@@ -65,18 +65,37 @@
 #define EVT_POINTER_UP 0x103
 #define EVT_POINTER_ABORT 0x107
 #define EVT_DESTROY 0x0c
+#if M1PLUS
+/* V2.1's AWTK numbers its events differently from V1.32's from focus on: one lower to the key
+ * events (one entry fewer before them), two higher from the window events. Each is V2.1's value in
+ * the same stock function that uses V1.32's: widget_on_keydown (0x670908: 0x10f, 0x111, long
+ * 0x110), widget_on_keyup (0x670d10: 0x114 before children), home_page_init's on_wm_keyup_fun
+ * (0x113), widget_set_focused_internal (0x10d, 0x10e), and the pages' window and value bindings. */
+#define EVT_KEY_DOWN 0x10f
+#define EVT_KEY_DOWN_BEFORE 0x111
+#define EVT_KEY_UP 0x113
+#define EVT_KEY_UP_BEFORE 0x114
+#define EVT_WINDOW_BACKGROUND 0x12c
+#define EVT_WINDOW_CLOSE 0x12e
+#else
 #define EVT_KEY_DOWN 0x110        /* widget_on_keydown @0x6627c4 (0x111 is its long press) */
 #define EVT_KEY_DOWN_BEFORE 0x112 /* wm keydown-before dispatch @0x523e6c */
 #define EVT_KEY_UP 0x114          /* wm keyup dispatch @0x523eb8 */
 #define EVT_KEY_UP_BEFORE 0x115   /* wm keyup-before dispatch @0x523e80 */
 #define EVT_WINDOW_BACKGROUND 0x12a
 #define EVT_WINDOW_CLOSE 0x12c
+#endif
 #define PULL_SEARCH_PX 48       /* device tuning: release distance from the initial touch */
 #define PULL_CLAIM_PX 8
 #define QUICK_EDGE_PX 31        /* stock on_wm_tsmove_fun @0x4e8d10 */
 #define EVT_CLICK 0x10c
+#if M1PLUS
+#define EVT_FOCUS 0x10d
+#define EVT_BLUR 0x10e
+#else
 #define EVT_FOCUS 0x10e /* widget_set_focused_internal @0x65fdf4 */
 #define EVT_BLUR 0x10f  /* widget_set_focused_internal @0x65fe40 */
+#endif
 #define EVT_SCROLL 0x14e /* stock scroll_view on_scroll @0x5efa40; table setter emits this too */
 #define EVT_SCROLL_END 0x14f /* stock lists queue their visible covers on this (album page registers @0x4a43d0) */
 #define VIEW_ON_SCROLL 0x100 /* scroll_view callback installed by list_view, called by touch @0x5efa5c */
@@ -464,7 +483,11 @@ static inline int arc_out(int r, int y) {
 /* Play/Pause hold queue menu (docs/internals.md). AWTK input_device_status lives at
  * wm+0x98 (window_manager_get_input_device_status @0x66e734): 16 key records of 0x18 bytes from
  * +0x30, each {key, long fired, u64 press time @8, aborted @0x10}. */
+#if M1PLUS
+#define EVT_KEY_LONG 0x110
+#else
 #define EVT_KEY_LONG 0x111
+#endif
 #define INPUT_KEYS 0x30
 #define INPUT_KEY_SIZE 0x18
 #define INPUT_KEY_COUNT 16
@@ -549,8 +572,13 @@ static inline int arc_out(int r, int y) {
  * index moves (0x5f320c). The stock scan thread handle (dialog_updatemusic_dialog_init) and its
  * done flag (wait_scan sets it) have no symbols: a scan runs while the handle is set and the
  * flag is clear. */
+#if M1PLUS /* V2.1 moved the value events up beside the others (0x11b will change) */
+#define EVT_VALUE_CHANGED 0x11c
+#define EVT_VALUE_CHANGING 0x11d
+#else
 #define EVT_VALUE_CHANGED 0x0e
 #define EVT_VALUE_CHANGING 0x0f
+#endif
 /* playset_bootvol_page_init (0x4b4a80) binds these, each with the window as context; Crossfade
  * re-dresses the page (crossfade.c) and unbinds them first. */
 #if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
