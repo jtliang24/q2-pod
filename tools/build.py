@@ -188,6 +188,9 @@ WATCHDOG = 'usr/bin/checkappprocess.sh'
 WATCHDOG_SLEEP = (b'\tsleep 2\n', b'\tsleep 10\n')
 # toolsSetRtcTime's command, with its padding; -u keeps the RTC in UTC. See docs/internals.md#clock.
 RTC_WRITE = (b'hwclock -w\0\0', b'hwclock -wu\0')
+# V2.1 also reads the RTC back each time demo starts (platform_init's toolsGetRtcTime), local time
+# too: it reads UTC as well, or every start would shift the clock by the zone's offset.
+RTC_READ_M1PLUS = (b'hwclock -s\0\0', b'hwclock -su\0')
 # The lock window's 12-hour clock format (after its 24-hour hh:mm, by clock_time): stock's HH:TT shows
 # "05:PM"; H:mm is the hour 1-12 unpadded and the minutes (tk_date_time_format_impl), "5:07".
 LOCK_CLOCK_12H = (b'hh:mm\0\0\0HH:TT\0', b'hh:mm\0\0\0H:mm\0\0')
@@ -1201,7 +1204,9 @@ def build(target_path, out, logo, ipod=False, dev=False):
         check(len(version) + 1 == len(b'V1.32\0'),
               'VERSION must be three single digits (x.y.z): the 5-character tag would shift every later file offset')
         patched = patched.replace(b'V1.32\0', version.encode()+b'\0')
-    patched = patched.replace(*RTC_WRITE)
+    for rtc in [RTC_WRITE] + [RTC_READ_M1PLUS] * m1plus:
+        check(patched.count(rtc[0]) == 1, f'Unexpected RTC command {rtc[0]!r}')
+        patched = patched.replace(*rtc)
     check(patched.count(LOCK_CLOCK_12H[0]) == 1, 'Unexpected lock clock formats')
     patched = patched.replace(*LOCK_CLOCK_12H)
     check(re.search(r'\.pdr +PROGBITS +0+ +0*%x +0*%x ' % (pdr_off, pdr_size), run('readelf', '-SW', demo)) and
