@@ -1225,10 +1225,14 @@ static int pull_event(void *page, void *event) {
     if (release) {
         pull_cancel(); /* clear before stock search can navigate or destroy anything */
         if (ready) {
+#if M1PLUS /* stock_search is a V1.32 routine, and only iPod's pages use it */
+            radio_search();
+#else
             if (!IPOD || !tk_strcmp(widget_get_prop_str(page, "name", ""), "radio_page"))
                 radio_search();
             else
                 stock_search(page, event);
+#endif
         }
         return STOP;
     }
@@ -3137,6 +3141,7 @@ int ringnav_playing(void *win, void *ctx) {
 }
 #endif
 
+#if !M1PLUS /* entered only from V1.32's NP_INFO_CALL */
 /* Now Playing's info page: stock (0x52a508, from its one call, NP_INFO_CALL in tools/build.py)
  * writes "Label:value" lines and the folder alone. Each line gets ": ", a number its unit's space
  * ("35.92 MB", "16-bit", "950 kbps", "44.1 kHz"), the folder its Location label, and an unknown
@@ -3178,6 +3183,7 @@ int ringnav_np_info(void *win) {
     }
     return result;
 }
+#endif
 
 /* systemset_display_page_init: stock builds its three rows (0x4c19bc: a s_listitem_black list_item
  * holding a 335x70 s_btn_listitem button with a 52px icon, a 24px label at x 72 and list_into); the
@@ -3972,6 +3978,7 @@ static int empty_toast(const void *unused) {
     return 0;
 }
 
+#if !M1PLUS /* entered only from V1.32's CLASS_ICON */
 /* Library Artists rows have no head picture, so the name gets its width (compact_row_layout skips
  * hidden siblings). Composers and Genres share the rows, which are rebound, so they show theirs
  * again. */
@@ -3980,6 +3987,7 @@ int ringnav_class_icon(void *row, int i) {
     widget_set_visible(widget_lookup(row, "img_icon", 1), !artists, 0);
     return artists ? 0 : class_icon(row, i);
 }
+#endif
 
 /* load_localclass_list: stock fills p_deque_showlist and returns its size. getAllAlbum,
  * getAllArtist (and its album-artist twin), getAllComposer and getAllGenre end with an Unknown row
@@ -5573,6 +5581,7 @@ int ringnav_keylong(void *ctx, void *event) {
     return stock_keylong_trampoline(ctx, event);
 }
 
+#if !M1PLUS /* entered only from V1.32's SHUFFLE_CALL */
 /* Replaces mclNextSong's shuffle pick call: stock picks and bookkeeps, then a pending Play next
  * becomes the next track if it is still at its index. */
 int ringnav_shuffle(int forward) {
@@ -5585,6 +5594,7 @@ int ringnav_shuffle(int forward) {
         MCL(MCL_POS) = (int)at;
     return result;
 }
+#endif
 
 /* Replaces the name comparators' toolsTrimLeft calls (SORT_TRIMS): each trims its own copy of a
  * name, which then sorts without its article. */

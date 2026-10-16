@@ -667,13 +667,37 @@ M1PLUS_GLOBAL_ALIASES = {
     'g_memory_play': 'memory_play',
     'g_headset_output': 'headset_output',
     'g_usbdet_value': 'usbdet_value',
+    'g_time24h_flag': 'time24hflag',
+    'bt__recv_pageflag': 'btrecv_pageflag',
+    'g_maxvolume': 'max_volume',
+    'g_carmode': 'car_mode',
 }
+# Renamed in V2.1; each has the size of its V1.32 counterpart (checked in m1plus_symbols).
 M1PLUS_CONTEXT_ALIASES = {
     'g_folder_path': 'folder_path',
     'g_artist_type': 'artist_type',
     'g_dacoff_time': 'dacoff_time',
     'g_power_capacity': 'power_capacity',
     'g_screensaver_picture': 'screensaver_picture',
+    'g_memory_info': 'meminfo_save',
+    'g_class_type': 'cur_classtype',
+    'g_local_classinfo_save': 'classinfo_save',
+    'p_deque_showlist': 'pdeq_showlist',
+    'p_vector_select_record': 'pvec_selectrecord',
+    'g_play_id3_info': 'playsong_id3info',
+    'p_deque_screensaverlist': 'pdeq_screensaverlist',
+}
+# A V1.32 global with no V2.1 counterpart gets zeroed storage of its own in the payload's .scratch
+# (m1stub_<name>), never a guessed address. Every reader must treat zero as "off" or "none".
+M1PLUS_STUB = 'm1stub_'
+# V2.1 globals without a symbol. on_wm_keylong_fun sets this byte on a long power (knob) press
+# (0x4cde14) and on_wm_keyup_fun drops that release and clears it (0x4cdc5c), as V1.32 does.
+M1PLUS_RAW_GLOBALS = {'g_power_longkey': 0xa041b8}
+# Local V2.1 routines, each checked to be a PIC entry with V2.1's GOT base.
+M1PLUS_PRIVATE_FUNCTIONS = {
+    'slide_menu_on_scroll_done': 0x6123f4,  # what slide_menu's scroll_to binds to its animator's end (0x612320)
+    'folder_refresh': 0x5318ac,  # folder_page_init's (0x53354c): navbar and table from pdeq_showlist
+    'album_row': 0x4e93c8,  # getAllAlbum's toolsQueryDbTable callback (0x4ea458): a record to tools_pdeq_directory
 }
 M1PLUS_FUNCTION_ALIASES = {
     'device_set_volume': 'set_devicevolume',
@@ -777,6 +801,38 @@ FLAGS = ['--target=mipsel-linux-gnu','-march=mips32r2','-mabi=32','-mfp64',
 
 def hooks(ipod): return HOOKS | IPOD_HOOKS if ipod else HOOKS
 
+def m1plus_symbols(syms, symbol_table):
+    """Resolve V1.32 names against the V2.1 demo: aliases (size-checked), then stubs.
+
+    Returns syms with the aliases applied and the [(name, size)] that get m1stub_ storage. Private
+    V1.32 routines are never merged: their addresses are V1.32 code."""
+    syms = dict(syms)
+    def size(name):
+        found = re.search(rf'\b(\d+)\s+OBJECT\s+GLOBAL\s+DEFAULT\s+\d+\s+{re.escape(name)}$', symbol_table, re.M)
+        return int(found.group(1)) if found else None
+    for k, v in M1PLUS_FUNCTION_ALIASES.items():
+        if v in syms: syms[k] = syms[v]
+    syms.update(M1PLUS_PRIVATE_FUNCTIONS)
+    stubs = []
+    for name in GLOBALS:  # payload reads one byte: little-endian, a 4-byte flag's low byte
+        alias = M1PLUS_GLOBAL_ALIASES.get(name, name)
+        if name in M1PLUS_RAW_GLOBALS:
+            syms[name] = M1PLUS_RAW_GLOBALS[name]
+            continue
+        if size(alias) is None:
+            stubs.append((name, 1))
+            continue
+        check(size(alias) in (1, 4), f'{name}: {alias} is not a byte or word global')
+        syms[name] = syms[alias]
+    for name, want in CONTEXT_DATA.items():
+        alias = M1PLUS_CONTEXT_ALIASES.get(name, name)
+        if size(alias) is None:
+            stubs.append((name, want))
+            continue
+        check(size(alias) == want, f'{name}: {alias} context data size mismatch')
+        syms[name] = syms[alias]
+    return syms, stubs
+
 def pic_gp(image, address):
     """The GOT base a PIC entry (lui $gp; addiu $gp; addu $gp, $t9) computes, else None."""
     lui, addiu, addu = struct.unpack_from('<III', image, fileoff(image, address))
@@ -790,6 +846,13 @@ def m1plus_inc(name):
                                                               ROOT/'patch/offsets.inc'), re.M)
     check(found, f'{name}: not defined for M1 Plus')
     return int(found.group(1), 0)
+
+def stub_asm(stubs):
+    """Zeroed .scratch storage for the stubbed globals (link.ld maps .scratch R/W, zero-filled)."""
+    asm = ['.section .scratch,"aw",@nobits', '.balign 8']
+    for name, size in stubs:
+        asm += [f'.globl {M1PLUS_STUB}{name}', f'{M1PLUS_STUB}{name}:', f'.space {(size + 7) & ~7}']
+    return '\n'.join(asm) + '\n'
 
 def compile_payload(out, ipod=False, m1plus=False):
     """Compile and link the payload."""
@@ -996,25 +1059,14 @@ def build(target_path, out, logo, ipod=False, dev=False):
         syms.update(PRIVATE_FUNCTIONS)
     header = [f'#define RING_STEP {RING_STEP}']
     if m1plus:
-        scratch_addr = SCRATCH + 0x1000
-        for k, v in M1PLUS_GLOBAL_ALIASES.items():
-            if v in syms:
-                syms[k] = syms[v]
-        for k, v in M1PLUS_CONTEXT_ALIASES.items():
-            if v in syms:
-                syms[k] = syms[v]
-        for k, v in M1PLUS_FUNCTION_ALIASES.items():
-            if v in syms:
-                syms[k] = syms[v]
-        for g in GLOBALS:
-            if g not in syms:
-                syms[g] = scratch_addr
-                scratch_addr += 4
-        for c, size in CONTEXT_DATA.items():
-            if c not in syms:
-                syms[c] = scratch_addr
-                scratch_addr += size
-            header.append(f'#define {c} ((const unsigned char *)0x{syms[c]:x}u)')
+        syms, stubs = m1plus_symbols(syms, symbol_table)
+        stubbed = dict(stubs)
+        for name in CONTEXT_DATA:
+            if name in stubbed:
+                header += [f'extern unsigned char {M1PLUS_STUB}{name}[{stubbed[name]}];',
+                           f'#define {name} ((const unsigned char *){M1PLUS_STUB}{name})']
+            else:
+                header.append(f'#define {name} ((const unsigned char *)0x{syms[name]:x}u)')
     else:
         for name in GLOBALS:
             check(re.search(rf'\b1\s+OBJECT\s+GLOBAL\s+DEFAULT\s+\d+\s+{name}$',
@@ -1049,6 +1101,8 @@ def build(target_path, out, logo, ipod=False, dev=False):
         check(syms[name] == address and struct.unpack_from('<III', patched, off) == words, f'{name}: unexpected code')
         jump(off, replacement)
     if m1plus:
+        for name, address in M1PLUS_PRIVATE_FUNCTIONS.items():
+            check(pic_gp(raw_demo, address) == M1PLUS_GP, f'{name}: not a V2.1 PIC entry')
         # ringnav_speed and ringnav_mode tell config_mplayer's re-applying calls from a choice by
         # their return addresses: each a jalr $t9 after lw $t9, <callee's GOT slot>($gp).
         for ret, callee in (('INITCONFIG_SPEED_RET', 'mclSetPlaySpeed'), ('INITCONFIG_MODE_RET', 'mclSetPlayMode')):

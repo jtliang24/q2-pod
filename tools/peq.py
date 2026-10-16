@@ -161,25 +161,22 @@ def compile_common(out, binary, player=False, ipod=False, target_profile=None, m
             f'#define HR_MP3_SEEK_ADDR 0x{target_profile["hr_mp3_seek"]:x}u',
         ]
     if not player:
-        syms = symbols(binary) | PRIVATE_FUNCTIONS
-        if m1plus:
-            from build import M1PLUS_GLOBAL_ALIASES, M1PLUS_FUNCTION_ALIASES, SCRATCH
-            scratch_addr = SCRATCH + 0x1000
-            for k, v in M1PLUS_GLOBAL_ALIASES.items():
-                if v in syms:
-                    syms[k] = syms[v]
-            for k, v in M1PLUS_FUNCTION_ALIASES.items():
-                if v in syms:
-                    syms[k] = syms[v]
-            for g in GLOBALS:
-                if g not in syms:
-                    syms[g] = scratch_addr
-                    scratch_addr += 4
+        stubs = []
+        if m1plus:  # V1.32's private routines are V1.32 code: never merged into V2.1's table
+            from build import M1PLUS_STUB, m1plus_symbols
+            syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
+        else:
+            syms = symbols(binary) | PRIVATE_FUNCTIONS
         for name, (ret, args) in FUNCTIONS.items():
             if name in syms and syms[name]:
                 header.append(f'#define {name} (({ret} (*)({args}))0x{syms[name]:x}u)')
-        # build.py has already checked each is a one-byte global.
-        header += [f'#define {name} (*(volatile unsigned char *)0x{syms[name]:x}u)' for name in GLOBALS]
+        # build.py has already checked each is a one-byte global (or, on V2.1, a byte or word).
+        stubbed = dict(stubs)
+        for name in GLOBALS:
+            if name in stubbed:
+                header += [f'extern volatile unsigned char {M1PLUS_STUB}{name};', f'#define {name} {M1PLUS_STUB}{name}']
+            else:
+                header.append(f'#define {name} (*(volatile unsigned char *)0x{syms[name]:x}u)')
     (out/'peq_platform.h').write_text('\n'.join(header)+'\n')
     (out/'peq_imports.S').write_text('\n'.join(asm)+'\n')
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', f'-DIPOD={int(ipod)}']
@@ -192,7 +189,13 @@ def compile_common(out, binary, player=False, ipod=False, target_profile=None, m
         objects.append(obj)
     obj = out/'peq_imports.o'
     run('clang', *flags, '-c', out/'peq_imports.S', '-o', obj)
-    return [*objects, obj]
+    objects.append(obj)
+    if m1plus and not player:
+        from build import stub_asm
+        (out/'m1stubs.S').write_text(stub_asm(stubs))
+        run('clang', *flags, '-c', out/'m1stubs.S', '-o', out/'m1stubs.o')
+        objects.append(out/'m1stubs.o')
+    return objects
 
 def patch_player(raw, out):
     out.mkdir(exist_ok=True)
