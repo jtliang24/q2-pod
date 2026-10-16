@@ -1,12 +1,14 @@
 # Shanling M1 Plus Firmware Porting Analysis
 
-Technical exploration, hardware breakdown, and reverse-engineered architecture for porting **Q2 Pod** to the **Shanling M1 Plus** (Firmware V2.1).
+Technical exploration, hardware breakdown, and reverse-engineered architecture for porting **Q2 Pod** to the **Shanling M1 Plus** (Firmware V2.1), based on **Q2 Pod v1.2.1** (the current release of the upstream repository).
 
 ---
 
 ## 1. Executive Summary & Feasibility
 
-Porting Q2 Pod to the Shanling M1 Plus is **highly feasible**. While the industrial design and hardware controls differ (side rotary knob and a larger 3.2" touchscreen instead of a front touch wheel), the underlying software stack is from the exact same codebase family as the Shanling Q2:
+Porting Q2 Pod to the Shanling M1 Plus is **highly feasible**. This port will be based off **Q2 Pod v1.2.1** (current upstream release), carrying over its 30-band PEQ, Standalone Spotify Connect browsing, CUE/audiobook resume points, View Queue, and iPod Classic interface overhaul.
+
+While the industrial design and hardware controls differ (side rotary knob and a larger 3.2" touchscreen instead of a front touch wheel), the underlying software stack is from the exact same codebase family as the Shanling Q2:
 
 | Component | Shanling Q2 | Shanling M1 Plus (V2.1) | Status |
 | :--- | :--- | :--- | :--- |
