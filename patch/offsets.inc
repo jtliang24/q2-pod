@@ -28,9 +28,18 @@
 #define W_W 0x08
 #define W_H 0x0c
 #define W_FOCUS 0x24            /* stock focused flag byte (tests) */
+#if M1PLUS
+/* V2.1's widget_t has one field fewer before its parent: the block to the vtable is 4 lower (parent
+ * window_close and widget_to_global, emitter widget_off_by_func, children layout
+ * widget_set_children_layout, vtable widget_get_type 0x70); subclasses still start at 0x78. */
+#define W_PARENT 0x44
+#define W_EMITTER 0x5c
+#define W_CHILDREN_LAYOUT 0x64
+#else
 #define W_PARENT 0x48
 #define W_EMITTER 0x60
 #define W_CHILDREN_LAYOUT 0x68
+#endif
 #define CHILDREN_LAYOUT_VTABLE 0x10
 #define DEFAULT_LAYOUT_X_MARGIN 0x18
 #define DEFAULT_LAYOUT_SPACING 0x1a
@@ -38,7 +47,11 @@
 #define DEFAULT_LAYOUT_VTABLE 0x926b20
 #endif
 #define EMIT_TYPE 0x08
+#if M1PLUS
+#define EMIT_PENDING_REMOVE 0x14 /* emitter_remove_item sets it there; V2.1 keeps no other flag */
+#else
 #define EMIT_PENDING_REMOVE 0x15
+#endif
 #define EMIT_NEXT 0x20
 #define ROW_HEIGHT 0x78         /* table_client row height */
 #define ROW_INDEX 0x78          /* table_row logical index (same slot) */
@@ -101,12 +114,18 @@
 #define VIEW_ON_SCROLL 0x100 /* scroll_view callback installed by list_view, called by touch @0x5efa5c */
 #define CANVAS_X 0x00
 #define CANVAS_Y 0x04
+#if M1PLUS /* canvas_t is 8 lower from here: canvas_set_fill_color, canvas_set_text_align */
+#define CANVAS_LCD 0x30
+#define CANVAS_ALIGN_V 0x28
+#define CANVAS_ALIGN_H 0x2c
+#else
 #define CANVAS_LCD 0x38
+#define CANVAS_ALIGN_V 0x30     /* canvas_set_text_align @0x63419c; middle = 1 */
+#define CANVAS_ALIGN_H 0x34     /* center = 1 */
+#endif
 #define LCD_FILL_COLOR 0xbc
 #define LCD_STROKE_COLOR 0xc0
 #define LCD_TEXT_COLOR 0xb8     /* lcd_set_text_color @0x6474c4 */
-#define CANVAS_ALIGN_V 0x30     /* canvas_set_text_align @0x63419c; middle = 1 */
-#define CANVAS_ALIGN_H 0x34     /* center = 1 */
 /* Selection outline tuning. RADIUS > 2 or the stock rounded path squares off; tests read these.
  * The shade uses the same stock dark surface as the fill at an alpha that keeps the outline
  * above 3:1 on pure white art (0x99 is the floor); on dark rows it matches the stock background
