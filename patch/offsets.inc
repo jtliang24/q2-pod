@@ -421,8 +421,8 @@ static inline int arc_out(int r, int y) {
 #define KEY_VOLUMEUP 220
 #define KEY_POWER 210
 #define KEY_PLAY 213
-#define KEY_FWD_BTN 214
-#define KEY_BACK_BTN 215
+#define KEY_BACK_BTN 214 /* on_wm_keyup_fun: 214 prev_quick_click, 215 next_quick_click (0x4cdb14) */
+#define KEY_FWD_BTN 215
 #define KEY_RETURN 170
 #define KEY_CENTER 218
 #define KEY_PREV 172
