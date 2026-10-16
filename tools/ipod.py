@@ -31,14 +31,21 @@ CORNER_R = 80
 CORNER_SLACK = 4
 
 
+UI_H = 320
+
+
 def corner_inset(y):
     """The width the glass hides at each end of screen row y."""
-    d = min(max(CORNER_R - y, y - (320 - CORNER_R), 0), CORNER_R)
+    if not CORNER_R:
+        return 0
+    d = min(max(CORNER_R - y, y - (UI_H - CORNER_R), 0), CORNER_R)
     return math.ceil(CORNER_R - math.sqrt(CORNER_R**2 - d*d))
 
 
 def corner_x(y, h):
     """The side inset, slack included, for content spanning screen rows y to y + h."""
+    if not CORNER_R:
+        return 0
     return max(corner_inset(y), corner_inset(y + h)) + CORNER_SLACK
 
 
@@ -49,7 +56,7 @@ def corner_x(y, h):
 # room for its widest text, "12:59 PM" (69px at 16px in the pinned stock font). STATUS_PAD keeps the icons
 # that much further in than the corners need, so they don't look cramped against the glass.
 STATUS_PAD = 2
-STATUS_MARGIN = corner_x(7, 16) + STATUS_PAD
+STATUS_MARGIN = (corner_x(7, 16) + STATUS_PAD) if CORNER_R else 0
 CLOCK_MIN = 105
 CLOCK_TEXT = 70
 # Seven full-width Home rows share one left edge clear of the rounded glass. The payload lays them out

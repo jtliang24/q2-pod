@@ -1638,7 +1638,7 @@ static void paint_caps(void *w, void *canvas) {
     if (!w || ipod_classic() || !P(canvas, CANVAS_LCD)) return;
     if (w == st.bar_idle) {
         draw_spaced(canvas, widget_get_text(w), 0, (I(w, W_H) - MARK_PX) / 2, MARK_PX,
-                    RGBA(0xaaaaaa), 375);
+                    RGBA(0xaaaaaa), UI_W);
         return;
     }
     if (st.np_album && w == P(st.np_album, W_PARENT)) {
@@ -5351,13 +5351,13 @@ static int qm_open(const void *unused) {
                                                                                      : "Group by");
         widget_destroy_children(view);
         for (int i = 0; i < count; ++i) {
-            void *item = list_item_create(view, 0, i * QM_ROW, 375, QM_ROW);
+            void *item = list_item_create(view, 0, i * QM_ROW, UI_W, QM_ROW);
             widget_use_style(item, "s_listitem_black");
-            void *label = hscroll_label_create(item, 30, 0, 310, QM_ROW);
+            void *label = hscroll_label_create(item, 30, 0, UI_W - 65, QM_ROW);
             widget_use_style(label, "s_scrlabel_white24l");
             widget_set_text_utf8(label, names[i]);
             if (i == playback_option(kind))
-                image_base_set_image(image_create(item, 340, 0, 24, QM_ROW), "select");
+                image_base_set_image(image_create(item, UI_W - 35, 0, 24, QM_ROW), "select");
             widget_on(item, EVT_CLICK, qm_pick, (void *)(long)(100 + i));
         }
         widget_set_prop_int(view, "virtual_h", count * QM_ROW);
@@ -5430,9 +5430,9 @@ static int qm_open(const void *unused) {
     char rated[32];
     /* stock sortselect row styles */
     for (int i = 0; i < n; ++i) {
-        void *item = list_item_create(view, 0, i * QM_ROW, 375, QM_ROW);
+        void *item = list_item_create(view, 0, i * QM_ROW, UI_W, QM_ROW);
         widget_use_style(item, "s_listitem_black");
-        void *label = hscroll_label_create(item, 30, 0, 266, QM_ROW);
+        void *label = hscroll_label_create(item, 30, 0, UI_W - 109, QM_ROW);
         widget_use_style(label, "s_scrlabel_white24l");
         if (acts[i] == QA_RATE) {
             int h = aid ? album_hearts : checkFavExist(r) ? 5 : rate_kept(0, listen_key(r));
@@ -5866,6 +5866,15 @@ static unsigned char *logo_read(const char *path, unsigned *n) {
 static void *logo_sync(void *unused) {
     unsigned n = 0, old_n;
     unsigned char *b = 0, *old = 0;
+#if M1PLUS
+    const char *err = "Boot logo must be a 320x480 JPEG";
+    (void)unused;
+    if (access(LOGO_SRC, 0))
+        unlink(LOGO_DST), err = 0;
+    else
+        b = logo_read(LOGO_SRC, &n);
+    if (b && jpeg_size(b, n) == (320u << 16 | 480)) {
+#else
     const char *err = "Boot logo must be a 320x375 JPEG";
     (void)unused;
     if (access(LOGO_SRC, 0))
@@ -5884,6 +5893,7 @@ static void *logo_sync(void *unused) {
         unlink(LOGO_ROT);
     }
     if (b && jpeg_size(b, n) == (320u << 16 | 375)) {
+#endif
         old = logo_read(LOGO_DST, &old_n);
         if ((old && old_n == n && !memcmp(old, b, n)) ||
             blob_io(LOGO_DST, LOGO_DST ".tmp", b, n, 1))

@@ -463,12 +463,12 @@ void *label(void *parent, int x, int y, int w, int h, const char *style, int px,
 static void spot_np(void) {
     if (ui.page || !(ui.page = page_open("spotify_page", closed, keyup))) return;
     void *f = widget_factory(), *page = ui.page;
-    int h = widget_get_prop_int(page, "h", 290);
-    ui.info = widget_factory_create_widget(f, "view", page, 0, 0, 375, h);
-    ui.msg = widget_factory_create_widget(f, "view", page, 0, 0, 375, h);
+    int h = widget_get_prop_int(page, "h", BOTTOM);
+    ui.info = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
+    ui.msg = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     widget_set_text_utf8(label(ui.info, 16, 12, 200, 16, "s_scrlabel_white20l", 16, SPOT_GREY),
                          "Spotify");
-    ui.glyph = widget_factory_create_widget(f, "view", ui.info, 337, 13, 14, 14); /* NP's top row */
+    ui.glyph = widget_factory_create_widget(f, "view", ui.info, UI_W - 38, 13, 14, 14); /* NP's top row */
     ui.art = image_create(ui.info, SPOT_ART_X, SPOT_ART_Y, SPOT_ART_PX, SPOT_ART_PX);
     image_set_draw_type(ui.art, 4); /* as Coverflow's covers */
     image_base_set_image(ui.art, PLACEHOLDER);
@@ -484,12 +484,12 @@ static void spot_np(void) {
                                           SPOT_BAR_H);
     ui.elapsed =
         label(ui.info, SPOT_TIME_X, SPOT_TIMES_Y, 80, 16, "s_scrlabel_white20l", 14, SPOT_GREY);
-    ui.remain = label(ui.info, 375 - SPOT_TIME_X - 80, SPOT_TIMES_Y, 80, 16, "s_scrlabel_white20r",
+    ui.remain = label(ui.info, UI_W - SPOT_TIME_X - 80, SPOT_TIMES_Y, 80, 16, "s_scrlabel_white20r",
                       14, SPOT_GREY);
     ui.note =
-        label(ui.msg, CF_EDGE, 100, 375 - 2 * CF_EDGE, 30, "s_scrlabel_white20c", 20, 0xffffffffu);
+        label(ui.msg, CF_EDGE, 100, UI_W - 2 * CF_EDGE, 30, "s_scrlabel_white20c", 20, 0xffffffffu);
     ui.sub =
-        label(ui.msg, CF_EDGE, 134, 375 - 2 * CF_EDGE, 24, "s_scrlabel_white20c", 16, SPOT_GREY);
+        label(ui.msg, CF_EDGE, 134, UI_W - 2 * CF_EDGE, 24, "s_scrlabel_white20c", 16, SPOT_GREY);
     ui.timer = timer_add(tick, 0, 250);
     spot_refresh();
 }

@@ -37,7 +37,7 @@ enum { HOME, BAND, PRESETS, IMPORTS, SAVES, CONFIRM, DELETES, PICK, ADJUST, STOC
 enum { BACK = 1000, APPLY, BYPASS, MENU, IMPORT, SAVE, ENABLE, TYPE, RAISE, LOWER, TYPED, CHANNEL, STEP,
        YES, CANCEL, DELETE, BALANCE, PREAMP, GAIN, /* these three open the picker, in picks[] order */
        FREQUENCY, QUALITY, /* and these two the value menu */ KEYBOARD, STOCK };
-#define GRAPH_W (375 - 2 * PEQ_GRAPH_X)
+#define GRAPH_W (UI_W - 2 * PEQ_GRAPH_X)
 #if IPOD
 #define ROW_X CF_EDGE /* the text column clear of the rounded glass, as coverflow.c's */
 #define TONE accent_tone(2) /* the light tone */
@@ -88,10 +88,10 @@ static int render(const void *unused);
 /* A row: the caption on the left, white or, for display-only rows and off bands (dim), grey, and the
  * value, if any, in grey against the right edge. */
 static void row_dim(void *view, int index, const char *text, const char *value, int id, int dim) {
-    void *item = list_item_create(view, 0, index * 48, 375, 48);
+    void *item = list_item_create(view, 0, index * 48, UI_W, 48);
     widget_use_style(item, "s_listitem_black");
     for (int i = 0; i < 1 + !!value; ++i) {
-        void *label = label_create(item, ROW_X, 0, 375 - 2 * ROW_X, 48);
+        void *label = label_create(item, ROW_X, 0, UI_W - 2 * ROW_X, 48);
         widget_use_style(label, "s_label_white20l");
         if (i || dim || id < 0) widget_set_prop_int(label, "style:normal:text_color", (int)CF_GREY);
         if (i) widget_set_prop_str(label, "style:normal:text_align_h", "right");
@@ -381,15 +381,15 @@ static int render(const void *unused) {
         ui.view = ui.graph = ui.edit = 0;
         ui.rendered = -1;
         widget_destroy_children(ui.page);
-        e3.view = widget_factory_create_widget(widget_factory(), "view", ui.page, 0, 0, 375, e3.h);
+        e3.view = widget_factory_create_widget(widget_factory(), "view", ui.page, 0, 0, UI_W, e3.h);
         widget_on(e3.view, EVT_POINTER_DOWN, e3_touch, 0);
-        ui.bar = bar(ui.page, 0, 375);
+        ui.bar = bar(ui.page, 0, UI_W);
         e3_show();
         return 7;
     }
     e3.view = 0;
     int selection = 0, offset = 0;
-    int height = widget_get_prop_int(ui.page, "h", 320), graph = ui.screen == HOME || ui.screen == BAND;
+    int height = widget_get_prop_int(ui.page, "h", UI_H), graph = ui.screen == HOME || ui.screen == BAND;
     int top = 48 + graph * PEQ_GRAPH_H;
     /* Whole rows only, so the last row is never clipped. */
     int rows = (height - top) / 48 * 48;
@@ -408,12 +408,12 @@ static int render(const void *unused) {
     ui.rendered = ui.screen;
     ui.edit = 0;
     widget_destroy_children(ui.page);
-    void *list = list_view_create(ui.page, 0, top, 375, rows);
+    void *list = list_view_create(ui.page, 0, top, UI_W, rows);
     widget_set_prop_int(list, "item_height", 48);
     /* The theme's default list_view is a light card; stock pages paint theirs black inline. */
     widget_set_prop_int(list, "style:normal:bg_color", (int)0xff000000u);
     widget_set_prop_int(list, "style:normal:border_color", 0);
-    void *view = scroll_view_create(list, 0, 0, 375, rows);
+    void *view = scroll_view_create(list, 0, 0, UI_W, rows);
     ui.view = view;
     widget_set_prop_int(view, "yslidable", 1);
     widget_set_prop_int(view, "xslidable", 0);
@@ -456,7 +456,7 @@ static int render(const void *unused) {
          * action text is "done", as stock edit_on_event only acts on the keyboard's OK for "done" (close the
          * keyboard, then EVT_VALUE_CHANGED) or "next"; the dialogs' "OK" is handled by their own EVT_IM_ACTION
          * handlers. The keyboard's OK key shows an image, not the text. */
-        void *item = list_item_create(view, 0, 0, 375, 48);
+        void *item = list_item_create(view, 0, 0, UI_W, 48);
         widget_use_style(item, "s_listitem_black");
         widget_on(item, EVT_CLICK, action, (void *)(long)KEYBOARD);
         ui.edit = edit_create(item, "ufloat");
@@ -506,18 +506,18 @@ static int render(const void *unused) {
     /* ringnav keeps the selection above on a view whose row count it already knows. */
     if (ui.screen == PICK) widget_set_prop_int(view, "_ringnav_count", n);
     if (n * 48 < rows) { /* short lists: shrink so the list's white background never shows below the rows */
-        widget_resize(list, 375, n * 48);
-        widget_resize(view, 375, n * 48);
+        widget_resize(list, UI_W, n * 48);
+        widget_resize(view, UI_W, n * 48);
     }
     scroll_view_set_offset(view, 0, offset);
     ui.graph = 0;
     if (graph) {
         curve();
-        ui.graph = widget_factory_create_widget(widget_factory(), "view", ui.page, 0, 48, 375, PEQ_GRAPH_H);
+        ui.graph = widget_factory_create_widget(widget_factory(), "view", ui.page, 0, 48, UI_W, PEQ_GRAPH_H);
     }
     /* A message takes the title bar until the next action, so it never shrinks the list; on the
      * main screen the bar otherwise shows the tabs (peq_paint). */
-    void *title = ui.screen == HOME ? bar(ui.page, 0, 375) : bar(ui.page, 8, 359);
+    void *title = ui.screen == HOME ? bar(ui.page, 0, UI_W) : bar(ui.page, 8, UI_W - 16);
     ui.bar = ui.screen == HOME ? title : 0;
     text[0] = 0;
     if (ui.status[0]) snprintf(text, sizeof(text), "%s", ui.status);
@@ -684,7 +684,7 @@ static void *bar(void *page, int x, int w) {
     void *title = label_create(page, x, 0, w, 48);
     widget_use_style(title, "s_label_white20c");
     widget_set_prop_int(title, "line_wrap", 1);
-    if (w == 375) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
+    if (w == UI_W) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
     return title;
 }
 
@@ -707,7 +707,7 @@ int peq_page_init(void *page, void *context) {
     if (memcmp(&ui.draft, &ui.named, sizeof(ui.named))) ui.applied[0] = 0; /* replaced since */
     memcpy(ui.name, ui.applied, sizeof(ui.name));
     e3.focus = E3_LOW;
-    e3.h = widget_get_prop_int(page, "h", 290);
+    e3.h = widget_get_prop_int(page, "h", BOTTOM);
     widget_on(page, EVT_DESTROY, closed, 0);
     widget_on(page, EVT_KEY_UP, keyup, 0);
     widget_on(page, EVT_POINTER_MOVE_BEFORE, e3_touch, 0); /* a slider's drag */

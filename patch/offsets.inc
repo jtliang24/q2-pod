@@ -1,6 +1,25 @@
 /* Stock V1.32 layout and ABI constants shared by patch/navigation.c and test/patch.py.
  * The test harness parses this file, so a field change cannot leave the mocks behind.
  * Fields marked "same slot" are class-specific views of one offset. */
+#ifndef M1PLUS
+#define M1PLUS 0
+#endif
+
+#if M1PLUS
+#define UI_W 320
+#define UI_H 480
+#define BOTTOM 450
+#define CORNER_R 0
+#define STATUS_MARGIN 0
+#define BAR_CORNER_R 0
+#else
+#define UI_W 375
+#define UI_H 320
+#define BOTTOM 290
+#define CORNER_R 80
+#define STATUS_MARGIN 52
+#define BAR_CORNER_R 76
+#endif
 #define I(p, o) (*(int *)((char *)(p) + (o)))
 #define P(p, o) (*(void **)((char *)(p) + (o)))
 #define FNV_SEED 2166136261u /* FNV-1a offset basis */
@@ -123,6 +142,7 @@
 #define NP_ART_RADIUS 12 /* Now Playing's art corners (paint_cover), as stock's play_defaultcover scaled to the art */
 /* A radius-r corner's arc at row y (0 the outermost): how far in it starts, in 1/16 pixels. */
 static inline int arc_out(int r, int y) {
+    if (!r) return 0;
     int d = 2 * (r - y) - 1, v = (4 * r * r - d * d) * 64, s = 0;
     while ((s + 1) * (s + 1) <= v) ++s;
     return 16 * r - s;
@@ -183,24 +203,33 @@ static inline int arc_out(int r, int y) {
  * Minimal's Full rows are full width. Labels end HOME_LABEL_END from the row's edge. The selection
  * dot (HOME_DOT px) sits at HOME_DOT_X, clear of the bottom row's corner, HOME_DOT_GAP before the
  * labels (HOME_TEXT_X in tools/ipod.py). */
+#if M1PLUS
+#define HOME_FULL_ROW 320
+#define HOME_LABEL_END 16
+#define HOME_SPLIT_LABEL_END 8 /* Split: the art, not a corner, is beside the labels */
+#define HOME_DOT_X 12
+#define HOME_DOT 6
+#define HOME_DOT_GAP 8
+#define HOME_SPLIT_W 160
+#define HOME_CLASSIC_ROW 314
+#define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
+#define HOME_CHEVRON_SHIFT 6
+#define HOME_CLASSIC_TEXT_X 20
+#define HOME_CLASSIC_LABEL_END (CHEVRON_W - 10)
+#else
 #define HOME_FULL_ROW 375
 #define HOME_LABEL_END 33
 #define HOME_SPLIT_LABEL_END 8 /* Split: the art, not a corner, is beside the labels */
 #define HOME_DOT_X 25
 #define HOME_DOT 6
 #define HOME_DOT_GAP 8
-/* iPod Theme: Classic (IPOD/THEME 1, docs/ipod.md#display-settings) puts the pre-1.0.1 look back
- * over the Minimal assets at runtime. In Home's Full the rows end at HOME_CLASSIC_ROW, so the
- * chevron's glyph (x 20 to 31 of list_into) moves 6px right of its old column. Labels start at
- * HOME_CLASSIC_TEXT_X and end 16px before the glyph. The status bar is BAR_CLASSIC and the progress bar an NP_BAR_CLASSIC capsule
- * (Minimal's NP_BAR_MINIMAL line). Minimal has no accent: its fills are MINIMAL_FILL, its
- * settings icons grey and list_into MINIMAL_CHEVRON. */
 #define HOME_SPLIT_W 187
 #define HOME_CLASSIC_ROW 369
 #define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
 #define HOME_CHEVRON_SHIFT 6
 #define HOME_CLASSIC_TEXT_X 33
 #define HOME_CLASSIC_LABEL_END (CHEVRON_W - 10)
+#endif
 #define BAR_CLASSIC 0x242424
 #define NP_BAR_CLASSIC 8
 #define NP_BAR_MINIMAL 4
@@ -230,6 +259,19 @@ static inline int arc_out(int r, int y) {
 #define NP_ALBUM_RGB 0xbbbbbb
 /* Spotify's and Internet Radio's Now Playing layout (tools/ipod.py NP_*, which checks they match):
  * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners. */
+#if M1PLUS
+#define SPOT_ART_X 33
+#define SPOT_ART_Y 50
+#define SPOT_ART_PX 254
+#define SPOT_TEXT_X 16
+#define SPOT_TEXT_W 288
+#define SPOT_BAR_X 12
+#define SPOT_BAR_Y 342
+#define SPOT_BAR_W 296
+#define SPOT_BAR_H 8
+#define SPOT_TIMES_Y 376
+#define SPOT_TIME_X 12
+#else
 #define SPOT_ART_X 16
 #define SPOT_ART_Y 50
 #define SPOT_ART_PX 166
@@ -241,6 +283,7 @@ static inline int arc_out(int r, int y) {
 #define SPOT_BAR_H 8 /* the bar's view; iPod's Minimal paints its 4px line at the top (np_bar_h) */
 #define SPOT_TIMES_Y 265
 #define SPOT_TIME_X 46
+#endif
 /* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic flush, and
  * holds SET_ROWS complete SET_ROW rows. Stock builds each row as a list_item holding a
  * SET_STOCK_W x SET_STOCK_BODY button at x SET_STOCK_X with a SET_STOCK_ICON icon, a label and a
@@ -435,20 +478,54 @@ static inline int arc_out(int r, int y) {
  * clears the bottom corners; both builds keep the captions there. Album names and artists scroll
  * within that. Under the covers (CF_TEXT_Y), the album name is CF_NAME_PX white and the artist
  * CF_ARTIST_PX in CF_GREY (stock secondary text) right under it. */
+#if M1PLUS
+#define CF_EDGE 16
+#define CF_NAME_PX 24
+#define CF_NAME_H 32
+#define CF_ARTIST_PX 20
+#define CF_ARTIST_H 28
+#define CF_GREY 0xffaaaaaa /* color_t #AAAAAA */
+#define CF_VIEW_W 320
+#define CF_VIEW_H 260
+#define CF_CX 160
+#define CF_TOP 16
+#define CF_EYE 300
+#define CF_X1 100
+#define CF_XS 40
+#define CF_Z1 80
+#define CF_ZS 18
+#define CF_BRIGHT1 192
+#define CF_BRIGHT2 128
+#define CF_REFLECT 24
+#define CF_REFLECT_TOP (IPOD ? 48 : 64)
+#define CF_STRIDE 100
+#define CF_TEXT_Y 268
+
+#define PH_COLS 3
+#define PH_GRID_X 4
+#define PH_TILE_W 104
+#define PH_TILE_H 96
+#define PH_THUMB_W 96
+#define PH_THUMB_H 88
+#define PH_SHOT_W 320
+#define PH_SHOT_H 450
+#define PH_GRID_H 402
+
+#define PEQ_GRAPH_H 120
+#define PEQ_GRAPH_X 12
+#define PEQ_GRAPH_DB 15
+#define PEQ_PLOT_TOP 8
+#define PEQ_PLOT_BOTTOM 98
+
+#define VIS_H 240
+#define BOOK_ROWS 16
+#else
 #define CF_EDGE 36
 #define CF_NAME_PX 24
 #define CF_NAME_H 32
 #define CF_ARTIST_PX 20
 #define CF_ARTIST_H 28
 #define CF_GREY 0xffaaaaaa /* color_t #AAAAAA */
-/* Coverflow depth (docs/internals.md#coverflow-depth): the covers are drawn in software into one
- * CF_VIEW_W x CF_VIEW_H frame, the top of the client area. The selected cover is ART_SIZE (160)
- * square with its top CF_TOP from the frame's; side covers turn CF_ANGLE (60) degrees inward (the
- * sine table in coverflow.c), sit CF_X1 px from the centre, then CF_XS apart, CF_Z1 px and then
- * CF_ZS more behind it, seen from CF_EYE px. Brightness (of 256) is 256 at the centre, CF_BRIGHT1
- * one cover out and CF_BRIGHT2 two out, reaching 0 three out. Each cover's reflection is
- * CF_REFLECT px high at native size, from CF_REFLECT_TOP (of 256) of its brightness down to black.
- * The wheel moves one album every CF_STRIDE px. Starting values, to be tuned together on the Q2. */
 #define CF_VIEW_W 375
 #define CF_VIEW_H 210
 #define CF_CX 187 /* the centre line lies between screen columns 186 and 187 */
@@ -464,11 +541,7 @@ static inline int arc_out(int r, int y) {
 #define CF_REFLECT_TOP (IPOD ? 48 : 64)
 #define CF_STRIDE 110
 #define CF_TEXT_Y 212 /* the album caption's top, under the frame; the artist follows */
-/* Photos (patch/photos.c, docs/internals.md#photos): under a 48px title, PH_COLS columns of
- * PH_TILE_W x PH_TILE_H tiles from x PH_GRID_X, three whole rows in the 240px below it, each a
- * thumbnail of at most PH_THUMB_W x PH_THUMB_H centred in its tile, so the selection shows round
- * it. The viewer's screen-size copy fits PH_SHOT_W x PH_SHOT_H (the client area). PH_GREY marks a
- * thumbnail not made yet or a file that will not open. */
+
 #define PH_COLS 4
 #define PH_GRID_X 1
 #define PH_TILE_W 93
@@ -477,16 +550,17 @@ static inline int arc_out(int r, int y) {
 #define PH_THUMB_H 72
 #define PH_SHOT_W 375
 #define PH_SHOT_H 290
-#define PH_GREY 0xff333333 /* color_t #333333 */
-#define PHOTOS_MAX 500 /* ponytail: ringnav navigates at most MAX_ENTRIES (512) rows; page beyond */
-/* PEQ editor (patch/peq_ui.c): on the main and band screens a PEQ_GRAPH_H view under the title
- * holds the response from PEQ_GRAPH_X to 375 - PEQ_GRAPH_X (20 Hz to 20 kHz, log), +-PEQ_GRAPH_DB at
- * its plot's top and bottom (rows PEQ_PLOT_TOP to PEQ_PLOT_BOTTOM), frequency labels under it. */
+#define PH_GRID_H 240
+
 #define PEQ_GRAPH_H 96
 #define PEQ_GRAPH_X 16
 #define PEQ_GRAPH_DB 15
 #define PEQ_PLOT_TOP 6
 #define PEQ_PLOT_BOTTOM 78
+
+#define VIS_H 186
+#define BOOK_ROWS 10
+#endif
 /* iPod visualizer (patch/visualizer.c, docs/ipod.md#visualizer), Now Playing's fourth page. The
  * page shows the audio VIS_LATENCY_MS behind what hciplayer last handed the filter: its ao_alsa asks
  * for a 500 ms buffer in 16 periods (0x438a2c: buffer_time 500000 us) and refills it a period at a
