@@ -6714,20 +6714,12 @@ void deque_init_copy(void *dest, const void *src) {
     deque_assign(dest, src);
 }
 
+/* V2.1's demo imports no deque_pop_back (libcstl's is _deque_shrink_at_end(d, 1)): erase the last
+ * element through the iterators it does import, so the deque keeps its own element type. */
 void deque_pop_back(void *d) {
-    unsigned n = deque_size(d);
-    if (!n) return;
-    if (n == 1) {
-        deque_clear(d);
-        return;
-    }
-    void *tmp = _create_deque("stSongInfo");
-    deque_init(tmp);
-    for (unsigned i = 0; i < n - 1; ++i)
-        _deque_push_back(tmp, deque_at(d, i));
-    deque_clear(d);
-    deque_assign(d, tmp);
-    deque_destroy(tmp);
-    free(tmp);
+    if (!deque_size(d)) return;
+    cstl_iter end = deque_end(d), last = deque_begin(d);
+    for (cstl_iter it = iterator_next(last); !iterator_equal(it, end); it = iterator_next(it)) last = it;
+    deque_erase(d, last);
 }
 #endif

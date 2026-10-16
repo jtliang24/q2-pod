@@ -86,6 +86,10 @@ LIBC = {
     'deque_at': ('void *', 'const void *, unsigned'), '_deque_push_back': ('void', 'void *, ...'),
     'deque_assign': ('void', 'void *, const void *'), 'deque_clear': ('void', 'void *'),
     'deque_pop_back': ('void', 'void *'),
+    # V2.1 imports no deque_pop_back; navigation.c erases the last element through these
+    'deque_begin': ('cstl_iter', 'const void *'), 'deque_end': ('cstl_iter', 'const void *'),
+    'deque_erase': ('cstl_iter', 'void *, cstl_iter'), 'iterator_next': ('cstl_iter', 'cstl_iter'),
+    'iterator_equal': ('int', 'cstl_iter, cstl_iter'),
     'deque_destroy': ('void', 'void *'), 'send': ('int', 'int, const void *, unsigned, int'),
     # Coverflow's art thread (coverflow.c)
     'pthread_create': ('int', 'unsigned long *, const void *, void *(*)(void *), void *'),
@@ -133,7 +137,8 @@ def compile_common(out, binary, player=False, ipod=False, target_profile=None, m
         if len(words) >= 6 and 'UND' in words and re.fullmatch('[0-9a-f]{8}', words[0]):
             got[words[-1].split('@')[0]] = int(words[0], 16)
     gp = 0xb16750 if player else (0xa03ed0 if m1plus else GP)
-    header = ['struct dirent { unsigned ino, off; unsigned short reclen; unsigned char d_type; char d_name[256]; };']
+    header = ['struct dirent { unsigned ino, off; unsigned short reclen; unsigned char d_type; char d_name[256]; };',
+              'typedef struct { void *w[7]; } cstl_iter; /* libcstl 2.2 iterator_t, passed by value */']
     asm = ['.set noreorder', '.text']
     for name, (ret, args) in LIBC.items():
         # Unused I/O is removed by --gc-sections in the player payload.
