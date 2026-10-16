@@ -419,6 +419,19 @@ static inline int arc_out(int r, int y) {
 
 /* slide_menu_scroll_to @0x5f3400 and completion @0x5f3654; animator
  * start @0x665ab0, time_elapse @0x6660d4, scroll_set_params @0x682124. */
+#if M1PLUS
+/* V2.1's slide_menu has no spacer: on_scroll_done (0x6123f4) moves value - round(xoffset / h),
+ * and scroll_to (0x612278) keeps xoffset at 0x88 and its animator at 0xb8, which it registers for
+ * 0x127. widget_animator_t is 4 bytes on: time_elapse (0x673678) and scroll_set_params (0x68cd04). */
+#define SLIDE_OFFSET 0x88
+#define SLIDE_ANIMATOR 0xb8
+#define ANIM_ELAPSED 0x14
+#define ANIM_START_TIME 0x1c
+#define ANIM_DURATION 0x24
+#define ANIM_X_TO 0x64
+#define EVT_ANIM_END 0x127
+#define slide_stride(w) I(w, W_H)
+#else
 #define SLIDE_SPACER 0x84
 #define SLIDE_OFFSET 0x94
 #define SLIDE_ANIMATOR 0xc8
@@ -426,8 +439,10 @@ static inline int arc_out(int r, int y) {
 #define ANIM_START_TIME 0x18
 #define ANIM_DURATION 0x20
 #define ANIM_X_TO 0x60
-#define SLIDE_EASING 8          /* stock scroll_to easing */
 #define EVT_ANIM_END 0x125
+#define slide_stride(w) (slide_menu_item_width(w) + I(w, SLIDE_SPACER))
+#endif
+#define SLIDE_EASING 8          /* stock scroll_to easing */
 
 /* Play/Pause hold queue menu (docs/internals.md). AWTK input_device_status lives at
  * wm+0x98 (window_manager_get_input_device_status @0x66e734): 16 key records of 0x18 bytes from

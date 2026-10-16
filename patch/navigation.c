@@ -529,7 +529,7 @@ static int slide_index(void *w) {
     int n = (int)widget_count_children(w);
     if (!n) return -1;
     int id = I(w, SLIDE_INDEX);
-    int stride = slide_menu_item_width(w) + I(w, SLIDE_SPACER);
+    int stride = slide_stride(w);
     if (a && stride > 0) id -= I(a, ANIM_X_TO) / stride;
     id %= n;
     return id < 0 ? id + n : id;
@@ -554,7 +554,7 @@ static int cf_letter_expire(const void *info) {
 
 static void home_step(void *w, int dir, unsigned now, int jump) {
     int n = (int)widget_count_children(w);
-    int stride = slide_menu_item_width(w) + I(w, SLIDE_SPACER);
+    int stride = slide_stride(w);
     int fast =
         st.home_surface == w && st.home_dir == dir && now - st.last_home <= HOME_FAST_WINDOW_MS;
     void *a = P(w, SLIDE_ANIMATOR);

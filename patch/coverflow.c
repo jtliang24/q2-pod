@@ -1350,7 +1350,7 @@ static int floor_div(int a, int b) { /* floor division, b > 0 */
 /* The visual position from the slide_menu's index and live offset (the wheel's animator): album c
  * (of n) at the centre and frac past it. Stock completion commits index - offset / stride. */
 int visual(void *s, int n, int *c, int *frac) { /* shared with photos.c */
-    int stride = slide_menu_item_width(s) + I(s, SLIDE_SPACER), d = -I(s, SLIDE_OFFSET);
+    int stride = slide_stride(s), d = -I(s, SLIDE_OFFSET);
     if (n <= 0 || stride <= 0) return 0;
     int q = floor_div(2 * d + stride, 2 * stride);
     *frac = (d - q * stride) * CF_ONE / stride;
