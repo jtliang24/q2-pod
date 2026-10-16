@@ -934,10 +934,16 @@ void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(vo
 }
 
 #if M1PLUS
+static int title_return(const void *info) {
+    (void)info;
+    dispatch_key_return();
+    return 0; /* not RET_REPEAT: one shot */
+}
+/* After the click: the Return closes the page, which must not happen inside its title's dispatch. */
 static int page_title_click(void *ctx, void *event) {
     (void)ctx;
     (void)event;
-    dispatch_key_return();
+    timer_add(title_return, 0, 0);
     return STOP;
 }
 #endif
