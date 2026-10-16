@@ -809,7 +809,7 @@ static int e3_single(const void *unused) {
 /* ringnav(), the page on top: Simple's wheel and Centre, and Advanced's tab bar, which the wheel
  * reaches past the list's first row. */
 int eq_key(void *top, unsigned key) {
-    static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = KEY_CENTER };
+    static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
     if (!ui.page || top != ui.page) return 0;
     if (ui.tab == ADVANCED) {
         if (ui.screen != HOME || !ui.view ||

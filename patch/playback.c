@@ -123,6 +123,7 @@ void wheel_sample(int *s, int ret, char *info) {
     s[0] = wh_anchor;
 }
 
+#if !M1PLUS
 /* $t9 still holds ts_read, which stock loaded for its jalr; $s1 is the thread's info, which stock
  * hands its poster. tslib_thread_run's touch screen reads stay stock. */
 __asm__(".set noreorder\n.globl ringnav_ts_read\nringnav_ts_read:\n"
@@ -131,6 +132,9 @@ __asm__(".set noreorder\n.globl ringnav_ts_read\nringnav_ts_read:\n"
         "sw $v0, 16($sp)\nlw $a0, 20($sp)\nmove $a1, $v0\n"
         "jal wheel_sample\nmove $a2, $s1\n"
         "lw $v0, 16($sp)\nlw $ra, 28($sp)\njr $ra\naddiu $sp, $sp, 32\n.set reorder\n");
+#else
+void ringnav_ts_read(void) {}
+#endif
 static void *queue(void) { return P(mcl_pdeqplaylist, 0); }
 static void close_preload(void) {
     if (M(MCL_PRELOAD) == 1 && M(MCL_FD) != -1) send(M(MCL_FD), "{mcl-closegapless\\null}", 23, 0);

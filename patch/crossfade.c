@@ -176,7 +176,7 @@ static int single(const void *info) {
  * page, and the wheel sets the length, down to Off. Wheel sensitivity: the wheel a ten a tick
  * (not through +/-, which stock may have disabled), Centre to edit_key, which goes back. */
 int xfade_key(void *top, unsigned key) {
-    static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = KEY_CENTER };
+    static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
     if (!xf.page || top != xf.page) return 0;
     if (key == KEY_CENTER) {
         if (xf.wheel) return 0;

@@ -371,13 +371,31 @@ static inline int arc_out(int r, int y) {
 #define BUMP_MS 120
 #define EDGE_PAUSE_MS 300 /* well above WHEEL_RUN_MS, so a spin never counts as a pause */
 #define BAR_VALUE 0x7c /* scroll_bar native value, maintained by list/table scroll callbacks */
+#if M1PLUS
+#define KEY_VOLUMEDOWN 221
+#define KEY_VOLUMEUP 220
+#define KEY_POWER 210
+#define KEY_PLAY 213
+#define KEY_FWD_BTN 214
+#define KEY_BACK_BTN 215
+#define KEY_RETURN 170
+#define KEY_CENTER 218
+#define KEY_PREV 172
+#define KEY_NEXT 173
+#define WM_KEY_SLEEP KEY_POWER
+#else
+#define KEY_VOLUMEDOWN 221
+#define KEY_VOLUMEUP 220
+#define KEY_POWER 210
 #define KEY_CENTER 218
 #define KEY_PREV 172
 #define KEY_NEXT 173
 #define KEY_PLAY 171
-#define KEY_RETURN 170 /* on_common_keyup @0x4e8124 */
-#define KEY_BACK_BTN 222 /* the previous and next buttons: on_wm_keyup_fun, prev_quick_click */
+#define KEY_RETURN 170
+#define KEY_BACK_BTN 222
 #define KEY_FWD_BTN 223
+#define WM_KEY_SLEEP KEY_CENTER
+#endif
 #define KEY_LOCKOUT 0xa37c89 /* stock: a centre key sets 8, on_wm_timer_setup_state counts it down per 100 ms */
 /* Stock drops wheel ticks while KEY_LOCKOUT is set, 800 ms after Centre, so a press that brushes
  * the wheel cannot scroll; only its first LOCKOUT_KEEP x 100 ms are kept (ringnav). */

@@ -933,10 +933,23 @@ void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(vo
     return page;
 }
 
+#if M1PLUS
+static int page_title_click(void *ctx, void *event) {
+    (void)ctx;
+    (void)event;
+    dispatch_key_return();
+    return STOP;
+}
+#endif
+
 /* A page's 48px title bar; shared with photos.c. */
 void *page_title(void *body, const char *caption) {
     void *title = text(body, CF_X, 0, CF_W, 48);
     widget_set_text_utf8(title, caption);
+#if M1PLUS
+    widget_set_prop_int(title, "clickable", 1);
+    widget_on(title, EVT_CLICK, page_title_click, 0);
+#endif
     return title;
 }
 

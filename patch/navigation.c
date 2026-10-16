@@ -242,8 +242,9 @@ typedef struct {
     unsigned lyric_timer; /* runs while the wheel holds the lyrics and stock's timer is stopped */
     /* The Display settings, read from config.ini on first use, and the display page's value labels.
      */
-    int settings_read, accent, home_full, battery, home_rockbox, classic, shortcut;
-    void *setting_label[5];
+    int settings_read, accent, home_full, battery, home_rockbox, classic, shortcut, knob_mode;
+    int swipe_x, swipe_y, swipe_valid;
+    void *setting_label[6];
     unsigned tone_key; /* the wheel key whose press ringnav_keydown silenced, 0 when none */
     int greeted;       /* the first reachable list got its boot repaint */
 #endif
@@ -1329,16 +1330,17 @@ _Static_assert(sizeof accent_names / sizeof *accent_names == ACCENT_N, "one name
 int config_digit(const char *key, int n) {
     return config_value("IPOD", key, n);
 } /* and visualizer.c's */
-/* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme. */
-static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT" };
-static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 5 };
+/* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme, 4 Shortcut, 5 Knob. */
+static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT", "KNOB" };
+static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 5, 2 };
 static int *const setting_values[] = { &st.accent, &st.home_full, &st.battery, &st.classic,
-                                       &st.shortcut };
+                                       &st.shortcut, &st.knob_mode };
 static int accent(void) {
     if (!st.settings_read) {
         for (int i = 0; i < 4; ++i)
             *setting_values[i] = config_digit(setting_keys[i], setting_counts[i]);
         st.shortcut = config_or("IPOD", "SHORTCUT", 5, 5); /* 5: no key, see shortcut() */
+        st.knob_mode = config_or("IPOD", "KNOB", 2, 0);    /* 0: Volume (Default), 1: Navigation */
         st.settings_read = 1;
     }
     return st.classic ? st.accent : 0; /* Graphite */
@@ -2500,7 +2502,7 @@ static void np_cancel(void) {
  * on_wm_keyup_fun, which turns the screen off (it reads only the event's key). */
 static int np_single(const void *info) {
     (void)info;
-    static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = KEY_CENTER };
+    static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
     st.np_press = 0;
     if (g_backlight_status) on_wm_keyup_fun((void *)0, (void *)release);
     return 0;
@@ -3049,7 +3051,8 @@ static void setting_text(int i) {
                              *const battery[] = { "Battery: Icon", "Battery: Percent",
                                                   "Battery: Icon + Percent",
                                                   "Battery: Percent Inside" },
-                             *const theme[] = { "Theme: Minimal", "Theme: Classic" };
+                             *const theme[] = { "Theme: Minimal", "Theme: Classic" },
+                             *const knob[] = { "Knob: Volume", "Knob: Navigation" };
     accent(); /* reads the settings */
     const char *const names[] = { accent_names[st.accent], home[st.home_full], battery[st.battery],
                                   theme[st.classic] };
@@ -3057,6 +3060,10 @@ static void setting_text(int i) {
     if (i == 4) {
         tk_snprintf(shortcut, sizeof shortcut, "Shortcut: %s", ipod_home_shortcut());
         widget_set_text_utf8(st.setting_label[i], shortcut);
+        return;
+    }
+    if (i == 5) {
+        widget_set_text_utf8(st.setting_label[i], knob[st.knob_mode]);
         return;
     }
     widget_set_text_utf8(st.setting_label[i], names[i]);
@@ -3194,6 +3201,10 @@ int ringnav_display(void *win, void *ctx) {
         st.setting_label[4] = list_row(view, "playset_covermode", setting_click, (void *)4);
         setting_text(4);
         accent_row();
+#if M1PLUS
+        st.setting_label[5] = list_row(view, "system_display", setting_click, (void *)5);
+        setting_text(5);
+#endif
     }
 #else
     pod_rows(win, "scroll_view_display", POD_ARTIST_CF, 1, cf_icon);
@@ -5972,7 +5983,7 @@ int rockbox_open(void *ctx, void *event) {
 }
 #endif
 
-#if IPOD
+#if IPOD || M1PLUS
 /* Now Playing on top. */
 static int now_playing(void) {
     void *top = window_manager_get_top_window(window_manager());
@@ -6131,11 +6142,39 @@ static int wake_gate(void *e) {
     return !st.wake_pass;
 }
 
+void dispatch_key_return(void) {
+    unsigned ev[8] = { 0 };
+    ev[EVENT_TYPE / 4] = EVT_KEY_UP;
+    ev[EVENT_KEY / 4] = KEY_RETURN;
+    window_manager_dispatch_input_event(window_manager(), (void *)ev);
+}
+
 /* window_manager_dispatch_input_event: while q2video plays (books.c) no key or touch reaches the
  * UI; a key's release goes to the player instead. Every event times ringnav_sleep's idle. */
 int ringnav_input(void *wm, void *e) {
     if (e && wake_gate(e)) return 0;
     st.last_input = time_now_ms();
+#if M1PLUS
+    if (e) {
+        unsigned type = (unsigned)I(e, EVENT_TYPE);
+        if (type == EVT_POINTER_DOWN) {
+            st.swipe_x = I(e, EVENT_X);
+            st.swipe_y = I(e, EVENT_Y);
+            st.swipe_valid = (st.swipe_x < 32);
+        } else if (st.swipe_valid) {
+            int dx = I(e, EVENT_X) - st.swipe_x;
+            int dy = I(e, EVENT_Y) - st.swipe_y;
+            if (dy < 0) dy = -dy;
+            if (dx > 40 && dx > dy * 2) {
+                st.swipe_valid = 0;
+                dispatch_key_return();
+                return 0;
+            }
+            if (type == EVT_POINTER_UP || type == EVT_POINTER_UP_BEFORE || type == EVT_POINTER_ABORT)
+                st.swipe_valid = 0;
+        }
+    }
+#endif
     if (!video_on()) return stock_input_trampoline(wm, e);
     if (e && I(e, EVENT_TYPE) == EVT_KEY_UP) video_key((unsigned)I(e, EVENT_KEY));
     return 0;
@@ -6159,6 +6198,17 @@ int ringnav_buzzer(int on) {
     return stock_buzzer_trampoline(on);
 }
 
+static int knob_nav_active(void) {
+#if M1PLUS
+    accent();
+    if (!st.knob_mode || !g_backlight_status) return 0;
+    if (now_playing() && !st.scrub && !st.rate_win) return 0;
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 /* on_wm_keydown_before_fun. Stock clicks (buzzeer_switch, which reads g_keytone_flag) on the press,
  * before the release moves anything. A wheel press on a page whose release ringnav() takes as row
  * navigation runs the whole stock body with the flag off for that one synchronous call, so its
@@ -6167,6 +6217,13 @@ int ringnav_buzzer(int on) {
  * scrub, the volume and every other key keep the stock click. */
 int ringnav_keydown(void *ctx, void *event) {
     unsigned key = event ? (unsigned)I(event, EVENT_KEY) : 0;
+#if M1PLUS
+    if (knob_nav_active() && event) {
+        if (key == KEY_VOLUMEDOWN) key = KEY_PREV, I(event, EVENT_KEY) = KEY_PREV;
+        else if (key == KEY_VOLUMEUP) key = KEY_NEXT, I(event, EVENT_KEY) = KEY_NEXT;
+        else if (key == KEY_POWER) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
+    }
+#endif
     void *top = window_manager_get_top_window(window_manager());
 #if IPOD
     unsigned char tone = g_keytone_flag;
@@ -6254,7 +6311,7 @@ static int edit_single(const void *info) {
 }
 
 static int edit_key(void *top, unsigned key) {
-    static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = KEY_CENTER };
+    static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
     int quick = top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "statusbar_dialog");
     int n = fields(top);
     if (!quick && !n && !slider_page(top)) return 0;
@@ -6368,6 +6425,17 @@ int ringnav(void *ctx, void *event) {
         return 0;
     }
     unsigned key = (unsigned)I(event, EVENT_KEY);
+#if M1PLUS
+    if (knob_nav_active()) {
+        if (key == KEY_VOLUMEDOWN) key = KEY_PREV, I(event, EVENT_KEY) = KEY_PREV;
+        else if (key == KEY_VOLUMEUP) key = KEY_NEXT, I(event, EVENT_KEY) = KEY_NEXT;
+        else if (key == KEY_POWER) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
+    }
+    if (!media_playing() && !now_playing() && key == KEY_BACK_BTN) {
+        dispatch_key_return();
+        return STOP;
+    }
+#endif
 #if IPOD
     /* This release's press was silenced by ringnav_keydown: a row change below clicks instead. */
     int owned = st.tone_key == key;
@@ -6487,7 +6555,7 @@ int ringnav(void *ctx, void *event) {
     if (key == KEY_CENTER && !st.center_timer) {
         unsigned now = (unsigned)time_now_ms();
         if (top == st.dc_top && now - st.dc_at < DOUBLE_CLICK_MS) {
-            static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = KEY_CENTER };
+            static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
             st.dc_top = (void *)0;
             drop_input();
             if (g_backlight_status) on_wm_keyup_fun((void *)0, (void *)release);
