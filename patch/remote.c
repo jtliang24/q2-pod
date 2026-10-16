@@ -136,7 +136,7 @@ static int capture(void) {
     int fb=open("/dev/fb0",O_RDWR);
     if (fb<0 || ioctl(fb,FBIOGET_VSCREENINFO,var) || ioctl(fb,FBIOGET_FSCREENINFO,fix)) return 1;
     unsigned w=var[0], h=var[1], virtual_h=var[3], bpp=var[6], y=var[5], stride=fix[11], length=fix[5];
-    if (w!=320 || h!=375 || virtual_h<2*h || bpp!=32 || stride<w*4 || y+h>virtual_h || length<virtual_h*stride) return 1;
+    if (w!=320 || (h!=375 && h!=480) || virtual_h<2*h || bpp!=32 || stride<w*4 || y+h>virtual_h || length<virtual_h*stride) return 1;
     unsigned char *mem=mmap(0,length,1,1,fb,0);
     if (mem==(void*)-1) return 1;
     unsigned size=stride*h;
