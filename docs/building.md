@@ -14,21 +14,26 @@
 - squashfs-tools 4.6 or later (tested with 4.6.1 and 4.7.5)
 - ImageMagick 6 or 7 for the iPod UI's settings icons (`convert` or `magick`; tested with 6.9.12)
 - The test dependencies: `pip install -r requirements.txt`
-- The original stock ZIP. Its SHA-256 is:
-
-```text
-154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00
-```
+- Alternatively, use the included Nix flake devshell for a hermetic build environment: `nix develop`
+- The original stock firmware:
+  - **Shanling Q2 (V1.32 ZIP):** SHA-256 `154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00`
+  - **Shanling M1 Plus (V2.1 update.bin):** SHA-256 `1ccb4667e3e9bdf9a35be4dc58d09b898ca53c5fd58396b7667fb91fe895f925`
 
 ## Build
 
+### Shanling Q2
 ```sh
 python3 tools/build.py 'Q2 Firmware V1.32.zip' --out /tmp/q2-build                 # Legacy (stock UI)
 python3 tools/build.py 'Q2 Firmware V1.32.zip' --out /tmp/q2-ipod --ipod           # iPod UI
 python3 tools/build.py 'Q2 Firmware V1.32.zip' --out /tmp/q2-dev --ipod --dev      # iPod test build
 ```
 
-Rebuilt firmware uses `assets/boot-logo.jpg` as the boot splash. Pass another 320x375 JPEG with `--logo` to use your own; see [boot.md](boot.md#custom-boot-logo).
+### Shanling M1 Plus
+```sh
+python3 tools/build.py 'M1 Plus Firmware V2.1/update.bin' --out /tmp/m1plus-build
+```
+
+Rebuilt firmware uses `assets/boot-logo.jpg` as the boot splash (320x375 for Q2, 320x480 for M1 Plus). Pass another JPEG with `--logo` to use your own; see [boot.md](boot.md#custom-boot-logo).
 
 Both variants replace the stock equalizer page with a 30-band PEQ editor (bands, shelves, preamp, on/off, presets, stock's built-in genre presets, `/EQ` import) and patch `hciplayer`'s equalizer filter with the matching DSP. Both also clear the 44.1 kHz AAC capability bit in `bluealsa` (see [internals.md](internals.md#bluetooth-aac)).
 

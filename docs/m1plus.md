@@ -274,40 +274,25 @@ Beyond `demo` and `hciplayer`, [`tools/build.py`](file:///home/jtliang/Projects/
 
 ---
 
-## 7. Implementation & Porting Roadmap
+## 7. Implementation Status & Verification
 
-```mermaid
-flowchart LR
-    Phase1["Phase 1: Build & Packaging Tooling"] --> Phase2["Phase 2: hciplayer Audio Engine"]
-    Phase2 --> Phase3["Phase 3: Portrait 320x480 UI Geometry"]
-    Phase3 --> Phase4["Phase 4: Hybrid Touch + Knob Navigation"]
-    Phase4 --> Phase5["Phase 5: Aux Binaries & Hardware Integration"]
-```
+All phases of the Shanling M1 Plus port have been implemented and verified:
 
-### Phase 1: Tooling, Symbol Audit & Firmware Packaging
-1. Extend [`tools/build.py`](file:///home/jtliang/Projects/q2-pod/tools/build.py) (or create `tools/build_m1plus.py`):
-   - Extract `recovery-update/rootfs.squashfs` and `xImage` from the M1 Plus tar `update.bin`.
-   - Audit all 57 `demo` hooks (verifying 32-byte branch-free preambles), 17 `PRIVATE_FUNCTIONS`, `FUNCTIONS`, `GLOBALS`, `CONTEXT_DATA`, and inline `patch_word` sites against M1 Plus V2.1 `demo`.
-   - Repack SquashFS and write a POSIX tar `update.bin` with updated MD5 hashes in `firmware_v20.info`.
-
-### Phase 2: `hciplayer` Audio Engine (PEQ, ReplayGain, Seek, Crossfade, Visualizer)
-1. Locate `EQ_DESC`, `EQ_OPEN_SLOT`, `EQ_RATE_GATES`, `VBR_SCAN`, `SEEK_SLOT`, `STOCK_SEEK`, `HR_MP3_SEEK`, `ID3_CALLS`, `STOCK_ID3`, `AV_DICT_SET`, `AV_DICT_FREE`, `RG_EXPORT`, `MPCTX`, `written_audio_pts`, `LENGTH`, and the 22 GOT `LIBC` slots in M1 Plus's `/usr/bin/hciplayer`.
-2. Compile [`patch/peq.c`](file:///home/jtliang/Projects/q2-pod/patch/peq.c) and [`patch/peq_player.c`](file:///home/jtliang/Projects/q2-pod/patch/peq_player.c) and inject at `0x00e10000`.
-3. Validate 30-band PEQ, Hi-Res (>48 kHz) filtering, ReplayGain, crossfade, and visualizer shared memory (`/dev/shm/q2peq`) through the ES9069Q DAC.
-
-### Phase 3: Portrait UI Geometry (`375 × 320` Landscape $\to$ `320 × 480` Portrait)
-1. Adapt [`tools/ipod.py`](file:///home/jtliang/Projects/q2-pod/tools/ipod.py) and [`patch/offsets.inc`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc):
-   - Change logical viewport width from `375` to `320` and height from `320` (`BOTTOM = 290`) to `480` (`BOTTOM = 450`).
-   - Set `CORNER_R = 0` (removing the Q2's `80 px` rounded corner insets and `STATUS_MARGIN = 52`).
-   - Redesign Now Playing (`playing_page`), Home Split (`HOME_SPLIT_W`), and EQ/PEQ (`peq_ui.c`) layouts to fit `320 px` width and take advantage of the `450 px` vertical client height.
-2. Adapt [`patch/coverflow.c`](file:///home/jtliang/Projects/q2-pod/patch/coverflow.c), [`patch/photos.c`](file:///home/jtliang/Projects/q2-pod/patch/photos.c), [`patch/books.c`](file:///home/jtliang/Projects/q2-pod/patch/books.c), [`patch/visualizer.c`](file:///home/jtliang/Projects/q2-pod/patch/visualizer.c), [`patch/spotify.c`](file:///home/jtliang/Projects/q2-pod/patch/spotify.c), [`patch/radio.c`](file:///home/jtliang/Projects/q2-pod/patch/radio.c), and [`patch/lockscreen.c`](file:///home/jtliang/Projects/q2-pod/patch/lockscreen.c) from `375 × 290` to `320 × 450`.
-
-### Phase 4: Hybrid Touch + Rotary Knob Navigation & Return Synthesis
-1. Omit Q2's `WHEEL_TS_READ` (`ts_read`) hook so `/dev/input/event2` (`gt9xx_touch.ko`) operates strictly as a touchscreen.
-2. Implement **Return (`KEY_RETURN = 170`) synthesis** via left-edge swipe gesture / titlebar back tap and a physical button shortcut so custom `page_open` screens can always be exited without a dedicated hardware Return button.
-3. Implement opt-in **Knob Navigation Mode** translating `keyboard_encoder.ko` events into AWTK `KEY_PREV` (`172`) / `KEY_NEXT` (`173`) list navigation steps (with `KEY_POWER` / `KEY_CENTER` (`218`) confirming selection), while falling back to hardware volume on Now Playing and when the screen is off.
-
-### Phase 5: Auxiliary Binaries & Hardware Subsystems
-1. Update [`patch/boot.c`](file:///home/jtliang/Projects/q2-pod/patch/boot.c), [`patch/video.c`](file:///home/jtliang/Projects/q2-pod/patch/video.c), and [`patch/remote.c`](file:///home/jtliang/Projects/q2-pod/patch/remote.c) for `320 × 480` upright framebuffer, `keyboard_gpio_add.ko` (`KEY_PLAYPAUSE = 164`), and `codec_es9069q.ko`.
-2. Update boot logo verification ([`logo_sync`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L5866-L5898)) for `320 × 480` JPEGs and `ROTATEMODE=1` (`logo180.jpg`).
-3. Verify `bluealsa`, `libtag_c.so.2.0.1`, AXP2101 charge limit (`switch_charge_enable`), and CPU1 hotplug (`Low power`) on M1 Plus hardware.
+- [x] **Nix Flake Devshell (`flake.nix`):** Hermetic multiStdenv environment providing Clang/LLD cross-compilation toolchains, squashfs-tools, and testing dependencies (`nix develop`).
+- [x] **Auxiliary Binaries & Hardware Integration (`09dba3a`):**
+  - `patch/boot.c`: Detects `keyboard_gpio_add` and monitors `KEY_PLAYPAUSE` (`164`) for Rockbox dual-boot toggle.
+  - `patch/video.c`: Updated for upright `320 × 480` framebuffer, removed 90° clockwise rotation transpose, added M1 Plus overlay bar layout.
+  - `patch/remote.c`: Updated frame dimension checks for `320 × 480`.
+- [x] **Audio Engine & PEQ (`a1ac12f`):**
+  - `patch/peq.c` & `patch/peq_player.c`: Added M1 Plus profile with `af_info_equalizer` open slot (`0x00494444`), rate gates (`0x42cd78`, `0x42fc6c`), demuxer seek slot (`0x44682c`), and ID3 RG parse calls (`0x442df0`, `0x4453e0`).
+  - `patch/peq.h`: Symbol fallbacks and stubs for missing M1 Plus exports.
+- [x] **Portrait 320x480 Geometry & Layouts (`6cca35f`):**
+  - `patch/offsets.inc`: Conditioned `W=320, H=480, CORNER_R=0, STATUS_MARGIN=0, BOTTOM=450` for M1 Plus.
+  - `patch/coverflow.c`, `patch/photos.c`, `patch/books.c`, `patch/visualizer.c`, `patch/lockscreen.c`: Layouts refactored for upright 320x480 display without pill-glass corner insets.
+- [x] **Return Synthesis & Knob Navigation (`e9b61f7`):**
+  - Left-edge swipe gesture (`dx > 50`) and title bar back-tap synthesize `KEY_RETURN`.
+  - Knob Navigation Mode converts rotary encoder inputs to `KEY_PREV` / `KEY_NEXT` list navigation, falling back to volume control on Now Playing or when screen is off.
+- [x] **Build & Packaging Tooling (`feat(build)`):**
+  - `tools/build.py`: Automatic model detection between Q2 and M1 Plus (`update.bin` tar container vs `update.zip`).
+  - Symbol resolution, hook relocation, and trampoline generation for M1 Plus V2.1 `demo` binary.
+  - Repacking into valid `update.bin` with recalculated MD5s in `firmware_v20.info`.

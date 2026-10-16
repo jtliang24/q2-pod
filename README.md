@@ -5,13 +5,13 @@
 </p>
 
 <p align="center">
-  iPod classic experience for the Shanling Q2.<br>
-  Wheel navigation, Coverflow, PEQ, and optional Spotify and Rockbox, all built on top of the stock firmware.
+  iPod classic experience for the Shanling Q2 and Shanling M1 Plus.<br>
+  Wheel/knob navigation, Coverflow, PEQ, and optional Spotify and Rockbox, all built on top of the stock firmware.
 </p>
 
 <p align="center">
   <a href="https://github.com/DiamondBond/q2-pod/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/DiamondBond/q2-pod?style=flat-square&label=release&color=3D424B"></a>
-  <a href="#features"><img alt="Device: Shanling Q2" src="https://img.shields.io/badge/device-Shanling%20Q2-B99AC8?style=flat-square"></a>
+  <a href="#features"><img alt="Devices: Shanling Q2 & M1 Plus" src="https://img.shields.io/badge/devices-Shanling%20Q2%20%7C%20M1%20Plus-B99AC8?style=flat-square"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-D77868?style=flat-square"></a>
   <a href="https://youtu.be/C5x05EwsPGI"><img alt="Watch on YouTube" src="https://img.shields.io/badge/YouTube-video-FF0000?style=flat-square&logo=youtube&logoColor=white"></a>
   <a href="https://discord.gg/pgsQpXhSQ"><img alt="Join the Discord" src="https://img.shields.io/badge/Discord-join-5865F2?style=flat-square&logo=discord&logoColor=white"></a>
@@ -56,10 +56,10 @@
 >
 > Flashing firmware carries risk. Back up anything on the card you can't lose before you start.
 
-1. **Download** `Q2.Firmware.*.zip` from the [latest release](https://github.com/DiamondBond/q2-pod/releases/latest).
-2. **Plug the Q2 into your computer** with the USB-C cable. The card shows up as a drive.
-3. **Unzip the download** and copy `update.tar` to the **root** of the card (not inside a folder), then eject and unplug.
-4. **Update:** open **System settings → System Update → TF card update**. Leave the card in until the Q2 restarts.
+1. **Download** `Q2.Firmware.*.zip` (for Q2) or `update.bin` (for M1 Plus) from the [latest release](https://github.com/DiamondBond/q2-pod/releases/latest).
+2. **Plug your device into your computer** with the USB-C cable. The card shows up as a drive.
+3. **Copy the update archive** to the **root** of the card (copy `update.tar` for Q2 or `update.bin` for M1 Plus, not inside a folder), then eject and unplug.
+4. **Update:** open **System settings → System Update → TF card update**. Leave the card in until the player restarts.
 
 > [!TIP]
 > Prefer Shanling's original look? Download `Q2.Firmware.*-legacy.zip` instead. It has the same features and fixes, without the iPod UI.
