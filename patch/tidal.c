@@ -30,7 +30,11 @@ static struct {
 /* mcl_tidalStartPlayer's only caller, the stream-URL thread (0x486d88), keeps its own copy of the
  * song id it fetched in $s2 from 0x48647c until it frees it after the call, so a skip that has
  * already rewritten tidalsongid can't file one track's stream under another's id. */
+#if M1PLUS /* V2.1's two callers (0x500d5c, 0x51c7b0) keep no audited id: stock streams, uncached */
+__asm__(".globl tidal_start\ntidal_start:\nmove $a1, $zero\nj tidal_play\n");
+#else
 __asm__(".globl tidal_start\ntidal_start:\nmove $a1, $s2\nj tidal_play\n");
+#endif
 
 /* Deletes the oldest finished downloads until the rest fit TIDAL_CAP_MB. stat is o32's: st_size
  * word 12, st_mtime word 16. ponytail: a directory pass per deletion, fine for a few hundred files. */
