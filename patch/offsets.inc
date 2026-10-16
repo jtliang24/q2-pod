@@ -34,7 +34,9 @@
 #define CHILDREN_LAYOUT_VTABLE 0x10
 #define DEFAULT_LAYOUT_X_MARGIN 0x18
 #define DEFAULT_LAYOUT_SPACING 0x1a
+#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
 #define DEFAULT_LAYOUT_VTABLE 0x926b20
+#endif
 #define EMIT_TYPE 0x08
 #define EMIT_PENDING_REMOVE 0x15
 #define EMIT_NEXT 0x20
@@ -133,7 +135,9 @@
 /* bitmap_t (docs/internals.md#accent): format u16 @0xe, 1 RGBA, 2 ABGR, 3 BGRA, 4 ARGB, 4 bytes a pixel
  * by bitmap_get_bpp_of_format; per format, the byte offsets of r, g, b and a. */
 #define BITMAP_RGBA_AT { { 0, 1, 2, 3 }, { 3, 2, 1, 0 }, { 2, 1, 0, 3 }, { 1, 2, 3, 0 } }
+#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
 #define STYLE_COLOR_GRADIENT_RET 0x649ff0 /* style_get_color's bal style_get_gradient (0x649fe8) returns here */
+#endif
 #define STOCK_RED 0xff1448
 #define RED_TOLERANCE 8 /* per channel, 0-255: how far a color may sit from a red/neutral blend */
 /* iPod black status chrome (Classic: BAR_CLASSIC); TRACK_COLOR is Now Playing's progress track. */
@@ -308,8 +312,10 @@ static inline int arc_out(int r, int y) {
 #define SET_STOCK_TRAIL 276   /* the usual trailing image x in the stock button */
 #define SET_RIGHT_SIDE 150    /* stock children starting here keep to the right edge */
 #define LIST_DEFAULT_ITEM_HEIGHT 0x7c  /* list_view default_item_height */
+#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
 #define LIST_VIEW_LAYOUT 0x5e9eb4      /* children_layouter_list_view's layout */
 #define LIST_VIEW_LAYOUT_SLOT 0x926930 /* its vtable slot (vtable 0x926928 + 8) */
+#endif
 #define IMAGE_DRAW_SCALE_DOWN 5        /* "scale_down" in the stock draw type table @0x9272c0 */
 #define IMAGE_DRAW_CENTER 1            /* "center", the same table */
 /* iPod fast-scroll letter: the selected row's first character in white, LETTER_PX high, on a
@@ -397,7 +403,9 @@ static inline int arc_out(int r, int y) {
 #define KEY_FWD_BTN 223
 #define WM_KEY_SLEEP KEY_CENTER
 #endif
+#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
 #define KEY_LOCKOUT 0xa37c89 /* stock: a centre key sets 8, on_wm_timer_setup_state counts it down per 100 ms */
+#endif
 /* Stock drops wheel ticks while KEY_LOCKOUT is set, 800 ms after Centre, so a press that brushes
  * the wheel cannot scroll; only its first LOCKOUT_KEEP x 100 ms are kept (ringnav). */
 #define LOCKOUT_KEEP 2
@@ -411,11 +419,20 @@ static inline int arc_out(int r, int y) {
  * a turn), 200 a turn, and stock's poster encoderknob_thread_run+0x150, which dispatches the
  * thread info's key event. */
 #define WHEEL_TICK_UNITS 28
+#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
 #define WHEEL_POST 0x6257f0
+#endif
 #define WHEEL_INFO_EVENT 0x20 /* event type: 0x110 key down, 0x114 key up */
 #define WHEEL_INFO_KEY 0x38   /* the event's key (EVENT_KEY) */
+#if M1PLUS
+/* V2.1 has no wheel lockout and no Return key latch. on_wm_keyup_fun (0x4cd9ac) drops a power
+ * (knob) release while this byte or g_power_longkey (tools/build.py M1PLUS_RAW_GLOBALS) is set and
+ * clears both; to_poweroptions sets this one after into_standby returns (0x4ce6d4). */
+#define BOOT_KEY_GUARD 0xa041a3
+#else
 #define BOOT_KEY_GUARD 0xa37c8a /* no symbol: set after a Standby resume, on_wm_keyup_fun drops the next centre release */
 #define RETURN_RELEASE_LATCH 0xa37c8b /* stock long Return arms it; the key-up filter consumes it */
+#endif
 
 /* slide_menu_scroll_to @0x5f3400 and completion @0x5f3654; animator
  * start @0x665ab0, time_elapse @0x6660d4, scroll_set_params @0x682124. */
@@ -472,8 +489,29 @@ static inline int arc_out(int r, int y) {
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
+#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
 #define ALBUMINFO_ROW 0xa27200  /* the albums row localmusic_albuminfo_page_init opened (0x4a7ab4) */
+#endif
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
+#if M1PLUS
+/* V2.1 keeps the same block, the words at the same offsets from MCL_POS: mclGetPlayPos (0x5d4290),
+ * mclGetPlayType, mclGetPlayMode, mclGetLastPos, mclGetRandomNum (the pool), mclCheckMplayerSocket
+ * and mclGetJumpFolder/mclGetGaplessMode (bytes) read them; mclSetPlayMode (0x5d278c) closes a
+ * preload with MCL_PRELOAD and MCL_FD, and the preload pick (0x5d0ea4) sets MCL_PREPOS.
+ * config_mplayer (0x4d869c) re-applies speed and mode as V1.32's player_initconfig does. */
+#define MCL_POOL 0xa0aae8
+#define MCL_LASTPOS 0xa0abc8
+#define MCL_PREPOS 0xa0abcc
+#define MCL_PRELOAD 0xa0abd0
+#define MCL_TYPE 0xa0abd8
+#define MCL_POS 0xa0abdc
+#define MCL_MODE 0xa0abe0
+#define MCL_JUMPFOLDER 0xa0ab88
+#define MCL_GAPLESS 0xa0ab89
+#define MCL_FD 0xa0abec
+#define INITCONFIG_SPEED_RET 0x4d86c4
+#define INITCONFIG_MODE_RET 0x4d8738
+#else
 #define MCL_POOL 0xa3bdb0       /* deque_t * of int: unplayed shuffle indices */
 #define MCL_LASTPOS 0xa3be90    /* shuffle "previous" index, -1 none */
 #define MCL_PREPOS 0xa3be94
@@ -484,10 +522,16 @@ static inline int arc_out(int r, int y) {
 #define MCL_JUMPFOLDER 0xa3be53 /* byte: Folder Skip, read only for class 1 queues */
 #define MCL_GAPLESS 0xa3be54    /* byte: stock's Gapless setting (mclGetGaplessMode); mclAutoChange preloads only with it */
 #define MCL_FD 0xa3beb4         /* player socket, -1 none */
+#define INITCONFIG_SPEED_RET 0x51339c /* player_initconfig's mclSetPlaySpeed call returns here */
 #define INITCONFIG_MODE_RET 0x513420 /* player_initconfig's mclSetPlayMode call (jalr 0x513418) returns here */
+#endif
 /* mclUsbAudioSetVol (0x5ac574): the USB DAC's volume control, -1 before the first set, -2 when it
  * has none and hciplayer's soft volume (mcl-softvolflag) applies instead (0x5a8498 opens hw:1). */
+#if M1PLUS
+#define USB_MIXER 0xa0aba4 /* mclUsbAudioSetVol (0x5d4694), MCL_POS - 0x38 as in V1.32 */
+#else
 #define USB_MIXER 0xa3be6c
+#endif
 /* Stock sortselect_dialog callbacks the menu replaces: both set g_sort_changeflag, which makes
  * allmusic reload and scroll to the top on return. */
 #define SORTSELECT_KEYUP 0x49f3e0
@@ -506,8 +550,18 @@ static inline int arc_out(int r, int y) {
 #define BOOTVOL_ADD 0x4b45a8      /* img_add's click */
 #define BOOTVOL_CHANGING 0x4b48f4 /* slider_bootvol's EVT_VALUE_CHANGING */
 #define BOOTVOL_CHANGED 0x4b4300  /* slider_bootvol's EVT_VALUE_CHANGED */
+#if M1PLUS /* V2.1: dialog_scanmusic_dialog_init keeps the handle (0x47bcd8), wait_scan sets the flag (0x47b460) */
+#define SCAN_THREAD 0xa03a44
+#define SCAN_DONE 0xa03a40
+#else
 #define SCAN_THREAD 0xa271d8
 #define SCAN_DONE 0xa271d4
+#endif
+#if M1PLUS
+#define BT_PAIRLIST 0xa041c0 /* stock pdeq_btpairlist (a symbol in V2.1) */
+#else
+#define BT_PAIRLIST 0xa38110 /* stock pdeq_btpairlist */
+#endif
 /* Coverflow text: iPod keeps every label CF_EDGE from the sides, where the lowest track row's text
  * clears the bottom corners; both builds keep the captions there. Album names and artists scroll
  * within that. Under the covers (CF_TEXT_Y), the album name is CF_NAME_PX white and the artist

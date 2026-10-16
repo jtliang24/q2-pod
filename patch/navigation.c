@@ -1140,9 +1140,11 @@ static int confirm_center(const void *info) {
     }
     cancel_center(); /* Clear before any app callback can destroy or navigate the page. */
     if (valid) {
+#if !M1PLUS /* V2.1 has no wheel lockout */
         /* Stock's wheel lockout after the centre key (up to 800 ms) has guarded the press; the
          * page it opens scrolls at once. */
         *(volatile unsigned char *)KEY_LOCKOUT = 0;
+#endif
         void *target = g_menu.at[index_of(&g_menu, st.center_id)];
         char click[0x30];
         stock_dispatch_trampoline(target, pointer_event_init(click, EVT_CLICK, target, 0, 0));
@@ -3537,9 +3539,11 @@ int compact_now_playing(void) {
             /* The window switch stops the hold's key-up from reaching the stock release
              * filter, so the latch it armed would otherwise swallow the next Return. Drop it
              * once the switch really landed, so the first short Return goes back. */
+#if !M1PLUS /* V2.1 has no Return key, so no latch */
             void *now = window_manager_get_top_window(wm);
             if (now && !tk_strcmp(widget_get_prop_str(now, "name", ""), "playing_page"))
                 *(volatile unsigned char *)RETURN_RELEASE_LATCH = 0;
+#endif
         }
     }
     return 0;
@@ -3949,6 +3953,7 @@ int ringnav_artist_art_name(char *buf, unsigned size, unsigned row, const char *
 int ringnav_artist_covers(void *list) {
     return st.art_keys ? rename_covers(list, artist_key) : albumcoverinfo_init(list);
 }
+#if !M1PLUS /* entered only from V1.32's ALBUM_ART */
 /* The album page's big cover, snprintf of classinfo +0xd (0x4a72a4): its Albums row's cover task
  * name, as the thread hashed it, when that is this album's key. */
 int ringnav_art_header(char *buf, unsigned size, const char *fmt, const char *album) {
@@ -3958,6 +3963,7 @@ int ringnav_art_header(char *buf, unsigned size, const char *fmt, const char *al
     return snprintf(buf, size, fmt,
                     key && !strncasecmp(key, album, n) && key[n] == 0x1f ? key : album);
 }
+#endif
 
 static int empty_toast(const void *unused) {
     static const char *const none[] = { "No albums", "No artists", "No composers", "No genres" };
@@ -6070,7 +6076,9 @@ static void bt_volume_poll(void) {
     if (v > limit) v = limit;
     btvol.last = cur;
     g_volume = (unsigned char)v;
+#if !M1PLUS /* V2.1's responseSetVolume (0x50eecc) keeps only volume, g_volume */
     *(volatile signed char *)0xa38c41u = (signed char)v; /* stock responseSetVolume's level */
+#endif
     device_set_volume(v, 1);
     write_int_config(v, "PLAYSET", "VOLUME");
     /* device_set_volume invokes our gain hook; enforce the limit even when mocked/unsupported. */
@@ -6301,7 +6309,9 @@ static int edit_single(const void *info) {
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
     if (!usable() || window_manager_is_animating(wm) || window_manager_get_pointer_pressed(wm))
         return 0;
+#if !M1PLUS
     *(volatile unsigned char *)KEY_LOCKOUT = 0; /* stock's wheel lockout after the centre key */
+#endif
     int n = fields(top), f = field_at(top);
     if (!n) {
         if (slider_page(top)) navigator_back();
@@ -6446,9 +6456,11 @@ int ringnav(void *ctx, void *event) {
     int owned = st.tone_key == key;
     st.tone_key = 0;
 #endif
+#if !M1PLUS
     if ((key == KEY_PREV || key == KEY_NEXT) &&
         *(volatile signed char *)KEY_LOCKOUT <= 8 - LOCKOUT_KEEP)
         *(volatile unsigned char *)KEY_LOCKOUT = 0;
+#endif
     if (key == KEY_CENTER || key == KEY_RETURN) st.held = 0; /* a button ends a held turn */
     /* The rating picker's keys, before the page's own (its Return would leave it) */
     if (usable() && rate_key(window_manager_get_top_window(window_manager()), key)) return STOP;

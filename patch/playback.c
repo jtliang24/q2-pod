@@ -43,10 +43,12 @@ static int back_to __attribute__((section(".scratch"))), back_at __attribute__((
  * carries; a reversal starts the count again, so turning back is as precise as starting. The
  * encoder's ts_read call (build.py WHEEL_TS_READ) runs through ringnav_ts_read, which posts the
  * ticks as stock does and then hands stock a still finger (the touch-down x), so it posts none. */
+#if !M1PLUS
 static int wh_last __attribute__((section(".scratch")));
 static int wh_acc __attribute__((section(".scratch")));
 static int wh_anchor __attribute__((section(".scratch"))); /* touch-down x (1-200); 0 lifted */
 static int wh_units __attribute__((section(".scratch")));  /* wh_acc's tick, both in 1/16 unit */
+#endif
 
 /* Wheel sensitivity (System settings -> Display, crossfade.c's page): 50-200% in tens, Q2POD
  * WHEELSENSITIVITY in config.ini, anything else 50%. The travel per tick is 50% / sensitivity of
@@ -83,6 +85,7 @@ void wheel_set_pct(int n) {
     write_int_config(n, "Q2POD", "WHEELSENSITIVITY");
 }
 
+#if !M1PLUS /* the Q2 touch wheel (ts_read); M1 Plus has a knob */
 static void wheel_post(char *info, int key) {
     for (int type = 0x110; type <= 0x114; type += 4) { /* key down, then up */
         *(int *)(info + WHEEL_INFO_KEY) = key;
@@ -123,7 +126,6 @@ void wheel_sample(int *s, int ret, char *info) {
     s[0] = wh_anchor;
 }
 
-#if !M1PLUS
 /* $t9 still holds ts_read, which stock loaded for its jalr; $s1 is the thread's info, which stock
  * hands its poster. tslib_thread_run's touch screen reads stay stock. */
 __asm__(".set noreorder\n.globl ringnav_ts_read\nringnav_ts_read:\n"
@@ -132,8 +134,6 @@ __asm__(".set noreorder\n.globl ringnav_ts_read\nringnav_ts_read:\n"
         "sw $v0, 16($sp)\nlw $a0, 20($sp)\nmove $a1, $v0\n"
         "jal wheel_sample\nmove $a2, $s1\n"
         "lw $v0, 16($sp)\nlw $ra, 28($sp)\njr $ra\naddiu $sp, $sp, 32\n.set reorder\n");
-#else
-void ringnav_ts_read(void) {}
 #endif
 static void *queue(void) { return P(mcl_pdeqplaylist, 0); }
 static void close_preload(void) {
@@ -184,7 +184,7 @@ int ringnav_speed(int mode) {
     folder_speed saved = { { 0 }, 0 };
     char path[80], tmp[84];
     /* player_initconfig re-applies speed when the decoder connects; that is not a user edit. */
-    if (__builtin_return_address(0) == (void *)0x51339c || (unsigned)mode >= 4) {
+    if (__builtin_return_address(0) == (void *)INITCONFIG_SPEED_RET || (unsigned)mode >= 4) {
         playback_speed_start();
         return stock_speed_trampoline(g_playspeed_mode);
     }

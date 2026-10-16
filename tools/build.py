@@ -784,6 +784,13 @@ def pic_gp(image, address):
     low = addiu & 65535
     return ((lui & 65535) << 16) + (low if low < 32768 else low - 65536) + address
 
+def m1plus_inc(name):
+    """An integer #define of patch/offsets.inc as the M1 Plus payload compiles it."""
+    found = re.search(rf'^#define {name} (0x[0-9a-f]+|\d+)$', run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c',
+                                                              ROOT/'patch/offsets.inc'), re.M)
+    check(found, f'{name}: not defined for M1 Plus')
+    return int(found.group(1), 0)
+
 def compile_payload(out, ipod=False, m1plus=False):
     """Compile and link the payload."""
     from peq import compile_common
@@ -1041,6 +1048,17 @@ def build(target_path, out, logo, ipod=False, dev=False):
         off = fileoff(patched, address)
         check(syms[name] == address and struct.unpack_from('<III', patched, off) == words, f'{name}: unexpected code')
         jump(off, replacement)
+    if m1plus:
+        # ringnav_speed and ringnav_mode tell config_mplayer's re-applying calls from a choice by
+        # their return addresses: each a jalr $t9 after lw $t9, <callee's GOT slot>($gp).
+        for ret, callee in (('INITCONFIG_SPEED_RET', 'mclSetPlaySpeed'), ('INITCONFIG_MODE_RET', 'mclSetPlayMode')):
+            ret = m1plus_inc(ret)
+            words = struct.unpack_from('<5I', raw_demo, fileoff(raw_demo, ret - 24))
+            load = next((w for w in reversed(words[:4]) if w >> 16 == 0x8f99), 0)
+            slot = M1PLUS_GP + (load & 0xffff) - (0x10000 if load & 0x8000 else 0)
+            check(load and words[4] == 0x0320f809 and
+                  struct.unpack_from('<I', raw_demo, fileoff(raw_demo, slot))[0] == syms[callee],
+                  f'config_mplayer: unexpected {callee} call')
     from peq import patch_player
     raw_player = cat('usr/bin/hciplayer')
     audio = patch_player(raw_player, out/'peq')
