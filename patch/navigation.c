@@ -3,6 +3,10 @@
 #include "peq.h" /* libc/libcstl imports (deque_*, send) and the shared helpers */
 #include "playback.h"
 #include "stock.h"
+#if M1PLUS /* V2.1 has only the per-corner form (V1.32's wrapper calls it so) */
+#define canvas_stroke_rounded_rect(c, rect, s, color, radius, width)                              \
+    canvas_stroke_rounded_rect_ex(c, rect, s, color, radius, radius, radius, radius, width, 0xffff)
+#endif
 #undef select /* the UI selection helper below; headset.c uses libc select */
 extern int stock_dbquery_trampoline(const char *, const char *, void *, int);
 extern int stock_quicksettings_trampoline(void *, void *);

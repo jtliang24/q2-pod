@@ -469,6 +469,8 @@ FUNCTIONS = {
  'canvas_measure_text': ('float', 'void *, const unsigned *, unsigned'),
  'canvas_fill_rounded_rect': ('int', 'void *, const void *, const void *, const void *, unsigned'),
  'canvas_stroke_rounded_rect': ('int', 'void *, const void *, const void *, const void *, unsigned, unsigned'),
+ # its four corner radii, the width and the edges (0xffff all), as V1.32's wrapper (0x63d034) passes them
+ 'canvas_stroke_rounded_rect_ex': ('int', 'void *, const void *, const void *, const void *, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned'),
  # The PEQ curve (peq_ui.c) and the visualizer (visualizer.c): AWTK's software nanovg, float_t float, color_t by value
  'canvas_get_vgcanvas': ('void *', 'void *'),
  'vgcanvas_save': ('int', 'void *'), 'vgcanvas_restore': ('int', 'void *'),
@@ -706,11 +708,10 @@ M1PLUS_PRIVATE_FUNCTIONS = {
 M1PLUS_FUNCTION_ALIASES = {
     'device_set_volume': 'set_devicevolume',
     'config_outputchannel': 'set_outputchannel',
-    'player_stop': 'mclStop',
+    'player_stop': 'stop_player',  # mclStop with the mute, seek, play status and headset updates (V1.32 has both)
     'player_play_pause': 'play_pause_music',
     'player_prev_music': 'prev_music',
     'player_next_music': 'next_music',
-    'canvas_stroke_rounded_rect': 'canvas_stroke_rounded_rect_ex',
     'player_save_start': 'save_start_player',
     'folder_reload_data': 'folder_reload',
     'player_playtime_and_length': 'get_playtimeandlength',
