@@ -124,13 +124,15 @@ LIBC = {
     'sinf': ('float', 'float'), 'cosf': ('float', 'float'),
 }
 
-def compile_common(out, binary, player=False, ipod=False, target_profile=None):
+def compile_common(out, binary, player=False, ipod=False, target_profile=None, m1plus=False):
+    if player and target_profile and target_profile.get('name') == 'm1plus':
+        m1plus = True
     got = {}
     for line in run('readelf', '-AW', binary).splitlines():
         words = line.split()
         if len(words) >= 6 and 'UND' in words and re.fullmatch('[0-9a-f]{8}', words[0]):
             got[words[-1].split('@')[0]] = int(words[0], 16)
-    gp = 0xb16750 if player else GP
+    gp = 0xb16750 if player else (0xa03ed0 if m1plus else GP)
     header = ['struct dirent { unsigned ino, off; unsigned short reclen; unsigned char d_type; char d_name[256]; };']
     asm = ['.set noreorder', '.text']
     for name, (ret, args) in LIBC.items():
@@ -160,6 +162,19 @@ def compile_common(out, binary, player=False, ipod=False, target_profile=None):
         ]
     if not player:
         syms = symbols(binary) | PRIVATE_FUNCTIONS
+        if m1plus:
+            from build import M1PLUS_GLOBAL_ALIASES, M1PLUS_FUNCTION_ALIASES, SCRATCH
+            scratch_addr = SCRATCH + 0x1000
+            for k, v in M1PLUS_GLOBAL_ALIASES.items():
+                if v in syms:
+                    syms[k] = syms[v]
+            for k, v in M1PLUS_FUNCTION_ALIASES.items():
+                if v in syms:
+                    syms[k] = syms[v]
+            for g in GLOBALS:
+                if g not in syms:
+                    syms[g] = scratch_addr
+                    scratch_addr += 4
         for name, (ret, args) in FUNCTIONS.items():
             if name in syms and syms[name]:
                 header.append(f'#define {name} (({ret} (*)({args}))0x{syms[name]:x}u)')
@@ -168,7 +183,8 @@ def compile_common(out, binary, player=False, ipod=False, target_profile=None):
     (out/'peq_platform.h').write_text('\n'.join(header)+'\n')
     (out/'peq_imports.S').write_text('\n'.join(asm)+'\n')
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', f'-DIPOD={int(ipod)}']
-    if player: flags += ['-mnan=2008']
+    if m1plus: flags += ['-DM1PLUS=1']
+    if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
     for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'spotify.c', 'radio.c', 'tidal.c', 'crossfade.c', 'headset.c', 'lockscreen.c']:
         obj = out/(name+'.o')

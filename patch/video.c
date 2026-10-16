@@ -491,7 +491,7 @@ int main(int argc, char **argv) {
             if (until && t >= until) until = 0, redraw = au.paused;
             int wait = 100, fate = have == size ? frame_due(n, clock) : 0;
             if (fate == 1 || (redraw && have == size)) { /* paused, the next frame shows the change */
-                for (unsigned y = 0; y < fb_h; ++y)
+                for (int y = 0; y < fb_h; ++y)
                     memcpy(mem + (back + y) * line, frame + y * row, row);
                 if (until)
                     overlay(mem + back * line, line, pos_bar ? at + seek + n / FPS : vol,

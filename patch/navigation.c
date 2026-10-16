@@ -241,13 +241,13 @@ typedef struct {
                    */
     unsigned lyric_timer; /* runs while the wheel holds the lyrics and stock's timer is stopped */
     /* The Display settings, read from config.ini on first use, and the display page's value labels.
-     */
-    int settings_read, accent, home_full, battery, home_rockbox, classic, shortcut, knob_mode;
-    int swipe_x, swipe_y, swipe_valid;
-    void *setting_label[6];
+    int settings_read, accent, home_full, battery, home_rockbox, classic, shortcut;
     unsigned tone_key; /* the wheel key whose press ringnav_keydown silenced, 0 when none */
     int greeted;       /* the first reachable list got its boot repaint */
 #endif
+    int knob_mode;
+    int swipe_x, swipe_y, swipe_valid;
+    void *setting_label[6];
     /* Queue menu: the hold's AWTK press time marks its release; the target is a track/list row
      * checked by count, record and browsing-state hashes; qm_cls is the class its list holds;
      * qm_forced is a shuffle Play next. */
@@ -6146,7 +6146,7 @@ void dispatch_key_return(void) {
     unsigned ev[8] = { 0 };
     ev[EVENT_TYPE / 4] = EVT_KEY_UP;
     ev[EVENT_KEY / 4] = KEY_RETURN;
-    window_manager_dispatch_input_event(window_manager(), (void *)ev);
+    stock_input_trampoline(window_manager(), (void *)ev);
 }
 
 /* window_manager_dispatch_input_event: while q2video plays (books.c) no key or touch reaches the
@@ -6183,7 +6183,7 @@ int ringnav_input(void *wm, void *e) {
 /* window_manager_paint, a leaf (tools/build.py WM_PAINT_LEAF): the window manager's own paint
  * (vtable +0xc), except while q2video has the framebuffer; video_poll repaints after. */
 int ringnav_wm_paint(void *wm) {
-    void *vt = wm && !video_on() ? P(wm, 0x94) : (void *)0;
+    void *vt = wm && !video_on() ? P(wm, M1PLUS ? 0x88 : 0x94) : (void *)0;
     int (*paint)(void *) = vt ? (int (*)(void *))P(vt, 0xc) : (int (*)(void *))0;
     return paint ? paint(wm) : video_on() ? 0 : 0x10; /* RET_BAD_PARAMS, as stock */
 }
@@ -6200,9 +6200,14 @@ int ringnav_buzzer(int on) {
 
 static int knob_nav_active(void) {
 #if M1PLUS
+#if IPOD
     accent();
     if (!st.knob_mode || !g_backlight_status) return 0;
     if (now_playing() && !st.scrub && !st.rate_win) return 0;
+#else
+    if (!st.knob_mode || !g_backlight_status) return 0;
+    if (now_playing()) return 0;
+#endif
     return 1;
 #else
     return 0;
@@ -6680,3 +6685,27 @@ int ringnav(void *ctx, void *event) {
     widget_invalidate_force(w, (void *)0);
     return STOP;
 }
+
+#if M1PLUS
+void deque_init_copy(void *dest, const void *src) {
+    deque_init(dest);
+    deque_assign(dest, src);
+}
+
+void deque_pop_back(void *d) {
+    unsigned n = deque_size(d);
+    if (!n) return;
+    if (n == 1) {
+        deque_clear(d);
+        return;
+    }
+    void *tmp = _create_deque("stSongInfo");
+    deque_init(tmp);
+    for (unsigned i = 0; i < n - 1; ++i)
+        _deque_push_back(tmp, deque_at(d, i));
+    deque_clear(d);
+    deque_assign(d, tmp);
+    deque_destroy(tmp);
+    free(tmp);
+}
+#endif

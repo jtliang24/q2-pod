@@ -16,6 +16,48 @@
 #else
 #include "peq_platform.h"
 #define PEQ_ROOT "" /* host tests pass a scratch directory */
+#ifndef STOP
+#define STOP 11
+#endif
+#ifndef tk_strcmp
+#define tk_strcmp strcmp
+#endif
+#ifndef set_hscroll_label_attribute
+static inline void set_hscroll_label_attribute(void *w) { (void)w; }
+#endif
+#ifndef slide_menu_set_spacer
+#define slide_menu_set_spacer(s, sp) ((void)0)
+#endif
+#ifndef window_manager_get_input_device_status
+#define window_manager_get_input_device_status(wm) ((char *)"")
+#endif
+#ifndef folder_reinit_navbarname
+static inline int folder_reinit_navbarname(void) { return 0; }
+#endif
+#ifndef batch_init_selectrecord
+static inline int batch_init_selectrecord(int n) { (void)n; return 0; }
+#endif
+#ifndef batch_set_selectitem
+static inline int batch_set_selectitem(int n) { (void)n; return 0; }
+#endif
+#ifndef switch_charge_enable
+static inline int switch_charge_enable(int n) { (void)n; return 0; }
+#endif
+#ifndef getMusicByAlbumArtist
+#define getMusicByAlbumArtist getMusicBySonger
+#endif
+#ifndef config_playmode
+static inline int config_playmode(int mode, int notify) { (void)mode; (void)notify; return 0; }
+#endif
+#ifndef window_manager_dispatch_input_event
+extern int window_manager_dispatch_input_event(void *, void *);
+#endif
+#ifndef slide_menu_scroll_to_next
+static inline int slide_menu_scroll_to_next(void *w) { (void)w; return 0; }
+#endif
+#ifndef slide_menu_scroll_to_prev
+static inline int slide_menu_scroll_to_prev(void *w) { (void)w; return 0; }
+#endif
 #endif
 
 #define PEQ_BANDS 30 /* 10 per side plus 10 shared, as L/R APO files use */

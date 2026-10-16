@@ -496,11 +496,16 @@ extern void ringnav_read_artistype(void);
 /* config_init applies the saved mode before the Home page can restore the queue; Artists is read
  * here too, as stock reads it only when a Library list or artist page opens. */
 int ringnav_bootmode(int mode, int notify) {
+#if !M1PLUS
     ringnav_read_artistype();
     s.restoring = 1;
     int result = config_playmode(mode, notify);
     s.restoring = 0;
     return result;
+#else
+    (void)mode; (void)notify;
+    return 0;
+#endif
 }
 void playback_clear(void) {
     /* Stock keeps a preload when selecting List Play; an advanced repeat preload may wrap. */

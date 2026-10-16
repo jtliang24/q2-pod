@@ -60,6 +60,7 @@
 #define EVT_POINTER_DOWN 0x100 /* wm registers on_wm_tsdown_before_fun for this type @0x523ef0 */
 #define EVT_POINTER_MOVE_BEFORE 0x102 /* wm move-before forwards this type to the down hook @0x523ed4 */
 #define EVT_POINTER_UP_BEFORE 0x104
+#define EVT_POINTER_UP 0x103
 #define EVT_POINTER_ABORT 0x107
 #define EVT_DESTROY 0x0c
 #define EVT_KEY_DOWN 0x110        /* widget_on_keydown @0x6627c4 (0x111 is its long press) */
@@ -579,6 +580,8 @@ static inline int arc_out(int r, int y) {
 #define VIS_H 186
 #define BOOK_ROWS 10
 #endif
+#define PH_GREY 0xff333333 /* color_t #333333 */
+#define PHOTOS_MAX 500 /* ponytail: ringnav navigates at most MAX_ENTRIES (512) rows; page beyond */
 /* iPod visualizer (patch/visualizer.c, docs/ipod.md#visualizer), Now Playing's fourth page. The
  * page shows the audio VIS_LATENCY_MS behind what hciplayer last handed the filter: its ao_alsa asks
  * for a 500 ms buffer in 16 periods (0x438a2c: buffer_time 500000 us) and refills it a period at a

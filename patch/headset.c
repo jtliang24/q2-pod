@@ -112,10 +112,14 @@ static int aap_open(const unsigned char *address, unsigned generation) {
             int ready = connect(aap, address, 14) == 0;
             for (int i = 0; !ready && i < 5 && generation == hs.generation; ++i)
                 if (wait_fd(aap, 1) > 0) {
+#if !M1PLUS
                     int error = -1;
                     unsigned len = sizeof error;
                     ready = !getsockopt(aap, 0xffff, 0x1007, &error, &len) &&
                             !error; /* SOL_SOCKET, SO_ERROR */
+#else
+                    ready = 1;
+#endif
                     break;
                 }
             if (!ready || send(aap, hello, sizeof hello, 0x40) != sizeof hello ||

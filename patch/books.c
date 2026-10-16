@@ -456,7 +456,9 @@ unsigned book_back(const unsigned char *t, unsigned n, unsigned pos, int rows, i
 #define BOOK_LH 26 /* line pitch */
 #define BOOK_X 24  /* the text's left edge, and its margin on the right */
 #define BOOK_Y 6   /* the first line's top: ten lines clear the glass's corners */
+#ifndef BOOK_ROWS
 #define BOOK_ROWS 10
+#endif
 #if IPOD
 #define BOOK_TONE accent_tone(2)
 #else
