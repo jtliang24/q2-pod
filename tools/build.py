@@ -677,11 +677,14 @@ M1PLUS_GLOBAL_ALIASES = {
     'bt__recv_pageflag': 'btrecv_pageflag',
     'g_maxvolume': 'max_volume',
     'g_carmode': 'car_mode',
+    # Matched by their users in both firmwares (config_init's first-boot guide; folder_enter and
+    # folder_back clear the navbar state).
+    'g_guideflag': 'first_guideflag',
+    'g_navbar_status': 'navigation_status',
 }
 # Renamed in V2.1; each has the size of its V1.32 counterpart (checked in m1plus_symbols).
 M1PLUS_CONTEXT_ALIASES = {
     'g_folder_path': 'folder_path',
-    'g_artist_type': 'artist_type',
     'g_dacoff_time': 'dacoff_time',
     'g_power_capacity': 'power_capacity',
     'g_screensaver_picture': 'screensaver_picture',
@@ -692,7 +695,10 @@ M1PLUS_CONTEXT_ALIASES = {
     'p_vector_select_record': 'pvec_selectrecord',
     'g_play_id3_info': 'playsong_id3info',
     'p_deque_screensaverlist': 'pdeq_screensaverlist',
+    'g_power_chargestate': 'pmucharge_status',  # get_battery_capacity keeps 0-2 in both
 }
+# V1.32's g_artist_type (load_localclass_list's flag) has no V2.1 twin: loadLocalClassList reads
+# artist_type itself, which home_page_init saves, so the payload's flag keeps its own storage.
 # A V1.32 global with no V2.1 counterpart gets zeroed storage of its own in the payload's .scratch
 # (m1stub_<name>), never a guessed address. Every reader must treat zero as "off" or "none".
 M1PLUS_STUB = 'm1stub_'
