@@ -534,8 +534,16 @@ static inline int arc_out(int r, int y) {
 #endif
 /* Stock sortselect_dialog callbacks the menu replaces: both set g_sort_changeflag, which makes
  * allmusic reload and scroll to the top on return. */
+#if M1PLUS /* V2.1 binds no key-up (no Return key); button_return's click quits (0x47d2fc) */
+#define SORTSELECT_CLOSE 0x47d0f0
+#define SORTSELECT_BACK "button_return"
+#define SORTSELECT_VIEW "scrollview_sortselect"
+#else
 #define SORTSELECT_KEYUP 0x49f3e0
 #define SORTSELECT_CLOSE 0x49f3c0
+#define SORTSELECT_BACK "img_return"
+#define SORTSELECT_VIEW "scroll_view"
+#endif
 
 /* Coverflow (docs/internals.md). slide_menu dispatches EVT_VALUE_CHANGED after its
  * index moves (0x5f320c). The stock scan thread handle (dialog_updatemusic_dialog_init) and its
