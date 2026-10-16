@@ -553,11 +553,13 @@ static inline int arc_out(int r, int y) {
 #define EVT_VALUE_CHANGING 0x0f
 /* playset_bootvol_page_init (0x4b4a80) binds these, each with the window as context; Crossfade
  * re-dresses the page (crossfade.c) and unbinds them first. */
+#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
 #define BOOTVOL_SWITCH 0x4b44d8   /* on_bootvol_switch_onclick: img_bootswitch's click */
 #define BOOTVOL_DEC 0x4b4624      /* img_dec's click */
 #define BOOTVOL_ADD 0x4b45a8      /* img_add's click */
 #define BOOTVOL_CHANGING 0x4b48f4 /* slider_bootvol's EVT_VALUE_CHANGING */
 #define BOOTVOL_CHANGED 0x4b4300  /* slider_bootvol's EVT_VALUE_CHANGED */
+#endif
 #if M1PLUS /* V2.1: dialog_scanmusic_dialog_init keeps the handle (0x47bcd8), wait_scan sets the flag (0x47b460) */
 #define SCAN_THREAD 0xa03a44
 #define SCAN_DONE 0xa03a40

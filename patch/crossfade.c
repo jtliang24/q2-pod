@@ -124,6 +124,9 @@ int xfade_open(void *ctx, void *event) {
     (void)event;
     int wheel = ctx != 0;
     settings();
+#if M1PLUS /* V2.1's bootvol_page has other widgets (btn_add, vol_slider, btn_memory) and handlers */
+    return 0;
+#endif
     if (xf.page) return 0;
     void *wm = window_manager(), *below = window_manager_get_top_window(wm);
     navigator_to("playset/bootvol_page");
@@ -141,11 +144,13 @@ int xfade_open(void *ctx, void *event) {
         window_close(page);
         return 0;
     }
+#if !M1PLUS
     widget_off_by_func(xf.sw, EVT_CLICK, (void *)BOOTVOL_SWITCH, page);
     widget_off_by_func(xf.dec, EVT_CLICK, (void *)BOOTVOL_DEC, page);
     widget_off_by_func(xf.add, EVT_CLICK, (void *)BOOTVOL_ADD, page);
     widget_off_by_func(xf.slider, EVT_VALUE_CHANGING, (void *)BOOTVOL_CHANGING, page);
     widget_off_by_func(xf.slider, EVT_VALUE_CHANGED, (void *)BOOTVOL_CHANGED, page);
+#endif
     widget_on(xf.sw, EVT_CLICK, toggle, 0);
     widget_on(xf.dec, EVT_CLICK, step, (void *)-1L);
     widget_on(xf.add, EVT_CLICK, step, (void *)1L);
