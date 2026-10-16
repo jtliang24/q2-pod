@@ -4485,9 +4485,13 @@ static void rate_close(int save) {
     }
     void *r = save ? rate_track() : (void *)0;
     if (!r) return;
+#if M1PLUS /* V2.1's Now Playing has no img_fav click to replay: My Fav stays as it is */
+    if (!rate_saved(rate_keep(0, listen_key(r), n), (void *)0)) return;
+#else
     int fav = checkFavExist(r) != 0;
     if (!rate_saved(rate_keep(0, listen_key(r), n), (void *)0)) return;
     if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, (void *)0);
+#endif
     rate_badge();
 }
 
@@ -4570,6 +4574,10 @@ static int rate_gone(void *win, void *event) {
 /* Now Playing's heart (both builds' playing_page_init): stock's click is swapped for one that
  * tells a hold from a tap, and the badge sits on the heart's top right. */
 static void rate_bind(void *win) {
+#if M1PLUS /* FAV_CLICK is V1.32's; V2.1's Now Playing has no img_fav */
+    (void)win;
+    return;
+#endif
     void *fav = widget_lookup(win, "img_fav", 1), *emitter = fav ? P(fav, W_EMITTER) : (void *)0;
     stop_timer(&st.rate_tick);
     stop_timer(&st.rate_hold);
@@ -5197,6 +5205,7 @@ static void qm_select(void) {
 }
 
 /* Stock playlist rows use the queue in add mode 2. Guard their final dispatch as well. */
+#if !M1PLUS /* V1.32's; V2.1's rows keep their stock click */
 #define PLAYLIST_PICK ((int (*)(void *, void *))0x4b1d24)
 static int qm_playlist_pick(void *ctx, void *event) {
     if (!qm_record()) {
@@ -5206,6 +5215,7 @@ static int qm_playlist_pick(void *ctx, void *event) {
     qm_select();
     return PLAYLIST_PICK(ctx, event);
 }
+#endif
 
 static int qm_playlist_gone(void *ctx, void *event) {
     (void)ctx;
@@ -5215,6 +5225,10 @@ static int qm_playlist_gone(void *ctx, void *event) {
 }
 
 static void qm_playlist_bind(void *w, int depth) {
+#if M1PLUS
+    (void)w;
+    (void)depth;
+#else
     if (!w || depth == 16) return;
     void *emitter = P(w, W_EMITTER);
     for (void *item = emitter ? P(emitter, 0) : 0; item; item = P(item, EMIT_NEXT))
@@ -5227,6 +5241,7 @@ static void qm_playlist_bind(void *w, int depth) {
         }
     for (unsigned i = 0, n = widget_count_children(w); i < n; ++i)
         qm_playlist_bind(widget_get_child(w, i), depth + 1);
+#endif
 }
 
 /* Rebind the guarded Now Playing picker after stock rebuilds its rows. */
