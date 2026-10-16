@@ -172,8 +172,15 @@ def compile_common(out, binary, player=False, ipod=False, target_profile=None, m
             syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
         else:
             syms = symbols(binary) | PRIVATE_FUNCTIONS
+        # A routine V2.1 hooks where V1.32 does not (on_wm_keyup_fun, ringnav's): the payload's own
+        # replays reach stock through its trampoline, not back into the hook.
+        from build import HOOKS, IPOD_HOOKS, M1PLUS_HOOKS
+        resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS | IPOD_HOOKS} if m1plus else {}
         for name, (ret, args) in FUNCTIONS.items():
-            if name in syms and syms[name]:
+            if name in resumed:
+                header += [f'extern {ret} stock_{resumed[name]}_trampoline({args});',
+                           f'#define {name} stock_{resumed[name]}_trampoline']
+            elif name in syms and syms[name]:
                 header.append(f'#define {name} (({ret} (*)({args}))0x{syms[name]:x}u)')
         # build.py has already checked each is a one-byte global (or, on V2.1, a byte or word).
         stubbed = dict(stubs)
