@@ -172,6 +172,7 @@ REMOTE_HOOK = (b'/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf\n',
                b'/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf\n/usr/bin/q2remote &\n')
 # The byte in bluealsa's AAC capability holding the 44.1 kHz bit; see docs/internals.md.
 BLUEALSA = 'usr/bin/bluealsa'
+BLUEALSA_SHA = '0a4ffb7cc8207a46a3568440c5f31022b7125befd164e2f1af52537340a9892a'  # the same binary in Q2 V1.32 and M1 Plus V2.1
 SCROBBLE_CA = 'etc/scrobble-ca.pem'
 AAC_44K1 = 0x317b8
 # DROP is acknowledged before the encoder handles its signal. Flush in the control
@@ -950,6 +951,7 @@ def patch_m4b_cover(raw, m1plus=False):
 def patch_bluealsa(raw):
     """Offer AAC at 48 kHz only. A headset that opens the stream itself (AirPods out of the case)
     picks 44.1 kHz, and bluealsa, still fed 48 kHz, drops about 8% of the AAC frames."""
+    check(sha(raw) == BLUEALSA_SHA, 'Unexpected bluealsa')
     image = bytearray(raw)
     image[AAC_44K1] = 0
     # o32: preserve PCM and ra; hold its fd mutex while flushing the nonblocking
