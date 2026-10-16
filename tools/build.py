@@ -777,6 +777,13 @@ FLAGS = ['--target=mipsel-linux-gnu','-march=mips32r2','-mabi=32','-mfp64',
 
 def hooks(ipod): return HOOKS | IPOD_HOOKS if ipod else HOOKS
 
+def pic_gp(image, address):
+    """The GOT base a PIC entry (lui $gp; addiu $gp; addu $gp, $t9) computes, else None."""
+    lui, addiu, addu = struct.unpack_from('<III', image, fileoff(image, address))
+    if lui >> 16 != 0x3c1c or addiu >> 16 != 0x279c or addu != 0x0399e021: return None
+    low = addiu & 65535
+    return ((lui & 65535) << 16) + (low if low < 32768 else low - 65536) + address
+
 def compile_payload(out, ipod=False, m1plus=False):
     """Compile and link the payload."""
     from peq import compile_common
@@ -1027,14 +1034,8 @@ def build(target_path, out, logo, ipod=False, dev=False):
     active_gp = M1PLUS_GP if m1plus else GP
     for name, (address, replacement, _) in active_hooks.items():
         check(syms[name] == address, f'{name}: callback address mismatch')
-        off = fileoff(patched, address)
-        prolog = struct.unpack_from('<III', patched, off)
-        check(prolog[0] >> 16 == 0x3c1c and prolog[1] >> 16 == 0x279c and
-              prolog[2] == 0x0399e021, f'{name}: unexpected PIC prologue')
-        low = prolog[1] & 65535
-        gp = ((prolog[0] & 65535) << 16) + (low if low < 32768 else low - 65536) + address
-        check(gp == active_gp, f'{name}: unexpected GOT base')
-        jump(off, replacement)
+        check(pic_gp(patched, address) == active_gp, f'{name}: unexpected PIC prologue or GOT base')
+        jump(fileoff(patched, address), replacement)
     leaf_paint = WM_PAINT_LEAF_M1PLUS if m1plus else WM_PAINT_LEAF
     for name, address, replacement, words in [leaf_paint] + ([IPOD_LEAF] if (ipod and not m1plus) else []):
         off = fileoff(patched, address)
