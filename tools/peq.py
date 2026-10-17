@@ -43,7 +43,7 @@ PLAYER_PROFILES = {
         'stock_id3': 0x48b760,
         'written_audio_pts': 0x4300f4,
         'length_addr': 0xb10e5c,
-        'av_dict_set': 0x6ea6d8,
+        'av_dict_set': 0x6ea1a4,
         'av_dict_free': 0x6ea65c,
         'rg_export': 0x5381c4,
         'hr_mp3_seek': 0xb15298,

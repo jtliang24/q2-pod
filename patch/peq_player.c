@@ -303,7 +303,11 @@ unsigned id3_txxx(const unsigned char *f, unsigned n, char *out, unsigned cap) {
 #ifndef RG_EXPORT_ADDR
 #define RG_EXPORT_ADDR 0x538764u
 #endif
+#if M1PLUS
+#define STOCK_ID3 ((int (*)(int, void *))STOCK_ID3_ADDR)
+#else
 #define STOCK_ID3 ((void (*)(void *, int))STOCK_ID3_ADDR)
+#endif
 #define AV_DICT_SET ((int (*)(void **, const char *, const char *, int))AV_DICT_SET_ADDR)
 #define AV_DICT_FREE ((void (*)(void **))AV_DICT_FREE_ADDR)
 #define RG_EXPORT ((int (*)(void *, void *))RG_EXPORT_ADDR)
@@ -312,6 +316,35 @@ static unsigned id3_int(const unsigned char *p, int syncsafe) {
     return syncsafe ? (p[0] & 127u) << 21 | (p[1] & 127u) << 14 | (p[2] & 127u) << 7 | (p[3] & 127u)
                     : (unsigned)p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3];
 }
+#if M1PLUS
+int id3_gain(int version, void *s) {
+    long long at = AT(s, 0x30, long long) + AT(s, 0x28, int) - AT(s, 0x2c, int) - 10; /* stream_tell */
+    int ret = STOCK_ID3(version, s);
+    int fd = AT(s, 0x14, int);
+    long long back = lseek64(fd, 0, 1);
+    unsigned char h[10], f[256];
+    char t[256];
+    void *dict = 0;
+    if (back >= 0 && lseek64(fd, at, 0) == at && read(fd, h, 10) == 10 && !memcmp(h, "ID3", 3) &&
+        (h[3] == 3 || h[3] == 4)) {
+        int v4 = h[3] == 4;
+        long long end = at + 10 + id3_int(h + 6, 1);
+        at += 10;
+        if (h[5] & 0x40 && read(fd, h, 4) == 4) at += v4 ? id3_int(h, 1) : 4 + id3_int(h, 0); /* extended header */
+        while (at + 10 <= end && lseek64(fd, at, 0) == at && read(fd, h, 10) == 10 && h[0]) {
+            unsigned n = id3_int(h + 4, v4), k, key;
+            if (!memcmp(h, "TXXX", 4) && n <= sizeof f && read(fd, f, n) == (int)n &&
+                (k = id3_txxx(f, n, t, sizeof t)) > (key = strlen(t)) + 1)
+                AV_DICT_SET(&dict, t, t + key + 1, 0);
+            at += 10 + n;
+        }
+        RG_EXPORT(0, dict);
+        AV_DICT_FREE(&dict);
+    }
+    if (back >= 0) lseek64(fd, back, 0);
+    return ret;
+}
+#else
 void id3_gain(void *s, int size) {
     long long at = AT(s, 0x30, long long) + AT(s, 0x28, int) - AT(s, 0x2c, int) - 10; /* stream_tell */
     STOCK_ID3(s, size);
@@ -338,6 +371,7 @@ void id3_gain(void *s, int size) {
     }
     if (back >= 0) lseek64(fd, back, 0);
 }
+#endif
 
 /* demux_audio_seek (0x48d1ac, the audio demuxer's seek slot). For an MP3 (priv->frmt 1, priv at
  * demuxer+0xc70) without hr_mp3_seek, stock lands at movi_start + seconds * average bytes per
