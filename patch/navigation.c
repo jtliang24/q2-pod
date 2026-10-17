@@ -1245,7 +1245,7 @@ static int pull_event(void *page, void *event) {
         prompt = label_create(page, 0, 0, I(page, W_W), 44);
         if (prompt) {
             widget_set_name(prompt, PULL_PROMPT);
-            widget_use_style(prompt, "s_label_white18c");
+            widget_use_style(prompt, STYLE_LABEL_WHITE18C);
             widget_set_enable(prompt, 0);
             widget_set_sensitive(prompt, 0);
             prop(prompt, "floating", 1);
@@ -1875,9 +1875,9 @@ int ringnav_paint(void *w, void *canvas) {
 /* A s_listitem_black list_item in view with a 335x70 s_btn_listitem button; returns the button. */
 static void *list_button(void *view) {
     void *item = list_item_create(view, 0, 0, 0, 0);
-    widget_use_style(item, "s_listitem_black");
+    widget_use_style(item, STYLE_LISTITEM_BLACK);
     void *button = button_create(item, 20, 0, 335, 70);
-    widget_use_style(button, "s_btn_listitem");
+    widget_use_style(button, STYLE_BTN_LISTITEM);
     return button;
 }
 
@@ -1891,7 +1891,7 @@ static void *list_row_core(void *view, const char *icon, int (*click)(void *, vo
     if (click) widget_on(button, EVT_CLICK, click, ctx);
     if (icon) image_base_set_image(image_create(button, 10, 0, SET_STOCK_ICON, 70), icon);
     void *label = hscroll_label_create(button, icon ? 72 : 10, 0, w, 70);
-    widget_use_style(label, "s_scrlabel_white24l");
+    widget_use_style(label, STYLE_SCRLABEL_WHITE24L);
     set_hscroll_label_attribute(label);
     if (into) image_base_set_image(image_create(button, 282, 0, 50, 70), "list_into");
     return label;
@@ -4613,7 +4613,7 @@ static void rate_bind(void *win) {
     widget_on(fav, EVT_CLICK, rate_fav_click, st.rate_ctx);
     widget_on(fav, EVT_POINTER_DOWN, rate_down, (void *)0);
     st.rate_badge = label(P(fav, W_PARENT), I(fav, W_X) + I(fav, W_W) - 18, I(fav, W_Y) + 6, 16, 16,
-                          "s_scrlabel_white20c", 12, 0xffffffffu);
+                          STYLE_SCRLABEL_WHITE20C, 12, 0xffffffffu);
     widget_on(win, EVT_DESTROY, rate_gone, win);
     st.rate_tick = timer_add(rate_tick, (void *)0, 500);
     rate_badge();
@@ -5176,8 +5176,8 @@ int ringnav_about(void *win, void *ctx) {
         widget_set_text_utf8(widget_get_child(widget_get_child(widget_get_child(view, 1), 0), 1),
                              STOCK_VERSION);
         void *button = list_button(view);
-        about_label(button, 10, 166, "s_scrlabel_white24l", "CFW. Version");
-        about_label(button, 176, 149, "s_scrlabel_white20r", Q2POD_VERSION);
+        about_label(button, 10, 166, STYLE_SCRLABEL_WHITE24L, "CFW. Version");
+        about_label(button, 176, 149, STYLE_SCRLABEL_WHITE20R, Q2POD_VERSION);
         widget_restack(P(button, W_PARENT), 2);
     }
     return result;
@@ -5416,9 +5416,9 @@ static int qm_open(const void *unused) {
         widget_destroy_children(view);
         for (int i = 0; i < count; ++i) {
             void *item = list_item_create(view, 0, i * QM_ROW, UI_W, QM_ROW);
-            widget_use_style(item, "s_listitem_black");
+            widget_use_style(item, STYLE_LISTITEM_BLACK);
             void *label = hscroll_label_create(item, 30, 0, UI_W - 65, QM_ROW);
-            widget_use_style(label, "s_scrlabel_white24l");
+            widget_use_style(label, STYLE_SCRLABEL_WHITE24L);
             widget_set_text_utf8(label, names[i]);
             if (i == playback_option(kind))
                 image_base_set_image(image_create(item, UI_W - 35, 0, 24, QM_ROW), "select");
@@ -5495,9 +5495,9 @@ static int qm_open(const void *unused) {
     /* stock sortselect row styles */
     for (int i = 0; i < n; ++i) {
         void *item = list_item_create(view, 0, i * QM_ROW, UI_W, QM_ROW);
-        widget_use_style(item, "s_listitem_black");
+        widget_use_style(item, STYLE_LISTITEM_BLACK);
         void *label = hscroll_label_create(item, 30, 0, UI_W - 109, QM_ROW);
-        widget_use_style(label, "s_scrlabel_white24l");
+        widget_use_style(label, STYLE_SCRLABEL_WHITE24L);
         if (acts[i] == QA_RATE) {
             int h = aid ? album_hearts : checkFavExist(r) ? 5 : rate_kept(0, listen_key(r));
             const char *row = aid ? "Rate Album" : "Rate";

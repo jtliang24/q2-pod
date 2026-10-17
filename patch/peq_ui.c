@@ -89,10 +89,10 @@ static int render(const void *unused);
  * value, if any, in grey against the right edge. */
 static void row_dim(void *view, int index, const char *text, const char *value, int id, int dim) {
     void *item = list_item_create(view, 0, index * 48, UI_W, 48);
-    widget_use_style(item, "s_listitem_black");
+    widget_use_style(item, STYLE_LISTITEM_BLACK);
     for (int i = 0; i < 1 + !!value; ++i) {
         void *label = label_create(item, ROW_X, 0, UI_W - 2 * ROW_X, 48);
-        widget_use_style(label, "s_label_white20l");
+        widget_use_style(label, STYLE_LABEL_WHITE20L);
         if (i || dim || id < 0) widget_set_prop_int(label, "style:normal:text_color", (int)CF_GREY);
         if (i) widget_set_prop_str(label, "style:normal:text_align_h", "right");
         widget_set_text_utf8(label, i ? value : text);
@@ -457,7 +457,7 @@ static int render(const void *unused) {
          * keyboard, then EVT_VALUE_CHANGED) or "next"; the dialogs' "OK" is handled by their own EVT_IM_ACTION
          * handlers. The keyboard's OK key shows an image, not the text. */
         void *item = list_item_create(view, 0, 0, UI_W, 48);
-        widget_use_style(item, "s_listitem_black");
+        widget_use_style(item, STYLE_LISTITEM_BLACK);
         widget_on(item, EVT_CLICK, action, (void *)(long)KEYBOARD);
         ui.edit = edit_create(item, "ufloat");
         peq_band *b = &ui.draft.bands[ui.band];
@@ -682,7 +682,7 @@ static int tab_touch(void *ctx, void *event) {
 /* The title label; the tabs' bar when the bar takes their taps. */
 static void *bar(void *page, int x, int w) {
     void *title = label_create(page, x, 0, w, 48);
-    widget_use_style(title, "s_label_white20c");
+    widget_use_style(title, STYLE_LABEL_WHITE20C);
     widget_set_prop_int(title, "line_wrap", 1);
     if (w == UI_W) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
     return title;

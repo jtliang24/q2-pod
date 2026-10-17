@@ -60,6 +60,11 @@ OUTPUT_WAY = 0xa0abe8 if is_m1plus else 0xa3beb0
 # The window manager's vtable slot and stock's vtable (window_manager_create's; V2.1 passes it to
 # window_manager_init as a2, which stores it at 0x88).
 WM_VT_SLOT, WM_VTABLE = (0x88, 0x97d6a0) if is_m1plus else (0x94, 0x9a0490)
+# The payload's styles (offsets.inc STYLE_*) as this model compiles them: S('s_listitem_black') is that
+# V1.32 name, or V2.1's nearest on M1 Plus.
+from build import run as _run
+NAMES = dict(re.findall(r'^#define ((?:STYLE|VIEW|ICON)_\w+) "([^"]+)"', _run('clang', '-E', '-dM', f'-DM1PLUS={int(is_m1plus)}', '-x', 'c', str(ROOT/'patch/offsets.inc')), re.M))
+def S(name): return NAMES['STYLE_' + name[2:].upper()]
 DC=O['DOUBLE_CLICK_MS']  # centre double-press window
 # iPod accent presets: {gradient top, bottom, light tone, red tone, highlight} per Accent setting value.
 ACCENTS=[tuple(int(v,16) for v in g) for g in re.findall(r'\{ 0x(\w+), 0x(\w+), 0x(\w+), 0x(\w+), 0x(\w+) \}',INC)]
@@ -5805,13 +5810,13 @@ if variant=='ipod':
     m,view,rows=display({})
     kids=m.nodes[view]['children'][3:]; cf,shortcut,wheel=kids[3],kids[5],kids[6]
     assert kids==[rows[3],rows[0],rows[1],cf,rows[2],shortcut,wheel] and m.nodes[rows[0]]['visible']==0  # Theme, hidden Accent, Home, Artist albums, Battery, Shortcut, Wheel sensitivity
-    assert m.icons_set==['system_display','system_display','playset_covermode','playset_covermode','system_powermanager','playset_covermode','system_display'] and all(m.nodes[r]['type']=='list_item' and m.nodes[r]['style']=='s_listitem_black' for r in rows)
+    assert m.icons_set==['system_display','system_display','playset_covermode','playset_covermode','system_powermanager','playset_covermode','system_display'] and all(m.nodes[r]['type']=='list_item' and m.nodes[r]['style']==S('s_listitem_black') for r in rows)
     buttons=[m.nodes[r]['children'][0] for r in rows]; labels=[m.nodes[b]['children'][1] for b in buttons]
     for b,l in zip(buttons,labels):
         icon=m.nodes[b]['children'][0]  # stock's 0x4c19bc icon geometry, which the row layouter maps
         assert m.nodes[icon]['type']=='image' and [m.get(icon+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[10,0,52,70]
-        assert m.nodes[b]['style']=='s_btn_listitem' and [m.get(b+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,70]
-        assert m.nodes[l]['type']=='hscroll_label' and m.nodes[l]['style']=='s_scrlabel_white24l' and m.get(l+O['W_X'])==72
+        assert m.nodes[b]['style']==S('s_btn_listitem') and [m.get(b+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,70]
+        assert m.nodes[l]['type']=='hscroll_label' and m.nodes[l]['style']==S('s_scrlabel_white24l') and m.get(l+O['W_X'])==72
     def texts(): return [m.nodes[l]['text'] for l in labels]
     # Artist albums (Q2POD ARTISTCF), the other layout choice, after Home; no key is Coverflow.
     cf_label=m.nodes[m.nodes[cf]['children'][0]]['children'][1]; assert m.nodes[cf_label]['text']=='Artist Albums: Coverflow'
@@ -6402,7 +6407,7 @@ assert m.calls[0][:3]==('stock_localmusic',m.top,5)
 # Recently Added, Recent, Most Played, Frequent, Hi-Res, Long Songs; then Update Local Music, last (stock rows by
 # get_localmusic_showinfo index).
 kids=m.nodes[view]['children']; row,rated,top,long=kids[0],kids[6],kids[10],kids[13]
-assert [kids[i] for i in (*range(1,6),7,8,9,11,12,14)]==[stock[i] for i in (3,2,1,4,10,6,9,8,7,5,0)] and m.nodes[row]['style']=='s_listitem_black'
+assert [kids[i] for i in (*range(1,6),7,8,9,11,12,14)]==[stock[i] for i in (3,2,1,4,10,6,9,8,7,5,0)] and m.nodes[row]['style']==S('s_listitem_black')
 icon,label=m.nodes[m.nodes[long]['children'][0]]['children']
 assert m.nodes[icon]['image']=='local_longsongs' and m.nodes[label]['text']=='Long Songs'
 assert m.nodes[stock[6]]['visible']==0 and all(m.nodes[k].get('visible',1) for k in kids if k!=stock[6])
@@ -6413,9 +6418,9 @@ assert m.nodes[icon]['image']=='local_fav' and m.nodes[label]['text']=='Ratings'
 # The Shuffle row: the local_shuffle icon, its label and stock's list_into trailing image, as the
 # stock Local Music categories place them. Its button has no name, so stock's row click ignores it.
 button=m.nodes[row]['children'][0]; icon,label,into=m.nodes[button]['children']
-assert m.nodes[button]['style']=='s_btn_listitem' and [m.get(button+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,70]
+assert m.nodes[button]['style']==S('s_btn_listitem') and [m.get(button+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,70]
 assert m.nodes[icon]['image']=='local_shuffle' and [m.get(icon+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[10,0,52,70]
-assert m.nodes[label]['style']=='s_scrlabel_white24l' and m.nodes[label]['text']=='Shuffle' and not m.nodes[button].get('name')
+assert m.nodes[label]['style']==S('s_scrlabel_white24l') and m.nodes[label]['text']=='Shuffle' and not m.nodes[button].get('name')
 assert m.nodes[into]['image']=='list_into' and [m.get(into+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[282,0,50,70]
 f,ctx=m.handler(button,O['EVT_CLICK'])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
@@ -6559,7 +6564,7 @@ assert m.texts()==['Most Played']+[x for p in zip(ranked,details) for x in p]
 rows=m.nodes[m.find('scroll_view')]['children']; assert len(rows)==O['PLAYS_TOP']
 assert [(m.get(rows[1]+O['W_Y']),m.get(rows[1]+O['W_H']))]==[(64,64)]
 title,detail=m.nodes[rows[1]]['children']
-assert m.nodes[title]['style']==m.nodes[detail]['style'] and (variant!='ipod' or m.nodes[title]['style']=='s_scrlabel_white20l') and m.get(title+O['W_Y'])+m.get(title+O['W_H'])<=m.get(detail+O['W_Y'])
+assert m.nodes[title]['style']==m.nodes[detail]['style'] and (variant!='ipod' or m.nodes[title]['style']==S('s_scrlabel_white20l')) and m.get(title+O['W_Y'])+m.get(title+O['W_H'])<=m.get(detail+O['W_Y'])
 assert m.nodes[detail]['style:normal:text_color']==-0x555556 and m.nodes[detail]['style:normal:font_size']==16
 assert m.get(detail+O['W_Y'])+m.get(detail+O['W_H'])<=64
 r=m.nodes[m.find('scroll_view')]['children'][2]; g,c=m.handler(r,O['EVT_CLICK'])
@@ -6963,7 +6968,7 @@ assert not m.nodes[albums]['visible'] and m.nodes[grid]['visible'] and labels(gr
 tiles_view=m.find('scroll_view',grid); tiles=m.nodes[tiles_view]['children']
 assert m.nodes[tiles_view].get('yslidable')==1 and m.nodes[tiles_view].get('virtual_h')==((len(tiles)+O['PH_COLS']-1)//O['PH_COLS'])*O['PH_TILE_H']
 assert [cf_geometry(m,t) for t in tiles]==[(O['PH_GRID_X']+(i%O['PH_COLS'])*O['PH_TILE_W'],(i//O['PH_COLS'])*O['PH_TILE_H'],O['PH_TILE_W'],O['PH_TILE_H']) for i in range(4)]
-assert all(m.nodes[t]['style']=='s_listitem_black' for t in tiles) and len(m.threads)==1
+assert all(m.nodes[t]['style']==S('s_listitem_black') for t in tiles) and len(m.threads)==1
 paths=[R+'/A.png',R+'/b.jpg',R+'/Trip/1.jpg',R+'/Trip/2.JPG']; keys=[fnv(p) for p in paths]
 def cache(i,s): return f'/mnt/mmc/.photos/{keys[i]:08x}{s}'
 # Grey until made; the worker makes each photo's screen copy (sides swapped for a turned photo),
@@ -7846,7 +7851,7 @@ if not is_m1plus:
     item=kids[2]; button=m.nodes[item]['children'][0]; title,value=m.nodes[button]['children']
     # Stock's row, title and value widgets alike.
     want=tree(m.nodes[rows[1]]['children'][0])
-    assert m.nodes[item]['style']=='s_listitem_black' and tree(button)==want
+    assert m.nodes[item]['style']==S('s_listitem_black') and tree(button)==want
     assert m.nodes[title]['text']=='CFW. Version' and m.nodes[value]['text']==f"{VERSION}{' Pod' if variant=='ipod' else ''}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
     assert not m.nodes[button].get('handlers') and not m.nodes[button].get('name'); passed()
 else:
@@ -8068,7 +8073,7 @@ def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False):
     m.entries=entries
     return m,rows,lambda:[m.nodes[l]['text'] for l in labels],icons,click
 m,rows,texts,icons,click=settings_page('power','scroll_view_powermanager')
-assert len(rows)==3 and icons==['usb_chargeswitch','system_powermanager','system_keylock'] and all(m.nodes[r]['style']=='s_listitem_black' for r in rows)
+assert len(rows)==3 and icons==['usb_chargeswitch','system_powermanager','system_keylock'] and all(m.nodes[r]['style']==S('s_listitem_black') for r in rows)
 assert texts()==['Charge Limit: Off','Low Power: Off','Wake: Single Press']
 assert click(0)==[(1,'Q2POD','CHARGELIMIT')] and texts()[0]==f"Charge Limit: {O['CHARGE_STOP']}%"
 assert click(1)==[(1,'Q2POD','LOWPOWER')] and texts()[1]=='Low Power: On'

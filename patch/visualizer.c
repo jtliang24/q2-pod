@@ -517,7 +517,7 @@ void visualizer_attach(void *win) {
     vz.slide = slide;
     vz.cover = widget_lookup(win, "img_cover", 1);
     vz.page = list_item_create(slide, 0, 0, UI_W, VIS_H);
-    widget_use_style(vz.page, "s_listitem_black");
+    widget_use_style(vz.page, STYLE_LISTITEM_BLACK);
     widget_on(vz.page, EVT_CLICK, next_style, 0);
     /* The art is the window's child, over the slide area's centre, for the same reason as the drawing. */
     vz.ox = vz.oy = 0;

@@ -264,7 +264,7 @@ static int to_grid(const void *unused) {
     for (int i = 0; i < n; ++i) {
         void *tile = list_item_create(ph.view, PH_GRID_X + i % PH_COLS * PH_TILE_W,
                                       i / PH_COLS * PH_TILE_H, PH_TILE_W, PH_TILE_H);
-        widget_use_style(tile, "s_listitem_black");
+        widget_use_style(tile, STYLE_LISTITEM_BLACK);
         widget_on(tile, EVT_CLICK, open_tile, (void *)(long)i);
     }
     mkdir(PHOTO_DIR, 0755);

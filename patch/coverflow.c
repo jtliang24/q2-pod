@@ -915,7 +915,7 @@ void coverflow_by_year(void *albums) {
 
 void *text(void *parent, int x, int y, int w, int h) { /* shared with photos.c */
     void *label = hscroll_label_create(parent, x, y, w, h);
-    widget_use_style(label, "s_scrlabel_white20c");
+    widget_use_style(label, STYLE_SCRLABEL_WHITE20C);
     set_hscroll_label_attribute(label);
     widget_set_prop_int(label, "loop", 1);
     return label;
@@ -992,13 +992,13 @@ void *page_row_detail(void *view, int index, const char *caption, const char *de
                       int (*click)(void *, void *)) {
     int h = detail ? 64 : 48;
     void *item = list_item_create(view, 0, index * h, UI_W, h);
-    widget_use_style(item, "s_listitem_black");
+    widget_use_style(item, STYLE_LISTITEM_BLACK);
     void *label = text(item, CF_ROW_X, detail ? 4 : 0, CF_ROW_W, detail ? 32 : 48);
-    if (IPOD) widget_use_style(label, "s_scrlabel_white20l");
+    if (IPOD) widget_use_style(label, STYLE_SCRLABEL_WHITE20L);
     widget_set_text_utf8(label, caption);
     if (detail) {
         label = text(item, CF_ROW_X, 36, CF_ROW_W, 24);
-        if (IPOD) widget_use_style(label, "s_scrlabel_white20l");
+        if (IPOD) widget_use_style(label, STYLE_SCRLABEL_WHITE20L);
         widget_set_prop_int(label, "style:normal:text_color", (int)0xffaaaaaau);
         widget_set_prop_int(label, "style:normal:font_size", 16);
         widget_set_text_utf8(label, detail);

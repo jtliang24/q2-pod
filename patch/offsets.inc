@@ -82,6 +82,30 @@
 #define EVT_POINTER_UP 0x103
 #define EVT_POINTER_ABORT 0x107
 #define EVT_DESTROY 0x0c
+/* The payload's own widgets' styles: V1.32's, or V2.1's nearest of the same widget type, colour,
+ * size and alignment (V2.1 has no centred 18 px label, no right-aligned 20 px scrolling label: their
+ * nearest are 20 px and 16 px). */
+#if M1PLUS
+#define STYLE_LISTITEM_BLACK "list_item_black_style"
+#define STYLE_BTN_LISTITEM "btn_listmore_style"
+#define STYLE_LABEL_WHITE18C "label_centerwhite20_style"
+#define STYLE_LABEL_WHITE20C "label_centerwhite20_style"
+#define STYLE_LABEL_WHITE20L "navbar_leftlabel_white"
+#define STYLE_SCRLABEL_WHITE20C "srlabel_msgwhite_style"
+#define STYLE_SCRLABEL_WHITE20L "srlabel_leftwhite20_style"
+#define STYLE_SCRLABEL_WHITE20R "srlabel_item_right_gray16_styl"
+#define STYLE_SCRLABEL_WHITE24L "srlabel_leftwhite22_style"
+#else
+#define STYLE_LISTITEM_BLACK "s_listitem_black"
+#define STYLE_BTN_LISTITEM "s_btn_listitem"
+#define STYLE_LABEL_WHITE18C "s_label_white18c"
+#define STYLE_LABEL_WHITE20C "s_label_white20c"
+#define STYLE_LABEL_WHITE20L "s_label_white20l"
+#define STYLE_SCRLABEL_WHITE20C "s_scrlabel_white20c"
+#define STYLE_SCRLABEL_WHITE20L "s_scrlabel_white20l"
+#define STYLE_SCRLABEL_WHITE20R "s_scrlabel_white20r"
+#define STYLE_SCRLABEL_WHITE24L "s_scrlabel_white24l"
+#endif
 #if M1PLUS
 /* V2.1's AWTK numbers its events differently from V1.32's from focus on: one lower to the key
  * events (one entry fewer before them), two higher from the window events. Each is V2.1's value in
