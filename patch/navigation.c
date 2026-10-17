@@ -244,7 +244,7 @@ typedef struct {
     int held_sec; /* a paused seek to scrub_to on scrub_track: the player's second then, +1; 0 none
                    */
     unsigned lyric_timer; /* runs while the wheel holds the lyrics and stock's timer is stopped */
-    /* The Display settings, read from config.ini on first use, and the display page's value labels.
+    /* The Display settings, read from config.ini on first use, and the display page's value labels. */
     int settings_read, accent, home_full, battery, home_rockbox, classic, shortcut;
     unsigned tone_key; /* the wheel key whose press ringnav_keydown silenced, 0 when none */
     int greeted;       /* the first reachable list got its boot repaint */
@@ -1340,17 +1340,26 @@ _Static_assert(sizeof accent_names / sizeof *accent_names == ACCENT_N, "one name
 int config_digit(const char *key, int n) {
     return config_value("IPOD", key, n);
 } /* and visualizer.c's */
-/* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme, 4 Shortcut, 5 Knob. */
+/* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme, 4 Shortcut. */
+#if M1PLUS
 static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT", "KNOB" };
 static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 5, 2 };
 static int *const setting_values[] = { &st.accent, &st.home_full, &st.battery, &st.classic,
                                        &st.shortcut, &st.knob_mode };
+#else
+static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT" };
+static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 5 };
+static int *const setting_values[] = { &st.accent, &st.home_full, &st.battery, &st.classic,
+                                       &st.shortcut };
+#endif
 static int accent(void) {
     if (!st.settings_read) {
         for (int i = 0; i < 4; ++i)
             *setting_values[i] = config_digit(setting_keys[i], setting_counts[i]);
         st.shortcut = config_or("IPOD", "SHORTCUT", 5, 5); /* 5: no key, see shortcut() */
+#if M1PLUS
         st.knob_mode = config_or("IPOD", "KNOB", 2, 0);    /* 0: Volume (Default), 1: Navigation */
+#endif
         st.settings_read = 1;
     }
     return st.classic ? st.accent : 0; /* Graphite */
@@ -3061,8 +3070,11 @@ static void setting_text(int i) {
                              *const battery[] = { "Battery: Icon", "Battery: Percent",
                                                   "Battery: Icon + Percent",
                                                   "Battery: Percent Inside" },
-                             *const theme[] = { "Theme: Minimal", "Theme: Classic" },
-                             *const knob[] = { "Knob: Volume", "Knob: Navigation" };
+                             *const theme[] = { "Theme: Minimal", "Theme: Classic" }
+#if M1PLUS
+                             , *const knob[] = { "Knob: Volume", "Knob: Navigation" }
+#endif
+                             ;
     accent(); /* reads the settings */
     const char *const names[] = { accent_names[st.accent], home[st.home_full], battery[st.battery],
                                   theme[st.classic] };
@@ -3072,10 +3084,12 @@ static void setting_text(int i) {
         widget_set_text_utf8(st.setting_label[i], shortcut);
         return;
     }
+#if M1PLUS
     if (i == 5) {
         widget_set_text_utf8(st.setting_label[i], knob[st.knob_mode]);
         return;
     }
+#endif
     widget_set_text_utf8(st.setting_label[i], names[i]);
 }
 
@@ -6204,17 +6218,21 @@ int ringnav_input(void *wm, void *e) {
             st.swipe_x = I(e, EVENT_X);
             st.swipe_y = I(e, EVENT_Y);
             st.swipe_valid = (st.swipe_x < 32);
-        } else if (st.swipe_valid) {
-            int dx = I(e, EVENT_X) - st.swipe_x;
-            int dy = I(e, EVENT_Y) - st.swipe_y;
-            if (dy < 0) dy = -dy;
-            if (dx > 40 && dx > dy * 2) {
-                st.swipe_valid = 0;
-                dispatch_key_return();
-                return 0;
+        } else if (type >= 0x100 && type <= 0x107) {
+            if (st.swipe_valid) {
+                int dx = I(e, EVENT_X) - st.swipe_x;
+                int dy = I(e, EVENT_Y) - st.swipe_y;
+                if (dy < 0) dy = -dy;
+                if (dx > 40 && dx > dy * 2) {
+                    st.swipe_valid = 0;
+                    dispatch_key_return();
+                    return 0;
+                }
+                if (type == EVT_POINTER_UP || type == EVT_POINTER_UP_BEFORE || type == EVT_POINTER_ABORT)
+                    st.swipe_valid = 0;
             }
-            if (type == EVT_POINTER_UP || type == EVT_POINTER_UP_BEFORE || type == EVT_POINTER_ABORT)
-                st.swipe_valid = 0;
+        } else {
+            st.swipe_valid = 0;
         }
     }
 #endif
@@ -6241,8 +6259,8 @@ int ringnav_buzzer(int on) {
     return stock_buzzer_trampoline(on);
 }
 
-static int knob_nav_active(void) {
 #if M1PLUS
+static int knob_nav_active(void) {
 #if IPOD
     accent();
     if (!st.knob_mode || !g_backlight_status) return 0;
@@ -6252,10 +6270,8 @@ static int knob_nav_active(void) {
     if (now_playing()) return 0;
 #endif
     return 1;
-#else
-    return 0;
-#endif
 }
+#endif
 
 /* on_wm_keydown_before_fun. Stock clicks (buzzeer_switch, which reads g_keytone_flag) on the press,
  * before the release moves anything. A wheel press on a page whose release ringnav() takes as row
@@ -6476,15 +6492,18 @@ int ringnav(void *ctx, void *event) {
     }
     unsigned key = (unsigned)I(event, EVENT_KEY);
 #if M1PLUS
+    int boot_guard = g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD;
     if (knob_nav_active()) {
         if (key == KEY_VOLUMEDOWN) key = KEY_PREV, I(event, EVENT_KEY) = KEY_PREV;
         else if (key == KEY_VOLUMEUP) key = KEY_NEXT, I(event, EVENT_KEY) = KEY_NEXT;
-        else if (key == KEY_POWER) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
+        else if (key == KEY_POWER && !boot_guard) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
     }
     if (!media_playing() && !now_playing() && key == KEY_BACK_BTN) {
         dispatch_key_return();
         return STOP;
     }
+#else
+    int boot_guard = g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD;
 #endif
 #if IPOD
     /* This release's press was silenced by ringnav_keydown: a row change below clicks instead. */
@@ -6583,11 +6602,15 @@ int ringnav(void *ctx, void *event) {
     /* An overdue click may change power/lock state; inspect it after its callback. */
     if (!usable()) {
         drop_input();
+#if M1PLUS
+        static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
+        if (!g_backlight_status) stock_keyup_trampoline((void *)0, (void *)release);
+#endif
         return result;
     }
     /* Match the stock power-key release exclusions, including release after long press. */
     if (key == KEY_CENTER &&
-        (g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD)) {
+        (boot_guard || g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD)) {
         cancel_center();
         return result;
     }
@@ -6624,7 +6647,11 @@ int ringnav(void *ctx, void *event) {
             static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
             st.dc_top = (void *)0;
             drop_input();
+#if M1PLUS
+            if (g_backlight_status) stock_keyup_trampoline((void *)0, (void *)release);
+#else
             if (g_backlight_status) on_wm_keyup_fun((void *)0, (void *)release);
+#endif
             return STOP;
         }
         st.dc_top = top;
@@ -6653,7 +6680,13 @@ int ringnav(void *ctx, void *event) {
     if (!dir) {
         if (st.center_timer && now - st.last_center < DOUBLE_CLICK_MS) {
             cancel_center();
+#if M1PLUS
+            static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
+            if (g_backlight_status) stock_keyup_trampoline((void *)0, (void *)release);
+            return 0;
+#else
             return result; /* Let the stock downstream short-press handler turn the screen off. */
+#endif
         }
         cancel_center();
         if (cur < 0) return STOP;

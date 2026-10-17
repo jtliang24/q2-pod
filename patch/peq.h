@@ -1,6 +1,10 @@
 #ifndef Q2_PEQ_H
 #define Q2_PEQ_H
 
+#ifndef STOP
+#define STOP 11
+#endif
+
 #ifdef PEQ_HOST
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE /* mmap64 */
@@ -16,9 +20,6 @@
 #else
 #include "peq_platform.h"
 #define PEQ_ROOT "" /* host tests pass a scratch directory */
-#ifndef STOP
-#define STOP 11
-#endif
 #ifndef tk_strcmp
 #define tk_strcmp strcmp
 #endif
@@ -29,7 +30,11 @@ static inline void set_hscroll_label_attribute(void *w) { (void)w; }
 #define slide_menu_set_spacer(s, sp) ((void)0)
 #endif
 #ifndef window_manager_get_input_device_status
+#if M1PLUS
+#define window_manager_get_input_device_status(wm) ((char *)(wm) + 0xf8)
+#else
 #define window_manager_get_input_device_status(wm) ((char *)"")
+#endif
 #endif
 #ifndef folder_reinit_navbarname
 static inline int folder_reinit_navbarname(void) { return 0; }

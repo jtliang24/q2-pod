@@ -710,6 +710,7 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'slide_menu_on_scroll_done': 0x6123f4,  # what slide_menu's scroll_to binds to its animator's end (0x612320)
     'folder_refresh': 0x5318ac,  # folder_page_init's (0x53354c): navbar and table from pdeq_showlist
     'album_row': 0x4e93c8,  # getAllAlbum's toolsQueryDbTable callback (0x4ea458): a record to tools_pdeq_directory
+    'gif_image_create': 0x5fb69c,
 }
 M1PLUS_FUNCTION_ALIASES = {
     'device_set_volume': 'set_devicevolume',
@@ -722,6 +723,7 @@ M1PLUS_FUNCTION_ALIASES = {
     'folder_reload_data': 'folder_reload',
     'player_playtime_and_length': 'get_playtimeandlength',
     'player_seek_time': 'seek_time',
+    'switch_charge_enable': 'toolsSetChargeSwitch',
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
@@ -888,7 +890,7 @@ def compile_payload(out, ipod=False, m1plus=False):
     undefined = [f'--undefined={name}' for _, name, _ in active_hooks.values()]
     if ipod and not m1plus:
         undefined.append(f'--undefined={IPOD_LEAF[2]}')
-    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode']
+    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
     if not m1plus:
         undefined.append('--undefined=ringnav_ts_read')
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',

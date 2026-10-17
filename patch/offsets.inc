@@ -33,12 +33,16 @@
  * window_close and widget_to_global, emitter widget_off_by_func, children layout
  * widget_set_children_layout, vtable widget_get_type 0x70); subclasses still start at 0x78. */
 #define W_PARENT 0x44
+#define W_CHILDREN 0x58
 #define W_EMITTER 0x5c
 #define W_CHILDREN_LAYOUT 0x64
+#define W_VT 0x70
 #else
 #define W_PARENT 0x48
+#define W_CHILDREN 0x5c
 #define W_EMITTER 0x60
 #define W_CHILDREN_LAYOUT 0x68
+#define W_VT 0x74
 #endif
 #define CHILDREN_LAYOUT_VTABLE 0x10
 #define DEFAULT_LAYOUT_X_MARGIN 0x18
@@ -484,6 +488,7 @@ static inline int arc_out(int r, int y) {
 #define ANIM_START_TIME 0x1c
 #define ANIM_DURATION 0x24
 #define ANIM_X_TO 0x64
+#define ANIM_X_FROM 0x6c
 #define EVT_ANIM_END 0x127
 #define slide_stride(w) I(w, W_H)
 #else
@@ -494,6 +499,7 @@ static inline int arc_out(int r, int y) {
 #define ANIM_START_TIME 0x18
 #define ANIM_DURATION 0x20
 #define ANIM_X_TO 0x60
+#define ANIM_X_FROM 0x68
 #define EVT_ANIM_END 0x125
 #define slide_stride(w) (slide_menu_item_width(w) + I(w, SLIDE_SPACER))
 #endif
@@ -504,10 +510,11 @@ static inline int arc_out(int r, int y) {
  * +0x30, each {key, long fired, u64 press time @8, aborted @0x10}. */
 #if M1PLUS
 #define EVT_KEY_LONG 0x110
+#define INPUT_KEYS 0x18
 #else
 #define EVT_KEY_LONG 0x111
-#endif
 #define INPUT_KEYS 0x30
+#endif
 #define INPUT_KEY_SIZE 0x18
 #define INPUT_KEY_COUNT 16
 #define INPUT_KEY_TIME 0x08
