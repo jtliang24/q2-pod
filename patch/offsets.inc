@@ -81,6 +81,10 @@
 #define EVT_POINTER_UP_BEFORE 0x104
 #define EVT_POINTER_UP 0x103
 #define EVT_POINTER_ABORT 0x107
+/* A press as the input thread queues it for window_manager_dispatch_input_event (tslib_run: 0xff
+ * on the first sample with pressure, then 0x101 moves, 0x103 on release; V2.1 0x637634); the wm
+ * turns it into EVT_POINTER_DOWN for widgets. */
+#define EVT_INPUT_POINTER_DOWN 0xff
 #define EVT_DESTROY 0x0c
 /* The stock settings lists the payload adds rows to, and the icons its rows borrow (each in the
  * firmware's UI assets and images; tools/build.py checks them against the rootfs). V2.1 names its

@@ -8789,42 +8789,52 @@ else:
     not_ported("Now Playing's info lines (NP_INFO_CALL not patched in V2.1)")
 
 if is_m1plus:
-    # M1 Plus has no Return key, so three gestures hand the window manager the key-up a Q2's Return
-    # sends (dispatch_key_return): a swipe in from the left edge, a tap on a payload page's title,
-    # and Back (Previous) while nothing plays. What reaches the stock dispatch is read back as
-    # (type, key); a pointer event's x sits where a key's code does (EVENT_X == EVENT_KEY).
+    # M1 Plus has no Return key, so three gestures hand the window manager a Return press and release,
+    # as the input thread queues a key's (dispatch_key_return): a swipe in from the left edge, a tap
+    # on a payload page's title, and Back (Previous) while nothing plays. Every event stock's dispatch
+    # receives is recorded as (type, key) when it arrives; a pointer event's x sits where a key's code
+    # does (EVENT_X == EVENT_KEY). Touches arrive as the input thread queues them (tslib_run, V2.1
+    # 0x637634): EVT_INPUT_POINTER_DOWN on the press, then 0x101 moves and EVT_POINTER_UP.
     INPUT=HOOKS['window_manager_dispatch_input_event'][0]
-    RETURN_UP=(O['EVT_KEY_UP'],O['KEY_RETURN'])
+    RETURN=[(O['EVT_KEY_DOWN'],O['KEY_RETURN']),(O['EVT_KEY_UP'],O['KEY_RETURN'])]
+    PRESS,MOVE,LIFT=O['EVT_INPUT_POINTER_DOWN'],0x101,O['EVT_POINTER_UP']
+    assert PRESS==0xff and struct.unpack('<I',bytes(Machine().u.mem_read(0x637634,4)))[0]==0x240200ff  # tslib_run's li v0,0xff
     def input_machine(page='sysset_page'):
-        m=Machine(); m.handlers[INPUT+12]='stock_input'; m.mock('on_wm_keyup_fun')
+        m=Machine(); m.handlers[INPUT+12]='stock_input'; m.mock('on_wm_keyup_fun'); m.seen=[]
+        def snap(u,address,size,_):  # before the mock returns: the event as it arrives
+            e=u.reg_read(UC_MIPS_REG_A1); m.seen.append((m.get(e+O['EVENT_TYPE']),m.get(e+O['EVENT_KEY'])))
+        m.u.hook_del(m.code_hook); m.u.hook_add(UC_HOOK_CODE,snap,begin=INPUT+12,end=INPUT+12)
+        m.code_hook=m.u.hook_add(UC_HOOK_CODE,m.hook)
         m.top=m.node('window',page,[m.node()]); return m
     def dispatched(m):
-        return [(m.get(c[2]+O['EVENT_TYPE']),m.get(c[2]+O['EVENT_KEY'])) for c in m.calls if c[0]=='stock_input']
-    def swipe(x0,x1,dy=0):
-        m=input_machine(); sent=[]
-        for kind,x,y in ((O['EVT_POINTER_DOWN'],x0,200),(O['EVT_POINTER_UP'],x1,200+dy)):
-            m.word(m.event+O['EVENT_Y'],y); m.calls=[]
-            assert m.call(x,address=INPUT,args=(m.wm,m.event,0,0),event_type=kind,gap=100,clear=False)==0
-            sent+=dispatched(m)
-        return sent
-    DOWN,UP=O['EVT_POINTER_DOWN'],O['EVT_POINTER_UP']
-    assert swipe(10,70)==[(DOWN,10),RETURN_UP]       # from the edge, right: Return instead of the release
-    assert swipe(31,81)==[(DOWN,31),RETURN_UP]
-    assert swipe(32,82)==[(DOWN,32),(UP,82)]         # not from the edge: the touch as it was
-    assert swipe(10,50)==[(DOWN,10),(UP,50)]         # too short
-    assert swipe(10,70,dy=30)==[(DOWN,10),(UP,70)]   # more diagonal than across
-    assert swipe(10,70,dy=-29)==[(DOWN,10),RETURN_UP]
+        out=m.seen; m.seen=[]; return out
+    def touch(*points):
+        m=input_machine()
+        for kind,x,y in points:
+            m.word(m.event+O['EVENT_Y'],y)
+            assert m.call(x,address=INPUT,args=(m.wm,m.event,0,0),event_type=kind,gap=20,clear=False)==0
+        return dispatched(m)
+    # An edge swipe right is a Return, and nothing of its touch reaches the page, its release included.
+    assert touch((PRESS,10,200),(MOVE,30,202),(MOVE,60,205),(MOVE,90,205),(LIFT,90,205))==RETURN
+    assert touch((PRESS,31,200),(MOVE,81,200))==RETURN
+    assert touch((PRESS,10,200),(LIFT,60,205))==RETURN  # one sample past the threshold, already lifted
+    # Not a swipe: the held press is replayed, then the touch goes on as it was.
+    assert touch((PRESS,10,200),(LIFT,10,200))==[(PRESS,10),(LIFT,10)]                         # a tap (the title's back button)
+    assert touch((PRESS,10,200),(MOVE,12,230),(MOVE,14,260))==[(PRESS,10),(MOVE,12),(MOVE,14)]  # a drag down
+    assert touch((PRESS,10,200),(MOVE,60,240))==[(PRESS,10),(MOVE,60)]                         # more diagonal than across
+    assert touch((PRESS,10,200),(MOVE,30,203),(LIFT,40,203))==[(PRESS,10),(LIFT,40)]            # too short: held moves dropped
+    assert touch((PRESS,32,200),(MOVE,82,200),(LIFT,82,200))==[(PRESS,32),(MOVE,82),(LIFT,82)]  # not from the edge
     passed()
     # The title of a page made by page_title: its click takes nothing else, and the Return follows on
     # a timer, outside the title's own dispatch (it closes the page).
     m=input_machine(); title=m.call(address=payload_syms['page_title'],args=(m.node('view'),m.string('Photos'),0,0),gap=0)
     (f,ctx),=[(f,ctx) for t,f,ctx in m.nodes[title]['handlers'] if t==O['EVT_CLICK']]
     m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),event_type=O['EVT_CLICK'],gap=0)==11 and dispatched(m)==[]
-    m.advance(0); assert dispatched(m)==[RETURN_UP]
+    m.advance(0); assert dispatched(m)==RETURN
     m.advance(1000); assert dispatched(m)==[]; passed()
     # Back: Return while nothing plays and Now Playing is not on top; there it stays Previous.
     m=input_machine(); m.calls=[]
-    assert m.call(O['KEY_BACK_BTN'],gap=1000)==11 and dispatched(m)==[RETURN_UP] and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
+    assert m.call(O['KEY_BACK_BTN'],gap=1000)==11 and dispatched(m)==RETURN and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
     m=input_machine('playing_page'); m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]; passed()
     def back_locked():  # screen off and keys locked: stock's key lock, not a hidden page's Back
         m=input_machine(); m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
