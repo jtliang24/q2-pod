@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Reproducibly patch only the audited Q2 V1.32 ZIP. Requires LLVM and squashfs-tools, and ImageMagick for --ipod.
+"""Reproducibly patch only the audited Q2 V1.32 or M1 Plus V2.1 firmware (the vendor ZIP or the archive
+in it). Requires LLVM and squashfs-tools, and ImageMagick for --ipod (Q2 only).
 
---logo swaps the boot splash JPEG (320x375); it defaults to assets/boot-logo.jpg.
+--logo swaps the boot splash JPEG (320x375 on Q2, 320x480 on M1 Plus); it defaults to
+assets/boot-logo.jpg on Q2 and to V2.1's own splash on M1 Plus.
 """
 import argparse, hashlib, io, json, os, pathlib, re, shlex, struct, subprocess, tarfile, zipfile
 os.environ.pop('SOURCE_DATE_EPOCH', None)
@@ -9,6 +11,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 Q2_ZIP_SHA = '154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00'
 Q2_DEMO_SHA = '2c5f06142850b4fc168f82b44a81550cce0a5b4b9fe1c179dced4a08a3049138'
 M1PLUS_BIN_SHA = '1ccb4667e3e9bdf9a35be4dc58d09b898ca53c5fd58396b7667fb91fe895f925'
+# Every accepted input, by SHA-256: a vendor ZIP and the archive it holds, or that archive alone.
+Q2_TAR_SHA = '0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1'
+M1PLUS_ZIP_SHA = 'db7bdbc42ffe6d5c1e3fdca9363edb78a01898b9a725c34793394cf6abfa33c0'
+INPUTS = {Q2_ZIP_SHA: ('Q2 Firmware V1.32/update.tar', Q2_TAR_SHA), Q2_TAR_SHA: (None, Q2_TAR_SHA),
+          M1PLUS_ZIP_SHA: ('M1 Plus Firmware V2.1/update.bin', M1PLUS_BIN_SHA), M1PLUS_BIN_SHA: (None, M1PLUS_BIN_SHA)}
 M1PLUS_DEMO_SHA = '29e23119bc2a0f153f3ea0ba942a39754d1aab0879c1040fae2269df8bd9b3f1'
 ZIP_SHA = Q2_ZIP_SHA
 DEMO_SHA = Q2_DEMO_SHA
@@ -1007,12 +1014,14 @@ def build(target_path, out, logo, ipod=False, dev=False):
     source = source_sha256()
     raw = target_path.read_bytes()
     input_sha = sha(raw)
-    if target_path.suffix.lower() == '.zip':
-        check(input_sha == Q2_ZIP_SHA, 'Unsupported ZIP: SHA-256 differs from audited original')
+    check(input_sha in INPUTS, 'Unsupported input: SHA-256 differs from every audited original')
+    member, archive_sha = INPUTS[input_sha]
+    if member:
         with zipfile.ZipFile(io.BytesIO(raw)) as z:
-            tarbytes = z.read('Q2 Firmware V1.32/update.tar')
+            tarbytes = z.read(member)
     else:
         tarbytes = raw
+    check(sha(tarbytes) == archive_sha, 'Unsupported update archive: SHA-256 differs from audited original')
     with tarfile.open(fileobj=io.BytesIO(tarbytes)) as t:
         meta = t.getmembers()
         check([m.name for m in meta] == ['firmware_v20.info','recovery-update',
@@ -1024,7 +1033,6 @@ def build(target_path, out, logo, ipod=False, dev=False):
         model = 'Shanling M1 Plus'
         stock_version = info[1]
         check(stock_version == 'V2.1', f'Unsupported M1 Plus version: {stock_version}')
-        check(input_sha == M1PLUS_BIN_SHA, 'Unsupported M1 Plus update archive: SHA-256 differs from audited original')
         archive_name = 'update.bin'
         expected_logo = (320, 480)
         pdr_off, pdr_size = (0x5f388c, 0x065800)
@@ -1383,7 +1391,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
 
 if __name__ == '__main__':
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('target',type=pathlib.Path, help='Target firmware archive (Q2 ZIP or M1 Plus update.bin)')
+    ap.add_argument('target',type=pathlib.Path, help='Target firmware (Q2 ZIP or update.tar, M1 Plus ZIP or update.bin)')
     ap.add_argument('--out',type=pathlib.Path,default=ROOT/'build')
     ap.add_argument('--logo',type=pathlib.Path,default=ROOT/'assets/boot-logo.jpg',
                     help='Boot splash JPEG (default: assets/boot-logo.jpg)')
