@@ -854,6 +854,28 @@ def m1plus_symbols(syms, symbol_table):
         syms[name] = syms[alias]
     return syms, stubs
 
+def m1plus_names(sq, out):
+    """Every stock widget, image and style the M1 Plus payload names (patch/offsets.inc VIEW_, ICON_,
+    STYLE_, ROW_ and ABOUT_, as it compiles them) is in V2.1's rootfs: a V1.32 name there finds
+    nothing, and a missing style draws AWTK's light default."""
+    from ipod import decode, walk, style_props
+    defines = dict(re.findall(r'^#define ((?:VIEW|ICON|STYLE|ROW|ABOUT)_\w+) "([^"]+)"$',
+                              run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c', ROOT/'patch/offsets.inc'), re.M))
+    check(defines, 'No M1 Plus asset names in patch/offsets.inc')
+    tree = out/'v21-assets'
+    run('unsquashfs', '-q', '-no-xattrs', '-f', '-d', tree, sq, 'release/assets/default/raw/ui',
+        'release/assets/default/raw/styles/default.bin', 'release/assets/default/raw/images/xx')
+    raw = tree/'release/assets/default/raw'
+    widgets = {n[2].get('name') for p in raw.glob('ui/**/*.bin') for n in walk(decode(p.read_bytes()))}
+    styles = {s for _, s, *_ in style_props((raw/'styles/default.bin').read_bytes())}
+    images = {p.stem for p in raw.glob('images/xx/*')}
+    for key, value in sorted(defines.items()):
+        kind = ('image', images) if key.startswith('ICON_') or key == 'ROW_CHEVRON' else \
+               ('style', styles) if key.startswith('STYLE_') or key.endswith('_STYLE') else ('widget', widgets)
+        check(value in kind[1], f'{key}: no {kind[0]} named {value!r} in V2.1')
+    import shutil
+    shutil.rmtree(tree)
+
 def pic_gp(image, address):
     """The GOT base a PIC entry (lui $gp; addiu $gp; addu $gp, $t9) computes, else None."""
     lui, addiu, addu = struct.unpack_from('<III', image, fileoff(image, address))
@@ -1076,6 +1098,8 @@ def build(target_path, out, logo, ipod=False, dev=False):
         check(windows, 'No UI assets in the stock rootfs')
         for name in contexts:
             check(name in windows | PAYLOAD_WINDOWS, f'Context {name} is not a window name in the stock rootfs')
+    else:
+        m1plus_names(sq, out)
     demo = out/'stock-demo'; demo.write_bytes(raw_demo)
     symbol_table = run('readelf', '-Ws', demo)
     syms = symbols(demo, symbol_table)
