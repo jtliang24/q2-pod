@@ -27,6 +27,9 @@
           pkg-config
           imagemagick
           graphify
+          # test/boot.py: V2.1's demo under user-mode emulation, sandboxed
+          qemu-user
+          bubblewrap
         ];
 
         hardeningDisable = [ "all" ];
