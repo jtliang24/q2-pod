@@ -1033,6 +1033,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
         model = 'Shanling M1 Plus'
         stock_version = info[1]
         check(stock_version == 'V2.1', f'Unsupported M1 Plus version: {stock_version}')
+        check(not ipod, 'M1 Plus has no iPod build yet')
         archive_name = 'update.bin'
         expected_logo = (320, 480)
         pdr_off, pdr_size = (0x5f388c, 0x065800)
