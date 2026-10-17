@@ -34,13 +34,19 @@ assert len(set(tags)) == len(tags) and all(len(t) == 5 for t in tags) and VERSIO
 assert dev_tag(36**3, 'S') == 'V001s'
 print('Dev build tag checks passed.')
 
-def boot_check():
-    """S90play's dual boot (build.py BOOT_HOOK) under the host sh, with stand-in programs."""
+def boot_check(s90play=None):
+    """S90play's dual boot under the host sh, with stand-in programs: build.py's BOOT_HOOK, or a
+    built rootfs's whole S90play (its dbus start stubbed), run as init runs it."""
     import subprocess, tempfile, pathlib
     from build import BOOT_HOOK, ROCKBOX_FLAG
     with tempfile.TemporaryDirectory(prefix='q2-boot-') as tmp:
         r = pathlib.Path(tmp)
-        script = BOOT_HOOK[1].decode().replace(' &\n', '\n')
+        script = (s90play or BOOT_HOOK[1]).decode().replace(' &\n', '\n')
+        if s90play:
+            stubs = ('/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf', '/usr/bin/q2remote')
+            assert script.count(stubs[0]) == 1, 'S90play: no dbus start'
+            for stub in stubs: script = script.replace(stub, ':')
+            script = script.replace('/bin/mkdir', 'mkdir').replace('/var/run/', f'{r}/var/run/')
         for old in ('/mnt/', '/tmp/mmc_add', ROCKBOX_FLAG, '/usr/bin/q2boot', '/release/bin/demo'):
             script = script.replace(old, f'{r}{old}')
         script = script.replace('usleep 200000', ':')
@@ -57,7 +63,7 @@ def boot_check():
             if card: exe('mnt/mmc/.rockbox/rockbox', f'pwd >> {r}/ran; exit {code}')
             else: rb.unlink(missing_ok=True)
             (r/'ran').write_text('')
-            subprocess.run(['sh', '-c', script], check=True)
+            subprocess.run(['sh', '-c', script, 'S90play', 'start'], check=True)
             return (r/'ran').read_text().split(), target.exists() and target.read_text().strip()
         rockbox = [str(rb.parent), 'demo']
         assert boot(False, False) == (['demo'], False)          # no Rockbox on the card: Q2 Pod
@@ -82,21 +88,30 @@ def boot_check():
         assert boot(True, True, 81, 1) == (['demo', *rockbox], False)
         assert boot(False, True, 81, 2) == (rockbox * 3, False) and not pathlib.Path(flag).exists()
         assert boot(True, False, 81, 1) == (['demo', 'demo'], False)  # no Rockbox on the card: Q2 Pod again
-    print('Dual boot: Rockbox by default, one-session Q2 Pod, stale choice ignored, card fallback and Home Rockbox row passed.')
+    print(f'Dual boot ({"built S90play" if s90play else "BOOT_HOOK"}): Rockbox by default, one-session Q2 Pod, stale choice ignored, card fallback and Home Rockbox row passed.')
 boot_check()
 
-def logo_check():
-    """S11logo_display_shell's splash choice (build.py LOGO_HOOK) under the host sh."""
+def logo_check(s11logo=None):
+    """S11logo_display_shell's splash choice under the host sh: build.py's LOGO_HOOK, or a built
+    rootfs's whole script (its /dev/fb0 wait and ROTATEMODE choice included)."""
     import subprocess, tempfile, pathlib
     from build import LOGO_HOOK
     with tempfile.TemporaryDirectory(prefix='q2-logo-') as tmp:
-        user = pathlib.Path(tmp)/'boot-logo.jpg'
-        script = LOGO_HOOK[1].decode().replace('/mnt/data/boot-logo.jpg', str(user)).replace('display_logo', 'echo')
-        def shown(): return subprocess.run(['sh', '-c', script], check=True, capture_output=True, text=True).stdout.strip()
+        user, config = pathlib.Path(tmp)/'boot-logo.jpg', pathlib.Path(tmp)/'config.ini'
+        script = (s11logo or LOGO_HOOK[1]).decode()
+        if s11logo:
+            assert script.count('"/dev/fb0"') <= 1
+            script = script.replace(' &\n', '\n').replace('"/dev/fb0"', '/').replace('/mnt/data/config.ini', str(config))
+        script = script.replace('/mnt/data/boot-logo.jpg', str(user)).replace('display_logo', 'echo')
+        def shown(rotate=0):
+            config.write_text(f'ROTATEMODE={rotate}\n')
+            return subprocess.run(['sh', '-c', script, 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip()
         assert shown() == '/release/assets/default/raw/images/xx/logo.jpg'  # no card logo: the built-in splash
         user.write_bytes(b'')
         assert shown() == str(user)
-    print('Boot logo: the saved card logo, else the built-in splash, passed.')
+        if 'logo180.jpg' in script:  # M1 Plus: a flipped screen keeps the stock flipped splash
+            assert shown(1) == '/release/assets/default/raw/images/xx/logo180.jpg'
+    print(f'Boot logo ({"built S11logo" if s11logo else "LOGO_HOOK"}): the saved card logo, else the built-in splash, passed.')
 logo_check()
 
 def validate_assets(directory):
