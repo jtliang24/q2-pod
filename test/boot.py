@@ -8,12 +8,14 @@ framebuffer backed by a file, and the device's serial; config.ini has the first-
 So both reach Home. The patched demo must stay up as long as stock, draw the same Home (but the
 status bar's clock and battery), and enter the payload through the hooks startup reaches.
 
-Then both take the same touches (the shim stands in for tslib, as the touchscreen's samples) through
-WALK: Home's pages, System Setting, About, Playback Setting and its EQ, where each screen must match
-stock's, or differ where the payload changes it, and an edge swipe must close the payload's EQ.
-Not covered: keys (the knob and buttons), the card, the DAC, GPIO and battery, and the X2000 CPU.
+Then both take the same input through WALK: touches (the shim stands in for tslib, as the
+touchscreen's samples) and keys (the buttons' and knob's devices, /dev/input/event1 and event2, are
+FIFOs the harness writes Linux key events to). Home's pages, System Setting, About, Playback Setting
+and its EQ: each screen must match stock's, or differ where the payload changes it, and an edge swipe
+and Previous must each close the payload's EQ.
+Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
-import argparse, bisect, collections, json, pathlib, re, shutil, subprocess, sys, tempfile, time
+import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]/'tools'))
 from build import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS, BASE, SCRATCH, source_sha256, symbols, run
 
@@ -33,6 +35,19 @@ int strcmp(const char *, const char *), ftruncate(int, long);
 void *memset(void *, int, unsigned);
 static int fb = -1;
 static int (*real_open)(const char *, int, int);
+static int (*real_access)(const char *, int);
+/* The buttons' (md-gpio-keys) and knob's (md-rotary-knob) devices, as main_loop_init names them:
+ * FIFOs the harness writes struct input_event to. The readers only read() them (0x637870, 0x637e70). */
+static const char *key_file(const char *path) {
+    if (!path) return 0;
+    if (!strcmp(path, "/dev/input/event1")) return KEYS_FILE;
+    if (!strcmp(path, "/dev/input/event2")) return KNOB_FILE;
+    return 0;
+}
+int access(const char *path, int mode) {
+    if (!real_access) real_access = (int (*)(const char *, int))dlsym(RTLD_NEXT, "access");
+    return key_file(path) ? 0 : real_access(path, mode);
+}
 static int (*real_ioctl)(int, unsigned long, void *);
 enum { LINE = W * 4, SIZE = LINE * H * 2 };
 int open(const char *path, int flags, int mode) {
@@ -42,6 +57,7 @@ int open(const char *path, int flags, int mode) {
         if (fb >= 0) ftruncate(fb, SIZE);
         return fb;
     }
+    if (key_file(path)) return real_open(key_file(path), 2 /* O_RDWR: a FIFO's open never waits */, 0);
     return real_open(path, flags, mode);
 }
 int open64(const char *path, int flags, int mode) { return open(path, flags, mode); }
@@ -137,7 +153,7 @@ def shim(out, root, sn_addr):
     """SHIM, compiled for V2.1's ABI (o32, nan2008, FR=1) against its own glibc 2.28."""
     src = out/'shim.c'
     src.write_text(f'#define W {W}\n#define H {H}\n#define FB_FILE "/out/fb.raw"\n#define TOUCH_FILE "/out/touch"\n'
-                   f'#define SN_ADDR {sn_addr:#x}u\n' + SHIM)
+                   f'#define KEYS_FILE "/out/keys"\n#define KNOB_FILE "/out/knob"\n#define SN_ADDR {sn_addr:#x}u\n' + SHIM)
     run('clang', '--target=mipsel-linux-gnu', '-march=mips32r2', '-mabi=32', '-mfp64', '-mnan=2008', '-mabs=2008', '-fPIC',
         '-ffreestanding', '-fno-builtin', '-fno-stack-protector', '-O2', '-Wall', '-Werror', '-c', src, '-o', out/'shim.o')
     run('ld.lld', '-m', 'elf32ltsmip', '-shared', '--hash-style=sysv', '-soname', 'shim.so', out/'shim.o',
@@ -154,6 +170,7 @@ def start(image, out, seconds, sn_addr, trace=''):
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))
     shim(out, root, sn_addr)
     (out/'touch').write_text('')
+    for fifo in ('keys', 'knob'): os.mkfifo(out/fifo)
     qemu = tool('qemu-mipsel')
     (out/'inner.sh').write_text(INNER.format(qemu=qemu, seconds=seconds, trace=trace))
     return subprocess.Popen([tool('bwrap'), '--bind', root, '/', '--bind', out, '/out', '--ro-bind', '/nix/store', '/nix/store',
@@ -176,7 +193,7 @@ def executed(log, elf):
         if i >= 0: hits[funcs[i][1]] += 1
     return hits
 
-WALK_SECONDS = 75  # the walk's budget after startup, inside the same run
+WALK_SECONDS = 90  # the walk's budget after startup, inside the same run
 
 def tap(x, y): return [f'{x} {y} 200', 'wait 80', f'{x} {y} 0']
 def swipe(x0, y0, x1, y1, steps=10):
@@ -185,9 +202,13 @@ NEXT_PAGE = swipe(280, 250, 40, 250)  # Home's carousel, a page right
 DOWN_LIST = swipe(160, 420, 160, 60)  # a list scrolled towards its end
 BACK = tap(18, 53)                    # V2.1's title-bar back button
 EDGE_SWIPE = swipe(5, 240, 160, 240)  # navigation.c edge_swipe: a Return
+# Keys, as Linux reports them (keyboard_gpio_add.sh, keyboard_encoder): "keys CODE" on the buttons'
+# device, "knob CODE" on the knob's; each a press and a release.
+PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
 # (name, touches for both, seconds to settle, expectation): 'same', stock's below the status bar;
-# ('rows', same, differ), the y bands that match stock's and that must not; 'differs'; or
-# ('as', step), the patched screen as it was at that step. Positions are V2.1's 320x480 layout.
+# ('rows', same, differ), the y bands that match stock's and that must not; 'differs'; ('as', step),
+# the patched screen as it was at that step; or ('same', 'moved', step, box): same, and the box (x0, y0,
+# x1, y1, the status bar's included) changed on both since that step. Positions are V2.1's 320x480 layout.
 WALK = [
     ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, 'same'),
     ('sysset', tap(82, 318), 4, 'same'),
@@ -196,9 +217,32 @@ WALK = [
     ('about', tap(160, 446), 4, ('rows', (30, 208), (208, 272))),
     ('home3_again', BACK + ['wait 2500'] + BACK, 5, 'same'),
     ('playset', tap(237, 230), 4, 'same'),
+    ('knob', [KNOB_UP, KNOB_UP], 3, ('same', 'moved', 'playset', (0, 0, 60, 30))),  # the volume, as stock's, and its figure up
     ('eq', tap(160, 238), 5, 'differs'),  # the PEQ editor in stock's EQ page
 ]
-PATCHED_ONLY = [('eq_closed', EDGE_SWIPE, 4, ('as', 'playset'))]  # stock's EQ page has its own back
+PATCHED_ONLY = [('eq_closed', EDGE_SWIPE, 4, ('as', 'playset')),  # stock's EQ page has its own back
+                ('eq_again', tap(160, 238), 5, ('as', 'eq')),
+                ('eq_previous', [PREVIOUS], 4, ('as', 'playset'))]  # Previous, nothing playing: Return
+
+def send(out, lines):
+    """A step's input: key lines to their device's FIFO, as a press and a release each with its
+    EV_SYN; the rest to the touch file."""
+    touch = [l for l in lines if not l.startswith(('keys ', 'knob '))]
+    if touch:
+        with open(out/'touch', 'a') as f: f.write(''.join(l + '\n' for l in touch))
+    for line in lines:
+        if not line.startswith(('keys ', 'knob ')): continue
+        device, code = line.split()
+        fd = os.open(out/device, os.O_RDWR)  # never waits, as the reader's own open
+        try:
+            for value in (1, 0):
+                now = time.time()
+                event = lambda kind, code, value: struct.pack('<IIHHi', int(now), int(now % 1 * 1e6), kind, code, value)
+                os.write(fd, event(1, int(code), value) + event(0, 0, 0))  # EV_KEY, then EV_SYN
+                time.sleep(0.12)
+        finally:
+            os.close(fd)
+        time.sleep(0.4)
 
 def png(pixels, path):
     from ipod import imagemagick
@@ -244,18 +288,26 @@ if __name__ == '__main__':
         differ = differing(stock, patched)
         assert not differ, f'patched Home differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
         # The walk: the same touches to both, a screen each step.
-        seen = {}
+        seen, seen_all = {}, {}
         for name, touches, settle, want in WALK + PATCHED_ONLY:
             targets = ['patched'] if (name, touches, settle, want) in PATCHED_ONLY else ['stock', 'patched']
             for t in targets:
-                with open(tmp/t/'touch', 'a') as f: f.write(''.join(l + '\n' for l in touches))
+                send(tmp/t, touches)
             time.sleep(settle)
             for t in runs: alive(t)
             shots = {t: screen(tmp/t) for t in targets}
             seen[name] = shots['patched']
+            for t, px in shots.items(): seen_all.setdefault(t, {})[name] = px
             if args.captures:
                 for t, px in shots.items(): png(px, args.captures/f'{name}-{t}.png')
-            if want == 'same':
+            if isinstance(want, tuple) and want[:2] == ('same', 'moved'):
+                differ = differing(shots['stock'], shots['patched'])
+                assert not differ, f'{name}: patched differs from stock at {len(differ)} pixels'
+                x0, y0, x1, y1 = want[3]
+                box = lambda px: [px[(y * W + x0) * 4:(y * W + x1) * 4] for y in range(y0, y1)]
+                for t in ('stock', 'patched'):
+                    assert box(shots[t]) != box(seen_all[t][want[2]]), f'{name}: {t} showed no change in {want[3]}'
+            elif want == 'same':
                 differ = differing(shots['stock'], shots['patched'])
                 assert not differ, f'{name}: patched differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
             elif want == 'differs':
