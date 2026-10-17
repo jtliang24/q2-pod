@@ -550,6 +550,7 @@ m=PlaybackMachine(); m.u.mem_map(0x1200000,0x1000000); q=m.get(syms['mcl_pdeqpla
 m.deqs[q][1]=[m.song('t')]*65537
 assert m.fn('playback_set',0,1)==0 and m.fn('playback_successor',1)==-1; checks+=1
 
+# Q2 only: the touch wheel's ticks (WHEEL_TS_READ); V2.1's touchscreen must keep stock ts_read.
 if not is_m1plus:
     # The wheel's ticks (wheel_sample): one per WHEEL_TICK_UNITS of travel, the rest carried; a reversal
     # starts again; the 200 -> 1 seam wraps; stock is handed the touch-down x, so its own logic sees a
@@ -783,6 +784,8 @@ if not is_m1plus:
     for next_at,want in ((1,0),(2,1)):
         m.word(O['MCL_PREPOS'],next_at); m.word(O['MCL_PRELOAD'],0)
         m.fn('ringnav_open_preload'); assert m.mcl('MCL_PRELOAD')==want
+else:
+    print('NOT PORTED: speed changes close the gapless preload (mcl_open_preload not hooked in V2.1)')
 # Changing speed closes an existing preload.
 m.word(O['MCL_PRELOAD'],1); m.word(O['MCL_FD'],-1)
 m.fn('ringnav_speed',1); assert m.mcl('MCL_PRELOAD')==0

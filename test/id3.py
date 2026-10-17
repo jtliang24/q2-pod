@@ -140,8 +140,8 @@ cases = [  # name, tag, stock's result, the fix's
 is_m1plus = profile and profile.get('name') == 'm1plus'
 for name, data, stock, fixed in cases:
     data += b'\xff\xfb\x90\0' + bytes(400)
-    if not is_m1plus:
-        assert run(data, stock_id3)[0] == stock, ('stock', name, run(data, stock_id3)[0])
+    # V2.1's own walker exports no gain from any of them, so the claim below is checked, not assumed.
+    assert run(data, stock_id3)[0] == (none if is_m1plus else stock), ('stock', name, run(data, stock_id3)[0])
     got, at = run(data, id3_gain)
     assert got == fixed, (name, got)
     assert at == 1234, (name, 'fd offset not restored', at)
