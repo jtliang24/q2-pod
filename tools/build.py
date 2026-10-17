@@ -330,6 +330,7 @@ def relabel(data):
 # demo's .pdr section (offset, size): MIPS procedure descriptors past every LOAD segment, which nothing
 # reads at run time. Zeroed, they pack to almost nothing, which keeps the Stock rootfs within stock's size.
 PDR = (0x61694c, 0x69d40)
+PDR_M1PLUS = (0x5f388c, 0x65800)
 
 def run(*args):
     return subprocess.check_output([str(a) for a in args], text=True)
@@ -1036,7 +1037,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
         check(not ipod, 'M1 Plus has no iPod build yet')
         archive_name = 'update.bin'
         expected_logo = (320, 480)
-        pdr_off, pdr_size = (0x5f388c, 0x065800)
+        pdr_off, pdr_size = PDR_M1PLUS
     elif info[0] == 'Shanling Q2':
         m1plus = False
         model = 'Shanling Q2'
