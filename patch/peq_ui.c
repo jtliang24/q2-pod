@@ -72,6 +72,14 @@ static const struct { double first, step; int rows; } picks[] = {{-12, 0.5, 49},
 #define E3_MAX 6
 #define E3_BUTTONS 52 /* the switch and Reset, 40px high */
 #define E3_SLIDERS 104
+/* The screen's width in three gain columns, two buttons and two tabs, 12 px (tabs 8) in from each
+ * side: on Q2's 375 px, columns of 125, buttons of 171 at 12 and 192, tabs of 176 at 8 and 191. */
+#define E3_COL (UI_W / 3)
+#define E3_BAND (E3_COL - 13)            /* a column's card and captions */
+#define E3_BUTTON ((UI_W - 33) / 2)
+#define E3_RIGHT (UI_W - 12 - E3_BUTTON) /* Reset's x */
+#define TAB_W ((UI_W - 23) / 2)
+#define TAB_RIGHT (UI_W - 8 - TAB_W)     /* Advanced's x */
 #define E3_SAVE_MS 250
 enum { E3_TABS, E3_SWITCH, E3_LOW, E3_HIGH = 4, E3_RESET };
 static struct {
@@ -234,7 +242,7 @@ static void load_draft(peq_preset *p, const char *name, int length) {
 
 /* A 48px row's T9 edit, the stock playlist dialogs' look, for input_type; shared with radio.c's Search. */
 void *edit_create(void *item, const char *input_type) {
-    void *edit = widget_factory_create_widget(widget_factory(), "edit", item, 12, 4, 351, 40);
+    void *edit = widget_factory_create_widget(widget_factory(), "edit", item, 12, 4, UI_W - 24, 40);
     static const char *const props[][2] = {{"keyboard", "kb_default_t9"}, {"input_type", 0}, {"action_text", "done"},
         {"bg_color", "#2B2B2B"}, {"border_color", "#2B2B2B00"}, {"text_color", "#FFFFFF"}, {"round_radius", "20"},
         {"margin_left", "12"}, {"font_size", "22"}};
@@ -675,7 +683,7 @@ static int tab_touch(void *ctx, void *event) {
     (void)ctx;
     int xy[2] = { I(event, EVENT_X), I(event, EVENT_Y) };
     widget_to_local(ui.page, xy);
-    tab_to(xy[0] < 188 ? SIMPLE : ADVANCED);
+    tab_to(xy[0] < (UI_W + 1) / 2 ? SIMPLE : ADVANCED);
     return 0;
 }
 
@@ -851,11 +859,11 @@ static int e3_touch(void *ctx, void *event) {
         if (xy[1] < E3_BUTTONS) return 0;
         e3.status = 0;
         if (xy[1] < E3_SLIDERS) {
-            e3.focus = xy[0] < 187 ? E3_SWITCH : E3_RESET;
+            e3.focus = xy[0] < UI_W / 2 ? E3_SWITCH : E3_RESET;
             e3_activate();
             return 0;
         }
-        e3.focus = E3_LOW + (xy[0] < 125 ? 0 : xy[0] < 250 ? 1 : 2);
+        e3.focus = E3_LOW + (xy[0] < E3_COL ? 0 : xy[0] < 2 * E3_COL ? 1 : 2);
         e3.adjusting = e3.dragging = 1;
     }
     if (type == EVT_POINTER_UP_BEFORE) e3_done();
@@ -881,22 +889,22 @@ static void e3_paint(void *canvas) {
     char text[16];
     for (int i = 0; i < 2; ++i) {
         int focus = e3.focus == (i ? E3_RESET : E3_SWITCH);
-        e3_box(canvas, i ? 192 : 12, E3_BUTTONS, 171, 40, focus ? 0x333333 : 0x1a1a1a);
-        if (!i) e3_box(canvas, 12, E3_BUTTONS + 36, 171, 4, tone);
-        caption(canvas, i ? "Reset" : e3.on ? "Simple On" : "Simple Off", i ? 192 : 12, E3_BUTTONS, 171, 40, 20, 0xffffffffu);
+        e3_box(canvas, i ? E3_RIGHT : 12, E3_BUTTONS, E3_BUTTON, 40, focus ? 0x333333 : 0x1a1a1a);
+        if (!i) e3_box(canvas, 12, E3_BUTTONS + 36, E3_BUTTON, 4, tone);
+        caption(canvas, i ? "Reset" : e3.on ? "Simple On" : "Simple Off", i ? E3_RIGHT : 12, E3_BUTTONS, E3_BUTTON, 40, 20, 0xffffffffu);
     }
     for (int i = 0; i < 3; ++i) {
         static const char *const names[] = { "Low", "Mid", "High" };
-        int x = 62 + 125 * i, y = e3_y(e3.gain[i]), focus = e3.focus == E3_LOW + i;
-        if (focus) e3_box(canvas, x - 56, E3_SLIDERS, 112, e3_bottom() + 36 - E3_SLIDERS, 0x1a1a1a);
-        caption(canvas, names[i], x - 56, E3_SLIDERS, 112, 28, 20, 0xffffffffu);
+        int x = E3_COL / 2 + E3_COL * i, y = e3_y(e3.gain[i]), focus = e3.focus == E3_LOW + i;
+        if (focus) e3_box(canvas, x - E3_BAND / 2, E3_SLIDERS, E3_BAND, e3_bottom() + 36 - E3_SLIDERS, 0x1a1a1a);
+        caption(canvas, names[i], x - E3_BAND / 2, E3_SLIDERS, E3_BAND, 28, 20, 0xffffffffu);
         e3_box(canvas, x - 2, e3_top(), 4, e3_bottom() - e3_top(), 0x333333);
         e3_box(canvas, x - 3, y < zero ? y : zero, 6, y < zero ? zero - y : y - zero + 1, tone);
         e3_box(canvas, x - 20, y - 5, 40, 10, focus && e3.adjusting ? 0xffffff : 0x8a8a8a);
         snprintf(text, sizeof text, e3.gain[i] ? "%+.1f dB" : "0 dB", e3.gain[i]);
-        caption(canvas, text, x - 56, e3_bottom() + 8, 112, 24, 18, focus && e3.adjusting ? 0xffffffffu : CF_GREY);
+        caption(canvas, text, x - E3_BAND / 2, e3_bottom() + 8, E3_BAND, 24, 18, focus && e3.adjusting ? 0xffffffffu : CF_GREY);
     }
-    e3_box(canvas, 12, zero, 351, 1, 0x8a8a8a); /* 0 dB */
+    e3_box(canvas, 12, zero, UI_W - 24, 1, 0x8a8a8a); /* 0 dB */
     canvas_set_fill_color(canvas, fill);
 }
 
@@ -907,10 +915,10 @@ static void tabs_paint(void *canvas) {
     if (simple ? e3.status != 0 : ui.status[0] != 0) return;
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
     for (int i = 0; i < 2; ++i) {
-        int x = i ? 191 : 8, shown = i == !simple;
-        if (focus && !shown) e3_box(canvas, x, 4, 176, 40, 0x333333);
-        caption(canvas, i ? "Advanced" : "Simple", x, 4, 176, 40, 20, shown ? 0xffffffffu : CF_GREY);
-        if (shown) e3_box(canvas, x + 40, 42, 96, 3, TONE);
+        int x = i ? TAB_RIGHT : 8, shown = i == !simple;
+        if (focus && !shown) e3_box(canvas, x, 4, TAB_W, 40, 0x333333);
+        caption(canvas, i ? "Advanced" : "Simple", x, 4, TAB_W, 40, 20, shown ? 0xffffffffu : CF_GREY);
+        if (shown) e3_box(canvas, x + (TAB_W - 96) / 2, 42, 96, 3, TONE);
     }
     canvas_set_fill_color(canvas, fill);
 }
