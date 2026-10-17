@@ -199,7 +199,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     """An M1 Plus build changes V2.1's demo only at M1PLUS_HOOKS, window_manager_paint and the
     identity strings, and its rootfs only in the files build.py names; and V2.1 still provides
     what the boot hook relies on."""
-    import filecmp, os, pathlib, re, struct, subprocess, tempfile
+    import filecmp, os, pathlib, re, struct, subprocess, tarfile, tempfile
     from build import (sha, run, fileoff, segments, symbols, pic_gp, BASE, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS,
                        PDR_M1PLUS, RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ, OBSOLETE, HELPER,
                        BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, WATCHDOG, S90PLAY, S11LOGO)
@@ -227,6 +227,22 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     at, n = stock.index(b'V2.1\0'), len(manifest['version']) + 1
     assert stock.count(b'V2.1\0') == 1 and stock[at+5:at+n] == bytes(n-5) and demo[at:at+n] == manifest['version'].encode()+b'\0'
     allowed.update(range(at, at+n))
+    # V2.1's updater (update_firmware, 0x4e0e34) takes a card's update.bin only if firmware_v20.info's
+    # first line is demo's model string and its second has a V and differs from demo's version
+    # literal: strcmp, strchr(line, 'V'), strcmp, each string a GOT page plus an addiu.
+    updater = fileoff(stock, 0x4e10e4)
+    assert stock[updater:updater+0x44].hex() == ('08a7858f6cf5998f09f820031877a524a2ff40141800bc8fecf4998f5600052409f82003'
+                                                '252080029cff40101800bc8f08a7858f252080026cf5998f09f820033c77a524'), 'update_firmware: not the audited checks'
+    def compared(lw, addiu):
+        page = struct.unpack_from('<I', stock, fileoff(stock, M1PLUS_GP + struct.unpack_from('<h', stock, fileoff(stock, lw))[0]))[0]
+        o = fileoff(stock, page + struct.unpack_from('<h', stock, fileoff(stock, addiu))[0])
+        return o, stock[o:stock.index(b'\0', o)]
+    (_, model), (version_at, version) = compared(0x4e10e4, 0x4e10f0), compared(0x4e1114, 0x4e1124)
+    assert model == manifest['model'].encode() and (version_at, version) == (at, b'V2.1')
+    with tarfile.open(directory/'update.bin') as t:
+        info = t.extractfile('firmware_v20.info').read().decode().splitlines()
+    # This build installs over stock (and stock back over it), and the same build is refused once installed.
+    assert info[0].encode() == model and 'V' in info[1] and info[1].encode() != version and info[1] == manifest['version']
     for old, new in (RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H):  # same-length literals in place
         at = stock.index(old)
         assert stock.count(old) == 1 and len(new) == len(old) and demo[at:at+len(old)] == new, old
