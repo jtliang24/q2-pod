@@ -118,7 +118,7 @@ logo_check()
 def shared_checks(directory, manifest, stock, demo, read):
     """What both models' builds share: the identity strings in demo, the M4B cover dispatcher, the
     helpers and init scripts, bluealsa, the watchdog and hciplayer."""
-    import re, struct, subprocess
+    import hashlib, pathlib, re, struct, subprocess, tarfile, tempfile
     from build import (sha, run, fileoff, segments, symbols, ROOT, TAG_C, patch_m4b_cover, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK,
                        REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG,
                        WATCHDOG_SLEEP, BLUEALSA, AAC_44K1, STOCK_EQ)
@@ -191,6 +191,31 @@ def shared_checks(directory, manifest, stock, demo, read):
     assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in profile['id3_calls']} == {0x0c000000 | id3_gain >> 2}
     names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
     assert not {'squashfs-root/'+rel for rel in STOCK_EQ} & names, 'Stock EQ assets remain'
+    # The kernel mounts the rootfs as it does stock's: build.py's mksquashfs options are stock's own.
+    def superblock(image):
+        text = run('unsquashfs', '-s', directory/image)
+        return re.search(r'^Compression (\w+)$', text, re.M)[1], re.search(r'^Block size (\d+)$', text, re.M)[1]
+    assert superblock('rootfs.squashfs') == superblock('stock.squashfs'), (superblock('rootfs.squashfs'), superblock('stock.squashfs'))
+    # The update archive: stock's members and GNU tar headers, and the MD5s recovery checks.
+    archive = directory/('update.bin' if m1plus else 'update.tar')
+    assert archive.read_bytes()[257:265] == b'ustar  \0' and sha(archive.read_bytes()) == manifest['update_sha256']
+    with tarfile.open(archive) as t:
+        assert [(m.name, m.type) for m in t.getmembers()] == [('firmware_v20.info', tarfile.REGTYPE), ('recovery-update', tarfile.DIRTYPE),
+            ('recovery-update/xImage', tarfile.REGTYPE), ('recovery-update/rootfs.squashfs', tarfile.REGTYPE)]
+        kernel, rootfs = (t.extractfile('recovery-update/'+n).read() for n in ('xImage', 'rootfs.squashfs'))
+        info = t.extractfile('firmware_v20.info').read().decode()
+    assert rootfs == (directory/'rootfs.squashfs').read_bytes() and sha(kernel) == manifest['kernel_sha256']
+    assert info == f"{manifest['model']}\n{manifest['version']}\n{hashlib.md5(kernel).hexdigest()}  recovery-update/xImage\n" \
+                   f"{hashlib.md5(rootfs).hexdigest()}  recovery-update/rootfs.squashfs\n"
+    # The helpers can start: their loader and every library they name are in the rootfs.
+    libs = {n.rsplit('/', 1)[-1] for n in names if n.startswith(('squashfs-root/lib/', 'squashfs-root/usr/lib/'))}
+    with tempfile.TemporaryDirectory(prefix='helpers-') as tmp:
+        for rel in (HELPER, BOOT, *([REMOTE] if manifest['dev'] else [])):
+            elf = pathlib.Path(tmp)/rel.rsplit('/', 1)[-1]
+            elf.write_bytes(read('rootfs.squashfs', rel))
+            interp = re.search(r'\[Requesting program interpreter: (\S+)\]', run('readelf', '-lW', elf))[1]
+            needed = re.findall(r'\(NEEDED\)\s+Shared library: \[(\S+)\]', run('readelf', '-dW', elf))
+            assert 'squashfs-root'+interp in names and needed and set(needed) <= libs, (rel, interp, set(needed) - libs)
     # The init scripts as the device runs them, not only build.py's fragments.
     boot_check(read('rootfs.squashfs', S90PLAY))
     logo_check(read('rootfs.squashfs', S11LOGO))
