@@ -16,8 +16,10 @@
 - The test dependencies: `pip install -r requirements.txt`
 - Alternatively, use the included Nix flake devshell for a hermetic build environment: `nix develop`
 - The original stock firmware:
-  - **Shanling Q2 (V1.32 ZIP):** SHA-256 `154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00`
-  - **Shanling M1 Plus (V2.1 update.bin):** SHA-256 `1ccb4667e3e9bdf9a35be4dc58d09b898ca53c5fd58396b7667fb91fe895f925`
+  - **Shanling Q2 (V1.32 ZIP):** SHA-256 `154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00`, or the `update.tar` in it, `0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1`
+  - **Shanling M1 Plus (V2.1 ZIP):** SHA-256 `db7bdbc42ffe6d5c1e3fdca9363edb78a01898b9a725c34793394cf6abfa33c0`, or the `update.bin` in it, `1ccb4667e3e9bdf9a35be4dc58d09b898ca53c5fd58396b7667fb91fe895f925`
+
+  `tools/build.py` refuses any other input.
 
 ## Build
 
@@ -30,10 +32,12 @@ python3 tools/build.py 'Q2 Firmware V1.32.zip' --out /tmp/q2-dev --ipod --dev   
 
 ### Shanling M1 Plus
 ```sh
-python3 tools/build.py 'M1 Plus Firmware V2.1/update.bin' --out /tmp/m1plus-build
+python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out /tmp/m1plus-build   # or 'M1 Plus Firmware V2.1/update.bin'
 ```
 
-Rebuilt firmware uses `assets/boot-logo.jpg` as the boot splash (320x375 for Q2, 320x480 for M1 Plus). Pass another JPEG with `--logo` to use your own; see [boot.md](boot.md#custom-boot-logo).
+M1 Plus has only the Stock UI so far: `--ipod` is refused for it.
+
+On Q2, rebuilt firmware uses `assets/boot-logo.jpg` (320x375) as the boot splash. `assets/boot-logo.jpg` doesn't fit M1 Plus's 320x480 splash, so an M1 Plus build keeps V2.1's own splash (the manifest records `logo_source: stock`). Pass a JPEG of the device's size with `--logo` to use your own; see [boot.md](boot.md#custom-boot-logo).
 
 Both variants replace the stock equalizer page with a 30-band PEQ editor (bands, shelves, preamp, on/off, presets, stock's built-in genre presets, `/EQ` import) and patch `hciplayer`'s equalizer filter with the matching DSP. Both also clear the 44.1 kHz AAC capability bit in `bluealsa` (see [internals.md](internals.md#bluetooth-aac)).
 
@@ -57,6 +61,8 @@ python3 test/coverflow.py --captures /tmp/cf  # the same, plus the renderer's fr
 python3 test/mp3.py                        # native Xing seek bounds, CRC and truncated headers; TXXX encodings
 python3 test/build.py                      # JPEG header checks; no emulator required
 python3 test/build.py 'Q2 Firmware V1.32.zip'   # packaging checks (custom logo, quoted paths)
+python3 test/build.py 'M1 Plus Firmware V2.1.zip'  # the same for M1 Plus (and its --ipod refusal)
+python3 test/build.py --build /tmp/m1plus-build    # audit a build: hook jumps, demo and rootfs diffs, boot scripts
 python3 test/remote.py                     # q2remote protocol, auth, event and framebuffer checks
 python3 test/playback.py /tmp/q2-build     # grouped traversal, snapshots and the wheel's ticks
 python3 test/patch.py /tmp/q2-build        # the patched MIPS payload, wheel and UI scenarios
@@ -69,6 +75,7 @@ python3 test/ui_preview.py BEFORE AFTER OUT.png  # not a test: side-by-side iPod
 ```
 
 - **MIPS suite:** `test/patch.py` executes the actual patched payload and the stock key and touch filters under Unicorn. UI services are mocked; the one other mocked boundary is the `system()` call that Key Tone uses to click the speaker. Case coverage lives in `test/patch.py`. Run the payload, headset worker, metadata dispatch and packaging checks for both Stock and iPod builds.
+- **M1 Plus:** run the same suites on an M1 Plus build. `test/build.py --build` checks that V2.1's demo differs from stock only at the `M1PLUS_HOOKS` jumps, `window_manager_paint`, the version, clock literals, the zeroed `.pdr` and the appended payload. It also checks that the rootfs differs only in the files the build names, and it runs the dual boot and splash scenarios on the image's own `S90play` and `S11logo_display_shell`. The MIPS suites print two kinds of lines for what the port lacks. `KNOWN GAP: <name>` is a real check that fails today, shown with its failing assertion; it must go on failing, and a run fails once it passes, so the marker is removed with the fix. `NOT PORTED: <name>` is a check M1 Plus skips, because the feature isn't in the M1 Plus build (named with the missing hook or patch) or the test still needs V1.32 code (`test: ...`). `test/patch.py` ends with a count of both.
 - **Known gap:** the stock rounded vgcanvas branch can't run end to end under Unicorn 2.1.4. Stock is built `-mfp64`, and Unicorn's MIPS32 FPU only implements `FR=0`, so its 64-bit conversions trap. The test runs the branch up to that instruction and asserts the calls before it.
 - **Reproducibility:** two fresh builds must produce identical `update.tar` files. Packaging verifies MD5 entries, unchanged kernel and rootfs metadata, and a rootfs no larger than stock.
 - **Space:** the payload is built with `-Oz`, and demo's `.pdr` section (MIPS procedure descriptors, 423 KB past every LOAD segment, never read at run time) ships zeroed. mksquashfs packs file tails into fragments (`-tailends`), which saves about 26 KB. Stock has about 25 KB of rootfs space left; iPod has about 250 KB.
