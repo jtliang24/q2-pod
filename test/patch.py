@@ -8743,6 +8743,53 @@ if not is_m1plus:
 else:
     not_ported("Now Playing's info lines (NP_INFO_CALL not patched in V2.1)")
 
+if is_m1plus:
+    # M1 Plus has no Return key, so three gestures hand the window manager the key-up a Q2's Return
+    # sends (dispatch_key_return): a swipe in from the left edge, a tap on a payload page's title,
+    # and Back (Previous) while nothing plays. What reaches the stock dispatch is read back as
+    # (type, key); a pointer event's x sits where a key's code does (EVENT_X == EVENT_KEY).
+    INPUT=HOOKS['window_manager_dispatch_input_event'][0]
+    RETURN_UP=(O['EVT_KEY_UP'],O['KEY_RETURN'])
+    def input_machine(page='sysset_page'):
+        m=Machine(); m.handlers[INPUT+12]='stock_input'; m.mock('on_wm_keyup_fun')
+        m.top=m.node('window',page,[m.node()]); return m
+    def dispatched(m):
+        return [(m.get(c[2]+O['EVENT_TYPE']),m.get(c[2]+O['EVENT_KEY'])) for c in m.calls if c[0]=='stock_input']
+    def swipe(x0,x1,dy=0):
+        m=input_machine(); sent=[]
+        for kind,x,y in ((O['EVT_POINTER_DOWN'],x0,200),(O['EVT_POINTER_UP'],x1,200+dy)):
+            m.word(m.event+O['EVENT_Y'],y); m.calls=[]
+            assert m.call(x,address=INPUT,args=(m.wm,m.event,0,0),event_type=kind,gap=100,clear=False)==0
+            sent+=dispatched(m)
+        return sent
+    DOWN,UP=O['EVT_POINTER_DOWN'],O['EVT_POINTER_UP']
+    assert swipe(10,70)==[(DOWN,10),RETURN_UP]       # from the edge, right: Return instead of the release
+    assert swipe(31,81)==[(DOWN,31),RETURN_UP]
+    assert swipe(32,82)==[(DOWN,32),(UP,82)]         # not from the edge: the touch as it was
+    assert swipe(10,50)==[(DOWN,10),(UP,50)]         # too short
+    assert swipe(10,70,dy=30)==[(DOWN,10),(UP,70)]   # more diagonal than across
+    assert swipe(10,70,dy=-29)==[(DOWN,10),RETURN_UP]
+    passed()
+    # The title of a page made by page_title: its click takes nothing else, and the Return follows on
+    # a timer, outside the title's own dispatch (it closes the page).
+    m=input_machine(); title=m.call(address=payload_syms['page_title'],args=(m.node('view'),m.string('Photos'),0,0),gap=0)
+    (f,ctx),=[(f,ctx) for t,f,ctx in m.nodes[title]['handlers'] if t==O['EVT_CLICK']]
+    m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),event_type=O['EVT_CLICK'],gap=0)==11 and dispatched(m)==[]
+    m.advance(0); assert dispatched(m)==[RETURN_UP]
+    m.advance(1000); assert dispatched(m)==[]; passed()
+    # Back: Return while nothing plays and Now Playing is not on top; there it stays Previous.
+    m=input_machine(); m.calls=[]
+    assert m.call(O['KEY_BACK_BTN'],gap=1000)==11 and dispatched(m)==[RETURN_UP] and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
+    m=input_machine('playing_page'); m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]; passed()
+    def back_locked():  # screen off and keys locked: stock's key lock, not a hidden page's Back
+        m=input_machine(); m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
+        m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]
+    known_gap('Back with the screen off and the keys locked sends Return to the hidden page', back_locked)
+    def knob_navigates():  # [IPOD] KNOB=1: the knob's turns move the selection, not the volume
+        m=input_machine(); m.config['KNOB']='1'; m.call(O['KEY_VOLUMEUP'],gap=1000)
+        assert m.get(m.event+O['EVENT_KEY'])==O['KEY_NEXT']
+    known_gap('Knob Navigation Mode: the KNOB setting is never read outside iPod builds', knob_navigates)
+
 print(f'{checks} MIPS execution scenarios passed; toolkit services mocked, stock lock filter executed.')
 if is_m1plus:
     print(f'M1 Plus: {len(GAPS)} known gaps, {len(NOT_PORTED)} checks not ported (listed above).')
