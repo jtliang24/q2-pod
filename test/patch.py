@@ -676,6 +676,12 @@ def known_gap(name, check):
     except AssertionError as e:  # the failing line is shown, so a harness assert can't pass for the gap
         GAPS.append(name); print(f'KNOWN GAP: {name}\n    {traceback.extract_tb(e.__traceback__)[-1].line} {e}'.rstrip()); return
     raise AssertionError(f'Gap fixed, remove its known_gap marker: {name}')
+def row_button(m,row):
+    """A list_row's tap target, which holds its icon and label: the list_item on V2.1, its button on V1.32."""
+    return row if is_m1plus else m.nodes[row]['children'][0]
+def row_click(m,row):
+    """A list_row's click (navigation.c list_row_core): the list_item's own on V2.1, its button's on V1.32."""
+    return m.handler(row if is_m1plus else m.nodes[row]['children'][0],O['EVT_CLICK'])
 def not_ported(name):
     """A check M1 Plus skips: its feature is not in the M1 Plus build, or the test needs V1.32 code."""
     assert is_m1plus, name
@@ -6407,21 +6413,33 @@ assert m.calls[0][:3]==('stock_localmusic',m.top,5)
 # Recently Added, Recent, Most Played, Frequent, Hi-Res, Long Songs; then Update Local Music, last (stock rows by
 # get_localmusic_showinfo index).
 kids=m.nodes[view]['children']; row,rated,top,long=kids[0],kids[6],kids[10],kids[13]
-assert [kids[i] for i in (*range(1,6),7,8,9,11,12,14)]==[stock[i] for i in (3,2,1,4,10,6,9,8,7,5,0)] and m.nodes[row]['style']==S('s_listitem_black')
-icon,label=m.nodes[m.nodes[long]['children'][0]]['children']
+# M1 Plus builds V2.1's rows (navigation.c list_row_core): the parts are the list_item's own, and its
+# click; V1.32's rows hold them in a button. V2.1 has no Local Music menu to show these on (its Home is
+# the library), so on M1 Plus this covers the rows and the pages they open, not the device's path.
+if is_m1plus: not_ported("Library's Shuffle, Ratings, Most Played and media rows (V2.1's Home is the library: no menu to add them to)")
+def parts(r): return m.nodes[r]['children'] if is_m1plus else m.nodes[m.nodes[r]['children'][0]]['children']
+assert [kids[i] for i in (*range(1,6),7,8,9,11,12,14)]==[stock[i] for i in (3,2,1,4,10,6,9,8,7,5,0)]
+assert m.nodes[row]['style']==('list_item_style' if is_m1plus else S('s_listitem_black'))
+icon,label=parts(long)
 assert m.nodes[icon]['image']=='local_longsongs' and m.nodes[label]['text']=='Long Songs'
 assert m.nodes[stock[6]]['visible']==0 and all(m.nodes[k].get('visible',1) for k in kids if k!=stock[6])
-icon,label=m.nodes[m.nodes[top]['children'][0]]['children']
+icon,label=parts(top)
 assert m.nodes[icon]['image']=='local_frequentplay' and m.nodes[label]['text']=='Most Played'
-icon,label,into=m.nodes[m.nodes[rated]['children'][0]]['children']
-assert m.nodes[icon]['image']=='local_fav' and m.nodes[label]['text']=='Ratings' and m.nodes[into]['image']=='list_into'
-# The Shuffle row: the local_shuffle icon, its label and stock's list_into trailing image, as the
-# stock Local Music categories place them. Its button has no name, so stock's row click ignores it.
-button=m.nodes[row]['children'][0]; icon,label,into=m.nodes[button]['children']
-assert m.nodes[button]['style']==S('s_btn_listitem') and [m.get(button+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,70]
-assert m.nodes[icon]['image']=='local_shuffle' and [m.get(icon+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[10,0,52,70]
-assert m.nodes[label]['style']==S('s_scrlabel_white24l') and m.nodes[label]['text']=='Shuffle' and not m.nodes[button].get('name')
-assert m.nodes[into]['image']=='list_into' and [m.get(into+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[282,0,50,70]
+icon,label,into=parts(rated)
+assert m.nodes[icon]['image']=='local_fav' and m.nodes[label]['text']=='Ratings' and m.nodes[into]['image']==('right_arrow' if is_m1plus else 'list_into')
+# The Shuffle row: the local_shuffle icon, its label and stock's trailing chevron, as the stock Local
+# Music categories (V2.1: its settings rows) place them. It has no name, so stock's row click ignores it.
+geometry=lambda w: [m.get(w+O[k]) for k in ('W_X','W_Y','W_W','W_H')]
+if is_m1plus:
+    button=row; icon,label,into=parts(row)
+    assert geometry(icon)==[12,10,40,40] and geometry(into)==[295,21,13,22] and geometry(label)[:2]==[60,20]
+    assert m.nodes[label]['style']=='srlabel_leftwhite21_style' and m.nodes[into]['image']=='right_arrow'
+else:
+    button=m.nodes[row]['children'][0]; icon,label,into=m.nodes[button]['children']
+    assert m.nodes[button]['style']==S('s_btn_listitem') and geometry(button)==[20,0,335,70]
+    assert geometry(icon)==[10,0,52,70] and m.nodes[label]['style']==S('s_scrlabel_white24l')
+    assert m.nodes[into]['image']=='list_into' and geometry(into)==[282,0,50,70]
+assert m.nodes[icon]['image']=='local_shuffle' and m.nodes[label]['text']=='Shuffle' and not m.nodes[button].get('name')
 f,ctx=m.handler(button,O['EVT_CLICK'])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
 # It opens the menu: a black shuffle_page holding the three 48px rows and the grey note under them.
@@ -6546,7 +6564,7 @@ if variant=='ipod':
 # press while it is open does nothing. Its rows are the top PLAYS_TOP, most played first and, among
 # equal counts, the most recently counted (earlier slot) first; a row plays that ranked list as a
 # library queue (0xf001) from itself, leaving the play mode alone.
-f,ctx=m.handler(m.nodes[top]['children'][0],O['EVT_CLICK'])
+f,ctx=row_click(m,top)
 m.found=[m.song(n) for n in ('T1','T2','T3')]; m.calls=[]; toasts=len(m.toasts)
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not m.plays and len(m.toasts)==toasts
 m.page=m.top; assert m.nodes[m.page]['name']=='mostplayed_page' and m.nodes[m.page]['style:normal:bg_color']==-0x1000000
@@ -6692,7 +6710,7 @@ m=RateMachine(b''.join(struct.pack('<I',(key_of(n)&~7)|h) for n,h in (('A',1),('
 m.found=[m.song(n) for n in ('A','B','C','D','E')]; m.fav_songs=[m.song('D')]
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
 m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
-f,ctx=m.handler(m.nodes[m.nodes[view]['children'][6]]['children'][0],O['EVT_CLICK'])
+f,ctx=row_click(m,m.nodes[view]['children'][6])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; menu=m.top; m.page=menu
 assert m.nodes[menu]['name']=='ratings_page' and m.texts()==['Ratings','Top Rated','Loved','Albums','All Rated','Disliked']
 want={0:['D','C'],1:['D'],2:['D','C','E','A'],3:['A']}
@@ -6718,7 +6736,7 @@ m.found=[m.song(n) for n in 'ABCDE']; m.word(m.found[2]+O['REC_CUE_END'],900)
 m.lengths={'/p/A':700,'/p/B':300}
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
 m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
-f,ctx=m.handler(m.nodes[m.nodes[view]['children'][13]]['children'][0],O['EVT_CLICK'])
+f,ctx=row_click(m,m.nodes[view]['children'][13])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; m.page=m.top
 assert m.nodes[m.page]['name']=='longsongs_page' and m.texts()==['Measuring songs…','Cancel'] and len(m.threads)==1
 worker,arg=m.threads[0]; assert m.call(address=worker,args=(arg,0,0,0),gap=0)==0 and m.probed==['/p/A','/p/B','/p/D']
@@ -6735,7 +6753,7 @@ assert not m.threads and not m.probed and m.texts()==want; m.close(); passed()
 m=RateMachine(); m.found=[m.song(n) for n in 'AB']; m.lengths={'/p/A':700,'/p/B':900}
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
 m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
-f,ctx=m.handler(m.nodes[m.nodes[view]['children'][13]]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.page=m.top
+f,ctx=row_click(m,m.nodes[view]['children'][13]); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.page=m.top
 cancel=m.nodes[m.find('scroll_view')]['children'][0]; g,c=m.handler(cancel,O['EVT_CLICK']); m.call(address=g,args=(c,m.event,0,0),gap=0)
 worker,arg=m.threads[0]; m.call(address=worker,args=(arg,0,0,0),gap=0); assert m.probed==[]  # cancelled before the first
 m.advance(250); assert m.texts()==['Long Songs','No songs over 10 minutes'] and m.joins==[77]; passed()
@@ -6743,7 +6761,7 @@ m.advance(250); assert m.texts()==['Long Songs','No songs over 10 minutes'] and 
 m=RateMachine(); m.found=[m.song('A'),m.song('A')]; m.lengths={'/p/A':1300}; m.word(m.found[1]+O['REC_CUE_START'],600)
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
 m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
-f,ctx=m.handler(m.nodes[m.nodes[view]['children'][13]]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.page=m.top
+f,ctx=row_click(m,m.nodes[view]['children'][13]); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.page=m.top
 worker,arg=m.threads[0]; m.call(address=worker,args=(arg,0,0,0),gap=0); m.advance(250)
 assert m.files['/mnt/data/ringnav-lengths']==struct.pack('<2I',fnv('/p/A'),1300)
 assert m.texts()==['Long Songs','A','Artist · 21:40','A','Artist · 11:40']; passed()
@@ -6757,7 +6775,7 @@ assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
 assert ('/mnt/mmc/.scrobble.ini','LASTFM','API_SECRET','') in m.config_reads
 m.config['TOKEN']='tok'; m.nodes[view]['children']=[m.node('list_item') for _ in range(11)]
 assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==16
-button=m.nodes[m.nodes[view]['children'][-2]]['children'][0]; icon,label=m.nodes[button]['children']
+button=row_button(m,m.nodes[view]['children'][-2]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_scrobble' and m.nodes[label]['text']=='Upload Scrobbles' and not m.nodes[button].get('name')
 f,ctx=m.handler(button,O['EVT_CLICK'])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]=='Connect to Wi-Fi first' and not m.threads
@@ -6775,7 +6793,7 @@ m.handlers[int(manifest['patch_symbols']['stock_folder_trampoline'],16)]='stock_
 m.handlers[int(manifest['patch_symbols']['stock_folder_back_trampoline'],16)]='stock_folder_back'
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
 assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==16
-button=m.nodes[m.nodes[view]['children'][-2]]['children'][0]; icon,label=m.nodes[button]['children']
+button=row_button(m,m.nodes[view]['children'][-2]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_podcasts' and m.nodes[label]['text']=='Podcasts' and not m.nodes[button].get('name')
 f,ctx=m.handler(button,O['EVT_CLICK']); m.calls=[]
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and [m.text(c[1]) for c in m.calls if c[0]=='navigator_to']==['folder_page']
@@ -6796,7 +6814,7 @@ m.handlers[int(manifest['patch_symbols']['stock_folder_back_trampoline'],16)]='s
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
 m.top=m.node('window','localmusic_page',[view])
 m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
-button=m.nodes[m.nodes[view]['children'][-2]]['children'][0]
+button=row_button(m,m.nodes[view]['children'][-2])
 f,ctx=m.handler(button,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
 win=m.node('window','folder_page'); m.call(address=HOOKS['folder_page_init'][0],args=(win,0,0,0),gap=0)
 assert m.text(syms['g_folder_path'])=='/mnt/mmc/Audiobooks' and m.u.mem_read(syms['g_folder_layer'],1)[0]==3
@@ -6950,7 +6968,7 @@ data={R+'/b.jpg':exif(6),R+'/A.png':b'\x89PNG',R+'/Trip/1.jpg':b'corrupt',R+'/Tr
 m=PhotosMachine(tree,data)
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
 assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
-button=m.nodes[m.nodes[view]['children'][-1]]['children'][0]; icon,label=m.nodes[button]['children']
+button=row_button(m,m.nodes[view]['children'][-1]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_photos' and m.nodes[label]['text']=='Photos' and len(m.nodes[view]['children'])==16
 f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
 page=m.top; assert m.nodes[page]['name']=='photos_page' and m.nodes[page]['style:normal:bg_color']==-0x1000000
@@ -7123,7 +7141,7 @@ files={R+'/Zed.txt':bytearray(txt.encode()),R+'/Series/A Tale.EPUB':bytearray(bu
 m=BooksMachine(tree,files)
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
 assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
-button=m.nodes[m.nodes[view]['children'][-1]]['children'][0]; icon,label=m.nodes[button]['children']
+button=row_button(m,m.nodes[view]['children'][-1]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_books' and m.nodes[label]['text']=='Books' and len(m.nodes[view]['children'])==16
 f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
 page=m.page=m.top; assert m.nodes[page]['name']=='books_page' and m.nodes[page]['style:normal:bg_color']==-0x1000000
@@ -7178,7 +7196,7 @@ tree={'/mnt/mmc':[('Music',4),('VIDEOS',4)],R:[('b.MKV',8),('a.mp4',8),('notes.t
 m=BooksMachine(tree,{})
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
 assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
-button=m.nodes[m.nodes[view]['children'][-1]]['children'][0]; icon,label=m.nodes[button]['children']
+button=row_button(m,m.nodes[view]['children'][-1]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_videos' and m.nodes[label]['text']=='Videos' and len(m.nodes[view]['children'])==16
 f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
 page=m.page=m.top; videos,_=m.nodes[page]['children']
@@ -7309,11 +7327,11 @@ def stream_page(m):
     assert m.call(address=STREAM_ENTRY,args=(m.top,5,0,0),gap=0,count=5_000_000)==0 and m.calls[0][0]=='stock_stream'
     assert len(m.nodes[view]['children'])==4
     # AirPlay, last: stock's own receiver, its switch on System settings' Network service page, one press away.
-    airplay=m.nodes[m.nodes[view]['children'][3]]['children'][0]; icon,label=m.nodes[airplay]['children'][:2]
+    airplay=row_button(m,m.nodes[view]['children'][3]); icon,label=m.nodes[airplay]['children'][:2]
     assert m.nodes[icon]['image']=='stream_airplay' and m.nodes[label]['text']=='AirPlay'
     top=m.top; f,ctx=m.handler(airplay,O['EVT_CLICK']); m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
     assert [m.text(c[1]) for c in m.calls if c[0]=='navigator_to']==['systemset/netservice_page']; m.top=top
-    return m.nodes[m.nodes[view]['children'][1]]['children'][0]
+    return row_button(m,m.nodes[view]['children'][1])
 def spot_open(m,button):
     """The row, then (librespot on the card: the browser) its Now Playing page."""
     f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
@@ -7468,7 +7486,7 @@ class RadioMachine(SpotMachine):
     def stream(self):
         view=self.node('scroll_view','scroll_view_streamsset',[self.node('list_item')]); self.top=self.node('window','stream_page',[view])
         assert self.call(address=STREAM_ENTRY,args=(self.top,5,0,0),gap=0,count=5_000_000)==0
-        return self.nodes[self.nodes[view]['children'][2]]['children'][0]
+        return row_button(self,self.nodes[view]['children'][2])
     def click(self,w):
         f,ctx=self.handler(w,O['EVT_CLICK']); assert self.call(address=f,args=(ctx,self.event,0,0),gap=0,count=5_000_000)==0
         self.advance(0,clear=False)
@@ -7678,7 +7696,7 @@ class BrowseMachine(RadioMachine):
         if not getattr(self,'button',0):  # Streaming, as RadioMachine.stream: Spotify's row
             view=self.node('scroll_view','scroll_view_streamsset',[self.node('list_item')]); self.top=self.node('window','stream_page',[view])
             assert self.call(address=STREAM_ENTRY,args=(self.top,5,0,0),gap=0,count=5_000_000)==0
-            self.button=self.nodes[self.nodes[view]['children'][1]]['children'][0]
+            self.button=row_button(self,self.nodes[view]['children'][1])
         self.click(self.button); self.page=self.top; assert self.nodes[self.page]['name']=='spotbrowse_page'
     def asked(self):
         """The request the worker is about to send (spotify.c's wk: buf at 32, len at 28), split."""
@@ -8064,20 +8082,23 @@ def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False):
     target={'power':'systemset_powermanager_page_init','audioset':'playset_playset_page_init','btrows':'btmenu_rows','display':'systemset_display_page_init'}[hook]
     assert m.call(address=HOOKS[target][0],args=(m.top,5,0,0),gap=0)==0 and m.calls[0][:3]==('stock_'+hook,m.top,5)
     rows=sorted(set(m.nodes[view]['children'])-set(entries))  # ours, as made (the page may restack)
-    buttons=[m.nodes[r]['children'][0] for r in rows]; labels=[m.nodes[b]['children'][-1] for b in buttons]
-    icons=[m.nodes[m.nodes[b]['children'][0]].get('image') for b in buttons]  # None: no icon
+    buttons=[row_button(m,r) for r in rows]; labels=[m.nodes[b]['children'][-1] for b in buttons]
+    icons=[m.nodes[m.nodes[b]['children'][0]].get('image') for b in buttons]  # None: no icon (the label first)
     def click(i):
         m.calls=[]; f,ctx=m.handler(buttons[i],O['EVT_CLICK'])
         assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
         return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
     m.entries=entries
     return m,rows,lambda:[m.nodes[l]['text'] for l in labels],icons,click
-m,rows,texts,icons,click=settings_page('power','scroll_view_powermanager')
-assert len(rows)==3 and icons==['usb_chargeswitch','system_powermanager','system_keylock'] and all(m.nodes[r]['style']==S('s_listitem_black') for r in rows)
-assert texts()==['Charge Limit: Off','Low Power: Off','Wake: Single Press']
+m,rows,texts,icons,click=settings_page('power',NAMES['VIEW_POWER'])
+# M1 Plus: V2.1's icon-less standby rows, and no Wake row (V2.1 has its own; the knob's press is not Centre).
+WAKE_ROW=[] if is_m1plus else ['Wake: Single Press']
+assert len(rows)==2+len(WAKE_ROW) and all(m.nodes[r]['style']==('list_item_style' if is_m1plus else S('s_listitem_black')) for r in rows)
+assert icons==([None,None] if is_m1plus else ['usb_chargeswitch','system_powermanager','system_keylock'])
+assert texts()==['Charge Limit: Off','Low Power: Off']+WAKE_ROW
 assert click(0)==[(1,'Q2POD','CHARGELIMIT')] and texts()[0]==f"Charge Limit: {O['CHARGE_STOP']}%"
 assert click(1)==[(1,'Q2POD','LOWPOWER')] and texts()[1]=='Low Power: On'
-assert click(0)==[(0,'Q2POD','CHARGELIMIT')] and texts()==['Charge Limit: Off','Low Power: On','Wake: Single Press']; passed()
+assert click(0)==[(0,'Q2POD','CHARGELIMIT')] and texts()==['Charge Limit: Off','Low Power: On']+WAKE_ROW; passed()
 # Wake (docs/internals.md#wake): screen off, a lone centre press and its release never reach the UI;
 # a second press within WAKE_MS passes, press and release. Other keys, the screen on, or the
 # setting off pass untouched.
@@ -8092,10 +8113,12 @@ RET,LONG=O['KEY_RETURN'],O['EVT_KEY_LONG']
 def back_dark(): return not any(wake(t,RET,gap=1000) for t in (DOWN,LONG,UP))  # Back does nothing dark (#28)
 assert back_dark()
 m.byte(O['BOOT_KEY_GUARD'],1); assert wake(DOWN,gap=1000) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\0' and wake(UP)  # Single press wakes after Standby
-assert click(2)==[(1,'Q2POD','WAKEDOUBLE')] and texts()[2]=='Wake: Double Press' and back_dark()
-assert not wake(DOWN,gap=1000) and not wake(UP,gap=50)  # a pocket bump
-assert wake(DOWN,gap=100) and wake(UP,gap=50)  # the double press
-assert not wake(DOWN,gap=O['WAKE_MS']) and not wake(UP) and not wake(DOWN,gap=O['WAKE_MS']) and not wake(UP)  # too slow
+# Q2 only: Wake's Double Press, on Centre (M1 Plus has V2.1's own Double wake, and no Wake row).
+if not is_m1plus:
+    assert click(2)==[(1,'Q2POD','WAKEDOUBLE')] and texts()[2]=='Wake: Double Press' and back_dark()
+    assert not wake(DOWN,gap=1000) and not wake(UP,gap=50)  # a pocket bump
+    assert wake(DOWN,gap=100) and wake(UP,gap=50)  # the double press
+    assert not wake(DOWN,gap=O['WAKE_MS']) and not wake(UP) and not wake(DOWN,gap=O['WAKE_MS']) and not wake(UP)  # too slow
 assert wake(DOWN,O['KEY_PLAY'],gap=1000) and wake(UP,O['KEY_PLAY']) and wake(UP,O['KEY_NEXT'])  # media and wheel work dark
 m.byte(syms['g_backlight_status'],1); assert wake(DOWN,gap=1000) and wake(UP) and all(wake(t,RET,gap=1000) for t in (DOWN,LONG,UP)); passed()
 # Standby's resume (STANDBY_WAKE, device_standby's awake_screen) stays dark in both modes, so the
@@ -8105,14 +8128,15 @@ if not is_m1plus:
     assert struct.unpack_from('<I',demo,fileoff(demo,STANDBY_WAKE[0]))[0]==STANDBY_WAKE[2]
 else:
     not_ported('Standby resume stays dark (STANDBY_WAKE not patched in V2.1)')
-m.byte(syms['g_backlight_status'],0)
-m.byte(O['BOOT_KEY_GUARD'],1); assert not wake(DOWN,gap=1000) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\1'
-assert wake(DOWN,gap=100) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\0' and wake(UP,gap=50)
-assert click(2)==[(0,'Q2POD','WAKEDOUBLE')]; passed()
-m,rows,texts,*_=settings_page('power','scroll_view_powermanager',{'CHARGELIMIT':'1','LOWPOWER':'1','WAKEDOUBLE':'1'})
-assert texts()==[f"Charge Limit: {O['CHARGE_STOP']}%",'Low Power: On','Wake: Double Press']; passed()
-m,rows,texts,icons,click=settings_page('audioset','scroll_view_playset',stock_rows=15)
-assert len(rows)==4 and icons==['playset_covermode','playset_folderjump','playset_covermode','playset_gapless'] and texts()==['Year Order: Newest First','Artists: Artist','Artist Album Order: Year','Crossfade: Off']
+if not is_m1plus:
+    m.byte(syms['g_backlight_status'],0)
+    m.byte(O['BOOT_KEY_GUARD'],1); assert not wake(DOWN,gap=1000) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\1'
+    assert wake(DOWN,gap=100) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\0' and wake(UP,gap=50)
+    assert click(2)==[(0,'Q2POD','WAKEDOUBLE')]; passed()
+m,rows,texts,*_=settings_page('power',NAMES['VIEW_POWER'],{'CHARGELIMIT':'1','LOWPOWER':'1','WAKEDOUBLE':'1'})
+assert texts()==[f"Charge Limit: {O['CHARGE_STOP']}%",'Low Power: On']+([] if is_m1plus else ['Wake: Double Press']); passed()
+m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],stock_rows=15)
+assert len(rows)==4 and icons==[NAMES[k] for k in ('ICON_COVERMODE','ICON_FOLDERJUMP','ICON_COVERMODE','ICON_GAPLESS')] and texts()==['Year Order: Newest First','Artists: Artist','Artist Album Order: Year','Crossfade: Off']
 assert click(2)==[(1,'Q2POD','ARTISTAZ')] and texts()[2]=='Artist Album Order: A–Z'
 assert click(2)==[(0,'Q2POD','ARTISTAZ')] and texts()[2]=='Artist Album Order: Year'
 assert click(0)==[(1,'Q2POD','YEAROLD')] and texts()[0]=='Year Order: Oldest First'
@@ -8131,33 +8155,39 @@ else:
 # Boot reads it too (ringnav_bootmode), so Audio settings shows it before any Library page has opened.
 if not is_m1plus:
     for config,text in (({},'Artists: Album Artist'),({'ARTISTTYPE':'0'},'Artists: Artist')):
-        shown=settings_page('audioset','scroll_view_playset',config,stock_rows=15,boot=True)[2]
+        shown=settings_page('audioset',NAMES['VIEW_PLAYSET'],config,stock_rows=15,boot=True)[2]
         assert shown()[1]==text,config
     passed()
 else:
     not_ported('Boot reads the Artists choice (ringnav_bootmode call not patched in V2.1)')
 # Playback Setting restacks by use (navigation.c playset_order): stock's rows by id, then ours.
 def stacked(m,view_name): return [(m.entries+rows).index(c) for c in m.nodes[named(m,m.top,view_name)]['children']]
-assert stacked(m,'scroll_view_playset')==[3,2,0,10,18,9,4,5,11,1,8,16,15,17,13,14,12,6,7]; passed()
+# (V1.32's row ids: M1 Plus keeps V2.1's order, ours after.)
+assert stacked(m,NAMES['VIEW_PLAYSET'])==(list(range(19)) if is_m1plus else [3,2,0,10,18,9,4,5,11,1,8,16,15,17,13,14,12,6,7]); passed()
 # Crossfade (crossfade.c): the row shows the saved length while on; an unreadable one is the default.
 for config,text in (({'XFADE':'1','XFADESEC':'7'},'Crossfade: 7 s'),({'XFADE':'1','XFADESEC':'11'},'Crossfade: 5 s'),({'XFADESEC':'7'},'Crossfade: Off')):
-    m,rows,texts,*_=settings_page('audioset','scroll_view_playset',config,stock_rows=15)
-    assert texts()[3]==text and m.nodes[m.nodes[m.nodes[rows[3]]['children'][0]]['children'][1]].get('name')=='label_xfade'
+    m,rows,texts,*_=settings_page('audioset',NAMES['VIEW_PLAYSET'],config,stock_rows=15)
+    assert texts()[3]==text and m.nodes[m.nodes[row_button(m,rows[3])]['children'][1]].get('name')=='label_xfade'
 passed()
 # Wheel sensitivity (playback.c wheel_pct, test/playback.py's travel): Display's last row in both
 # builds, Q2POD WHEELSENSITIVITY as 1.0.6 saved it, 50% unless a canonical ten in 50-200.
-for config,pct in (({},50),({'WHEELSENSITIVITY':'130'},130),({'WHEELSENSITIVITY':'200'},200),({'WHEELSENSITIVITY':'40'},50),
-                   ({'WHEELSENSITIVITY':'135'},50),({'WHEELSENSITIVITY':'210'},50),({'WHEELSENSITIVITY':'x'},50)):
-    m,rows,texts,icons,click=settings_page('display','scroll_view_display',config,stock_rows=3)
-    label=m.nodes[m.nodes[rows[-1]]['children'][0]]['children'][-1]
-    assert texts()[-1]==f'Wheel Sensitivity: {pct}%' and icons[-1]=='system_display' and m.nodes[label]['name']=='label_wheel'
-    assert m.nodes[named(m,m.top,'scroll_view_display')]['children'][-1]==rows[-1],config  # the list's end
-passed()
+if not is_m1plus:  # Q2 only: the touch wheel's
+    for config,pct in (({},50),({'WHEELSENSITIVITY':'130'},130),({'WHEELSENSITIVITY':'200'},200),({'WHEELSENSITIVITY':'40'},50),
+                       ({'WHEELSENSITIVITY':'135'},50),({'WHEELSENSITIVITY':'210'},50),({'WHEELSENSITIVITY':'x'},50)):
+        m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],config,stock_rows=3)
+        label=m.nodes[row_button(m,rows[-1])]['children'][-1]
+        assert texts()[-1]==f'Wheel Sensitivity: {pct}%' and icons[-1]=='system_display' and m.nodes[label]['name']=='label_wheel'
+        assert m.nodes[named(m,m.top,'scroll_view_display')]['children'][-1]==rows[-1],config  # the list's end
+    passed()
+else:  # M1 Plus: Display gains Artist Albums alone, icon-less as V2.1's display rows
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=3)
+    assert texts()==['Artist Albums: Coverflow'] and icons==[None]
+    assert m.nodes[named(m,m.top,NAMES['VIEW_DISPLAY'])]['children'][-1]==rows[-1]; passed()
 # Its row opens stock's Boot volume page re-dressed (crossfade.c): titled, no switch, the percent
 # beside the slider, which runs 50-200 in tens. The wheel and +/- step 10%, live and saved, the
 # slider snaps to a ten, and Centre goes back (edit_key, as on Brightness).
 if not is_m1plus:
-    m,rows,texts,icons,click=settings_page('display','scroll_view_display',stock_rows=3)
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=3)
     display_page=m.top; m.stack=[m.top]; m.nodes[m.wm]=dict(type='window_manager',name='',children=m.stack,visible=1)
     assert click(-1)==[] and m.top!=display_page and m.nodes[m.top]['name']=='bootvol_page'
     assert m.nodes[m.title]['text']=='Wheel Sensitivity' and m.nodes[m.switch]['visible']==0 and m.nodes[m.vol]['text']=='50%'
@@ -8182,16 +8212,16 @@ else:
 # right after its fourth row, Bluetooth Headset Volume Control, as stock's rows: no icon, 78 high.
 # Off unless Q2POD RESUME is 1 (docs/internals.md#resume-on-connect).
 if not is_m1plus:
-    m,rows,texts,icons,click=settings_page('btrows','scroll_view_bluetooth',stock_rows=7)  # 5 rows, 2 devices
+    m,rows,texts,icons,click=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],stock_rows=7)  # 5 rows, 2 devices
     assert len(rows)==1 and icons==[None] and texts()==['Resume on Connect: Off']
-    kids=m.nodes[m.nodes[rows[0]]['children'][0]]['children']  # the label alone
+    kids=m.nodes[row_button(m,rows[0])]['children']  # the label alone
     assert len(kids)==1 and m.get(kids[0]+O['W_X'])==10 and m.get(rows[0]+O['W_H'])==78
     assert m.nodes[named(m,m.top,'scroll_view_bluetooth')]['children'].index(rows[0])==4
     assert click(0)==[(1,'Q2POD','RESUME')] and texts()==['Resume on Connect: On']
     assert click(0)==[(0,'Q2POD','RESUME')] and texts()==['Resume on Connect: Off']; passed()
-    m,rows,texts,*_=settings_page('btrows','scroll_view_bluetooth',{'RESUME':'1'},stock_rows=7)
+    m,rows,texts,*_=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],{'RESUME':'1'},stock_rows=7)
     assert texts()==['Resume on Connect: On']; passed()
-    m,rows,*_=settings_page('btrows','scroll_view_bluetooth',stock_rows=1,bt=0)  # just the switch
+    m,rows,*_=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],stock_rows=1,bt=0)  # just the switch
     assert rows==[]; passed()
 else:
     not_ported('Bluetooth Resume on connect row (btmenu_rows not hooked in V2.1)')
@@ -8500,17 +8530,19 @@ def boot_row(value=None,mode=0o100755):
     m.handlers[int(manifest['patch_symbols']['stock_systemset_trampoline'],16)]='stock_systemset'
     m.mock('ferror@GLIBC_2.0','fflush@GLIBC_2.0','fsync@GLIBC_2.0','fileno@GLIBC_2.0','navigator_to_with_context')
     entries=[m.entry(0) for _ in range(12)]
-    view=m.node('scroll_view','scroll_view_sysset',entries.copy())
+    view=m.node('scroll_view',NAMES['VIEW_SYSSET'],entries.copy())
     m.top=m.node('window','sysset_page',[m.node('list_view','list_view_sysset',[view])])
     assert m.call(address=HOOKS['systemset_sysset_page_init'][0],args=(m.top,5,0,0),gap=0)==0
     assert m.calls[0][:3]==('stock_systemset',m.top,5)
+    # sysset_order is V1.32's row ids: M1 Plus keeps V2.1's order and appends Boot to.
+    order=list(range(12)) if is_m1plus else [1,3,4,5,8,7,2,0,6,9,10,11]
     if mode!=0o100755:
-        assert m.nodes[view]['children']==[entries[i] for i in (1,3,4,5,8,7,2,0,6,9,10,11)]
+        assert m.nodes[view]['children']==[entries[i] for i in order]
         return m,None,None
-    kids=m.nodes[view]['children']
+    kids=m.nodes[view]['children']; at=12 if is_m1plus else 9
     assert len(kids)==13
-    assert kids[:9]+kids[10:]==[entries[i] for i in (1,3,4,5,8,7,2,0,6,9,10,11)]
-    button=m.nodes[kids[9]]['children'][0]
+    assert kids[:at]+kids[at+1:]==[entries[i] for i in order]
+    button=row_button(m,kids[at])
     label=m.nodes[button]['children'][1]
     return m,button,label
 def toggle_boot(m,button):

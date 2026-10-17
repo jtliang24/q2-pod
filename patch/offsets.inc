@@ -82,6 +82,42 @@
 #define EVT_POINTER_UP 0x103
 #define EVT_POINTER_ABORT 0x107
 #define EVT_DESTROY 0x0c
+/* The stock settings lists the payload adds rows to, and the icons its rows borrow (each in the
+ * firmware's UI assets and images; tools/build.py checks them against the rootfs). V2.1 names its
+ * lists <page>_scrollview, and its 40 px settings icons pset_ and sset_. */
+#if M1PLUS
+#define VIEW_ABOUT "about_scrollview"
+#define ABOUT_FW_LABEL "scrlabel1"            /* About's FW. Version row */
+#define ROW_STYLE "list_item_style"            /* V2.1's settings row (list_row_core) */
+#define ROW_LABEL_STYLE "srlabel_leftwhite21_style"
+#define ROW_CHEVRON "right_arrow"
+#define VIEW_SYSSET "sysset_scrollview"
+#define VIEW_POWER "standby_scrollview" /* Idle (powermanager_page) */
+#define VIEW_DISPLAY "display_scrollview"
+#define VIEW_PLAYSET "playset_scrollview"
+#define VIEW_BLUETOOTH "bluetooth_scrollview"
+#define ICON_CHARGE "usb_chargeswitch"
+#define ICON_POWER "sset_powermanager"
+#define ICON_KEYLOCK "sset_keylock"
+#define ICON_DISPLAY "sset_display"
+#define ICON_COVERMODE "pset_covermode"
+#define ICON_FOLDERJUMP "pset_jumpfolder"
+#define ICON_GAPLESS "pset_gapless"
+#else
+#define VIEW_ABOUT "scroll_view_about"
+#define VIEW_SYSSET "scroll_view_sysset"
+#define VIEW_POWER "scroll_view_powermanager"
+#define VIEW_DISPLAY "scroll_view_display"
+#define VIEW_PLAYSET "scroll_view_playset"
+#define VIEW_BLUETOOTH "scroll_view_bluetooth"
+#define ICON_CHARGE "usb_chargeswitch"
+#define ICON_POWER "system_powermanager"
+#define ICON_KEYLOCK "system_keylock"
+#define ICON_DISPLAY "system_display"
+#define ICON_COVERMODE "playset_covermode"
+#define ICON_FOLDERJUMP "playset_folderjump"
+#define ICON_GAPLESS "playset_gapless"
+#endif
 /* The payload's own widgets' styles: V1.32's, or V2.1's nearest of the same widget type, colour,
  * size and alignment (V2.1 has no centred 18 px label, no right-aligned 20 px scrolling label: their
  * nearest are 20 px and 16 px). */

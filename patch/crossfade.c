@@ -124,7 +124,13 @@ int xfade_open(void *ctx, void *event) {
     (void)event;
     int wheel = ctx != 0;
     settings();
-#if M1PLUS /* V2.1's bootvol_page has other widgets (btn_add, vol_slider, btn_memory) and handlers */
+#if M1PLUS /* V2.1's bootvol_page has other widgets (btn_add, vol_slider, btn_memory) and handlers:
+            * until the page is re-dressed for it, the row itself turns Crossfade on and off, at
+            * the saved length (XF_DEFAULT unless one was set). */
+    if (!wheel) {
+        xf.on = !xf.on;
+        refresh(1);
+    }
     return 0;
 #endif
     if (xf.page) return 0;

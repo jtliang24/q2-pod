@@ -1873,6 +1873,24 @@ int ringnav_paint(void *w, void *canvas) {
 }
 
 /* A s_listitem_black list_item in view with a 335x70 s_btn_listitem button; returns the button. */
+#if M1PLUS
+/* A stock settings row as V2.1 builds them (playset's, 0x4a0578): a list_item_style list_item (64
+ * high, the list's item height), a 40 px icon at 12,10, a 21 px srlabel_leftwhite21_style label at
+ * 60,20 (no icon: at 12), and, opening a page, right_arrow at 295. The click is the row's. Returns
+ * the label. */
+static void *list_row_core(void *view, const char *icon, int (*click)(void *, void *), void *ctx,
+                           int w, int into) {
+    (void)w;
+    void *item = list_item_create(view, 0, 0, 0, 0);
+    widget_use_style(item, ROW_STYLE);
+    if (click) widget_on(item, EVT_CLICK, click, ctx);
+    if (icon) image_base_set_image(image_create(item, 12, 10, 40, 40), icon);
+    void *label = hscroll_label_create(item, icon ? 60 : 12, 20, into ? 220 : 240, 21);
+    widget_use_style(label, ROW_LABEL_STYLE);
+    if (into) image_base_set_image(image_create(item, 295, 21, 13, 22), ROW_CHEVRON);
+    return label;
+}
+#else
 static void *list_button(void *view) {
     void *item = list_item_create(view, 0, 0, 0, 0);
     widget_use_style(item, STYLE_LISTITEM_BLACK);
@@ -1896,10 +1914,13 @@ static void *list_row_core(void *view, const char *icon, int (*click)(void *, vo
     if (into) image_base_set_image(image_create(button, 282, 0, 50, 70), "list_into");
     return label;
 }
+#endif
 
 void *list_row(void *view, const char *icon, int (*click)(void *, void *), void *ctx) {
     return list_row_core(view, icon, click, ctx, 260, 0);
 }
+/* A list_row label's list_item: its parent on V2.1, its button's on V1.32. */
+static void *row_of(void *label) { return M1PLUS ? P(label, W_PARENT) : P(P(label, W_PARENT), W_PARENT); }
 
 /* Stock modes: 1 locks volume, 3 locks volume and playback buttons, only with the screen off.
  * KEY_LOCKOUT is the separate, temporary debounce after a button press. */
@@ -2072,10 +2093,14 @@ void pod_rows(void *win, const char *view_name, int first, int n, const char *co
 /* systemset_powermanager_page_init and playset_playset_page_init: stock builds its rows, then
  * these follow in the same widgets and styles (list_row), with the value in the label. */
 int ringnav_powermanager(void *win, void *ctx) {
-    static const char *const icons[] = { "usb_chargeswitch", "system_powermanager",
-                                         "system_keylock" };
+#if M1PLUS /* V2.1's standby rows have no icons */
+    static const char *const icons[] = { 0, 0, 0 };
+#else
+    static const char *const icons[] = { ICON_CHARGE, ICON_POWER, ICON_KEYLOCK };
+#endif
     int result = stock_power_trampoline(win, ctx);
-    pod_rows(win, "scroll_view_powermanager", POD_CHARGE, 3, icons);
+    /* M1 Plus: no Wake row. V2.1 has its own (Double wake), and the knob's press is not Centre. */
+    pod_rows(win, VIEW_POWER, POD_CHARGE, M1PLUS ? 2 : 3, icons);
     return result;
 }
 /* The Bluetooth page's list (stock's local builder, btmenu_rows), rebuilt whole on every search and
@@ -2086,8 +2111,8 @@ int ringnav_btrows(void *win, void *ctx) {
     static const char *const icons[] = { 0 };
     int result = stock_btrows_trampoline(win, ctx);
     if (!g_bluetoothflag) return result;
-    pod_rows(win, "scroll_view_bluetooth", POD_RESUME, 1, icons);
-    void *view = win ? widget_lookup(win, "scroll_view_bluetooth", 1) : (void *)0;
+    pod_rows(win, VIEW_BLUETOOTH, POD_RESUME, 1, icons);
+    void *view = win ? widget_lookup(win, VIEW_BLUETOOTH, 1) : (void *)0;
     unsigned n = view ? widget_count_children(view) : 0;
     if (!n) return result;
     void *row = widget_get_child(view, n - 1);
@@ -2100,7 +2125,8 @@ int ringnav_btrows(void *win, void *ctx) {
  * left as built. */
 static void reorder(void *view, const unsigned char *order, unsigned n) {
     void *rows[24];
-    if (!view || n > sizeof rows / sizeof *rows || widget_count_children(view) != n) return;
+    /* The orders are V1.32's row ids: V2.1's lists keep their own order. */
+    if (M1PLUS || !view || n > sizeof rows / sizeof *rows || widget_count_children(view) != n) return;
     for (unsigned i = 0; i < n; i++) rows[i] = widget_get_child(view, i);
     for (unsigned i = 0; i < n; i++) widget_restack(rows[order[i]], i);
 }
@@ -2127,12 +2153,12 @@ static const unsigned char sysset_order[] = {
 };
 
 int ringnav_audioset(void *win, void *ctx) {
-    static const char *const icons[] = { "playset_covermode", "playset_folderjump" };
+    static const char *const icons[] = { ICON_COVERMODE, ICON_FOLDERJUMP };
     int result = stock_audioset_trampoline(win, ctx);
-    pod_rows(win, "scroll_view_playset", POD_YEAR_OLD, 2, icons);
-    pod_rows(win, "scroll_view_playset", POD_ARTIST_AZ, 1, icons);
-    void *view = win ? widget_lookup(win, "scroll_view_playset", 1) : (void *)0;
-    if (view) xfade_row(list_row(view, "playset_gapless", xfade_open, (void *)0)); /* crossfade.c */
+    pod_rows(win, VIEW_PLAYSET, POD_YEAR_OLD, 2, icons);
+    pod_rows(win, VIEW_PLAYSET, POD_ARTIST_AZ, 1, icons);
+    void *view = win ? widget_lookup(win, VIEW_PLAYSET, 1) : (void *)0;
+    if (view) xfade_row(list_row(view, ICON_GAPLESS, xfade_open, (void *)0)); /* crossfade.c */
     reorder(view, playset_order, sizeof playset_order);
     return result;
 }
@@ -3097,7 +3123,7 @@ static void setting_text(int i) {
  * no keep_invisible) skips a hidden row, so it leaves no gap, and the wheel skips it too. */
 static void accent_row(void) {
     if (st.setting_label[0])
-        widget_set_visible(P(P(st.setting_label[0], W_PARENT), W_PARENT), st.classic, 0);
+        widget_set_visible(row_of(st.setting_label[0]), st.classic, 0);
 }
 
 static int settings_list(void *w) {
@@ -3212,14 +3238,18 @@ int ringnav_np_info(void *win) {
 int ringnav_display(void *win, void *ctx) {
     int result = stock_display_trampoline(win, ctx);
     /* Artist albums: Grid or Coverflow, a layout as Home's, so it sits after Home. */
-    static const char *const cf_icon[] = { "playset_covermode" };
-    void *view = win ? widget_lookup(win, "scroll_view_display", 1) : (void *)0;
+#if M1PLUS /* V2.1's display rows have no icons */
+    static const char *const cf_icon[] = { 0 };
+#else
+    static const char *const cf_icon[] = { ICON_COVERMODE };
+#endif
+    void *view = win ? widget_lookup(win, VIEW_DISPLAY, 1) : (void *)0;
 #if IPOD
     static const char *const icons[] = { "system_display", "playset_covermode",
                                          "system_powermanager", "system_display" };
     for (int k = 0; view && k < 4; ++k) {
         int i = (k + 3) % 4; /* Theme, Accent, Home, Battery */
-        if (i == 2) pod_rows(win, "scroll_view_display", POD_ARTIST_CF, 1, cf_icon);
+        if (i == 2) pod_rows(win, VIEW_DISPLAY, POD_ARTIST_CF, 1, cf_icon);
         st.setting_label[i] = list_row(view, icons[i], setting_click, (void *)(long)i);
         setting_text(i);
     }
@@ -3233,9 +3263,13 @@ int ringnav_display(void *win, void *ctx) {
 #endif
     }
 #else
-    pod_rows(win, "scroll_view_display", POD_ARTIST_CF, 1, cf_icon);
+    pod_rows(win, VIEW_DISPLAY, POD_ARTIST_CF, 1, cf_icon);
 #endif
-    if (view) wheel_row(list_row(view, "system_display", xfade_open, (void *)1));
+#if !M1PLUS /* the touch wheel's sensitivity */
+    if (view) wheel_row(list_row(view, ICON_DISPLAY, xfade_open, (void *)1));
+#else
+    (void)view;
+#endif
     return result;
 }
 
@@ -3263,7 +3297,7 @@ static int boot_click(void *label, void *event) {
 }
 int ringnav_systemset(void *win, void *ctx) {
     int result = stock_systemset_trampoline(win, ctx);
-    void *view = win ? widget_lookup(win, "scroll_view_sysset", 1) : (void *)0;
+    void *view = win ? widget_lookup(win, VIEW_SYSSET, 1) : (void *)0;
     if (view && rockbox_available()) {
         char value[16];
         void *f = fopen(BOOT_TARGET, "rb");
@@ -3278,7 +3312,7 @@ int ringnav_systemset(void *win, void *ctx) {
             boot_rockbox = !q2pod || ferror(f);
             fclose(f);
         }
-        void *label = list_row(view, "system_powermanager", 0, 0);
+        void *label = list_row(view, ICON_POWER, 0, 0);
         void *button = P(label, W_PARENT);
         widget_on(button, EVT_CLICK, boot_click, label);
         boot_text(label);
@@ -5054,7 +5088,7 @@ static void *library_row(void *view, const char *icon, int (*click)(void *, void
                          const char *text) {
     void *label = list_row(view, icon, click, ctx);
     widget_set_text_utf8(label, text);
-    return P(P(label, W_PARENT), W_PARENT);
+    return row_of(label);
 }
 
 /* A library row that opens another list: stock's own list_into trailing image, as the stock Local
@@ -5063,7 +5097,7 @@ static void *library_into(void *view, const char *icon, int (*click)(void *, voi
                           const char *text) {
     void *label = list_row_core(view, icon, click, ctx, 210, 1);
     widget_set_text_utf8(label, text);
-    return P(P(label, W_PARENT), W_PARENT);
+    return row_of(label);
 }
 
 /* localmusic_page_init: stock's 11 category rows (0x5247ec), by index (get_localmusic_showinfo
@@ -5161,6 +5195,7 @@ int ringnav_start_player(void) {
  * reads demo's version literal, which carries the updater tag (tools/build.py VERSIONS), so it
  * shows the stock firmware's again; a CFW. Version row in the same widgets follows it. Its button
  * has no name, so stock's row click (atoi of the name, 0x4bc774) ignores it. */
+#if !M1PLUS
 static void about_label(void *button, int x, int w, const char *style, const char *text) {
     void *label = hscroll_label_create(button, x, 0, w, 70);
     widget_use_style(label, style);
@@ -5168,10 +5203,40 @@ static void about_label(void *button, int x, int w, const char *style, const cha
     hscroll_label_set_ellipses(label, 1);
     widget_set_text_utf8(label, text);
 }
+#endif
 
+#if M1PLUS
+/* V2.1's About (systemset_about_page_init's widget_foreach callback, 0x4a12c0): each row is a
+ * list_item holding one hscroll_label, getFormatString's title and the value as "%s:%s"; FW. Version
+ * is scrlabel1, from demo's version literal (the updater tag). It shows the stock firmware's again,
+ * and a row in the same widgets and styles after it shows this build's. */
+static void about_row(void *label, const char *key, const char *value) {
+    char title[0x100], text[0x200];
+    getFormatString(key, title, sizeof title);
+    tk_snprintf(text, sizeof text, "%s:%s", title, value);
+    widget_set_text_utf8(label, text);
+}
 int ringnav_about(void *win, void *ctx) {
     int result = stock_about_trampoline(win, ctx);
-    void *view = win ? widget_lookup(win, "scroll_view_about", 1) : (void *)0;
+    void *view = win ? widget_lookup(win, VIEW_ABOUT, 1) : (void *)0;
+    void *fw = win ? widget_lookup(win, ABOUT_FW_LABEL, 1) : (void *)0;
+    if (view && fw) {
+        about_row(fw, "about_version", STOCK_VERSION);
+        void *item = list_item_create(view, 0, 0, 0, 0);
+        widget_use_style(item, ROW_STYLE);
+        void *label = hscroll_label_create(item, 12, 20, 260, 21);
+        widget_use_style(label, ROW_LABEL_STYLE);
+        char cfw[0x100];
+        tk_snprintf(cfw, sizeof cfw, "CFW. Version:%s", Q2POD_VERSION);
+        widget_set_text_utf8(label, cfw);
+        widget_restack(item, 2);
+    }
+    return result;
+}
+#else
+int ringnav_about(void *win, void *ctx) {
+    int result = stock_about_trampoline(win, ctx);
+    void *view = win ? widget_lookup(win, VIEW_ABOUT, 1) : (void *)0;
     if (view && widget_count_children(view) == 7) {
         widget_set_text_utf8(widget_get_child(widget_get_child(widget_get_child(view, 1), 0), 1),
                              STOCK_VERSION);
@@ -5182,6 +5247,7 @@ int ringnav_about(void *win, void *ctx) {
     }
     return result;
 }
+#endif
 
 /* Go to album/artist reuse g_local_classinfo_save, which the pages underneath reload from when
  * they come back, so it is put back as the page opened here closes. */

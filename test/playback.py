@@ -633,13 +633,15 @@ for folder in (0,1):
     assert m.labels()[:2]==(['Next Folder','Previous Folder'] if folder else ['Next Album','Previous Album'])
     m.pick(0); m.advance(0,clear=False); assert m.current() not in (0,2,6)
     checks+=1
-m=PlaybackMachine(); m.handlers[ps['stock_display_trampoline']]='stock_display'
-view=m.node('scroll_view','scroll_view_display'); lst=m.node('list_view','list_view_display',[view])
-m.top=m.node('window','display_page',[lst]); m.stack=[m.top]
-for child,parent in ((view,lst),(lst,m.top),(m.top,m.wm)): m.word(child+O['W_PARENT'],parent)
-assert m.fn('ringnav_display',m.top,0)==0
-assert [n['text'] for n in m.nodes.values() if 'Wheel' in str(n.get('text'))]==['Wheel Sensitivity: 50%']  # the row, test/patch.py's
-checks+=1
+# Q2 only: the touch wheel's Wheel Sensitivity row, on Display.
+if not is_m1plus:
+    m=PlaybackMachine(); m.handlers[ps['stock_display_trampoline']]='stock_display'
+    view=m.node('scroll_view','scroll_view_display'); lst=m.node('list_view','list_view_display',[view])
+    m.top=m.node('window','display_page',[lst]); m.stack=[m.top]
+    for child,parent in ((view,lst),(lst,m.top),(m.top,m.wm)): m.word(child+O['W_PARENT'],parent)
+    assert m.fn('ringnav_display',m.top,0)==0
+    assert [n['text'] for n in m.nodes.values() if 'Wheel' in str(n.get('text'))]==['Wheel Sensitivity: 50%']  # the row, test/patch.py's
+    checks+=1
 
 # Manual Next/Prev at the queue ends runs stock player_change_music through ringnav_change. Stock
 # keeps Folder Skip's sibling folder for class 1; other classes stop at the end (Next) or wrap (Prev); advanced
