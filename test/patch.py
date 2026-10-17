@@ -57,6 +57,9 @@ _at = fileoff(_demo, WM_PAINT_LEAF[1])
 assert _demo[_at:_at+8] == struct.pack('<II', 0x08000000 | payload_syms[WM_PAINT_LEAF[2]] >> 2, 0)
 PLAY_STATUS = 0xa0abe4 if is_m1plus else 0xa3beac
 OUTPUT_WAY = 0xa0abe8 if is_m1plus else 0xa3beb0
+# The window manager's vtable slot and stock's vtable (window_manager_create's; V2.1 passes it to
+# window_manager_init as a2, which stores it at 0x88).
+WM_VT_SLOT, WM_VTABLE = (0x88, 0x97d6a0) if is_m1plus else (0x94, 0x9a0490)
 DC=O['DOUBLE_CLICK_MS']  # centre double-press window
 # iPod accent presets: {gradient top, bottom, light tone, red tone, highlight} per Accent setting value.
 ACCENTS=[tuple(int(v,16) for v in g) for g in re.findall(r'\{ 0x(\w+), 0x(\w+), 0x(\w+), 0x(\w+), 0x(\w+) \}',INC)]
@@ -2653,7 +2656,7 @@ class NavigationMachine(Machine):
     def __init__(self):
         super().__init__()
         self.order=[]; self.block_open=False
-        self.word(self.wm+0x94,0x9a0490)
+        self.word(self.wm+WM_VT_SLOT,WM_VTABLE)
         for name in ('navigator_switch_to_with_context','navigator_back_to_home','navigator_to_with_context',
                      'navigator_to','window_close'):
             self.handlers.pop(syms[name],None)
@@ -2770,6 +2773,11 @@ else:
     assert wm_event_type(0x523e6c)==O['EVT_KEY_DOWN_BEFORE']==0x112
     assert wm_event_type(0x523eb8)==O['EVT_KEY_UP']==0x114
     assert wm_event_type(0x523e80)==O['EVT_KEY_UP_BEFORE']==0x115
+if is_m1plus:  # WM_VTABLE: window_manager_create's lw $6,<page>($gp); addiu $6,$6,<low> (V2.1)
+    lw,addiu=(struct.unpack('<I',m.u.mem_read(a,4))[0] for a in (0x692d64,0x692d78))
+    half=lambda w: (w&0xffff)-((w&0x8000)<<1)
+    assert lw>>16==0x8f86 and addiu>>16==0x24c6 and m.get(0xa03ed0+half(lw))+half(addiu)==WM_VTABLE
+passed()
 passed()
 
 for page_name in ('folder_page','localmusic_page','allmusic_page','radio_page'):
@@ -7231,7 +7239,7 @@ poll(O['SCRUB_MS']-1); assert key(O['KEY_NEXT'])==('f',[]) and key(O['KEY_FWD_BT
 poll(O['SCRUB_MS']-1); assert key(O['KEY_NEXT'])==('f',[]); poll(O['SCRUB_MS']); assert key(O['KEY_NEXT'])==('v\x1f',31)
 assert key(O['KEY_CENTER'])==('s',[]) and key(O['KEY_CENTER'])==('v\x1f',[]) and key(O['KEY_PREV'])==('v\x1e',30); passed()
 # Nor does the window manager paint over it; the screen, standby and DAC power-off timeouts are held off.
-vt=m.alloc(16); m.word(m.wm+(0x88 if is_m1plus else 0x94),vt); m.word(vt+0xc,0x400100); m.handlers[0x400100]='wm_vt_paint'
+vt=m.alloc(16); m.word(m.wm+WM_VT_SLOT,vt); m.word(vt+0xc,0x400100); m.handlers[0x400100]='wm_vt_paint'
 def wm_paint():
     m.calls=[]; m.call(address=WM_PAINT_LEAF[1],args=(m.wm,0,0,0),gap=0,clear=False); return [c[0] for c in m.calls]
 assert wm_paint()==[]
