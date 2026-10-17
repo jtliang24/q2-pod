@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""JPEG checks; optionally pass the stock ZIP to test packaging with a custom logo and quoted paths too."""
+"""JPEG and boot script checks; --build BUILD audits a build (Q2 or M1 Plus), and a stock firmware ZIP
+also tests packaging with a custom logo and quoted paths."""
 import io, sys; sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first: test/build.py must import tools/build.py
 from build import CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover
 
@@ -10,11 +11,11 @@ assert jpeg_size(logo[:2] + b'\xff' + logo[2:]) == (320, 375)
 frame = b'\xff\xd8\xff\xc0\x00\x11\x08\x01\x77\x01\x40'
 # The stock display_logo reads three bytes per pixel without converting grayscale/CMYK.
 # It also requires the documented 8-bit baseline format.
-def sof(marker=0xc0, precision=8, components=3):
+def sof(marker=0xc0, precision=8, components=3, height=375):
     return (b'\xff\xd8\xff' + bytes([marker]) + (8+3*components).to_bytes(2,'big') +
-            bytes([precision]) + b'\x01\x77\x01\x40' + bytes([components]) +
+            bytes([precision]) + height.to_bytes(2,'big') + b'\x01\x40' + bytes([components]) +
             b''.join(bytes([i+1,0x11,0]) for i in range(components)))
-assert jpeg_size(sof()) == (320,375)
+assert jpeg_size(sof()) == (320,375) and jpeg_size(sof(height=480)) == (320,480)  # Q2's splash, M1 Plus's
 for data in (b'', b'not a JPEG', frame, frame + bytes(8),
              b'\xff\xd8\xff', b'\xff\xd8\xff\xe0\x00',
              b'\xff\xd8\xff\xe0\x00\x01', b'\xff\xd8\xff\xd9' + logo[2:],
@@ -114,6 +115,177 @@ def logo_check(s11logo=None):
     print(f'Boot logo ({"built S11logo" if s11logo else "LOGO_HOOK"}): the saved card logo, else the built-in splash, passed.')
 logo_check()
 
+def shared_checks(directory, manifest, stock, demo, read):
+    """What both models' builds share: the identity strings in demo, the M4B cover dispatcher, the
+    helpers and init scripts, bluealsa, the watchdog and hciplayer."""
+    import re, struct, subprocess
+    from build import (sha, run, fileoff, segments, symbols, ROOT, TAG_C, patch_m4b_cover, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK,
+                       REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG,
+                       WATCHDOG_SLEEP, BLUEALSA, AAC_44K1, STOCK_EQ)
+    from peq import PLAYER_PROFILES
+    m1plus = manifest['model'] == 'Shanling M1 Plus'
+    assert manifest['version'].encode()+b'\0' in demo
+    # The RTC is written in UTC: the one hwclock -w literal gains -u in its own padding.
+    assert demo.index(RTC_WRITE[1]) == stock.index(RTC_WRITE[0])
+    # The lock window's 12-hour clock reads hour:minutes (H:mm), in stock HH:TT's slot after its 24-hour hh:mm.
+    assert demo.index(LOCK_CLOCK_12H[1]) == stock.index(LOCK_CLOCK_12H[0]) and LOCK_CLOCK_12H[0] not in demo
+    tag_old, tag_new = read('stock.squashfs', TAG_C), read('rootfs.squashfs', TAG_C)
+    assert tag_new == patch_m4b_cover(tag_old, m1plus=m1plus)
+    assert manifest['changed_assets'][TAG_C] == dict(original_sha256=sha(tag_old), sha256=sha(tag_new))
+    tag_segment = segments(tag_new)[-1][1]
+    assert tag_segment[0] == 1 and tag_segment[2] == 0x30000 and tag_segment[4:7] == (48, 48, 5)
+    # Videos' player: an ELF with the stock binaries' ABI flags (nan2008, o32, mips32r2).
+    helper = read('rootfs.squashfs', HELPER)
+    assert sha(helper) == manifest['q2video_sha256'] and helper[:4] == b'\x7fELF'
+    assert helper[36:40] == read('stock.squashfs', HELPER_LIKE)[36:40]
+    # Rockbox's dual boot: q2boot likewise, and S90play differs from stock only in starting demo.
+    boot = read('rootfs.squashfs', BOOT)
+    assert sha(boot) == manifest['q2boot_sha256'] and boot[:4] == b'\x7fELF' and boot[36:40] == helper[36:40]
+    expected_start = read('stock.squashfs', S90PLAY).replace(*BOOT_HOOK)
+    if manifest['dev']:
+        remote = read('rootfs.squashfs', REMOTE)
+        assert sha(remote) == manifest['q2remote_sha256'] and remote[:4] == b'\x7fELF'
+        assert remote[36:40] == helper[36:40]
+        expected_start = expected_start.replace(*REMOTE_HOOK)
+    else:
+        assert 'q2remote_sha256' not in manifest
+        assert not (directory/'q2remote').exists()
+        absent = subprocess.run(['unsquashfs', '-cat', str(directory/'rootfs.squashfs'), REMOTE],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        assert absent.returncode != 0, 'release rootfs contains q2remote'
+    assert read('rootfs.squashfs', S90PLAY) == expected_start
+    assert read('rootfs.squashfs', S11LOGO) == read('stock.squashfs', S11LOGO).replace(*LOGO_HOOK)  # the card's logo, if saved
+    # bluealsa: AAC capability, the two DROP jumps, and one appended LOAD payload.
+    from build import BT_DROP, BT_DROP_HANDLER, BT_DROP_PAYLOAD, patch_bluealsa, segments
+    old, new = read('stock.squashfs', BLUEALSA), read('rootfs.squashfs', BLUEALSA)
+    header = segments(old)[-1][0]
+    allowed = {AAC_44K1, *range(header, header+32)}
+    for address in (BT_DROP, BT_DROP_HANDLER):
+        off = fileoff(old, address)
+        allowed.update(range(off, off+8))
+    assert {i for i in range(len(old)) if old[i] != new[i]} <= allowed
+    assert new == patch_bluealsa(old)
+    assert segments(new)[-1][1][2] == BT_DROP_PAYLOAD
+    assert new[AAC_44K1] == 0 and manifest['bluealsa_sha256'] == sha(new)
+    from bluealsa import check as check_bluetooth_drop
+    check_bluetooth_drop(directory)
+    from build import SCROBBLE_CA
+    assert read('rootfs.squashfs', SCROBBLE_CA) == (ROOT/'assets/scrobble-ca.pem').read_bytes()
+    # The crash watchdog only sleeps longer.
+    old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
+    assert new == old.replace(*WATCHDOG_SLEEP) and new != old
+    # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates
+    # and the ID3v2 walker calls, now id3_gain (MP3 ReplayGain); each model's at its own addresses.
+    old, new = read('stock.squashfs', 'usr/bin/hciplayer'), read('rootfs.squashfs', 'usr/bin/hciplayer')
+    profile = PLAYER_PROFILES[sha(old)]
+    assert manifest['peq']['stock_sha256'] == sha(old) and manifest['peq']['sha256'] == sha(new)
+    assert (directory/'peq'/'stock-hciplayer').read_bytes() == old
+    text = re.search(r'\.text +PROGBITS +[0-9a-f]+ ([0-9a-f]+) ([0-9a-f]+) ', run('readelf', '-SW', directory/'peq'/'stock-hciplayer'))
+    start, size = int(text[1], 16), int(text[2], 16)
+    off = fileoff(old, profile['vbr_scan'])
+    gates = [fileoff(old, a) for a in (*(a for a, _, _ in profile['eq_rate_gates']), *profile['id3_calls'])]
+    differ = [i for i in range(start, start+size) if old[i] != new[i]]
+    assert set(differ) <= {*range(off, off+4), *(i for g in gates for i in range(g, g+4))} and not any(new[off:off+4])
+    assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in profile['eq_rate_gates']] == [p for _, _, p in profile['eq_rate_gates']]
+    id3_gain = symbols(directory/'peq'/'peq.elf')['id3_gain']
+    assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in profile['id3_calls']} == {0x0c000000 | id3_gain >> 2}
+    names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
+    assert not {'squashfs-root/'+rel for rel in STOCK_EQ} & names, 'Stock EQ assets remain'
+    # The init scripts as the device runs them, not only build.py's fragments.
+    boot_check(read('rootfs.squashfs', S90PLAY))
+    logo_check(read('rootfs.squashfs', S11LOGO))
+
+def m1plus_checks(directory, manifest, stock, demo, read):
+    """An M1 Plus build changes V2.1's demo only at M1PLUS_HOOKS, window_manager_paint and the
+    identity strings, and its rootfs only in the files build.py names; and V2.1 still provides
+    what the boot hook relies on."""
+    import filecmp, os, pathlib, re, struct, subprocess, tempfile
+    from build import (sha, run, fileoff, segments, symbols, pic_gp, BASE, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS,
+                       PDR_M1PLUS, RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ, OBSOLETE, HELPER,
+                       BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, WATCHDOG, S90PLAY, S11LOGO)
+    ps = symbols(directory/'patch.elf')
+    payload = (directory/'patch.bin').read_bytes()
+    assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
+    # Only the Stock UI exists for M1 Plus so far, and none of Q2's call-site patches apply to V2.1.
+    assert manifest['variant'] == 'stock' and manifest['compact_code'] == [] and manifest['audio_extension_calls'] == []
+    assert set(manifest['changed_assets']) == {TAG_C}
+    stock_syms = symbols(directory/'stock-demo')
+    allowed = set()  # demo file offsets the build may change
+    def jumped(address, name):
+        off = fileoff(stock, address)
+        assert demo[off:off+8] == struct.pack('<II', 0x08000000 | ps[name] >> 2, 0), f'{name}: no jump at {address:#x}'
+        allowed.update(range(off, off+8))
+    # Each hook: V2.1's own symbol, a PIC entry resolving V2.1's GOT base (the trampoline restores
+    # it), now a jump to its payload replacement.
+    for name, (address, replacement, _) in M1PLUS_HOOKS.items():
+        assert stock_syms[name] == address and pic_gp(stock, address) == M1PLUS_GP, name
+        jumped(address, replacement)
+    name, address, replacement, words = WM_PAINT_LEAF_M1PLUS
+    assert stock_syms[name] == address and struct.unpack_from('<III', stock, fileoff(stock, address)) == words
+    jumped(address, replacement)
+    # The one version literal takes the 5-character tag; the byte past V2.1's NUL is padding.
+    at, n = stock.index(b'V2.1\0'), len(manifest['version']) + 1
+    assert stock.count(b'V2.1\0') == 1 and stock[at+5:at+n] == bytes(n-5) and demo[at:at+n] == manifest['version'].encode()+b'\0'
+    allowed.update(range(at, at+n))
+    for old, new in (RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H):  # same-length literals in place
+        at = stock.index(old)
+        assert stock.count(old) == 1 and len(new) == len(old) and demo[at:at+len(old)] == new, old
+        allowed.update(range(at, at+len(old)))
+    off, size = PDR_M1PLUS  # .pdr, past every LOAD segment, ships zeroed
+    assert demo[off:off+size] == bytes(size) and any(stock[off:off+size])
+    assert all(p[1]+p[4] <= off for _, p in segments(stock) if p[0] == 1)
+    allowed.update(range(off, off+size))
+    # The payload: stock's final PT_NULL header becomes its LOAD segment, R/W/X at BASE, after stock's bytes.
+    old_segs, new_segs = segments(stock), segments(demo)
+    assert [h for h, _ in old_segs] == [h for h, _ in new_segs] and [p for _, p in old_segs[:-1]] == [p for _, p in new_segs[:-1]]
+    assert old_segs[-1][1][0] == 0
+    start = (len(stock) + 65535) & ~65535
+    assert new_segs[-1][1] == (1, start, BASE, BASE, len(payload), ps['__scratch_end'] - BASE, 7, 65536)
+    assert demo[len(stock):start] == bytes(start - len(stock)) and demo[start:] == payload
+    allowed.update(range(new_segs[-1][0], new_segs[-1][0] + 32))
+    def stray(image):
+        changed = set()
+        for block in range(0, len(stock), 4096):
+            if stock[block:block+4096] != image[block:block+4096]:
+                changed.update(i for i in range(block, min(block+4096, len(stock))) if stock[i] != image[i])
+        return sorted(changed - allowed)
+    assert not stray(demo), f'demo differs from V2.1 outside the audited sites: {[hex(i) for i in stray(demo)[:8]]}'
+    damaged = bytearray(demo)  # one changed .text word next to a hook is caught
+    damaged[fileoff(stock, M1PLUS_HOOKS['on_wm_keyup_fun'][0]) + 8] ^= 1
+    assert stray(damaged), 'The demo audit accepted an unaudited change'
+    # rootfs: the same files as V2.1 but for the ones build.py replaces, adds and removes.
+    xx = 'release/assets/default/raw/images/xx/'
+    added = {xx+n for n in ICONS} | {xx+f'local_{n}.png' for n in ('shuffle', 'scrobble', 'podcasts', 'audiobooks', 'photos',
+                                                                    'books', 'videos', 'longsongs')} | {
+             xx+f'stream_{n}.png' for n in ('spotify', 'radio', 'airplay')} | {HELPER, SCROBBLE_CA, BOOT} | ({REMOTE} if manifest['dev'] else set())
+    replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, WATCHDOG, S90PLAY, S11LOGO, TAG_C}
+    logo = xx+'logo.jpg'
+    with tempfile.TemporaryDirectory(prefix='m1-rootfs-') as tmp:
+        trees = {}
+        for image in ('stock.squashfs', 'rootfs.squashfs'):
+            run('unsquashfs', '-q', '-no-xattrs', '-d', f'{tmp}/{image}', directory/image)
+            files = trees[image] = {}
+            for root, dirs, names in os.walk(f'{tmp}/{image}'):
+                for name in dirs + names:
+                    path = os.path.join(root, name)
+                    files[os.path.relpath(path, f'{tmp}/{image}')] = path
+        old, new = trees['stock.squashfs'], trees['rootfs.squashfs']
+        removed = {p for p in STOCK_EQ + OBSOLETE if p in old}
+        assert set(new) == (set(old) - removed) | added, (set(new) ^ ((set(old) - removed) | added))
+        differ = {p for p in set(old) & set(new) if os.path.isfile(old[p]) and not os.path.islink(old[p])
+                  and not filecmp.cmp(old[p], new[p], shallow=False)}
+        assert differ - {logo} == replaced, differ ^ replaced
+        logo_new = pathlib.Path(new[logo]).read_bytes()
+        assert sha(logo_new) == manifest['logo_sha256'] and (logo not in differ) == (manifest['logo_source'] == 'stock')
+        # The boot hook's assumptions about V2.1: the card script announces a mounted card, and
+        # q2boot's Play/Pause (KEY_PLAYPAUSE) is on the "md-gpio-keys" device.
+        stock_file = lambda rel: pathlib.Path(old[rel]).read_bytes()
+        assert re.search(rb'^\s*touch +/tmp/mmc_add$', stock_file('etc/mdev/add_removesd.sh'), re.M)
+        assert re.search(rb'mmcblk\[0-9\]p\[0-9\] .* /etc/mdev/add_removesd\.sh', stock_file('etc/mdev.conf'))
+        assert re.search(rb'^echo gpio="\w+" key_code=164 tag="KEY_PLAYPAUSE"', stock_file('module_driver/keyboard_gpio_add.sh'), re.M)
+        assert b'md-gpio-keys\0' in stock_file('module_driver/keyboard_gpio_add.ko')
+        assert b'sh keyboard_gpio_add.sh' in stock_file('module_driver/driver_default_init_script.sh')
+
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
     from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, WHEEL_TS_READ, PDR
@@ -122,10 +294,19 @@ def validate_assets(directory):
                       NP_BAR, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
                       STATUS_ICONS, status_icon, QUIET_ICONS, quiet_icon, SET_ICON, SET_STOCK_ICON, SETTINGS_ICONS, SETTINGS_SLIDERS, decode, slider_plain, imagemagick, inc, png_header, settings_icon, walk,
                       patch_asset, patch_code, patch_style, style_props, SLIDE)
+    from build import source_sha256
     manifest = json.loads((directory/'manifest.json').read_text())
+    assert manifest['source_sha256'] == source_sha256(), f'{directory} was built from other sources; rebuild into a fresh directory'
     ipod = manifest['variant'] == 'ipod'
     stock = (directory/'stock-demo').read_bytes()
     demo = (directory/'demo').read_bytes()
+    def read(image, rel):
+        return subprocess.check_output(['unsquashfs', '-cat', str(directory/image), rel])
+    shared_checks(directory, manifest, stock, demo, read)
+    if manifest['model'] == 'Shanling M1 Plus':
+        m1plus_checks(directory, manifest, stock, demo, read)
+        print(f'M1 Plus {manifest["variant"]}: hook jumps, demo diff, rootfs file parity and boot scripts passed.')
+        return
     # All original executable bytes outside the reviewed hooks, version and compact sites
     # must remain stock; the payload and ELF mapping are independently hashed by the runner.
     if not ipod:
@@ -134,13 +315,8 @@ def validate_assets(directory):
             for address, _ in group['sites']:
                 off = fileoff(stock, int(address, 16))
                 assert demo[off:off+4] == stock[off:off+4]
-    assert manifest['version'].encode()+b'\0' in demo
     # .pdr (build.py PDR), past every LOAD segment, ships zeroed.
     assert demo[PDR[0]:PDR[0]+PDR[1]] == bytes(PDR[1]) and any(stock[PDR[0]:PDR[0]+PDR[1]])
-    # The RTC is written in UTC: the one hwclock -w literal gains -u in its own padding.
-    assert demo.index(RTC_WRITE[1]) == stock.index(RTC_WRITE[0])
-    # The lock window's 12-hour clock reads hour:minutes (H:mm), in stock HH:TT's slot after its 24-hour hh:mm.
-    assert demo.index(LOCK_CLOCK_12H[1]) == stock.index(LOCK_CLOCK_12H[0]) and LOCK_CLOCK_12H[0] not in demo
     # The slide hint names a stock animator and gives it a duration (a missing one means stock's 500 ms).
     assert re.fullmatch(r'htranslate\(duration=\d+\)', SLIDE) and b'\0htranslate\0' in stock
     # Only iPod's animated lookup pages need synchronous unwind; Stock keeps its Back calls.
@@ -170,8 +346,6 @@ def validate_assets(directory):
     assert set(changed) == {'release/assets/default/raw/ui/'+p for p in (UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])} | {
         'release/assets/default/raw/styles/'+p for p in (AUDIT['styles'] if ipod else [])} | {
         xx+n for n in (SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS | ART_PLACEHOLDERS if ipod else [])} | {'release/assets/default/raw/strings/en_US.bin', FONT, TAG_C}
-    def read(image, rel):
-        return subprocess.check_output(['unsquashfs', '-cat', str(directory/image), rel])
     master = (ROOT/'assets/icons/default_album_home.png').read_bytes()
     for name, size in ART_PLACEHOLDERS.items():
         old, new = read('stock.squashfs', xx+name), read('rootfs.squashfs', xx+name)
@@ -185,12 +359,6 @@ def validate_assets(directory):
         flow = read('rootfs.squashfs', xx+'default_album_flow.png')
         assert flow == sized_art(master, 160) and png_header(flow) == (160, 160, 8, 6)
         assert read('rootfs.squashfs', xx+'default_album_home.png') == master
-    tag_old, tag_new = read('stock.squashfs', TAG_C), read('rootfs.squashfs', TAG_C)
-    assert tag_new == patch_m4b_cover(tag_old)
-    assert changed[TAG_C] == dict(original_sha256=sha(tag_old), sha256=sha(tag_new))
-    from build import segments
-    tag_segment = segments(tag_new)[-1][1]
-    assert tag_segment[0] == 1 and tag_segment[2] == 0x30000 and tag_segment[4:7] == (48, 48, 5)
     if ipod:
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.ttf') as font:
@@ -232,43 +400,6 @@ def validate_assets(directory):
         runtime = imagemagick('-size', f'{SET_ICON}x{SET_ICON}', '-depth', '8', 'rgba:-', '-define', 'png:color-type=6', 'png:-', data=bytes(px))
         values = mean(runtime, '#000000')  # Minimal's black list: neutral grey
         assert max(values) - min(values) < 0.001, name
-    # Videos' player: an ELF with the stock binaries' ABI flags (nan2008, o32, mips32r2).
-    helper = read('rootfs.squashfs', HELPER)
-    assert sha(helper) == manifest['q2video_sha256'] and helper[:4] == b'\x7fELF'
-    assert helper[36:40] == read('stock.squashfs', HELPER_LIKE)[36:40]
-    # Rockbox's dual boot: q2boot likewise, and S90play differs from stock only in starting demo.
-    boot = read('rootfs.squashfs', BOOT)
-    assert sha(boot) == manifest['q2boot_sha256'] and boot[:4] == b'\x7fELF' and boot[36:40] == helper[36:40]
-    expected_start = read('stock.squashfs', S90PLAY).replace(*BOOT_HOOK)
-    if manifest['dev']:
-        remote = read('rootfs.squashfs', REMOTE)
-        assert sha(remote) == manifest['q2remote_sha256'] and remote[:4] == b'\x7fELF'
-        assert remote[36:40] == helper[36:40]
-        expected_start = expected_start.replace(*REMOTE_HOOK)
-    else:
-        assert 'q2remote_sha256' not in manifest
-        assert not (directory/'q2remote').exists()
-        absent = subprocess.run(['unsquashfs', '-cat', str(directory/'rootfs.squashfs'), REMOTE],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        assert absent.returncode != 0, 'release rootfs contains q2remote'
-    assert read('rootfs.squashfs', S90PLAY) == expected_start
-    assert read('rootfs.squashfs', S11LOGO) == read('stock.squashfs', S11LOGO).replace(*LOGO_HOOK)  # the card's logo, if saved
-    # bluealsa: AAC capability, the two DROP jumps, and one appended LOAD payload.
-    from build import BT_DROP, BT_DROP_HANDLER, BT_DROP_PAYLOAD, patch_bluealsa, segments
-    old, new = read('stock.squashfs', BLUEALSA), read('rootfs.squashfs', BLUEALSA)
-    header = segments(old)[-1][0]
-    allowed = {AAC_44K1, *range(header, header+32)}
-    for address in (BT_DROP, BT_DROP_HANDLER):
-        off = fileoff(old, address)
-        allowed.update(range(off, off+8))
-    assert {i for i in range(len(old)) if old[i] != new[i]} <= allowed
-    assert new == patch_bluealsa(old)
-    assert segments(new)[-1][1][2] == BT_DROP_PAYLOAD
-    assert new[AAC_44K1] == 0 and manifest['bluealsa_sha256'] == sha(new)
-    from bluealsa import check as check_bluetooth_drop
-    check_bluetooth_drop(directory)
-    from build import SCROBBLE_CA
-    assert read('rootfs.squashfs', SCROBBLE_CA) == (ROOT/'assets/scrobble-ca.pem').read_bytes()
     # Curly quotes draw the straight glyphs and ♡ takes ♥'s box and advance; other tables keep their
     # stock bytes (head: its checksum).
     from build import QUOTES
@@ -281,31 +412,17 @@ def validate_assets(directory):
     assert abs(g[empty].xMin - g[full].xMin) <= 1 and abs(g[empty].xMax - g[full].xMax) <= 1
     assert abs(g[empty].yMin - g[full].yMin) <= 1 and abs(g[empty].yMax - g[full].yMax) <= 1
     assert all(new.reader[t] == old.reader[t] for t in old.reader.keys() if t not in ('cmap', 'head', 'glyf', 'loca', 'hmtx'))
-    # The crash watchdog only sleeps longer; check_mem_thd's drop_caches write is branched over.
-    old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
-    assert new == old.replace(*WATCHDOG_SLEEP) and new != old
+    # check_mem_thd's drop_caches write is branched over.
     off = fileoff(stock, DROP_CACHES[0])
     assert struct.unpack_from('<I', stock, off)[0] == DROP_CACHES[1] and struct.unpack_from('<I', demo, off)[0] == DROP_CACHES[2]
     # The encoder thread's ts_read call goes through ringnav_ts_read (playback.c wheel_sample).
     off = fileoff(stock, WHEEL_TS_READ[0])
     assert struct.unpack_from('<I', stock, off)[0] == WHEEL_TS_READ[1]
     assert struct.unpack_from('<I', demo, off)[0] == 0x0c000000 | symbols(directory/'patch.elf')['ringnav_ts_read'] >> 2
-    # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates
-    # and the ID3v2 walker calls, now id3_gain (MP3 ReplayGain).
-    from peq import VBR_SCAN, EQ_RATE_GATES, ID3_CALLS
-    old, new = read('stock.squashfs', 'usr/bin/hciplayer'), read('rootfs.squashfs', 'usr/bin/hciplayer')
-    off = fileoff(old, VBR_SCAN)
-    gates = [fileoff(old, a) for a in (*(a for a, _, _ in EQ_RATE_GATES), *ID3_CALLS)]
-    differ = [i for i in range(0x3e40, 0x485250) if old[i] != new[i]]
-    assert set(differ) <= {*range(off, off+4), *(i for g in gates for i in range(g, g+4))} and not any(new[off:off+4])
-    assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in EQ_RATE_GATES] == [p for _, _, p in EQ_RATE_GATES]
-    id3_gain = symbols(directory/'peq'/'peq.elf')['id3_gain']
-    assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in ID3_CALLS} == {0x0c000000 | id3_gain >> 2}
     # Include every excluded UI screen and saved-preference defaults in byte parity checks.
     paths = [l.removeprefix('squashfs-root/') for l in run('unsquashfs', '-l', directory/'stock.squashfs').splitlines()
              if ('/raw/ui/' in l or '/raw/styles/' in l) and l.endswith('.bin') or l.endswith('/config.ini')]
     names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
-    assert not {'squashfs-root/'+rel for rel in STOCK_EQ} & names, 'Stock EQ assets remain'
     # iPod drops the carousel images and adds no Coverflow icons; Stock keeps both.
     icons = {'squashfs-root/release/assets/default/raw/images/xx/'+n for n in ICONS}
     carousel = {'squashfs-root/'+rel for rel in CAROUSEL}
@@ -625,11 +742,19 @@ if __name__ == '__main__':
     if args.build: validate_assets(args.build)
     if args.zip:
         # Reproducibility and update.tar's MD5s are release.py package's; this covers the logo and quoting.
-        for ipod in (False, True):
+        from build import INPUTS, M1PLUS_BIN_SHA
+        assert sha(args.zip.read_bytes()) in INPUTS, f'{args.zip}: not an audited firmware'
+        m1plus = INPUTS[sha(args.zip.read_bytes())][1] == M1PLUS_BIN_SHA
+        card_logo = logo
+        if m1plus:  # its splash is 320x480: a stand-in in the stock baseline RGB format
+            from ipod import imagemagick
+            card_logo = imagemagick('-size', '320x480', 'gradient:#335-#c96', '-type', 'TrueColor', '-strip', 'jpg:-', data=b'')
+            assert jpeg_size(card_logo) == (320, 480)
+        for ipod in (False,) if m1plus else (False, True):
           with tempfile.TemporaryDirectory(prefix='q2-package-') as tmp:
               root=pathlib.Path(tmp)
               custom=root/"custom ' logo.jpg"
-              custom.write_bytes(logo)
+              custom.write_bytes(card_logo)
               def change_source(*command):
                   if command[0]=='mksquashfs': custom.write_bytes(b'edited during compression')
                   return run(*command)
@@ -638,8 +763,12 @@ if __name__ == '__main__':
                   build(args.zip,a,custom,ipod)
               validate_assets(a)
               manifest=json.loads((a/'manifest.json').read_text())
-              assert manifest['logo_sha256']==sha(logo)
-              for rel,expected in [('release/assets/default/raw/images/xx/logo.jpg',logo),
+              assert manifest['logo_sha256']==sha(card_logo) and manifest['logo_source']=='custom'
+              for rel,expected in [('release/assets/default/raw/images/xx/logo.jpg',card_logo),
                                    ('release/bin/demo',(a/'demo').read_bytes())]:
                   assert subprocess.check_output(['unsquashfs','-cat',str(a/'rootfs.squashfs'),rel])==expected
+              if m1plus:  # no iPod UI for M1 Plus yet, so no build may claim one
+                  try: build(args.zip, root/'ipod', custom, True)
+                  except ValueError as e: assert 'no iPod build' in str(e), e
+                  else: raise AssertionError('Built an M1 Plus iPod variant')
               print('Packaging, mutable logo and quoted paths checks passed.')
