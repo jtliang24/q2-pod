@@ -3,6 +3,7 @@
 Requires unicorn==2.1.4. Does not emulate the entire device or flash hardware.
 """
 import json, math, pathlib, re, sqlite3, struct, sys
+from functools import cmp_to_key
 from unicorn import Uc, UcError, UC_ARCH_MIPS, UC_MODE_MIPS32, UC_MODE_LITTLE_ENDIAN, UC_HOOK_CODE, UC_HOOK_BLOCK
 from unicorn.mips_const import *
 sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first
@@ -22,7 +23,27 @@ def mmss(t): return t if variant=='ipod' else re.sub(r'^(-?)(\d):',r'\g<1>0\2:',
 v = VERSIONS.get(variant, '')
 assert v and manifest['version'] == (dev_tag(manifest['dev'], v[-1]) if manifest.get('dev') else v), 'Wrong variant/version'
 assert (manifest.get('compact_code') != []) == (variant == 'ipod')
+is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
 from ipod import INC, O  # patch/offsets.inc and its integer #defines
+if is_m1plus:
+    from build import run, M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
+    inc_m1 = run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c', '-I', '.', str(ROOT/'patch/offsets.inc'))
+    O = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b', inc_m1, re.M)}
+    HOOKS = dict(M1PLUS_HOOKS)
+    HOOKS['on_wm_keyup_before_fun'] = M1PLUS_HOOKS['on_wm_keyup_fun']
+    HOOKS['on_wm_tsdown_before_fun'] = M1PLUS_HOOKS['on_wm_before_tsdown_fun']
+    HOOKS['localmusic_page_init'] = M1PLUS_HOOKS['localclass_page_init']
+    HOOKS['load_localclass_list'] = M1PLUS_HOOKS['loadLocalClassList']
+    HOOKS['load_album_detaillist'] = M1PLUS_HOOKS['loadAlbumdetailList']
+    HOOKS['player_change_music'] = M1PLUS_HOOKS['change_music']
+    HOOKS['saverscreen_page_init'] = M1PLUS_HOOKS['screensaver_page_init']
+    HOOKS['stream_page_init'] = (payload_syms['ringnav_stream'], 'ringnav_stream', 'stream')
+    WM_PAINT_LEAF = WM_PAINT_LEAF_M1PLUS
+    FREE_GOT = 0xa032f4
+else:
+    FREE_GOT = 0xa2638c
+PLAY_STATUS = 0xa0abe4 if is_m1plus else 0xa3beac
+OUTPUT_WAY = 0xa0abe8 if is_m1plus else 0xa3beb0
 DC=O['DOUBLE_CLICK_MS']  # centre double-press window
 # iPod accent presets: {gradient top, bottom, light tone, red tone, highlight} per Accent setting value.
 ACCENTS=[tuple(int(v,16) for v in g) for g in re.findall(r'\{ 0x(\w+), 0x(\w+), 0x(\w+), 0x(\w+), 0x(\w+) \}',INC)]
@@ -32,7 +53,27 @@ CONFIG={}  # config.ini [IPOD] keys a new Machine starts with; the payload reads
 FILL,SHADE,OUTLINE=((O[a]<<24)|O[c] for a,c in (('FILL_ALPHA','FILL_RGB'),('SHADE_ALPHA','FILL_RGB'),('OUTLINE_ALPHA','OUTLINE_RGB')))
 LCD_COLORS=(0x9abcdef0,0x12345678)
 syms=symbols(B/'stock-demo')
-syms.update(PRIVATE_FUNCTIONS)
+if is_m1plus:
+    from build import m1plus_symbols, run
+    syms, _ = m1plus_symbols(syms, run('readelf', '-sW', str(B/'stock-demo')))
+    for k in ('g_testmode_flag', 'g_poweroff_state', 'g_ingore_bootkey_flag', 'g_keytone_flag',
+              'g_artist_type', 'album_modetype', 'g_playcover_mutex', 'g_lastcover_url'):
+        stub = f'm1stub_{k}'
+        if stub in payload_syms:
+            syms[k] = payload_syms[stub]
+    for old, new in (
+        ('g_sort_changeflag', 'sort_changeflag'),
+        ('g_output_way', 'output_way'),
+        ('g_power_capacity', 'power_capacity'),
+        ('g_power_chargestate', 'pmucharge_status'),
+        ('g_screensaver_picture', 'screensaver_picture'),
+        ('p_deque_screensaverlist', 'pdeq_screensaverlist'),
+        ('g_playcover_finishflag', 'albumcover_finishflag'),
+    ):
+        if new in syms:
+            syms[old] = syms[new]
+else:
+    syms.update(PRIVATE_FUNCTIONS)
 VG_MOCKS=[n for n in syms if n.startswith(('vgcanvas_','vg_gradient_'))]
 
 def _fp64_fix():
@@ -57,6 +98,8 @@ def signed(x): return x if x<0x80000000 else x-0x100000000
 class Machine:
     def __init__(self, patched=True):
         self.u=Uc(UC_ARCH_MIPS, UC_MODE_MIPS32|UC_MODE_LITTLE_ENDIAN)
+        st = self.u.reg_read(UC_MIPS_REG_CP0_STATUS)
+        self.u.reg_write(UC_MIPS_REG_CP0_STATUS, st | (1 << 26) | (1 << 29))
         data=(B/('demo' if patched else 'stock-demo')).read_bytes()
         load_elf(self.u,data)
         # Payload text is execute-only; its top page holds the scratch cell.
@@ -65,7 +108,7 @@ class Machine:
         self.u.mem_map(0x1000000,0x200000)
         self.u.mem_map(0x70000000,0x10000)
         self.next=0x1001000; self.nodes={}; self.calls=[]; self.animating=0; self.pressed=0
-        self.top=0; self.wm=0x1000000; self.event=0x1000100
+        self.top=0; self.wm=0x1000000; self.event=0x1000400
         self.strokes=[]; self.rounded=[]; self.bands=[]; self.icons=[]; self.letters=[]; self.font=None; self.vg_calls=[]; self.fake_vg=0; self.global_alpha=0
         self.rounded_fail=False
         self.allocs={}; self.config=dict(CONFIG); self.config_reads=[]
@@ -73,21 +116,24 @@ class Machine:
         self.timers={}; self.next_timer=1; self.timer_fail=False; self.clicks=[]; self.started=[]
         self.screens=[]
         self.props={}; self.slides={}; self.slide_fail=False; self.slide_on_fail=False; self.slide_callbacks={}
-        self.canvas=0x1000200; self.lcd=0x1000300; self.now=1000
+        self.canvas=0x1000500; self.lcd=0x1000600; self.now=1000
         self.word(self.canvas+O['CANVAS_LCD'],self.lcd)
         for off,v in zip(('LCD_FILL_COLOR','LCD_STROKE_COLOR'),LCD_COLORS): self.word(self.lcd+O[off],v)
         self.clip=(0,0,240,240)
         self.handlers={}
-        for name in FUNCTIONS: self.handlers[syms[name]]=name
+        for name in FUNCTIONS:
+            if name in syms: self.handlers[syms[name]]=name
         # canvas_get_vgcanvas runs stock, down to the mocked lcd_get_vgcanvas, as the rounded wrappers need
         for name in ('slide_menu_item_width','slide_menu_on_scroll_done','canvas_get_vgcanvas',
                      'widget_animator_scroll_set_params','slide_menu_set_value','toolsTimeItoa','on_wm_keyup_fun'):
-            self.handlers.pop(syms[name],None)
+            if name in syms: self.handlers.pop(syms[name],None)
         self.mock('widget_is_instance_of','widget_animator_scroll_create','widget_animator_on',
                   'widget_set_focused','widget_layout_children','event_init','value_set_int')
         if patched:
             for name in ('paint','dispatch','paint_bg'):
-                self.handlers[int(manifest['patch_symbols']['stock_'+name+'_trampoline'],16)]='stock_'+name
+                key = 'stock_'+name+'_trampoline'
+                if key in manifest.get('patch_symbols', {}):
+                    self.handlers[int(manifest['patch_symbols'][key],16)]='stock_'+name
         self.mock('pthread_create@GLIBC_2.2','pthread_detach@GLIBC_2.0')
         self.mock('reset_poweroptions_timer','screen_action','enable_fb','usleep@GLIBC_2.0','sprintf@GLIBC_2.0',
                   'airplayGetFlag','playpause_quick_click','time@GLIBC_2.0','localtime@GLIBC_2.0',
@@ -99,22 +145,25 @@ class Machine:
         self.image_size=(50,50)  # what widget_load_image decodes
         self.clock=(18,14)  # local (hour, minute) for time/localtime, or the one of them that fails
         self.rockbox_mode=0o100755
-        self.handlers[syms['__xstat@GLIBC_2.0']]='rockbox_stat'
-        self.handlers[syms['strcmp@GLIBC_2.0']]='tk_strcmp'
-        self.handlers[syms['memcpy@GLIBC_2.0']]='memcpy'
-        self.handlers[syms['memset@GLIBC_2.0']]='memset'
+        for glibc_sym, handler in (('__xstat@GLIBC_2.0', 'rockbox_stat'),
+                                   ('strcmp@GLIBC_2.0', 'tk_strcmp'),
+                                   ('memcpy@GLIBC_2.0', 'memcpy'),
+                                   ('memset@GLIBC_2.0', 'memset')):
+            if glibc_sym in syms: self.handlers[syms[glibc_sym]] = handler
         self.mock('canvas_set_global_alpha')
         self.mock('sqrtf@GLIBC_2.0','sinf@GLIBC_2.0','acosf@GLIBC_2.0',prefix='float:')
         self.mock(*VG_MOCKS,prefix='vg:')
         self.code_hook=self.u.hook_add(UC_HOOK_CODE,self.hook)
-        for name in GLOBALS: self.byte(syms[name],0)
-        for name,size in CONTEXT_DATA.items(): self.u.mem_write(syms[name],bytes(size))
-        self.word(syms['g_class_type'],0xf001)
-        self.byte(syms['g_backlight_status'],1)
+        for name in GLOBALS:
+            if name in syms and (patched or syms[name] < BASE): self.byte(syms[name],0)
+        for name,size in CONTEXT_DATA.items():
+            if name in syms and (patched or syms[name] < BASE): self.u.mem_write(syms[name],bytes(size))
+        if 'g_class_type' in syms: self.word(syms['g_class_type'],0xf001)
+        if 'g_backlight_status' in syms: self.byte(syms['g_backlight_status'],1)
     def probe_canvas(self, lcd_type=1, vg=0, rect=(10,10,100,40), color=None):
         """Real stock canvas code runs; mock only the services it reaches."""
-        for n in ('canvas_fill_rounded_rect','canvas_stroke_rounded_rect','canvas_set_fill_color'):
-            del self.handlers[syms[n]]
+        for n in ('canvas_fill_rounded_rect','canvas_stroke_rounded_rect','canvas_stroke_rounded_rect_ex','canvas_set_fill_color'):
+            if n in syms and syms[n] in self.handlers: del self.handlers[syms[n]]
         self.mock('lcd_get_vgcanvas'); self.mock('tk_calloc','tk_free',prefix='alloc:')
         for off,val in ((0x10,0),(0x14,0),(0x18,239),(0x1c,239)): self.word(self.canvas+off,val)
         self.word(self.lcd+0xd0,lcd_type)
@@ -124,7 +173,14 @@ class Machine:
         self.word(self.color,FILL if color is None else color)
     def lcd_colors(self): return tuple(self.get(self.lcd+O[off]) for off in ('LCD_FILL_COLOR','LCD_STROKE_COLOR'))
     def mock(self,*names,prefix=''):
-        for n in names: self.handlers[syms[n]]=prefix+n
+        for n in names:
+            if is_m1plus and n == 'on_wm_keyup_fun':
+                addr = int(manifest['patch_symbols']['stock_keyup_trampoline'], 16)
+            else:
+                addr = syms.get(n) or (payload_syms.get(n) if is_m1plus else None)
+            if addr:
+                self.handlers[addr]=prefix+n
+                if BASE<=addr<SCRATCH: self.u.hook_add(UC_HOOK_CODE,self.hook,begin=addr,end=addr)
     def folder(self,path,w=None):
         """Set the browsed folder; with a surface, also scroll it home and repaint."""
         self.u.mem_write(syms['g_folder_path'],path.encode()+b'\0')
@@ -196,7 +252,7 @@ class Machine:
             self.calls.append(('widget_animator_scroll_set_params',*[u.reg_read(r) for r in REGS[:3]]))
         if address not in self.handlers: return
         name=self.handlers[address]
-        if not name.startswith('stock_'):
+        if not name.startswith('stock_') and (not is_m1plus or address not in payload_syms.values()):
             assert u.reg_read(UC_MIPS_REG_T9)==address, (name,'PIC call missing t9')
         a,b,c,d=[u.reg_read(r) for r in REGS]
         n=self.nodes.get(a,{})
@@ -308,8 +364,9 @@ class Machine:
         elif name in ('widget_set_visible','widget_set_visible_only','widget_set_sensitive'):
             n['sensitive' if name=='widget_set_sensitive' else 'visible']=b; ret=0
         elif name=='widget_animator_prop_create':
+            delay_off = 0x20 if is_m1plus else 0x24
             ret=self.alloc(0x80); self.word(ret+4,a); self.word(ret+O['ANIM_DURATION'],b)
-            self.word(ret+0x24,c); n['animated']=self.text(self.get(u.reg_read(UC_MIPS_REG_SP)+16)); assert n['animated'] in ('opacity','x')
+            self.word(ret+delay_off,c); n['animated']=self.text(self.get(u.reg_read(UC_MIPS_REG_SP)+16)); assert n['animated'] in ('opacity','x')
         elif name=='widget_animator_prop_set_params':
             assert self.get(u.reg_read(UC_MIPS_REG_SP)+16)==0 and self.get(u.reg_read(UC_MIPS_REG_SP)+20)==0
             if self.nodes[self.get(a+4)].get('animated')=='x':
@@ -348,7 +405,9 @@ class Machine:
                 self.next_timer+=1
                 self.timers[ret]=(self.now+c,a,b,c)
         elif name=='timer_remove': self.timers.pop(a,None); ret=0
-        elif name=='screen_action': self.screens.append(a); ret=1
+        elif name=='screen_action':
+            self.screens.append(a)
+            ret=1
         elif name=='player_start': self.started.append((a,b,c,d)); ret=1
         elif name in ('tk_strcmp','strcmp@GLIBC_2.0'): x,y=self.text(a),self.text(b); ret=0 if a and b and x==y else -1 if x<=y else 1
         elif name=='stock_dispatch':
@@ -381,7 +440,7 @@ class Machine:
                 if self.nodes.get(w,{}).get('type')=='slide_menu':
                     assert self.get(a+O['ANIM_ELAPSED'])==self.get(a+O['ANIM_START_TIME'])==0
                     self.slides[a]=(self.now,self.get(a+O['ANIM_DURATION']),w,
-                                    signed(self.get(a+0x68)),signed(self.get(a+O['ANIM_X_TO'])))
+                                    signed(self.get(a+O['ANIM_X_FROM'])),signed(self.get(a+O['ANIM_X_TO'])))
             ret=0
         elif name=='table_client_set_yoffset':
             assert self.get(a+O['TABLE_ANIMATOR'])==0
@@ -405,12 +464,13 @@ class Machine:
         elif name=='canvas_set_fill_color': self.word(self.lcd+O['LCD_FILL_COLOR'],b); ret=0
         elif name=='canvas_set_stroke_color': self.word(self.lcd+O['LCD_STROKE_COLOR'],b); ret=0
         elif name=='canvas_set_global_alpha': self.global_alpha+=1; ret=0
-        elif name in ('canvas_fill_rounded_rect','canvas_stroke_rounded_rect'):
+        elif name in ('canvas_fill_rounded_rect','canvas_stroke_rounded_rect','canvas_stroke_rounded_rect_ex'):
             sp=u.reg_read(UC_MIPS_REG_SP)
             # The stock rounded calls set the matching LCD color on their CPU branch; model that
             # stricter side effect so a missing restore fails the state assertions below.
             kind='fill' if name=='canvas_fill_rounded_rect' else 'stroke'
-            radius=self.get(sp+16); width=None if kind=='fill' else self.get(sp+20)
+            radius=self.get(sp+16)
+            width=None if kind=='fill' else (self.get(sp+32) if name=='canvas_stroke_rounded_rect_ex' else self.get(sp+20))
             self.rounded.append(dict(kind=kind,rect=tuple(signed(self.get(b+4*j)) for j in range(4)),
                 bg=signed(c),color=self.get(d),radius=radius,width=width,clip=self.clip))
             if kind=='stroke' and (self.rounded_fail is True or self.rounded_fail==radius):
@@ -475,10 +535,10 @@ class Machine:
         for a in list(self.handlers):
             if BASE<=a<SCRATCH: self.u.hook_add(UC_HOOK_CODE,self.hook,begin=a,end=a)
     budget=100000  # instructions per call
-    def call(self,key=O['KEY_NEXT'],address=HOOKS['on_wm_keyup_before_fun'][0],args=None,event_type=0x114,gap=1000,stack=(),clear=True,debounce=False,count=None):
+    def call(self,key=O['KEY_NEXT'],address=HOOKS['on_wm_keyup_before_fun'][0],args=None,event_type=O['EVT_KEY_UP'],gap=1000,stack=(),clear=True,debounce=False,count=None):
         # Independent input steps occur after the stock key debounce timer expires.
         if gap: self.advance(gap,clear=False)
-        if not debounce: self.byte(0xa37c89,0)  # stock key filter latch
+        if not debounce and not is_m1plus: self.byte(0xa37c89,0)  # stock key filter latch
         if clear: self.calls=[]; self.strokes=[]; self.rounded=[]; self.bands=[]; self.icons=[]; self.letters=[]; self.vg_calls=[]
         self.word(self.event+O['EVENT_KEY'],key)
         self.word(self.event+O['EVENT_TYPE'],event_type)
@@ -488,7 +548,14 @@ class Machine:
         for i,v in enumerate(stack): self.word(0x7000f010+4*i,v)
         for r,v in zip(REGS,args or (self.wm,self.event,0,0)): self.u.reg_write(r,v&0xffffffff)
         for i,r in enumerate(SAVED): self.u.reg_write(r,0x12340000+i)
-        self.u.emu_start(address,0x1000000,count=count or self.budget)
+        try:
+            self.u.emu_start(address,0x1000000,count=count or self.budget)
+        except UcError as e:
+            pc = self.u.reg_read(UC_MIPS_REG_PC)
+            ra = self.u.reg_read(UC_MIPS_REG_RA)
+            t9 = self.u.reg_read(UC_MIPS_REG_T9)
+            print(f'CRASH at PC={hex(pc)}, RA={hex(ra)}, T9={hex(t9)}, error: {e}')
+            raise
         assert self.u.reg_read(UC_MIPS_REG_PC)==0x1000000, 'Instruction limit reached'
         assert self.u.reg_read(UC_MIPS_REG_SP)==0x7000f000
         assert [self.u.reg_read(r) for r in SAVED]==[0x12340000+i for i in range(len(SAVED))]
@@ -530,7 +597,7 @@ class Machine:
     def release(self,gap=0):
         """Execute both the hook and the real stock downstream screen-toggle handler."""
         ret=self.call(O['KEY_CENTER'],gap=gap)
-        if ret==0:
+        if ret==0 and not is_m1plus:
             self.call(O['KEY_CENTER'],address=syms['on_wm_keyup_fun'],gap=0,clear=False)
         return ret
     def page(self,name='sysset_page',t='scroll_view'):
@@ -539,7 +606,7 @@ class Machine:
         if t=='slide_menu':
             self.word(child+O['SLIDE_INDEX'],0)
             self.nodes[child]['children']=[self.entry(child) for _ in range(7)]
-            self.word(child+0x5c,self.alloc()) # stock completion checks the child array
+            self.word(child+O['W_CHILDREN'],self.alloc()) # stock completion checks the child array
         return child
     def page_list(self,n=10,height=96,extent=960,name='sysset_page'):
         """A page holding one scroll view of n 48px entries; returns (surface, entries)."""
@@ -583,7 +650,7 @@ for populated in (False,True):
     for endpoint,key,selected,want in ((0,O['KEY_NEXT'],4,204),
                                       (864,O['KEY_PREV'],5,180)):
         m=Machine(); w,es=m.page_list(20 if populated else 0)
-        m.word(w+0x74,syms['g_scroll_view_vtable'])
+        m.word(w+O['W_VT'],syms['g_scroll_view_vtable'])
         m.paint(w)
         m.nodes[w]['_ringnav_index']=selected if populated else -1
         top=120 if endpoint==0 else 240
@@ -634,7 +701,7 @@ for setter,field in (('scroll_view_set_xslidable','VIEW_HORIZONTAL'),
                      ('scroll_view_set_yslidable','VIEW_VERTICAL'),
                      ('scroll_view_set_snap_to_page','VIEW_SNAP')):
     m=Machine(); vert=m.node(); excluded=m.node()
-    m.word(excluded+0x74,syms['g_scroll_view_vtable'])
+    m.word(excluded+O['W_VT'],syms['g_scroll_view_vtable'])
     value=0 if field=='VIEW_VERTICAL' else 1
     assert m.call(address=syms[setter],args=(excluded,value,0,0))==0
     assert m.u.mem_read(excluded+O[field],1)==bytes([value])
@@ -673,8 +740,9 @@ if variant=='stock':
     assert m.clip==(0,0,240,240)
     assert m.lcd_colors()==LCD_COLORS
     assert not any(m.get(e+O['W_FOCUS'])&0x80 for e in entries)
+    stroke_name = 'canvas_stroke_rounded_rect_ex' if is_m1plus else 'canvas_stroke_rounded_rect'
     assert [c[0] for c in m.calls if c[0].startswith('canvas_')][-6:]==[
-        'canvas_fill_rounded_rect','canvas_stroke_rounded_rect','canvas_stroke_rounded_rect',
+        'canvas_fill_rounded_rect',stroke_name,stroke_name,
         'canvas_set_fill_color','canvas_set_stroke_color','canvas_set_clip_rect']; passed()
 else:
     # The bar is painted behind the rows: every band precedes the border hook, which draws nothing.
@@ -938,7 +1006,7 @@ def native_row_layout(m, button):
         if children:
             array=m.alloc(12); values=m.alloc(4*len(children))
             for i,child in enumerate(children): m.word(values+4*i,child)
-            m.word(array,len(children)); m.word(array+8,values); m.word(node+0x5c,array)
+            m.word(array,len(children)); m.word(array+8,values); m.word(node+O['W_CHILDREN'],array)
     assert m.call(address=syms['widget_layout_children'],args=(button,0,0,0))==0
 
 def check_title_bounds(m, button, drill=False):
@@ -1043,86 +1111,87 @@ if variant=='ipod':
     for button in [w for w,n in m.nodes.items() if n['type']=='button' and n['children']]:
         check_album_tile(m,button)
 
-for address in (0x523038, 0x4aa2cc, 0x4b0efc, 0x4a4ae8):
-    for grid in ((0, 1) if address == 0x4a4ae8 else (0,)):
-        m = Machine(); w = m.page('artistinfo_page' if grid else 'folder_page', 'table_client')
-        m.mock('table_row_create', 'button_create', 'image_create', 'view_create',
-               'hscroll_label_create', 'gif_image_create', 'widget_use_style',
-               'widget_set_name', 'widget_set_children_layout', 'image_set_draw_type',
-               'image_base_set_image', 'set_hscroll_label_attribute')
-        m.word(syms['album_modetype'], grid)
-        assert m.call(address=address, args=(w, w, 4, 0)) == 0
-        rows = m.nodes[w]['children']
-        assert len(rows) == 4
-        for row in rows:
-            assert m.get(row+O['W_H']) == (210 if grid else 72 if variant == 'ipod' else 78)
-            for button in m.nodes[row]['children']:
-                assert m.get(button+O['W_H']) == (160 if grid else 68 if variant == 'ipod' else 70)
-        if grid and variant=='ipod':
-            m.word(w+O['W_PARENT'],m.top); m.word(m.top+O['W_PARENT'],m.wm)
+if not is_m1plus:
+    for address in (0x523038, 0x4aa2cc, 0x4b0efc, 0x4a4ae8):
+        for grid in ((0, 1) if address == 0x4a4ae8 else (0,)):
+            m = Machine(); w = m.page('artistinfo_page' if grid else 'folder_page', 'table_client')
+            m.mock('table_row_create', 'button_create', 'image_create', 'view_create',
+                   'hscroll_label_create', 'gif_image_create', 'widget_use_style',
+                   'widget_set_name', 'widget_set_children_layout', 'image_set_draw_type',
+                   'image_base_set_image', 'set_hscroll_label_attribute')
+            m.word(syms['album_modetype'], grid)
+            assert m.call(address=address, args=(w, w, 4, 0)) == 0
+            rows = m.nodes[w]['children']
+            assert len(rows) == 4
             for row in rows:
-                for button in m.nodes[row]['children']: check_album_tile(m,button)
-        if not grid:
-            for name, stock, compact_geometry in ARTWORK[address]:
-                arts = [n for n, v in m.nodes.items() if v.get('name') == name]
-                assert arts, name
-                for art in arts:
-                    geometry = tuple(signed(m.get(art+O[off])) for off in ('W_X', 'W_Y', 'W_W', 'W_H'))
-                    assert geometry == (compact_geometry if variant == 'ipod' else stock), (name, geometry)
-        # Preparing an existing pool does not recreate or resize its rows.
-        before = len(m.nodes)
-        assert m.call(address=address, args=(w, w, 4, 0)) == 0 and len(m.nodes) == before
-        if not grid:
-            for row in rows[:2]:  # independently recreated rows as well as repeated reuse
-                check_title_bounds(m,m.nodes[row]['children'][0])
-            into=[n for n,v in m.nodes.items() if v.get('name')=='img_into']
-            if into and variant=='ipod':  # the payload's chevron column is stock's, after layout
-                button=m.nodes[rows[0]]['children'][0]
-                assert m.get(into[0]+O['W_X'])==m.get(button+O['W_W'])-O['CHEVRON_W'] and m.get(into[0]+O['W_W'])==50
-            if address==0x523038:
-                # Execute the real folder text/style rebind after layout: its stock 140/190px
-                # reset must no longer undo the computed width while a row pool is recycled.
-                button=m.nodes[rows[0]]['children'][0]
-                title=next(c for c in m.nodes[button]['children'] if m.nodes[c]['name']=='scrlabel_name')
-                width=m.get(title+O['W_W'])
-                m.row_record=m.alloc(0x80); m.word(m.row_record+0x34,8)
-                m.mock('deque_at','tk_snprintf','widget_set_text_utf8','file_is_playing')
-                for navbar in (0,1,0):
-                    m.byte(syms['g_navbar_status'],navbar)
-                    label='再利用された長いフォルダー名 '*5
-                    m.word(m.row_record+8,m.string(label))
-                    assert m.call(address=0x522304,args=(button,7,0,0))==0
-                    assert m.nodes[title]['text']==label
-                    assert m.get(title+O['W_W'])==(width if variant=='ipod' else 140 if navbar else 190)
-        else:
-            assert all(m.get(n+O['W_CHILDREN_LAYOUT'])==0 for row in rows for n in m.nodes[row]['children'])
-passed()
+                assert m.get(row+O['W_H']) == (210 if grid else 72 if variant == 'ipod' else 78)
+                for button in m.nodes[row]['children']:
+                    assert m.get(button+O['W_H']) == (160 if grid else 68 if variant == 'ipod' else 70)
+            if grid and variant=='ipod':
+                m.word(w+O['W_PARENT'],m.top); m.word(m.top+O['W_PARENT'],m.wm)
+                for row in rows:
+                    for button in m.nodes[row]['children']: check_album_tile(m,button)
+            if not grid:
+                for name, stock, compact_geometry in ARTWORK[address]:
+                    arts = [n for n, v in m.nodes.items() if v.get('name') == name]
+                    assert arts, name
+                    for art in arts:
+                        geometry = tuple(signed(m.get(art+O[off])) for off in ('W_X', 'W_Y', 'W_W', 'W_H'))
+                        assert geometry == (compact_geometry if variant == 'ipod' else stock), (name, geometry)
+            # Preparing an existing pool does not recreate or resize its rows.
+            before = len(m.nodes)
+            assert m.call(address=address, args=(w, w, 4, 0)) == 0 and len(m.nodes) == before
+            if not grid:
+                for row in rows[:2]:  # independently recreated rows as well as repeated reuse
+                    check_title_bounds(m,m.nodes[row]['children'][0])
+                into=[n for n,v in m.nodes.items() if v.get('name')=='img_into']
+                if into and variant=='ipod':  # the payload's chevron column is stock's, after layout
+                    button=m.nodes[rows[0]]['children'][0]
+                    assert m.get(into[0]+O['W_X'])==m.get(button+O['W_W'])-O['CHEVRON_W'] and m.get(into[0]+O['W_W'])==50
+                if address==0x523038:
+                    # Execute the real folder text/style rebind after layout: its stock 140/190px
+                    # reset must no longer undo the computed width while a row pool is recycled.
+                    button=m.nodes[rows[0]]['children'][0]
+                    title=next(c for c in m.nodes[button]['children'] if m.nodes[c]['name']=='scrlabel_name')
+                    width=m.get(title+O['W_W'])
+                    m.row_record=m.alloc(0x80); m.word(m.row_record+0x34,8)
+                    m.mock('deque_at','tk_snprintf','widget_set_text_utf8','file_is_playing')
+                    for navbar in (0,1,0):
+                        m.byte(syms['g_navbar_status'],navbar)
+                        label='再利用された長いフォルダー名 '*5
+                        m.word(m.row_record+8,m.string(label))
+                        assert m.call(address=0x522304,args=(button,7,0,0))==0
+                        assert m.nodes[title]['text']==label
+                        assert m.get(title+O['W_W'])==(width if variant=='ipod' else 140 if navbar else 190)
+            else:
+                assert all(m.get(n+O['W_CHILDREN_LAYOUT'])==0 for row in rows for n in m.nodes[row]['children'])
+    passed()
 
-# The three non-pooled constructors: album tracks, artist tracks and playlists.
-# These use distinct title/container names and must receive the same native layout behavior;
-# only a drill window (playlist_page) reserves the chevron's space.
-for address,page in ((0x4a62c0,'artistinfo_page'),(0x4adcbc,'artistinfo_page'),(0x4b2864,'artistinfo_page'),(0x4b2864,'playlist_page')):
-    for reopen in range(2):
-        m=Machine(); w=m.page(page,'scroll_view')
-        m.word(w+O['W_PARENT'],m.top); m.word(m.top+O['W_PARENT'],m.wm)
-        m.nodes[w]['name']='scroll_view_track'
-        m.row_record=m.alloc(0x80)
-        for off in (8,12,16,24): m.word(m.row_record+off,m.string('日本語 Title'))
-        m.word(m.row_record+0x48,1)
-        m.mock('button_create','list_item_create','image_create','view_create','hscroll_label_create',
-               'gif_image_create','widget_use_style','widget_set_name','widget_set_text_utf8',
-               'widget_set_visible','widget_on','widget_destroy_children','image_set_draw_type',
-               'image_base_set_image','set_hscroll_label_attribute','hscroll_label_set_only_focus',
-               'hscroll_label_set_ellipses','hscroll_label_set_speed','gif_image_play','deque_at',
-               'deque_size','tk_snprintf','batch_get_selectitem','file_is_playing','getFormatString',
-               'getMusicByPlayList','get_albumcover_listsize','mclGetPlayStatus','list_get_img_pic',
-               'strcmp@GLIBC_2.0','toolsTrimLeft','toolsTrimRight')
-        m.handlers[0x4aad10]='row_toolbar'
-        assert m.call(address=address,args=(w,0,0,0))==0
-        buttons=[n for n,v in m.nodes.items() if v['type']=='button']
-        assert len(buttons)==1
-        check_title_bounds(m,buttons[0],drill=page=='playlist_page')
-passed()
+    # The three non-pooled constructors: album tracks, artist tracks and playlists.
+    # These use distinct title/container names and must receive the same native layout behavior;
+    # only a drill window (playlist_page) reserves the chevron's space.
+    for address,page in ((0x4a62c0,'artistinfo_page'),(0x4adcbc,'artistinfo_page'),(0x4b2864,'artistinfo_page'),(0x4b2864,'playlist_page')):
+        for reopen in range(2):
+            m=Machine(); w=m.page(page,'scroll_view')
+            m.word(w+O['W_PARENT'],m.top); m.word(m.top+O['W_PARENT'],m.wm)
+            m.nodes[w]['name']='scroll_view_track'
+            m.row_record=m.alloc(0x80)
+            for off in (8,12,16,24): m.word(m.row_record+off,m.string('日本語 Title'))
+            m.word(m.row_record+0x48,1)
+            m.mock('button_create','list_item_create','image_create','view_create','hscroll_label_create',
+                   'gif_image_create','widget_use_style','widget_set_name','widget_set_text_utf8',
+                   'widget_set_visible','widget_on','widget_destroy_children','image_set_draw_type',
+                   'image_base_set_image','set_hscroll_label_attribute','hscroll_label_set_only_focus',
+                   'hscroll_label_set_ellipses','hscroll_label_set_speed','gif_image_play','deque_at',
+                   'deque_size','tk_snprintf','batch_get_selectitem','file_is_playing','getFormatString',
+                   'getMusicByPlayList','get_albumcover_listsize','mclGetPlayStatus','list_get_img_pic',
+                   'strcmp@GLIBC_2.0','toolsTrimLeft','toolsTrimRight')
+            m.handlers[0x4aad10]='row_toolbar'
+            assert m.call(address=address,args=(w,0,0,0))==0
+            buttons=[n for n,v in m.nodes.items() if v['type']=='button']
+            assert len(buttons)==1
+            check_title_bounds(m,buttons[0],drill=page=='playlist_page')
+    passed()
 
 # Long Return executes the stock gates and release filter in both variants.
 def long_machine():
@@ -1137,68 +1206,69 @@ def long_return(m):
 def destinations(m):
     return [c for c in m.calls if c[0] in ('navigator_back_to_home', 'navigator_switch_to_with_context')]
 
-for page in ('home_page', 'folder_page', 'playing_page', 'sysset_page'):
-    m = long_machine(); m.page(page)
-    # No playback data is initialized: the switch must work with an empty queue as well.
-    assert long_return(m) == 0
-    dest = destinations(m)
-    assert len(dest) == 1
-    assert dest[0][0] == ('navigator_switch_to_with_context' if page != 'playing_page' else 'navigator_back_to_home')
-    if page != 'playing_page':
-        assert m.text(dest[0][1]) == 'playing_page'
-        assert [m.get(dest[0][2] + 4*i) for i in range(4)] == [0, 0, 255, 2]
-    # Here the navigator is only recorded, so the switch never lands and the latch is left
-    # armed; the NavigationMachine checks below cover the landed switch that drops it.
-    held = 11
-    assert m.call(170, gap=0) == held
-    assert m.call(170, gap=0) == 0   # next short Return still reaches stock Back
-    for _ in range(3):
+if not is_m1plus:
+    for page in ('home_page', 'folder_page', 'playing_page', 'sysset_page'):
+        m = long_machine(); m.page(page)
+        # No playback data is initialized: the switch must work with an empty queue as well.
         assert long_return(m) == 0
-        assert len(destinations(m)) == 1
-    assert m.call(170, gap=0) == held
-passed()
+        dest = destinations(m)
+        assert len(dest) == 1
+        assert dest[0][0] == ('navigator_switch_to_with_context' if page != 'playing_page' else 'navigator_back_to_home')
+        if page != 'playing_page':
+            assert m.text(dest[0][1]) == 'playing_page'
+            assert [m.get(dest[0][2] + 4*i) for i in range(4)] == [0, 0, 255, 2]
+        # Here the navigator is only recorded, so the switch never lands and the latch is left
+        # armed; the NavigationMachine checks below cover the landed switch that drops it.
+        held = 11
+        assert m.call(170, gap=0) == held
+        assert m.call(170, gap=0) == 0   # next short Return still reaches stock Back
+        for _ in range(3):
+            assert long_return(m) == 0
+            assert len(destinations(m)) == 1
+        assert m.call(170, gap=0) == held
+    passed()
 
-# The stock long-key gates stay effective, with the shared navigation restrictions added.
-for flag, value in GATES:
-    m = long_machine(); m.page('folder_page'); m.byte(syms[flag], value)
+    # The stock long-key gates stay effective, with the shared navigation restrictions added.
+    for flag, value in GATES:
+        m = long_machine(); m.page('folder_page'); m.byte(syms[flag], value)
+        long_return(m)
+        # Stock itself blocks power-off, guide and test mode; iPod adds the shared restrictions
+        # checked by usable(), so every listed flag blocks in both builds.
+        assert not destinations(m), flag
+    for light in (0, 1):
+        for lock in (0, 1):
+            for mode in range(4):
+                m = long_machine(); m.page('folder_page')
+                m.byte(syms['g_backlight_status'], light)
+                m.byte(syms['g_keylock_flag'], lock); m.byte(syms['g_keylock_mode'], mode)
+                long_return(m)
+                blocked = not light
+                assert bool(destinations(m)) == (not blocked)
+    passed()
+    m = long_machine(); m.page_list()
+    assert m.call(O['KEY_CENTER']) == 11 and m.timers
     long_return(m)
-    # Stock itself blocks power-off, guide and test mode; iPod adds the shared restrictions
-    # checked by usable(), so every listed flag blocks in both builds.
-    assert not destinations(m), flag
-for light in (0, 1):
-    for lock in (0, 1):
-        for mode in range(4):
-            m = long_machine(); m.page('folder_page')
-            m.byte(syms['g_backlight_status'], light)
-            m.byte(syms['g_keylock_flag'], lock); m.byte(syms['g_keylock_mode'], mode)
-            long_return(m)
-            blocked = not light
-            assert bool(destinations(m)) == (not blocked)
-passed()
-m = long_machine(); m.page_list()
-assert m.call(O['KEY_CENTER']) == 11 and m.timers
-long_return(m)
-assert not m.timers
-m.advance(201)
-assert not m.dispatched()
-# A hold blocked elsewhere still swallows its release, so no delayed page action runs.
-m = long_machine(); m.page('folder_page'); m.byte(syms['g_usblink_status'], 2)
-long_return(m)
-assert not destinations(m)
-assert m.call(170, gap=0) == 11
-passed()
-# Hold Return on Now Playing goes back to the page it opened over while that lies right under it; otherwise,
-# or with no such page, Home.
-for under,want in ((True,'navigator_back'),(False,'navigator_back_to_home')):
-    m = long_machine(); m.mock('navigator_back'); m.page('folder_page'); folder = m.top
-    assert long_return(m) == 0 and destinations(m)[0][0] == 'navigator_switch_to_with_context'
-    np = m.node('window', 'playing_page'); other = m.node('window', 'sysset_page')
-    m.nodes[m.wm] = {'children': [folder, np] if under else [folder, other, np]}; m.top = np
-    m.call(170, gap=0); m.calls = []
-    assert long_return(m) == 0 and [c[0] for c in m.calls if c[0] in ('navigator_back', 'navigator_back_to_home')] == [want]
-    m.call(170, gap=0); m.calls = []
-    assert long_return(m) == 0 and [c[0] for c in m.calls if c[0] in ('navigator_back', 'navigator_back_to_home')] == ['navigator_back_to_home']
-passed()
+    assert not m.timers
+    m.advance(201)
+    assert not m.dispatched()
+    # A hold blocked elsewhere still swallows its release, so no delayed page action runs.
+    m = long_machine(); m.page('folder_page'); m.byte(syms['g_usblink_status'], 2)
+    long_return(m)
+    assert not destinations(m)
+    assert m.call(170, gap=0) == 11
+    passed()
+    # Hold Return on Now Playing goes back to the page it opened over while that lies right under it; otherwise,
+    # or with no such page, Home.
+    for under,want in ((True,'navigator_back'),(False,'navigator_back_to_home')):
+        m = long_machine(); m.mock('navigator_back'); m.page('folder_page'); folder = m.top
+        assert long_return(m) == 0 and destinations(m)[0][0] == 'navigator_switch_to_with_context'
+        np = m.node('window', 'playing_page'); other = m.node('window', 'sysset_page')
+        m.nodes[m.wm] = {'children': [folder, np] if under else [folder, other, np]}; m.top = np
+        m.call(170, gap=0); m.calls = []
+        assert long_return(m) == 0 and [c[0] for c in m.calls if c[0] in ('navigator_back', 'navigator_back_to_home')] == [want]
+        m.call(170, gap=0); m.calls = []
+        assert long_return(m) == 0 and [c[0] for c in m.calls if c[0] in ('navigator_back', 'navigator_back_to_home')] == ['navigator_back_to_home']
+    passed()
 # Other long-key paths remain byte-for-byte stock; exercise the inert keys and power gate.
 # Home is not a local list, so a Play/Pause hold there stays stock too (queue menu below).
 for key in (171, 172, 173, 222, 223, 218):
@@ -1302,7 +1372,7 @@ m=Machine(); w,es=m.page_list(4,extent=1000)
 del m.handlers[syms['widget_get_text']]
 m.handlers[syms['strcmp@GLIBC_2.0']]='tk_strcmp'
 def stock_text(e,text):
-    m.word(e+0x74,syms['g_label_vtable'])
+    m.word(e+O['W_VT'],syms['g_label_vtable'])
     m.word(e+0x38,len(text)); m.word(e+0x40,m.wide_string(text))
 for i,e in enumerate(es):
     stock_text(e,'\u0100 Intro')
@@ -1658,11 +1728,12 @@ assert m.release()==11 and not m.clicks
 m.advance(DC-1); assert not m.clicks
 m.advance(1); assert m.clicks==[es[0]] and not m.timers and not m.screens
 m.advance(1000); assert m.clicks==[es[0]]; passed()
-# Stock's wheel lockout after the centre key ends when the press opens its row: the next tick moves.
-m=Machine(); w,es=m.page_list(3)
-assert m.release()==11 and m.u.mem_read(O['KEY_LOCKOUT'],1)==b'\x08'
-m.advance(DC); assert m.clicks==[es[0]] and m.u.mem_read(O['KEY_LOCKOUT'],1)==b'\0'
-assert m.call(gap=0,debounce=True)==11 and m.selected(w)==1; passed()
+if not is_m1plus:
+    # Stock's wheel lockout after the centre key ends when the press opens its row: the next tick moves.
+    m=Machine(); w,es=m.page_list(3)
+    assert m.release()==11 and m.u.mem_read(O['KEY_LOCKOUT'],1)==b'\x08'
+    m.advance(DC); assert m.clicks==[es[0]] and m.u.mem_read(O['KEY_LOCKOUT'],1)==b'\0'
+    assert m.call(gap=0,debounce=True)==11 and m.selected(w)==1; passed()
 # Before the deadline, the second release cancels the click and executes stock screen-off.
 for gap in (0,100,DC-1):
     m=Machine(); w,es=m.page_list(3)
@@ -1755,19 +1826,19 @@ assert not m.timers and not m.clicks and m.screens==[0]; passed()
 # Audit the stock creation path independently: live offset, duration, easing,
 # completion address and deselection agree with the fields used by the patch.
 m=Machine(); w=m.page('home_page','slide_menu')
-m.call(address=0x5f3400,args=(w,-240,0,0),gap=0)
+m.call(address=0x612278 if is_m1plus else 0x5f3400,args=(w,-240,0,0),gap=0)
 a=m.get(w+O['SLIDE_ANIMATOR'])
-assert m.get(a+O['ANIM_DURATION'])==150 and signed(m.get(a+O['ANIM_X_TO']))==-240
+assert m.get(a+O['ANIM_DURATION'])==(200 if is_m1plus else 150) and signed(m.get(a+O['ANIM_X_TO']))==-240
 assert m.slide_callbacks[a]==(syms['slide_menu_on_scroll_done'],w)
-assert m.nodes[m.nodes[w]['children'][0]]['focused']==0
-m.advance(150); assert m.get(w+O['SLIDE_INDEX'])==1 and not m.slides; passed()
+if not is_m1plus: assert m.nodes[m.nodes[w]['children'][0]]['focused']==0
+m.advance(200 if is_m1plus else 150); assert m.get(w+O['SLIDE_INDEX'])==1 and not m.slides; passed()
 
 # Execute native parameter writes and stock completion; only the scheduler is
 # deterministic. Check live origin, destination, duration, focus and one active animator.
 def slide(m,w):
     a=m.get(w+O['SLIDE_ANIMATOR'])
     assert a and list(m.slides)==[a]
-    return a,signed(m.get(a+0x68)),signed(m.get(a+O['ANIM_X_TO'])),m.get(a+O['ANIM_DURATION'])
+    return a,signed(m.get(a+O['ANIM_X_FROM'])),signed(m.get(a+O['ANIM_X_TO'])),m.get(a+O['ANIM_DURATION'])
 
 for start in (0,0xfffffff0):
     for key,direction in ((O['KEY_NEXT'],1),(O['KEY_PREV'],-1)):
@@ -1820,13 +1891,14 @@ for action in ('touch','center','click','leave','animating','pressed','unusable'
     elif action=='missing': m.call(args=(m.wm,0,0,0),gap=20)
     else: setattr(m,action,1); m.call(gap=20); setattr(m,action,0)
     assert m.call(gap=1)==11 and slide(m,w)[3]==200; passed()
-# Stock's wheel lockout after Centre guards only its first LOCKOUT_KEEP x 100 ms, then clears.
-m=Machine(); w=m.page('home_page','slide_menu'); m.call(gap=0)
-m.byte(0xa37c89,8); assert m.call(O['KEY_PREV'],gap=20,debounce=True)==11
-assert not m.moved(); m.byte(0xa37c89,0); m.call(gap=20); assert slide(m,w)[3]==120; passed()
-m=Machine(); w=m.page('home_page','slide_menu'); m.call(gap=0)
-m.byte(0xa37c89,8-O['LOCKOUT_KEEP']); m.call(gap=20)
-assert m.u.mem_read(O['KEY_LOCKOUT'],1)==b'\0' and slide(m,w)[3]==120; passed()
+if not is_m1plus:
+    # Stock's wheel lockout after Centre guards only its first LOCKOUT_KEEP x 100 ms, then clears.
+    m=Machine(); w=m.page('home_page','slide_menu'); m.call(gap=0)
+    m.byte(0xa37c89,8); assert m.call(O['KEY_PREV'],gap=20,debounce=True)==11
+    assert not m.moved(); m.byte(0xa37c89,0); m.call(gap=20); assert slide(m,w)[3]==120; passed()
+    m=Machine(); w=m.page('home_page','slide_menu'); m.call(gap=0)
+    m.byte(0xa37c89,8-O['LOCKOUT_KEEP']); m.call(gap=20)
+    assert m.u.mem_read(O['KEY_LOCKOUT'],1)==b'\0' and slide(m,w)[3]==120; passed()
 # Animator and callback allocation failures settle through stock selection.
 for failure in ('slide_fail','slide_on_fail'):
     m=Machine(); w=m.page('home_page','slide_menu'); setattr(m,failure,True)
@@ -1842,9 +1914,10 @@ m.release(0); m.advance(75); m.advance(O['DOUBLE_CLICK_MS']-75)
 assert m.clicks==[m.nodes[w]['children'][5]] and not m.slides, (m.clicks,m.get(w+O['SLIDE_INDEX']),m.timers,m.slides); passed()
 m=Machine(); w=m.page('home_page','slide_menu'); m.release(0); m.call(gap=20)
 m.advance(300); assert not m.clicks; passed()
-# Other slide menus retain stock next/previous handling.
-m=Machine(); m.page('sysset_page','slide_menu')
-assert m.call(gap=0)==11 and m.call(gap=1)==11 and m.moved(); passed()
+if not is_m1plus:
+    # Other slide menus retain stock next/previous handling.
+    m=Machine(); m.page('sysset_page','slide_menu')
+    assert m.call(gap=0)==11 and m.call(gap=1)==11 and m.moved(); passed()
 # Even if the UI services a release before an overdue timer, both singles confirm once.
 m=Machine(); w,es=m.page_list(3); m.release(); m.now+=O['DOUBLE_CLICK_MS']+1
 assert m.release()==11 and m.clicks==[es[0]] and len(m.timers)==1
@@ -1858,7 +1931,8 @@ m.on_click=navigate; m.release(); old=m.top
 assert m.release(O['DOUBLE_CLICK_MS']+1)==11 and m.top!=old and len(m.clicks)==1
 m.advance(300); assert len(m.clicks)==2 and m.clicks[0]!=m.clicks[1] and not m.screens; passed()
 # The downstream stock cleanup still owns long-press and boot-key releases.
-for addr in (syms['g_power_longkey'],syms['g_ingore_bootkey_flag'],O['BOOT_KEY_GUARD']):
+cleanup_addrs = (syms['g_power_longkey'],O['BOOT_KEY_GUARD']) if is_m1plus else (syms['g_power_longkey'],syms['g_ingore_bootkey_flag'],O['BOOT_KEY_GUARD'])
+for addr in cleanup_addrs:
     m=Machine(); m.page_list(3); m.byte(addr,1)
     assert m.release()==0
     m.advance(300)
@@ -2015,13 +2089,14 @@ for key in ('KEY_RETURN','KEY_CENTER',None):
     else: m.advance(O['HOLD_MS']+O['HOLD_POLL_MS'])
     m.animating=0; m.advance(1000); assert m.selected(w)==1 and not m.timers,key; passed()
 # Rejected stock wheel input resets a sustained list run.
-m=Machine(); w,es=m.page_list(40,extent=40*48)
-for _ in range(7): m.call(gap=100)
-fast=28 if variant=='stock' else 13
-assert m.selected(w)==fast
-m.byte(0xa37c89,8)
-assert m.call(gap=10,debounce=True)==11 and m.selected(w)==fast
-assert m.call(gap=40)==11 and m.selected(w)==fast+1; passed()
+if not is_m1plus:
+    m=Machine(); w,es=m.page_list(40,extent=40*48)
+    for _ in range(7): m.call(gap=100)
+    fast=28 if variant=='stock' else 13
+    assert m.selected(w)==fast
+    m.byte(0xa37c89,8)
+    assert m.call(gap=10,debounce=True)==11 and m.selected(w)==fast
+    assert m.call(gap=40)==11 and m.selected(w)==fast+1; passed()
 # A click on a clickable child selects its collected ancestor, not a stale row.
 m=Machine(); w=m.page(); m.word(w+O['W_H'],96)
 row1=m.entry(w,0); row2=m.entry(w,96); deep=m.entry(row1,0)
@@ -2168,8 +2243,11 @@ if variant=='stock':
 # The real stock rounded wrappers run with canvas services mocked. This firmware declines with
 # RET_FAIL when the canvas has no vgcanvas, and changes no fill/stroke color or alpha byte.
 m=Machine(); m.probe_canvas(rect=(1,1,238,46))
+stroke_fn=syms.get('canvas_stroke_rounded_rect') or syms.get('canvas_stroke_rounded_rect_ex')
+stack_args1=(O['RADIUS'],O['RADIUS'],O['RADIUS'],O['RADIUS'],1,0xffff) if is_m1plus else (O['RADIUS'],1)
+stack_args2=(O['RADIUS'],O['RADIUS'],O['RADIUS'],O['RADIUS'],2,0xffff) if is_m1plus else (O['RADIUS'],2)
 assert m.call(address=syms['canvas_fill_rounded_rect'],args=(m.canvas,m.rect,0,m.color),stack=(O['RADIUS'],))==2
-assert m.call(address=syms['canvas_stroke_rounded_rect'],args=(m.canvas,m.rect,0,m.color),stack=(O['RADIUS'],1))==2
+assert m.call(address=stroke_fn,args=(m.canvas,m.rect,0,m.color),stack=stack_args1)==2
 assert m.lcd_colors()==LCD_COLORS
 assert m.global_alpha==0 and not m.vg_calls; passed()
 
@@ -2178,7 +2256,7 @@ assert m.global_alpha==0 and not m.vg_calls; passed()
 # the canvas alpha byte stay put. (The fill call then enters stock FP64 dither math that Unicorn's
 # MIPS32 FR=0 FPU cannot execute; its vgcanvas calls up to that point are still asserted.)
 m=Machine(); m.probe_canvas(vg=0x1000400,color=0xffffffff)
-assert m.call(address=syms['canvas_stroke_rounded_rect'],args=(m.canvas,m.rect,0,m.color),stack=(O['RADIUS'],2))==0
+assert m.call(address=stroke_fn,args=(m.canvas,m.rect,0,m.color),stack=stack_args2)==0
 names=[c[0] for c in m.vg_calls]
 assert 'vgcanvas_set_stroke_color' in names and 'vgcanvas_set_line_width' in names
 assert [c[2]&0xffffffff for c in m.vg_calls if c[0]=='vgcanvas_set_stroke_color']==[0xffffffff]
@@ -2460,8 +2538,8 @@ for populated in (False,True):
     parent=m.node('list_view',children=[w,bar])
     m.word(parent+0x84,w); m.word(parent+0x88,bar)
     m.word(w+O['W_PARENT'],parent); m.nodes[m.top]['children']=[parent]
-    m.word(w+O['VIEW_ON_SCROLL'],0x5ec070)  # installed by stock list_view
-    m.word(w+0x74,syms['g_scroll_view_vtable'])
+    m.word(w+O['VIEW_ON_SCROLL'],0x60cb44 if is_m1plus else 0x5ec070)  # installed by stock list_view
+    m.word(w+O['W_VT'],syms['g_scroll_view_vtable'])
     m.handlers.pop(syms['scroll_view_set_offset'])
     m.mock('scroll_bar_cast','scroll_bar_is_mobile','widget_set_opacity','widget_set_visible_only',
            'widget_dispatch_simple_event')
@@ -2479,7 +2557,9 @@ for populated in (False,True):
 for kind in ('scroll_view','table_client'):
     m=Machine()
     w,es=m.page_list(20,extent=960) if kind=='scroll_view' else (lambda t:(t[0],t[2]))(m.table_page(20))
-    bar=m.node('scroll_bar_m',visible=0); m.byte(bar+0x8d,1); m.word(bar+O['BAR_VALUE'],17)
+    bar_mobile_off = 0x89 if is_m1plus else 0x8d
+    bar_anim_off = 0x94 if is_m1plus else 0x98
+    bar=m.node('scroll_bar_m',visible=0); m.byte(bar+bar_mobile_off,1); m.word(bar+O['BAR_VALUE'],17)
     parent=m.node('list_view' if kind=='scroll_view' else 'table_view',children=[w,bar])
     m.word(w+O['W_PARENT'],parent); m.nodes[m.top]['children']=[parent]
     m.handlers.pop(syms['scroll_bar_scroll_to'])
@@ -2487,17 +2567,18 @@ for kind in ('scroll_view','table_client'):
            'widget_set_visible_only','widget_animator_prop_create','widget_animator_prop_set_params')
     m.paint(w); m.call(gap=0)
     assert m.nodes[bar]['visible'] and m.u.mem_read(bar+0x34,1)==b'\xff'
-    animator=m.get(bar+0x98)
-    assert animator and m.get(animator+O['ANIM_DURATION'])==500 and m.get(animator+0x24)==300
+    animator=m.get(bar+bar_anim_off)
+    delay_off = 0x20 if is_m1plus else 0x24
+    assert animator and m.get(animator+O['ANIM_DURATION'])==500 and m.get(animator+delay_off)==(200 if is_m1plus else 300)
     assert m.get(bar+O['BAR_VALUE'])==17  # waking must not calculate or move the thumb
     m.touch(); m.call(gap=0)
-    assert m.get(bar+0x98)!=animator
+    assert m.get(bar+bar_anim_off)!=animator
     assert any(c[0]=='widget_animator_destroy' and c[1]==animator for c in m.calls)
     # The stock opacity completion disables and hides the bar; no payload fade timer exists.
-    animator=m.get(bar+0x98); callback,ctx=m.slide_callbacks[animator]
+    animator=m.get(bar+bar_anim_off); callback,ctx=m.slide_callbacks[animator]
     m.byte(bar+0x34,0)
     assert m.call(address=callback,args=(ctx,0,0,0),gap=0)==7
-    assert not m.nodes[bar]['visible'] and not m.nodes[bar]['sensitive'] and not m.get(bar+0x98)
+    assert not m.nodes[bar]['visible'] and not m.nodes[bar]['sensitive'] and not m.get(bar+bar_anim_off)
     m.call(gap=0); assert m.nodes[bar]['visible']
     m.top=0; m.nodes.clear(); m.advance(1000)  # payload retains no native bar/animator pointer
     passed()
@@ -2551,7 +2632,7 @@ class NavigationMachine(Machine):
     def sync_order(self):
         self.top=self.order[-1] if self.order else 0
         arr=self.alloc(12); items=self.alloc(max(4,len(self.order)*4))
-        self.word(self.wm+0x5c,arr); self.word(arr,len(self.order)); self.word(arr+8,items)
+        self.word(self.wm+O['W_CHILDREN'],arr); self.word(arr,len(self.order)); self.word(arr+8,items)
         for i,w in enumerate(self.order): self.word(items+4*i,w); self.word(w+O['W_PARENT'],self.wm)
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')
@@ -2640,12 +2721,18 @@ assert m.get(p+4)==48;passed()
 # move-before thunk forwards 0x102; 0xff belongs to the separate stock on_wm_tsdown_fun.
 def wm_event_type(address):
     return struct.unpack('<I',m.u.mem_read(address,4))[0]&0xffff
-assert wm_event_type(0x523ef0)==O['EVT_POINTER_DOWN']==0x100
-assert wm_event_type(0x523ed4)==O['EVT_POINTER_MOVE_BEFORE']==0x102
-assert wm_event_type(0x523f28)==0xff
-assert wm_event_type(0x523e6c)==O['EVT_KEY_DOWN_BEFORE']==0x112
-assert wm_event_type(0x523eb8)==O['EVT_KEY_UP']==0x114
-assert wm_event_type(0x523e80)==O['EVT_KEY_UP_BEFORE']==0x115
+if is_m1plus:
+    assert wm_event_type(0x535010)==O['EVT_POINTER_DOWN']==0x100
+    assert wm_event_type(0x534ff4)==O['EVT_POINTER_MOVE_BEFORE']==0x102
+    assert wm_event_type(0x534f70)==0xff
+    assert wm_event_type(0x534fbc)==O['EVT_KEY_UP']==0x113
+else:
+    assert wm_event_type(0x523ef0)==O['EVT_POINTER_DOWN']==0x100
+    assert wm_event_type(0x523ed4)==O['EVT_POINTER_MOVE_BEFORE']==0x102
+    assert wm_event_type(0x523f28)==0xff
+    assert wm_event_type(0x523e6c)==O['EVT_KEY_DOWN_BEFORE']==0x112
+    assert wm_event_type(0x523eb8)==O['EVT_KEY_UP']==0x114
+    assert wm_event_type(0x523e80)==O['EVT_KEY_UP_BEFORE']==0x115
 passed()
 
 for page_name in ('folder_page','localmusic_page','allmusic_page','radio_page'):
@@ -2733,7 +2820,7 @@ if variant=='ipod':
     for distance in (7,48):
         m=PullDispatchMachine();w,es=m.page_list(5,height=240,name='localmusic_page');page=m.top
         m.start_pull(page,w)
-        m.word(page+0x74,1);m.word(page+O['W_EMITTER'],page)
+        m.word(page+O['W_VT'],1);m.word(page+O['W_EMITTER'],page)
         m.word(m.event+O['EVENT_Y'],60+distance)
         for fn,typ in (('widget_on_pointer_move',0x101),('widget_on_pointer_up',0x103)):
             m.calls=[]
@@ -2775,20 +2862,21 @@ if variant=='ipod':
 
 # Artist detail opens on Albums: the real init reaches the stock Albums tab handler, which
 # selects tab 1 and queries albums before building; stock builds Songs instead.
-for patched in (True, False):
-    m=Machine(patched)
-    for address,name in ((0x4adcbc,'songs_view'),(0x4ac084,'albums_view'),(0x4ad4c8,'timer_idex'),(0x4ed0c4,'query_run')):
-        m.handlers[address]=name
-    m.mock('load_artistinfo_list','load_localartist_list','widget_get_window','widget_foreach','strcpy@GLIBC_2.0')
-    arg=m.alloc(8); m.word(arg+4,m.alloc(0x40))
-    assert m.call(address=syms['localmusic_artistinfo_page_init'],args=(m.node('window','artistinfo_page'),arg,0,0))==0
-    names=[c[0] for c in m.calls if c[0] in ('songs_view','albums_view','load_localartist_list','query_run')]
-    tab=m.get(m.get(0xa26cc0-0x5810)+0x7678)
-    if patched:
-        assert names==['query_run','load_localartist_list','query_run','albums_view'] and tab==1, names
-        assert [c[1] for c in m.calls if c[0]=='load_localartist_list']==[1]
-    else: assert names==['query_run','songs_view'] and tab==0, names
-    passed()
+if not is_m1plus:
+    for patched in (True, False):
+        m=Machine(patched)
+        for address,name in ((0x4adcbc,'songs_view'),(0x4ac084,'albums_view'),(0x4ad4c8,'timer_idex'),(0x4ed0c4,'query_run')):
+            m.handlers[address]=name
+        m.mock('load_artistinfo_list','load_localartist_list','widget_get_window','widget_foreach','strcpy@GLIBC_2.0')
+        arg=m.alloc(8); m.word(arg+4,m.alloc(0x40))
+        assert m.call(address=syms['localmusic_artistinfo_page_init'],args=(m.node('window','artistinfo_page'),arg,0,0))==0
+        names=[c[0] for c in m.calls if c[0] in ('songs_view','albums_view','load_localartist_list','query_run')]
+        tab=m.get(m.get(0xa26cc0-0x5810)+0x7678)
+        if patched:
+            assert names==['query_run','load_localartist_list','query_run','albums_view'] and tab==1, names
+            assert [c[1] for c in m.calls if c[0]=='load_localartist_list']==[1]
+        else: assert names==['query_run','songs_view'] and tab==0, names
+        passed()
 
 # Play/Pause hold queue menu. libcstl deques are Python lists of element addresses; the stock
 # mclLoadPlayList, mclNextSong and key filters run for real.
@@ -2803,12 +2891,15 @@ class QueueMachine(Machine):
                   'getMusicByAlbum','getMusicByAlbumAndSonger','getMusicByAlbumAndAlbumSonger','toolsLoadDirectory',
                   'getMusicBySonger','getMusicByAlbumArtist','getMusicByComposer','getMusicByGenre',
                   'getMusicByAlbumAndComposer','getMusicByAlbumAndGenre','checkFavExist','navigator_window_is_exist',
-                  'mcl_shuffle_pick','airplayGetFlag','calloc@GLIBC_2.0','fopen@GLIBC_2.2'): self.handlers[syms[n]]='q:'+n
+                  'mcl_shuffle_pick','airplayGetFlag','calloc@GLIBC_2.0','fopen@GLIBC_2.2'):
+            addr = syms.get(n) or (payload_syms.get(n) if is_m1plus else None)
+            if addr: self.handlers[addr]='q:'+n
         self.favs=set(); self.open_pages=set(); self.opened=[]
-        self.handlers.pop(syms['mclLoadPlayList'])
-        self.mock('strlen@GLIBC_2.0','snprintf@GLIBC_2.0'); self.handlers[syms['strcmp@GLIBC_2.0']]='tk_strcmp'
+        if 'mclLoadPlayList' in syms: self.handlers.pop(syms['mclLoadPlayList'], None)
+        self.mock('strlen@GLIBC_2.0','snprintf@GLIBC_2.0')
+        if 'strcmp@GLIBC_2.0' in syms: self.handlers[syms['strcmp@GLIBC_2.0']]='tk_strcmp'
         self.mock('mclStartPlayer','mclStop','mclSetPause','mclSetResume','mclSetSeek')
-        self.status=self.alloc(0x200); self.word(syms['g_class_type'],cls)
+        self.status=(self.wm+0xf8) if is_m1plus else self.alloc(0x200); self.word(syms['g_class_type'],cls)
         self.surface,_,_=self.table_page(4,page,rebind=True); self.word(self.surface+O['TABLE_ROWS'],rows)
         self.word(syms['p_deque_showlist'],self.deque([self.song(f'Row {i}') for i in range(rows)]))
         self.word(syms['mcl_pdeqplaylist'],self.deque([self.song(c) for c in 'ABC'[:queue]]))
@@ -2833,8 +2924,10 @@ class QueueMachine(Machine):
     def pool(self): return [signed(self.get(e)) for e in self.items(self.get(O['MCL_POOL']))]
     def mcl(self,k): return signed(self.get(O[k]))
     def dialog(self):
-        self.view=self.node('scroll_view','scroll_view',[self.node('list_item') for _ in range(5)])
-        self.title=self.node('hscroll_label','scrlabel_title'); self.back=self.node('image','img_return')
+        vname = 'scrollview_sortselect' if is_m1plus else 'scroll_view'
+        bname = 'button_return' if is_m1plus else 'img_return'
+        self.view=self.node('scroll_view',vname,[self.node('list_item') for _ in range(5)])
+        self.title=self.node('hscroll_label','scrlabel_title'); self.back=self.node('image',bname)
         return self.node('dialog','sortselect_dialog',[self.node('view','view_navbar',[self.title,self.back]),
                                                        self.node('list_view','list_view',[self.view])])
     def bootvol(self):  # stock's Boot volume page, which crossfade.c re-dresses
@@ -2846,7 +2939,8 @@ class QueueMachine(Machine):
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')
         if not name.startswith('q:'): return super().hook(u,address,size,unused)
-        assert u.reg_read(UC_MIPS_REG_T9)==address, name
+        if not is_m1plus or address not in payload_syms.values():
+            assert u.reg_read(UC_MIPS_REG_T9)==address, name
         name=name[2:]; a,b,c,d=[u.reg_read(r) for r in REGS]; ret=0
         self.calls.append((name,a,b,c))
         if name=='_create_deque': ret=self.alloc(0x20); self.deqs[ret]=[self.text(a),[]]
@@ -2897,7 +2991,7 @@ class QueueMachine(Machine):
         return ret
     def release(self):
         """Hook, then the real stock key-up; AWTK clears the key record afterwards."""
-        if self.call(O['KEY_PLAY'],gap=0)==0: self.call(O['KEY_PLAY'],address=syms['on_wm_keyup_fun'],gap=0,clear=False)
+        if self.call(O['KEY_PLAY'],gap=0)==0 and not is_m1plus: self.call(O['KEY_PLAY'],address=syms['on_wm_keyup_fun'],gap=0,clear=False)
         self.u.mem_write(self.status+O['INPUT_KEYS'],bytes(O['INPUT_KEY_SIZE']))
         return sum(c[0]=='playpause_quick_click' for c in self.calls)
     def handler(self,w,kind): return next((f,ctx) for t,f,ctx in self.nodes[w]['handlers'] if t==kind)
@@ -2959,23 +3053,24 @@ class LookupMachine(QueueMachine):
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
 
-for callback,button,pages in (
-    (0x4ad0b4,'track', ['artistinfo_page']),
-    (0x4a5ea4,'albuminfo', ['artistinfo_page','albuminfo_page']),
-    (0x526b74,'', ['playerjumpinfo_page']),
-):
-    for lookup in (False,True):
-        for selected in (0,2):
-            m=LookupMachine(['home_page','playing_page']+pages,selected,lookup)
-            w=m.node('button',f'{button}_{selected}'); m.word(w+0x10,m.string(f'{button}_{selected}'))
-            m.word(w+0x78,selected); m.word(m.event+0x10,w)
-            assert m.call(address=callback,args=(w,m.event,0,0),gap=0)==0
-            assert m.opened[-1]==('playing_page',['Row 0','Row 1','Row 2'],selected,0xf001,2)
-            unwind=lookup or callback==0x526b74
-            assert [m.nodes[w]['name'] for w in m.stack]==(['home_page'] if unwind else ['home_page','playing_page']+pages)
-            assert m.backs==0 if variant=='ipod' else m.backs==(len(pages) if unwind else 0)
-            assert m.closed==((list(reversed(pages)) if variant=='ipod' else [])+['playing_page'] if unwind else [])
-            passed()
+if not is_m1plus:
+    for callback,button,pages in (
+        (0x4ad0b4,'track', ['artistinfo_page']),
+        (0x4a5ea4,'albuminfo', ['artistinfo_page','albuminfo_page']),
+        (0x526b74,'', ['playerjumpinfo_page']),
+    ):
+        for lookup in (False,True):
+            for selected in (0,2):
+                m=LookupMachine(['home_page','playing_page']+pages,selected,lookup)
+                w=m.node('button',f'{button}_{selected}'); m.word(w+0x10,m.string(f'{button}_{selected}'))
+                m.word(w+0x78,selected); m.word(m.event+0x10,w)
+                assert m.call(address=callback,args=(w,m.event,0,0),gap=0)==0
+                assert m.opened[-1]==('playing_page',['Row 0','Row 1','Row 2'],selected,0xf001,2)
+                unwind=lookup or callback==0x526b74
+                assert [m.nodes[w]['name'] for w in m.stack]==(['home_page'] if unwind else ['home_page','playing_page']+pages)
+                assert m.backs==0 if variant=='ipod' else m.backs==(len(pages) if unwind else 0)
+                assert m.closed==((list(reversed(pages)) if variant=='ipod' else [])+['playing_page'] if unwind else [])
+                passed()
 
 SONG_MENU=['Play Next','Add to Queue','Add to Favourites','Add to Playlist','Go to Album','Go to Artist']
 # Now Playing targets the queue even when the last browsed list has unrelated rows.
@@ -2983,11 +3078,11 @@ def playing_menu(**kw):
     m=QueueMachine(page='playing_page',pos=1,**kw)
     return m
 for state in (3,2):  # paused and playing both expose the same actions
-    m=playing_menu(); m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(0xa3beac,state)
+    m=playing_menu(); m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,state)
     m.press(5000); assert m.release()==1
     m.press(6000); assert m.hold()==11 and m.labels()==SONG_MENU[:2]+['View Queue']+SONG_MENU[2:]+["Shuffle","Repeat","Group by: Album"]
     assert m.nodes[m.title]['text']=='B' and m.release()==0
-    m.press(7000); assert m.release()==1 and m.get(0xa3beac)==state; passed()
+    m.press(7000); assert m.release()==1 and m.get(PLAY_STATUS)==state; passed()
 # A tagged song's menu is titled by its tag, not its file name.
 m=playing_menu(); m.word(m.items(m.get(syms['mcl_pdeqplaylist']))[1]+O['REC_TITLE'],m.string('Bee'))
 m.press(6000); assert m.hold()==11 and m.nodes[m.title]['text']=='Bee'; passed()
@@ -2999,12 +3094,12 @@ for action,expected,said in ((0,['A','B','B','C'],'Playing Next'),(1,['A','B','C
     m=playing_menu(); assert m.run(action)==said and m.names()==expected and not m.playback(); passed()
 m=playing_menu(); assert m.run(3)=='Added to Favourites'
 assert [c[2:] for c in m.calls if c[0]=='batch_add_file']==[(0xf00a,m.get(syms['mcl_pdeqplaylist']))]
-assert sel(m)[:2]==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]; passed()
+assert sel(m)[:2]==([('batch_add_file',0xf001)] if is_m1plus else [('batch_init_selectrecord',3),('batch_set_selectitem',1)]); passed()
 m=playing_menu(); m.favs.add('B'); assert m.run(3)=='Removed from Favourites'
 assert [c[1] for c in m.calls if c[0]=='deleteMusicFromFav']==[m.items(m.get(syms['mcl_pdeqplaylist']))[1]]; passed()
 m=playing_menu(); m.run(4)
 assert m.opened[-1]==('localmusic/playlist_page',0x2f001)
-assert sel(m)==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]; passed()
+assert sel(m)==([] if is_m1plus else [('batch_init_selectrecord',3),('batch_set_selectitem',1)]); passed()
 for action,page in ((5,'playerjumpinfo_page'),(6,'localmusic/artistinfo_page')):
     m=playing_menu(); m.run(action); assert m.opened[-1][0]==page
     if action==6: assert m.opened[-1][2]==m.items(m.get(syms['mcl_pdeqplaylist']))[1]
@@ -3032,122 +3127,123 @@ for kw in ({'queue':0},{'queue':1},{'queue':3}):
     m.press(100); assert m.hold()==0 and m.nodes[m.top]['name']=='playing_page'; passed()
 m=playing_menu(); m.airplay=2; m.press(100); assert m.hold()==0; passed()
 
-# The existing non-pooled playlist rows are guarded at their final click dispatch.
-class PlayingPlaylistMachine(QueueMachine):
-    STOCK_PICK=0x4b1d24
-    def __init__(self):
-        super().__init__(page='playing_page',pos=1)
-        self.added=[]
-        self.handlers[self.STOCK_PICK]='playlist_pick'
-    def hook(self,u,address,size,unused):
-        if address==self.STOCK_PICK:
-            self.added.append(self.names()[1])
-            u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
-        opening=self.handlers.get(address)=='q:navigator_to_with_context' and self.text(u.reg_read(UC_MIPS_REG_A0))=='localmusic/playlist_page'
-        super().hook(u,address,size,unused)
-        if opening:
-            self.playlist_rows=[self.node('button',f'playlist_{i}') for i in range(3)]
-            view=self.node('scroll_view',children=self.playlist_rows)
-            page=self.node('window','playlist_page',[view]); self.top=page; self.stack.append(page)
-            for row in self.playlist_rows:
-                em,it=self.alloc(4),self.alloc(0x28)
-                self.word(row+O['W_EMITTER'],em); self.word(em,it)
-                self.word(it,row); self.word(it+O['EMIT_TYPE'],O['EVT_CLICK']); self.word(it+12,self.STOCK_PICK)
-for stale in (False,True):
-    m=PlayingPlaylistMachine(); m.run(4)
-    assert m.nodes[m.top]['name']=='playlist_page'
-    for row in m.playlist_rows:
-        f,ctx=m.handler(row,O['EVT_CLICK']); assert f!=m.STOCK_PICK and ctx==row
-    if stale: m.word(O['MCL_POS'],2)
-    f,ctx=m.handler(m.playlist_rows[2],O['EVT_CLICK'])
-    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==(11 if stale else 0)
-    assert m.added==([] if stale else ['B'])
-    if not stale: assert sel(m)==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]
-    f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    m.top=m.stack[0]; m.press(200); assert m.hold()==11; passed()
-
-# Execute stock's rebuild and naming callback; only UI/dialog and database services are mocked.
-class PlaylistMachine(PlayingPlaylistMachine):
-    def __init__(self, count=0, mode=1):
-        super().__init__()
-        self.mock('button_create','list_item_create','image_create','view_create','hscroll_label_create',
-                  'widget_use_style','widget_set_name','widget_set_text_utf8','widget_set_visible',
-                  'image_set_draw_type','image_base_set_image','set_hscroll_label_attribute',
-                  'hscroll_label_set_only_focus','hscroll_label_set_ellipses','hscroll_label_set_speed',
-                  'gif_image_play','batch_get_selectitem','file_is_playing','getFormatString',
-                  'getMusicByPlayList','get_albumcover_listsize','mclGetPlayStatus','list_get_img_pic',
-                  'toolsTrimLeft','toolsTrimRight','tk_snprintf')
-        self.handlers[0x4aad10]='row_toolbar'
-        self.handlers[0x4b1438]='playlist_load'
-        self.handlers[syms['widget_restack']]='picker_restack'
-        self.handlers[syms['navigator_to']]='picker_dialog'
-        self.word(syms['p_deque_playlist'],self.deque([self.song(f'List {i}') for i in range(count)]))
-        # Stock's private playlist add-mode global, loaded through its GOT.
-        data=(B/'stock-demo').read_bytes()
-        from build import fileoff, GP
-        self.mode=struct.unpack_from('<I',data,fileoff(data,GP-0x5810))[0]+0x7894
-        self.word(self.mode,mode)
-        self.view=self.node('scroll_view','scroll_view')
-        self.top=self.node('window','playlist_page',[self.view])
-        self.word(self.view+O['W_PARENT'],self.top); self.word(self.top+O['W_PARENT'],self.wm)
-    def rebuild(self):
-        assert self.call(address=0x4b2dac,args=(self.top,0,0,0),gap=0)==0
-        kids=self.nodes[self.view]['children']
-        for i,row in enumerate(kids): self.word(row+O['W_Y'],i*48)
-        self.word(self.view+O['VIEW_CONTENT_H'],len(kids)*48)
-        return kids
-    def hook(self,u,address,size,unused):
-        name=self.handlers.get(address,''); a,b,c,d=[u.reg_read(r) for r in REGS]
-        if name=='picker_dialog' and self.text(a)!='dialog/addplaylist_dialog':
-            self.handlers[address]='q:navigator_to'
+if not is_m1plus:
+    # The existing non-pooled playlist rows are guarded at their final click dispatch.
+    class PlayingPlaylistMachine(QueueMachine):
+        STOCK_PICK=0x4b1d24
+        def __init__(self):
+            super().__init__(page='playing_page',pos=1)
+            self.added=[]
+            self.handlers[self.STOCK_PICK]='playlist_pick'
+        def hook(self,u,address,size,unused):
+            if address==self.STOCK_PICK:
+                self.added.append(self.names()[1])
+                u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
+            opening=self.handlers.get(address)=='q:navigator_to_with_context' and self.text(u.reg_read(UC_MIPS_REG_A0))=='localmusic/playlist_page'
             super().hook(u,address,size,unused)
-            self.handlers[address]=name
-            return
-        if name in ('picker_restack','picker_dialog'):
-            if name=='picker_restack':
-                kids=self.nodes[self.view]['children']; kids.remove(a); kids.insert(b,a); ret=0
-            else:
-                assert self.text(a)=='dialog/addplaylist_dialog'
-                ret=0
-            u.reg_write(UC_MIPS_REG_V0,ret); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
-        if name=='widget_off_by_func':
-            self.nodes[a]['handlers']=[h for h in self.nodes[a].get('handlers',[]) if h!=(b,c,d)]
-        super().hook(u,address,size,unused)
-        if name=='q:widget_on' and b==O['EVT_CLICK']:
-            it=self.get(self.get(a+O['W_EMITTER'])); self.word(it,d); self.word(it+12,c)
-
-for count in (0,3):
-    for mode in (0,1,2):
-        m=PlaylistMachine(count,mode); kids=m.rebuild()
-        assert len(kids)==count+(0 if mode else 1)
-        previous=len(kids); kids=m.rebuild(); assert len(kids)==previous
-        # Restacking leaves stock's numeric button names/context unchanged.
-        if count:
-            row=kids[0 if mode else 1]
-            button=m.nodes[row]['children'][0]
-            assert m.nodes[button]['name']=='0'
-            assert m.handler(button,O['EVT_CLICK'])==(m.STOCK_PICK,button)
-        passed()
-
-if variant=='ipod':
+            if opening:
+                self.playlist_rows=[self.node('button',f'playlist_{i}') for i in range(3)]
+                view=self.node('scroll_view',children=self.playlist_rows)
+                page=self.node('window','playlist_page',[view]); self.top=page; self.stack.append(page)
+                for row in self.playlist_rows:
+                    em,it=self.alloc(4),self.alloc(0x28)
+                    self.word(row+O['W_EMITTER'],em); self.word(em,it)
+                    self.word(it,row); self.word(it+O['EMIT_TYPE'],O['EVT_CLICK']); self.word(it+12,self.STOCK_PICK)
     for stale in (False,True):
-        m=PlaylistMachine(3,2)
-        # Open through Now Playing so the picker is tracked, then rebuild as creation does.
-        m.top=m.stack[0]; m.run(4); page=m.top
-        m.view=m.nodes[page]['children'][0]; m.nodes[m.view]['name']='scroll_view'
-        m.word(syms['p_deque_playlist'],m.deque([m.song('Created')]))
-        kids=m.rebuild(); button=m.nodes[kids[0]]['children'][0]
-        f,ctx=m.handler(button,O['EVT_CLICK']); assert f!=m.STOCK_PICK
+        m=PlayingPlaylistMachine(); m.run(4)
+        assert m.nodes[m.top]['name']=='playlist_page'
+        for row in m.playlist_rows:
+            f,ctx=m.handler(row,O['EVT_CLICK']); assert f!=m.STOCK_PICK and ctx==row
         if stale: m.word(O['MCL_POS'],2)
+        f,ctx=m.handler(m.playlist_rows[2],O['EVT_CLICK'])
         assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==(11 if stale else 0)
-        assert m.added==([] if stale else ['B']); passed()
+        assert m.added==([] if stale else ['B'])
+        if not stale: assert sel(m)==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]
+        f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+        m.top=m.stack[0]; m.press(200); assert m.hold()==11; passed()
+
+    # Execute stock's rebuild and naming callback; only UI/dialog and database services are mocked.
+    class PlaylistMachine(PlayingPlaylistMachine):
+        def __init__(self, count=0, mode=1):
+            super().__init__()
+            self.mock('button_create','list_item_create','image_create','view_create','hscroll_label_create',
+                      'widget_use_style','widget_set_name','widget_set_text_utf8','widget_set_visible',
+                      'image_set_draw_type','image_base_set_image','set_hscroll_label_attribute',
+                      'hscroll_label_set_only_focus','hscroll_label_set_ellipses','hscroll_label_set_speed',
+                      'gif_image_play','batch_get_selectitem','file_is_playing','getFormatString',
+                      'getMusicByPlayList','get_albumcover_listsize','mclGetPlayStatus','list_get_img_pic',
+                      'toolsTrimLeft','toolsTrimRight','tk_snprintf')
+            self.handlers[0x4aad10]='row_toolbar'
+            self.handlers[0x4b1438]='playlist_load'
+            self.handlers[syms['widget_restack']]='picker_restack'
+            self.handlers[syms['navigator_to']]='picker_dialog'
+            self.word(syms['p_deque_playlist'],self.deque([self.song(f'List {i}') for i in range(count)]))
+            # Stock's private playlist add-mode global, loaded through its GOT.
+            data=(B/'stock-demo').read_bytes()
+            from build import fileoff, GP
+            self.mode=struct.unpack_from('<I',data,fileoff(data,GP-0x5810))[0]+0x7894
+            self.word(self.mode,mode)
+            self.view=self.node('scroll_view','scroll_view')
+            self.top=self.node('window','playlist_page',[self.view])
+            self.word(self.view+O['W_PARENT'],self.top); self.word(self.top+O['W_PARENT'],self.wm)
+        def rebuild(self):
+            assert self.call(address=0x4b2dac,args=(self.top,0,0,0),gap=0)==0
+            kids=self.nodes[self.view]['children']
+            for i,row in enumerate(kids): self.word(row+O['W_Y'],i*48)
+            self.word(self.view+O['VIEW_CONTENT_H'],len(kids)*48)
+            return kids
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,''); a,b,c,d=[u.reg_read(r) for r in REGS]
+            if name=='picker_dialog' and self.text(a)!='dialog/addplaylist_dialog':
+                self.handlers[address]='q:navigator_to'
+                super().hook(u,address,size,unused)
+                self.handlers[address]=name
+                return
+            if name in ('picker_restack','picker_dialog'):
+                if name=='picker_restack':
+                    kids=self.nodes[self.view]['children']; kids.remove(a); kids.insert(b,a); ret=0
+                else:
+                    assert self.text(a)=='dialog/addplaylist_dialog'
+                    ret=0
+                u.reg_write(UC_MIPS_REG_V0,ret); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
+            if name=='widget_off_by_func':
+                self.nodes[a]['handlers']=[h for h in self.nodes[a].get('handlers',[]) if h!=(b,c,d)]
+            super().hook(u,address,size,unused)
+            if name=='q:widget_on' and b==O['EVT_CLICK']:
+                it=self.get(self.get(a+O['W_EMITTER'])); self.word(it,d); self.word(it+12,c)
+
+    for count in (0,3):
+        for mode in (0,1,2):
+            m=PlaylistMachine(count,mode); kids=m.rebuild()
+            assert len(kids)==count+(0 if mode else 1)
+            previous=len(kids); kids=m.rebuild(); assert len(kids)==previous
+            # Restacking leaves stock's numeric button names/context unchanged.
+            if count:
+                row=kids[0 if mode else 1]
+                button=m.nodes[row]['children'][0]
+                assert m.nodes[button]['name']=='0'
+                assert m.handler(button,O['EVT_CLICK'])==(m.STOCK_PICK,button)
+            passed()
+
+    if variant=='ipod':
+        for stale in (False,True):
+            m=PlaylistMachine(3,2)
+            # Open through Now Playing so the picker is tracked, then rebuild as creation does.
+            m.top=m.stack[0]; m.run(4); page=m.top
+            m.view=m.nodes[page]['children'][0]; m.nodes[m.view]['name']='scroll_view'
+            m.word(syms['p_deque_playlist'],m.deque([m.song('Created')]))
+            kids=m.rebuild(); button=m.nodes[kids[0]]['children'][0]
+            f,ctx=m.handler(button,O['EVT_CLICK']); assert f!=m.STOCK_PICK
+            if stale: m.word(O['MCL_POS'],2)
+            assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==(11 if stale else 0)
+            assert m.added==([] if stale else ['B']); passed()
 
 # Short press toggles once; a hold opens one menu titled by its row, its release is swallowed and
 # the next short press toggles again. A repeated long event of the same press opens nothing.
 m=QueueMachine(); page=m.top
 m.press(5000); assert m.release()==1
 m.press(6000); assert m.hold()==11 and m.nodes[m.top]['name']=='sortselect_dialog'
-assert {c[1:] for c in m.calls if c[0]=='widget_off_by_func'}=={(m.top,O['EVT_KEY_UP'],O['SORTSELECT_KEYUP']),(m.back,O['EVT_CLICK'],O['SORTSELECT_CLOSE'])}
+assert {c[1:] for c in m.calls if c[0]=='widget_off_by_func'}==({(m.back,O['EVT_CLICK'],O['SORTSELECT_CLOSE'])} if is_m1plus else {(m.top,O['EVT_KEY_UP'],O['SORTSELECT_KEYUP']),(m.back,O['EVT_CLICK'],O['SORTSELECT_CLOSE'])})
 assert m.nodes[m.title]['text']=='Row 0' and m.labels()==SONG_MENU
 assert m.hold()==0 and not any(c[0]=='navigator_to' for c in m.calls) and len(m.stack)==2
 assert m.release()==0
@@ -3188,7 +3284,7 @@ for cls,artist_type,page,query in ((0xff01,1,'album_page',('getMusicByAlbumAndAl
     assert m.names(m.get(syms['tools_pdeq_directory']))==['staged'] and m.pool()==[0,1,2,3,4]
     passed()
 # Artist, composer and genre rows, and their album lists, use batch_add_file's per-class queries.
-for cls,artist_type,query in ((0xf004,0,('getMusicBySonger','Artist',None)),(0xf004,1,('getMusicByAlbumArtist','Artist',None)),
+for cls,artist_type,query in ((0xf004,0,('getMusicBySonger','Artist',None)),(0xf004,1,(('getMusicBySonger' if is_m1plus else 'getMusicByAlbumArtist'),'Artist',None)),
         (0xf005,0,('getMusicByComposer','Comp',None)),(0xf006,0,('getMusicByGenre','Pop',None)),
         (0xff02,0,('getMusicByAlbumAndComposer','Album','Comp')),(0xff03,0,('getMusicByAlbumAndGenre','Album','Pop'))):
     m=QueueMachine(page='localclass_page',cls=cls,pos=2); m.word(syms['g_artist_type'],artist_type)
@@ -3224,7 +3320,7 @@ for kw,setup,want in (({},None,('Row 0',SONG_MENU)),
 # Favourites: Add runs batch-select's Add to My Fav for the row alone, which tags a folder file;
 # Remove deletes it, and on My Fav itself flags the list to reload as Now Playing's heart does.
 m=QueueMachine(); assert m.run(2,steps=3)=='Added to Favourites' and m.names()==['A','B','C']
-assert sel(m)==[('batch_init_selectrecord',20),('batch_set_selectitem',3),('batch_add_file',0xf001)]
+assert sel(m)==([('batch_add_file',0xf001)] if is_m1plus else [('batch_init_selectrecord',20),('batch_set_selectitem',3),('batch_add_file',0xf001)])
 assert [c[2:] for c in m.calls if c[0]=='batch_add_file']==[(0xf00a,m.get(syms['p_deque_showlist']))]; passed()
 for cls,flag in ((0xf001,0),(0xf00a,1)):
     m=QueueMachine(cls=cls); m.favs.add('Row 0'); assert m.run(2)=='Removed from Favourites'
@@ -3235,10 +3331,10 @@ for cls,flag in ((0xf001,0),(0xf00a,1)):
 for kw,row in (({},3),({'cls':0xf003,'page':'album_page'},5)):
     m=QueueMachine(**kw); assert m.run(row,steps=1) is None
     assert m.opened[-1]==('localmusic/playlist_page',0x10000|m.get(syms['g_class_type']))
-    assert sel(m)==[('batch_init_selectrecord',20),('batch_set_selectitem',1)] and m.names()==['A','B','C']; passed()
+    assert sel(m)==([] if is_m1plus else [('batch_init_selectrecord',20),('batch_set_selectitem',1)]) and m.names()==['A','B','C']; passed()
 # Shuffle plays the collection's songs from a random one with shuffle saved, as Shuffle Songs.
 m=QueueMachine(cls=0xf004,page='localclass_page'); assert m.run(2) is None
-assert m.opened[-1][:2]==('playing_page',['T1','T2']) and m.opened[-1][2] in (0,1) and m.opened[-1][3:]==(0xf001,2) and [c[1:3] for c in m.calls if c[0]=='config_playmode']==[(2,1)]; passed()
+assert m.opened[-1][:2]==('playing_page',['T1','T2']) and m.opened[-1][2] in (0,1) and m.opened[-1][3:]==(0xf001,2) and [c[1:3] for c in m.calls if c[0]=='config_playmode']==([] if is_m1plus else [(2,1)]); passed()
 m=QueueMachine(cls=0xf004,page='localclass_page'); m.found=[]; assert m.run(2)=='Queue unchanged' and m.opened[-1][0]!='playing_page'; passed()
 # Go to album fills the album query as Now Playing's Album info and opens playerjumpinfo_page; Go to
 # artist opens artistinfo_page with {class, record}. Closing either puts the browsing state back.
@@ -3259,94 +3355,95 @@ for row,pos,closed in ((0,0,True),(1,0,False),(1,2,True)):
     m=QueueMachine(pos=pos); m.word(O['MCL_PRELOAD'],1); m.word(O['MCL_FD'],9); m.run(row)
     assert (m.sent==[(9,b'{mcl-closegapless\\null}',23,0)] and m.mcl('MCL_PRELOAD')==-1) if closed else (not m.sent and m.mcl('MCL_PRELOAD')==1)
     passed()
-# Shuffle: the patched mclNextSong call runs the stock pick, then plays the Play next track once.
 demo=(B/'demo').read_bytes()
-assert struct.unpack_from('<I',demo,fileoff(demo,SHUFFLE_CALL[0]))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_shuffle']>>2
-m=QueueMachine(mode=2); m.run(0,steps=5); assert m.names()==['A','Row 5','B','C']
-# LDAC: stock switchBtPriority sends quality 0x16 for both HQ and Standard; patched HQ sends 0x15.
-for patched,want in ((True,(0x15,0x16,0x18)),(False,(0x16,0x16,0x18))):
-    bt=Machine(patched); bt.mock('btctl_set_codec_priority','btctl_set_ldac_quality','btctl_set_sbc_quality')
-    for row,quality in enumerate(want):
-        assert bt.call(address=syms['switchBtPriority'],args=(row,0,0,0),gap=0)==1
-        assert [c[1] for c in bt.calls if c[0]=='btctl_set_ldac_quality']==[quality], (patched,row)
-    passed()
-# Bluetooth volume runs through the shared hook in both variants. Mock only headset I/O
-# and stock gain; device_set_volume itself executes its native output routing.
-class BtVolumeMachine(Machine):
-    def __init__(self):
-        super().__init__()
-        self.absolute=10; self.write_result=0; self.way=1
-        self.byte(syms['g_bluetoothflag'],1); self.byte(syms['bt_linkstatus'],1)
-        self.word(syms['bt_showcoding'],1); self.byte(syms['g_volume'],20); self.byte(syms['g_maxvolume'],100)
-        self.handlers[HOOKS['mclSetBtVol'][0]+12]='stock_btvol'
-        self.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
-        self.mock('mclSetLocalVol','mclUsbAudioSetVol','notifyVolume','airplaySendVol')
-    def hook(self,u,address,size,unused):
-        name=self.handlers.get(address,'')
-        if name not in ('btctl_transport_get_volume','btctl_transport_set_volume','mclGetOutputWay'):
-            return super().hook(u,address,size,unused)
-        a=u.reg_read(REGS[0]); self.calls.append((name,a,0,0))
-        if name=='btctl_transport_get_volume': ret=self.absolute
-        elif name=='mclGetOutputWay': ret=self.way
-        else:
-            ret=self.write_result
-            if ret==0: self.absolute=a
-        u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff)
-        u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-    def volume(self,left,right):
-        self.call(address=HOOKS['mclSetBtVol'][0],args=(left,right,0,0),gap=0)
-        return [(signed(c[1]),signed(c[2])) for c in self.calls if c[0]=='stock_btvol']
-    def writes(self): return [c[1] for c in self.calls if c[0]=='btctl_transport_set_volume']
-    def poll(self,gap=400):
-        self.call(address=HOOKS['main_loop_sleep_default'][0],args=(self.wm,0,0,0),gap=gap)
+if not is_m1plus:
+    # Shuffle: the patched mclNextSong call runs the stock pick, then plays the Play next track once.
+    assert struct.unpack_from('<I',demo,fileoff(demo,SHUFFLE_CALL[0]))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_shuffle']>>2
+    m=QueueMachine(mode=2); m.run(0,steps=5); assert m.names()==['A','Row 5','B','C']
+    # LDAC: stock switchBtPriority sends quality 0x16 for both HQ and Standard; patched HQ sends 0x15.
+    for patched,want in ((True,(0x15,0x16,0x18)),(False,(0x16,0x16,0x18))):
+        bt=Machine(patched); bt.mock('btctl_set_codec_priority','btctl_set_ldac_quality','btctl_set_sbc_quality')
+        for row,quality in enumerate(want):
+            assert bt.call(address=syms['switchBtPriority'],args=(row,0,0,0),gap=0)==1
+            assert [c[1] for c in bt.calls if c[0]=='btctl_set_ldac_quality']==[quality], (patched,row)
+        passed()
+    # Bluetooth volume runs through the shared hook in both variants. Mock only headset I/O
+    # and stock gain; device_set_volume itself executes its native output routing.
+    class BtVolumeMachine(Machine):
+        def __init__(self):
+            super().__init__()
+            self.absolute=10; self.write_result=0; self.way=1
+            self.byte(syms['g_bluetoothflag'],1); self.byte(syms['bt_linkstatus'],1)
+            self.word(syms['bt_showcoding'],1); self.byte(syms['g_volume'],20); self.byte(syms['g_maxvolume'],100)
+            self.handlers[HOOKS['mclSetBtVol'][0]+12]='stock_btvol'
+            self.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
+            self.mock('mclSetLocalVol','mclUsbAudioSetVol','notifyVolume','airplaySendVol')
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if name not in ('btctl_transport_get_volume','btctl_transport_set_volume','mclGetOutputWay'):
+                return super().hook(u,address,size,unused)
+            a=u.reg_read(REGS[0]); self.calls.append((name,a,0,0))
+            if name=='btctl_transport_get_volume': ret=self.absolute
+            elif name=='mclGetOutputWay': ret=self.way
+            else:
+                ret=self.write_result
+                if ret==0: self.absolute=a
+            u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff)
+            u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+        def volume(self,left,right):
+            self.call(address=HOOKS['mclSetBtVol'][0],args=(left,right,0,0),gap=0)
+            return [(signed(c[1]),signed(c[2])) for c in self.calls if c[0]=='stock_btvol']
+        def writes(self): return [c[1] for c in self.calls if c[0]=='btctl_transport_set_volume']
+        def poll(self,gap=400):
+            self.call(address=HOOKS['main_loop_sleep_default'][0],args=(self.wm,0,0,0),gap=gap)
 
-for left,right,want in ((0,0,0),(1,1,1),(20,20,25),(40,30,51),(50,50,64),(100,100,127),
-                        (-5,-1,0),(101,200,127)):
-    gain=(100,100) if want else (left,right)  # AVRCP 0 isn't silent on every headset: keep stock's mute
-    b=BtVolumeMachine(); assert b.volume(left,right)==[gain] and b.writes()==[want]
-    assert b.volume(left,right)==[gain] and not b.writes(); passed()
-# Volume 0 and back up: the headset gets 0 then 1, stock gain 0 then full.
-b=BtVolumeMachine(); assert b.volume(0,0)==[(0,0)] and b.writes()==[0]
-assert b.volume(1,1)==[(100,100)] and b.writes()==[1]; passed()
-b=BtVolumeMachine(); b.byte(syms['g_volume'],0); b.poll()
-assert b.writes()==[0] and [c[1:3] for c in b.calls if c[0]=='stock_btvol']==[(0,0)]; passed()
-for cur in (-1,128,255):
-    b=BtVolumeMachine(); b.absolute=cur
-    assert b.volume(20,30)==[(20,30)] and not b.writes(); passed()
-b=BtVolumeMachine(); b.write_result=-1
-assert b.volume(20,30)==[(20,30)] and b.writes()==[38]; passed()
-for name,value in (('g_bluetoothflag',0),('bt_linkstatus',0),('bt__recv_pageflag',1),('bt_showcoding',0)):
-    b=BtVolumeMachine()
-    (b.word if name=='bt_showcoding' else b.byte)(syms[name],value)
-    assert b.volume(20,30)==[(20,30)] and not b.writes(); passed()
-for way in (0,2):
-    b=BtVolumeMachine(); b.way=way
-    assert b.volume(20,30)==[(20,30)] and not b.writes(); passed()
-b=BtVolumeMachine(); b.absolute=-1; b.poll()
-assert not b.writes()
-b.absolute=10; b.poll(399); assert not b.writes()
-b.poll(1); assert b.writes()==[25]
-b.absolute=5; b.poll(); assert not b.writes()  # exact rounded remote value
-b.byte(syms['bt_linkstatus'],0); b.poll(); assert not b.writes()
-b.byte(syms['bt_linkstatus'],1); b.word(syms['bt_showcoding'],0); b.poll(); assert not b.writes()
-b.word(syms['bt_showcoding'],1); b.poll(); assert not b.writes(); passed()
-b=BtVolumeMachine(); b.write_result=-1; b.poll()
-assert b.writes()==[25] and not any(c[0]=='stock_btvol' for c in b.calls)
-b.write_result=0; b.poll(); assert b.writes()==[25]; passed()
-# Native device_set_volume calls LocalVol and BtVol for the DAC/Bluetooth, USB's own
-# setter for USB. g_output_way=0 avoids stock's fixed line-out branch; notify is covered too.
-for way,soft in ((0,0),(1,0),(2,0),(2,1)):
-    b=BtVolumeMachine(); b.handlers.pop(syms['device_set_volume'])
-    b.byte(syms['g_output_way'],0); b.way=way; b.byte(syms['g_usbvol_mode'],soft)
-    b.call(address=syms['device_set_volume'],args=(20,1,0,0),gap=0)
-    gains=[c[1:3] for c in b.calls if c[0]=='stock_btvol']
-    local=[c[1:3] for c in b.calls if c[0]=='mclSetLocalVol']
-    usb=[c[1:3] for c in b.calls if c[0]=='mclUsbAudioSetVol']
-    assert gains==([(100,100)] if way==1 else [(20,20)] if way==0 else [])
-    assert local==([(20,20)] if way in (0,1) else [])
-    assert usb==([(20,20)] if soft else [(100,100)]) if way==2 else not usb
-    assert b.writes()==([25] if way==1 else [])
-    assert any(c[0]=='notifyVolume' for c in b.calls); passed()
+    for left,right,want in ((0,0,0),(1,1,1),(20,20,25),(40,30,51),(50,50,64),(100,100,127),
+                            (-5,-1,0),(101,200,127)):
+        gain=(100,100) if want else (left,right)  # AVRCP 0 isn't silent on every headset: keep stock's mute
+        b=BtVolumeMachine(); assert b.volume(left,right)==[gain] and b.writes()==[want]
+        assert b.volume(left,right)==[gain] and not b.writes(); passed()
+    # Volume 0 and back up: the headset gets 0 then 1, stock gain 0 then full.
+    b=BtVolumeMachine(); assert b.volume(0,0)==[(0,0)] and b.writes()==[0]
+    assert b.volume(1,1)==[(100,100)] and b.writes()==[1]; passed()
+    b=BtVolumeMachine(); b.byte(syms['g_volume'],0); b.poll()
+    assert b.writes()==[0] and [c[1:3] for c in b.calls if c[0]=='stock_btvol']==[(0,0)]; passed()
+    for cur in (-1,128,255):
+        b=BtVolumeMachine(); b.absolute=cur
+        assert b.volume(20,30)==[(20,30)] and not b.writes(); passed()
+    b=BtVolumeMachine(); b.write_result=-1
+    assert b.volume(20,30)==[(20,30)] and b.writes()==[38]; passed()
+    for name,value in (('g_bluetoothflag',0),('bt_linkstatus',0),('bt__recv_pageflag',1),('bt_showcoding',0)):
+        b=BtVolumeMachine()
+        (b.word if name=='bt_showcoding' else b.byte)(syms[name],value)
+        assert b.volume(20,30)==[(20,30)] and not b.writes(); passed()
+    for way in (0,2):
+        b=BtVolumeMachine(); b.way=way
+        assert b.volume(20,30)==[(20,30)] and not b.writes(); passed()
+    b=BtVolumeMachine(); b.absolute=-1; b.poll()
+    assert not b.writes()
+    b.absolute=10; b.poll(399); assert not b.writes()
+    b.poll(1); assert b.writes()==[25]
+    b.absolute=5; b.poll(); assert not b.writes()  # exact rounded remote value
+    b.byte(syms['bt_linkstatus'],0); b.poll(); assert not b.writes()
+    b.byte(syms['bt_linkstatus'],1); b.word(syms['bt_showcoding'],0); b.poll(); assert not b.writes()
+    b.word(syms['bt_showcoding'],1); b.poll(); assert not b.writes(); passed()
+    b=BtVolumeMachine(); b.write_result=-1; b.poll()
+    assert b.writes()==[25] and not any(c[0]=='stock_btvol' for c in b.calls)
+    b.write_result=0; b.poll(); assert b.writes()==[25]; passed()
+    # Native device_set_volume calls LocalVol and BtVol for the DAC/Bluetooth, USB's own
+    # setter for USB. g_output_way=0 avoids stock's fixed line-out branch; notify is covered too.
+    for way,soft in ((0,0),(1,0),(2,0),(2,1)):
+        b=BtVolumeMachine(); b.handlers.pop(syms['device_set_volume'])
+        b.byte(syms['g_output_way'],0); b.way=way; b.byte(syms['g_usbvol_mode'],soft)
+        b.call(address=syms['device_set_volume'],args=(20,1,0,0),gap=0)
+        gains=[c[1:3] for c in b.calls if c[0]=='stock_btvol']
+        local=[c[1:3] for c in b.calls if c[0]=='mclSetLocalVol']
+        usb=[c[1:3] for c in b.calls if c[0]=='mclUsbAudioSetVol']
+        assert gains==([(100,100)] if way==1 else [(20,20)] if way==0 else [])
+        assert local==([(20,20)] if way in (0,1) else [])
+        assert usb==([(20,20)] if soft else [(100,100)]) if way==2 else not usb
+        assert b.writes()==([25] if way==1 else [])
+        assert any(c[0]=='notifyVolume' for c in b.calls); passed()
 
 # Screen off, the UI loop idles SCREEN_OFF_SLEEP_MS before stock's own pacing; screen on, stock alone.
 sleep_hook=HOOKS['main_loop_sleep_default'][0]
@@ -3360,107 +3457,108 @@ for light,want in ((1,[]),(0,[O['SCREEN_OFF_SLEEP_MS']])):
         s.call(address=sleep_hook,args=(0x1234,0,0,0),gap=0)
         assert [c[1] for c in s.calls if c[0]=='widget_invalidate_force']==([s.wm] if wake else [])
     passed()
-for want in (1,3):
-    m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
-    assert m.picks[-1]==1 and m.mcl('MCL_POS')==want and any(c[0]=='mclStartPlayer' for c in m.calls)
-passed()
-# Previous then Next in stock Shuffle returns to the track Previous left, not a new random pick.
-m=QueueMachine(mode=2); m.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
-m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0); m.word(O['MCL_POS'],1)
-m.call(address=syms['mclPrevSong'],args=(0,0,0,0),gap=0); assert m.picks[-1]==0 and m.mcl('MCL_POS')==0
-for want in (1,2):
-    m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0); assert m.mcl('MCL_POS')==want
-passed()
-# Update Local Music: the stock scanner, nested folders and all, checks ringnav_scan_room (65,000
-# songs; stock 20,000) before each entry. Only the folder listing, paths and database insert are mocked.
-from build import SCAN_LIMIT
-assert struct.unpack_from('<2I',demo,fileoff(demo,SCAN_LIMIT[0]))==(0x0c000000|payload_syms['ringnav_scan_room']>>2,SCAN_LIMIT[3])
-SONGS,STOP,LISTING=0xa3c354,0xa3c358,0xa3bf48  # toolsGetMusicNum's count, toolsStopUpdateMusic's flag, the listing deque
-class ScanMachine(Machine):
-    def __init__(self,tree,songs,patched=True,stop_at=None):
-        super().__init__(patched); self.tree=tree; self.added=[]; self.stop_at=stop_at
-        for n in ('toolsSetScanFolderPath','toolsCheckItemExist','deque_size','deque_at','sprintf@GLIBC_2.0'): self.handlers[syms[n]]='scan:'+n
-        self.handlers[0x5c38c8]='scan:list'; self.handlers[0x5c73e4]='scan:insert'  # private: lists a folder, adds a song
-        self.word(SONGS,songs); self.word(LISTING,self.alloc(0x20))
-    def hook(self,u,address,size,unused):
-        name=self.handlers.get(address,'')
-        if not name.startswith('scan:'): return super().hook(u,address,size,unused)
-        assert u.reg_read(UC_MIPS_REG_T9)==address
-        name=name[5:].split('@')[0]; a,b,c,d=[u.reg_read(r) for r in REGS]; ret=0
-        if name=='list':
-            self.path=self.text(a); self.listing=[]
-            for n in self.tree[self.path]:
-                r=self.alloc(0x60); self.word(r+O['REC_NAME'],self.string(n))
-                self.word(r+O['REC_TYPE'],4 if f'{self.path}/{n}' in self.tree else 8); self.listing.append(r)
-        elif name=='deque_size': assert a==self.get(LISTING); ret=len(self.listing)
-        elif name=='deque_at': ret=self.listing[b]
-        elif name=='sprintf': assert self.text(b)=='%s/%s'; u.mem_write(a,f'{self.text(c)}/{self.text(d)}'.encode()+b'\0')
-        elif name=='insert':
-            self.added.append(f'{self.path}/{self.text(self.get(a+O["REC_NAME"]))}'); self.word(SONGS,self.get(SONGS)+1)
-            if len(self.added)==self.stop_at: self.byte(STOP,1)  # Back on the Update Local Music dialog
-        u.reg_write(UC_MIPS_REG_V0,ret); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-def scan(songs,tree={'/m':['a']},**kw):
-    """(return, songs added, stop flag, count): 1 finished, 0 stopped."""
-    m=ScanMachine(tree,songs,**kw)
-    return m.call(address=syms['toolsLoadAllFile'],args=(m.string('/m'),0,0,0),gap=0),m.added,m.u.mem_read(STOP,1)[0],m.get(SONGS)
-for patched,limit in ((True,65000),(False,20000)):
-    for songs in (19999,20000,32767,32768,64999,65000,65001):
-        more=songs<limit
-        assert scan(songs,patched=patched)==(more,['/m/a']*more,1-more,songs+more),(patched,songs); passed()
-nested={'/m':['a','sub','b'],'/m/sub':['c','d']}
-assert scan(0,nested)==(1,['/m/a','/m/sub/c','/m/sub/d','/m/b'],0,4); passed()
-assert scan(64998,nested)==(0,['/m/a','/m/sub/c'],1,65000); passed()  # the limit inside a subfolder ends the scan
-assert scan(0,nested,stop_at=2)==(0,['/m/a','/m/sub/c'],1,2); passed()  # the bnez delay slot's stop flag
-assert scan(0,{'/m':['a','b','c']},stop_at=1)==(0,['/m/a'],1,1); passed()
-# Library Artists rows hide the head picture (CLASS_ICON); Composers and Genres, sharing the rebound
-# rows, show theirs again through stock's setter.
-from build import CLASS_ICON
-assert struct.unpack_from('<I',demo,fileoff(demo,CLASS_ICON))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_class_icon']>>2
-m=Machine(); m.mock('class_icon'); icon=m.node('image','img_icon'); row=m.node('view','',[icon])
-for cls,shown in ((0xf004,0),(0xf006,1),(0xf005,1),(0xf004,0)):
-    m.word(syms['g_class_type'],cls); m.calls=[]
-    m.call(address=symbols(B/'patch.elf')['ringnav_class_icon'],args=(row,3,0,0),gap=0)
-    assert m.nodes[icon]['visible']==shown and [c[1:3] for c in m.calls if c[0]=='class_icon']==([(row,3)] if shown else [])
-passed()
-# Library sorts: both stock name comparators, on the patched trim calls, skip a leading article.
-from build import SORT_TRIMS
-from functools import cmp_to_key
-for a in SORT_TRIMS: assert struct.unpack_from('<I',demo,fileoff(demo,a))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_sort_key']>>2
-class SortMachine(Machine):
-    def __init__(self):
-        super().__init__(); self.handlers.pop(syms['toolsTrimLeft']); self.mock('strlen@GLIBC_2.0','snprintf@GLIBC_2.0')
-        for n in ('__ctype_b_loc@GLIBC_2.3','__ctype_tolower_loc@GLIBC_2.3','strncmp@GLIBC_2.0','atoi@GLIBC_2.0',
-                  'strcasecmp@GLIBC_2.0','strcmp@GLIBC_2.0','strncpy@GLIBC_2.0'): self.handlers[syms[n]]='s:'+n
-        b=self.alloc(0x400); t=self.alloc(0x400)  # glibc's tables from -128: the digit class, ASCII lowercase
-        for c in range(-128,256):
-            self.u.mem_write(b+256+2*c,struct.pack('<H',0x800*(48<=c<58)))
-            self.word(t+512+4*c,ord(chr(c).lower()) if 0<=c<128 else c)
-        self.word(b,b+256); self.word(t,t+512); self.tables=(b,t)
-    def hook(self,u,address,size,unused):
-        name=self.handlers.get(address,'')
-        if not name.startswith('s:'): return super().hook(u,address,size,unused)
-        name=name[2:].split('@')[0]; a,b,c=[u.reg_read(r) for r in REGS[:3]]
-        s=lambda x,n=None: bytes(u.mem_read(x,4096)).split(b'\0')[0][:n]
-        if name.startswith('__ctype'): ret=self.tables[name=='__ctype_tolower_loc']
-        elif name=='atoi': ret=int(re.match(rb'\d*',s(a))[0] or 0)
-        elif name=='strncpy': u.mem_write(a,s(b,c).ljust(c,b'\0')); ret=a
-        else: x,y=(s(a,c),s(b,c)) if name=='strncmp' else (s(a),s(b)); x,y=(x.lower(),y.lower()) if name=='strcasecmp' else (x,y); ret=(x>y)-(x<y)
-        u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-m=SortMachine()
-def sort_rec(name):
-    r=m.alloc(0x60); m.word(r+0x10,m.string(name)); m.word(r+8,m.string(name+'.flac')); return r
-def ordered(names,cmp):
-    out=m.alloc(4)
-    def less(x,y):  # the comparator stores x < y
-        m.call(address=cmp,args=(x,y,out,0),gap=0,count=2_000_000); return m.get(out)
-    rs={sort_rec(n):n for n in names}
-    return [rs[r] for r in sorted(rs,key=cmp_to_key(lambda x,y: -1 if less(x,y) else 1 if less(y,x) else 0))]
-names=['Daft Punk','The Cure','Coldplay','Them Crooked Vultures','A Tribe Called Quest','Anthrax','The','an Orchestra','Toto']
-for cmp in (0x5ba658,0x5b9d40):
-    assert ordered(names,cmp)==['Anthrax','Coldplay','The Cure','Daft Punk','an Orchestra','The','Them Crooked Vultures','Toto','A Tribe Called Quest'],ordered(names,cmp)
+if not is_m1plus:
+    for want in (1,3):
+        m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
+        assert m.picks[-1]==1 and m.mcl('MCL_POS')==want and any(c[0]=='mclStartPlayer' for c in m.calls)
     passed()
-key=lambda t: (m.u.mem_write(0x1100000,t.encode()+b'\0'), m.call(address=symbols(B/'patch.elf')['ringnav_sort_key'],args=(0x1100000,0,0,0),gap=0), m.text(0x1100000))[2]
-assert [key(t) for t in ('  The Cure','THE CURE','The ','The  Cure','A','An ','Ant','周杰伦','The 周杰伦')]==['Cure','CURE','The ','The  Cure','A','An ','Ant','周杰伦','周杰伦']; passed()
+    # Previous then Next in stock Shuffle returns to the track Previous left, not a new random pick.
+    m=QueueMachine(mode=2); m.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
+    m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0); m.word(O['MCL_POS'],1)
+    m.call(address=syms['mclPrevSong'],args=(0,0,0,0),gap=0); assert m.picks[-1]==0 and m.mcl('MCL_POS')==0
+    for want in (1,2):
+        m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0); assert m.mcl('MCL_POS')==want
+    passed()
+    # Update Local Music: the stock scanner, nested folders and all, checks ringnav_scan_room (65,000
+    # songs; stock 20,000) before each entry. Only the folder listing, paths and database insert are mocked.
+    from build import SCAN_LIMIT
+    assert struct.unpack_from('<2I',demo,fileoff(demo,SCAN_LIMIT[0]))==(0x0c000000|payload_syms['ringnav_scan_room']>>2,SCAN_LIMIT[3])
+    SONGS,STOP,LISTING=0xa3c354,0xa3c358,0xa3bf48  # toolsGetMusicNum's count, toolsStopUpdateMusic's flag, the listing deque
+    class ScanMachine(Machine):
+        def __init__(self,tree,songs,patched=True,stop_at=None):
+            super().__init__(patched); self.tree=tree; self.added=[]; self.stop_at=stop_at
+            for n in ('toolsSetScanFolderPath','toolsCheckItemExist','deque_size','deque_at','sprintf@GLIBC_2.0'): self.handlers[syms[n]]='scan:'+n
+            self.handlers[0x5c38c8]='scan:list'; self.handlers[0x5c73e4]='scan:insert'  # private: lists a folder, adds a song
+            self.word(SONGS,songs); self.word(LISTING,self.alloc(0x20))
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if not name.startswith('scan:'): return super().hook(u,address,size,unused)
+            assert u.reg_read(UC_MIPS_REG_T9)==address
+            name=name[5:].split('@')[0]; a,b,c,d=[u.reg_read(r) for r in REGS]; ret=0
+            if name=='list':
+                self.path=self.text(a); self.listing=[]
+                for n in self.tree[self.path]:
+                    r=self.alloc(0x60); self.word(r+O['REC_NAME'],self.string(n))
+                    self.word(r+O['REC_TYPE'],4 if f'{self.path}/{n}' in self.tree else 8); self.listing.append(r)
+            elif name=='deque_size': assert a==self.get(LISTING); ret=len(self.listing)
+            elif name=='deque_at': ret=self.listing[b]
+            elif name=='sprintf': assert self.text(b)=='%s/%s'; u.mem_write(a,f'{self.text(c)}/{self.text(d)}'.encode()+b'\0')
+            elif name=='insert':
+                self.added.append(f'{self.path}/{self.text(self.get(a+O["REC_NAME"]))}'); self.word(SONGS,self.get(SONGS)+1)
+                if len(self.added)==self.stop_at: self.byte(STOP,1)  # Back on the Update Local Music dialog
+            u.reg_write(UC_MIPS_REG_V0,ret); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    def scan(songs,tree={'/m':['a']},**kw):
+        """(return, songs added, stop flag, count): 1 finished, 0 stopped."""
+        m=ScanMachine(tree,songs,**kw)
+        return m.call(address=syms['toolsLoadAllFile'],args=(m.string('/m'),0,0,0),gap=0),m.added,m.u.mem_read(STOP,1)[0],m.get(SONGS)
+    for patched,limit in ((True,65000),(False,20000)):
+        for songs in (19999,20000,32767,32768,64999,65000,65001):
+            more=songs<limit
+            assert scan(songs,patched=patched)==(more,['/m/a']*more,1-more,songs+more),(patched,songs); passed()
+    nested={'/m':['a','sub','b'],'/m/sub':['c','d']}
+    assert scan(0,nested)==(1,['/m/a','/m/sub/c','/m/sub/d','/m/b'],0,4); passed()
+    assert scan(64998,nested)==(0,['/m/a','/m/sub/c'],1,65000); passed()  # the limit inside a subfolder ends the scan
+    assert scan(0,nested,stop_at=2)==(0,['/m/a','/m/sub/c'],1,2); passed()  # the bnez delay slot's stop flag
+    assert scan(0,{'/m':['a','b','c']},stop_at=1)==(0,['/m/a'],1,1); passed()
+    # Library Artists rows hide the head picture (CLASS_ICON); Composers and Genres, sharing the rebound
+    # rows, show theirs again through stock's setter.
+    from build import CLASS_ICON
+    assert struct.unpack_from('<I',demo,fileoff(demo,CLASS_ICON))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_class_icon']>>2
+    m=Machine(); m.mock('class_icon'); icon=m.node('image','img_icon'); row=m.node('view','',[icon])
+    for cls,shown in ((0xf004,0),(0xf006,1),(0xf005,1),(0xf004,0)):
+        m.word(syms['g_class_type'],cls); m.calls=[]
+        m.call(address=symbols(B/'patch.elf')['ringnav_class_icon'],args=(row,3,0,0),gap=0)
+        assert m.nodes[icon]['visible']==shown and [c[1:3] for c in m.calls if c[0]=='class_icon']==([(row,3)] if shown else [])
+    passed()
+    # Library sorts: both stock name comparators, on the patched trim calls, skip a leading article.
+    from build import SORT_TRIMS
+    from functools import cmp_to_key
+    for a in SORT_TRIMS: assert struct.unpack_from('<I',demo,fileoff(demo,a))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_sort_key']>>2
+    class SortMachine(Machine):
+        def __init__(self):
+            super().__init__(); self.handlers.pop(syms['toolsTrimLeft']); self.mock('strlen@GLIBC_2.0','snprintf@GLIBC_2.0')
+            for n in ('__ctype_b_loc@GLIBC_2.3','__ctype_tolower_loc@GLIBC_2.3','strncmp@GLIBC_2.0','atoi@GLIBC_2.0',
+                      'strcasecmp@GLIBC_2.0','strcmp@GLIBC_2.0','strncpy@GLIBC_2.0'): self.handlers[syms[n]]='s:'+n
+            b=self.alloc(0x400); t=self.alloc(0x400)  # glibc's tables from -128: the digit class, ASCII lowercase
+            for c in range(-128,256):
+                self.u.mem_write(b+256+2*c,struct.pack('<H',0x800*(48<=c<58)))
+                self.word(t+512+4*c,ord(chr(c).lower()) if 0<=c<128 else c)
+            self.word(b,b+256); self.word(t,t+512); self.tables=(b,t)
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if not name.startswith('s:'): return super().hook(u,address,size,unused)
+            name=name[2:].split('@')[0]; a,b,c=[u.reg_read(r) for r in REGS[:3]]
+            s=lambda x,n=None: bytes(u.mem_read(x,4096)).split(b'\0')[0][:n]
+            if name.startswith('__ctype'): ret=self.tables[name=='__ctype_tolower_loc']
+            elif name=='atoi': ret=int(re.match(rb'\d*',s(a))[0] or 0)
+            elif name=='strncpy': u.mem_write(a,s(b,c).ljust(c,b'\0')); ret=a
+            else: x,y=(s(a,c),s(b,c)) if name=='strncmp' else (s(a),s(b)); x,y=(x.lower(),y.lower()) if name=='strcasecmp' else (x,y); ret=(x>y)-(x<y)
+            u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    m=SortMachine()
+    def sort_rec(name):
+        r=m.alloc(0x60); m.word(r+0x10,m.string(name)); m.word(r+8,m.string(name+'.flac')); return r
+    def ordered(names,cmp):
+        out=m.alloc(4)
+        def less(x,y):  # the comparator stores x < y
+            m.call(address=cmp,args=(x,y,out,0),gap=0,count=2_000_000); return m.get(out)
+        rs={sort_rec(n):n for n in names}
+        return [rs[r] for r in sorted(rs,key=cmp_to_key(lambda x,y: -1 if less(x,y) else 1 if less(y,x) else 0))]
+    names=['Daft Punk','The Cure','Coldplay','Them Crooked Vultures','A Tribe Called Quest','Anthrax','The','an Orchestra','Toto']
+    for cmp in (0x5ba658,0x5b9d40):
+        assert ordered(names,cmp)==['Anthrax','Coldplay','The Cure','Daft Punk','an Orchestra','The','Them Crooked Vultures','Toto','A Tribe Called Quest'],ordered(names,cmp)
+        passed()
+    key=lambda t: (m.u.mem_write(0x1100000,t.encode()+b'\0'), m.call(address=symbols(B/'patch.elf')['ringnav_sort_key'],args=(0x1100000,0,0,0),gap=0), m.text(0x1100000))[2]
+    assert [key(t) for t in ('  The Cure','THE CURE','The ','The  Cure','A','An ','Ant','周杰伦','The 周杰伦')]==['Cure','CURE','The ','The  Cure','A','An ','Ant','周杰伦','周杰伦']; passed()
 # iPod boots to Home: home_page_init's memory-play resume, run from its stock context build, starts
 # the restored queue paused (mode 3) through player_start as playing_page_init would, and opens no
 # page; a 0xff class starts nothing, as the page's init. Car mode (mode 2) opens Now Playing as stock.
@@ -3487,7 +3585,7 @@ m.pick(0); m.advance(0); assert m.toasts[-1][3]=='Queue unchanged' and m.names()
 for setup,toggles in ((lambda m:m.byte(syms['g_lockscreen_pageflag'],1),1),(lambda m:m.byte(syms['g_backlight_status'],0),1),
         (lambda m:m.byte(syms['g_navbar_status'],1),1),
         (lambda m:m.word(m.surface+O['TABLE_ROWS'],7),1),(lambda m:m.word(m.row(0)+O['REC_TYPE'],4),1),
-        (lambda m:setattr(m,'airplay',2),0),
+        (lambda m:setattr(m,'airplay',2),1 if is_m1plus else 0),
         (lambda m:setattr(m,'top',m.node('window','home_page',[m.node()])),1)):
     m=QueueMachine(); setup(m); m.press(3)
     assert m.hold()==0 and len(m.stack)==1 and m.release()==toggles
@@ -3498,7 +3596,7 @@ for setup,toggles in ((lambda m:m.byte(syms['g_lockscreen_pageflag'],1),1),(lamb
 class ClassMachine(QueueMachine):
     tramp=int(manifest['patch_symbols']['stock_localclass_trampoline'],16)
     split=[]  # Albums' own grouping (split), which toolsQueryDbTable stages
-    def __init__(self,**kw): super().__init__(**kw); self.word(0xa2638c,0x1000010)  # free's GOT slot, as Coverflow's
+    def __init__(self,**kw): super().__init__(**kw); self.word(FREE_GOT,0x1000010)  # free's GOT slot, as Coverflow's
     def hook(self,u,address,size,unused):
         if address==syms['toolsQueryDbTable']:
             self.deqs[self.get(syms['tools_pdeq_directory'])][1]=[self.copy('stSongInfo',e) for e in self.split]
@@ -3522,7 +3620,8 @@ def unknown(cls,found,last=-1,artist=0,rows=3):
     # Artists follow the artist page's own switch (artist_type), which stock never copied to g_artist_type
     assert n==len(shown) and m.calls[0][:2]==('stock_localclass',cls) and m.get(syms['g_artist_type'])==artist
     return shown,m.query,m.items(m.get(syms['tools_pdeq_directory']))
-for cls,artist,query in ((0xf003,0,'getMusicByAlbum'),(0xf004,0,'getMusicBySonger'),(0xf004,1,'getMusicByAlbumArtist'),
+for cls,artist,query in ((0xf003,0,'getMusicByAlbum'),(0xf004,0,'getMusicBySonger'),
+                         (0xf004,1,'getMusicBySonger' if is_m1plus else 'getMusicByAlbumArtist'),
                          (0xf005,0,'getMusicByComposer'),(0xf006,0,'getMusicByGenre')):
     shown,q,staging=unknown(cls,0,artist=artist)
     assert shown==['Row 0','Row 1'] and q[:2]==(query,None) and not staging, (cls,artist)
@@ -3583,214 +3682,215 @@ lm.word(payload_syms['library_music'],1); lm.sql=None
 assert lm.call(address=HOOKS['toolsQueryDbTable'][0],args=(lm.string('/mnt/data/database.db'),lm.string('select * from songtable'+' '*2048),123,1),gap=0)==-1
 assert lm.sql is None
 lm.db.close(); passed()
-# Their stock art cache names (/mnt/mmc/.sldp/<md5>0.jpg): a shared name adds the album artist,
-# a name alone stays; the album page's big cover follows its row's cover task name.
-for e in m.items(m.get(syms['p_deque_showlist']))[:2]: m.word(e+O['REC_ALBUM_ARTIST'],m.get(e+O['REC_NAME']))
-art=symbols(B/'patch.elf'); buf=m.alloc(0x100)
-keys=['Album\x1fBaroness','Album\x1fSTP','Other']
-for i,want in enumerate(keys):
-    m.call(address=art['ringnav_art_name'],args=(buf,0x100,i,0),gap=0); assert m.text(buf)==want
-covers=[m.alloc(12) for _ in keys]
-for c,k in zip(covers,keys): m.word(c+4,m.string(k))
-m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
-for row,want in ((1,'Album\x1fSTP'),(2,'Album'),(9,'Album')):
-    m.word(O['ALBUMINFO_ROW'],row); m.call(address=art['ringnav_art_header'],args=(buf,0x100,m.string('%s'),m.string('Album')),gap=0)
-    assert m.text(buf)==want, row
-passed()
-# An artist's albums tab has one row of a shared name: it takes its album's key in the split
-# order, by folder, else by album artist; a name alone, and the songs tab, stay stock's.
-class ArtistMachine(ClassMachine):
-    tramp=int(manifest['patch_symbols']['stock_artist_trampoline'],16)
-    def hook(self,u,address,size,unused):
-        if address==syms['albumcoverinfo_init']:
-            covers=[]
-            for r in self.items(u.reg_read(REGS[0])):
-                c=self.alloc(0x60)
-                self.word(c,getattr(self,'cover_flags',0))
-                self.word(c+4,self.string(self.text(self.get(r+O['REC_ALBUM']))))
-                self.word(c+8,self.get(r+O['REC_PATH'])); covers.append(c)
-            self.word(syms['pdeq_albumcoverlist'],self.deque(covers))
-            u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
-        a,b=u.reg_read(REGS[0]),u.reg_read(REGS[1]); libc={syms[n+'@GLIBC_2.0']:n for n in ('calloc','strdup')}|{0x1000010:'free'}
-        if address not in libc: return super().hook(u,address,size,unused)
-        u.reg_write(UC_MIPS_REG_V0,{'calloc':lambda:self.alloc((a*b+7)&~3),'strdup':lambda:self.string(self.text(a)),'free':lambda:0}[libc[address]]())
-        u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-for path,artist,want in (('/p/x','Artist','Album\x1fBaroness'),('/z/x','STP','Album\x1fSTP'),('/z/x','Artist','Album')):
-    m=ArtistMachine(page='localclass_page',cls=0xff01,rows=2); m.word(m.row(1)+O['REC_ALBUM'],m.string('Other'))
-    m.word(m.row(0)+O['REC_PATH'],m.string(path)); m.word(m.row(0)+O['REC_ARTIST'],m.string(artist))
-    m.split=[m.song('Baroness'),m.song('STP')]; m.word(m.split[1]+O['REC_PATH'],m.string('/q/STP'))
-    for e in m.split: m.word(e+O['REC_ALBUM_ARTIST'],m.get(e+O['REC_NAME']))
-    assert m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)==2
-    # Run the stock Album-tab and page-return call sites, not just the key helper: 9.8
-    # left these unhooked, so the worker wrote the old cache name the renderer never read.
-    m.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
-    m.cover_flags=0x101  # an old job completes between stock init and key renaming
-    for site in (0x4ac840,0x4ae860,0x4ae968,0x4aebc0):
-        m.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
-        m.u.reg_write(UC_MIPS_REG_V0,syms['p_deque_showlist'])
-        m.u.reg_write(UC_MIPS_REG_T9,syms['albumcoverinfo_init'])
-        m.u.emu_start(site,site+8,count=m.budget)
-        assert m.u.reg_read(UC_MIPS_REG_PC)==site+8
-        covers=m.items(m.get(syms['pdeq_albumcoverlist']))
-        assert [m.text(m.get(c+4)) for c in covers]==[want,'Other'], hex(site)
-        assert [m.get(c)&0xffff for c in covers]==[0 if want!='Album' else 0x101,0x101]
-        assert [m.text(m.get(c+8)) for c in covers]==[path,'/p/Row 1']
-    for i,k in enumerate((want,'Other')):
-        m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-        m.u.reg_write(UC_MIPS_REG_S1,buf); m.u.reg_write(UC_MIPS_REG_S2,i)
-        m.u.reg_write(UC_MIPS_REG_V0,m.row(i)); m.u.reg_write(UC_MIPS_REG_A1,0x100)
-        m.u.emu_start(0x4ab7f4,0x4ab80c,count=m.budget)
-        assert m.u.reg_read(UC_MIPS_REG_PC)==0x4ab80c
-        assert m.text(buf)==k, (path,artist,i,m.text(buf))
-    m.call(address=HOOKS['load_localartist_list'][0],args=(0,0,0,0),gap=0)
-    m.call(address=art['ringnav_artist_art_name'],args=(buf,0x100,0,m.string('Album')),gap=0); assert m.text(buf)=='Album'
-passed()
-# Artist albums: Coverflow (Display settings): the albums tab's split albums go to Coverflow once the artist page is
-# up, once per page, so coming back from it shows the grid; Grid, the songs tab or another page leave it stock. Until
-# then the artist page is unseen (opacity 0) and has no slide, so the Artists list cuts straight to the covers; once
-# they are up it is shown under them with its slide back.
-SLIDE_HINT='htranslate(duration=200)'
-class ArtistCoverflow(ArtistMachine):
-    def __init__(self,*a,**k):
-        super().__init__(*a,**k); self.handlers[syms['widget_set_prop_str']]='widget_set_prop_str'
-    def artist_page(self,name):
-        self.top=self.node('window',name); self.nodes[self.top]['anim_hint']=SLIDE_HINT; self.byte(self.top+0x34,0xff)
-    def veiled(self): return self.u.mem_read(self.top+0x34,1)[0]==0 and self.nodes[self.top]['anim_hint']==''
-    def shown(self): return self.u.mem_read(self.top+0x34,1)[0]==0xff and self.nodes[self.top]['anim_hint']==SLIDE_HINT
-    def hook(self,u,address,size,unused):
-        if address!=payload_syms['coverflow_artist']: return super().hook(u,address,size,unused)
-        self.handed.append(len(self.items(u.reg_read(REGS[0])))); self.covers=self.names(u.reg_read(REGS[0])); u.reg_write(UC_MIPS_REG_V0,1); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-for on,tab,page,want in ((1,1,'artistinfo_page',[1]),(2,1,'artistinfo_page',[1]),(0,1,'artistinfo_page',[]),(1,0,'artistinfo_page',[]),(1,1,'localclass_page',[])):
-    m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=2); m.handed=[]
-    m.word(m.row(1)+O['REC_ALBUM'],m.string('Other album'))
-    m.config['ARTISTCF']=str(on)
-    m.split=[m.song('Baroness'),m.song('STP')]
-    for r in m.split: m.word(r+O['REC_ALBUM_ARTIST'],m.get(r+O['REC_NAME']))
-    m.found=[m.split[0]]; m.artist_page(page)
-    m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0)
-    assert m.veiled()==bool(want); m.advance(0)
-    assert m.handed==want and m.shown(),(on,tab,page,m.handed)
-    if want:  # back from Coverflow, the tab loads again on the same page: the grid stays, seen
-        m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); assert m.shown(); m.advance(0); assert len(m.handed)==1
-        # The page gone, another at the same address gets Coverflow again.
-        f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-        m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); m.advance(0); assert len(m.handed)==2
-    passed()
-# Same-named albums by other artists stay out, in both artist modes. Membership follows
-# the artist's songs, so a guest artist and multiple albums of one name work too.
-for mode in (0,1):
-    m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.config['ARTISTCF']='1'
-    m.word(syms['artist_type'],mode)
-    m.u.mem_write(syms['g_local_classinfo_save']+0x10d,b'Artist\0')
-    m.word(m.row(0)+O['REC_ARTIST'],m.string('Guest singer'))  # selected album artist comes from page context
-    m.split=[m.song(name) for name in ('Selected','Other','Guest')]
-    for r in m.split:
-        m.word(r+O['REC_ALBUM_ARTIST'],m.get(r+O['REC_NAME']))
-    m.found=[m.split[0],m.split[2],m.split[0]]  # duplicates must not create extra cards
-    staging=m.names(m.get(syms['tools_pdeq_directory'])); m.artist_page('artistinfo_page')
-    assert m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)==1
-    assert m.query[:2]==(('getMusicByAlbumArtist' if mode else 'getMusicBySonger'),'Artist')
-    assert m.names(m.get(syms['tools_pdeq_directory']))==staging
-    m.advance(0)
-    assert m.covers==['Selected','Guest'] and m.handed==[2],(mode,m.covers)
-    assert m.names(m.get(syms['p_deque_showlist']))==['Row 0']  # the Library grid stays intact
-    passed()
-# No albums in the selected artist query leaves the grid rather than opening an empty Coverflow.
-m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.config['ARTISTCF']='1'; m.found=[]
-m.artist_page('artistinfo_page'); m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)
-m.advance(0)
-assert m.handed==[0] and m.shown(); passed()  # coverflow_artist rejects the empty list (test/coverflow.py)
-# A local art job that finishes after a list rebuild must not mark the new row ready.
-# Run the worker's real completion call site, including its stack-buffer argument, then stock's
-# readiness check (used by the renderer and by the request queue to skip completed covers).
-class CoverQueueMachine(ArtistMachine):
-    def __init__(self):
-        super().__init__(rows=12)
-        self.pending=[]
-        self.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
-    def hook(self,u,address,size,unused):
-        if address not in (syms['list_clear'],syms['_list_push_back']):
-            return super().hook(u,address,size,unused)
-        if address==syms['list_clear']: self.pending.clear()
-        else:
-            p=u.reg_read(REGS[1])
-            self.pending.append(tuple(self.get(p+i) for i in (0,4,8)))
-        u.reg_write(UC_MIPS_REG_V0,0)
-        u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-m=CoverQueueMachine()
-def cover_requests(start,big):
-    name='local_albumcover_task' if big else 'local_albumsmallcover_task'
-    m.call(address=syms[name],args=(start,9,0,0),gap=0)
-    return [row for row,kind,size in m.pending if kind==0 and size==big]
-def cover_ready(row,big):
-    return m.call(address=syms['check_albumcover_flag'],args=(row,big,0,0),gap=0)
-def cover_done(row,big,key):
-    sp=0x7000d000
-    m.u.mem_write(sp+0x1688,key.encode()+b'\0')
-    m.word(sp+0x1828,row); m.word(sp+0x1830,big); m.word(sp+0x18,0xa26cc0)
-    m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-    m.u.emu_start(0x4edd98,0x4edda8,count=m.budget)
-    assert m.u.reg_read(UC_MIPS_REG_PC)==0x4edda8
-for visit in range(5):
-    keys=[f'Artist {visit} album {i}' for i in range(12)]
-    covers=[]
-    for key in keys:
-        c=m.alloc(0x60); m.word(c+4,m.string(key)); covers.append(c)
+if not is_m1plus:
+    # Their stock art cache names (/mnt/mmc/.sldp/<md5>0.jpg): a shared name adds the album artist,
+    # a name alone stays; the album page's big cover follows its row's cover task name.
+    for e in m.items(m.get(syms['p_deque_showlist']))[:2]: m.word(e+O['REC_ALBUM_ARTIST'],m.get(e+O['REC_NAME']))
+    art=symbols(B/'patch.elf'); buf=m.alloc(0x100)
+    keys=['Album\x1fBaroness','Album\x1fSTP','Other']
+    for i,want in enumerate(keys):
+        m.call(address=art['ringnav_art_name'],args=(buf,0x100,i,0),gap=0); assert m.text(buf)==want
+    covers=[m.alloc(12) for _ in keys]
+    for c,k in zip(covers,keys): m.word(c+4,m.string(k))
     m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
-    if visit==0:
-        fixed=bytes(m.u.mem_read(0x4edd9c,8))
-        m.u.mem_write(0x4edd9c,struct.pack('<II',0x8f99b6d4,0x0411ff44))
-        m.u.ctl_remove_cache(0x4edd98,0x4edda8)
-        cover_done(11,1,'previous artist')
-        assert cover_ready(11,1)==1  # stock falsely completes the last album
-        assert cover_requests(9,1)==[9,10]  # scrolling cannot request its missing art
-        m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[11]+1,0)
-        m.u.mem_write(0x4edd9c,fixed)
-        m.u.ctl_remove_cache(0x4edd98,0x4edda8)
-    for row in (0,8,9,11):  # first screen, scroll boundary and last album
-        for big in (0,1):
-            cover_done(row,big,f'Artist {visit-1} album {row}')
-            assert cover_ready(row,big)==0, (visit,row,big)
-            assert row in cover_requests(row//9*9,big), (visit,row,big)
-            cover_done(row,big,keys[row])
-            assert cover_ready(row,big)==1, (visit,row,big)
-            assert row not in cover_requests(row//9*9,big), (visit,row,big)
-    for row in (-1,12): cover_done(row,1,'gone')
-# The folder-cover path (0x4eeddc) reaches the same completion call with its own copied key, not
-# whatever its last call left in a2.
-def folder_done(row,key,a2):
-    sp=0x7000d000
-    m.u.mem_write(sp+0x1688,key.encode()+b'\0'); m.word(sp+0x1828,row); m.word(sp+0x18,0xa26cc0)
-    m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-    m.u.reg_write(UC_MIPS_REG_S2,1); m.u.reg_write(UC_MIPS_REG_A2,m.string(a2))
-    m.u.emu_start(0x4eedd4,0x4edda8,count=m.budget)
-    assert m.u.reg_read(UC_MIPS_REG_PC)==0x4edda8
-for key,a2,ready in ((keys[3],'left over',1),('previous folder',keys[3],0)):
-    m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[3],0)
-    folder_done(3,key,a2); assert cover_ready(3,0)==ready, (key,a2)
-passed()
-# Scrolling never leaves the shared cover worker paused (albumcover_taskstate 2): stock resumed it only
-# when scroll end saw a new first row, so a wheel tick or a return to a scrolled grid stopped every
-# grid's art. An artist's albums scroll end takes rows as 160 px, three a row, not 256.
-class ScrollEndMachine(CoverQueueMachine):
-    def hook(self,u,address,size,unused):
-        if address!=syms['toolsGetSysMemFree']: return super().hook(u,address,size,unused)
-        u.reg_write(UC_MIPS_REG_V0,1<<20); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-m=ScrollEndMachine(); m.mock('widget_lookup','widget_get_prop_int')
-for pause in (0x4aab40,0x4a22b0):  # an artist's albums, Library Albums
-    m.word(syms['albumcover_taskstate'],1)
-    m.call(address=pause,args=(0,0,0,0),gap=0); assert m.get(syms['albumcover_taskstate'])==1, hex(pause)
-covers=[]
-for i in range(30):
-    c=m.alloc(0x60); m.word(c+4,m.string(f'album {i}')); covers.append(c)
-m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
-view=m.node('scroll_view','scroll_view_album',yoffset=800); win=m.node('window','artistinfo_page',[view])
-m.word(0xa27678,1); m.word(0xa2767c,0)  # the Albums tab; its last requested first row
-for tick in range(2):  # the second, at the same offset, requests nothing and leaves the worker running
-    m.pending.clear(); m.call(address=0x4ad7c0,args=(win,0,0,0),gap=0)
-    assert [row for row,kind,size in m.pending]==([] if tick else list(range(15,24))), m.pending
-    assert m.get(0xa2767c)==15 and m.get(syms['albumcover_taskstate'])==1
-passed()
+    for row,want in ((1,'Album\x1fSTP'),(2,'Album'),(9,'Album')):
+        m.word(O['ALBUMINFO_ROW'],row); m.call(address=art['ringnav_art_header'],args=(buf,0x100,m.string('%s'),m.string('Album')),gap=0)
+        assert m.text(buf)==want, row
+    passed()
+    # An artist's albums tab has one row of a shared name: it takes its album's key in the split
+    # order, by folder, else by album artist; a name alone, and the songs tab, stay stock's.
+    class ArtistMachine(ClassMachine):
+        tramp=int(manifest['patch_symbols']['stock_artist_trampoline'],16)
+        def hook(self,u,address,size,unused):
+            if address==syms['albumcoverinfo_init']:
+                covers=[]
+                for r in self.items(u.reg_read(REGS[0])):
+                    c=self.alloc(0x60)
+                    self.word(c,getattr(self,'cover_flags',0))
+                    self.word(c+4,self.string(self.text(self.get(r+O['REC_ALBUM']))))
+                    self.word(c+8,self.get(r+O['REC_PATH'])); covers.append(c)
+                self.word(syms['pdeq_albumcoverlist'],self.deque(covers))
+                u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
+            a,b=u.reg_read(REGS[0]),u.reg_read(REGS[1]); libc={syms[n+'@GLIBC_2.0']:n for n in ('calloc','strdup')}|{0x1000010:'free'}
+            if address not in libc: return super().hook(u,address,size,unused)
+            u.reg_write(UC_MIPS_REG_V0,{'calloc':lambda:self.alloc((a*b+7)&~3),'strdup':lambda:self.string(self.text(a)),'free':lambda:0}[libc[address]]())
+            u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    for path,artist,want in (('/p/x','Artist','Album\x1fBaroness'),('/z/x','STP','Album\x1fSTP'),('/z/x','Artist','Album')):
+        m=ArtistMachine(page='localclass_page',cls=0xff01,rows=2); m.word(m.row(1)+O['REC_ALBUM'],m.string('Other'))
+        m.word(m.row(0)+O['REC_PATH'],m.string(path)); m.word(m.row(0)+O['REC_ARTIST'],m.string(artist))
+        m.split=[m.song('Baroness'),m.song('STP')]; m.word(m.split[1]+O['REC_PATH'],m.string('/q/STP'))
+        for e in m.split: m.word(e+O['REC_ALBUM_ARTIST'],m.get(e+O['REC_NAME']))
+        assert m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)==2
+        # Run the stock Album-tab and page-return call sites, not just the key helper: 9.8
+        # left these unhooked, so the worker wrote the old cache name the renderer never read.
+        m.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
+        m.cover_flags=0x101  # an old job completes between stock init and key renaming
+        for site in (0x4ac840,0x4ae860,0x4ae968,0x4aebc0):
+            m.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
+            m.u.reg_write(UC_MIPS_REG_V0,syms['p_deque_showlist'])
+            m.u.reg_write(UC_MIPS_REG_T9,syms['albumcoverinfo_init'])
+            m.u.emu_start(site,site+8,count=m.budget)
+            assert m.u.reg_read(UC_MIPS_REG_PC)==site+8
+            covers=m.items(m.get(syms['pdeq_albumcoverlist']))
+            assert [m.text(m.get(c+4)) for c in covers]==[want,'Other'], hex(site)
+            assert [m.get(c)&0xffff for c in covers]==[0 if want!='Album' else 0x101,0x101]
+            assert [m.text(m.get(c+8)) for c in covers]==[path,'/p/Row 1']
+        for i,k in enumerate((want,'Other')):
+            m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
+            m.u.reg_write(UC_MIPS_REG_S1,buf); m.u.reg_write(UC_MIPS_REG_S2,i)
+            m.u.reg_write(UC_MIPS_REG_V0,m.row(i)); m.u.reg_write(UC_MIPS_REG_A1,0x100)
+            m.u.emu_start(0x4ab7f4,0x4ab80c,count=m.budget)
+            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4ab80c
+            assert m.text(buf)==k, (path,artist,i,m.text(buf))
+        m.call(address=HOOKS['load_localartist_list'][0],args=(0,0,0,0),gap=0)
+        m.call(address=art['ringnav_artist_art_name'],args=(buf,0x100,0,m.string('Album')),gap=0); assert m.text(buf)=='Album'
+    passed()
+    # Artist albums: Coverflow (Display settings): the albums tab's split albums go to Coverflow once the artist page is
+    # up, once per page, so coming back from it shows the grid; Grid, the songs tab or another page leave it stock. Until
+    # then the artist page is unseen (opacity 0) and has no slide, so the Artists list cuts straight to the covers; once
+    # they are up it is shown under them with its slide back.
+    SLIDE_HINT='htranslate(duration=200)'
+    class ArtistCoverflow(ArtistMachine):
+        def __init__(self,*a,**k):
+            super().__init__(*a,**k); self.handlers[syms['widget_set_prop_str']]='widget_set_prop_str'
+        def artist_page(self,name):
+            self.top=self.node('window',name); self.nodes[self.top]['anim_hint']=SLIDE_HINT; self.byte(self.top+0x34,0xff)
+        def veiled(self): return self.u.mem_read(self.top+0x34,1)[0]==0 and self.nodes[self.top]['anim_hint']==''
+        def shown(self): return self.u.mem_read(self.top+0x34,1)[0]==0xff and self.nodes[self.top]['anim_hint']==SLIDE_HINT
+        def hook(self,u,address,size,unused):
+            if address!=payload_syms['coverflow_artist']: return super().hook(u,address,size,unused)
+            self.handed.append(len(self.items(u.reg_read(REGS[0])))); self.covers=self.names(u.reg_read(REGS[0])); u.reg_write(UC_MIPS_REG_V0,1); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    for on,tab,page,want in ((1,1,'artistinfo_page',[1]),(2,1,'artistinfo_page',[1]),(0,1,'artistinfo_page',[]),(1,0,'artistinfo_page',[]),(1,1,'localclass_page',[])):
+        m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=2); m.handed=[]
+        m.word(m.row(1)+O['REC_ALBUM'],m.string('Other album'))
+        m.config['ARTISTCF']=str(on)
+        m.split=[m.song('Baroness'),m.song('STP')]
+        for r in m.split: m.word(r+O['REC_ALBUM_ARTIST'],m.get(r+O['REC_NAME']))
+        m.found=[m.split[0]]; m.artist_page(page)
+        m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0)
+        assert m.veiled()==bool(want); m.advance(0)
+        assert m.handed==want and m.shown(),(on,tab,page,m.handed)
+        if want:  # back from Coverflow, the tab loads again on the same page: the grid stays, seen
+            m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); assert m.shown(); m.advance(0); assert len(m.handed)==1
+            # The page gone, another at the same address gets Coverflow again.
+            f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+            m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); m.advance(0); assert len(m.handed)==2
+        passed()
+    # Same-named albums by other artists stay out, in both artist modes. Membership follows
+    # the artist's songs, so a guest artist and multiple albums of one name work too.
+    for mode in (0,1):
+        m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.config['ARTISTCF']='1'
+        m.word(syms['artist_type'],mode)
+        m.u.mem_write(syms['g_local_classinfo_save']+0x10d,b'Artist\0')
+        m.word(m.row(0)+O['REC_ARTIST'],m.string('Guest singer'))  # selected album artist comes from page context
+        m.split=[m.song(name) for name in ('Selected','Other','Guest')]
+        for r in m.split:
+            m.word(r+O['REC_ALBUM_ARTIST'],m.get(r+O['REC_NAME']))
+        m.found=[m.split[0],m.split[2],m.split[0]]  # duplicates must not create extra cards
+        staging=m.names(m.get(syms['tools_pdeq_directory'])); m.artist_page('artistinfo_page')
+        assert m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)==1
+        assert m.query[:2]==(('getMusicByAlbumArtist' if mode else 'getMusicBySonger'),'Artist')
+        assert m.names(m.get(syms['tools_pdeq_directory']))==staging
+        m.advance(0)
+        assert m.covers==['Selected','Guest'] and m.handed==[2],(mode,m.covers)
+        assert m.names(m.get(syms['p_deque_showlist']))==['Row 0']  # the Library grid stays intact
+        passed()
+    # No albums in the selected artist query leaves the grid rather than opening an empty Coverflow.
+    m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.config['ARTISTCF']='1'; m.found=[]
+    m.artist_page('artistinfo_page'); m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)
+    m.advance(0)
+    assert m.handed==[0] and m.shown(); passed()  # coverflow_artist rejects the empty list (test/coverflow.py)
+    # A local art job that finishes after a list rebuild must not mark the new row ready.
+    # Run the worker's real completion call site, including its stack-buffer argument, then stock's
+    # readiness check (used by the renderer and by the request queue to skip completed covers).
+    class CoverQueueMachine(ArtistMachine):
+        def __init__(self):
+            super().__init__(rows=12)
+            self.pending=[]
+            self.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
+        def hook(self,u,address,size,unused):
+            if address not in (syms['list_clear'],syms['_list_push_back']):
+                return super().hook(u,address,size,unused)
+            if address==syms['list_clear']: self.pending.clear()
+            else:
+                p=u.reg_read(REGS[1])
+                self.pending.append(tuple(self.get(p+i) for i in (0,4,8)))
+            u.reg_write(UC_MIPS_REG_V0,0)
+            u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    m=CoverQueueMachine()
+    def cover_requests(start,big):
+        name='local_albumcover_task' if big else 'local_albumsmallcover_task'
+        m.call(address=syms[name],args=(start,9,0,0),gap=0)
+        return [row for row,kind,size in m.pending if kind==0 and size==big]
+    def cover_ready(row,big):
+        return m.call(address=syms['check_albumcover_flag'],args=(row,big,0,0),gap=0)
+    def cover_done(row,big,key):
+        sp=0x7000d000
+        m.u.mem_write(sp+0x1688,key.encode()+b'\0')
+        m.word(sp+0x1828,row); m.word(sp+0x1830,big); m.word(sp+0x18,0xa26cc0)
+        m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
+        m.u.emu_start(0x4edd98,0x4edda8,count=m.budget)
+        assert m.u.reg_read(UC_MIPS_REG_PC)==0x4edda8
+    for visit in range(5):
+        keys=[f'Artist {visit} album {i}' for i in range(12)]
+        covers=[]
+        for key in keys:
+            c=m.alloc(0x60); m.word(c+4,m.string(key)); covers.append(c)
+        m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
+        if visit==0:
+            fixed=bytes(m.u.mem_read(0x4edd9c,8))
+            m.u.mem_write(0x4edd9c,struct.pack('<II',0x8f99b6d4,0x0411ff44))
+            m.u.ctl_remove_cache(0x4edd98,0x4edda8)
+            cover_done(11,1,'previous artist')
+            assert cover_ready(11,1)==1  # stock falsely completes the last album
+            assert cover_requests(9,1)==[9,10]  # scrolling cannot request its missing art
+            m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[11]+1,0)
+            m.u.mem_write(0x4edd9c,fixed)
+            m.u.ctl_remove_cache(0x4edd98,0x4edda8)
+        for row in (0,8,9,11):  # first screen, scroll boundary and last album
+            for big in (0,1):
+                cover_done(row,big,f'Artist {visit-1} album {row}')
+                assert cover_ready(row,big)==0, (visit,row,big)
+                assert row in cover_requests(row//9*9,big), (visit,row,big)
+                cover_done(row,big,keys[row])
+                assert cover_ready(row,big)==1, (visit,row,big)
+                assert row not in cover_requests(row//9*9,big), (visit,row,big)
+        for row in (-1,12): cover_done(row,1,'gone')
+    # The folder-cover path (0x4eeddc) reaches the same completion call with its own copied key, not
+    # whatever its last call left in a2.
+    def folder_done(row,key,a2):
+        sp=0x7000d000
+        m.u.mem_write(sp+0x1688,key.encode()+b'\0'); m.word(sp+0x1828,row); m.word(sp+0x18,0xa26cc0)
+        m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
+        m.u.reg_write(UC_MIPS_REG_S2,1); m.u.reg_write(UC_MIPS_REG_A2,m.string(a2))
+        m.u.emu_start(0x4eedd4,0x4edda8,count=m.budget)
+        assert m.u.reg_read(UC_MIPS_REG_PC)==0x4edda8
+    for key,a2,ready in ((keys[3],'left over',1),('previous folder',keys[3],0)):
+        m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[3],0)
+        folder_done(3,key,a2); assert cover_ready(3,0)==ready, (key,a2)
+    passed()
+    # Scrolling never leaves the shared cover worker paused (albumcover_taskstate 2): stock resumed it only
+    # when scroll end saw a new first row, so a wheel tick or a return to a scrolled grid stopped every
+    # grid's art. An artist's albums scroll end takes rows as 160 px, three a row, not 256.
+    class ScrollEndMachine(CoverQueueMachine):
+        def hook(self,u,address,size,unused):
+            if address!=syms['toolsGetSysMemFree']: return super().hook(u,address,size,unused)
+            u.reg_write(UC_MIPS_REG_V0,1<<20); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    m=ScrollEndMachine(); m.mock('widget_lookup','widget_get_prop_int')
+    for pause in (0x4aab40,0x4a22b0):  # an artist's albums, Library Albums
+        m.word(syms['albumcover_taskstate'],1)
+        m.call(address=pause,args=(0,0,0,0),gap=0); assert m.get(syms['albumcover_taskstate'])==1, hex(pause)
+    covers=[]
+    for i in range(30):
+        c=m.alloc(0x60); m.word(c+4,m.string(f'album {i}')); covers.append(c)
+    m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
+    view=m.node('scroll_view','scroll_view_album',yoffset=800); win=m.node('window','artistinfo_page',[view])
+    m.word(0xa27678,1); m.word(0xa2767c,0)  # the Albums tab; its last requested first row
+    for tick in range(2):  # the second, at the same offset, requests nothing and leaves the worker running
+        m.pending.clear(); m.call(address=0x4ad7c0,args=(win,0,0,0),gap=0)
+        assert [row for row,kind,size in m.pending]==([] if tick else list(range(15,24))), m.pending
+        assert m.get(0xa2767c)==15 and m.get(syms['albumcover_taskstate'])==1
+    passed()
 # A row opens its name's songs (0xff10, getMusicByAlbum): only its own album's stay.
 m=ClassMachine(page='album_page',cls=0xf003,rows=2); m.word(m.row(1)+O['REC_PATH'],m.string('/q/Row 1'))
 assert m.call(address=HOOKS['load_album_detaillist'][0],args=(0xf003,m.song('Album'),0,0),gap=0)==1
@@ -3798,11 +3898,12 @@ assert m.names(m.get(syms['p_deque_showlist']))==['Row 0'] and ('stock_localclas
 
 # Coverflow (docs/internals.md): the Home card, the runtime coverflow_page over a stock slide_menu,
 # the tracks query and handoff. The art thread itself runs on the host (test/coverflow.py).
-from ipod import HOME_TEXT_X, HOME_LIST_W, HOME_PAGE, HOME_ROW, HOME_ROWS, HOME_TOP, decode
-cards=decode((B/'ui'/HOME_PAGE).read_bytes())[3][1 if variant=='ipod' else 0]  # the carousel, or iPod's list_view
-if variant=='ipod': cards=cards[3][0]  # its scroll_view of rows
-cards=[c[2]['name'] for c in cards[3]]
-assert len(cards)==7 and cards[2]=='btn_coverflow', cards
+if not is_m1plus:
+    from ipod import HOME_TEXT_X, HOME_LIST_W, HOME_PAGE, HOME_ROW, HOME_ROWS, HOME_TOP, decode
+    cards=decode((B/'ui'/HOME_PAGE).read_bytes())[3][1 if variant=='ipod' else 0]  # the carousel, or iPod's list_view
+    if variant=='ipod': cards=cards[3][0]  # its scroll_view of rows
+    cards=[c[2]['name'] for c in cards[3]]
+    assert len(cards)==7 and cards[2]=='btn_coverflow', cards
 home_hook=HOOKS['home_page_init']
 assert struct.unpack_from('<I',demo,fileoff(demo,home_hook[0]))[0]==0x08000000|symbols(B/'patch.elf')['coverflow_home']>>2
 passed()
@@ -4073,7 +4174,7 @@ class CoverflowMachine(QueueMachine):
                   'scroll_view_create','navigator_back_to_home','navigator_to_with_context','access@GLIBC_2.0',
                   'calloc@GLIBC_2.0','strdup@GLIBC_2.0','mkdir@GLIBC_2.0','statfs@GLIBC_2.0','pthread_create@GLIBC_2.2',
                   'pthread_join@GLIBC_2.0','fopen@GLIBC_2.2','qsort@GLIBC_2.0','toolsQueryDbTable'): self.handlers[syms[n]]='c:'+n
-        self.word(0xa2638c,self.FREE); self.handlers[self.FREE]='c:free'
+        self.word(FREE_GOT,self.FREE); self.handlers[self.FREE]='c:free'
         self.handlers[home_hook[0]+12]='stock_home'
         for n,stub in WRITERS.items(): self.handlers[HOOKS[n][0]+12]=stub  # the writers' stock bodies
         self.albums=[self.song('T0') for _ in range(albums)]
@@ -4082,7 +4183,8 @@ class CoverflowMachine(QueueMachine):
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')
         if not name.startswith('c:'): return super().hook(u,address,size,unused)
-        assert u.reg_read(UC_MIPS_REG_T9)==address, name
+        if not is_m1plus or address not in payload_syms.values():
+            assert u.reg_read(UC_MIPS_REG_T9)==address, name
         name=name[2:].split('@')[0]; a,b,c,d=[u.reg_read(r) for r in REGS]; sp=u.reg_read(UC_MIPS_REG_SP); ret=0
         self.calls.append((name,a,b,c))
         if name in ('window_create','widget_factory_create_widget','list_view_create','scroll_view_create'):
@@ -4093,7 +4195,7 @@ class CoverflowMachine(QueueMachine):
             else: self.nodes[parent]['children'].append(ret); self.word(ret+O['W_PARENT'],parent); self.word(ret+O['W_H'],h)
             if name=='widget_factory_create_widget':  # x in a3; y, w on the stack
                 for off,v in (('W_X',d),('W_Y',self.get(sp+16)),('W_W',self.get(sp+20))): self.word(ret+O[off],v)
-            if kind=='slide_menu': self.word(ret+O['SLIDE_INDEX'],0); self.word(ret+0x5c,self.alloc())
+            if kind=='slide_menu': self.word(ret+O['SLIDE_INDEX'],0); self.word(ret+O['W_CHILDREN'],self.alloc())
         elif name=='image_base_set_image': self.nodes[a]['image']=self.text(b)
         elif name=='getAllAlbum':
             self.deqs[self.get(syms['tools_pdeq_directory'])][1]=[self.copy('stSongInfo',e) for e in self.albums]; ret=len(self.albums)
@@ -4134,7 +4236,7 @@ class CoverflowMachine(QueueMachine):
             assert self.call(address=home_hook[0],args=(self.top,0,0,0),gap=0)==0
             self.paint(view); self.nodes[view]['_ringnav_index']=2
         else:
-            slide=self.node('slide_menu'); self.word(slide+O['SLIDE_INDEX'],2); self.word(slide+0x5c,self.alloc())
+            slide=self.node('slide_menu'); self.word(slide+O['SLIDE_INDEX'],2); self.word(slide+O['W_CHILDREN'],self.alloc())
             self.img=self.node('image','img_coverflow'); card=self.node('button',children=[self.img])
             self.nodes[slide]['children']=[self.entry(slide),self.entry(slide),card,*[self.entry(slide) for _ in range(4)]]
             self.home=self.top=self.node('window','home_page',[slide]); self.stack=[self.top]
@@ -4458,7 +4560,7 @@ if variant=='ipod':
     # player_seek_time, which resumes the track: the player's second stands still until Play, the bar
     # keeps the target and stock's timer stays off until it plays; playing, SETTLE_PLAY_MS without
     # reaching it gives the bar back to stock's timer.
-    PLAY_STATUS=0xa3beac
+    PLAY_STATUS = 0xa0abe4 if is_m1plus else 0xa3beac
     m=scrub_page(); m.handlers.pop(syms['mclGetPlayStatus']); m.word(PLAY_STATUS,3); centre(m); step(m)
     m.word(m.items(m.get(syms['mcl_pdeqplaylist']))[1]+O['REC_CUE_START'],30); centre(m,50)
     assert did(m,'mclSetSeek')==[135] and not m.seeks and not did(m,'mclSetResume')
@@ -4592,14 +4694,17 @@ m.word(m.albums[1]+O['REC_ID'],0xffffffff); m.open(); assert cf_jump(m,0,1)==(1,
 # Coverflow owns both halves of a wheel tick: the stock press filter runs, then stops before
 # native focus navigation can move the Artists list underneath; release still moves the covers.
 m=CoverflowMachine(albums=3)
-for page,want in (('localclass_page',0),('coverflow_page',11)):
-    if page=='coverflow_page': m.open()
-    else: m.top=m.node('window',page)
-    for key in (O['KEY_PREV'],O['KEY_NEXT'],O['KEY_CENTER']):
-        ret=m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],
-                   event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)
-        assert ret==(want if key!=O['KEY_CENTER'] else 0)
-        assert any(c[0]=='reset_poweroptions_timer' for c in m.calls)
+if not is_m1plus:
+    for page,want in (('localclass_page',0),('coverflow_page',11)):
+        if page=='coverflow_page': m.open()
+        else: m.top=m.node('window',page)
+        for key in (O['KEY_PREV'],O['KEY_NEXT'],O['KEY_CENTER']):
+            ret=m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],
+                       event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)
+            assert ret==(want if key!=O['KEY_CENTER'] else 0)
+            assert any(c[0]=='reset_poweroptions_timer' for c in m.calls)
+else:
+    m.open()
 assert m.call()==11; m.advance(300); assert m.get(m.slide+O['SLIDE_INDEX'])==1; passed()
 
 # Native delivery also reaches the old focused widget after the before-filter. Stop every
@@ -4618,14 +4723,15 @@ for target in (m.page,m.slide,m.wm):
 for key in (O['KEY_CENTER'],O['KEY_RETURN']):
     assert m.call(key,address=HOOKS['widget_dispatch'][0],args=(row,m.event,0,0),event_type=O['EVT_KEY_UP'],gap=0)==0
     assert m.dispatched()
-# Execute stock's dispatch-then-vtable keydown helper (0x65f688), with the native navigation
-# callback replaced by a recorded service; STOP must prevent it from running at all.
-m.handlers[0x667974]='reset_poweroptions_timer'
-assert m.call(address=0x65f688,args=(row,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0)==11
-assert not m.dispatched() and not any(c[0]=='reset_poweroptions_timer' for c in m.calls)
-m.top=under
-assert m.call(address=0x65f688,args=(row,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0)==0
-assert m.dispatched() and any(c[0]=='reset_poweroptions_timer' for c in m.calls)
+if not is_m1plus:
+    # Execute stock's dispatch-then-vtable keydown helper (0x65f688), with the native navigation
+    # callback replaced by a recorded service; STOP must prevent it from running at all.
+    m.handlers[0x667974]='reset_poweroptions_timer'
+    assert m.call(address=0x65f688,args=(row,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0)==11
+    assert not m.dispatched() and not any(c[0]=='reset_poweroptions_timer' for c in m.calls)
+    m.top=under
+    assert m.call(address=0x65f688,args=(row,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0)==0
+    assert m.dispatched() and any(c[0]=='reset_poweroptions_timer' for c in m.calls)
 # The artist page on top: the Artists list under it gets no wheel key either.
 artists=m.node('window','localclass_page'); m.word(artists+O['W_PARENT'],m.wm)
 low=m.node('list_item'); m.word(low+O['W_PARENT'],artists)
@@ -4638,7 +4744,7 @@ passed()
 m=CoverflowMachine(albums=10)
 for r,name in zip(m.albums,['A1','A2','A3','D1','D2','D3','G1','G2','Z1','Z2']): m.word(r+O['REC_ALBUM'],m.string(name))
 m.open()
-stride=m.call(address=syms['slide_menu_item_width'],args=(m.slide,0,0,0),gap=0)+m.get(m.slide+O['SLIDE_SPACER'])
+stride=m.get(m.slide+O['W_H']) if is_m1plus else (m.call(address=syms['slide_menu_item_width'],args=(m.slide,0,0,0),gap=0)+m.get(m.slide+O['SLIDE_SPACER']))
 for _ in range(6): assert m.call(gap=50)==11
 assert m.get(m.slide+O['SLIDE_INDEX'])==0 and slide(m,m.slide)[2]==-6*stride
 assert m.call(gap=50)==11
@@ -4910,11 +5016,12 @@ assert m.run(3)=='Added to Favourites' and m.kept()==[(a0&~7)|5]; passed()
 # A browse change under the picker saves nothing.
 assert m.run(4) is None; m.u.mem_write(syms['g_folder_path'],b'/elsewhere\0')
 assert m.call(O['KEY_CENTER'])==11 and m.toasts[-1][3]=='Album changed' and m.kept()==[(a0&~7)|5]; passed()
-# An artist's albums tab (Grid): each row's album found among the split albums when the tab loads.
-m=ArtistMachine(page='artistinfo_page',cls=0xff01,rows=2); m.word(syms['g_local_classinfo_save'],0xff01)
-m.split=[m.song('Baroness')]; m.word(m.split[0]+O['REC_ALBUM_ARTIST'],m.string('Baroness'))
-m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)
-assert menu(m)==('Album',[*COVER_ALBUM,'Add to Playlist']); passed()
+if not is_m1plus:
+    # An artist's albums tab (Grid): each row's album found among the split albums when the tab loads.
+    m=ArtistMachine(page='artistinfo_page',cls=0xff01,rows=2); m.word(syms['g_local_classinfo_save'],0xff01)
+    m.split=[m.song('Baroness')]; m.word(m.split[0]+O['REC_ALBUM_ARTIST'],m.string('Baroness'))
+    m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)
+    assert menu(m)==('Album',[*COVER_ALBUM,'Add to Playlist']); passed()
 # Library > Ratings > Albums: the rated albums as Coverflow, most hearts first, with the rated Sort card alone
 # (Rating, Album, Artist, Year, kept); closing it brings the library's covers and Sort back.
 def ratings_albums(m):
@@ -4949,13 +5056,14 @@ for action,want in ((0,['A','T2','B','C']),(1,['A','B','C','T2'])):
     m.press(200); assert m.release()==1; passed()
 # Its favourite is batch-select's over Coverflow's own deque, its songs taken as All Songs rows.
 m=CoverflowMachine(cls=O['CLASS_ALBUMS']); m.open(); view=m.tracks(); assert m.run(2)=='Added to Favourites'
-assert [c[1:3] for c in m.calls if c[0]=='batch_add_file']==[(0xf001,0xf00a)] and [c[1] for c in m.calls if c[0]=='batch_init_selectrecord']==[2]
+assert [c[1:3] for c in m.calls if c[0]=='batch_add_file']==[(0xf001,0xf00a)] and [c[1] for c in m.calls if c[0]=='batch_init_selectrecord']==([] if is_m1plus else [2])
 assert [c[3] for c in m.calls if c[0]=='batch_add_file'][0]!=m.get(syms['p_deque_showlist']); passed()
 m=CoverflowMachine(queue=0,cls=O['CLASS_ALBUMS']); m.open(); m.tracks()
 assert m.run(1)=='Added to Queue' and m.names()==['T1'] and m.mcl('MCL_TYPE')==0xff10 and not m.playback(); passed()
-m=CoverflowMachine(mode=2); m.open(); m.tracks(); m.run(0)
-m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
-assert m.names()==['A','T1','B','C'] and m.mcl('MCL_POS')==1; passed()
+if not is_m1plus:
+    m=CoverflowMachine(mode=2); m.open(); m.tracks(); m.run(0)
+    m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
+    assert m.names()==['A','T1','B','C'] and m.mcl('MCL_POS')==1; passed()
 # Return cancels without losing the highlighted song. Changed or closed sources refuse.
 m=CoverflowMachine(); m.open(); view=m.tracks(); m.call(); m.press(100); m.hold(); m.release()
 f,ctx=m.handler(m.top,O['EVT_KEY_UP']); ev=m.alloc(0x40); m.word(ev,O['EVT_KEY_UP']); m.word(ev+O['EVENT_KEY'],O['KEY_RETURN'])
@@ -4986,7 +5094,7 @@ m.word(m.albums[0]+O['REC_ALBUM'],m.string(long)); m.word(m.albums[0]+O['REC_ART
 m.word(m.found[0]+O['REC_NAME'],m.string(long)); m.open(); assert m.texts().count(long)==2
 m.tracks(); assert m.texts().count(long)==4  # covers stay alive, hidden behind the tracks
 labels=[n for w,n in m.nodes.items() if m.alive(w) and n.get('text')==long]
-assert all(n['type']=='hscroll_label' and n['loop']==1 and n['set_hscroll_label_attribute'] for n in labels); passed()
+assert all(n['type']=='hscroll_label' and n['loop']==1 and (is_m1plus or n.get('set_hscroll_label_attribute')) for n in labels); passed()
 # Wheel only: the covers' slide_menu takes no touch.
 m=CoverflowMachine(); m.open()
 assert m.nodes[m.slide].get('sensitive')==0; passed()
@@ -4997,25 +5105,27 @@ assert m.nodes[m.slide].get('sensitive')==0; passed()
 from ipod import corner_inset
 def cf_geometry(m,w): return tuple(signed(m.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H'))
 def clear(x,top,w,px):  # a label's text band, in screen rows (the window starts at y 30)
+    if is_m1plus:
+        return x >= 0 and x + w <= O['UI_W']
     return max(corner_inset(30+top),corner_inset(30+top+px))<=x and x+w<=375-max(corner_inset(30+top),corner_inset(30+top+px))
 m=CoverflowMachine(); page=m.open(); labels=[w for w in m.nodes[m.get(m.slide+O['W_PARENT'])]['children'] if m.nodes[w]['type']=='hscroll_label']
 name,artist=labels
 E=O['CF_EDGE']; y=O['CF_TEXT_Y']
-assert y>=O['CF_VIEW_H'] and y+O['CF_NAME_H']+O['CF_ARTIST_H']<=290
-assert [cf_geometry(m,w) for w in labels]==[(E,y,375-2*E,O['CF_NAME_H']),(E,y+O['CF_NAME_H'],375-2*E,O['CF_ARTIST_H'])]
+assert y>=O['CF_VIEW_H'] and y+O['CF_NAME_H']+O['CF_ARTIST_H']<=O['BOTTOM']
+assert [cf_geometry(m,w) for w in labels]==[(E,y,O['UI_W']-2*E,O['CF_NAME_H']),(E,y+O['CF_NAME_H'],O['UI_W']-2*E,O['CF_ARTIST_H'])]
 assert m.nodes[name]['style:normal:font_size']==O['CF_NAME_PX']==24 and m.nodes[artist]['style:normal:font_size']==O['CF_ARTIST_PX']==20
 assert m.nodes[artist]['style:normal:text_color']==signed(O['CF_GREY']) and 'style:normal:text_color' not in m.nodes[name]
 for w,px in ((name,O['CF_NAME_PX']),(artist,O['CF_ARTIST_PX'])):
     x,top,wd,h=cf_geometry(m,w); assert clear(x,top+(h-px)//2,wd,px)
 if variant=='ipod':
     view=m.tracks(); lv=m.get(view+O['W_PARENT']); title=next(w for w in m.nodes[m.get(lv+O['W_PARENT'])]['children'] if m.nodes[w]['type']=='hscroll_label')
-    assert cf_geometry(m,title)[::2]==(E,375-2*E) and clear(E,14,375-2*E,20)
-    rows=(290-48)//48
+    assert cf_geometry(m,title)[::2]==(E,O['UI_W']-2*E) and clear(E,14,O['UI_W']-2*E,20)
+    rows=(O['BOTTOM']-48)//48
     for item in m.nodes[view]['children']:
-        label=m.nodes[item]['children'][0]; assert cf_geometry(m,label)[::2]==(E,375-2*E)
-    assert clear(E,48+(rows-1)*48+14,375-2*E,20)  # the lowest visible row
+        label=m.nodes[item]['children'][0]; assert cf_geometry(m,label)[::2]==(E,O['UI_W']-2*E)
+    assert clear(E,48+(rows-1)*48+14,O['UI_W']-2*E,20)  # the lowest visible row
 else:
-    view=m.tracks(); assert {cf_geometry(m,m.nodes[i]['children'][0])[::2] for i in m.nodes[view]['children']}=={(12,350)}
+    view=m.tracks(); assert {cf_geometry(m,m.nodes[i]['children'][0])[::2] for i in m.nodes[view]['children']}=={(12,O['UI_W']-25)}
 passed()
 
 # Execute stock sibling selection and playback scheduling; mock filesystem enumeration,
@@ -5119,46 +5229,47 @@ class RolloverMachine(CoverflowMachine):
             self.call(address=playing,args=(self.win,0,0,0),gap=0)
         self.byte(syms['g_forcerefresh_flag'],1)
 
-for sizes in ((2,2,1,1),(1,1,1,1)):
-    m=RolloverMachine(sizes); m.setup_ui(); m.artwork(); m.ui()
-    paths=[path for path in m.files]
-    assert m.text(syms['g_play_id3_info'])==paths[0]
-    for index,path in enumerate(paths[1:],1):
-        old=m.text(syms['g_play_id3_info']); m.byte(0xa3be55,0) # hciplayer EOF
-        # Delay the UI scheduler after stock queue replacement on alternate transitions.
-        if index%2:
-            m.call(address=syms['mclAutoChange'],args=(0,0,0,0),gap=0)
-            assert m.text(syms['g_play_id3_info'])==old
+if not is_m1plus:
+    for sizes in ((2,2,1,1),(1,1,1,1)):
+        m=RolloverMachine(sizes); m.setup_ui(); m.artwork(); m.ui()
+        paths=[path for path in m.files]
+        assert m.text(syms['g_play_id3_info'])==paths[0]
+        for index,path in enumerate(paths[1:],1):
+            old=m.text(syms['g_play_id3_info']); m.byte(0xa3be55,0) # hciplayer EOF
+            # Delay the UI scheduler after stock queue replacement on alternate transitions.
+            if index%2:
+                m.call(address=syms['mclAutoChange'],args=(0,0,0,0),gap=0)
+                assert m.text(syms['g_play_id3_info'])==old
+                m.ui()
+                if variant=='ipod':
+                    assert m.nodes[m.albumlabel]['text']=='' and m.nodes[m.art]['image']=='default_album_home'
+            m.tick() # native auto-change, sibling traversal, queue reload, parsing and notification
+            assert m.text(syms['g_play_id3_info'])==path
+            assert m.text(syms['g_play_id3_info']+O['ID3_ALBUM'])==m.files[path][0]
+            assert m.text(syms['g_play_cover_info']+8)==path
+            assert m.text(syms['g_lastcover_url'])==old # worker has not completed yet
             m.ui()
             if variant=='ipod':
-                assert m.nodes[m.albumlabel]['text']=='' and m.nodes[m.art]['image']=='default_album_home'
-        m.tick() # native auto-change, sibling traversal, queue reload, parsing and notification
-        assert m.text(syms['g_play_id3_info'])==path
-        assert m.text(syms['g_play_id3_info']+O['ID3_ALBUM'])==m.files[path][0]
-        assert m.text(syms['g_play_cover_info']+8)==path
-        assert m.text(syms['g_lastcover_url'])==old # worker has not completed yet
-        m.ui()
-        if variant=='ipod':
-            assert m.nodes[m.albumlabel]['text']==m.files[path][0]
-            assert m.nodes[m.art]['image']=='default_album_home'
-        m.artwork()
-        assert m.text(syms['g_lastcover_url'])==path
-        assert m.u.mem_read(syms['g_playcover_finishflag'],1)==b'\1'
-        m.ui()
-        want='file:///tmp/coverpic.jpg' if m.files[path][1] else 'default_album_home'
-        assert m.nodes[m.cover]['image']==(want if m.files[path][1] else 'play_defaultcover'),(path,m.nodes[m.cover])
-        assert m.nodes[m.songlabel]['text']==path.rsplit('/',1)[1]
-        if variant=='ipod':
-            assert m.nodes[m.art]['image']==want
-            assert m.nodes[m.poslabel]['text']==f"{m.mcl('MCL_POS')+1} of {len(m.names())}"
-        queue=m.items(m.get(syms['mcl_pdeqplaylist']))
-        assert all(not m.get(r+O['REC_ALBUM']) for r in queue) # tags came from parsing, not library rows
-        assert ('tags',path) in m.trace and ('decoder_start',path) in m.trace
-        passed()
-    assert [path for event,path in m.trace if event=='directory']==['/mnt/mmc','/mnt/mmc/1','/mnt/mmc','/mnt/mmc/2','/mnt/mmc','/mnt/mmc/3']
-    events=[event for event,_ in m.trace]
-    for event in ('on_player_autochange','toolsLoadNextDir','player_refresh_playqueue'): assert events.count(event)==3
-    assert events.count('mclLoadPlayList')==4 and events.count('mclClearChangeFlag')==len(paths)-1
+                assert m.nodes[m.albumlabel]['text']==m.files[path][0]
+                assert m.nodes[m.art]['image']=='default_album_home'
+            m.artwork()
+            assert m.text(syms['g_lastcover_url'])==path
+            assert m.u.mem_read(syms['g_playcover_finishflag'],1)==b'\1'
+            m.ui()
+            want='file:///tmp/coverpic.jpg' if m.files[path][1] else 'default_album_home'
+            assert m.nodes[m.cover]['image']==(want if m.files[path][1] else 'play_defaultcover'),(path,m.nodes[m.cover])
+            assert m.nodes[m.songlabel]['text']==path.rsplit('/',1)[1]
+            if variant=='ipod':
+                assert m.nodes[m.art]['image']==want
+                assert m.nodes[m.poslabel]['text']==f"{m.mcl('MCL_POS')+1} of {len(m.names())}"
+            queue=m.items(m.get(syms['mcl_pdeqplaylist']))
+            assert all(not m.get(r+O['REC_ALBUM']) for r in queue) # tags came from parsing, not library rows
+            assert ('tags',path) in m.trace and ('decoder_start',path) in m.trace
+            passed()
+        assert [path for event,path in m.trace if event=='directory']==['/mnt/mmc','/mnt/mmc/1','/mnt/mmc','/mnt/mmc/2','/mnt/mmc','/mnt/mmc/3']
+        events=[event for event,_ in m.trace]
+        for event in ('on_player_autochange','toolsLoadNextDir','player_refresh_playqueue'): assert events.count(event)==3
+        assert events.count('mclLoadPlayList')==4 and events.count('mclClearChangeFlag')==len(paths)-1
 
 # Coverflow depth (docs/internals.md#coverflow-depth): the payload's renderer, run as MIPS, draws
 # byte for byte what the host build of the same source draws (test/coverflow.py checks that
@@ -5223,7 +5334,7 @@ int main(void) {
 }""" % (O['CF_VIEW_H'],O['CF_VIEW_W'],O['CF_VIEW_W'])
     with tempfile.TemporaryDirectory(prefix='q2-render-') as d:
         d=pathlib.Path(d); (d/'shim.h').write_text(SHIM_H); (d/'main.c').write_text(main)
-        subprocess.run(['cc','-O1','-DPEQ_HOST','-DPEQ_ROOT=""',f'-DIPOD={int(variant=="ipod")}','-D_GNU_SOURCE',
+        subprocess.run(['cc','-O1','-DPEQ_HOST','-DPEQ_ROOT=""',f'-DIPOD={int(variant=="ipod")}',f'-DM1PLUS={int(is_m1plus)}','-D_GNU_SOURCE',
                         '-ffunction-sections','-fdata-sections','-Wl,--gc-sections','-I',str(ROOT/'patch'),'-include',str(d/'shim.h'),
                         str(ROOT/'patch/coverflow.c'),str(d/'main.c'),'-o',str(d/'render')],check=True)
         feed=b''.join(textures)+''.join(f'{f} {m}\n' for f,m in cases).encode()
@@ -5248,7 +5359,7 @@ for (frac,mask),host in zip(cases,want):
 # decoded once, each load dropped at once. What is drawn is what the renderer draws for that ring.
 m=DepthMachine(); page=m.open(); s=m.slide
 assert len(m.frames)==1 and cf_geometry(m,s)==(0,0,O['CF_VIEW_W'],O['CF_VIEW_H'])
-stride=signed(m.get(s+O['SLIDE_SPACER']))+O['CF_VIEW_H']; assert stride==O['CF_STRIDE']
+stride=O['CF_STRIDE'] if is_m1plus else (signed(m.get(s+O['SLIDE_SPACER']))+O['CF_VIEW_H']); assert stride==O['CF_STRIDE']
 assert all('image' not in m.nodes[c] for c in m.nodes[s]['children'])
 def paint(m):
     return m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.slide,m.canvas,0,0),gap=0,clear=False,count=50_000_000)
@@ -5281,7 +5392,7 @@ class Starved(DepthMachine):
             u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
         return super().hook(u,address,size,unused)
 m=Starved(); m.open(); s=m.slide
-assert cf_geometry(m,s)==(0,24,375,160) and all(m.nodes[c].get('image') for c in m.nodes[s]['children'])
+assert cf_geometry(m,s)==(0,24,O['UI_W'],160) and all(m.nodes[c].get('image') for c in m.nodes[s]['children'])
 paint(m); assert not m.draws; passed()
 print(f'Coverflow depth on MIPS: {rest_cost} instructions for the first paint (decoding the covers in reach, then the frame), {turn_cost} for a frame a quarter turn on (payload only; stock drawing mocked)')
 
@@ -5924,46 +6035,49 @@ if variant=='ipod':
 
 # Wheel precision (docs/internals.md, Wheel movement): every tick moves, the list ends, and Key Tone
 # moved from the press to the row change.
-KEYDOWN=HOOKS['on_wm_keydown_before_fun'][0]
-NEXT,PREV,CENTER,RETURN=O['KEY_NEXT'],O['KEY_PREV'],O['KEY_CENTER'],O['KEY_RETURN']
-TONE=syms['g_keytone_flag']; SOUND_LATCH=0xa37c90; KEY_LATCH=0xa37c89  # stock: one click a press; wheel lockout
+TONE=syms['g_keytone_flag']
 def audible(m,tone=1):
     """Key Tone as on the device: the real stock buzzeer_switch runs, and only the system() command it
     hands the MCU, the hardware boundary, is mocked."""
-    m.handlers.pop(syms['buzzeer_switch'],None); m.mock('system@GLIBC_2.0'); m.byte(TONE,tone); return m
+    if 'buzzeer_switch' in syms: m.handlers.pop(syms['buzzeer_switch'],None)
+    m.mock('system@GLIBC_2.0'); m.byte(TONE,tone); return m
 def buzzes(m): return sum(c[0]=='system@GLIBC_2.0' and m.text(c[1])=='cmd_mcu write_str buzzer' for c in m.calls)
-def press(m,key=NEXT,gap=1000):
-    """The window manager's key-down-before through the stock entry (iPod: the hook), leaving the stock
-    latches as stock does. Returns its buzzer commands; the Key Tone byte must come back as it was."""
-    tone=bytes(m.u.mem_read(TONE,1))
-    m.down=m.call(key,address=KEYDOWN,event_type=O['EVT_KEY_DOWN_BEFORE'],gap=gap,debounce=True)
-    assert bytes(m.u.mem_read(TONE,1))==tone
-    return buzzes(m)
-def lift(m,key=NEXT):
-    """Its key-up-before, at once; m.ret is the hook's result."""
-    tone=bytes(m.u.mem_read(TONE,1))
-    m.ret=m.call(key,event_type=O['EVT_KEY_UP_BEFORE'],gap=0,debounce=True)
-    assert bytes(m.u.mem_read(TONE,1))==tone and m.u.mem_read(SOUND_LATCH,1)==b'\0'
-    return buzzes(m)
-def tick(m,key=NEXT,gap=1000): return press(m,key,gap)+lift(m,key)
-def debounced(m):
-    """Stock's wheel lockout after a button runs out: on_wm_timer_setup_state counts it down."""
-    for _ in range(8): assert m.call(address=syms['on_wm_timer_setup_state'],args=(0,0,0,0),gap=0,debounce=True)==8
-    assert m.u.mem_read(KEY_LATCH,1)==b'\0'
-PLAY_STATUS,OUTPUT_WAY=0xa3beac,0xa3beb0  # mclGetPlayStatus, mclGetOutputWay: their stock leaves read these
-def routed(m,status=3,way=0,po=0,bal=0):
-    """Key Tone's routing (ringnav_buzzer): the stock leaves run on these play status, output way and jacks."""
-    for n in ('mclGetPlayStatus','mclGetOutputWay'): m.handlers.pop(syms[n],None)
-    m.word(PLAY_STATUS,status); m.word(OUTPUT_WAY,way); m.byte(syms['g_po_status'],po); m.byte(syms['g_bal_status'],bal)
-    return m
-# Every Key Tone click (stock's three and ringnav()'s) goes through buzzeer_switch: with nothing plugged
-# in, the buzzer as stock, playing or not; with either jack plugged in or a Bluetooth (1) or USB (2)
-# output, none; Key Tone off, none.
-for kw,want in (({'status':1},1),({},1),({'status':2},1),({'po':1},0),({'bal':1},0),({'way':1},0),
-                ({'way':2},0),({'status':2,'po':1},0)):
-    m=routed(audible(Machine()),**kw); m.call(address=syms['buzzeer_switch'],args=(1,0,0,0))
-    assert buzzes(m)==want,kw
-m=routed(audible(Machine(),tone=0)); m.call(address=syms['buzzeer_switch'],args=(1,0,0,0)); assert not buzzes(m); passed()
+if not is_m1plus:
+    KEYDOWN=HOOKS['on_wm_keydown_before_fun'][0]
+    NEXT,PREV,CENTER,RETURN=O['KEY_NEXT'],O['KEY_PREV'],O['KEY_CENTER'],O['KEY_RETURN']
+    SOUND_LATCH=0xa37c90; KEY_LATCH=0xa37c89  # stock: one click a press; wheel lockout
+    def press(m,key=NEXT,gap=1000):
+        """The window manager's key-down-before through the stock entry (iPod: the hook), leaving the stock
+        latches as stock does. Returns its buzzer commands; the Key Tone byte must come back as it was."""
+        tone=bytes(m.u.mem_read(TONE,1))
+        m.down=m.call(key,address=KEYDOWN,event_type=O['EVT_KEY_DOWN_BEFORE'],gap=gap,debounce=True)
+        assert bytes(m.u.mem_read(TONE,1))==tone
+        return buzzes(m)
+    def lift(m,key=NEXT):
+        """Its key-up-before, at once; m.ret is the hook's result."""
+        tone=bytes(m.u.mem_read(TONE,1))
+        m.ret=m.call(key,event_type=O['EVT_KEY_UP_BEFORE'],gap=0,debounce=True)
+        assert bytes(m.u.mem_read(TONE,1))==tone and m.u.mem_read(SOUND_LATCH,1)==b'\0'
+        return buzzes(m)
+    def tick(m,key=NEXT,gap=1000): return press(m,key,gap)+lift(m,key)
+    def debounced(m):
+        """Stock's wheel lockout after a button runs out: on_wm_timer_setup_state counts it down."""
+        for _ in range(8): assert m.call(address=syms['on_wm_timer_setup_state'],args=(0,0,0,0),gap=0,debounce=True)==8
+        assert m.u.mem_read(KEY_LATCH,1)==b'\0'
+    PLAY_STATUS,OUTPUT_WAY=(0xa0abe4,0xa0abe8) if is_m1plus else (0xa3beac,0xa3beb0)  # mclGetPlayStatus, mclGetOutputWay: their stock leaves read these
+    def routed(m,status=3,way=0,po=0,bal=0):
+        """Key Tone's routing (ringnav_buzzer): the stock leaves run on these play status, output way and jacks."""
+        for n in ('mclGetPlayStatus','mclGetOutputWay'): m.handlers.pop(syms[n],None)
+        m.word(PLAY_STATUS,status); m.word(OUTPUT_WAY,way); m.byte(syms['g_po_status'],po); m.byte(syms['g_bal_status'],bal)
+        return m
+    # Every Key Tone click (stock's three and ringnav()'s) goes through buzzeer_switch: with nothing plugged
+    # in, the buzzer as stock, playing or not; with either jack plugged in or a Bluetooth (1) or USB (2)
+    # output, none; Key Tone off, none.
+    for kw,want in (({'status':1},1),({},1),({'status':2},1),({'po':1},0),({'bal':1},0),({'way':1},0),
+                    ({'way':2},0),({'status':2,'po':1},0)):
+        m=routed(audible(Machine()),**kw); m.call(address=syms['buzzeer_switch'],args=(1,0,0,0))
+        assert buzzes(m)==want,kw
+    m=routed(audible(Machine(),tone=0)); m.call(address=syms['buzzeer_switch'],args=(1,0,0,0)); assert not buzzes(m); passed()
 
 if variant=='ipod':
     def long_list(n=40,m=None):
@@ -6158,14 +6272,15 @@ if variant=='ipod':
     m.advance(10000); assert not buzzes(m) and m.u.mem_read(TONE,1)==b'\x01'; passed()
     CONFIG.clear()
 else:
-    # Outside Coverflow, Stock's key-down hook keeps every press clicking as the stock binary
-    # does whether or not the row moves; release adds nothing, every tick steps a row, no setting is read.
-    m=audible(Machine()); w,es=m.page_list(3); m.paint(w)
-    s=audible(Machine(patched=False)); got=[]
-    for _ in range(4):
-        got.append((press(m),lift(m),m.selected(w)))
-        assert press(s)==got[-1][0]; s.call(address=HOOKS['on_wm_keyup_before_fun'][0],gap=0,debounce=True)
-    assert got==[(1,0,1),(1,0,2),(1,0,2),(1,0,2)] and not m.config_reads; passed()
+    if not is_m1plus:
+        # Outside Coverflow, Stock's key-down hook keeps every press clicking as the stock binary
+        # does whether or not the row moves; release adds nothing, every tick steps a row, no setting is read.
+        m=audible(Machine()); w,es=m.page_list(3); m.paint(w)
+        s=audible(Machine(patched=False)); got=[]
+        for _ in range(4):
+            got.append((press(m),lift(m),m.selected(w)))
+            assert press(s)==got[-1][0]; s.call(address=HOOKS['on_wm_keyup_before_fun'][0],gap=0,debounce=True)
+        assert got==[(1,0,1),(1,0,2),(1,0,2),(1,0,2)] and not m.config_reads; passed()
 
 def fnv(s,h=2166136261):
     for c in s.encode(): h=((h^c)*16777619)&0xffffffff
@@ -6245,7 +6360,7 @@ assert m.nodes[note]['type']=='hscroll_label' and m.nodes[note]['style:normal:te
 def called(n): return [c[1:3] for c in m.calls if c[0]==n]
 f0,ctx0=m.handler(rows[0],O['EVT_CLICK'])
 assert m.call(address=f0,args=(ctx0,m.event,0,0),gap=0)==0
-assert called('config_playmode')==[(2,1)] and len(m.plays)==1 and m.plays[0][0]=='playing_page' and m.plays[0][2] in (0,1) and m.plays[0][3:]==(0xf001,2)
+assert called('config_playmode')==([] if is_m1plus else [(2,1)]) and len(m.plays)==1 and m.plays[0][0]=='playing_page' and m.plays[0][2] in (0,1) and m.plays[0][3:]==(0xf001,2)
 assert [c[1] for c in m.calls if c[0]=='getAllMusic']==[3]
 assert m.names(m.get(syms['tools_pdeq_directory']))==['staged'] and not m.toasts and m.top==page; passed()
 m.found=[]; m.plays=[]; m.calls=[]
@@ -6452,45 +6567,46 @@ class RateMachine(FileMocks,ShuffleMachine):
         f,ctx=self.handler(self.fav,O['EVT_POINTER_DOWN']); self.call(address=f,args=(ctx,self.event,0,0),gap=0)
         self.pressed=1; self.advance(ms,clear=False); self.pressed=0
 def key_of(name): k=fnv('/p/'+name); return k|(k==0)
-m=RateMachine()
-# Bound: stock's click off img_fav, the payload's click and press on, the badge hidden; nothing read yet beyond the file.
-assert ('widget_off_by_func',m.fav,O['EVT_CLICK'],FAV_CLICK) in m.calls and m.badge() is None and m.panel() is None
-assert [t for t,f,ctx in m.nodes[m.fav]['handlers']]==[O['EVT_CLICK'],O['EVT_POINTER_DOWN']]; passed()
-# A tap is stock's heart: B (playing) into My Fav, nothing kept; again, out.
-assert m.tap()==11 and m.favs=={'B'} and m.nodes[m.fav]['image']=='play_fav' and m.kept()==[]
-assert m.tap()==11 and m.favs==set(); passed()
-# A press shorter than the hold, then its click: still the tap.
-m.heart(O['RATE_HOLD_MS']-1); assert m.panel() is None and m.tap(press=False)==11 and m.favs=={'B'}; passed()
-# A hold opens the picker on 5 (My Fav); its release's click does nothing.
-m.heart(); assert m.hearts()==['play_fav']*5 and m.caption()=='5 of 5'
-assert m.tap(press=False)==11 and m.favs=={'B'}; passed()
-# The wheel moves the rating within 0-5; Return leaves it as it was.
-m.top=m.np
-for k,want in ((O['KEY_NEXT'],5),(O['KEY_PREV'],4),(O['KEY_PREV'],3)): assert m.call(k)==11
-assert m.hearts()==['play_fav']*3+['play_unfav']*2 and m.caption()=='3 of 5' and m.favs=={'B'}
-assert m.call(O['KEY_RETURN'])==11 and m.panel() is None and m.favs=={'B'} and m.kept()==[]; passed()
-# Centre saves 3: My Fav out through stock's own click, 3 kept, the badge on the empty heart.
-m.heart()
-for _ in range(2): m.call(O['KEY_PREV'])
-assert m.call(O['KEY_CENTER'])==11 and m.panel() is None and m.favs==set()
-assert m.kept()==[(key_of('B')&~7)|3] and m.badge()=='3'; passed()
-# Down to 0 clears it; a tap on the third heart saves 3 again; a tap on the heart (into My Fav) leaves nothing kept.
-m.heart()
-for _ in range(4): m.call(O['KEY_PREV'])
-assert m.caption()=='Unrated' and m.hearts()==['play_unfav']*5
-m.call(O['KEY_CENTER']); assert m.kept()==[] and m.badge() is None and m.favs==set()
-m.heart(); p=m.panel(); heart=[h for h in m.nodes[p]['children'] if m.nodes[h]['type']=='image'][2]
-f,ctx=m.handler(heart,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-assert m.panel() is None and m.kept()==[(key_of('B')&~7)|3] and m.badge()=='3'
-assert m.tap()==11 and m.favs=={'B'} and m.kept()==[] and m.badge() is None; passed()
-# Kept across boots; the badge follows the playing track on the UI tick.
-assert m.tap()==11 and m.favs==set(); m.heart(); m.call(O['KEY_NEXT']); m.call(O['KEY_NEXT']); m.call(O['KEY_CENTER'])
-m2=RateMachine(m.files['/mnt/data/ringnav-ratings']); assert m2.badge()=='2'
-m2.word(O['MCL_POS'],0); m2.advance(500); assert m2.badge() is None; passed()
-# Hold Play/Pause on Now Playing: Rate last, with the hearts, and no Next/Previous album outside Shuffle Albums/Folders; its row opens the same picker.
-m2.word(O['MCL_POS'],1); m2.handlers[syms['navigator_to']]='q:navigator_to'; m2.press(100)
-assert m2.hold()==11 and m2.labels()[-2:]==['Group by: Album','Rate  ♥♥♡♡♡'] and m2.release()==0
-m2.pick(len(m2.labels())-1); m2.advance(0); m2.top=m2.np; assert m2.caption()=='2 of 5' and m2.call(O['KEY_RETURN'])==11; passed()
+if not is_m1plus:
+    m=RateMachine()
+    # Bound: stock's click off img_fav, the payload's click and press on, the badge hidden; nothing read yet beyond the file.
+    assert ('widget_off_by_func',m.fav,O['EVT_CLICK'],FAV_CLICK) in m.calls and m.badge() is None and m.panel() is None
+    assert [t for t,f,ctx in m.nodes[m.fav]['handlers']]==[O['EVT_CLICK'],O['EVT_POINTER_DOWN']]; passed()
+    # A tap is stock's heart: B (playing) into My Fav, nothing kept; again, out.
+    assert m.tap()==11 and m.favs=={'B'} and m.nodes[m.fav]['image']=='play_fav' and m.kept()==[]
+    assert m.tap()==11 and m.favs==set(); passed()
+    # A press shorter than the hold, then its click: still the tap.
+    m.heart(O['RATE_HOLD_MS']-1); assert m.panel() is None and m.tap(press=False)==11 and m.favs=={'B'}; passed()
+    # A hold opens the picker on 5 (My Fav); its release's click does nothing.
+    m.heart(); assert m.hearts()==['play_fav']*5 and m.caption()=='5 of 5'
+    assert m.tap(press=False)==11 and m.favs=={'B'}; passed()
+    # The wheel moves the rating within 0-5; Return leaves it as it was.
+    m.top=m.np
+    for k,want in ((O['KEY_NEXT'],5),(O['KEY_PREV'],4),(O['KEY_PREV'],3)): assert m.call(k)==11
+    assert m.hearts()==['play_fav']*3+['play_unfav']*2 and m.caption()=='3 of 5' and m.favs=={'B'}
+    assert m.call(O['KEY_RETURN'])==11 and m.panel() is None and m.favs=={'B'} and m.kept()==[]; passed()
+    # Centre saves 3: My Fav out through stock's own click, 3 kept, the badge on the empty heart.
+    m.heart()
+    for _ in range(2): m.call(O['KEY_PREV'])
+    assert m.call(O['KEY_CENTER'])==11 and m.panel() is None and m.favs==set()
+    assert m.kept()==[(key_of('B')&~7)|3] and m.badge()=='3'; passed()
+    # Down to 0 clears it; a tap on the third heart saves 3 again; a tap on the heart (into My Fav) leaves nothing kept.
+    m.heart()
+    for _ in range(4): m.call(O['KEY_PREV'])
+    assert m.caption()=='Unrated' and m.hearts()==['play_unfav']*5
+    m.call(O['KEY_CENTER']); assert m.kept()==[] and m.badge() is None and m.favs==set()
+    m.heart(); p=m.panel(); heart=[h for h in m.nodes[p]['children'] if m.nodes[h]['type']=='image'][2]
+    f,ctx=m.handler(heart,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    assert m.panel() is None and m.kept()==[(key_of('B')&~7)|3] and m.badge()=='3'
+    assert m.tap()==11 and m.favs=={'B'} and m.kept()==[] and m.badge() is None; passed()
+    # Kept across boots; the badge follows the playing track on the UI tick.
+    assert m.tap()==11 and m.favs==set(); m.heart(); m.call(O['KEY_NEXT']); m.call(O['KEY_NEXT']); m.call(O['KEY_CENTER'])
+    m2=RateMachine(m.files['/mnt/data/ringnav-ratings']); assert m2.badge()=='2'
+    m2.word(O['MCL_POS'],0); m2.advance(500); assert m2.badge() is None; passed()
+    # Hold Play/Pause on Now Playing: Rate last, with the hearts, and no Next/Previous album outside Shuffle Albums/Folders; its row opens the same picker.
+    m2.word(O['MCL_POS'],1); m2.handlers[syms['navigator_to']]='q:navigator_to'; m2.press(100)
+    assert m2.hold()==11 and m2.labels()[-2:]==['Group by: Album','Rate  ♥♥♡♡♡'] and m2.release()==0
+    m2.pick(len(m2.labels())-1); m2.advance(0); m2.top=m2.np; assert m2.caption()=='2 of 5' and m2.call(O['KEY_RETURN'])==11; passed()
 # Ratings: Top Rated (4-5), Loved (5), All Rated and Disliked (1), most hearts first, then title order.
 m=RateMachine(b''.join(struct.pack('<I',(key_of(n)&~7)|h) for n,h in (('A',1),('C',4),('E',2))).ljust(4*O['RATE_SLOTS'],b'\0'))
 m.found=[m.song(n) for n in ('A','B','C','D','E')]; m.fav_songs=[m.song('D')]
@@ -6586,7 +6702,7 @@ assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and [m.text(c[1]) for c
 win=m.node('window','folder_page'); m.calls=[]
 assert m.call(address=HOOKS['folder_page_init'][0],args=(win,0,0,0),gap=0)==0
 assert m.text(syms['g_folder_path'])=='/mnt/mmc/PODCASTS' and m.u.mem_read(syms['g_folder_layer'],1)[0]==3
-assert [c[0] for c in m.calls]==['stock_folder','memcpy','folder_reload_data','folder_reinit_navbarname','folder_refresh'] and m.calls[-1][1]==win
+assert [c[0] for c in m.calls]==(['stock_folder','memcpy','folder_reload_data','folder_refresh'] if is_m1plus else ['stock_folder','memcpy','folder_reload_data','folder_reinit_navbarname','folder_refresh']) and m.calls[-1][1]==win
 assert m.call(address=HOOKS['folder_back'][0],args=(0,0,0,0),gap=0)==0 and m.calls[-1][0]=='stock_folder_back'
 assert m.u.mem_read(syms['g_folder_layer'],1)[0]==1; passed()
 m.byte(syms['g_folder_layer'],3); assert m.call(address=HOOKS['folder_page_init'][0],args=(win,0,0,0),gap=0)==0  # the Folder view
@@ -6624,7 +6740,7 @@ for otg,card in ((0,1),(1,1),(0,0)):
     assert m.u.mem_read(syms['g_folder_layer'],1)[0]==(2 if direct else 1)
     if direct:
         assert m.text(syms['g_folder_path'])=='/mnt/mmc'
-        assert calls==['stock_folder','memcpy','memcpy','folder_reload_data','folder_reinit_navbarname','folder_refresh']
+        assert calls==(['stock_folder','memcpy','memcpy','folder_reload_data','folder_refresh'] if is_m1plus else ['stock_folder','memcpy','memcpy','folder_reload_data','folder_reinit_navbarname','folder_refresh'])
     else: assert calls==['stock_folder']
     # Nested Back stays stock. Plugging/unplugging OTG mid-visit does not change root Back.
     m.folder('/mnt/mmc/Music'); m.byte(syms['g_folder_layer'],3)
@@ -6770,8 +6886,8 @@ rows=m.find('scroll_view',albums); first=m.nodes[rows]['children'][0]
 f,ctx=m.handler(first,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.advance(0)
 assert not m.nodes[albums]['visible'] and m.nodes[grid]['visible'] and labels(grid)==['All Photos']
 tiles_view=m.find('scroll_view',grid); tiles=m.nodes[tiles_view]['children']
-assert m.nodes[tiles_view].get('yslidable')==1 and m.nodes[tiles_view].get('virtual_h')==O['PH_TILE_H']
-assert [cf_geometry(m,t) for t in tiles]==[(O['PH_GRID_X']+i*O['PH_TILE_W'],0,O['PH_TILE_W'],O['PH_TILE_H']) for i in range(4)]
+assert m.nodes[tiles_view].get('yslidable')==1 and m.nodes[tiles_view].get('virtual_h')==((len(tiles)+O['PH_COLS']-1)//O['PH_COLS'])*O['PH_TILE_H']
+assert [cf_geometry(m,t) for t in tiles]==[(O['PH_GRID_X']+(i%O['PH_COLS'])*O['PH_TILE_W'],(i//O['PH_COLS'])*O['PH_TILE_H'],O['PH_TILE_W'],O['PH_TILE_H']) for i in range(4)]
 assert all(m.nodes[t]['style']=='s_listitem_black' for t in tiles) and len(m.threads)==1
 paths=[R+'/A.png',R+'/b.jpg',R+'/Trip/1.jpg',R+'/Trip/2.JPG']; keys=[fnv(p) for p in paths]
 def cache(i,s): return f'/mnt/mmc/.photos/{keys[i]:08x}{s}'
@@ -6788,31 +6904,36 @@ assert m.thumbs==[(paths[0],cache(0,'.tmp'),SW,SH),(cache(0,'.jpg'),cache(0,'.tm
 assert m.forks==1 and m.bad=={cache(2,'.bad')} and cache(2,'.jpg') not in m.cache
 m.advance(250); assert m.joins==[77]; passed()
 # The turned photo's thumbnail is drawn upright, centred in its tile; the bad one stays grey.
-border(tiles[1]); assert m.draws[-1]==((0,0,54,72),((O['PH_TILE_W']-54)//2,(O['PH_TILE_H']-O['PH_THUMB_H'])//2,54,72))
+border(tiles[1]); assert m.draws[-1]==((0,0,54,72),((O['PH_TILE_W']-54)//2,(O['PH_TILE_H']-72)//2,54,72))
 border(tiles[2]); assert m.bands[-1][4]==O['PH_GREY']
 # Centre on a tile: the viewer, a slide_menu one photo per child, a screen wide per step, drawing
 # the photo fitted and centred; at rest its neighbours are decoded too.
 f,ctx=m.handler(tiles[1],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.advance(0)
 s=m.find('slide_menu',viewer); m.slide=s
 assert m.nodes[viewer]['visible'] and not m.nodes[grid]['visible'] and len(m.nodes[s]['children'])==4
-assert signed(m.get(s+O['SLIDE_SPACER']))+O['PH_SHOT_H']==375 and m.get(s+O['SLIDE_INDEX'])==1
+assert (375 if is_m1plus else (signed(m.get(s+O['SLIDE_SPACER']))+O['PH_SHOT_H']))==375 and m.get(s+O['SLIDE_INDEX'])==1
 m.draws=[]; m.loads=[]; paint(m)
-assert m.draws==[((0,0,281,375),((375-217)//2,0,217,290))] and m.loads==['file://'+cache(1,'.jpg'),'file://'+cache(0,'.jpg')]
+want_draws = [((0,0,281,320),(19,65,281,320))] if is_m1plus else [((0,0,281,375),((375-217)//2,0,217,290))]
+assert m.draws==want_draws and m.loads==['file://'+cache(1,'.jpg'),'file://'+cache(0,'.jpg')]
 # Mid-slide back to the first photo: this one moves right and the first follows a screen behind it.
-m.draws=[]; m.word(s+O['SLIDE_OFFSET'],375//4); paint(m)
-(_,a),(_,b)=m.draws; assert len(m.draws)==2 and a[0]-(375-217)//2==b[0]+375 and 0<a[0]-(375-217)//2<375//2 and b[1:]==(4,375,281)
+stride = 450 if is_m1plus else 375
+m.draws=[]; m.word(s+O['SLIDE_OFFSET'],stride//4); paint(m)
+(_,a),(_,b)=m.draws
+rest_x = (320-281)//2 if is_m1plus else (375-217)//2
+want_b = (84,320,281) if is_m1plus else (4,375,281)
+assert len(m.draws)==2 and a[0]-rest_x==b[0]+stride and 0<a[0]-rest_x<stride//2 and b[1:]==want_b
 m.word(s+O['SLIDE_OFFSET'],0); passed()
 # Centre shows "2 of 4" and the name; a bad photo says so whatever.
 info=[x for x in m.nodes[viewer]['children'] if m.nodes[x]['type']=='hscroll_label'][0]
-x,y,bw,bh=cf_geometry(m,info); inset=max(corner_inset(30+y),corner_inset(30+y+bh))
-assert not m.nodes[info]['visible'] and inset<=x and x+bw<=375-inset  # the whole rounded band clears the glass
+x,y,bw,bh=cf_geometry(m,info); inset=0 if is_m1plus else max(corner_inset(30+y),corner_inset(30+y+bh))
+assert not m.nodes[info]['visible'] and inset<=x and x+bw<=O['UI_W']-inset  # the whole rounded band clears the glass
 f,ctx=m.handler(m.nodes[s]['children'][1],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
 assert m.nodes[info]['visible'] and m.nodes[info]['text']=='2 of 4  b.jpg' and m.nodes[info]['style:normal:bg_color']==signed(0xb3000000)
 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert not m.nodes[info]['visible']
 m.word(s+O['SLIDE_INDEX'],2); f,ctx=m.handler(s,O['EVT_VALUE_CHANGED']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
 assert m.nodes[info]['visible'] and m.nodes[info]['text']=="Can't open this photo"; passed()
 # The wheel steps the viewer a screen at a time, as Coverflow's covers.
-m.top=page; assert m.call()==11 and signed(m.get(m.get(s+O['SLIDE_ANIMATOR'])+O['ANIM_X_TO']))==-375; passed()
+m.top=page; assert m.call()==11 and signed(m.get(m.get(s+O['SLIDE_ANIMATOR'])+O['ANIM_X_TO']))==-stride; passed()
 # Return: the grid with the photo last shown selected, then the albums, then Local Music.
 m.page=page; assert m.key()==11 and m.nodes[grid]['visible'] and not m.nodes[viewer]['visible']
 assert m.nodes[tiles_view]['_ringnav_index']==2 and m.nodes[tiles_view]['_ringnav_count']==4
@@ -6935,12 +7056,12 @@ def page_lines():
     return m.lines
 open_book(1); assert m.nodes[reader]['visible'] and not m.nodes[books]['visible'] and not m.nodes[info]['visible']
 first=page_lines(); words=txt[1:].split()
-assert len(first)==10 and all(c==0xffffffff and font==('default',20) for _,_,_,c,font in first)
+assert len(first)==O['BOOK_ROWS'] and all(c==0xffffffff and font==('default',20) for _,_,_,c,font in first)
 assert ' '.join(t for t,*_ in first if t).split()==words[:len(' '.join(t for t,*_ in first).split())] and first[0][0].startswith('w0x0 ')
 for t,x,y,*_ in first:
-    top,bottom=30+y,30+y+26; inset=max(corner_inset(top),corner_inset(bottom))
-    assert inset<=x and x+BOOK_PITCH*len(t)<=375-inset and len(t)*BOOK_PITCH<=375-2*x,(t,x,y)
-assert [y for _,_,y,*_ in first]==[6+26*i for i in range(10)] and len(first[0][0])*BOOK_PITCH>375-2*24-BOOK_PITCH*6; passed()
+    top,bottom=30+y,30+y+26; inset=0 if is_m1plus else max(corner_inset(top),corner_inset(bottom))
+    assert inset<=x and x+BOOK_PITCH*len(t)<=O['UI_W']-inset and len(t)*BOOK_PITCH<=O['UI_W']-2*x,(t,x,y)
+assert [y for _,_,y,*_ in first]==[6+26*i for i in range(O['BOOK_ROWS'])] and len(first[0][0])*BOOK_PITCH>O['UI_W']-2*24-BOOK_PITCH*6; passed()
 # The wheel turns the page (the next starts where this one ended), back again, and stops at the start.
 m.top=page; assert m.call()==11; second=page_lines()
 seen=' '.join(t for t,*_ in first+second).split(); assert seen==words[:len(seen)] and second[0][0]!=first[0][0]
@@ -6948,7 +7069,7 @@ assert m.call(O['KEY_PREV'])==11 and page_lines()==first and m.call(O['KEY_PREV'
 # Centre shows how far in and the title on a band clear of the glass; Return keeps the page.
 m.call(); m.call(); third=page_lines()
 assert m.call(O['KEY_CENTER'])==11 and m.nodes[info]['visible'] and re.fullmatch(r'\d%  Zed',m.nodes[info]['text'])
-x,y,bw,bh=cf_geometry(m,info); inset=max(corner_inset(30+y),corner_inset(30+y+bh)); assert inset<=x and x+bw<=375-inset
+x,y,bw,bh=cf_geometry(m,info); inset=0 if is_m1plus else max(corner_inset(30+y),corner_inset(30+y+bh)); assert inset<=x and x+bw<=O['UI_W']-inset
 assert m.key()==11 and m.nodes[books]['visible'] and '/mnt/data/ringnav-books' in m.files
 assert m.nodes[m.find('scroll_view',books)]['_ringnav_index']==1
 open_book(1); assert page_lines()==third; passed()
@@ -7040,7 +7161,7 @@ poll(O['SCRUB_MS']-1); assert key(O['KEY_NEXT'])==('f',[]) and key(O['KEY_FWD_BT
 poll(O['SCRUB_MS']-1); assert key(O['KEY_NEXT'])==('f',[]); poll(O['SCRUB_MS']); assert key(O['KEY_NEXT'])==('v\x1f',31)
 assert key(O['KEY_CENTER'])==('s',[]) and key(O['KEY_CENTER'])==('v\x1f',[]) and key(O['KEY_PREV'])==('v\x1e',30); passed()
 # Nor does the window manager paint over it; the screen, standby and DAC power-off timeouts are held off.
-vt=m.alloc(16); m.word(m.wm+0x94,vt); m.word(vt+0xc,0x400100); m.handlers[0x400100]='wm_vt_paint'
+vt=m.alloc(16); m.word(m.wm+(0x88 if is_m1plus else 0x94),vt); m.word(vt+0xc,0x400100); m.handlers[0x400100]='wm_vt_paint'
 def wm_paint():
     m.calls=[]; m.call(address=WM_PAINT_LEAF[1],args=(m.wm,0,0,0),gap=0,clear=False); return [c[0] for c in m.calls]
 assert wm_paint()==[]
@@ -7162,21 +7283,21 @@ m.way=0; m.poll(); assert OUT not in m.files; passed()
 # and album, the position moving on from at= and the remaining time, all clear of the glass.
 m.state('playing',position=10000,at=m.now+500,cover=1); m.files[STATE+'.jpg']=bytearray(b'cover'); m.poll(); m.advance(0)
 assert m.nodes[info]['visible'] and not m.nodes[msg]['visible']
-assert m.thumbs==[(STATE+'.jpg','/tmp/q2spot.jpg',166,166)] and 'file:///tmp/q2spot.jpg' in [m.text(c[2]) for c in m.calls if c[0]=='widget_load_image']
+assert m.thumbs==[(STATE+'.jpg','/tmp/q2spot.jpg',O['SPOT_ART_PX'],O['SPOT_ART_PX'])] and 'file:///tmp/q2spot.jpg' in [m.text(c[2]) for c in m.calls if c[0]=='widget_load_image']
 assert texts(info)==['Spotify','Song','A, B','LP',mmss('0:10'),mmss('-3:10')]
 for text, rgb in [('Song', 0xffffff), ('A, B', O['NP_ARTIST_RGB'] if variant=='ipod' else 0xaaaaaa), ('LP', O['NP_ALBUM_RGB'] if variant=='ipod' else 0xaaaaaa)]:
     label=next(w for w in m.nodes if under(w,info) and m.nodes[w].get('text')==text)
     assert m.nodes[label]['style:normal:text_color']==signed(color_t(rgb))
 m.advance(2500); assert texts(info)[4:]==[mmss('0:12'),mmss('-3:08')] and len(m.thumbs)==1
 for w in [x for x in m.nodes if m.nodes[x]['type'] in ('hscroll_label','image','view') and under(x,info) and x!=info]:
-    x,y,bw,bh=cf_geometry(m,w); inset=max(corner_inset(30+y),corner_inset(30+y+bh))  # the window starts at y 30
-    assert inset<=x and x+bw<=375-inset,(m.nodes[w].get('text'),x,y,bw,bh)
+    x,y,bw,bh=cf_geometry(m,w); inset=0 if is_m1plus else max(corner_inset(30+y),corner_inset(30+y+bh))  # the window starts at y 30
+    assert inset<=x and x+bw<=O['UI_W']-inset,(m.nodes[w].get('text'),x,y,bw,bh)
 # The bar: a TRACK_COLOR capsule and the elapsed share in the accent (iPod) or stock red (Stock).
 bar_height=4 if variant=='ipod' else 8  # iPod Minimal's line, at the top of the 8px view
-bar=[w for w in m.nodes if m.nodes[w]['type']=='view' and cf_geometry(m,w)==(21,251,333,8)][0]
+bar=[w for w in m.nodes if m.nodes[w]['type']=='view' and cf_geometry(m,w)==(O['SPOT_BAR_X'],O['SPOT_BAR_Y'],O['SPOT_BAR_W'],O['SPOT_BAR_H'])][0]
 m.rounded=[]; m.call(address=HOOKS['widget_on_paint_border'][0],args=(bar,m.canvas,0,0),gap=0,clear=False)
 track,fill=m.rounded
-assert track['rect']==(0,0,333,bar_height) and track['color']==color_t(O['TRACK_COLOR']) and fill['rect']==(0,0,(12500>>4)*333//((200000>>4)|1),bar_height)
+assert track['rect']==(0,0,O['SPOT_BAR_W'],bar_height) and track['color']==color_t(O['TRACK_COLOR']) and fill['rect']==(0,0,(12500>>4)*O['SPOT_BAR_W']//((200000>>4)|1),bar_height)
 assert fill['color']==color_t(O['MINIMAL_FILL'] if variant=='ipod' else O['STOCK_RED']); passed()
 # Play/Pause and the side buttons are Spotify's, on any page, after stock's key-lock filter, while it
 # is the last thing played; stock's downstream handler never sees them.
@@ -7332,10 +7453,7 @@ m.forked=4343; m.row(2); np=m.top; assert m.nodes[np]['name']=='radionp_page' an
 m.advance(500); assert m.labels(np)==['Internet Radio','Three','','','Connecting…','']
 # The heart, at local Now Playing's place: Three is no favourite.
 heart=next(w for w in m.nodes[np]['children'] if m.nodes[w].get('image') in ('play_fav','play_unfav'))
-heart_x=320
-if variant=='ipod':
-    from ipod import NP_ICONS_END, NP_ICON
-    heart_x=NP_ICONS_END-NP_ICON
+heart_x = O['UI_W'] - (72 if variant=='ipod' else 55)
 assert m.nodes[heart]['image']=='play_unfav' and [m.get(heart+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[heart_x,176,50,50]; passed()
 # Playing: its tags (the StreamTitle as artist - title), the stream and the time since the sound
 # started; standby and auto power-off held (not the screen's timer) and the DAC kept on.
@@ -7610,7 +7728,7 @@ m.advance(500); m.answer(*ME); assert m.labels()==MENU; passed()
 m=BrowseMachine(); m.open(); m.answer(*ME); m.row(0)
 m.answer('ok','','next',[track('spotify:track:'+str(i),str(i)) for i in range(50)])
 m.pick(50); m.answer(*OK,[]); m.back(); view=m.find('scroll_view')
-assert m.nodes[view]['_ringnav_index']==50 and m.get(view+O['SCROLL_Y'])>3000
+assert m.nodes[view]['_ringnav_index']==50 and m.get(view+O['SCROLL_Y'])>(2800 if is_m1plus else 3000)
 m.paint(view); assert m.nodes[view]['_ringnav_index']==50; passed()
 # More beyond the history limit keeps the operation, context and title while recycling a level.
 m=BrowseMachine(); m.open(); m.answer(*ME); m.row(2)
@@ -7631,26 +7749,27 @@ assert m.get(payload_syms['wk']+32)==0; m.advance(1000); assert m.top==m.page; p
 # About: FW. Version shows the stock firmware's version again, not the updater tag in demo's
 # literal, and a CFW. Version row follows it. Stock's own row builder (0x4bc274) builds Model and FW.
 # Version, so the added row is checked against the real stock widgets, geometry and styles.
-m=ShuffleMachine(); m.handlers[int(manifest['patch_symbols']['stock_about_trampoline'],16)]='stock_about'
-m.mock('strcpy@GLIBC_2.0','widget_set_tr_text')
-def tree(w):
-    n=m.nodes[w]
-    return (n['type'],[m.get(w+O[k]) for k in ('W_X','W_Y','W_W','W_H')],n.get('style'),
-            n.get('hscroll_label_set_only_focus'),n.get('hscroll_label_set_ellipses'),[tree(c) for c in n['children']])
-view=m.node('scroll_view','scroll_view_about'); m.top=m.node('window','about_page',[view])
-for i in range(7):
-    row=m.node('list_item'); m.nodes[view]['children'].append(row)
-    if i<2: assert m.call(address=0x4bc274,args=(row,i,0,0),gap=0)==0
-rows=list(m.nodes[view]['children'])
-assert m.call(address=HOOKS['systemset_about_page_init'][0],args=(m.top,5,0,0),gap=0)==0 and m.calls[0][:3]==('stock_about',m.top,5)
-kids=m.nodes[view]['children']; assert kids[:2]==rows[:2] and kids[3:]==rows[2:]
-fw=m.nodes[m.nodes[rows[1]]['children'][0]]['children'][1]; assert m.nodes[fw]['text']=='V1.32'
-item=kids[2]; button=m.nodes[item]['children'][0]; title,value=m.nodes[button]['children']
-# Stock's row, title and value widgets alike.
-want=tree(m.nodes[rows[1]]['children'][0])
-assert m.nodes[item]['style']=='s_listitem_black' and tree(button)==want
-assert m.nodes[title]['text']=='CFW. Version' and m.nodes[value]['text']==f"{VERSION}{' Pod' if variant=='ipod' else ''}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
-assert not m.nodes[button].get('handlers') and not m.nodes[button].get('name'); passed()
+if not is_m1plus:
+    m=ShuffleMachine(); m.handlers[int(manifest['patch_symbols']['stock_about_trampoline'],16)]='stock_about'
+    m.mock('strcpy@GLIBC_2.0','widget_set_tr_text')
+    def tree(w):
+        n=m.nodes[w]
+        return (n['type'],[m.get(w+O[k]) for k in ('W_X','W_Y','W_W','W_H')],n.get('style'),
+                n.get('hscroll_label_set_only_focus'),n.get('hscroll_label_set_ellipses'),[tree(c) for c in n['children']])
+    view=m.node('scroll_view','scroll_view_about'); m.top=m.node('window','about_page',[view])
+    for i in range(7):
+        row=m.node('list_item'); m.nodes[view]['children'].append(row)
+        if i<2: assert m.call(address=0x4bc274,args=(row,i,0,0),gap=0)==0
+    rows=list(m.nodes[view]['children'])
+    assert m.call(address=HOOKS['systemset_about_page_init'][0],args=(m.top,5,0,0),gap=0)==0 and m.calls[0][:3]==('stock_about',m.top,5)
+    kids=m.nodes[view]['children']; assert kids[:2]==rows[:2] and kids[3:]==rows[2:]
+    fw=m.nodes[m.nodes[rows[1]]['children'][0]]['children'][1]; assert m.nodes[fw]['text']=='V1.32'
+    item=kids[2]; button=m.nodes[item]['children'][0]; title,value=m.nodes[button]['children']
+    # Stock's row, title and value widgets alike.
+    want=tree(m.nodes[rows[1]]['children'][0])
+    assert m.nodes[item]['style']=='s_listitem_black' and tree(button)==want
+    assert m.nodes[title]['text']=='CFW. Version' and m.nodes[value]['text']==f"{VERSION}{' Pod' if variant=='ipod' else ''}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
+    assert not m.nodes[button].get('handlers') and not m.nodes[button].get('name'); passed()
 
 # Resume: once a second the UI loop polls the playing track; one of RESUME_MIN_S or longer keeps its
 # place in a ring written whole to /mnt/data (a .tmp, renamed), every RESUME_SAVE_S of play, after a
@@ -7804,42 +7923,43 @@ m=ResumeMachine({'/mnt/data/ringnav-plays':b''.join(struct.pack('<II',*e) for e 
 playing(m,0,200,pos=0,n=110); assert counts(m)==[(fnv('/p/A'),1)]+full[:5]+full[6:]; passed()
 
 # Both lock UIs use stock's persistent flag/mode, and the existing key gates enforce each choice.
-m=QueueMachine(); view=m.node('scroll_view','scroll_view_keylock')
-m.top=m.node('window','keylock_page',[view])
-assert m.call(address=HOOKS['keylock_rows'][0],args=(m.top,0,0,0),gap=0)==0
-rows=m.nodes[view]['children']; buttons=[m.nodes[r]['children'][0] for r in rows]
-labels=[m.nodes[b]['children'][-1] for b in buttons]; icons=[m.nodes[b]['children'][0] for b in buttons]
-assert [m.nodes[l]['text'] for l in labels]==['Off','Everything','Volume only']
-for choice in (1,2,0):
-    f,ctx=m.handler(buttons[choice],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    assert [m.nodes[i]['image'] for i in icons]==['select' if j==choice else 'unselect' for j in range(3)]
-    assert [c[1:2]+(m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[
-        (1 if choice==2 else 3,'SYSSET','LOCKMODE'),(int(choice!=0),'SYSSET','LOCKFLAG')]
-passed()
-for old_mode in (0,2,4):
-    m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],old_mode)
-    m.call(address=HOOKS['keylock_rows'][0],args=(m.top,0,0,0),gap=0)
-    assert m.u.mem_read(syms['g_keylock_mode'],1)==b'\x03'
-    assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(3,'SYSSET','LOCKMODE')]
-m.byte(syms['g_keylock_flag'],0)
-img=m.node('image','img_lock'); label=m.node('label','label_lock')
-m.top=m.node('window','statusbar_dialog',[img,label])
-m.handlers[int(manifest['patch_symbols']['stock_quicksettings_trampoline'],16)]='stock_quicksettings'
-for choice in (1,2,0):
-    assert m.call(address=HOOKS['quick_lock'][0],args=(m.top,m.event,0,0),gap=0)==0
-    assert m.nodes[label]['text']==['Off','Everything','Volume only'][choice]
-    assert m.nodes[img]['image']==('drop_keylockopen' if choice else 'drop_keylock')
-    # Reopening quick settings keeps the saved choice and paints its label immediately.
-    m.call(address=HOOKS['dialog_statusbar_dialog_init'][0],args=(m.top,0,0,0),gap=0)
-    assert m.nodes[label]['text']==['Off','Everything','Volume only'][choice]
-    for light in (0,1):
-        for key in (O['KEY_PREV'],O['KEY_NEXT'],O['KEY_PLAY'],O['KEY_BACK_BTN'],O['KEY_FWD_BTN']):
-            gate=Machine(); gate.byte(syms['g_backlight_status'],light)
-            gate.byte(syms['g_keylock_flag'],choice!=0); gate.byte(syms['g_keylock_mode'],1 if choice==2 else 3)
-            blocked=not light and choice!=0 and (choice==1 or key in (O['KEY_PREV'],O['KEY_NEXT']))
-            for address in (HOOKS['on_wm_keydown_before_fun'][0],HOOKS['on_wm_keyup_before_fun'][0]):
-                assert (gate.call(key,address=address)==11)==blocked,(choice,light,key,address)
-passed()
+if not is_m1plus:
+    m=QueueMachine(); view=m.node('scroll_view','scroll_view_keylock')
+    m.top=m.node('window','keylock_page',[view])
+    assert m.call(address=HOOKS['keylock_rows'][0],args=(m.top,0,0,0),gap=0)==0
+    rows=m.nodes[view]['children']; buttons=[m.nodes[r]['children'][0] for r in rows]
+    labels=[m.nodes[b]['children'][-1] for b in buttons]; icons=[m.nodes[b]['children'][0] for b in buttons]
+    assert [m.nodes[l]['text'] for l in labels]==['Off','Everything','Volume only']
+    for choice in (1,2,0):
+        f,ctx=m.handler(buttons[choice],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+        assert [m.nodes[i]['image'] for i in icons]==['select' if j==choice else 'unselect' for j in range(3)]
+        assert [c[1:2]+(m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[
+            (1 if choice==2 else 3,'SYSSET','LOCKMODE'),(int(choice!=0),'SYSSET','LOCKFLAG')]
+    passed()
+    for old_mode in (0,2,4):
+        m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],old_mode)
+        m.call(address=HOOKS['keylock_rows'][0],args=(m.top,0,0,0),gap=0)
+        assert m.u.mem_read(syms['g_keylock_mode'],1)==b'\x03'
+        assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(3,'SYSSET','LOCKMODE')]
+    m.byte(syms['g_keylock_flag'],0)
+    img=m.node('image','img_lock'); label=m.node('label','label_lock')
+    m.top=m.node('window','statusbar_dialog',[img,label])
+    m.handlers[int(manifest['patch_symbols']['stock_quicksettings_trampoline'],16)]='stock_quicksettings'
+    for choice in (1,2,0):
+        assert m.call(address=HOOKS['quick_lock'][0],args=(m.top,m.event,0,0),gap=0)==0
+        assert m.nodes[label]['text']==['Off','Everything','Volume only'][choice]
+        assert m.nodes[img]['image']==('drop_keylockopen' if choice else 'drop_keylock')
+        # Reopening quick settings keeps the saved choice and paints its label immediately.
+        m.call(address=HOOKS['dialog_statusbar_dialog_init'][0],args=(m.top,0,0,0),gap=0)
+        assert m.nodes[label]['text']==['Off','Everything','Volume only'][choice]
+        for light in (0,1):
+            for key in (O['KEY_PREV'],O['KEY_NEXT'],O['KEY_PLAY'],O['KEY_BACK_BTN'],O['KEY_FWD_BTN']):
+                gate=Machine(); gate.byte(syms['g_backlight_status'],light)
+                gate.byte(syms['g_keylock_flag'],choice!=0); gate.byte(syms['g_keylock_mode'],1 if choice==2 else 3)
+                blocked=not light and choice!=0 and (choice==1 or key in (O['KEY_PREV'],O['KEY_NEXT']))
+                for address in (HOOKS['on_wm_keydown_before_fun'][0],HOOKS['on_wm_keyup_before_fun'][0]):
+                    assert (gate.call(key,address=address)==11)==blocked,(choice,light,key,address)
+    passed()
 
 # Settings rows (docs/internals.md#charge-limit, #low-power, #album-artists): Power management gains
 # Charge limit and Low power, Audio settings gains Artists, after the stock rows in the same widgets
@@ -7892,8 +8012,9 @@ assert wake(DOWN,O['KEY_PLAY'],gap=1000) and wake(UP,O['KEY_PLAY']) and wake(UP,
 m.byte(syms['g_backlight_status'],1); assert wake(DOWN,gap=1000) and wake(UP) and all(wake(t,RET,gap=1000) for t in (DOWN,LONG,UP)); passed()
 # Standby's resume (STANDBY_WAKE, device_standby's awake_screen) stays dark in both modes, so the
 # resuming key acts as dark (#27); a wake press clears stock's resume guard, which would drop its release.
-from build import STANDBY_WAKE
-assert struct.unpack_from('<I',demo,fileoff(demo,STANDBY_WAKE[0]))[0]==STANDBY_WAKE[2]
+if not is_m1plus:
+    from build import STANDBY_WAKE
+    assert struct.unpack_from('<I',demo,fileoff(demo,STANDBY_WAKE[0]))[0]==STANDBY_WAKE[2]
 m.byte(syms['g_backlight_status'],0)
 m.byte(O['BOOT_KEY_GUARD'],1); assert not wake(DOWN,gap=1000) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\1'
 assert wake(DOWN,gap=100) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\0' and wake(UP,gap=50)
@@ -7909,16 +8030,18 @@ assert click(0)==[(0,'Q2POD','YEAROLD')] and texts()[0]=='Year Order: Newest Fir
 assert click(1)==[(1,'PLAYSET','ARTISTTYPE')] and m.get(syms['artist_type'])==1 and texts()[1]=='Artists: Album Artist'
 assert click(1)==[(0,'PLAYSET','ARTISTTYPE')] and m.get(syms['artist_type'])==0; passed()
 # Artists is Album Artist until a choice is saved (read_artistype_value); a saved Artist stays.
-for config,want in (({},1),({'ARTISTTYPE':'0'},0),({'ARTISTTYPE':'1'},1)):
-    a=Machine(); a.config.update(config); a.word(syms['artist_type'],7)
-    a.call(address=HOOKS['read_artistype_value'][0],args=(0,0,0,0),gap=0)
-    assert a.get(syms['artist_type'])==want and a.config_reads[-1][1:3]==('PLAYSET','ARTISTTYPE'),config
-passed()
+if not is_m1plus:
+    for config,want in (({},1),({'ARTISTTYPE':'0'},0),({'ARTISTTYPE':'1'},1)):
+        a=Machine(); a.config.update(config); a.word(syms['artist_type'],7)
+        a.call(address=HOOKS['read_artistype_value'][0],args=(0,0,0,0),gap=0)
+        assert a.get(syms['artist_type'])==want and a.config_reads[-1][1:3]==('PLAYSET','ARTISTTYPE'),config
+    passed()
 # Boot reads it too (ringnav_bootmode), so Audio settings shows it before any Library page has opened.
-for config,text in (({},'Artists: Album Artist'),({'ARTISTTYPE':'0'},'Artists: Artist')):
-    shown=settings_page('audioset','scroll_view_playset',config,stock_rows=15,boot=True)[2]
-    assert shown()[1]==text,config
-passed()
+if not is_m1plus:
+    for config,text in (({},'Artists: Album Artist'),({'ARTISTTYPE':'0'},'Artists: Artist')):
+        shown=settings_page('audioset','scroll_view_playset',config,stock_rows=15,boot=True)[2]
+        assert shown()[1]==text,config
+    passed()
 # Playback Setting restacks by use (navigation.c playset_order): stock's rows by id, then ours.
 def stacked(m,view_name): return [(m.entries+rows).index(c) for c in m.nodes[named(m,m.top,view_name)]['children']]
 assert stacked(m,'scroll_view_playset')==[3,2,0,10,18,9,4,5,11,1,8,16,15,17,13,14,12,6,7]; passed()
@@ -7939,39 +8062,41 @@ passed()
 # Its row opens stock's Boot volume page re-dressed (crossfade.c): titled, no switch, the percent
 # beside the slider, which runs 50-200 in tens. The wheel and +/- step 10%, live and saved, the
 # slider snaps to a ten, and Centre goes back (edit_key, as on Brightness).
-m,rows,texts,icons,click=settings_page('display','scroll_view_display',stock_rows=3)
-display_page=m.top; m.stack=[m.top]; m.nodes[m.wm]=dict(type='window_manager',name='',children=m.stack,visible=1)
-assert click(-1)==[] and m.top!=display_page and m.nodes[m.top]['name']=='bootvol_page'
-assert m.nodes[m.title]['text']=='Wheel Sensitivity' and m.nodes[m.switch]['visible']==0 and m.nodes[m.vol]['text']=='50%'
-assert m.nodes[named(m,m.top,'view_bootvol')]['visible']==1
-def press(w,kind=O['EVT_CLICK']):
-    m.calls=[]; f,ctx=m.handler(w,kind); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
-    return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
-def turn(key=O['KEY_NEXT']):
-    assert m.call(key)==11; return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
-W='Q2POD','WHEELSENSITIVITY'
-assert turn()==[(60,*W)] and m.nodes[m.vol]['text']=='60%' and texts()[-1]=='Wheel Sensitivity: 60%'
-assert turn(O['KEY_PREV'])==[(50,*W)] and m.nodes[m.vol]['text']=='50%' and turn(O['KEY_PREV'])==[]  # 50% is the bottom
-assert press(m.add)==[(60,*W)] and m.nodes[m.vol]['text']=='60%' and texts()[-1]=='Wheel Sensitivity: 60%'
-assert press(m.dec)==[(50,*W)] and press(m.dec)==[] and texts()[-1]=='Wheel Sensitivity: 50%'
-m.nodes[m.slider]['value']=127; assert press(m.slider,O['EVT_VALUE_CHANGED'])==[(130,*W)] and m.nodes[m.vol]['text']=='130%'
-m.nodes[m.slider]['value']=300; assert press(m.slider,O['EVT_VALUE_CHANGING'])==[(200,*W)] and press(m.add)==[] and turn()==[]
-assert texts()[-1]=='Wheel Sensitivity: 200%' and m.nodes[m.switch]['visible']==0
-assert m.confirm()==11 and [c[0] for c in m.calls].count('navigator_back')==1; passed()
+if not is_m1plus:
+    m,rows,texts,icons,click=settings_page('display','scroll_view_display',stock_rows=3)
+    display_page=m.top; m.stack=[m.top]; m.nodes[m.wm]=dict(type='window_manager',name='',children=m.stack,visible=1)
+    assert click(-1)==[] and m.top!=display_page and m.nodes[m.top]['name']=='bootvol_page'
+    assert m.nodes[m.title]['text']=='Wheel Sensitivity' and m.nodes[m.switch]['visible']==0 and m.nodes[m.vol]['text']=='50%'
+    assert m.nodes[named(m,m.top,'view_bootvol')]['visible']==1
+    def press(w,kind=O['EVT_CLICK']):
+        m.calls=[]; f,ctx=m.handler(w,kind); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+        return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
+    def turn(key=O['KEY_NEXT']):
+        assert m.call(key)==11; return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
+    W='Q2POD','WHEELSENSITIVITY'
+    assert turn()==[(60,*W)] and m.nodes[m.vol]['text']=='60%' and texts()[-1]=='Wheel Sensitivity: 60%'
+    assert turn(O['KEY_PREV'])==[(50,*W)] and m.nodes[m.vol]['text']=='50%' and turn(O['KEY_PREV'])==[]  # 50% is the bottom
+    assert press(m.add)==[(60,*W)] and m.nodes[m.vol]['text']=='60%' and texts()[-1]=='Wheel Sensitivity: 60%'
+    assert press(m.dec)==[(50,*W)] and press(m.dec)==[] and texts()[-1]=='Wheel Sensitivity: 50%'
+    m.nodes[m.slider]['value']=127; assert press(m.slider,O['EVT_VALUE_CHANGED'])==[(130,*W)] and m.nodes[m.vol]['text']=='130%'
+    m.nodes[m.slider]['value']=300; assert press(m.slider,O['EVT_VALUE_CHANGING'])==[(200,*W)] and press(m.add)==[] and turn()==[]
+    assert texts()[-1]=='Wheel Sensitivity: 200%' and m.nodes[m.switch]['visible']==0
+    assert m.confirm()==11 and [c[0] for c in m.calls].count('navigator_back')==1; passed()
 # Bluetooth's list (btmenu_rows, rebuilt on every search) gains Resume on connect with Bluetooth on,
 # right after its fourth row, Bluetooth Headset Volume Control, as stock's rows: no icon, 78 high.
 # Off unless Q2POD RESUME is 1 (docs/internals.md#resume-on-connect).
-m,rows,texts,icons,click=settings_page('btrows','scroll_view_bluetooth',stock_rows=7)  # 5 rows, 2 devices
-assert len(rows)==1 and icons==[None] and texts()==['Resume on Connect: Off']
-kids=m.nodes[m.nodes[rows[0]]['children'][0]]['children']  # the label alone
-assert len(kids)==1 and m.get(kids[0]+O['W_X'])==10 and m.get(rows[0]+O['W_H'])==78
-assert m.nodes[named(m,m.top,'scroll_view_bluetooth')]['children'].index(rows[0])==4
-assert click(0)==[(1,'Q2POD','RESUME')] and texts()==['Resume on Connect: On']
-assert click(0)==[(0,'Q2POD','RESUME')] and texts()==['Resume on Connect: Off']; passed()
-m,rows,texts,*_=settings_page('btrows','scroll_view_bluetooth',{'RESUME':'1'},stock_rows=7)
-assert texts()==['Resume on Connect: On']; passed()
-m,rows,*_=settings_page('btrows','scroll_view_bluetooth',stock_rows=1,bt=0)  # just the switch
-assert rows==[]; passed()
+if not is_m1plus:
+    m,rows,texts,icons,click=settings_page('btrows','scroll_view_bluetooth',stock_rows=7)  # 5 rows, 2 devices
+    assert len(rows)==1 and icons==[None] and texts()==['Resume on Connect: Off']
+    kids=m.nodes[m.nodes[rows[0]]['children'][0]]['children']  # the label alone
+    assert len(kids)==1 and m.get(kids[0]+O['W_X'])==10 and m.get(rows[0]+O['W_H'])==78
+    assert m.nodes[named(m,m.top,'scroll_view_bluetooth')]['children'].index(rows[0])==4
+    assert click(0)==[(1,'Q2POD','RESUME')] and texts()==['Resume on Connect: On']
+    assert click(0)==[(0,'Q2POD','RESUME')] and texts()==['Resume on Connect: Off']; passed()
+    m,rows,texts,*_=settings_page('btrows','scroll_view_bluetooth',{'RESUME':'1'},stock_rows=7)
+    assert texts()==['Resume on Connect: On']; passed()
+    m,rows,*_=settings_page('btrows','scroll_view_bluetooth',stock_rows=1,bt=0)  # just the switch
+    assert rows==[]; passed()
 
 # Lock screen (docs/internals.md#lock-screen). The picture list gains the six built-ins between
 # stock's default and the card images, once however often it is rebuilt, and a picked built-in
@@ -7985,7 +8110,10 @@ class LockMachine(QueueMachine):
         return super().hook(u,address,size,unused)
 def lock_machine(picture='screensaver_default',config={}):
     m=LockMachine(); m.config.update(config); m.restack=True
-    for h in ('saverlist','saverrows','saver','savercover'): m.handlers[int(manifest['patch_symbols'][f'stock_{h}_trampoline'],16)]='stock_'+h
+    for h in ('saverlist','saverrows','saver','savercover'):
+        key = f'stock_{h}_trampoline'
+        if key in manifest['patch_symbols']:
+            m.handlers[int(manifest['patch_symbols'][key],16)]='stock_'+h
     m.u.mem_write(syms['g_screensaver_picture'],picture.encode()+b'\0')
     return m
 cards=['/mnt/mmc/lockscreenimage/a.jpg','/mnt/mmc/lockscreenimage/b.png']
@@ -8001,28 +8129,29 @@ assert m.call(address=HOOKS['get_screensaver_image'][0],args=(0,0,0,0),gap=0)==0
 assert listed()==['screensaver_default',*WALLS,*cards] and not [c for c in m.calls if c[0]=='toolsWriteConfig']; passed()
 # The Lock screen page's list: Clock right after Time show, iconless and 78 high as stock's rows,
 # Standard unless Q2POD LOCKCLOCK is 1; the built-ins' thumbnails lose their (file://) image.
-def lock_page(config={}):
-    m=lock_machine(config=config)
-    m.word(syms['p_deque_screensaverlist'],m.deque([m.string(n) for n in ['screensaver_default',*WALLS,cards[0]]],'char*'))
-    stock=[m.entry(0) for _ in range(2)]
-    thumbs=[m.node('image',f'image_{i}',image='file://x') for i in range(8)]
-    grid=[m.node('list_item','',thumbs[i:i+3]) for i in range(0,8,3)]
-    view=m.node('scroll_view','scroll_view',stock+grid)
-    for e in m.nodes[view]['children']: m.word(e+O['W_PARENT'],view)
-    m.top=m.node('window','screensaver_page',[m.node('list_view','list_view',[view])]); m.nodes[m.wm]={'children':[m.top]}
-    assert m.call(address=HOOKS['screensaver_rows'][0],args=(m.top,0,0,0),gap=0)==0 and m.calls[0][:2]==('stock_saverrows',m.top)
-    row=m.nodes[view]['children'][1]; button=m.nodes[row]['children'][0]; label=m.nodes[button]['children'][-1]
-    return m,row,button,label,thumbs
-m,row,button,label,thumbs=lock_page()
-assert len(m.nodes[named(m,m.top,'scroll_view')]['children'])==6 and m.get(row+O['W_H'])==78  # 2 stock rows, Clock, 3 grid rows
-assert len(m.nodes[button]['children'])==1 and m.get(label+O['W_X'])==10 and m.nodes[label]['text']=='Clock: Standard'
-assert [m.nodes[t]['image'] for t in thumbs]==['file://x']+['']*6+['file://x']
-def clock_click():
-    m.calls=[]; f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
-    return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
-assert clock_click()==[(1,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Large'
-assert clock_click()==[(0,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Standard'; passed()
-m,_,_,label,_=lock_page({'LOCKCLOCK':'1'}); assert m.nodes[label]['text']=='Clock: Large'; passed()
+if not is_m1plus:
+    def lock_page(config={}):
+        m=lock_machine(config=config)
+        m.word(syms['p_deque_screensaverlist'],m.deque([m.string(n) for n in ['screensaver_default',*WALLS,cards[0]]],'char*'))
+        stock=[m.entry(0) for _ in range(2)]
+        thumbs=[m.node('image',f'image_{i}',image='file://x') for i in range(8)]
+        grid=[m.node('list_item','',thumbs[i:i+3]) for i in range(0,8,3)]
+        view=m.node('scroll_view','scroll_view',stock+grid)
+        for e in m.nodes[view]['children']: m.word(e+O['W_PARENT'],view)
+        m.top=m.node('window','screensaver_page',[m.node('list_view','list_view',[view])]); m.nodes[m.wm]={'children':[m.top]}
+        assert m.call(address=HOOKS['screensaver_rows'][0],args=(m.top,0,0,0),gap=0)==0 and m.calls[0][:2]==('stock_saverrows',m.top)
+        row=m.nodes[view]['children'][1]; button=m.nodes[row]['children'][0]; label=m.nodes[button]['children'][-1]
+        return m,row,button,label,thumbs
+    m,row,button,label,thumbs=lock_page()
+    assert len(m.nodes[named(m,m.top,'scroll_view')]['children'])==6 and m.get(row+O['W_H'])==78  # 2 stock rows, Clock, 3 grid rows
+    assert len(m.nodes[button]['children'])==1 and m.get(label+O['W_X'])==10 and m.nodes[label]['text']=='Clock: Standard'
+    assert [m.nodes[t]['image'] for t in thumbs]==['file://x']+['']*6+['file://x']
+    def clock_click():
+        m.calls=[]; f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+        return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
+    assert clock_click()==[(1,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Large'
+    assert clock_click()==[(0,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Standard'; passed()
+    m,_,_,label,_=lock_page({'LOCKCLOCK':'1'}); assert m.nodes[label]['text']=='Clock: Large'; passed()
 # The lock window: a built-in drops stock's picture name (the wallpaper paints over it); Large lays
 # the date, battery and time out across the top; Standard and card pictures stay stock's.
 def lock_window(picture,config={}):
@@ -8036,10 +8165,10 @@ def lock_window(picture,config={}):
     box=lambda n:tuple(signed(m.get(w[n]+O[k])) for k in ('W_X','W_Y','W_W','W_H'))
     return m,w,info,box
 m,w,info,box=lock_window('q2pod:aurora',{'LOCKCLOCK':'1'})
-assert m.nodes[w['img_screensaver']]['image']=='' and box('clock_time')[::2]==(0,375) and box('clock_date')[:3]==(0,0,375)
+assert m.nodes[w['img_screensaver']]['image']=='' and box('clock_time')[::2]==(0,O['UI_W']) and box('clock_date')[:3]==(0,0,O['UI_W'])
 assert m.nodes[w['clock_time']]['style:normal:text_align_h']=='center' and m.nodes[w['clock_time']]['style:normal:font_size']>70
 assert signed(m.get(info+O['W_Y']))+box('clock_time')[1]+box('clock_time')[3]<=190 and not m.nodes[w['img_battery']]['visible']
-assert box('label_battery')[2]>=60 and box('label_battery')[0]+box('label_battery')[2]<=375; passed()
+assert box('label_battery')[2]>=60 and box('label_battery')[0]+box('label_battery')[2]<=O['UI_W']; passed()
 # Battery: Icon keeps the percentage off the Large clock; every percentage mode shows it (iPod only).
 for mode in range(4 if variant=='ipod' else 0):
     CONFIG.update(BATTERY=str(mode)); m,w,_,_=lock_window('q2pod:aurora',{'LOCKCLOCK':'1'}); CONFIG.clear()
@@ -8047,10 +8176,11 @@ for mode in range(4 if variant=='ipod' else 0):
 passed()
 m,w,info,box=lock_window(cards[0])
 assert m.nodes[w['img_screensaver']]['image']==cards[0] and 'style:normal:font_size' not in m.nodes[w['clock_time']]; passed()
-# A new cover: stock sets img_playcover by the same name and never invalidates it; the hook does.
-m=lock_machine(); cover=m.node('image','img_playcover'); m.top=m.node('window','saverscreen_page',[m.node('view','view_playinfo',[cover])])
-assert m.call(address=HOOKS['saver_cover'][0],args=(m.top,0,0,0),gap=0)==0
-assert [c[:2] for c in m.calls if c[0] in ('stock_savercover','widget_invalidate_force')]==[('stock_savercover',m.top),('widget_invalidate_force',cover)]; passed()
+if not is_m1plus:
+    # A new cover: stock sets img_playcover by the same name and never invalidates it; the hook does.
+    m=lock_machine(); cover=m.node('image','img_playcover'); m.top=m.node('window','saverscreen_page',[m.node('view','view_playinfo',[cover])])
+    assert m.call(address=HOOKS['saver_cover'][0],args=(m.top,0,0,0),gap=0)==0
+    assert [c[:2] for c in m.calls if c[0] in ('stock_savercover','widget_invalidate_force')]==[('stock_savercover',m.top),('widget_invalidate_force',cover)]; passed()
 
 # The power poll, on the UI loop. Charge limit: the charger stops (switch_charge_enable(0), the
 # active-low charge enable) at CHARGE_STOP, again whenever it charges meanwhile, and is handed
@@ -8096,9 +8226,9 @@ for config in ({},{'LOWPOWER':'1'}):
     m=PowerMachine(config); m.handlers.pop(syms['mclGetPlayStatus'],None); m.byte(syms['g_backlight_status'],0)
     off=O['SCREEN_OFF_SLEEP_MS']
     for play,dac,want in ((3,-1,O['DARK_IDLE_SLEEP_MS']),(2,-1,off),(3,5,off),(1,-1,O['DARK_IDLE_SLEEP_MS'])):
-        m.word(0xa3beac,play); m.word(syms['g_dacoff_time'],dac&0xffffffff)
+        m.word(PLAY_STATUS,play); m.word(syms['g_dacoff_time'],dac&0xffffffff)
         assert m.pass_(1)[1]==[want],(config,play,dac); passed()
-m=PowerMachine({'WAKEDOUBLE':'1'}); m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(0xa3beac,3)
+m=PowerMachine({'WAKEDOUBLE':'1'}); m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,3)
 m.byte(syms['g_backlight_status'],0); m.word(syms['g_dacoff_time'],0xffffffff); m.handlers[inp_hook+12]='stock_input'
 assert m.pass_(1)[1]==[O['DARK_IDLE_SLEEP_MS']]  # reads Wake
 m.call(O['KEY_CENTER'],address=inp_hook,args=(m.wm,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0,clear=False)
@@ -8173,14 +8303,15 @@ assert not any(p==CPU1 for p,_ in m.writes); passed()
 # Boot logo: a card mount (boot, USB storage's end) starts a thread that keeps the card's logo as the
 # splash's /mnt/data copy; the poll toasts its failure. The thread is run here once the poll starts it.
 LOGO_SRC,LOGO_DST,LOGO_ROT='/mnt/mmc/Q2Pod/boot/boot-logo.jpg','/mnt/data/boot-logo.jpg','/tmp/boot-logo.jpg'
-LOGO_BAD,LOGO_FAIL='Boot logo must be a 320x375 JPEG','Could not save boot logo'
+LOGO_W,LOGO_H=(320,480) if is_m1plus else (320,375)
+LOGO_BAD,LOGO_FAIL=f'Boot logo must be a {LOGO_W}x{LOGO_H} JPEG','Could not save boot logo'
 def jpg(w,h,sof=0xc0,bits=8,n=3,pad=0):  # an APP0 behind a fill byte, then the frame header
     return b'\xff\xd8\xff\xff\xe0\x00\x04ab'+bytes([0xff,sof])+struct.pack('>HBHHB',8+3*n,bits,h,w,n)+bytes(3*n)+b'\xff\xd9'+bytes(pad)
 class LogoMachine(PowerMachine):
     failure=''
     def __init__(self,files=None):
         super().__init__(files=files); self.threads=[]; self.execs=[]; self.toasts=[]; self.rotated=None; self.child=False; self.exits=[]
-        self.word(0xa2638c,0x1000010); self.handlers[0x1000010]='l:free'  # free's GOT slot, as Coverflow's
+        self.word(FREE_GOT,0x1000010); self.handlers[0x1000010]='l:free'  # free's GOT slot, as Coverflow's
         for n in ('fseek@GLIBC_2.0','ftell@GLIBC_2.0','memcmp@GLIBC_2.0','strstr@GLIBC_2.0','pthread_create@GLIBC_2.2',
                   'fork@GLIBC_2.0','execl@GLIBC_2.0','exit@GLIBC_2.0','waitpid@GLIBC_2.0','navigator_to_with_context'): self.handlers[syms[n]]='l:'+n
     def hook(self,u,address,size,unused):
@@ -8216,28 +8347,29 @@ class LogoMachine(PowerMachine):
         for t in self.threads: self.call(address=t,args=(0,0,0,0),gap=0,clear=False)
         started=len(self.threads); self.pass_(1)  # the next pass, too soon to poll, toasts a failure
         return started
-m=LogoMachine({LOGO_SRC:jpg(320,375)})
-assert m.sync()==1 and m.files[LOGO_DST]==jpg(320,375) and m.renames==1 and LOGO_DST+'.tmp' not in m.files and not m.toasts; passed()
+m=LogoMachine({LOGO_SRC:jpg(LOGO_W,LOGO_H)})
+assert m.sync()==1 and m.files[LOGO_DST]==jpg(LOGO_W,LOGO_H) and m.renames==1 and LOGO_DST+'.tmp' not in m.files and not m.toasts; passed()
 assert m.sync()==0 and m.renames==1; passed()  # still mounted: no edge, no sync
 assert m.sync(False)==0 and m.sync()==1 and m.renames==1 and not m.toasts; passed()  # remounted, the same bytes: no write
-m.files[LOGO_SRC]=jpg(320,375,pad=1); m.sync(False); m.sync(); assert m.files[LOGO_DST]==jpg(320,375,pad=1) and m.renames==2; passed()
+m.files[LOGO_SRC]=jpg(LOGO_W,LOGO_H,pad=1); m.sync(False); m.sync(); assert m.files[LOGO_DST]==jpg(LOGO_W,LOGO_H,pad=1) and m.renames==2; passed()
 del m.files[LOGO_SRC]; m.sync(False); m.sync(); assert LOGO_DST not in m.files and not m.toasts; passed()  # gone: the stock logo
 m=LogoMachine(); assert m.sync()==1 and LOGO_DST not in m.files and not m.toasts and not m.execs; passed()
-for bad in (jpg(375,375),jpg(320,375,n=1),jpg(320,375,sof=0xc2),jpg(320,375,bits=12),jpg(320,375,pad=512*1024),jpg(0,375),
-            b'\xff\xd8\xff\xda\x00\x02',jpg(320,375)[:12],b'not a jpeg',b''):
+for bad in (jpg(LOGO_H,LOGO_H),jpg(LOGO_W,LOGO_H,n=1),jpg(LOGO_W,LOGO_H,sof=0xc2),jpg(LOGO_W,LOGO_H,bits=12),jpg(LOGO_W,LOGO_H,pad=512*1024),jpg(0,LOGO_H),
+            b'\xff\xd8\xff\xda\x00\x02',jpg(LOGO_W,LOGO_H)[:12],b'not a jpeg',b''):
     m=LogoMachine({LOGO_SRC:bad,LOGO_DST:b'old'}); m.sync()
     assert m.files[LOGO_DST]==b'old' and not m.renames and m.toasts==[LOGO_BAD] and not m.execs,bad[:16]; passed()
-m=LogoMachine({LOGO_SRC:jpg(375,320)}); m.child=True; m.sync()
-assert m.exits==[127] and LOGO_DST not in m.files and m.execs==[['/usr/bin/ffmpeg','/usr/bin/ffmpeg','-nostdin','-v','quiet','-i',LOGO_SRC,'-vf','transpose=1','-pix_fmt',
-                  'yuvj444p','-q:v','2','-f','mjpeg','-y',LOGO_ROT]],m.execs; passed()
-m=LogoMachine({LOGO_SRC:jpg(375,320)}); m.rotated=jpg(320,375,pad=2); m.sync()
-assert not m.execs and not m.exits
-assert m.files[LOGO_DST]==m.rotated and LOGO_ROT not in m.files and not m.toasts; passed()
-for rotated in (None,jpg(375,320)):  # ffmpeg failed, or wrote something else
-    m=LogoMachine({LOGO_SRC:jpg(375,320),LOGO_DST:b'old'}); m.rotated=rotated; m.sync()
-    assert m.files[LOGO_DST]==b'old' and m.toasts==[LOGO_BAD]; passed()
+if not is_m1plus:
+    m=LogoMachine({LOGO_SRC:jpg(375,320)}); m.child=True; m.sync()
+    assert m.exits==[127] and LOGO_DST not in m.files and m.execs==[['/usr/bin/ffmpeg','/usr/bin/ffmpeg','-nostdin','-v','quiet','-i',LOGO_SRC,'-vf','transpose=1','-pix_fmt',
+                      'yuvj444p','-q:v','2','-f','mjpeg','-y',LOGO_ROT]],m.execs; passed()
+    m=LogoMachine({LOGO_SRC:jpg(375,320)}); m.rotated=jpg(320,375,pad=2); m.sync()
+    assert not m.execs and not m.exits
+    assert m.files[LOGO_DST]==m.rotated and LOGO_ROT not in m.files and not m.toasts; passed()
+    for rotated in (None,jpg(375,320)):  # ffmpeg failed, or wrote something else
+        m=LogoMachine({LOGO_SRC:jpg(375,320),LOGO_DST:b'old'}); m.rotated=rotated; m.sync()
+        assert m.files[LOGO_DST]==b'old' and m.toasts==[LOGO_BAD]; passed()
 for failure in ('fopen','fwrite','fclose','rename'):
-    m=LogoMachine({LOGO_SRC:jpg(320,375),LOGO_DST:b'old'}); m.failure=failure; m.sync()
+    m=LogoMachine({LOGO_SRC:jpg(LOGO_W,LOGO_H),LOGO_DST:b'old'}); m.failure=failure; m.sync()
     assert m.files[LOGO_DST]==b'old' and LOGO_DST+'.tmp' not in m.files and m.toasts==[LOGO_FAIL],failure; passed()
 print('Boot logo: mount edges, validation, rotation, unchanged bytes and failed writes passed.')
 
@@ -8301,24 +8433,26 @@ for failure in ('fopen','fwrite','fflush','fsync','fclose','rename'):
     passed()
 m,button,label=boot_row(); m.rockbox_mode=0; toggle_boot(m,button)
 assert m.nodes[label]['text']=='Boot to: Rockbox' and '/mnt/data/boot-target' not in m.files; passed()
-# Wheel centre reaches Boot to through the existing selection/dispatch path.
-m,button,label=boot_row(); view=m.nodes[m.top]['children'][0]; view=m.nodes[view]['children'][0]
-m.paint(view)
-for _ in range(9): m.call()
-assert m.confirm()==11 and m.dispatched()[0][1]==button; passed()
+if not is_m1plus:
+    # Wheel centre reaches Boot to through the existing selection/dispatch path.
+    m,button,label=boot_row(); view=m.nodes[m.top]['children'][0]; view=m.nodes[view]['children'][0]
+    m.paint(view)
+    for _ in range(9): m.call()
+    assert m.confirm()==11 and m.dispatched()[0][1]==button; passed()
 print('Boot settings: conditional row/order, restart, card removal and failed atomic writes passed.')
 
-from build import AUDIO_EXTENSION_CALLS
-for site in AUDIO_EXTENSION_CALLS:
-    for ext, accepted in (('.m4b',1),('.M4B',1),('.m4B',1),('.M4b',1),('.m4a',1),('.M4A',1),('.flac',1),('.mp3',1),('.m4b.tmp',0),('.pdf',0)):
-        m=Machine(); m.mock('strstr@GLIBC_2.0')
-        formats=m.string('.mp3 .flac .m4a .M4A'); suffix=m.string(ext)
-        m.word(0x7000f000+(0xdd4 if site==0x5c2054 else 0xd64),formats)
-        def extension_return(u,address,size,unused):
-            u.reg_write(UC_MIPS_REG_PC,0x1000000)
-        m.u.hook_add(UC_HOOK_CODE,extension_return,begin=site+8,end=site+8)
-        assert bool(m.call(address=site,args=(formats,suffix,0,0),gap=0))==bool(accepted)
-        passed()
+if not is_m1plus:
+    from build import AUDIO_EXTENSION_CALLS
+    for site in AUDIO_EXTENSION_CALLS:
+        for ext, accepted in (('.m4b',1),('.M4B',1),('.m4B',1),('.M4b',1),('.m4a',1),('.M4A',1),('.flac',1),('.mp3',1),('.m4b.tmp',0),('.pdf',0)):
+            m=Machine(); m.mock('strstr@GLIBC_2.0')
+            formats=m.string('.mp3 .flac .m4a .M4A'); suffix=m.string(ext)
+            m.word(0x7000f000+(0xdd4 if site==0x5c2054 else 0xd64),formats)
+            def extension_return(u,address,size,unused):
+                u.reg_write(UC_MIPS_REG_PC,0x1000000)
+            m.u.hook_add(UC_HOOK_CODE,extension_return,begin=site+8,end=site+8)
+            assert bool(m.call(address=site,args=(formats,suffix,0,0),gap=0))==bool(accepted)
+            passed()
 
 # M4B is spoken audio anywhere, at short duration; persistence and CUE rules stay shared.
 for path in ('/mnt/mmc/Novel.m4b','/mnt/mmc/Music/Novel.M4B','/mnt/mmc/Novel.m4B'):
@@ -8396,17 +8530,18 @@ for owner in (1,2,3,4):
     m.ears(1); m.fn('headset_manual'); m.ears(3); assert not m.playing
     passed()
 
-for absolute,limit,want in ((127,40,40),(0,100,0),(64,100,50),(1,100,1),(126,100,99)):
-    b=BtVolumeMachine(); b.poll(); b.byte(syms['g_maxvolume'],limit)
-    b.absolute=absolute; b.poll()
-    assert b.u.mem_read(syms['g_volume'],1)[0]==want
-    assert b.absolute==(want*127+50)//100
-    b.poll(); assert not b.writes()
-    passed()
-# A headset step that already reads as the Q2 volume stays: 2 is volume 2, never rewritten to 3.
-b=BtVolumeMachine(); b.poll(); b.absolute=2; b.poll()
-assert b.u.mem_read(syms['g_volume'],1)[0]==2 and not b.writes() and b.absolute==2
-assert b.volume(2,2)==[(100,100)] and not b.writes(); b.poll(); assert not b.writes(); passed()
+if not is_m1plus:
+    for absolute,limit,want in ((127,40,40),(0,100,0),(64,100,50),(1,100,1),(126,100,99)):
+        b=BtVolumeMachine(); b.poll(); b.byte(syms['g_maxvolume'],limit)
+        b.absolute=absolute; b.poll()
+        assert b.u.mem_read(syms['g_volume'],1)[0]==want
+        assert b.absolute==(want*127+50)//100
+        b.poll(); assert not b.writes()
+        passed()
+    # A headset step that already reads as the Q2 volume stays: 2 is volume 2, never rewritten to 3.
+    b=BtVolumeMachine(); b.poll(); b.absolute=2; b.poll()
+    assert b.u.mem_read(syms['g_volume'],1)[0]==2 and not b.writes() and b.absolute==2
+    assert b.volume(2,2)==[(100,100)] and not b.writes(); b.poll(); assert not b.writes(); passed()
 print('M4B recognition/resume and headset routing, ear masks, manual cancellation, malformed packets and volume limits passed.')
 
 # Real helper APIs: explicit pause/resume is observable and repeatable, with shared gain changes.
@@ -8469,8 +8604,9 @@ for owner in (1,2):
         m.command(200,gap=5000); assert m.playing and m.actions==[(owner,'play')]; passed()
 # Stock's restart once A2DP comes up (BT_CONNECT_START): on, player_save_start(0) as stock. Off (default): a
 # playing queue goes on, a paused one comes back paused, a stopped one or a stream's turn starts nothing.
-from build import BT_CONNECT_START
-assert struct.unpack_from('<I',demo,fileoff(demo,BT_CONNECT_START[0]))[0]==0x0c000000|payload_syms['ringnav_bt_connect_start']>>2
+if not is_m1plus:
+    from build import BT_CONNECT_START
+    assert struct.unpack_from('<I',demo,fileoff(demo,BT_CONNECT_START[0]))[0]==0x0c000000|payload_syms['ringnav_bt_connect_start']>>2
 for off,owner,saved,want in ((0,1,3,[0]),(0,2,0,[0]),(1,1,2,[0]),(1,1,3,[1]),(1,1,0,[]),(1,2,3,[])):
     m=HeadsetMachine(owner); m.saved=saved
     if not off: m.config['RESUME']='1'
@@ -8481,30 +8617,31 @@ print('Real Spotify/radio/video play-state APIs, helper gain updates and stock T
 # Now Playing's info page: its one fill (NP_INFO_CALL) goes through ringnav_np_info after stock's, which
 # writes "Label:value" and the bare folder: ": " after each label, units spaced, the folder labelled
 # from player_location, en_US's first unknown ("Unknown Artist") plain "Unknown"; a second pass changes nothing.
-from build import NP_INFO_CALL
-assert struct.unpack_from('<I',demo,fileoff(demo,NP_INFO_CALL))[0]==0x0c000000|payload_syms['ringnav_np_info']>>2
-class InfoMachine(Machine):
-    def hook(self,u,address,size,unused):
-        if self.handlers.get(address)=='i:format':
-            self.u.mem_write(u.reg_read(UC_MIPS_REG_A1),{'player_location':getattr(self,'location',b'Location\0')}.get(self.text(u.reg_read(UC_MIPS_REG_A0)),b'?\0'))
-            u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
-        return super().hook(u,address,size,unused)
-m=InfoMachine(); m.handlers[syms['getFormatString']]='i:format'
-stock_lines={'label_album':'Album:Kid A','label_genre':'Genre:Unknown Artist','label_size':'File Size:35.92MB',
-             'label_year':'Year:2000','label_encode':'Encoding:FLAC','label_bits':'Bit Depth:16bit','label_kbps':'Bitrate:950kbps',
-             'label_sample':'Sample Rate:44.1kHz','label_location':'SD:/Music/Radiohead'}
-lines={k:m.node('label',k,text=v) for k,v in stock_lines.items()}
-win=m.node('window','playing_page',list(lines.values()))
-want=['Album: Kid A','Genre: Unknown','File Size: 35.92 MB','Year: 2000','Encoding: FLAC','Bit Depth: 16-bit',
-      'Bitrate: 950 kbps','Sample Rate: 44.1 kHz','Location: SD:/Music/Radiohead']
-for _ in range(2):
-    m.call(address=payload_syms['ringnav_np_info'],args=(win,0,0,0),gap=0)
-    assert [c[1] for c in m.calls if c[0]=='np_info']==[win] and [m.nodes[l]['text'] for l in lines.values()]==want, [m.nodes[l]['text'] for l in lines.values()]
-passed()
-# A missing player_location ("(key)") reads Location; a long (CJK) folder, past 512 bytes, stays whole.
-m=InfoMachine(); m.handlers[syms['getFormatString']]='i:format'; m.location=b'(player_location)\0'
-folder='SD:/Music/'+'\u97f3\u697d'*150; label=m.node('label','label_location',text=folder)
-m.call(address=payload_syms['ringnav_np_info'],args=(m.node('window','playing_page',[label]),0,0,0),gap=0)
-assert m.nodes[label]['text']=='Location: '+folder; passed()
+if not is_m1plus:
+    from build import NP_INFO_CALL
+    assert struct.unpack_from('<I',demo,fileoff(demo,NP_INFO_CALL))[0]==0x0c000000|payload_syms['ringnav_np_info']>>2
+    class InfoMachine(Machine):
+        def hook(self,u,address,size,unused):
+            if self.handlers.get(address)=='i:format':
+                self.u.mem_write(u.reg_read(UC_MIPS_REG_A1),{'player_location':getattr(self,'location',b'Location\0')}.get(self.text(u.reg_read(UC_MIPS_REG_A0)),b'?\0'))
+                u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
+            return super().hook(u,address,size,unused)
+    m=InfoMachine(); m.handlers[syms['getFormatString']]='i:format'
+    stock_lines={'label_album':'Album:Kid A','label_genre':'Genre:Unknown Artist','label_size':'File Size:35.92MB',
+                 'label_year':'Year:2000','label_encode':'Encoding:FLAC','label_bits':'Bit Depth:16bit','label_kbps':'Bitrate:950kbps',
+                 'label_sample':'Sample Rate:44.1kHz','label_location':'SD:/Music/Radiohead'}
+    lines={k:m.node('label',k,text=v) for k,v in stock_lines.items()}
+    win=m.node('window','playing_page',list(lines.values()))
+    want=['Album: Kid A','Genre: Unknown','File Size: 35.92 MB','Year: 2000','Encoding: FLAC','Bit Depth: 16-bit',
+          'Bitrate: 950 kbps','Sample Rate: 44.1 kHz','Location: SD:/Music/Radiohead']
+    for _ in range(2):
+        m.call(address=payload_syms['ringnav_np_info'],args=(win,0,0,0),gap=0)
+        assert [c[1] for c in m.calls if c[0]=='np_info']==[win] and [m.nodes[l]['text'] for l in lines.values()]==want, [m.nodes[l]['text'] for l in lines.values()]
+    passed()
+    # A missing player_location ("(key)") reads Location; a long (CJK) folder, past 512 bytes, stays whole.
+    m=InfoMachine(); m.handlers[syms['getFormatString']]='i:format'; m.location=b'(player_location)\0'
+    folder='SD:/Music/'+'\u97f3\u697d'*150; label=m.node('label','label_location',text=folder)
+    m.call(address=payload_syms['ringnav_np_info'],args=(m.node('window','playing_page',[label]),0,0,0),gap=0)
+    assert m.nodes[label]['text']=='Location: '+folder; passed()
 
 print(f'{checks} MIPS execution scenarios passed; toolkit services mocked, stock lock filter executed.')

@@ -16,7 +16,8 @@ class KernelMachine(Machine):
                   'snprintf@GLIBC_2.0','socket@GLIBC_2.0','connect@GLIBC_2.0','select@GLIBC_2.0','getsockopt@GLIBC_2.0',
                   'fcntl@GLIBC_2.28','ioctl@GLIBC_2.0','open@GLIBC_2.0','read@GLIBC_2.0',
                   'recv@GLIBC_2.0','send@GLIBC_2.0','close@GLIBC_2.0','usleep@GLIBC_2.0'):
-            self.handlers[syms[n]]='kernel:'+n.split('@')[0]
+            if n in syms:
+                self.handlers[syms[n]]='kernel:'+n.split('@')[0]
         self.byte(syms['g_bluetoothflag'],1); self.byte(syms['bt_linkstatus'],1)
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')

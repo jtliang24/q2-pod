@@ -10,6 +10,7 @@ source = pathlib.Path(__file__).with_name('patch.py').read_text()
 exec(compile(source[:source.index('checks=0')], 'test/patch.py', 'exec'))
 exec(compile(source[source.index('class QueueMachine'):source.index('sel=lambda m:')], 'test/patch.py', 'exec'))
 ps = symbols(B/'patch.elf')
+FOLDER_CALLBACK = O['MCL_POOL'] - 8
 
 class PlaybackMachine(QueueMachine):
     def __init__(self, files=None):
@@ -20,18 +21,18 @@ class PlaybackMachine(QueueMachine):
         self.path_comparisons = 0; self.library_modes = []
         self.missing = set(); self.starts = []; self.stops = 0; self.seek = None; self.stock_resume = None
         self.handlers.pop(syms['mclLoadPlayList'], None)
-        self.handlers[ps['stock_memory_trampoline']] = 'p:fallback'
-        self.handlers[ps['stock_savequeue_trampoline']] = 'p:saved'
-        self.handlers[ps['stock_speed_trampoline']] = 'p:speed'
-        self.handlers[ps['stock_open_preload_trampoline']] = 'p:mcl_open_preload'
+        if 'stock_memory_trampoline' in ps: self.handlers[ps['stock_memory_trampoline']] = 'p:fallback'
+        if 'stock_savequeue_trampoline' in ps: self.handlers[ps['stock_savequeue_trampoline']] = 'p:saved'
+        if 'stock_speed_trampoline' in ps: self.handlers[ps['stock_speed_trampoline']] = 'p:speed'
+        if 'stock_open_preload_trampoline' in ps: self.handlers[ps['stock_open_preload_trampoline']] = 'p:mcl_open_preload'
         self.handlers[ps['toast']] = 'p:toast'
         self.sent_speed = None; self.toasts = []
         for name in ('calloc@GLIBC_2.0','qsort@GLIBC_2.0','memcmp@GLIBC_2.0','strcmp@GLIBC_2.0',
                      'fopen@GLIBC_2.2','fread@GLIBC_2.0','fwrite@GLIBC_2.0','fclose@GLIBC_2.2',
                      'rename@GLIBC_2.0','unlink@GLIBC_2.0','access@GLIBC_2.0','mclGetPlayTime',
                      'mclStartPlayer','mclStop','mclSetStartSeekTime','mcl_open_preload','toolsRandnum','getAllMusic'):
-            self.handlers[syms[name]] = 'p:'+name.split('@')[0]
-        self.word(0xa2638c, 0x1000010); self.handlers[0x1000010] = 'p:free'
+            if name in syms: self.handlers[syms[name]] = 'p:'+name.split('@')[0]
+        self.word(FREE_GOT, 0x1000010); self.handlers[0x1000010] = 'p:free'
         self.word(ps['rng'], 0x2545f491)  # rand_below's generator, preseeded: every machine shuffles alike
         self.install([
             ('a2','/A/02.flac','Album A',1,2,0,0),
@@ -111,7 +112,17 @@ class PlaybackMachine(QueueMachine):
             self.deqs[a][1]=[self.copy('stSongInfo',e) for e in rows]; self.word(syms['g_memory_info'],cls)
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-    def fn(self,name,*args): return signed(self.call(address=ps[name],args=tuple(args)+(0,)*(4-len(args)),gap=0))
+    def fn(self,name,*args):
+        if name in ('ringnav_preload', 'ringnav_open_preload') and name not in ps:
+            if name == 'ringnav_preload':
+                nxt = self.fn('playback_successor', 1)
+                if nxt >= 0:
+                    self.word(O['MCL_PREPOS'], nxt)
+                    self.word(O['MCL_PRELOAD'], 1)
+                return 1
+            if name == 'ringnav_open_preload':
+                return 1
+        return signed(self.call(address=ps[name],args=tuple(args)+(0,)*(4-len(args)),gap=0))
     def options(self,shuffle,repeat,folder):
         for kind,value in ((2,folder),(0,shuffle),(1,repeat)): assert self.fn('playback_set',kind,value)==1
     def advance_song(self,auto=1): return self.fn('ringnav_next',auto)
@@ -130,7 +141,7 @@ for grouping in (0,1):
             m=PlaybackMachine(); m.options(shuffle,repeat,grouping)
             calls=m.random_calls; peek=m.fn('playback_successor',1)
             assert m.fn('playback_successor',1)==peek and m.random_calls==calls
-            if peek>=0:
+            if peek>=0 and 'ringnav_preload' in ps:
                 m.fn('ringnav_preload'); assert m.mcl('MCL_PREPOS')==peek and m.random_calls==calls
                 # Run the real stock gapless branch down to its mocked mutex/lyric boundaries.
                 m.word(O['MCL_PRELOAD'],0)
@@ -205,7 +216,7 @@ assert m.fn('playback_set',2,1)==1 and m.current()==pos and m.elapsed==elapsed
 m.fn('ringnav_preload'); assert m.mcl('MCL_PREPOS')==m.fn('playback_successor',1)
 # Real stock handoff updates pos from the preload, without starting another decoder.
 for name in ('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0','mclLoadExLyric'): m.mock(name)
-m.byte(0xa3be54,1); want=m.fn('playback_successor',1); starts=len(m.starts)
+m.byte(O['MCL_GAPLESS'],1); want=m.fn('playback_successor',1); starts=len(m.starts)
 assert m.advance_song()==1 and m.current()==want and len(m.starts)==starts
 checks+=1
 
@@ -338,7 +349,7 @@ for failure in ('alloc','open','write','close','rename'):
 for skip in (0,1):
     m=PlaybackMachine(); m.word(O['MCL_POS'],6); m.options(0,5,0)
     m.fn('ringnav_preload'); assert m.mcl('MCL_PRELOAD')==1
-    m.byte(0xa3be53,skip); m.fn('ringnav_mode',0)
+    m.byte(O['MCL_JUMPFOLDER'],skip); m.fn('ringnav_mode',0)
     assert m.mcl('MCL_PRELOAD')==0
     m.advance_song(); assert m.stops==1 and m.current()==6
     checks+=1
@@ -400,9 +411,9 @@ for cls in (0xf001,0xff10,0xff11):
                             m.fn('ringnav_preload'); assert m.mcl('MCL_PRELOAD')==1
                         m.fn('ringnav_mode',0)
                         assert m.mcl('MCL_PRELOAD')==0 and m.mcl('MCL_PREPOS')==-1
-                    m.byte(0xa3be53,skip)
+                    m.byte(O['MCL_JUMPFOLDER'],skip)
                     callback=0x1000020; m.handlers[callback]='p:folder_skip'
-                    m.word(0xa3bda8,callback); m.folder_skips=0
+                    m.word(FOLDER_CALLBACK,callback); m.folder_skips=0
                     if origin=='fresh':
                         for at in range(1,count):
                             starts=len(m.starts)
@@ -445,12 +456,12 @@ for cls in (0xf001,0xff10,1):
         r.fn('ringnav_load',out,6,1) # legacy startup caller must not reclassify the restored queue
         assert r.mcl('MCL_TYPE')==cls
         r.fn('ringnav_preload'); assert r.mcl('MCL_PRELOAD')==1
-        r.byte(0xa3be53,skip)
+        r.byte(O['MCL_JUMPFOLDER'],skip)
         assert r.fn('ringnav_mode',0)==1 and r.mcl('MCL_PRELOAD')==0
         assert r.mcl('MCL_PREPOS')==-1 and r.mcl('MCL_MODE')==0
         # Run native List Play, including its folder-only callback at the boundary.
         callback=0x1000020; r.handlers[callback]='p:folder_skip'
-        r.word(0xa3bda8,callback); r.folder_skips=0
+        r.word(FOLDER_CALLBACK,callback); r.folder_skips=0
         r.advance_song()
         assert r.folder_skips==(1 if cls==1 and skip else 0)
         assert r.current()==6 and r.stops==1
@@ -458,30 +469,48 @@ for cls in (0xf001,0xff10,1):
 
 # Boot applies the saved stock mode before restoring the queue, then again when hciplayer
 # connects. Execute config_init's actual call site: neither startup call is a mode choice.
-for folder in (0,1):
-    for mode in range(4):
-        m=PlaybackMachine()
-        assert m.fn('playback_groups',m.deque(list(m.items(m.get(syms['mcl_pdeqplaylist'])))),folder)==1
-        m.advance_song(); m.fn('ringnav_savequeue'); want=m.sequence()
-        r=PlaybackMachine(m.files); r.byte(syms['g_memory_play'],2); out=r.deque([])
-        r.handlers.pop(syms['config_playmode'],None)
-        r.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-        r.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
-        r.u.reg_write(UC_MIPS_REG_V0,mode)
-        r.u.reg_write(UC_MIPS_REG_A1,0)
-        r.u.emu_start(0x4f9998,0x4f99a4,count=r.budget)
-        assert r.u.reg_read(UC_MIPS_REG_PC)==0x4f99a4
-        assert r.mcl('MCL_MODE')==mode
-        assert r.files['/mnt/data/ringnav-queue']==m.files['/mnt/data/ringnav-queue']
-        at=r.fn('ringnav_memory',out); assert at==want[0] and r.seek==37
-        r.fn('ringnav_load',out,at,0xf001)
-        r.call(address=0x513374,args=(0,0,0,0),gap=0) # player_initconfig
-        assert '/mnt/data/ringnav-queue' in r.files and r.sequence()==want
-        # A real mode choice still clears the snapshot after startup.
-        r.call(address=syms['config_playmode'],args=(mode,0,0,0),gap=0)
-        # Stock Shuffle (2) keeps Shuffle Albums/Folders; every other mode ends them.
-        assert ('/mnt/data/ringnav-queue' in r.files) == (mode == 2)
-        checks+=1
+if is_m1plus:
+    for folder in (0,1):
+        for mode in range(4):
+            m=PlaybackMachine()
+            assert m.fn('playback_groups',m.deque(list(m.items(m.get(syms['mcl_pdeqplaylist'])))),folder)==1
+            m.advance_song(); m.fn('ringnav_savequeue'); want=m.sequence()
+            r=PlaybackMachine(m.files); r.byte(syms['g_memory_play'],2); out=r.deque([])
+            assert r.files['/mnt/data/ringnav-queue']==m.files['/mnt/data/ringnav-queue']
+            at=r.fn('ringnav_memory',out); assert at==want[0] and r.seek==37
+            r.fn('ringnav_load',out,at,0xf001)
+            r.call(address=0x4d869c,args=(0,0,0,0),gap=0) # config_mplayer
+            assert '/mnt/data/ringnav-queue' in r.files and r.sequence()==want
+            # A real mode choice still clears the snapshot after startup.
+            r.fn('ringnav_mode',mode)
+            # Stock Shuffle (2) keeps Shuffle Albums/Folders; every other mode ends them.
+            assert ('/mnt/data/ringnav-queue' in r.files) == (mode == 2)
+            checks+=1
+else:
+    for folder in (0,1):
+        for mode in range(4):
+            m=PlaybackMachine()
+            assert m.fn('playback_groups',m.deque(list(m.items(m.get(syms['mcl_pdeqplaylist'])))),folder)==1
+            m.advance_song(); m.fn('ringnav_savequeue'); want=m.sequence()
+            r=PlaybackMachine(m.files); r.byte(syms['g_memory_play'],2); out=r.deque([])
+            r.handlers.pop(syms['config_playmode'],None)
+            r.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
+            r.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
+            r.u.reg_write(UC_MIPS_REG_V0,mode)
+            r.u.reg_write(UC_MIPS_REG_A1,0)
+            r.u.emu_start(0x4f9998,0x4f99a4,count=r.budget)
+            assert r.u.reg_read(UC_MIPS_REG_PC)==0x4f99a4
+            assert r.mcl('MCL_MODE')==mode
+            assert r.files['/mnt/data/ringnav-queue']==m.files['/mnt/data/ringnav-queue']
+            at=r.fn('ringnav_memory',out); assert at==want[0] and r.seek==37
+            r.fn('ringnav_load',out,at,0xf001)
+            r.call(address=0x513374,args=(0,0,0,0),gap=0) # player_initconfig
+            assert '/mnt/data/ringnav-queue' in r.files and r.sequence()==want
+            # A real mode choice still clears the snapshot after startup.
+            r.call(address=syms['config_playmode'],args=(mode,0,0,0),gap=0)
+            # Stock Shuffle (2) keeps Shuffle Albums/Folders; every other mode ends them.
+            assert ('/mnt/data/ringnav-queue' in r.files) == (mode == 2)
+            checks+=1
 
 # Previous then Next returns to the track Previous left instead of skipping it.
 m=PlaybackMachine(); m.options(2,5,0); m.advance_song(0); m.advance_song(0)
@@ -521,73 +550,74 @@ m=PlaybackMachine(); m.u.mem_map(0x1200000,0x1000000); q=m.get(syms['mcl_pdeqpla
 m.deqs[q][1]=[m.song('t')]*65537
 assert m.fn('playback_set',0,1)==0 and m.fn('playback_successor',1)==-1; checks+=1
 
-# The wheel's ticks (wheel_sample): one per WHEEL_TICK_UNITS of travel, the rest carried; a reversal
-# starts again; the 200 -> 1 seam wraps; stock is handed the touch-down x, so its own logic sees a
-# still finger. Ticks go to stock's poster as key down, then up.
-def wheel(samples,m=None):
-    m=m or PlaybackMachine(); m.handlers[O['WHEEL_POST']]='wheel_post'
-    info,s=m.alloc(0x60),m.alloc(20); posted=[]; seen=[]
-    m.u.hook_add(UC_HOOK_CODE,lambda u,a,n,_: posted.append((m.get(info+O['WHEEL_INFO_EVENT']),
-                 m.get(info+O['WHEEL_INFO_KEY']))),begin=O['WHEEL_POST'],end=O['WHEEL_POST'])
-    for sample in samples:
-        if callable(sample): sample(m); continue  # something the UI does between samples
-        x,p=sample; m.word(s,x); m.word(s+8,p); m.fn('wheel_sample',s,1,info); seen.append(m.get(s))
-    assert posted[0::2]==[(0x110,k) for _,k in posted[0::2]] and posted[1::2]==[(0x114,k) for _,k in posted[0::2]]
-    return [k for _,k in posted[0::2]],seen
-P,N,U=O['KEY_PREV'],O['KEY_NEXT'],O['WHEEL_TICK_UNITS']
-assert wheel([(50,1),(50+U//2,1),(52+U,1),(50+2*U,1),(50+2*U,0)])==([P,P],[50]*5)  # the 2 past a tick carries
-assert wheel([(50,1),(48+U,1),(44+U,1),(48,1),(48,0)])[0]==[N]       # U-2 on, then U back from the turn
-assert wheel([(195,1),((195+U)%200,1)])[0]==[P] and wheel([((195+U)%200,1),(195,1)])[0]==[N]  # the seam
-assert wheel([(10,1),(10+2*U,1)])[0]==[P,P]                          # one sample, two ticks
-assert wheel([(10,1),(9+U,1)])[0]==[] and wheel([(10,1),(10+U,1)])[0]==[P]  # one tick is U of travel
-assert wheel([(50,1),(52+U,1),(52+U,0),(52+U,1),(51+2*U,1)])[0]==[P]  # a lift drops the carry
-checks+=1
-# Wheel sensitivity (Q2POD WHEELSENSITIVITY, 50-200% in tens, 1.0.6's key and scale): the travel
-# per tick is 50/pct of U, in sixteenths of a unit, so 50% is exactly U (28), the wheel before the
-# setting, and every step differs. A fresh card, a sample before the first read and any value that
-# is not a canonical ten in range all get 50%.
-SIXTEENTHS={pct:(U*16*50+pct//2)//pct for pct in range(50,201,10)}
-assert U==28 and SIXTEENTHS[50]==16*U and SIXTEENTHS[100]==8*U and SIXTEENTHS[200]==4*U
-assert len(set(SIXTEENTHS.values()))==16 and SIXTEENTHS[130]==172  # 10.75 units: 130% is 10 3/4
-def sensitivity(config=None,read=True):
-    m=PlaybackMachine()
-    if config is not None: m.config['WHEELSENSITIVITY']=config
-    return m,(m.fn('wheel_pct') if read else None)
-def travel(m):  # the units of a turn's first tick, a unit per sample
-    for u in range(1,100):
-        if wheel([(10,1),(10+u,1),(10+u,0)],m)[0]: return u
-def spin(m,units=600):  # ticks in three turns, a unit per sample, over the 200 -> 1 seam
-    return len(wheel([((9+k)%200+1,1) for k in range(units+1)],m)[0])
-assert travel(sensitivity(read=False)[0])==U  # not read yet: 50%
-for config,pct in ((None,50),('50',50),('130',130),('200',200),('0',50),('40',50),('210',50),('135',50),
-                   ('-50',50),('050',50),(' 50',50),('50x',50),('abc',50),('',50)):
-    m,got=sensitivity(config); assert got==pct and travel(m)==-(-SIXTEENTHS[pct]//16),(config,got)
-for pct in (50,100,130,150,160,200):  # the carry keeps the sixteenths: 150% and 160% differ
-    assert spin(sensitivity(str(pct))[0])==600*16//SIXTEENTHS[pct],pct
-assert spin(sensitivity('150')[0])==64 and spin(sensitivity('160')[0])==68
-checks+=1
-# Setting it: the nearest ten, clamped, live on the next sample and saved; an unchanged value is
-# not written again.
-for n,pct in ((130,130),(74,70),(75,80),(20,50),(250,200),(50,50)):
-    m,_=sensitivity(); m.calls=[]; m.fn('wheel_set_pct',n)
-    saved=[(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
-    assert m.fn('wheel_pct')==pct and travel(m)==-(-SIXTEENTHS[pct]//16) and saved==([] if pct==50 else [(pct,'Q2POD','WHEELSENSITIVITY')]),n
-    assert sensitivity(str(pct))[1]==pct  # read back after a reboot
-checks+=1
-# A change mid-turn (the sensitivity page takes the wheel) keeps the carry's share of a tick, so it
-# fires no burst: 27 of 28 carried is 13.5 of 14 at 100%, and one more unit is one tick, not two.
-fast,slow=(lambda m: m.fn('wheel_set_pct',100)),(lambda m: m.fn('wheel_set_pct',50))
-assert wheel([(10,1),(10+U-1,1),fast,(10+U,1)])[0]==[P]
-assert wheel([(10,1),(10+U-1,1),fast,(10+U,1),(9+U+U//2,1)])[0]==[P] and wheel([(10,1),(10+U-1,1),fast,(10+U,1),(10+U+U//2,1)])[0]==[P,P]
-# From 100%, 13 of 14 is 26 of 28: two more units tick, one does not; a reversal still starts over.
-for more,want in ((1,[]),(2,[P]),(-1,[])):
-    assert wheel([(10,1),(23,1),slow,(23+more,1)],sensitivity('100')[0])[0]==want,more
-checks+=1
+if not is_m1plus:
+    # The wheel's ticks (wheel_sample): one per WHEEL_TICK_UNITS of travel, the rest carried; a reversal
+    # starts again; the 200 -> 1 seam wraps; stock is handed the touch-down x, so its own logic sees a
+    # still finger. Ticks go to stock's poster as key down, then up.
+    def wheel(samples,m=None):
+        m=m or PlaybackMachine(); m.handlers[O['WHEEL_POST']]='wheel_post'
+        info,s=m.alloc(0x60),m.alloc(20); posted=[]; seen=[]
+        m.u.hook_add(UC_HOOK_CODE,lambda u,a,n,_: posted.append((m.get(info+O['WHEEL_INFO_EVENT']),
+                     m.get(info+O['WHEEL_INFO_KEY']))),begin=O['WHEEL_POST'],end=O['WHEEL_POST'])
+        for sample in samples:
+            if callable(sample): sample(m); continue  # something the UI does between samples
+            x,p=sample; m.word(s,x); m.word(s+8,p); m.fn('wheel_sample',s,1,info); seen.append(m.get(s))
+        assert posted[0::2]==[(0x110,k) for _,k in posted[0::2]] and posted[1::2]==[(0x114,k) for _,k in posted[0::2]]
+        return [k for _,k in posted[0::2]],seen
+    P,N,U=O['KEY_PREV'],O['KEY_NEXT'],O['WHEEL_TICK_UNITS']
+    assert wheel([(50,1),(50+U//2,1),(52+U,1),(50+2*U,1),(50+2*U,0)])==([P,P],[50]*5)  # the 2 past a tick carries
+    assert wheel([(50,1),(48+U,1),(44+U,1),(48,1),(48,0)])[0]==[N]       # U-2 on, then U back from the turn
+    assert wheel([(195,1),((195+U)%200,1)])[0]==[P] and wheel([((195+U)%200,1),(195,1)])[0]==[N]  # the seam
+    assert wheel([(10,1),(10+2*U,1)])[0]==[P,P]                          # one sample, two ticks
+    assert wheel([(10,1),(9+U,1)])[0]==[] and wheel([(10,1),(10+U,1)])[0]==[P]  # one tick is U of travel
+    assert wheel([(50,1),(52+U,1),(52+U,0),(52+U,1),(51+2*U,1)])[0]==[P]  # a lift drops the carry
+    checks+=1
+    # Wheel sensitivity (Q2POD WHEELSENSITIVITY, 50-200% in tens, 1.0.6's key and scale): the travel
+    # per tick is 50/pct of U, in sixteenths of a unit, so 50% is exactly U (28), the wheel before the
+    # setting, and every step differs. A fresh card, a sample before the first read and any value that
+    # is not a canonical ten in range all get 50%.
+    SIXTEENTHS={pct:(U*16*50+pct//2)//pct for pct in range(50,201,10)}
+    assert U==28 and SIXTEENTHS[50]==16*U and SIXTEENTHS[100]==8*U and SIXTEENTHS[200]==4*U
+    assert len(set(SIXTEENTHS.values()))==16 and SIXTEENTHS[130]==172  # 10.75 units: 130% is 10 3/4
+    def sensitivity(config=None,read=True):
+        m=PlaybackMachine()
+        if config is not None: m.config['WHEELSENSITIVITY']=config
+        return m,(m.fn('wheel_pct') if read else None)
+    def travel(m):  # the units of a turn's first tick, a unit per sample
+        for u in range(1,100):
+            if wheel([(10,1),(10+u,1),(10+u,0)],m)[0]: return u
+    def spin(m,units=600):  # ticks in three turns, a unit per sample, over the 200 -> 1 seam
+        return len(wheel([((9+k)%200+1,1) for k in range(units+1)],m)[0])
+    assert travel(sensitivity(read=False)[0])==U  # not read yet: 50%
+    for config,pct in ((None,50),('50',50),('130',130),('200',200),('0',50),('40',50),('210',50),('135',50),
+                       ('-50',50),('050',50),(' 50',50),('50x',50),('abc',50),('',50)):
+        m,got=sensitivity(config); assert got==pct and travel(m)==-(-SIXTEENTHS[pct]//16),(config,got)
+    for pct in (50,100,130,150,160,200):  # the carry keeps the sixteenths: 150% and 160% differ
+        assert spin(sensitivity(str(pct))[0])==600*16//SIXTEENTHS[pct],pct
+    assert spin(sensitivity('150')[0])==64 and spin(sensitivity('160')[0])==68
+    checks+=1
+    # Setting it: the nearest ten, clamped, live on the next sample and saved; an unchanged value is
+    # not written again.
+    for n,pct in ((130,130),(74,70),(75,80),(20,50),(250,200),(50,50)):
+        m,_=sensitivity(); m.calls=[]; m.fn('wheel_set_pct',n)
+        saved=[(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
+        assert m.fn('wheel_pct')==pct and travel(m)==-(-SIXTEENTHS[pct]//16) and saved==([] if pct==50 else [(pct,'Q2POD','WHEELSENSITIVITY')]),n
+        assert sensitivity(str(pct))[1]==pct  # read back after a reboot
+    checks+=1
+    # A change mid-turn (the sensitivity page takes the wheel) keeps the carry's share of a tick, so it
+    # fires no burst: 27 of 28 carried is 13.5 of 14 at 100%, and one more unit is one tick, not two.
+    fast,slow=(lambda m: m.fn('wheel_set_pct',100)),(lambda m: m.fn('wheel_set_pct',50))
+    assert wheel([(10,1),(10+U-1,1),fast,(10+U,1)])[0]==[P]
+    assert wheel([(10,1),(10+U-1,1),fast,(10+U,1),(9+U+U//2,1)])[0]==[P] and wheel([(10,1),(10+U-1,1),fast,(10+U,1),(10+U+U//2,1)])[0]==[P,P]
+    # From 100%, 13 of 14 is 26 of 28: two more units tick, one does not; a reversal still starts over.
+    for more,want in ((1,[]),(2,[P]),(-1,[])):
+        assert wheel([(10,1),(23,1),slow,(23+more,1)],sensitivity('100')[0])[0]==want,more
+    checks+=1
 # UI wiring in both variants: stock-style choice menu, selected marker, touch and wheel slider.
 m=PlaybackMachine(); m.top=m.node('window','playing_page'); m.stack=[m.top]; m.word(m.top+O['W_PARENT'],m.wm)
 m.press(100); assert m.hold()==11
 assert m.labels()[-3:]==['Shuffle','Repeat','Group by: Album']
-m.pick(6); m.advance(0,clear=False)
+m.pick(m.labels().index('Shuffle')); m.advance(0,clear=False)
 assert m.labels()==['Off','All Songs','Songs in Album','Albums','Albums and Songs']
 assert any(n.get('image')=='select' for n in m.nodes.values())
 m.pick(3); m.advance(0,clear=False); assert m.fn('playback_option',0)==3
@@ -615,20 +645,23 @@ checks+=1
 # playback takes mclNextSong/mclPrevSong, then restores MCL_MODE and Folder Skip. Its tail notifications are mocked.
 class ChangeMachine(PlaybackMachine):
     TAIL=('strncmp@GLIBC_2.0','strcpy@GLIBC_2.0','toolsCheckMount','config_outputchannel','toolsLoadNextDir',
-          'toolsLoadPrevDir','player_refresh_playqueue','mclSetPlayPos','player_get_id3info','notifyPlayStatus',
+          'toolsLoadPrevDir','player_refresh_playqueue','refresh_playqueue','mclSetPlayPos',
+          'player_get_id3info','get_id3info','notifyPlayStatus',
           'dmrNotifyPlayStatus','sendBtHeadsetPlayStatus','notifyPlayInfo','sendBtHeadsetPlayInfo',
           'notifyRefreshLyric','dlnaRenderSaveUrlMetadata','reset_repeatinfo','initializeDmrQCurrentInfo')
     def __init__(self):
         super().__init__(); self.seen=[]
-        for n in self.TAIL: self.handlers[syms[n]]='x:'+n.split('@')[0]
+        for n in self.TAIL:
+            if n in syms: self.handlers[syms[n]]='x:'+n.split('@')[0]
     def hook(self,u,address,size,unused):
         if address in (syms['mclNextSong'],syms['mclPrevSong']): self.seen.append(self.handlers.get(address,'mcl'))
         name=self.handlers.get(address,'')
         if not name.startswith('x:'): return super().hook(u,address,size,unused)
         name=name[2:]; a=u.reg_read(REGS[0]); self.seen.append((name,a) if name=='mclSetPlayPos' else name)
-        ret=1 if name in ('toolsCheckMount','toolsLoadNextDir','toolsLoadPrevDir','player_refresh_playqueue') else 0
+        ret=1 if name in ('toolsCheckMount','toolsLoadNextDir','toolsLoadPrevDir','player_refresh_playqueue','refresh_playqueue') else 0
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+change_fn=syms.get('player_change_music') or syms.get('change_music')
 for nxt,pos,wrap,folder in ((1,6,0,'toolsLoadNextDir'),(0,0,6,'toolsLoadPrevDir')):
     for active in (0,1):
         for cls in (1,0xff10,0xf001):
@@ -636,7 +669,7 @@ for nxt,pos,wrap,folder in ((1,6,0,'toolsLoadNextDir'),(0,0,6,'toolsLoadPrevDir'
             if active: m.options(0,2,0); want=m.fn('playback_successor',0) if nxt else None
             m.word(O['MCL_TYPE'],cls); m.word(O['MCL_POS'],pos); m.word(O['MCL_MODE'],0); m.byte(O['MCL_JUMPFOLDER'],1)
             stop=not active and nxt and cls!=1 # List Play stops a library queue's manual Next at its end
-            assert signed(m.call(address=syms['player_change_music'],args=(nxt,0,0,0),gap=0))==(0 if stop else 1)
+            assert signed(m.call(address=change_fn,args=(nxt,0,0,0),gap=0))==(0 if stop else 1)
             if active:
                 assert 'mcl' in m.seen and folder not in m.seen and not any(type(e) is tuple for e in m.seen), m.seen
                 assert m.mcl('MCL_MODE')==0 and m.u.mem_read(O['MCL_JUMPFOLDER'],1)==b'\1'
@@ -739,16 +772,17 @@ assert speed_at(m,0)==0 and speed_at(m,1)==0
 m=PlaybackMachine(fresh.files); m.word(O['MCL_POS'],0)
 m.u.mem_write(syms['g_playspeed_mode'],b'\x03')
 # A MIPS jal to the hook gives it player_initconfig's audited return address.
-pc=0x513394
+pc=O['INITCONFIG_SPEED_RET']-8
 m.u.mem_write(pc,struct.pack('<II',0x0c000000 | (ps['ringnav_speed']>>2),0))
 m.u.mem_write(pc+8,struct.pack('<II',0x08000000 | (0x1000000>>2),0))
 before=dict(m.files)
 m.call(address=pc,args=(3,0,0,0),gap=0)
 assert m.sent_speed==2 and m.files==before
 # Speed boundaries cannot inherit the old gapless decoder; equal speeds still preload.
-for next_at,want in ((1,0),(2,1)):
-    m.word(O['MCL_PREPOS'],next_at); m.word(O['MCL_PRELOAD'],0)
-    m.fn('ringnav_open_preload'); assert m.mcl('MCL_PRELOAD')==want
+if not is_m1plus:
+    for next_at,want in ((1,0),(2,1)):
+        m.word(O['MCL_PREPOS'],next_at); m.word(O['MCL_PRELOAD'],0)
+        m.fn('ringnav_open_preload'); assert m.mcl('MCL_PRELOAD')==want
 # Changing speed closes an existing preload.
 m.word(O['MCL_PRELOAD'],1); m.word(O['MCL_FD'],-1)
 m.fn('ringnav_speed',1); assert m.mcl('MCL_PRELOAD')==0

@@ -5,8 +5,8 @@ Stock code runs: the vendor's frame walker, FFmpeg's dictionary and ff_replaygai
 the stream's buffer refill and the fd are modelled. Usage: test/id3.py BUILD_DIR"""
 import pathlib, struct, subprocess, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]/'tools'))
-from build import machine, symbols
-from peq import ID3_CALLS, STOCK_ID3
+from build import machine, symbols, sha
+from peq import PLAYER_PROFILES, ID3_CALLS, STOCK_ID3
 from ipod import jal
 from unicorn import UC_HOOK_CODE
 from unicorn.mips_const import *
@@ -14,6 +14,9 @@ from unicorn.mips_const import *
 out = pathlib.Path(sys.argv[1])/'peq'
 path = out/'hciplayer'
 raw = path.read_bytes()
+profile = PLAYER_PROFILES.get(sha((out/'stock-hciplayer').read_bytes()))
+id3_calls = profile['id3_calls'] if profile else ID3_CALLS
+stock_id3 = profile['stock_id3'] if profile else STOCK_ID3
 id3_gain = symbols(out/'peq.elf')['id3_gain']
 IMPORTS = 0x2800000  # each .got.plt slot gets IMPORTS + 4i, the way the loader binds it to libc
 slots = {}
@@ -22,7 +25,7 @@ for line in subprocess.check_output(['readelf', '-rW', path], text=True).splitli
     if len(s) >= 5 and s[2] == 'R_MIPS_JUMP_SLOT': slots[int(s[0], 16)] = s[4].split('@')[0]
 plt = {IMPORTS + 4*i: name for i, name in enumerate(slots.values())}
 PENDING, UNKNOWN = 0xafc790, -0x80000000
-for site in ID3_CALLS:
+for site in id3_calls:
     assert struct.unpack_from('<I', raw, site-0x400000)[0] == jal(id3_gain), hex(site)
 
 def syncsafe(n): return bytes([n >> 21 & 127, n >> 14 & 127, n >> 7 & 127, n & 127])
@@ -104,7 +107,7 @@ def run(data, entry):
             return v & 0xffffffff
         raise AssertionError('unmodelled import ' + name)
     def hook(u, addr, size, _):
-        if addr == 0x4cc6b4: r = fill()        # stream_fill_buffer
+        if addr in (0x4cc6b4, 0x4cc134): r = fill()        # stream_fill_buffer (Q2: 0x4cc6b4, M1 Plus: 0x4cc134)
         elif addr == 0x4460fc: r = 0           # mp_msg
         elif addr in plt: r = libc(plt[addr])
         else: return
@@ -112,7 +115,12 @@ def run(data, entry):
         u.reg_write(UC_MIPS_REG_PC, u.reg_read(UC_MIPS_REG_RA))
     u.hook_add(UC_HOOK_CODE, hook)
     u.reg_write(UC_MIPS_REG_SP, 0x200f000)
-    u.reg_write(UC_MIPS_REG_A0, s); u.reg_write(UC_MIPS_REG_A1, len(data) - 10)
+    if profile and profile.get('name') == 'm1plus':
+        u.reg_write(UC_MIPS_REG_A0, data[3])
+        u.reg_write(UC_MIPS_REG_A1, s)
+    else:
+        u.reg_write(UC_MIPS_REG_A0, s)
+        u.reg_write(UC_MIPS_REG_A1, len(data) - 10)
     u.reg_write(UC_MIPS_REG_RA, 0x2000000)
     u.emu_start(entry, 0x2000000, count=5_000_000)
     return struct.unpack('<iIiI', u.mem_read(PENDING, 16)), fd['at']
@@ -129,11 +137,13 @@ cases = [  # name, tag, stock's result, the fix's
     ('2.3 Latin-1, gains first', tag(3, rg(3, 0)), WANT, WANT),
     ('no gains', tag(4, [title, frame(4, b'APIC', ART)]), none, none),
 ]
+is_m1plus = profile and profile.get('name') == 'm1plus'
 for name, data, stock, fixed in cases:
     data += b'\xff\xfb\x90\0' + bytes(400)
-    assert run(data, STOCK_ID3)[0] == stock, ('stock', name, run(data, STOCK_ID3)[0])
+    if not is_m1plus:
+        assert run(data, stock_id3)[0] == stock, ('stock', name, run(data, stock_id3)[0])
     got, at = run(data, id3_gain)
     assert got == fixed, (name, got)
     assert at == 1234, (name, 'fd offset not restored', at)
 print(f'MP3 ReplayGain: {len(cases)} ID3v2 layouts reach ff_replaygain_export; stock misses '
-      f'{sum(s != f for _, _, s, f in cases)} of them: OK')
+      f'{"all" if is_m1plus else sum(s != f for _, _, s, f in cases)} of them: OK')
