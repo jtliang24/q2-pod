@@ -37,11 +37,24 @@ if is_m1plus:
     HOOKS['load_album_detaillist'] = M1PLUS_HOOKS['loadAlbumdetailList']
     HOOKS['player_change_music'] = M1PLUS_HOOKS['change_music']
     HOOKS['saverscreen_page_init'] = M1PLUS_HOOKS['screensaver_page_init']
-    HOOKS['stream_page_init'] = (payload_syms['ringnav_stream'], 'ringnav_stream', 'stream')
+    # Every hook a test enters is one V2.1 really jumps from (the renames above are the same entries).
+    assert set(HOOKS.values()) <= set(M1PLUS_HOOKS.values())
     WM_PAINT_LEAF = WM_PAINT_LEAF_M1PLUS
+    # V2.1 has no stream_page_init to hook: the Streaming page's tests enter the payload's own
+    # ringnav_stream, so they cover its pages, never the device path (NOT PORTED below).
+    STREAM_ENTRY = payload_syms['ringnav_stream']
     FREE_GOT = 0xa032f4
 else:
     FREE_GOT = 0xa2638c
+    STREAM_ENTRY = HOOKS['stream_page_init'][0]
+# The built demo enters the payload at every hook the tests call through.
+_demo = (B/'demo').read_bytes()
+from build import fileoff
+for _name, (_address, _replacement, _) in HOOKS.items():
+    _at = fileoff(_demo, _address)
+    assert _demo[_at:_at+8] == struct.pack('<II', 0x08000000 | payload_syms[_replacement] >> 2, 0), f'{_name}: no jump to {_replacement}'
+_at = fileoff(_demo, WM_PAINT_LEAF[1])
+assert _demo[_at:_at+8] == struct.pack('<II', 0x08000000 | payload_syms[WM_PAINT_LEAF[2]] >> 2, 0)
 PLAY_STATUS = 0xa0abe4 if is_m1plus else 0xa3beac
 OUTPUT_WAY = 0xa0abe8 if is_m1plus else 0xa3beb0
 DC=O['DOUBLE_CLICK_MS']  # centre double-press window
@@ -644,6 +657,22 @@ def passed():
     global checks
     checks+=1
 
+# M1 Plus: features the port lacks, reported by name rather than skipped or passed by construction.
+GAPS, NOT_PORTED = [], []
+def known_gap(name, check):
+    """A real check that fails on M1 Plus today. It must keep failing (AssertionError) until the
+    feature is ported; once it passes, the marker has to go."""
+    assert is_m1plus, name
+    import traceback
+    try: check()
+    except AssertionError as e:  # the failing line is shown, so a harness assert can't pass for the gap
+        GAPS.append(name); print(f'KNOWN GAP: {name}\n    {traceback.extract_tb(e.__traceback__)[-1].line} {e}'.rstrip()); return
+    raise AssertionError(f'Gap fixed, remove its known_gap marker: {name}')
+def not_ported(name):
+    """A check M1 Plus skips: its feature is not in the M1 Plus build, or the test needs V1.32 code."""
+    assert is_m1plus, name
+    NOT_PORTED.append(name); print(f'NOT PORTED: {name}')
+
 # Execute the stock offset setter after cancelling an animator headed to either boundary.
 # Cover selected rows and the pixel-scroll fallback.
 for populated in (False,True):
@@ -1192,6 +1221,8 @@ if not is_m1plus:
             assert len(buttons)==1
             check_title_bounds(m,buttons[0],drill=page=='playlist_page')
     passed()
+else:
+    not_ported("test: library row title bounds use V1.32's row builders")
 
 # Long Return executes the stock gates and release filter in both variants.
 def long_machine():
@@ -1206,6 +1237,7 @@ def long_return(m):
 def destinations(m):
     return [c for c in m.calls if c[0] in ('navigator_back_to_home', 'navigator_switch_to_with_context')]
 
+# Q2 only: Long Return holds the Return key, which M1 Plus does not have.
 if not is_m1plus:
     for page in ('home_page', 'folder_page', 'playing_page', 'sysset_page'):
         m = long_machine(); m.page(page)
@@ -1728,6 +1760,7 @@ assert m.release()==11 and not m.clicks
 m.advance(DC-1); assert not m.clicks
 m.advance(1); assert m.clicks==[es[0]] and not m.timers and not m.screens
 m.advance(1000); assert m.clicks==[es[0]]; passed()
+# Q2 only: the touch wheel's lockout after Centre; M1 Plus has no wheel.
 if not is_m1plus:
     # Stock's wheel lockout after the centre key ends when the press opens its row: the next tick moves.
     m=Machine(); w,es=m.page_list(3)
@@ -1891,6 +1924,7 @@ for action in ('touch','center','click','leave','animating','pressed','unusable'
     elif action=='missing': m.call(args=(m.wm,0,0,0),gap=20)
     else: setattr(m,action,1); m.call(gap=20); setattr(m,action,0)
     assert m.call(gap=1)==11 and slide(m,w)[3]==200; passed()
+# Q2 only: the touch wheel's lockout expiry.
 if not is_m1plus:
     # Stock's wheel lockout after Centre guards only its first LOCKOUT_KEEP x 100 ms, then clears.
     m=Machine(); w=m.page('home_page','slide_menu'); m.call(gap=0)
@@ -1918,6 +1952,8 @@ if not is_m1plus:
     # Other slide menus retain stock next/previous handling.
     m=Machine(); m.page('sysset_page','slide_menu')
     assert m.call(gap=0)==11 and m.call(gap=1)==11 and m.moved(); passed()
+else:
+    not_ported("test: other slide menus' stock next/previous use V1.32's handlers")
 # Even if the UI services a release before an overdue timer, both singles confirm once.
 m=Machine(); w,es=m.page_list(3); m.release(); m.now+=O['DOUBLE_CLICK_MS']+1
 assert m.release()==11 and m.clicks==[es[0]] and len(m.timers)==1
@@ -2089,6 +2125,7 @@ for key in ('KEY_RETURN','KEY_CENTER',None):
     else: m.advance(O['HOLD_MS']+O['HOLD_POLL_MS'])
     m.animating=0; m.advance(1000); assert m.selected(w)==1 and not m.timers,key; passed()
 # Rejected stock wheel input resets a sustained list run.
+# Q2 only: rejected touch wheel input.
 if not is_m1plus:
     m=Machine(); w,es=m.page_list(40,extent=40*48)
     for _ in range(7): m.call(gap=100)
@@ -2877,6 +2914,8 @@ if not is_m1plus:
             assert [c[1] for c in m.calls if c[0]=='load_localartist_list']==[1]
         else: assert names==['query_run','songs_view'] and tab==0, names
         passed()
+else:
+    not_ported('Artist pages open on Albums (ARTIST_ALBUMS not patched in V2.1)')
 
 # Play/Pause hold queue menu. libcstl deques are Python lists of element addresses; the stock
 # mclLoadPlayList, mclNextSong and key filters run for real.
@@ -3071,6 +3110,8 @@ if not is_m1plus:
                 assert m.backs==0 if variant=='ipod' else m.backs==(len(pages) if unwind else 0)
                 assert m.closed==((list(reversed(pages)) if variant=='ipod' else [])+['playing_page'] if unwind else [])
                 passed()
+else:
+    not_ported("test: info pages' Back uses V1.32's page callbacks")
 
 SONG_MENU=['Play Next','Add to Queue','Add to Favourites','Add to Playlist','Go to Album','Go to Artist']
 # Now Playing targets the queue even when the last browsed list has unrelated rows.
@@ -3237,6 +3278,8 @@ if not is_m1plus:
             if stale: m.word(O['MCL_POS'],2)
             assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==(11 if stale else 0)
             assert m.added==([] if stale else ['B']); passed()
+else:
+    not_ported('Playlist rows and click guards (V1.32 playlist builders)')
 
 # Short press toggles once; a hold opens one menu titled by its row, its release is swallowed and
 # the next short press toggles again. A repeated long event of the same press opens nothing.
@@ -3444,6 +3487,8 @@ if not is_m1plus:
         assert usb==([(20,20)] if soft else [(100,100)]) if way==2 else not usb
         assert b.writes()==([25] if way==1 else [])
         assert any(c[0]=='notifyVolume' for c in b.calls); passed()
+else:
+    not_ported('Shuffle honours Play next, LDAC HQ and Bluetooth absolute volume (SHUFFLE_CALL, LDAC_HQ, mclSetBtVol not patched in V2.1)')
 
 # Screen off, the UI loop idles SCREEN_OFF_SLEEP_MS before stock's own pacing; screen on, stock alone.
 sleep_hook=HOOKS['main_loop_sleep_default'][0]
@@ -3559,6 +3604,8 @@ if not is_m1plus:
         passed()
     key=lambda t: (m.u.mem_write(0x1100000,t.encode()+b'\0'), m.call(address=symbols(B/'patch.elf')['ringnav_sort_key'],args=(0x1100000,0,0,0),gap=0), m.text(0x1100000))[2]
     assert [key(t) for t in ('  The Cure','THE CURE','The ','The  Cure','A','An ','Ant','周杰伦','The 周杰伦')]==['Cure','CURE','The ','The  Cure','A','An ','Ant','周杰伦','周杰伦']; passed()
+else:
+    not_ported('Shuffle Previous/Next history, 65,000-song scan, article-free sort, Artists rows (V1.32 call-site patches)')
 # iPod boots to Home: home_page_init's memory-play resume, run from its stock context build, starts
 # the restored queue paused (mode 3) through player_start as playing_page_init would, and opens no
 # page; a 0xff class starts nothing, as the page's init. Car mode (mode 2) opens Now Playing as stock.
@@ -3891,6 +3938,8 @@ if not is_m1plus:
         assert [row for row,kind,size in m.pending]==([] if tick else list(range(15,24))), m.pending
         assert m.get(0xa2767c)==15 and m.get(syms['albumcover_taskstate'])==1
     passed()
+else:
+    not_ported("Same-named albums apart in art and artist pages' covers (ALBUM_ART patches not applied to V2.1)")
 # A row opens its name's songs (0xff10, getMusicByAlbum): only its own album's stay.
 m=ClassMachine(page='album_page',cls=0xf003,rows=2); m.word(m.row(1)+O['REC_PATH'],m.string('/q/Row 1'))
 assert m.call(address=HOOKS['load_album_detaillist'][0],args=(0xf003,m.song('Album'),0,0),gap=0)==1
@@ -3904,6 +3953,8 @@ if not is_m1plus:
     if variant=='ipod': cards=cards[3][0]  # its scroll_view of rows
     cards=[c[2]['name'] for c in cards[3]]
     assert len(cards)==7 and cards[2]=='btn_coverflow', cards
+else:
+    not_ported("test: Home's Coverflow card layout reads V1.32's home_page.bin")
 home_hook=HOOKS['home_page_init']
 assert struct.unpack_from('<I',demo,fileoff(demo,home_hook[0]))[0]==0x08000000|symbols(B/'patch.elf')['coverflow_home']>>2
 passed()
@@ -4732,6 +4783,8 @@ if not is_m1plus:
     m.top=under
     assert m.call(address=0x65f688,args=(row,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0)==0
     assert m.dispatched() and any(c[0]=='reset_poweroptions_timer' for c in m.calls)
+else:
+    not_ported("test: stock keydown helper with STOP uses V1.32's 0x65f688")
 # The artist page on top: the Artists list under it gets no wheel key either.
 artists=m.node('window','localclass_page'); m.word(artists+O['W_PARENT'],m.wm)
 low=m.node('list_item'); m.word(low+O['W_PARENT'],artists)
@@ -5022,6 +5075,8 @@ if not is_m1plus:
     m.split=[m.song('Baroness')]; m.word(m.split[0]+O['REC_ALBUM_ARTIST'],m.string('Baroness'))
     m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)
     assert menu(m)==('Album',[*COVER_ALBUM,'Add to Playlist']); passed()
+else:
+    not_ported('Artist albums tab art keys (load_localartist_list not hooked in V2.1)')
 # Library > Ratings > Albums: the rated albums as Coverflow, most hearts first, with the rated Sort card alone
 # (Rating, Album, Artist, Year, kept); closing it brings the library's covers and Sort back.
 def ratings_albums(m):
@@ -5064,6 +5119,8 @@ if not is_m1plus:
     m=CoverflowMachine(mode=2); m.open(); m.tracks(); m.run(0)
     m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
     assert m.names()==['A','T1','B','C'] and m.mcl('MCL_POS')==1; passed()
+else:
+    not_ported("test: Coverflow's track queue through stock mclNextSong (V1.32 flow)")
 # Return cancels without losing the highlighted song. Changed or closed sources refuse.
 m=CoverflowMachine(); m.open(); view=m.tracks(); m.call(); m.press(100); m.hold(); m.release()
 f,ctx=m.handler(m.top,O['EVT_KEY_UP']); ev=m.alloc(0x40); m.word(ev,O['EVT_KEY_UP']); m.word(ev+O['EVENT_KEY'],O['KEY_RETURN'])
@@ -5270,6 +5327,8 @@ if not is_m1plus:
         events=[event for event,_ in m.trace]
         for event in ('on_player_autochange','toolsLoadNextDir','player_refresh_playqueue'): assert events.count(event)==3
         assert events.count('mclLoadPlayList')==4 and events.count('mclClearChangeFlag')==len(paths)-1
+else:
+    not_ported("test: folder rollover and UI scheduler delay use V1.32's player addresses")
 
 # Coverflow depth (docs/internals.md#coverflow-depth): the payload's renderer, run as MIPS, draws
 # byte for byte what the host build of the same source draws (test/coverflow.py checks that
@@ -5359,7 +5418,11 @@ for (frac,mask),host in zip(cases,want):
 # decoded once, each load dropped at once. What is drawn is what the renderer draws for that ring.
 m=DepthMachine(); page=m.open(); s=m.slide
 assert len(m.frames)==1 and cf_geometry(m,s)==(0,0,O['CF_VIEW_W'],O['CF_VIEW_H'])
-stride=O['CF_STRIDE'] if is_m1plus else (signed(m.get(s+O['SLIDE_SPACER']))+O['CF_VIEW_H']); assert stride==O['CF_STRIDE']
+# slide_stride (offsets.inc): V2.1's slide_menu steps its own height, V1.32's an item and the spacer.
+stride=m.get(s+O['W_H']) if is_m1plus else signed(m.get(s+O['SLIDE_SPACER']))+O['CF_VIEW_H']
+def cf_stride(): assert stride==O['CF_STRIDE'], stride
+if is_m1plus: known_gap(f"Coverflow steps CF_STRIDE ({O['CF_STRIDE']} px) per album; V2.1's slide_menu steps its height", cf_stride)
+else: cf_stride()
 assert all('image' not in m.nodes[c] for c in m.nodes[s]['children'])
 def paint(m):
     return m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.slide,m.canvas,0,0),gap=0,clear=False,count=50_000_000)
@@ -6078,6 +6141,8 @@ if not is_m1plus:
         m=routed(audible(Machine()),**kw); m.call(address=syms['buzzeer_switch'],args=(1,0,0,0))
         assert buzzes(m)==want,kw
     m=routed(audible(Machine(),tone=0)); m.call(address=syms['buzzeer_switch'],args=(1,0,0,0)); assert not buzzes(m); passed()
+else:
+    not_ported('Key Tone and the knob remap on key-down (on_wm_keydown_before_fun, buzzeer_switch not hooked in V2.1)')
 
 if variant=='ipod':
     def long_list(n=40,m=None):
@@ -6607,6 +6672,8 @@ if not is_m1plus:
     m2.word(O['MCL_POS'],1); m2.handlers[syms['navigator_to']]='q:navigator_to'; m2.press(100)
     assert m2.hold()==11 and m2.labels()[-2:]==['Group by: Album','Rate  ♥♥♡♡♡'] and m2.release()==0
     m2.pick(len(m2.labels())-1); m2.advance(0); m2.top=m2.np; assert m2.caption()=='2 of 5' and m2.call(O['KEY_RETURN'])==11; passed()
+else:
+    not_ported("Ratings: Now Playing's heart binding (V1.32 img_fav handler)")
 # Ratings: Top Rated (4-5), Loved (5), All Rated and Disliked (1), most hearts first, then title order.
 m=RateMachine(b''.join(struct.pack('<I',(key_of(n)&~7)|h) for n,h in (('A',1),('C',4),('E',2))).ljust(4*O['RATE_SLOTS'],b'\0'))
 m.found=[m.song(n) for n in ('A','B','C','D','E')]; m.fav_songs=[m.song('D')]
@@ -6911,12 +6978,15 @@ border(tiles[2]); assert m.bands[-1][4]==O['PH_GREY']
 f,ctx=m.handler(tiles[1],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.advance(0)
 s=m.find('slide_menu',viewer); m.slide=s
 assert m.nodes[viewer]['visible'] and not m.nodes[grid]['visible'] and len(m.nodes[s]['children'])==4
-assert (375 if is_m1plus else (signed(m.get(s+O['SLIDE_SPACER']))+O['PH_SHOT_H']))==375 and m.get(s+O['SLIDE_INDEX'])==1
+stride=m.get(s+O['W_H']) if is_m1plus else signed(m.get(s+O['SLIDE_SPACER']))+O['PH_SHOT_H']  # slide_stride
+def photo_stride(): assert stride==O['UI_W'], stride
+if is_m1plus: known_gap(f"Photos step one screen width ({O['UI_W']} px) per photo; V2.1's slide_menu steps its height", photo_stride)
+else: photo_stride()
+assert m.get(s+O['SLIDE_INDEX'])==1
 m.draws=[]; m.loads=[]; paint(m)
 want_draws = [((0,0,281,320),(19,65,281,320))] if is_m1plus else [((0,0,281,375),((375-217)//2,0,217,290))]
 assert m.draws==want_draws and m.loads==['file://'+cache(1,'.jpg'),'file://'+cache(0,'.jpg')]
-# Mid-slide back to the first photo: this one moves right and the first follows a screen behind it.
-stride = 450 if is_m1plus else 375
+# Mid-slide back to the first photo: this one moves right and the first follows a stride behind it.
 m.draws=[]; m.word(s+O['SLIDE_OFFSET'],stride//4); paint(m)
 (_,a),(_,b)=m.draws
 rest_x = (320-281)//2 if is_m1plus else (375-217)//2
@@ -7219,10 +7289,11 @@ class SpotMachine(BooksMachine):
         return [c[0] for c in self.calls]
     def key(self,k):
         self.sent=[]; self.calls=[]; return self.call(k,gap=0,clear=False)
+if is_m1plus: not_ported("Streaming's Spotify, Internet Radio and AirPlay rows (no stream_page_init hook in V2.1)")
 def stream_page(m):
     """Stock Streaming's one Tidal row, then the hook's Spotify, Internet Radio and AirPlay rows; returns Spotify's button."""
     view=m.node('scroll_view','scroll_view_streamsset',[m.node('list_item')]); m.top=m.node('window','stream_page',[view])
-    assert m.call(address=HOOKS['stream_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0 and m.calls[0][0]=='stock_stream'
+    assert m.call(address=STREAM_ENTRY,args=(m.top,5,0,0),gap=0,count=5_000_000)==0 and m.calls[0][0]=='stock_stream'
     assert len(m.nodes[view]['children'])==4
     # AirPlay, last: stock's own receiver, its switch on System settings' Network service page, one press away.
     airplay=m.nodes[m.nodes[view]['children'][3]]['children'][0]; icon,label=m.nodes[airplay]['children'][:2]
@@ -7383,7 +7454,7 @@ class RadioMachine(SpotMachine):
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
     def stream(self):
         view=self.node('scroll_view','scroll_view_streamsset',[self.node('list_item')]); self.top=self.node('window','stream_page',[view])
-        assert self.call(address=HOOKS['stream_page_init'][0],args=(self.top,5,0,0),gap=0,count=5_000_000)==0
+        assert self.call(address=STREAM_ENTRY,args=(self.top,5,0,0),gap=0,count=5_000_000)==0
         return self.nodes[self.nodes[view]['children'][2]]['children'][0]
     def click(self,w):
         f,ctx=self.handler(w,O['EVT_CLICK']); assert self.call(address=f,args=(ctx,self.event,0,0),gap=0,count=5_000_000)==0
@@ -7593,7 +7664,7 @@ class BrowseMachine(RadioMachine):
     def open(self):
         if not getattr(self,'button',0):  # Streaming, as RadioMachine.stream: Spotify's row
             view=self.node('scroll_view','scroll_view_streamsset',[self.node('list_item')]); self.top=self.node('window','stream_page',[view])
-            assert self.call(address=HOOKS['stream_page_init'][0],args=(self.top,5,0,0),gap=0,count=5_000_000)==0
+            assert self.call(address=STREAM_ENTRY,args=(self.top,5,0,0),gap=0,count=5_000_000)==0
             self.button=self.nodes[self.nodes[view]['children'][1]]['children'][0]
         self.click(self.button); self.page=self.top; assert self.nodes[self.page]['name']=='spotbrowse_page'
     def asked(self):
@@ -7770,6 +7841,8 @@ if not is_m1plus:
     assert m.nodes[item]['style']=='s_listitem_black' and tree(button)==want
     assert m.nodes[title]['text']=='CFW. Version' and m.nodes[value]['text']==f"{VERSION}{' Pod' if variant=='ipod' else ''}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
     assert not m.nodes[button].get('handlers') and not m.nodes[button].get('name'); passed()
+else:
+    not_ported("test: About's CFW. Version row uses V1.32's row builder 0x4bc274")
 
 # Resume: once a second the UI loop polls the playing track; one of RESUME_MIN_S or longer keeps its
 # place in a ring written whole to /mnt/data (a .tmp, renamed), every RESUME_SAVE_S of play, after a
@@ -7960,6 +8033,8 @@ if not is_m1plus:
                 for address in (HOOKS['on_wm_keydown_before_fun'][0],HOOKS['on_wm_keyup_before_fun'][0]):
                     assert (gate.call(key,address=address)==11)==blocked,(choice,light,key,address)
     passed()
+else:
+    not_ported('Key lock and quick lock rows (keylock_rows, quick_lock not hooked in V2.1)')
 
 # Settings rows (docs/internals.md#charge-limit, #low-power, #album-artists): Power management gains
 # Charge limit and Low power, Audio settings gains Artists, after the stock rows in the same widgets
@@ -8015,6 +8090,8 @@ m.byte(syms['g_backlight_status'],1); assert wake(DOWN,gap=1000) and wake(UP) an
 if not is_m1plus:
     from build import STANDBY_WAKE
     assert struct.unpack_from('<I',demo,fileoff(demo,STANDBY_WAKE[0]))[0]==STANDBY_WAKE[2]
+else:
+    not_ported('Standby resume stays dark (STANDBY_WAKE not patched in V2.1)')
 m.byte(syms['g_backlight_status'],0)
 m.byte(O['BOOT_KEY_GUARD'],1); assert not wake(DOWN,gap=1000) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\1'
 assert wake(DOWN,gap=100) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\0' and wake(UP,gap=50)
@@ -8036,12 +8113,16 @@ if not is_m1plus:
         a.call(address=HOOKS['read_artistype_value'][0],args=(0,0,0,0),gap=0)
         assert a.get(syms['artist_type'])==want and a.config_reads[-1][1:3]==('PLAYSET','ARTISTTYPE'),config
     passed()
+else:
+    not_ported('Artists defaults to Album Artist (read_artistype_value not hooked in V2.1)')
 # Boot reads it too (ringnav_bootmode), so Audio settings shows it before any Library page has opened.
 if not is_m1plus:
     for config,text in (({},'Artists: Album Artist'),({'ARTISTTYPE':'0'},'Artists: Artist')):
         shown=settings_page('audioset','scroll_view_playset',config,stock_rows=15,boot=True)[2]
         assert shown()[1]==text,config
     passed()
+else:
+    not_ported('Boot reads the Artists choice (ringnav_bootmode call not patched in V2.1)')
 # Playback Setting restacks by use (navigation.c playset_order): stock's rows by id, then ours.
 def stacked(m,view_name): return [(m.entries+rows).index(c) for c in m.nodes[named(m,m.top,view_name)]['children']]
 assert stacked(m,'scroll_view_playset')==[3,2,0,10,18,9,4,5,11,1,8,16,15,17,13,14,12,6,7]; passed()
@@ -8082,6 +8163,8 @@ if not is_m1plus:
     m.nodes[m.slider]['value']=300; assert press(m.slider,O['EVT_VALUE_CHANGING'])==[(200,*W)] and press(m.add)==[] and turn()==[]
     assert texts()[-1]=='Wheel Sensitivity: 200%' and m.nodes[m.switch]['visible']==0
     assert m.confirm()==11 and [c[0] for c in m.calls].count('navigator_back')==1; passed()
+else:
+    not_ported('test: Display settings rows (V1.32 page builders)')
 # Bluetooth's list (btmenu_rows, rebuilt on every search) gains Resume on connect with Bluetooth on,
 # right after its fourth row, Bluetooth Headset Volume Control, as stock's rows: no icon, 78 high.
 # Off unless Q2POD RESUME is 1 (docs/internals.md#resume-on-connect).
@@ -8097,6 +8180,8 @@ if not is_m1plus:
     assert texts()==['Resume on Connect: On']; passed()
     m,rows,*_=settings_page('btrows','scroll_view_bluetooth',stock_rows=1,bt=0)  # just the switch
     assert rows==[]; passed()
+else:
+    not_ported('Bluetooth Resume on connect row (btmenu_rows not hooked in V2.1)')
 
 # Lock screen (docs/internals.md#lock-screen). The picture list gains the six built-ins between
 # stock's default and the card images, once however often it is rebuilt, and a picked built-in
@@ -8152,6 +8237,8 @@ if not is_m1plus:
     assert clock_click()==[(1,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Large'
     assert clock_click()==[(0,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Standard'; passed()
     m,_,_,label,_=lock_page({'LOCKCLOCK':'1'}); assert m.nodes[label]['text']=='Clock: Large'; passed()
+else:
+    not_ported('Lock screen Clock row and built-in thumbnails (screensaver_rows not hooked in V2.1)')
 # The lock window: a built-in drops stock's picture name (the wallpaper paints over it); Large lays
 # the date, battery and time out across the top; Standard and card pictures stay stock's.
 def lock_window(picture,config={}):
@@ -8181,6 +8268,8 @@ if not is_m1plus:
     m=lock_machine(); cover=m.node('image','img_playcover'); m.top=m.node('window','saverscreen_page',[m.node('view','view_playinfo',[cover])])
     assert m.call(address=HOOKS['saver_cover'][0],args=(m.top,0,0,0),gap=0)==0
     assert [c[:2] for c in m.calls if c[0] in ('stock_savercover','widget_invalidate_force')]==[('stock_savercover',m.top),('widget_invalidate_force',cover)]; passed()
+else:
+    not_ported('Lock screen cover repaint (saver_cover not hooked in V2.1)')
 
 # The power poll, on the UI loop. Charge limit: the charger stops (switch_charge_enable(0), the
 # active-low charge enable) at CHARGE_STOP, again whenever it charges meanwhile, and is handed
@@ -8358,6 +8447,7 @@ for bad in (jpg(LOGO_H,LOGO_H),jpg(LOGO_W,LOGO_H,n=1),jpg(LOGO_W,LOGO_H,sof=0xc2
             b'\xff\xd8\xff\xda\x00\x02',jpg(LOGO_W,LOGO_H)[:12],b'not a jpeg',b''):
     m=LogoMachine({LOGO_SRC:bad,LOGO_DST:b'old'}); m.sync()
     assert m.files[LOGO_DST]==b'old' and not m.renames and m.toasts==[LOGO_BAD] and not m.execs,bad[:16]; passed()
+# Q2 only: the card logo is rotated for Q2's sideways panel; M1 Plus's is upright.
 if not is_m1plus:
     m=LogoMachine({LOGO_SRC:jpg(375,320)}); m.child=True; m.sync()
     assert m.exits==[127] and LOGO_DST not in m.files and m.execs==[['/usr/bin/ffmpeg','/usr/bin/ffmpeg','-nostdin','-v','quiet','-i',LOGO_SRC,'-vf','transpose=1','-pix_fmt',
@@ -8433,6 +8523,7 @@ for failure in ('fopen','fwrite','fflush','fsync','fclose','rename'):
     passed()
 m,button,label=boot_row(); m.rockbox_mode=0; toggle_boot(m,button)
 assert m.nodes[label]['text']=='Boot to: Rockbox' and '/mnt/data/boot-target' not in m.files; passed()
+# Q2 only: the wheel's centre press on Boot to.
 if not is_m1plus:
     # Wheel centre reaches Boot to through the existing selection/dispatch path.
     m,button,label=boot_row(); view=m.nodes[m.top]['children'][0]; view=m.nodes[view]['children'][0]
@@ -8453,6 +8544,8 @@ if not is_m1plus:
             m.u.hook_add(UC_HOOK_CODE,extension_return,begin=site+8,end=site+8)
             assert bool(m.call(address=site,args=(formats,suffix,0,0),gap=0))==bool(accepted)
             passed()
+else:
+    not_ported('M4B in folder scans (AUDIO_EXTENSION_CALLS not patched in V2.1)')
 
 # M4B is spoken audio anywhere, at short duration; persistence and CUE rules stay shared.
 for path in ('/mnt/mmc/Novel.m4b','/mnt/mmc/Music/Novel.M4B','/mnt/mmc/Novel.m4B'):
@@ -8542,6 +8635,8 @@ if not is_m1plus:
     b=BtVolumeMachine(); b.poll(); b.absolute=2; b.poll()
     assert b.u.mem_read(syms['g_volume'],1)[0]==2 and not b.writes() and b.absolute==2
     assert b.volume(2,2)==[(100,100)] and not b.writes(); b.poll(); assert not b.writes(); passed()
+else:
+    not_ported('Bluetooth headset volume scaling (mclSetBtVol not hooked in V2.1)')
 print('M4B recognition/resume and headset routing, ear masks, manual cancellation, malformed packets and volume limits passed.')
 
 # Real helper APIs: explicit pause/resume is observable and repeatable, with shared gain changes.
@@ -8607,6 +8702,8 @@ for owner in (1,2):
 if not is_m1plus:
     from build import BT_CONNECT_START
     assert struct.unpack_from('<I',demo,fileoff(demo,BT_CONNECT_START[0]))[0]==0x0c000000|payload_syms['ringnav_bt_connect_start']>>2
+else:
+    not_ported('Bluetooth Resume on connect start (BT_CONNECT_START not patched in V2.1)')
 for off,owner,saved,want in ((0,1,3,[0]),(0,2,0,[0]),(1,1,2,[0]),(1,1,3,[1]),(1,1,0,[]),(1,2,3,[])):
     m=HeadsetMachine(owner); m.saved=saved
     if not off: m.config['RESUME']='1'
@@ -8643,5 +8740,9 @@ if not is_m1plus:
     folder='SD:/Music/'+'\u97f3\u697d'*150; label=m.node('label','label_location',text=folder)
     m.call(address=payload_syms['ringnav_np_info'],args=(m.node('window','playing_page',[label]),0,0,0),gap=0)
     assert m.nodes[label]['text']=='Location: '+folder; passed()
+else:
+    not_ported("Now Playing's info lines (NP_INFO_CALL not patched in V2.1)")
 
 print(f'{checks} MIPS execution scenarios passed; toolkit services mocked, stock lock filter executed.')
+if is_m1plus:
+    print(f'M1 Plus: {len(GAPS)} known gaps, {len(NOT_PORTED)} checks not ported (listed above).')
