@@ -59,6 +59,38 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
     add it to `M1PLUS_HOOKS`.
   - Test it with `test/boot.py`'s knob FIFO: with the setting on, a knob turn must move a list's
     selection, not the volume.
+- **Touch long-press opens the hold menu.** `NOT PORTED: Rate Album from an artist's albums`.
+  - **The problem:** a Play/Pause hold opens the menu for the highlighted row (`qm_hold`). On M1
+    nothing highlights a row until Knob Navigation Mode lands, so the hold falls through to V2.1's
+    List sort order dialog. The menu's actions are wired but unreachable. On a touchscreen, a long
+    press on the row itself is the natural way in, with or without the knob.
+  - **The fix:** in the input hook (`ringnav_input`), treat a press held still on a row or tile as
+    its hold. Take the row from the pressed widget's index into `p_deque_showlist`, not from a
+    highlight, and enter `qm_hold`'s existing path (`qm_kind`, `qm_cls`, `qm_idx`, `qm_hash`) so
+    every action and its checks ("Album changed") stay as they are. Swallow the release, so the row
+    doesn't also open.
+  - **Coexist with V2.1's touch handling:** a press that moves is a scroll or a swipe and stays
+    V2.1's. Leave Play/Pause hold as it is: without a highlight it is still V2.1's sort dialog.
+  - **Where it helps.** Each of these is a Play/Pause hold on a highlighted row on the Q2:
+    - V2.1's library pages, reachable today:
+      - an artist's albums (`album_page`) and Library → Albums (`localclass_page`): the album menu,
+        with Add to Favourites and Rate Album (the case that showed the gap);
+      - Artists, Composers and Genres (`localclass_page`): Play Next, Add to Queue or Shuffle the
+        whole group;
+      - All Songs and an album's tracks (`allmusic_page`, `albuminfo_page`): the song menu (Play
+        Next, Add to Queue, Favourites, Add to Playlist, Go to Album or Artist, Rate);
+      - Folders (`folder_page`), for a folder or a song, and Playlists (`playlist_page`).
+    - Q2 Pod's own pages, once their entry points land (section 3). These are payload widgets, so
+      the long press can be bound on the row directly:
+      - Most Played, the Ratings lists and Long Songs: the song menu;
+      - Internet Radio's stations: add to or remove from favourites (`radio_hold`);
+      - Spotify's tracks: add to Spotify's queue (`spot_hold`);
+      - Coverflow's centre cover: the album menu. Its hold already works without a highlight,
+        because the centred cover is the selection, but a long press on the cover is the touch form.
+    - Not needed on Now Playing, whose hold menu acts on the playing track.
+  - **Test it:** in `test/patch.py`, a still press held on a row of each reachable page opens that
+    row's menu and no click, and a moving press doesn't. In `test/boot.py`, a step long-presses an
+    album tile on an artist's page; that needs the card library (section 6).
 - **Bluetooth absolute volume.** `NOT PORTED: Bluetooth headset volume scaling`.
   - **The problem:** `mclSetBtVol` isn't hooked, so `stock_btvol_trampoline` is a stub. An
     absolute-volume headset gets the volume twice: as AVRCP and as software gain.
