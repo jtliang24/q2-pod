@@ -26,15 +26,12 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 - **Every page has an explicit Back button.** Every page Q2 Pod opens or replaces on M1 shows V2.1's
   title-bar back button at its top left. Make it with `back_button`, or with `page_title`, which adds
   one; its click sends Return, and the page's keyup decides whether that closes the page or steps
-  back one screen. No gesture or hidden tap may be a page's only way out, and neither may Previous,
-  which is Return only while nothing plays. Each new page's `test/boot.py` step closes it with the
-  button (`BACK`).
+  back one screen. The M1 has no Return key, and Previous, Next and Play/Pause are media keys, as
+  on stock: no gesture, hidden tap or key may be a page's only way out. Each new page's
+  `test/boot.py` step closes it with the button (`BACK`).
 
 ## 1. Small fixes (S)
 
-- **Back while the keys are locked.** `KNOWN GAP: Back with the screen off and the keys locked sends
-  Return to the hidden page`. In `ringnav` (`patch/navigation.c`), move the Previous-as-Return check
-  below the `locked` test, and require the screen to be on. The known-gap check becomes a plain test.
 - **Crossfade's length slider.** Today the row only toggles Off and 5 s.
   - `crossfade.c` re-dresses V1.32's Boot volume page. V2.1's `bootvol_page` has other widgets
     (`btn_add`, `vol_slider`, `btn_memory`) and handlers.

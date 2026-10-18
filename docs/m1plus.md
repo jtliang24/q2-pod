@@ -157,17 +157,19 @@ icons, named in `offsets.inc` so the build's V2.1 name check covers them). Make 
 [`back_button`](../patch/coverflow.c), or with `page_title`, which adds one beside the title. Its
 click sends `KEY_RETURN` through `dispatch_key_return` on a timer, so the page's own keyup decides
 what Back means: close the page, or step back one screen as the PEQ editor's Advanced tab does.
-No gesture or hidden tap may be a page's only way out, and neither may Previous, which is Return
-only while nothing plays. A new page's `test/boot.py` step closes it with that button.
+No gesture, hidden tap or key may be a page's only way out. A new page's `test/boot.py` step
+closes it with that button.
 
-**M1 Plus Return mechanisms:**
-1. **The Back button** on every payload page, as above. V2.1's own pages have theirs.
-2. **Previous** while nothing plays and Now Playing is not on top (`ringnav`, `KEY_BACK_BTN`), so
-   knob-only navigation never gets trapped in a submenu.
+**The Back button is M1 Plus's only Return.** V2.1's own pages have theirs. Previous, Next and
+Play/Pause stay media keys, as on stock.
 
-The left-edge swipe and the title tap that once sent Return are gone. Nothing on screen showed
-them, and the swipe had to hold back every touch in the left 32 px of every page, stock pages
-included ([m1plus-progress.md](m1plus-progress.md) §11).
+Three earlier ways in are gone:
+- **The left-edge swipe and the title tap.** Nothing on screen showed them, and the swipe had to
+  hold back every touch in the left 32 px of every page, stock pages included
+  ([m1plus-progress.md](m1plus-progress.md) §11).
+- **Previous as Return while nothing played.** Its Return skipped `wake_gate`'s screen-off drop, so
+  a bump of Previous with the screen off closed a page nobody could see, even with the keys locked
+  ([m1plus-progress.md](m1plus-progress.md) §13).
 
 ### 4.2 Side Rotary Knob (Volume by Default, Navigation Optional)
 The side rotary knob defaults to **standard hardware volume control** out of the box, preserving normal M1 Plus volume wheel behavior.
