@@ -2990,13 +2990,59 @@ class QueueMachine(Machine):
         return self.node('dialog','sortselect_dialog',[self.node('view','view_navbar',[self.title,self.back]),
                                                        self.node('list_view','list_view',[self.view])])
     def bootvol(self):  # stock's Boot volume page, which crossfade.c re-dresses
+        if is_m1plus: return self.v21_bootvol()
         self.slider=self.node('slider','slider_bootvol'); self.vol=self.node('label','label_vol')
         self.dec,self.add=self.node('image','img_dec'),self.node('image','img_add')
         self.title,self.switch=self.node('label','label_title'),self.node('image','img_bootswitch')
         return self.node('window','bootvol_page',[self.node('view','view_navbar',[self.title,self.switch]),
                          self.node('view','view_bootvol',[self.slider,self.dec,self.add,self.vol],visible=0)])
+    def v21_page(self,ui):
+        """M1 Plus: a V2.1 page as its own asset builds it: types, names (also in widget_t, which
+        stock code reads), geometry, style and slider value."""
+        import subprocess
+        from ipod import decode
+        asset=subprocess.check_output(['unsquashfs','-cat',str(B/'rootfs.squashfs'),f'release/assets/default/raw/ui/{ui}.bin'])
+        def build(n):
+            kind,rect,props,children=n
+            extra={k:(int(v) if k=='value' else v) for k,v in props.items() if k in ('value','style')}
+            w=self.node(kind,props.get('name',''),[build(c) for c in children],**extra)
+            self.word(w+0x10,self.string(props.get('name','')))  # widget_t name, which the visit reads
+            for k,v in zip(('W_X','W_Y','W_W','W_H'),rect): self.word(w+O[k],v)
+            for c in self.nodes[w]['children']: self.word(c+O['W_PARENT'],w)
+            return w
+        page=build(decode(asset)); self.word(page+O['W_PARENT'],self.wm)
+        return page
+    def v21_init(self,init,page,only=None):
+        """V2.1's page init on page, then its widget_foreach visit on each widget (those named in
+        only, else all), as AWTK's runs it: a hook can't run stock code, so the visit comes after."""
+        self.mock('widget_foreach','widget_set_tr_text')
+        assert self.call(address=init,args=(page,0,0,0),gap=0)==0
+        (_,_,visit,ctx),=[c for c in self.calls if c[0]=='widget_foreach']
+        def every(w): return [w]+[d for c in self.nodes[w]['children'] for d in every(c)]
+        for w in every(page):
+            if only is None or self.nodes[w]['name'] in only: assert self.call(address=visit,args=(ctx,w,0,0),gap=0)==0
+    def prepare_bootvol(self):
+        """M1 Plus: V2.1's Boot volume page, bound by V2.1's own init, before navigator_to hands it
+        over; so its handlers are V2.1's, not offsets.inc's."""
+        page=self.v21_page('playset/bootvol_page')
+        self.byte(syms['boot_volflag'],1)  # Volume memory on: V2.1 hides and disables the slider's view
+        self.mock('slider_set_min','slider_set_max','slider_set_step','slider_set_value')
+        self.v21_init(syms['playset_bootvol_page_init'],page)
+        self.prepared=page
+        return page
+    def v21_bootvol(self):
+        page,self.prepared=self.prepared,None
+        self.title,self.switch,self.switch_label,self.switch_icon,self.slider,self.dec,self.add,self.vol,self.back=(named(self,page,n) for n in (
+            'label_title','btn_memory','label_memory','img_switchmemory','vol_slider','btn_dec','btn_add','label_vol','btn_return'))
+        return page
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')
+        if name=='widget_off_by_func' and u.reg_read(REGS[0]) in self.nodes:  # AWTK removes the matching handler
+            a,b,c,d=[u.reg_read(r) for r in REGS]
+            self.nodes[a]['handlers']=[h for h in self.nodes[a].get('handlers',[]) if h!=(b,c,d)]
+        elif name in ('slider_set_min','slider_set_max','slider_set_step','slider_set_value'):
+            a,_,c,d=[u.reg_read(r) for r in REGS]  # a double: $a2, $a3 (o32 aligns it past $a1)
+            self.nodes[a][name.removeprefix('slider_set_')]=round(struct.unpack('<d',struct.pack('<II',c,d))[0])
         if not name.startswith('q:'): return super().hook(u,address,size,unused)
         if not is_m1plus or address not in payload_syms.values():
             assert u.reg_read(UC_MIPS_REG_T9)==address, name
@@ -8269,8 +8315,44 @@ if not is_m1plus:
     m.nodes[m.slider]['value']=300; assert press(m.slider,O['EVT_VALUE_CHANGING'])==[(200,*W)] and press(m.add)==[] and turn()==[]
     assert texts()[-1]=='Wheel Sensitivity: 200%' and m.nodes[m.switch]['visible']==0
     assert m.confirm()==11 and [c[0] for c in m.calls].count('navigator_back')==1; passed()
-else:
-    not_ported('test: Display settings rows (V1.32 page builders)')
+else:  # M1 Plus: Wheel Sensitivity is Q2 only; Crossfade's row opens the same page, as V2.1 has it
+    # Crossfade's row opens V2.1's Boot volume page re-dressed (crossfade.c): V2.1's own init binds
+    # it, crossfade.c takes off exactly those handlers, and the title, the switch row, the slider
+    # (Off, then 1-XF_MAX s) and +/- become Crossfade's, live and saved. Back stays stock's.
+    m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],{'XFADESEC':'7'},stock_rows=15)
+    audio=m.top; m.stack=[m.top]; m.nodes[m.wm]=dict(type='window_manager',name='',children=m.stack,visible=1)
+    page=m.prepare_bootvol(); w=lambda n:named(m,page,n)
+    def bound(x): return [(t,f) for t,f,ctx in m.nodes[x].get('handlers',[]) if ctx==page]
+    CLICK,CHANGING=O['EVT_CLICK'],O['EVT_VALUE_CHANGING']
+    V21={'btn_memory':[(CLICK,O['BOOTVOL_SWITCH'])],'btn_dec':[(CLICK,O['BOOTVOL_DEC'])],'btn_add':[(CLICK,O['BOOTVOL_ADD'])],
+         'vol_slider':[(CHANGING,O['BOOTVOL_CHANGING'])],'btn_return':[(CLICK,syms['on_back_onclick'])]}
+    assert {n:bound(w(n)) for n in V21}==V21  # offsets.inc's are V2.1's
+    assert (m.nodes[w('bootvol_view')]['visible'],m.nodes[w('bootvol_view')]['enable'])==(0,0)
+    assert click(3)==[] and m.top==page and m.nodes[m.title]['text']=='Crossfade' and m.nodes[m.switch_label]['text']=='Crossfade'
+    stock_handlers={f for _,f in sum(V21.values(),[])}-{syms['on_back_onclick']}
+    def every(x): return [x]+[d for c in m.nodes[x]['children'] for d in every(c)]
+    assert not [x for x in every(page) for t,f,ctx in m.nodes[x].get('handlers',[]) if f in stock_handlers]
+    assert bound(m.back)==V21['btn_return']  # the title bar's Back closes it, as stock
+    assert (m.nodes[w('bootvol_view')]['visible'],m.nodes[w('bootvol_view')]['enable'],m.nodes[m.switch]['visible'])==(1,1,1)
+    assert (m.nodes[m.slider]['min'],m.nodes[m.slider]['max'],m.nodes[m.slider]['step'],m.nodes[m.slider]['value'])==(0,10,1,0)
+    assert m.nodes[m.vol]['text']=='Off' and m.nodes[m.switch_icon]['image']==NAMES['ICON_SWITCH_OFF']
+    def press(x,kind=CLICK):
+        m.calls=[]; f,ctx=m.handler(x,kind); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+        return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
+    X=lambda on,s:[(on,'Q2POD','XFADE'),(s,'Q2POD','XFADESEC')]
+    assert press(m.switch)==X(1,7) and m.nodes[m.vol]['text']=='7 s' and m.nodes[m.slider]['value']==7
+    assert m.nodes[m.switch_icon]['image']==NAMES['ICON_SWITCH_ON'] and texts()[3]=='Crossfade: 7 s'
+    assert press(m.add)==X(1,8) and press(m.dec)==X(1,7) and texts()[3]=='Crossfade: 7 s'
+    m.nodes[m.slider]['value']=3; assert press(m.slider,CHANGING)==X(1,3) and m.nodes[m.vol]['text']=='3 s'
+    m.nodes[m.slider]['value']=0; assert press(m.slider,CHANGING)==X(0,3) and m.nodes[m.vol]['text']=='Off'
+    assert m.nodes[m.switch_icon]['image']==NAMES['ICON_SWITCH_OFF'] and texts()[3]=='Crossfade: Off'
+    assert press(m.add)==X(1,1) and press(m.dec)==X(0,1) and press(m.dec)==[]  # Off is the bottom
+    m.nodes[m.slider]['value']=15; assert press(m.slider,O['EVT_VALUE_CHANGED'])==X(1,10) and press(m.add)==[]
+    assert m.nodes[m.vol]['text']=='10 s' and texts()[3]=='Crossfade: 10 s'
+    # Closed (stock's Back destroys it), the row opens it afresh, at the saved length.
+    f,ctx=m.handler(page,O['EVT_DESTROY']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+    m.stack.remove(page); m.top=audio; page=m.prepare_bootvol()
+    assert click(3)==[] and m.top==page and m.nodes[m.vol]['text']=='10 s' and m.nodes[m.slider]['value']==10; passed()
 # Bluetooth's list (btmenu_rows, rebuilt on every search) gains Resume on connect with Bluetooth on,
 # right after its fourth row, Bluetooth Headset Volume Control, as stock's rows: no icon, 78 high.
 # Off unless Q2POD RESUME is 1 (docs/internals.md#resume-on-connect).

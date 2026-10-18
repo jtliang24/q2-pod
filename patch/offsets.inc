@@ -676,14 +676,40 @@ static inline int arc_out(int r, int y) {
 #define EVT_VALUE_CHANGED 0x0e
 #define EVT_VALUE_CHANGING 0x0f
 #endif
-/* playset_bootvol_page_init (0x4b4a80) binds these, each with the window as context; Crossfade
- * re-dresses the page (crossfade.c) and unbinds them first. */
-#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
+/* playset_bootvol_page_init binds these, each with the window as context; Crossfade re-dresses the
+ * page (crossfade.c) and unbinds them first. */
+#if M1PLUS /* V2.1's (0x49d544) binds them in its widget_foreach callback (0x49cf60). Its switch is a
+            * settings row, btn_memory, whose label and image the click leaves to the page. */
+#define BOOTVOL_SWITCH 0x49d328   /* btn_memory's click */
+#define BOOTVOL_DEC 0x49d39c      /* btn_dec's click */
+#define BOOTVOL_ADD 0x49d4c8      /* btn_add's click */
+#define BOOTVOL_CHANGING 0x49d418 /* vol_slider's EVT_VALUE_CHANGING; nothing binds EVT_VALUE_CHANGED */
+#define VIEW_BOOTVOL_TITLE "label_title"
+#define VIEW_BOOTVOL_SWITCH "btn_memory"
+#define VIEW_BOOTVOL_SWITCH_LABEL "label_memory"
+#define VIEW_BOOTVOL_SWITCH_ICON "img_switchmemory"
+#define VIEW_BOOTVOL "bootvol_view"
+#define VIEW_BOOTVOL_SLIDER "vol_slider"
+#define VIEW_BOOTVOL_DEC "btn_dec"
+#define VIEW_BOOTVOL_ADD "btn_add"
+#define VIEW_BOOTVOL_VALUE "label_vol"
+#define ICON_SWITCH_ON "sset_on"
+#define ICON_SWITCH_OFF "sset_off"
+#else /* V1.32's (0x4b4a80) */
 #define BOOTVOL_SWITCH 0x4b44d8   /* on_bootvol_switch_onclick: img_bootswitch's click */
 #define BOOTVOL_DEC 0x4b4624      /* img_dec's click */
 #define BOOTVOL_ADD 0x4b45a8      /* img_add's click */
 #define BOOTVOL_CHANGING 0x4b48f4 /* slider_bootvol's EVT_VALUE_CHANGING */
 #define BOOTVOL_CHANGED 0x4b4300  /* slider_bootvol's EVT_VALUE_CHANGED */
+#define VIEW_BOOTVOL_SWITCH "img_bootswitch" /* in view_navbar, after the title */
+#define VIEW_BOOTVOL_SWITCH_ICON "img_bootswitch"
+#define VIEW_BOOTVOL "view_bootvol"
+#define VIEW_BOOTVOL_SLIDER "slider_bootvol"
+#define VIEW_BOOTVOL_DEC "img_dec"
+#define VIEW_BOOTVOL_ADD "img_add"
+#define VIEW_BOOTVOL_VALUE "label_vol"
+#define ICON_SWITCH_ON "switch_on"
+#define ICON_SWITCH_OFF "switch_off"
 #endif
 #if M1PLUS /* V2.1: dialog_scanmusic_dialog_init keeps the handle (0x47bcd8), wait_scan sets the flag (0x47b460) */
 #define SCAN_THREAD 0xa03a44

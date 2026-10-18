@@ -76,7 +76,7 @@ static void refresh(int save) {
         tk_snprintf(t, sizeof t, "%d%%", wheel_pct());
     else {
         tk_snprintf(t, sizeof t, xf.on ? "%d s" : "Off", xf.seconds);
-        image_base_set_image(xf.sw, xf.on ? "switch_on" : "switch_off");
+        image_base_set_image(xf.sw, xf.on ? ICON_SWITCH_ON : ICON_SWITCH_OFF);
     }
     widget_set_text_utf8(xf.label, t);
     if (widget_get_prop_int(xf.slider, "value", 0) != value()) slider_set_value(xf.slider, value());
@@ -119,53 +119,57 @@ static int gone(void *ctx, void *event) {
 }
 
 /* The row's click: stock's Boot volume page, its handlers swapped for these; ctx 1 for Wheel
- * sensitivity's row. */
+ * sensitivity's row. V2.1's page has its switch on a settings row (VIEW_BOOTVOL_SWITCH), which
+ * becomes Crossfade's, and its title bar's Back button, which stays stock's. */
 int xfade_open(void *ctx, void *event) {
     (void)event;
     int wheel = ctx != 0;
     settings();
-#if M1PLUS /* V2.1's bootvol_page has other widgets (btn_add, vol_slider, btn_memory) and handlers:
-            * until the page is re-dressed for it, the row itself turns Crossfade on and off, at
-            * the saved length (XF_DEFAULT unless one was set). */
-    if (!wheel) {
-        xf.on = !xf.on;
-        refresh(1);
-    }
-    return 0;
-#endif
     if (xf.page) return 0;
     void *wm = window_manager(), *below = window_manager_get_top_window(wm);
     navigator_to("playset/bootvol_page");
     void *page = window_manager_get_top_window(wm);
     if (page == below) return 0;
+#if M1PLUS
+    void *title = widget_lookup(page, VIEW_BOOTVOL_TITLE, 1);
+    void *row = widget_lookup(page, VIEW_BOOTVOL_SWITCH, 1);
+    void *name = widget_lookup(page, VIEW_BOOTVOL_SWITCH_LABEL, 1);
+#else
     void *nav = widget_lookup(page, "view_navbar", 1), *title = nav ? widget_get_child(nav, 0) : 0;
-    xf.sw = widget_lookup(page, "img_bootswitch", 1);
-    xf.view = widget_lookup(page, "view_bootvol", 1);
-    xf.slider = widget_lookup(page, "slider_bootvol", 1);
-    xf.dec = widget_lookup(page, "img_dec", 1);
-    xf.add = widget_lookup(page, "img_add", 1);
-    xf.label = widget_lookup(page, "label_vol", 1);
-    if (tk_strcmp(widget_get_prop_str(page, "name", ""), "bootvol_page") || !title || !xf.sw ||
-        !xf.view || !xf.slider || !xf.dec || !xf.add || !xf.label) {
+    void *row = widget_lookup(page, VIEW_BOOTVOL_SWITCH, 1), *name = row;
+#endif
+    xf.sw = widget_lookup(page, VIEW_BOOTVOL_SWITCH_ICON, 1);
+    xf.view = widget_lookup(page, VIEW_BOOTVOL, 1);
+    xf.slider = widget_lookup(page, VIEW_BOOTVOL_SLIDER, 1);
+    xf.dec = widget_lookup(page, VIEW_BOOTVOL_DEC, 1);
+    xf.add = widget_lookup(page, VIEW_BOOTVOL_ADD, 1);
+    xf.label = widget_lookup(page, VIEW_BOOTVOL_VALUE, 1);
+    if (tk_strcmp(widget_get_prop_str(page, "name", ""), "bootvol_page") || !title || !row ||
+        !name || !xf.sw || !xf.view || !xf.slider || !xf.dec || !xf.add || !xf.label) {
         window_close(page);
         return 0;
     }
-#if !M1PLUS
-    widget_off_by_func(xf.sw, EVT_CLICK, (void *)BOOTVOL_SWITCH, page);
+    widget_off_by_func(row, EVT_CLICK, (void *)BOOTVOL_SWITCH, page);
     widget_off_by_func(xf.dec, EVT_CLICK, (void *)BOOTVOL_DEC, page);
     widget_off_by_func(xf.add, EVT_CLICK, (void *)BOOTVOL_ADD, page);
     widget_off_by_func(xf.slider, EVT_VALUE_CHANGING, (void *)BOOTVOL_CHANGING, page);
+#if !M1PLUS
     widget_off_by_func(xf.slider, EVT_VALUE_CHANGED, (void *)BOOTVOL_CHANGED, page);
 #endif
-    widget_on(xf.sw, EVT_CLICK, toggle, 0);
+    widget_on(row, EVT_CLICK, toggle, 0);
     widget_on(xf.dec, EVT_CLICK, step, (void *)-1L);
     widget_on(xf.add, EVT_CLICK, step, (void *)1L);
     widget_on(xf.slider, EVT_VALUE_CHANGING, slid, 0);
     widget_on(xf.slider, EVT_VALUE_CHANGED, slid, 0);
     widget_on(page, EVT_DESTROY, gone, page);
     widget_set_text_utf8(title, wheel ? "Wheel Sensitivity" : "Crossfade");
-    widget_set_visible(xf.view, 1, 0); /* stock shows it only while Boot volume's switch is on */
-    if (wheel) widget_set_visible(xf.sw, 0, 0);
+#if M1PLUS
+    widget_set_text_utf8(name, "Crossfade");
+#endif
+    /* Stock shows it only while Boot volume is in use; V2.1 also disables it while it is hidden. */
+    widget_set_visible(xf.view, 1, 0);
+    widget_set_enable(xf.view, 1);
+    if (wheel) widget_set_visible(row, 0, 0);
     slider_set_min(xf.slider, wheel ? 50 : 0);
     slider_set_max(xf.slider, wheel ? 200 : XF_MAX);
     slider_set_step(xf.slider, wheel ? 10 : 1);
