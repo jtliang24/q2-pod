@@ -22,7 +22,7 @@ inferred from what the commit changed and is marked *(inferred)*.
 | Oct 17 | V2.1's whole demo under emulation | `9ab2a38` … `72c3310` |
 | Oct 17 | First device test, then fixes from it | `75bc4b3` … `d2fbfe5` |
 | Oct 17 | Keys in the emulator, second device test | `c265690`, `15f52d2` |
-| Oct 17 | A Back button replaces the edge swipe | |
+| Oct 17 | A Back button replaces the edge swipe, third device test | `117bbc9` … `82c2866` |
 
 The branch leaves `main` at `b229c24`. There are 59 commits on `feature/m1plus-port`.
 
@@ -219,7 +219,7 @@ close the EQ.
 - the PEQ fits the screen and works with music;
 - settings survive a reboot.
 
-## 11. A Back button replaces the edge swipe (Oct 17)
+## 11. A Back button replaces the edge swipe, and the third device test (Oct 17)
 
 Q2 Pod's pages were left by gestures that nothing on screen showed: the left-edge swipe and a tap on
 the page title. Previous also acts as Back, but only while nothing plays. So with music on, those
@@ -245,6 +245,16 @@ V2.1's own pages use a visible title-bar back button, so Q2 Pod's pages now use 
   Return on the timer, and that a swipe from the edge now reaches stock unchanged.
 - `test/boot.py` closes the EQ with the button. It also opens Advanced and its Preamp screen, and
   checks that Back returns to Advanced before a second Back closes the page.
+
+**Commits:** `117bbc9` (the button), `ae3c58f` (the swipe removed), `d1e596b` (the boot walk) and
+`82c2866` (docs).
+
+**On the device,** a `--dev` build (`update.bin` `88246102…`, tag `V001s`) installed through the menu
+updater directly over `V122S`. The updater takes a new tag, so it didn't need stock first. Then:
+- About shows "CFW. Version:1.2.2 dev 1";
+- the PEQ editor's Back button closes it from Simple and from Advanced's first screen;
+- from Advanced's Preamp, Balance, band and Presets screens, Back returns to Advanced;
+- a drag from the left edge of a stock page (a list, a slider) behaves as on stock.
 
 From now on, every page on M1 has an explicit Back button. The rule is in
 [m1plus-roadmap.md](m1plus-roadmap.md)'s ground rules and in [m1plus.md](m1plus.md) §4.1.
