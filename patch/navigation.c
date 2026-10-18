@@ -255,6 +255,13 @@ typedef struct {
 #endif
     int knob_mode;
     void *setting_label[6];
+#if M1PLUS
+    /* A touch long-press (lp_input): its timer, the page and point pressed, set while qm_hold
+     * takes the row under that point (lp_touch), and the press's click to swallow. */
+    unsigned lp_timer;
+    void *lp_top;
+    int lp_x, lp_y, lp_touch, lp_swallow;
+#endif
     /* Queue menu: the hold's AWTK press time marks its release; the target is a track/list row
      * checked by count, record and browsing-state hashes; qm_cls is the class its list holds;
      * qm_forced is a shuffle Play next. */
@@ -3413,6 +3420,9 @@ int ringnav_dispatch(void *target, void *event) {
     if (st.pull_page && (!event || !pull_live() || I(event, EVENT_TYPE) == EVT_KEY_DOWN_BEFORE))
         pull_cancel();
     if (target && event && I(event, EVENT_TYPE) == EVT_CLICK) {
+#if M1PLUS
+        if (st.lp_swallow) return STOP; /* the release of a long press that opened a menu */
+#endif
         for (void *w = target; w; w = P(w, W_PARENT))
             if (widget_get_prop_int(w, PULL_SUPPRESS, 0)) return STOP;
         pull_cancel();
@@ -5607,9 +5617,28 @@ static int qm_open(const void *unused) {
     return 0;
 }
 
+#if M1PLUS
+/* A touch long-press's row: the entry under the pressed point, as an index into m. The point must
+ * be on the list itself, since a recycled table keeps rows past its viewport. */
+static int lp_entry(menu_t *m) {
+    int xy[2] = { st.lp_x, st.lp_y };
+    widget_to_local(m->w, xy);
+    if (xy[0] < 0 || xy[1] < 0 || xy[0] >= I(m->w, W_W) || xy[1] >= m->height) return -1;
+    for (int i = 0; i < m->n; ++i) {
+        rect_t r = bounds(m, i);
+        if (xy[0] >= r.x && xy[0] < r.x + r.w && xy[1] >= r.y && xy[1] < r.y + r.h) return i;
+    }
+    return -1;
+}
+#define LP_TOUCH st.lp_touch
+#else
+#define LP_TOUCH 0
+#endif
+
 /* The hold: the same gates and row as a centre press, over the stock showlist or Coverflow's
  * own tracks (row count checked), or the album at the centre of Coverflow's covers. Everything
- * else stays stock. */
+ * else stays stock. On M1 Plus a touch long-press (LP_TOUCH) takes the row under the finger
+ * instead of the highlighted one, with the finger still down and no key to swallow. */
 static int qm_hold(void) {
     st.qm_choice = 0;
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
@@ -5623,7 +5652,8 @@ static int qm_hold(void) {
     }
     if (st.qm_dialog || st.qm_timer || st.qm_playlist || !usable() ||
         (!playing && !allowed_top(top)) || window_manager_is_animating(wm) ||
-        window_manager_get_pointer_pressed(wm) || airplayGetFlag() == 2 || g_navbar_status)
+        (!LP_TOUCH && window_manager_get_pointer_pressed(wm)) || airplayGetFlag() == 2 ||
+        g_navbar_status)
         return 0;
     if (playing) {
         unsigned at, n, type = (unsigned)MCL(MCL_TYPE);
@@ -5658,10 +5688,14 @@ static int qm_hold(void) {
     void *list = page_tracks(top);
     int coverflow = list != 0;
     void *w = surface_under(top, (void *)0, (void *)0, 0);
-    if ((!coverflow && kind < CTX_FOLDER) || !w || !load(&g_menu, w, 1) || g_menu.ctx < 0 ||
+    if ((!coverflow && kind < CTX_FOLDER) || !w || !load(&g_menu, w, !LP_TOUCH) || g_menu.ctx < 0 ||
         g_menu.kind == 3)
         return 0;
+#if M1PLUS
+    int cur = LP_TOUCH ? lp_entry(&g_menu) : reconcile(&g_menu, !moving(&g_menu));
+#else
     int cur = reconcile(&g_menu, !moving(&g_menu));
+#endif
     if (!coverflow) list = P(p_deque_showlist, 0);
     if (cur < 0 || !list || deque_size(list) != (unsigned)g_menu.rows) return 0;
     void *r = deque_at(list, g_menu.id[cur]);
@@ -5669,7 +5703,7 @@ static int qm_hold(void) {
      * (0xff07 songs, 0xff01 albums) but not g_class_type. */
     unsigned cls = (unsigned)(tk_strcmp(name, "artistinfo_page") ? I(g_class_type, 0)
                                                                  : I(g_local_classinfo_save, 0));
-    if (!r || !key) return 0;
+    if (!r || (!key && !LP_TOUCH)) return 0;
     st.qm_kind = I(r, REC_TYPE) == 8 ? QM_SONG : 0;
     if (coverflow) {
         if (st.qm_kind) st.qm_kind = QM_COVERFLOW;
@@ -5685,7 +5719,7 @@ static int qm_hold(void) {
     st.qm_rows = (unsigned)g_menu.rows;
     st.qm_hash = rec_hash(r);
     st.qm_browse = browse_hash();
-    st.qm_press = *(unsigned long long *)((char *)key + INPUT_KEY_TIME);
+    st.qm_press = LP_TOUCH ? 0 : *(unsigned long long *)((char *)key + INPUT_KEY_TIME);
     drop_input();
     return 1;
 }
@@ -6307,12 +6341,63 @@ void dispatch_key_return(void) {
     stock_input_trampoline(window_manager(), (void *)ev);
 }
 
+#if M1PLUS
+/* Touch long-press: a press held still LONG_PRESS_MS on a row or tile of a library page opens
+ * that row's hold menu, as Play/Pause held on a highlighted row does (qm_hold takes the row under
+ * the finger). The native press is aborted, as a claimed pull is (pull_event), and the release's
+ * click swallowed, so the row doesn't open as well. A press that moves is the list's scroll. */
+static int lp_fire(const void *unused) {
+    (void)unused;
+    st.lp_timer = 0;
+    void *wm = window_manager(), *top = window_manager_get_top_window(wm);
+    if (!top || top != st.lp_top || !window_manager_get_pointer_pressed(wm)) return 0;
+    st.lp_touch = 1;
+    int taken = qm_hold();
+    st.lp_touch = 0;
+    if (!taken) return 0;
+    st.lp_swallow = 1;
+    unsigned abort_event[12];
+    pointer_event_init(abort_event, EVT_POINTER_ABORT, top, st.lp_x, st.lp_y);
+    widget_dispatch_event_to_target_recursive(top, abort_event);
+    return 0; /* RET_REMOVE */
+}
+
+static void lp_input(void *e) {
+    unsigned type = e ? (unsigned)I(e, EVENT_TYPE) : 0;
+    if (type == EVT_INPUT_POINTER_DOWN) {
+        st.lp_swallow = 0;
+        stop_timer(&st.lp_timer);
+        void *top = window_manager_get_top_window(window_manager());
+        int ctx = top ? context_id(widget_get_prop_str(top, "name", "")) : -1;
+        if (ctx < 0 || contexts[ctx].kind < CTX_FOLDER) return;
+        st.lp_top = top;
+        st.lp_x = I(e, EVENT_X);
+        st.lp_y = I(e, EVENT_Y);
+        rearm(&st.lp_timer, lp_fire, LONG_PRESS_MS);
+    } else if (st.lp_timer && type == EVT_INPUT_POINTER_MOVE) {
+        int dx = I(e, EVENT_X) - st.lp_x, dy = I(e, EVENT_Y) - st.lp_y;
+        if (dx >= PULL_CLAIM_PX || -dx >= PULL_CLAIM_PX || dy >= PULL_CLAIM_PX || -dy >= PULL_CLAIM_PX)
+            stop_timer(&st.lp_timer);
+    } else if (type == EVT_POINTER_UP)
+        stop_timer(&st.lp_timer);
+}
+#endif
+
 /* window_manager_dispatch_input_event: while q2video plays (books.c) no key or touch reaches the
  * UI; a key's release goes to the player instead. Every event times ringnav_sleep's idle. */
 int ringnav_input(void *wm, void *e) {
     if (e && wake_gate(e)) return 0;
     st.last_input = time_now_ms();
+#if M1PLUS
+    lp_input(e);
+    if (!video_on()) {
+        int result = stock_input_trampoline(wm, e);
+        if (e && I(e, EVENT_TYPE) == EVT_POINTER_UP) st.lp_swallow = 0; /* its click is past */
+        return result;
+    }
+#else
     if (!video_on()) return stock_input_trampoline(wm, e);
+#endif
     if (e && I(e, EVENT_TYPE) == EVT_KEY_UP) video_key((unsigned)I(e, EVENT_KEY));
     return 0;
 }

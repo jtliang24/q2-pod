@@ -3431,6 +3431,51 @@ for kw,setup,want in (({},None,('Row 0',SONG_MENU)),
         ({'cls':0xf006,'page':'localclass_page'},lambda m:m.word(m.row(0)+0x1c,m.string('Pop')),('Pop',GROUP)),
         ({'page':'folder_page','cls':1},lambda m:m.word(m.row(0)+O['REC_TYPE'],4),('Row 0',GROUP))):
     assert menu(QueueMachine(**kw),setup)==want, (kw,want); passed()
+if is_m1plus:
+    # A touch long-press (navigation.c lp_input): a press held still LONG_PRESS_MS on a row opens
+    # that row's menu, as Play/Pause held on the highlighted row does, whatever is highlighted (the
+    # harness highlights the first). The native press is aborted and the row's click swallowed
+    # until the release, which reaches stock. A press that moves (a scroll), lifts early or lands
+    # off the list opens nothing. Rows are 48 px from y 0; the list shows two (96 px).
+    LP_INPUT,LONG=HOOKS['window_manager_dispatch_input_event'][0],O['LONG_PRESS_MS']
+    tslib=Machine().u.mem_read  # V2.1's input thread (tslib_run) queues 0xff, then 0x101 moves, then 0x103
+    assert struct.unpack('<3I',bytes(tslib(0x637634,8))+bytes(tslib(0x6376f8,4)))==(0x240200ff,0x24020101,0x24020103)
+    assert (O['EVT_INPUT_POINTER_DOWN'],O['EVT_INPUT_POINTER_MOVE'],O['EVT_POINTER_UP'])==(0xff,0x101,0x103)
+    def long_press(m,y,held=LONG,moves=(),x=100):
+        """Press at (x, y), move by each of moves, hold held ms, then click the row under the finger
+        and lift. Returns the menu's (title, labels) or None, and whether the click reached the row."""
+        m.handlers[LP_INPUT+12]='stock_input'; page=m.top
+        def send(kind,x,y):
+            m.word(m.event+O['EVENT_Y'],y)
+            assert m.call(x,address=LP_INPUT,args=(m.wm,m.event,0,0),event_type=kind,gap=0,clear=False)==0
+        m.calls=[]; m.pressed=1; send(O['EVT_INPUT_POINTER_DOWN'],x,y)
+        for dx,dy in moves: send(O['EVT_INPUT_POINTER_MOVE'],x+dx,y+dy)
+        m.advance(held,clear=False)
+        opened=m.top!=page and m.nodes[m.top]['name']=='sortselect_dialog'
+        aborted=[c for c in m.calls if c[0]=='widget_dispatch_event_to_target_recursive']
+        assert [c[1] for c in aborted]==([page] if opened else [])
+        if opened: assert m.get(aborted[0][2]+O['EVENT_TYPE'])==O['EVT_POINTER_ABORT']
+        row=next(r for r in m.nodes[m.surface]['children'] if m.get(r+O['W_Y'])<=y<m.get(r+O['W_Y'])+48)
+        m.calls=[]; m.call(address=HOOKS['widget_dispatch'][0],args=(m.nodes[row]['children'][0],m.event,0,0),event_type=O['EVT_CLICK'],gap=0,clear=False)
+        clicked=bool(m.dispatched())
+        m.pressed=0; send(O['EVT_POINTER_UP'],x,y); m.advance(1000)
+        assert m.calls==[] or not any(c[0]=='navigator_to' for c in m.calls)  # nothing opens later
+        return ((m.nodes[m.title]['text'],m.labels()) if opened else None),clicked
+    for kw,setup,y,want in (({},None,60,('Row 1',SONG_MENU)),
+            ({'cls':0xf003,'page':'album_page'},None,10,('Album',[*GROUP[:3],'Add to Favourites','Rate Album',GROUP[3],'Go to Artist'])),
+            ({'cls':0xff01,'page':'album_page'},None,60,('Album',GROUP)),
+            ({'cls':0xf004,'page':'localclass_page'},None,60,('Artist',GROUP)),
+            ({'page':'folder_page','cls':1},lambda m:m.word(m.row(1)+O['REC_TYPE'],4),60,('Row 1',GROUP))):
+        m=QueueMachine(**kw)
+        if setup: setup(m)
+        assert long_press(m,y)==(want,False), (kw,want)
+        # The click after the release is the row's again.
+        m.calls=[]; m.call(address=HOOKS['widget_dispatch'][0],args=(m.nodes[m.nodes[m.surface]['children'][0]]['children'][0],m.event,0,0),event_type=O['EVT_CLICK'],gap=0,clear=False)
+        assert m.dispatched(); passed()
+    for kw in (dict(moves=((8,0),)),dict(moves=((0,-9),)),dict(held=LONG-1),dict(y=100),dict(x=250)):
+        assert long_press(QueueMachine(),**{'y':60,**kw})==(None,True), kw; passed()
+    assert long_press(QueueMachine(),60,moves=((7,-7),))[0]==('Row 1',SONG_MENU); passed()  # a tremor isn't a scroll
+    m=QueueMachine(page='sysset_page'); assert long_press(m,60)==(None,True); passed()  # not a library page
 # Favourites: Add runs batch-select's Add to My Fav for the row alone, which tags a folder file;
 # Remove deletes it, and on My Fav itself flags the list to reload as Now Playing's heart does.
 m=QueueMachine(); assert m.run(2,steps=3)=='Added to Favourites' and m.names()==['A','B','C']
@@ -5183,7 +5228,7 @@ else:
     m,shown=artist_years()
     assert shown==['Row 1','Row 2','Row 0'] and m.query[:2]==('getMusicBySonger','Artist'), (shown,m.query)
     assert len(m.sqls)==1 and m.sqls[0].endswith('order by ifnull(max(year),0)=0,max(year) desc,album COLLATE NOCASE'), m.sqls
-    # The harness highlights the first row; on the device nothing can yet (NOT PORTED below)
+    # The harness highlights the first row, as Knob Navigation Mode does on the device
     assert menu(m)==('New',[*COVER_ALBUM,'Add to Playlist']); passed()  # the first row, rated as its album
     m,shown=artist_years(artist_type=1,YEAROLD='1')  # Album Artist browsing; Year Order: Oldest First
     assert shown==['Row 1','Row 2','Row 0'] and m.query[:4]==(*BY_ALBUM_ARTIST('Artist'),1), (shown,m.query)
@@ -5191,7 +5236,9 @@ else:
     m,shown=artist_years(ARTISTAZ='1')
     assert shown==['Row 1','Row 2','Row 0'] and m.sqls[0].endswith(' order by album COLLATE NOCASE'), m.sqls; passed()
     not_ported("Artist albums tab art keys and Coverflow (V2.1's artist page renderer and Coverflow not patched)")
-    not_ported("Rate Album from an artist's albums (the hold menu acts on the highlighted row, and nothing highlights one on M1: Knob Navigation Mode or a touch long-press)")
+    # On the device: a long press on the second album, the one under the finger (Rate Album, rated as
+    # its album).
+    m,shown=artist_years(); assert long_press(m,60)==(('Mid',[*COVER_ALBUM,'Add to Playlist']),False); passed()
 # Library > Ratings > Albums: the rated albums as Coverflow, most hearts first, with the rated Sort card alone
 # (Rating, Album, Artist, Year, kept); closing it brings the library's covers and Sort back.
 def ratings_albums(m):

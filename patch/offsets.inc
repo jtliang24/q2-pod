@@ -85,6 +85,7 @@
  * on the first sample with pressure, then 0x101 moves, 0x103 on release; V2.1 0x637634); the wm
  * turns it into EVT_POINTER_DOWN for widgets. */
 #define EVT_INPUT_POINTER_DOWN 0xff
+#define EVT_INPUT_POINTER_MOVE 0x101
 #define EVT_DESTROY 0x0c
 /* The stock settings lists the payload adds rows to, and the icons its rows borrow (each in the
  * firmware's UI assets and images; tools/build.py checks them against the rootfs). V2.1 names its
@@ -482,6 +483,8 @@ static inline int arc_out(int r, int y) {
  * Now Playing's heart RATE_HOLD_MS opens the picker. */
 #define RATE_SLOTS 4096
 #define RATE_HOLD_MS 500
+/* M1 Plus: a press held still this long on a library row opens its hold menu (ringnav_input). */
+#define LONG_PRESS_MS 500
 /* Long Songs (docs/internals.md#long-songs): songs longer than this. */
 #define LONG_SONG_S 600
 /* End bump and wrap, audited row lists only (see ring_list in patch/navigation.c). A detent past an
