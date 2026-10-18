@@ -5126,6 +5126,7 @@ else:
     m,shown=artist_years()
     assert shown==['Row 1','Row 2','Row 0'] and m.query[:2]==('getMusicBySonger','Artist'), (shown,m.query)
     assert len(m.sqls)==1 and m.sqls[0].endswith('order by ifnull(max(year),0)=0,max(year) desc,album COLLATE NOCASE'), m.sqls
+    # The harness highlights the first row; on the device nothing can yet (NOT PORTED below)
     assert menu(m)==('New',[*COVER_ALBUM,'Add to Playlist']); passed()  # the first row, rated as its album
     m,shown=artist_years(artist_type=1,YEAROLD='1')  # Album Artist browsing; Year Order: Oldest First
     assert shown==['Row 1','Row 2','Row 0'] and m.query[:4]==(*BY_ALBUM_ARTIST('Artist'),1), (shown,m.query)
@@ -5133,6 +5134,7 @@ else:
     m,shown=artist_years(ARTISTAZ='1')
     assert shown==['Row 1','Row 2','Row 0'] and m.sqls[0].endswith(' order by album COLLATE NOCASE'), m.sqls; passed()
     not_ported("Artist albums tab art keys and Coverflow (V2.1's artist page renderer and Coverflow not patched)")
+    not_ported("Rate Album from an artist's albums (the hold menu acts on the highlighted row, and nothing highlights one on M1: Knob Navigation Mode or a touch long-press)")
 # Library > Ratings > Albums: the rated albums as Coverflow, most hearts first, with the rated Sort card alone
 # (Rating, Album, Artist, Year, kept); closing it brings the library's covers and Sort back.
 def ratings_albums(m):
