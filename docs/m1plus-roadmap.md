@@ -46,14 +46,26 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
   Each needs V2.1's equivalent function. The emulator walk already covers About visually.
 
+  Five more `test:` lines cover features M1 can't reach yet, so each goes with its feature:
+  - Home's Coverflow card layout, Coverflow's track queue through `mclNextSong`, and other slide
+    menus' next and previous: with Coverflow's entry point (section 3) and its scroll distance
+    (section 2);
+  - the stock key-down helper with STOP (`0x65f688`): with Knob Navigation Mode's key-down hook;
+  - folder rollover and the UI scheduler delay: with the player call sites (section 4).
+
 ## 2. Hardware-specific behaviour (M)
 
-- **Knob Navigation Mode.** `KNOWN GAP: Knob Navigation Mode`. The setting row and the
-  `config.ini [IPOD] KNOB` read exist only in iPod builds, and V2.1's key-down isn't hooked, so the
-  remap in `ringnav_keydown` never runs.
-  - Read the setting outside iPod, and add the row to Display.
+- **Knob Navigation Mode.** `KNOWN GAP: Knob Navigation Mode`.
+  - **The problem:** `ringnav` already remaps the knob's key-up on M1, but nothing turns it on.
+    `knob_nav_active` calls `accent()`, which reads `config.ini [IPOD] KNOB`, only in iPod builds.
+    `ringnav_display` adds the Knob row only under `#if IPOD`. V2.1's key-down isn't hooked, so
+    the remap in `ringnav_keydown` never runs, and the press still turns the volume.
+  - Call `accent()` in M1's `knob_nav_active`, and add the row to Display outside `#if IPOD`.
   - Find V2.1's key-down-before handler (registered in `home_page_init` beside `on_wm_keyup_fun`) and
-    add it to `M1PLUS_HOOKS`.
+    add it to `M1PLUS_HOOKS`. The same hook brings Key Tone's click control
+    (`NOT PORTED: Key Tone and the knob remap on key-down`, `buzzeer_switch`).
+  - Back stays the on-screen button. Previous is a media key on M1, so knob navigation has no Back
+    key.
   - Test it with `test/boot.py`'s knob FIFO: with the setting on, a knob turn must move a list's
     selection, not the volume.
 - **Touch long-press opens the hold menu.** `NOT PORTED: Rate Album from an artist's albums`.
@@ -151,6 +163,8 @@ beside the Q2 one in `tools/build.py`, and moving the test's address to a per-mo
 | Feature | V1.32 site | Notes |
 |---|---|---|
 | Shuffle honours Play next | `SHUFFLE_CALL` | mclNextSong's shuffle pick |
+| Shuffle's Previous/Next history | V1.32 call-site patches | |
+| Playlist rows and click guards | V1.32 playlist builders | |
 | LDAC HQ sends 990 kbps | `LDAC_HQ` | switchBtPriority |
 | Resume on connect | `BT_CONNECT_START`, `btmenu_rows` | plus the Bluetooth page's row |
 | Standby resume stays dark | `STANDBY_WAKE` | device_standby's `awake_screen` |
@@ -158,6 +172,7 @@ beside the Q2 one in `tools/build.py`, and moving the test's address to a per-mo
 | M4B in folder scans | `AUDIO_EXTENSION_CALLS` | the `strstr` extension checks |
 | 65,000-song scan, article-free sort, Artists rows | `SCAN_LIMIT`, `SORT_TRIMS`, `CLASS_ICON` | |
 | Same-named albums' art, artist covers | `ALBUM_ART`, `ALBUM_ART_ROW`, `ARTIST_COVER_ROW` | |
+| An artist's albums' art keys | V2.1's artist page renderer | the order is ported (`ringnav_localclass`, `0xff01`) |
 | Artist pages open on Albums | `ARTIST_ALBUMS` | |
 | Artists defaults to Album Artist, read at boot | `read_artistype_value`, `ringnav_bootmode` call | |
 | Lock screen Clock row, thumbnails, cover repaint | `screensaver_rows`, `saver_cover` | |
