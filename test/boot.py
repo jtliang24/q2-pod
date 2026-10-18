@@ -12,7 +12,7 @@ Then both take the same input through WALK: touches (the shim stands in for tsli
 touchscreen's samples) and keys (the buttons' and knob's devices, /dev/input/event1 and event2, are
 FIFOs the harness writes Linux key events to). Home's pages, System Setting, About, Playback Setting
 and its EQ: each screen must match stock's, or differ where the payload changes it, and the payload's
-back button and Previous must each close its EQ.
+back button must close its EQ and Previous must not.
 Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
 import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
@@ -222,9 +222,8 @@ WALK = [
 ]
 PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back button; stock's EQ page has its own
                 ('eq_again', tap(160, 238), 5, ('as', 'eq')),
-                ('eq_previous', [PREVIOUS], 4, ('as', 'playset')),  # Previous, nothing playing: Return
+                ('eq_previous', [PREVIOUS], 4, ('as', 'eq')),  # Previous is a media key, not Back: the PEQ stays
                 # Back steps back one screen: Advanced's Preamp row, then Back to Advanced, then out.
-                ('eq_third', tap(160, 238), 5, ('as', 'eq')),
                 ('advanced', tap(250, 53), 4, ('not', 'eq')),           # the tab bar's right half
                 ('preamp', tap(160, 318), 4, ('not', 'advanced')),      # the third row, under the graph
                 ('preamp_back', BACK, 4, ('not', 'preamp', 'playset')),

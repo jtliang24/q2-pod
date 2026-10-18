@@ -8828,11 +8828,10 @@ else:
     not_ported("Now Playing's info lines (NP_INFO_CALL not patched in V2.1)")
 
 if is_m1plus:
-    # M1 Plus has no Return key, so two controls hand the window manager a Return press and release, as
-    # the input thread queues a key's (dispatch_key_return): the back button on every payload page
-    # (back_button), and Back (Previous) while nothing plays. Every event stock's dispatch receives is
-    # recorded as (type, key) when it arrives; a pointer event's x sits where a key's code does (EVENT_X
-    # == EVENT_KEY). Touches arrive as the input thread queues them (tslib_run, V2.1 0x637634):
+    # M1 Plus has no Return key, so the back button on every payload page (back_button) hands the window
+    # manager a Return press and release, as the input thread queues a key's (dispatch_key_return).
+    # Every event stock's dispatch receives is recorded as (type, key) when it arrives; a pointer
+    # event's x sits where a key's code does (EVENT_X == EVENT_KEY). Touches arrive as the input thread queues them (tslib_run, V2.1 0x637634):
     # EVT_INPUT_POINTER_DOWN on the press, then 0x101 moves and EVT_POINTER_UP.
     INPUT=HOOKS['window_manager_dispatch_input_event'][0]
     RETURN=[(O['EVT_KEY_DOWN'],O['KEY_RETURN']),(O['EVT_KEY_UP'],O['KEY_RETURN'])]
@@ -8873,14 +8872,13 @@ if is_m1plus:
     assert len(buttons)==1 and m.nodes[buttons[0]]['style']=='navbar_btnreturn_style'
     assert not m.nodes[title].get('handlers') and 'clickable' not in m.nodes[title]
     assert m.get(title+O['W_X'])==O['BACK_W'] and m.get(title+O['W_W'])==O['UI_W']-2*O['BACK_W']; passed()
-    # Back: Return while nothing plays and Now Playing is not on top; there it stays Previous.
+    # Previous is a media key, as on stock, never Return: the back button is the way back. Idle, on
+    # Now Playing, and with the screen off and the keys locked (stock's key lock, not a hidden page's Back).
     m=input_machine(); m.calls=[]
-    assert m.call(O['KEY_BACK_BTN'],gap=1000)==11 and dispatched(m)==RETURN and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
-    m=input_machine('playing_page'); m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]; passed()
-    def back_locked():  # screen off and keys locked: stock's key lock, not a hidden page's Back
-        m=input_machine(); m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
-        m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]
-    known_gap('Back with the screen off and the keys locked sends Return to the hidden page', back_locked)
+    m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[] and 'on_wm_keyup_fun' in [c[0] for c in m.calls]
+    m=input_machine('playing_page'); m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]
+    m=input_machine(); m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
+    m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[] and 'on_wm_keyup_fun' in [c[0] for c in m.calls]; passed()
     def knob_navigates():  # [IPOD] KNOB=1: the knob's turns move the selection, not the volume
         m=input_machine(); m.config['KNOB']='1'; m.call(O['KEY_VOLUMEUP'],gap=1000)
         assert m.get(m.event+O['EVENT_KEY'])==O['KEY_NEXT']

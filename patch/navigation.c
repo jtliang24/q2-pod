@@ -6552,10 +6552,6 @@ int ringnav(void *ctx, void *event) {
         else if (key == KEY_VOLUMEUP) key = KEY_NEXT, I(event, EVENT_KEY) = KEY_NEXT;
         else if (key == KEY_POWER && !boot_guard) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
     }
-    if (!media_playing() && !now_playing() && key == KEY_BACK_BTN) {
-        dispatch_key_return();
-        return STOP;
-    }
 #else
     int boot_guard = g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD;
 #endif
