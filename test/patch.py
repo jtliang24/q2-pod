@@ -8789,12 +8789,13 @@ else:
     not_ported("Now Playing's info lines (NP_INFO_CALL not patched in V2.1)")
 
 if is_m1plus:
-    # M1 Plus has no Return key, so three gestures hand the window manager a Return press and release,
-    # as the input thread queues a key's (dispatch_key_return): a swipe in from the left edge, a tap
-    # on a payload page's title, and Back (Previous) while nothing plays. Every event stock's dispatch
-    # receives is recorded as (type, key) when it arrives; a pointer event's x sits where a key's code
-    # does (EVENT_X == EVENT_KEY). Touches arrive as the input thread queues them (tslib_run, V2.1
-    # 0x637634): EVT_INPUT_POINTER_DOWN on the press, then 0x101 moves and EVT_POINTER_UP.
+    # M1 Plus has no Return key, so three controls hand the window manager a Return press and release,
+    # as the input thread queues a key's (dispatch_key_return): a swipe in from the left edge, the back
+    # button on every payload page (back_button), and Back (Previous) while nothing plays. Every event
+    # stock's dispatch receives is recorded as (type, key) when it arrives; a pointer event's x sits
+    # where a key's code does (EVENT_X == EVENT_KEY). Touches arrive as the input thread queues them
+    # (tslib_run, V2.1 0x637634): EVT_INPUT_POINTER_DOWN on the press, then 0x101 moves and
+    # EVT_POINTER_UP.
     INPUT=HOOKS['window_manager_dispatch_input_event'][0]
     RETURN=[(O['EVT_KEY_DOWN'],O['KEY_RETURN']),(O['EVT_KEY_UP'],O['KEY_RETURN'])]
     PRESS,MOVE,LIFT=O['EVT_INPUT_POINTER_DOWN'],0x101,O['EVT_POINTER_UP']
@@ -8825,13 +8826,23 @@ if is_m1plus:
     assert touch((PRESS,10,200),(MOVE,30,203),(LIFT,40,203))==[(PRESS,10),(LIFT,40)]            # too short: held moves dropped
     assert touch((PRESS,32,200),(MOVE,82,200),(LIFT,82,200))==[(PRESS,32),(MOVE,82),(LIFT,82)]  # not from the edge
     passed()
-    # The title of a page made by page_title: its click takes nothing else, and the Return follows on
-    # a timer, outside the title's own dispatch (it closes the page).
-    m=input_machine(); title=m.call(address=payload_syms['page_title'],args=(m.node('view'),m.string('Photos'),0,0),gap=0)
-    (f,ctx),=[(f,ctx) for t,f,ctx in m.nodes[title]['handlers'] if t==O['EVT_CLICK']]
+    # The back button, V2.1's btn_return at the top left: its click takes nothing else, and the Return
+    # follows on a timer, outside the button's own dispatch (it closes the page).
+    m=input_machine(); button=m.call(address=payload_syms['back_button'],args=(m.node('view'),0,0,0),gap=0)
+    b=m.nodes[button]
+    assert b['type']=='button' and b['style']=='navbar_btnreturn_style'
+    assert (b['style:normal:icon'],b['style:over:icon'],b['style:pressed:icon'])==('return','return','return_down')
+    assert [m.get(button+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[0,0,O['BACK_W'],48]
+    (f,ctx),=[(f,ctx) for t,f,ctx in b['handlers'] if t==O['EVT_CLICK']]
     m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),event_type=O['EVT_CLICK'],gap=0)==11 and dispatched(m)==[]
     m.advance(0); assert dispatched(m)==RETURN
     m.advance(1000); assert dispatched(m)==[]; passed()
+    # page_title puts the back button beside a plain title, centred on the screen.
+    m=input_machine(); body=m.node('view'); title=m.call(address=payload_syms['page_title'],args=(body,m.string('Photos'),0,0),gap=0)
+    buttons=[c for c in m.nodes[body]['children'] if m.nodes[c]['type']=='button']
+    assert len(buttons)==1 and m.nodes[buttons[0]]['style']=='navbar_btnreturn_style'
+    assert not m.nodes[title].get('handlers') and 'clickable' not in m.nodes[title]
+    assert m.get(title+O['W_X'])==O['BACK_W'] and m.get(title+O['W_W'])==O['UI_W']-2*O['BACK_W']; passed()
     # Back: Return while nothing plays and Now Playing is not on top; there it stays Previous.
     m=input_machine(); m.calls=[]
     assert m.call(O['KEY_BACK_BTN'],gap=1000)==11 and dispatched(m)==RETURN and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]

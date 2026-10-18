@@ -78,7 +78,12 @@ static const struct { double first, step; int rows; } picks[] = {{-12, 0.5, 49},
 #define E3_BAND (E3_COL - 13)            /* a column's card and captions */
 #define E3_BUTTON ((UI_W - 33) / 2)
 #define E3_RIGHT (UI_W - 12 - E3_BUTTON) /* Reset's x */
-#define TAB_W ((UI_W - 23) / 2)
+#if M1PLUS
+#define TAB_LEFT BACK_W /* Simple's x: the back button is left of the tabs */
+#else
+#define TAB_LEFT 8
+#endif
+#define TAB_W ((UI_W - TAB_LEFT - 15) / 2)
 #define TAB_RIGHT (UI_W - 8 - TAB_W)     /* Advanced's x */
 #define E3_SAVE_MS 250
 enum { E3_TABS, E3_SWITCH, E3_LOW, E3_HIGH = 4, E3_RESET };
@@ -429,7 +434,7 @@ static int render(const void *unused) {
     char text[160], value[32];
     int n = 0;
     static const char *const types[] = {"Peaking", "Low shelf", "High shelf"};
-    /* No Back row: Return steps back on every screen (keyup). */
+    /* No Back row: Return steps back on every screen (keyup), as M1 Plus's back button does (bar). */
     if (ui.screen == HOME) {
         row(view, n++, ui.dirty ? "Apply changes" : "Nothing to apply", ui.dirty ? APPLY : -1);
         row_dim(view, n++, "Advanced", ui.draft.bypass ? "Off" : "On", BYPASS, 0);
@@ -525,7 +530,7 @@ static int render(const void *unused) {
     }
     /* A message takes the title bar until the next action, so it never shrinks the list; on the
      * main screen the bar otherwise shows the tabs (peq_paint). */
-    void *title = ui.screen == HOME ? bar(ui.page, 0, UI_W) : bar(ui.page, 8, UI_W - 16);
+    void *title = ui.screen == HOME ? bar(ui.page, 0, UI_W) : bar(ui.page, TAB_LEFT, UI_W - 2 * TAB_LEFT);
     ui.bar = ui.screen == HOME ? title : 0;
     text[0] = 0;
     if (ui.status[0]) snprintf(text, sizeof(text), "%s", ui.status);
@@ -683,16 +688,20 @@ static int tab_touch(void *ctx, void *event) {
     (void)ctx;
     int xy[2] = { I(event, EVENT_X), I(event, EVENT_Y) };
     widget_to_local(ui.page, xy);
-    tab_to(xy[0] < (UI_W + 1) / 2 ? SIMPLE : ADVANCED);
+    tab_to(xy[0] < (TAB_LEFT + TAB_W + TAB_RIGHT) / 2 ? SIMPLE : ADVANCED);
     return 0;
 }
 
-/* The title label; the tabs' bar when the bar takes their taps. */
+/* The title label; the tabs' bar when the bar takes their taps. On M1 Plus the back button sits over
+ * its left end, created after the page's other widgets so it takes the taps there. */
 static void *bar(void *page, int x, int w) {
     void *title = label_create(page, x, 0, w, 48);
     widget_use_style(title, STYLE_LABEL_WHITE20C);
     widget_set_prop_int(title, "line_wrap", 1);
     if (w == UI_W) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
+#if M1PLUS
+    back_button(page);
+#endif
     return title;
 }
 
@@ -915,7 +924,7 @@ static void tabs_paint(void *canvas) {
     if (simple ? e3.status != 0 : ui.status[0] != 0) return;
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
     for (int i = 0; i < 2; ++i) {
-        int x = i ? TAB_RIGHT : 8, shown = i == !simple;
+        int x = i ? TAB_RIGHT : TAB_LEFT, shown = i == !simple;
         if (focus && !shown) e3_box(canvas, x, 4, TAB_W, 40, 0x333333);
         caption(canvas, i ? "Advanced" : "Simple", x, 4, TAB_W, 40, 20, shown ? 0xffffffffu : CF_GREY);
         if (shown) e3_box(canvas, x + (TAB_W - 96) / 2, 42, 96, 3, TONE);

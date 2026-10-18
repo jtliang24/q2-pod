@@ -934,28 +934,42 @@ void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(vo
 }
 
 #if M1PLUS
-static int title_return(const void *info) {
+static int back_return(const void *info) {
     (void)info;
     dispatch_key_return();
     return 0; /* not RET_REPEAT: one shot */
 }
-/* After the click: the Return closes the page, which must not happen inside its title's dispatch. */
-static int page_title_click(void *ctx, void *event) {
+/* After the click: the Return closes the page, which must not happen inside the button's dispatch. */
+static int back_click(void *ctx, void *event) {
     (void)ctx;
     (void)event;
-    timer_add(title_return, 0, 0);
+    timer_add(back_return, 0, 0);
     return STOP;
+}
+
+/* M1 Plus has no Return key: every page the payload opens or replaces gets V2.1's title-bar back
+ * button at its top left, a Return when clicked (the page's keyup closes it or steps back a screen).
+ * Shared with peq_ui.c. */
+void *back_button(void *parent) {
+    void *button = widget_factory_create_widget(widget_factory(), "button", parent, 0, 0, BACK_W, 48);
+    widget_use_style(button, STYLE_NAVBAR_RETURN);
+    widget_set_prop_str(button, "style:normal:icon", ICON_RETURN);
+    widget_set_prop_str(button, "style:over:icon", ICON_RETURN);
+    widget_set_prop_str(button, "style:pressed:icon", ICON_RETURN_DOWN);
+    widget_on(button, EVT_CLICK, back_click, 0);
+    return button;
 }
 #endif
 
-/* A page's 48px title bar; shared with photos.c. */
+/* A page's 48px title bar, on M1 Plus after a back button; shared with photos.c. */
 void *page_title(void *body, const char *caption) {
-    void *title = text(body, CF_X, 0, CF_W, 48);
-    widget_set_text_utf8(title, caption);
 #if M1PLUS
-    widget_set_prop_int(title, "clickable", 1);
-    widget_on(title, EVT_CLICK, page_title_click, 0);
+    void *title = text(body, BACK_W, 0, UI_W - 2 * BACK_W, 48); /* still centred on the screen */
+    back_button(body);
+#else
+    void *title = text(body, CF_X, 0, CF_W, 48);
 #endif
+    widget_set_text_utf8(title, caption);
     return title;
 }
 

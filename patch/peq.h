@@ -150,6 +150,9 @@ typedef struct { peq_dsp dsp; peq_preset preset; int id; } player_state; /* id: 
 void *text(void *parent, int x, int y, int w, int h);
 void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(void *, void *));
 void *page_title(void *body, const char *caption);
+#if M1PLUS
+void *back_button(void *parent);
+#endif
 void *page_list(void *page, void *body, void **title, const char *caption, int n, int item_h);
 void *page_row_detail(void *view, int index, const char *caption, const char *detail,
                       int (*click)(void *, void *));

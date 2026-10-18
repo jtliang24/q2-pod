@@ -135,6 +135,11 @@
 #define STYLE_SCRLABEL_WHITE20L "srlabel_leftwhite20_style"
 #define STYLE_SCRLABEL_WHITE20R "srlabel_item_right_gray16_styl"
 #define STYLE_SCRLABEL_WHITE24L "srlabel_leftwhite22_style"
+/* V2.1's title-bar back button (btn_return in its pages' navigationbar_view), which back_button copies. */
+#define STYLE_NAVBAR_RETURN "navbar_btnreturn_style"
+#define ICON_RETURN "return"
+#define ICON_RETURN_DOWN "return_down"
+#define BACK_W 48 /* back_button's width, the payload's title-bar height: titles start after it */
 #else
 #define STYLE_LISTITEM_BLACK "s_listitem_black"
 #define STYLE_BTN_LISTITEM "s_btn_listitem"

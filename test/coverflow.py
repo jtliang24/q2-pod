@@ -47,7 +47,7 @@ widget_factory_create_widget image_create hscroll_label_create set_hscroll_label
 slide_menu_set_value slide_menu_item_width list_view_create scroll_view_create list_item_create image_set_draw_type
 image_base_set_image widget_load_image widget_unload_image widget_set_name widget_use_style
 widget_set_text_utf8 widget_restack widget_animator_prop_create widget_animator_prop_set_params widget_animator_start widget_set_visible widget_get_prop_int widget_set_prop_int
-widget_get_prop_str widget_on widget_destroy_children widget_invalidate_force
+widget_get_prop_str widget_set_prop_str widget_on widget_destroy_children widget_invalidate_force
 widget_count_children widget_get_child widget_lookup widget_move_resize widget_get_visible
 canvas_get_clip_rect canvas_set_clip_rect widget_set_sensitive widget_get_type tk_strcmp
 timer_add timer_remove navigator_back_to_home navigator_back window_manager_close_window_force navigator_to_with_context bitmap_create_ex bitmap_destroy bitmap_unlock_buffer
@@ -150,6 +150,7 @@ int widget_set_visible(void *x, int v, int r) { (void)r; W(x)->visible = v; retu
 int widget_get_prop_int(void *x, const char *k, int d) { (void)x; (void)k; return d; }
 int widget_set_prop_int(void *x, const char *k, int v) { if (!strcmp(k, "style:normal:bg_color")) W(x)->bg = v; return 0; }
 const char *widget_get_prop_str(void *x, const char *k, const char *d) { return strcmp(k, "image") ? d : W(x)->image; }
+int widget_set_prop_str(void *x, const char *k, const char *v) { (void)x; (void)k; (void)v; return 0; }
 unsigned widget_on(void *x, unsigned type, handler f, void *ctx) {
     if (!x) return 0;
     if (type == EVT_CLICK || type == EVT_KEY_UP || type == EVT_DESTROY) {
