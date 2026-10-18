@@ -162,6 +162,7 @@
 #define EVT_KEY_UP 0x113
 #define EVT_KEY_UP_BEFORE 0x114
 #define EVT_WINDOW_BACKGROUND 0x12c
+#define EVT_WINDOW_FOREGROUND 0x12d /* playset_playset_page_init binds its list's rebuild to it */
 #define EVT_WINDOW_CLOSE 0x12e
 #else
 #define EVT_KEY_DOWN 0x110        /* widget_on_keydown @0x6627c4 (0x111 is its long press) */
@@ -169,6 +170,7 @@
 #define EVT_KEY_UP 0x114          /* wm keyup dispatch @0x523eb8 */
 #define EVT_KEY_UP_BEFORE 0x115   /* wm keyup-before dispatch @0x523e80 */
 #define EVT_WINDOW_BACKGROUND 0x12a
+#define EVT_WINDOW_FOREGROUND 0x12b
 #define EVT_WINDOW_CLOSE 0x12c
 #endif
 #define PULL_SEARCH_PX 48       /* device tuning: release distance from the initial touch */

@@ -8119,7 +8119,8 @@ def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False):
     for e in m.nodes[view]['children']: m.word(e+O['W_PARENT'],view)
     m.top=m.node('window','page',[m.node('list_view','list_view',[view])])
     target={'power':'systemset_powermanager_page_init','audioset':'playset_playset_page_init','btrows':'btmenu_rows','display':'systemset_display_page_init'}[hook]
-    assert m.call(address=HOOKS[target][0],args=(m.top,5,0,0),gap=0)==0 and m.calls[0][:3]==('stock_'+hook,m.top,5)
+    assert m.call(address=HOOKS[target][0],args=(m.top,5,0,0),gap=0)==0 and [c[:3] for c in m.calls if c[0]==f'stock_{hook}']==[('stock_'+hook,m.top,5)]
+    m.init_calls=list(m.calls)
     rows=sorted(set(m.nodes[view]['children'])-set(entries))  # ours, as made (the page may restack)
     buttons=[row_button(m,r) for r in rows]; labels=[m.nodes[b]['children'][-1] for b in buttons]
     icons=[m.nodes[m.nodes[b]['children'][0]].get('image') for b in buttons]  # None: no icon (the label first)
@@ -8208,6 +8209,29 @@ for config,text in (({'XFADE':'1','XFADESEC':'7'},'Crossfade: 7 s'),({'XFADE':'1
     m,rows,texts,*_=settings_page('audioset',NAMES['VIEW_PLAYSET'],config,stock_rows=15)
     assert texts()[3]==text and m.nodes[m.nodes[row_button(m,rows[3])]['children'][1]].get('name')=='label_xfade'
 passed()
+# M1 Plus: V2.1 rebuilds the Playback list whole, stock's rows only, whenever the page comes back
+# to the front (from EQ, Default Vol or Crossfade's page): its init binds EVT_WINDOW_FOREGROUND to a
+# handler that destroys the rows and builds stock's again. The payload's handler adds its rows again,
+# as they were; AWTK runs the newest handler first, so it is bound before stock's init runs.
+if is_m1plus:
+    from build import M1PLUS_GP
+    v21=(B/'stock-demo').read_bytes()
+    def word(a): return struct.unpack_from('<I',v21,fileoff(v21,a))[0]
+    def half(a): return struct.unpack_from('<h',v21,fileoff(v21,a))[0]
+    assert O['EVT_WINDOW_FOREGROUND']==0x12d and word(0x4a0ca4)==0x2405012d  # init: li $a1, 0x12d for its widget_on
+    assert (word(M1PLUS_GP+half(0x4a0ca0))+half(0x4a0cb4))&0xffffffff==0x4a0c50  # its $a2: GOT page + addiu
+    assert word(0x4a0c70)==0x04110000|((0x4a0578-0x4a0c74)>>2&0xffff)  # the handler: bal the list's builder
+    assert word(0x4a05ec)==0x8f99a9fc and word(M1PLUS_GP-0x5604)==syms['widget_destroy_children']  # which empties it
+    assert (word(0x6f4668),word(0x6f466c),word(0x6f4670))==(0x8e030000,0xac430020,0xae020000)  # emitter_on: item->next=items; items=item
+    m,rows,texts,*_=settings_page('audioset',NAMES['VIEW_PLAYSET'],{'XFADE':'1','XFADESEC':'7'},stock_rows=15)
+    before=texts(); view=named(m,m.top,NAMES['VIEW_PLAYSET'])
+    order=[c[0] for c in m.init_calls if c[0]=='stock_audioset' or (c[0]=='widget_on' and c[2]==O['EVT_WINDOW_FOREGROUND'])]
+    assert order==['widget_on','stock_audioset']
+    f,ctx=m.handler(m.top,O['EVT_WINDOW_FOREGROUND']); assert ctx==m.top
+    m.nodes[view]['children']=[m.entry(view) for _ in range(15)]  # stock's rebuild
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+    again=m.nodes[view]['children'][15:]
+    assert len(again)==4 and [m.nodes[m.nodes[row_button(m,r)]['children'][-1]]['text'] for r in again]==before; passed()
 # Wheel sensitivity (playback.c wheel_pct, test/playback.py's travel): Display's last row in both
 # builds, Q2POD WHEELSENSITIVITY as 1.0.6 saved it, 50% unless a canonical ten in 50-200.
 if not is_m1plus:  # Q2 only: the touch wheel's
