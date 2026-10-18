@@ -57,38 +57,6 @@ here goes with other sections' features:
 
 ## 2. Hardware-specific behaviour (M)
 
-- **Touch long-press opens the hold menu.** `NOT PORTED: Rate Album from an artist's albums`.
-  - **The problem:** a Play/Pause hold opens the menu for the highlighted row (`qm_hold`). On M1
-    nothing highlights a row unless Knob Navigation Mode is on, so the hold falls through to V2.1's
-    List sort order dialog. The menu's actions are wired but unreachable. On a touchscreen, a long
-    press on the row itself is the natural way in, with or without the knob.
-  - **The fix:** in the input hook (`ringnav_input`), treat a press held still on a row or tile as
-    its hold. Take the row from the pressed widget's index into `p_deque_showlist`, not from a
-    highlight, and enter `qm_hold`'s existing path (`qm_kind`, `qm_cls`, `qm_idx`, `qm_hash`) so
-    every action and its checks ("Album changed") stay as they are. Swallow the release, so the row
-    doesn't also open.
-  - **Coexist with V2.1's touch handling:** a press that moves is a scroll or a swipe and stays
-    V2.1's. Leave Play/Pause hold as it is: without a highlight it is still V2.1's sort dialog.
-  - **Where it helps.** Each of these is a Play/Pause hold on a highlighted row on the Q2:
-    - V2.1's library pages, reachable today:
-      - an artist's albums (`album_page`) and Library → Albums (`localclass_page`): the album menu,
-        with Add to Favourites and Rate Album (the case that showed the gap);
-      - Artists, Composers and Genres (`localclass_page`): Play Next, Add to Queue or Shuffle the
-        whole group;
-      - All Songs and an album's tracks (`allmusic_page`, `albuminfo_page`): the song menu (Play
-        Next, Add to Queue, Favourites, Add to Playlist, Go to Album or Artist, Rate);
-      - Folders (`folder_page`), for a folder or a song, and Playlists (`playlist_page`).
-    - Q2 Pod's own pages, once their entry points land (section 3). These are payload widgets, so
-      the long press can be bound on the row directly:
-      - Most Played, the Ratings lists and Long Songs: the song menu;
-      - Internet Radio's stations: add to or remove from favourites (`radio_hold`);
-      - Spotify's tracks: add to Spotify's queue (`spot_hold`);
-      - Coverflow's centre cover: the album menu. Its hold already works without a highlight,
-        because the centred cover is the selection, but a long press on the cover is the touch form.
-    - Not needed on Now Playing, whose hold menu acts on the playing track.
-  - **Test it:** in `test/patch.py`, a still press held on a row of each reachable page opens that
-    row's menu and no click, and a moving press doesn't. In `test/boot.py`, a step long-presses an
-    album tile on an artist's page; that needs the card library (section 6).
 - **Coverflow and Photos scroll distance.** `KNOWN GAP`s.
   - **The problem:** V2.1's `slide_menu` steps by its own height (260 and 450 px), not by
     `slide_menu_item_width` plus a spacer as V1.32's does. Photos leave a black gap mid-swipe, and a
@@ -109,6 +77,18 @@ Each page reached this way needs a Back button (ground rules):
 - **Still need one:** the full-screen views with no title bar. These are Coverflow's carousel, the photo
   viewer, the book reader and video player, and Spotify's and Radio's Now Playing pages
   (`spotify_page`, `radionp_page`). Add `back_button` to each, over its content.
+
+Each list page reached this way should also take the touch long-press (`lp_input`), which today arms
+only on V2.1's library pages (`CTX_FOLDER`, `CTX_LOCAL`). On the Q2 these holds are Play/Pause held on
+a highlighted row:
+- Most Played, the Ratings lists and Long Songs: the song menu (`qm_hold` already reads their tracks
+  through `page_tracks`);
+- Internet Radio's stations: add to or remove from favourites (`radio_hold`);
+- Spotify's tracks: add to Spotify's queue (`spot_hold`);
+- Coverflow's centre cover: the album menu.
+
+`radio_hold` and `spot_hold` read the row from the list's `_ringnav_index`, so a long press sets that
+first. Now Playing needs none: its hold menu acts on the playing track.
 
 - **The Library's extras.** `NOT PORTED: Library's Shuffle, Ratings, Most Played and media rows`.
   - **The problem:** V1.32 has a Local Music menu that the payload extends. V2.1's Home carousel *is* the
@@ -182,7 +162,8 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   - a release note with the reflash-to-stock instructions.
 - **A card library in the emulator.** `test/boot.py` runs with an empty card. A small generated library
   (a few tagged FLAC/MP3 files) would let the walk open Album, Artist and Now Playing. Playback itself
-  would still need a stand-in for `hciplayer`'s audio output.
+  would still need a stand-in for `hciplayer`'s audio output. The touch long-press's walk step (hold an
+  album tile on an artist's page; the menu opens and the tile doesn't) waits for this.
 - **An after-boot log on the device.** The `.rockbox/rockbox` diagnostic script can leave a background
   job that writes `ps` and the full `dmesg` a minute after boot. That captures demo crashes and driver
   errors that the emulator can't see.

@@ -192,6 +192,9 @@ When switched to **Navigation**:
 - **Context Fallback to Volume**:
   - Even in Navigation mode, when on `playing_page` or when the screen is off (`!g_backlight_status`), turning the knob controls master audio volume. A knob press held by the boot guard stays Power.
 
+### 4.3 Touch Long-Press Opens the Hold Menu
+On the Q2, Play/Pause held on a highlighted row opens Q2 Pod's hold menu for that row: Play Next, Add to Queue, Favourites, Rate Album and the rest. On the M1 nothing is highlighted unless the knob is in Navigation mode. So a finger held still for 500 ms (`LONG_PRESS_MS`) on a row or tile of a library page opens the same menu for the row under the finger. That covers an artist's albums, Albums, Artists, Composers, Genres, All Songs, an album's tracks, Folders and Playlists. A press that moves is the list's scroll, and the row doesn't open on the release. Play/Pause held with nothing highlighted is still V2.1's own sort dialog. See [internals.md](internals.md#queue-menu).
+
 ---
 
 ## 5. Verified Memory Addresses, Symbols & Patch Inventory

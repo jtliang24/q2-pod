@@ -438,6 +438,35 @@ thread's call.
 headset as it was, and it fails without the pass-through. The device test still has to check, at
 low volume, that wired headphones come back at the slider's level after a headset disconnects.
 
+**Touch long-press.** A press held still for 500 ms on a library row or tile opens that row's hold
+menu, as Play/Pause held on a highlighted row does on the Q2.
+- **Arming and the row.** `lp_input` in `ringnav_input` arms on V2.1's `0xff` press, on a
+  `CTX_FOLDER`/`CTX_LOCAL` page, and stops on a `0x101` move of 8 px or on the `0x103` release.
+  `qm_hold` then runs with `LP_TOUCH` set and takes the row under the pressed point (`lp_entry`),
+  without the pointer gate or a key latch. `LP_TOUCH` is the constant 0 on Q2, so Q2's `qm_hold` and
+  both Q2 `update.tar` are byte-identical.
+- **The release.** As a claimed pull does, the hold aborts the native press. `ringnav_dispatch`
+  swallows clicks until the release has been through stock.
+- **Its own point.** The hit test requires the point to be on the list, because a recycled table
+  keeps rows past its viewport.
+
+`test/patch.py` long-presses a row of each library page and checks four things:
+- the title and the menu of the row under the finger, not the highlighted first;
+- that the page got the abort;
+- that the row's click was swallowed, and the next click goes through;
+- that nothing else opens.
+
+A move of 8 or 9 px, a release 1 ms early, and a press below or beside the list open nothing, and
+their click reaches the row. A 7 px tremor still opens the menu, and a press on a non-library page
+opens nothing. The `NOT PORTED` line for Rate Album on an artist's albums is now a long press on its
+second album. `tslib_run`'s `0x101` and `0x103` are pinned beside its `0xff`. Without the swallow,
+the suite fails.
+
+What is left for the device test, at low volume first:
+- a Bluetooth headset with absolute volume, then wired headphones after it disconnects;
+- the knob in both modes;
+- a long press on an artist's album tile, then Rate Album.
+
 ## How to check a build now
 
 ```sh
