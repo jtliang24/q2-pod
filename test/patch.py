@@ -6247,8 +6247,7 @@ if not is_m1plus:
         m=routed(audible(Machine()),**kw); m.call(address=syms['buzzeer_switch'],args=(1,0,0,0))
         assert buzzes(m)==want,kw
     m=routed(audible(Machine(),tone=0)); m.call(address=syms['buzzeer_switch'],args=(1,0,0,0)); assert not buzzes(m); passed()
-else:
-    not_ported('Key Tone and the knob remap on key-down (on_wm_keydown_before_fun, buzzeer_switch not hooked in V2.1)')
+# Q2 only: V2.1 has no Key Tone (no buzzer command) and binds no key-down handler (test/build.py).
 
 if variant=='ipod':
     def long_list(n=40,m=None):

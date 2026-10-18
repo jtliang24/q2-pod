@@ -268,6 +268,17 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         info = t.extractfile('firmware_v20.info').read().decode().splitlines()
     # This build installs over stock (and stock back over it), and the same build is refused once installed.
     assert info[0].encode() == model and 'V' in info[1] and info[1].encode() != version and info[1] == manifest['version']
+    # Knob Navigation Mode remaps the knob on its release (navigation.c knob_nav_active), which is
+    # enough because V2.1 turns the volume there: home_page_init binds the window manager's key-up
+    # to on_wm_keyup_fun and no key-down at all, and on_wm_keyup_fun opens the volume dialog for
+    # 220/221 (key - 220 < 2). V2.1 has no Key Tone (no buzzer command) to port.
+    def got(lw): return struct.unpack_from('<I', stock, fileoff(stock, M1PLUS_GP + struct.unpack_from('<h', stock, fileoff(stock, lw))[0]))[0]
+    def words(address, n): return struct.unpack_from(f'<{n}I', stock, fileoff(stock, address))
+    assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
+    bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
+    assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'
+    assert words(0x4cdbf4, 2) == (0x2443ff24, 0x2c630002) and compared(0x4cdc34, 0x4cdc44)[1] == b'dialog/volume_dialog'
+    assert b'buzzer' not in stock and b'cmd_mcu' not in stock
     for old, new in (RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H):  # same-length literals in place
         at = stock.index(old)
         assert stock.count(old) == 1 and len(new) == len(old) and demo[at:at+len(old)] == new, old
