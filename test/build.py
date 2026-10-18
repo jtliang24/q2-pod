@@ -305,6 +305,19 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         start = stock_syms[name]
         callees = [got(a) for a in range(start, start + size, 4) if words(a, 1)[0] >> 16 == 0x8f99]  # lw $t9, GOT
         assert [c for c in callees if c in order] == order * times, name
+    # The hold menu is V2.1's sortselect_dialog (navigation.c qm_sortselect_init). V2.1's navigator
+    # (0x4d00c0, navigator_to's) runs its init, and when that returns 0 tail-calls dialog_modal for a
+    # dialog whose to_modal reads set, by default: V2.1's init sets no property, and the asset has
+    # none, so without the hook navigator_to would return only once the menu had closed. The popup is
+    # 260 px wide (offsets.inc SORTSELECT_W).
+    sortselect = stock_syms['dialog_sortselect_dialog_init']
+    assert got(0x4d0200) == sortselect and words(0x4d0214, 2) == (0x1040ffda, 0x8f99b494)  # beqz $v0 to the check
+    assert got(0x4d0198) == stock_syms['widget_get_prop_bool'] and words(0x4d0194, 1) == (0x24060001,)  # default 1
+    assert compared(0x4d0190, 0x4d01a4)[1] == b'to_modal' and got(0x4d01b4) == stock_syms['dialog_modal']
+    setters = {stock_syms[n] for n in ('widget_set_prop', 'widget_set_prop_int', 'widget_set_prop_bool') if n in stock_syms}
+    assert not setters & {got(a) for a in range(sortselect, sortselect + 720, 4) if words(a, 1)[0] >> 16 == 0x8f99}
+    asset = read('rootfs.squashfs', 'release/assets/default/raw/ui/dialog/sortselect_dialog.bin')
+    assert b'to_modal' not in asset and b'default(x=c,y=m,w=260,h=360)' in asset
     for old, new in (RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H):  # same-length literals in place
         at = stock.index(old)
         assert stock.count(old) == 1 and len(new) == len(old) and demo[at:at+len(old)] == new, old
