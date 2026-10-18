@@ -193,7 +193,7 @@ def executed(log, elf):
         if i >= 0: hits[funcs[i][1]] += 1
     return hits
 
-WALK_SECONDS = 90  # the walk's budget after startup, inside the same run
+WALK_SECONDS = 120  # the walk's budget after startup, inside the same run
 
 def tap(x, y): return [f'{x} {y} 200', 'wait 80', f'{x} {y} 0']
 def swipe(x0, y0, x1, y1, steps=10):
@@ -208,7 +208,8 @@ PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
 # ('rows', same, differ), the y bands that match stock's and that must not; 'differs'; ('as', step),
 # the patched screen as it was at that step; ('not', step, ...), unlike it at each of those steps; or
 # ('same', 'moved', step, box): same, and the box (x0, y0, x1, y1, the status bar's included) changed
-# on both since that step. Positions are V2.1's 320x480 layout.
+# on both since that step; ('as', step, same, differ), as at that step in the y band same and unlike
+# it in differ. Positions are V2.1's 320x480 layout.
 WALK = [
     ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, 'same'),
     ('sysset', tap(82, 318), 4, 'same'),
@@ -227,7 +228,12 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('advanced', tap(250, 53), 4, ('not', 'eq')),           # the tab bar's right half
                 ('preamp', tap(160, 318), 4, ('not', 'advanced')),      # the third row, under the graph
                 ('preamp_back', BACK, 4, ('not', 'preamp', 'playset')),
-                ('advanced_back', BACK, 4, ('as', 'playset'))]
+                ('advanced_back', BACK, 4, ('as', 'playset')),
+                ('playset_end', (DOWN_LIST + ['wait 800']) * 3 + DOWN_LIST, 4, ('not', 'playset')),
+                ('crossfade', tap(160, 446), 4, ('not', 'playset_end')),
+                ('crossfade_slid', tap(230, 247), 4, ('not', 'crossfade')),
+                # Back: the list as before (the rows V2.1 rebuilds, then ours again), Crossfade's row now 8 s.
+                ('crossfade_back', BACK, 4, ('as', 'playset_end', (30, 414), (414, 480)))]
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
@@ -323,6 +329,9 @@ if __name__ == '__main__':
             elif want[0] == 'not':
                 for step in want[1:]:
                     assert differing(seen[step], shots['patched']), f'{name}: still as at {step}'
+            elif len(want) == 4:
+                assert not differing(seen[want[1]], shots['patched'], *want[2]), f'{name}: rows {want[2]} differ from {want[1]}'
+                assert differing(seen[want[1]], shots['patched'], *want[3]), f'{name}: rows {want[3]} are as at {want[1]}'
             else:
                 differ = differing(seen[want[1]], shots['patched'])
                 assert not differ, f'{name}: not back at {want[1]} ({len(differ)} pixels differ)'
@@ -339,5 +348,8 @@ if __name__ == '__main__':
         hooks[WM_PAINT_LEAF_M1PLUS[0]] = WM_PAINT_LEAF_M1PLUS[2]
         reached = {n for n, r in hooks.items() if hits[r]}
         assert STARTUP <= reached, f'startup never entered {sorted(STARTUP - reached)}'
+        # crossfade's tap opened crossfade.c's page: its row was there again after EQ, when V2.1
+        # rebuilt the list (a tap on a stock row there would change the screens as well).
+        assert hits['xfade_open'], 'crossfade: the Crossfade row was not there to open its page'
     print(f'M1 Plus under qemu: both demos up, the same Home below the status bar; the walk ({", ".join(n for n, *_ in WALK + PATCHED_ONLY)}) '
           f'as expected; the payload entered through {len(reached)} hooks ({", ".join(sorted(reached))}), {len(hits)} payload functions ran.')
