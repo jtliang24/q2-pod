@@ -184,6 +184,9 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
 
 ## 6. Tooling and release
 
+- **Q2 from the same tree.** Building the fork point's Q2 firmware beside M1's is tracked in
+  [m1plus-integration.md](m1plus-integration.md): the measured differences, and items 1–9 to close them.
+  The Q2 release (`tools/release.py`) is broken on this branch until its item 1 lands.
 - **Release packaging for M1.** The README tells M1 users to download `update.bin` from a release, but
   `tools/release.py` packages only the Q2 (upstream owns that). An M1 path needs:
   - a reproducible `update.bin`;
