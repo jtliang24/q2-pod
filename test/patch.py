@@ -3032,7 +3032,7 @@ class QueueMachine(Machine):
         elif name=='mcl_shuffle_pick':  # as stock: back to the previous index once, else forward from it
             self.picks.append(a); last=self.mcl('MCL_LASTPOS'); self.word(O['MCL_LASTPOS'],-1 if not a else self.mcl('MCL_POS'))
             self.word(O['MCL_POS'],last if not a and last!=-1 else len(self.names())-1); ret=1
-        elif name=='calloc@GLIBC_2.0': ret=self.alloc(a*b+4)  # the album ratings' table
+        elif name=='calloc@GLIBC_2.0': ret=self.alloc((a*b+7)&~3)  # the album ratings' table; word-aligned after
         elif name=='fopen@GLIBC_2.2': ret=0  # no ratings file
         else:  # the album/folder queries fill the staging deque
             self.query=(name,self.text(a) if a else None,(self.text(b) if b else None) if 'And' in name else None,c)
