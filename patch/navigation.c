@@ -3955,11 +3955,12 @@ static int artist_cf_open(const void *unused) {
     if (veiled) artist_cf_veil(veiled, 0);
     return 0;
 }
-int ringnav_artist_list(int tab) {
-    int n = stock_artist_trampoline(tab);
+/* An artist's albums, the n rows stock just put in p_deque_showlist (none for another tab): by
+ * year or A-Z, with each row's art key and album_id. */
+static void artist_tab(int n) {
     void *list = P(p_deque_showlist, 0), *all;
     artist_keys_free();
-    if (tab != 1 || n <= 0 || !(st.art_keys = calloc((unsigned)n, sizeof(char *)))) return n;
+    if (n <= 0 || !(st.art_keys = calloc((unsigned)n, sizeof(char *)))) return;
     st.art_ids = calloc((unsigned)n, sizeof *st.art_ids);
     st.art_n = (unsigned)n;
     all = _create_deque("stSongInfo");
@@ -3992,6 +3993,10 @@ int ringnav_artist_list(int tab) {
     }
     if (mine) deque_destroy(mine);
     deque_destroy(all);
+}
+int ringnav_artist_list(int tab) {
+    int n = stock_artist_trampoline(tab);
+    artist_tab(tab == 1 ? n : 0);
     return n;
 }
 static const char *artist_key(char *buf, void *list, unsigned i) {
@@ -4063,6 +4068,10 @@ int ringnav_localclass(int cls) {
     void *list = P(p_deque_showlist, 0), *dir = P(tools_pdeq_directory, 0), *a = album_opened();
     if (n > 0 && cls == 0xff10 && a) album_only(list, a, 0), n = (int)deque_size(list);
     if (n > 0 && cls == CLASS_ALBUMS) n = coverflow_split(list);
+#if M1PLUS /* V2.1's artist albums load here (loadAlbumList, on album_page: never Coverflow's
+            * artistinfo_page), not in load_localartist_list */
+    if (cls == CLASS_ARTIST_ALBUMS) artist_tab(n);
+#endif
     if (IPOD) /* an untagged song's row reads its file name without the extension (track_name) */
         for (int i = 0; i < n; ++i) {
             void *r = deque_at(list, (unsigned)i);

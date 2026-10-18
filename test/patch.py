@@ -3698,7 +3698,9 @@ for cls,artist,query in ((0xf003,0,('getMusicByAlbum',None,None)),(0xf004,0,('ge
     assert shown==['Row 0','Row 1','Row 2'] and q[:3]==query and not staging, (cls,artist,q); passed()
 for cls,last,rows in ((0xf004,1,3),(0xff01,-1,3),(0xf007,-1,3),(0xf004,-1,0)):
     shown,q,_=unknown(cls,0,last=last,rows=rows)
-    assert len(shown)==rows and q is None, (cls,last,rows); passed()
+    # V2.1's artist albums query their artist's songs to order them (below), not an Unknown row's
+    m1_order=is_m1plus and cls==0xff01 and q is not None and q[:2]==('getMusicBySonger','')
+    assert len(shown)==rows and (q is None or m1_order), (cls,last,rows,q); passed()
 # iPod song rows: an untagged song's title is its file name without the extension; a tag stays.
 m=ClassMachine(page='localclass_page',cls=0xf001,rows=2); m.word(m.row(1)+O['REC_TITLE'],m.string('Tagged'))
 m.word(m.row(0)+O['REC_NAME'],m.string('a.flac')); m.word(m.row(0)+O['REC_PATH'],m.string('/p/a.flac'))
@@ -5098,7 +5100,39 @@ if not is_m1plus:
     m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)
     assert menu(m)==('Album',[*COVER_ALBUM,'Add to Playlist']); passed()
 else:
-    not_ported('Artist albums tab art keys (load_localartist_list not hooked in V2.1)')
+    # V2.1 loads an artist's albums in loadLocalClassList (0xff01, from loadAlbumList), so its hook
+    # does load_localartist_list's work: this artist's albums (a same-named one by another album
+    # artist stays out) in the ranking query's order, by year or with Artist Album Order: A-Z by
+    # name, and each row's album for Rate Album. The staging deque is restored.
+    class ArtistYears(ClassMachine):
+        def hook(self,u,address,size,unused):
+            if address!=syms['toolsQueryDbTable'] or ' order by ' not in (sql:=self.text(u.reg_read(REGS[1]))):
+                return super().hook(u,address,size,unused)
+            self.sqls.append(sql)
+            self.deqs[self.get(syms['tools_pdeq_directory'])][1]=[self.copy('stSongInfo',e) for e in self.ranked]
+            u.reg_write(UC_MIPS_REG_V0,len(self.ranked)); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    def artist_years(artist_type=0,**config):
+        m=ArtistYears(page='album_page',cls=0xff01,rows=3); m.sqls=[]; m.config.update(config)
+        m.word(syms['artist_type'],artist_type); m.u.mem_write(syms['g_local_classinfo_save']+0x10d,b'Artist\0')
+        def album(r,name): m.word(r+O['REC_ALBUM'],m.string(name)); return r
+        for i,name in enumerate(('Old','New','Mid')): album(m.row(i),name)
+        other=album(m.song('Other Mid'),'Mid'); m.word(other+O['REC_ALBUM_ARTIST'],m.string('Other'))
+        m.split=[album(m.song(n),n) for n in ('Old','New','Mid')]+[other]
+        m.found=[album(m.song(n),n) for n in ('New','Old','Mid')]  # the artist's songs
+        m.ranked=[m.split[i] for i in (1,3,2,0)]  # the query's order: New, the other Mid, Mid, Old
+        assert m.call(address=HOOKS['load_localclass_list'][0],args=(0xff01,0,0,0),gap=0)==3
+        assert m.names(m.get(syms['tools_pdeq_directory']))==['staged']
+        return m,m.names(m.get(syms['p_deque_showlist']))
+    m,shown=artist_years()
+    assert shown==['Row 1','Row 2','Row 0'] and m.query[:2]==('getMusicBySonger','Artist'), (shown,m.query)
+    assert len(m.sqls)==1 and m.sqls[0].endswith('order by ifnull(max(year),0)=0,max(year) desc,album COLLATE NOCASE'), m.sqls
+    assert menu(m)==('New',[*COVER_ALBUM,'Add to Playlist']); passed()  # the first row, rated as its album
+    m,shown=artist_years(artist_type=1,YEAROLD='1')  # Album Artist browsing; Year Order: Oldest First
+    assert shown==['Row 1','Row 2','Row 0'] and m.query[:4]==(*BY_ALBUM_ARTIST('Artist'),1), (shown,m.query)
+    assert m.sqls[0].endswith('order by ifnull(max(year),0)=0,max(year),album COLLATE NOCASE'), m.sqls; passed()
+    m,shown=artist_years(ARTISTAZ='1')
+    assert shown==['Row 1','Row 2','Row 0'] and m.sqls[0].endswith(' order by album COLLATE NOCASE'), m.sqls; passed()
+    not_ported("Artist albums tab art keys and Coverflow (V2.1's artist page renderer and Coverflow not patched)")
 # Library > Ratings > Albums: the rated albums as Coverflow, most hearts first, with the rated Sort card alone
 # (Rating, Album, Artist, Year, kept); closing it brings the library's covers and Sort back.
 def ratings_albums(m):
