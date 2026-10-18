@@ -23,6 +23,12 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
   parts by child index.
 - **Prefer V2.1's own UI conventions.** Its title-bar back button, its row styles, and its native
   settings where one exists (for example Double wake). Avoid copying a Q2 control V2.1 already has.
+- **Every page has an explicit Back button.** Every page Q2 Pod opens or replaces on M1 shows V2.1's
+  title-bar back button at its top left. Make it with `back_button`, or with `page_title`, which adds
+  one; its click sends Return, and the page's keyup decides whether that closes the page or steps
+  back one screen. No gesture or hidden tap may be a page's only way out, and neither may Previous,
+  which is Return only while nothing plays. Each new page's `test/boot.py` step closes it with the
+  button (`BACK`).
 
 ## 1. Small fixes (S)
 
@@ -77,6 +83,14 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 V2.1 lays out navigation differently from V1.32, so several payload pages have no way in on M1.
 
+Each page reached this way needs a Back button (ground rules):
+- **Already have one:** the list pages, through `page_list` and `page_title`. These are Shuffle,
+  Ratings, Most Played, Long Songs, Photos' albums and grid, Books' list, and Spotify's and Radio's
+  browsers.
+- **Still need one:** the full-screen views with no title bar. These are Coverflow's carousel, the photo
+  viewer, the book reader and video player, and Spotify's and Radio's Now Playing pages
+  (`spotify_page`, `radionp_page`). Add `back_button` to each, over its content.
+
 - **The Library's extras.** `NOT PORTED: Library's Shuffle, Ratings, Most Played and media rows`.
   - **The problem:** V1.32 has a Local Music menu that the payload extends. V2.1's Home carousel *is* the
     library, and `ringnav_localmusic` is bound to `localclass_page_init`, the per-category page.
@@ -87,6 +101,7 @@ V2.1 lays out navigation differently from V1.32, so several payload pages have n
        Long Songs, Podcasts, Audiobooks, Photos, Books, Videos and Coverflow.
 
     Option 2 is less invasive, and it fits the build's no-asset-changes M1 policy.
+    Either way the new page gets a Back button (ground rules), as must each page it opens.
   - Then unbind `localclass_page_init` from `ringnav_localmusic`.
 - **Streaming's Spotify, Internet Radio and AirPlay rows.** `NOT PORTED`.
   - **The problem:** V2.1 has no `stream_page_init` symbol.

@@ -114,7 +114,7 @@ On the Shanling Q2, navigation is built around the front capacitive touch wheel 
 flowchart TD
     subgraph Input ["M1 Plus Input Sources"]
         Touch["3.2\" Capacitive Touchscreen (/dev/input/event2)"]
-        EdgeSwipe["Left-Edge Swipe / Back Gesture"]
+        BackBtn["Title-Bar Back Button (every payload page)"]
         Knob["Side Rotary Encoder (PB18 / PB19)"]
         KnobPress["Knob Push (PE31 / KEY_POWER)"]
         SideBtns["Side Buttons (Play/Pause, Next, Prev)"]
@@ -129,7 +129,7 @@ flowchart TD
     end
 
     Touch --> TouchEngine
-    EdgeSwipe --> SynReturn
+    BackBtn --> SynReturn
     Knob --> KnobMode
     KnobMode -->|"Volume (Default)"| VolCtrl
     KnobMode -->|"Navigation"| ListNav
@@ -139,7 +139,7 @@ flowchart TD
 
 ### 4.1 Solving the Missing Physical `KEY_RETURN` (`170`) Button
 In Q2 Pod, [`KEY_RETURN`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L329) is the sole exit path for:
-- Every custom full-screen page created via [`page_open()`](file:///home/jtliang/Projects/q2-pod/patch/coverflow.c#L926-L934) (which has no titlebar back button):
+- Every custom full-screen page created via [`page_open()`](file:///home/jtliang/Projects/q2-pod/patch/coverflow.c#L926-L934) (a bare window: on M1 Plus its back button comes from `page_title` or `back_button`):
   - Coverflow ([`coverflow.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/coverflow.c#L1696))
   - 30-Band PEQ / 10-Band EQ / 3-Band EQ ([`peq_ui.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/peq_ui.c#L661))
   - Photos viewer ([`photos.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/photos.c#L118))
@@ -151,12 +151,23 @@ In Q2 Pod, [`KEY_RETURN`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc
 - Opening Now Playing from Home or via hold ([`HOLD_RETURN`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L121), [`compact_now_playing`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L3504))
 - Canceling an active scrub on Now Playing ([`navigation.c:6399`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6399))
 
-**Required M1 Plus Return Mechanisms:**
-1. **Touch Swipe-to-Return & Status Bar / Title Tap**:
-   - Ensure stock M1 Plus's left-to-right swipe-back gesture (`g_navbar_status` / window manager back gesture) or a left-edge pull gesture synthesizes `KEY_RETURN` (`170`) on custom `page_open` windows and on the iPod Home `Settings` submenu.
-   - Alternatively, allow tapping the top-left corner of the `48 px` `page_title` bar on custom pages to dispatch `KEY_RETURN`.
-2. **Physical Button Return in Knob Navigation Mode**:
-   - Provide a button mapping (e.g., short press of `Prev` when not playing, or holding `Prev` / double-pressing a button) that dispatches `KEY_RETURN` so knob-only navigation never gets trapped in a submenu.
+**Rule: every page has an explicit Back button.** On M1 Plus, every page Q2 Pod opens or replaces
+shows V2.1's title-bar back button at its top left (`btn_return`'s style and `return`/`return_down`
+icons, named in `offsets.inc` so the build's V2.1 name check covers them). Make it with
+[`back_button`](../patch/coverflow.c), or with `page_title`, which adds one beside the title. Its
+click sends `KEY_RETURN` through `dispatch_key_return` on a timer, so the page's own keyup decides
+what Back means: close the page, or step back one screen as the PEQ editor's Advanced tab does.
+No gesture or hidden tap may be a page's only way out, and neither may Previous, which is Return
+only while nothing plays. A new page's `test/boot.py` step closes it with that button.
+
+**M1 Plus Return mechanisms:**
+1. **The Back button** on every payload page, as above. V2.1's own pages have theirs.
+2. **Previous** while nothing plays and Now Playing is not on top (`ringnav`, `KEY_BACK_BTN`), so
+   knob-only navigation never gets trapped in a submenu.
+
+The left-edge swipe and the title tap that once sent Return are gone. Nothing on screen showed
+them, and the swipe had to hold back every touch in the left 32 px of every page, stock pages
+included ([m1plus-progress.md](m1plus-progress.md) §11).
 
 ### 4.2 Side Rotary Knob (Volume by Default, Navigation Optional)
 The side rotary knob defaults to **standard hardware volume control** out of the box, preserving normal M1 Plus volume wheel behavior.
@@ -291,7 +302,7 @@ All phases of the Shanling M1 Plus port have been implemented and verified:
   - `patch/offsets.inc`: Conditioned `W=320, H=480, CORNER_R=0, STATUS_MARGIN=0, BOTTOM=450` for M1 Plus.
   - `patch/coverflow.c`, `patch/photos.c`, `patch/books.c`, `patch/visualizer.c`, `patch/lockscreen.c`: Layouts refactored for upright 320x480 display without pill-glass corner insets.
 - [x] **Return Synthesis & Knob Navigation (`e9b61f7`):**
-  - Left-edge swipe gesture (`dx > 50`) and title bar back-tap synthesize `KEY_RETURN`.
+  - Left-edge swipe gesture (`dx > 50`) and title bar back-tap synthesize `KEY_RETURN`. Both were later replaced by an explicit Back button (§4.1).
   - Knob Navigation Mode converts rotary encoder inputs to `KEY_PREV` / `KEY_NEXT` list navigation, falling back to volume control on Now Playing or when screen is off.
 - [x] **Build & Packaging Tooling (`feat(build)`):**
   - `tools/build.py`: Automatic model detection between Q2 and M1 Plus (`update.bin` tar container vs `update.zip`).

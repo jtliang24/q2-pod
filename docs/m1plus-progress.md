@@ -22,6 +22,7 @@ inferred from what the commit changed and is marked *(inferred)*.
 | Oct 17 | V2.1's whole demo under emulation | `9ab2a38` … `72c3310` |
 | Oct 17 | First device test, then fixes from it | `75bc4b3` … `d2fbfe5` |
 | Oct 17 | Keys in the emulator, second device test | `c265690`, `15f52d2` |
+| Oct 17 | A Back button replaces the edge swipe | |
 
 The branch leaves `main` at `b229c24`. There are 59 commits on `feature/m1plus-port`.
 
@@ -218,6 +219,36 @@ close the EQ.
 - the PEQ fits the screen and works with music;
 - settings survive a reboot.
 
+## 11. A Back button replaces the edge swipe (Oct 17)
+
+Q2 Pod's pages were left by gestures that nothing on screen showed: the left-edge swipe and a tap on
+the page title. Previous also acts as Back, but only while nothing plays. So with music on, those
+hidden gestures were the only way out of the PEQ editor.
+
+The swipe also cost the most of anything in the port:
+- **It sat in front of every touch, on every page, stock pages included.** It held back each press in
+  the left 32 px until the touch turned out to be a swipe, then replayed it.
+- **It needed a device fix.** It had the wrong event type and an unpaired Return (section 9).
+
+V2.1's own pages use a visible title-bar back button, so Q2 Pod's pages now use the same one:
+- **`back_button`** (`patch/coverflow.c`) copies V2.1's `btn_return`: the style
+  `navbar_btnreturn_style`, the icons `return` and `return_down`, and its place at the top left.
+  These names are in `offsets.inc`, so the build checks them against V2.1's theme.
+- **Its click sends Return on a timer,** as the title tap did. The page's keyup decides what Back
+  means: the PEQ's Advanced tab steps back one screen, and its Home closes.
+- **`page_title` adds the button,** so every titled payload page has one. The PEQ editor's title bar
+  adds it too; its tabs now start after the button.
+- **`edge_swipe` and the title tap are gone.** Touches reach stock as they arrive.
+
+**Tests.**
+- `test/patch.py` checks the button's style, icons and place, that its click sends exactly one
+  Return on the timer, and that a swipe from the edge now reaches stock unchanged.
+- `test/boot.py` closes the EQ with the button. It also opens Advanced and its Preamp screen, and
+  checks that Back returns to Advanced before a second Back closes the page.
+
+From now on, every page on M1 has an explicit Back button. The rule is in
+[m1plus-roadmap.md](m1plus-roadmap.md)'s ground rules and in [m1plus.md](m1plus.md) §4.1.
+
 ## How to check a build now
 
 ```sh
@@ -241,3 +272,4 @@ card update.
 - **A skip has a name.** `KNOWN GAP` and `NOT PORTED` replace silent skips, and neither can quietly start
   passing.
 - **Prove each new check can fail,** once, against a deliberately broken build.
+- **A way out is on screen.** Every page has a visible Back button; a gesture can't be the only exit.
