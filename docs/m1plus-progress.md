@@ -25,8 +25,9 @@ inferred from what the commit changed and is marked *(inferred)*.
 | Oct 17 | A Back button replaces the edge swipe, third device test | `117bbc9` … `82c2866` |
 | Oct 18 | An artist's albums on V2.1 | `063416d` … `944ac29` |
 | Oct 18 | Previous is a media key again | `47ee97e` … `3f74f4c` |
+| Oct 18 | The roadmap's small fixes | `5b7bb1d` … `994451b` |
 
-The branch leaves `main` at `b229c24`. There are 79 commits on `feature/m1plus-port`.
+The branch leaves `main` at `b229c24`. There are 85 commits on `feature/m1plus-port`.
 
 ## 1. Feasibility study (on `main`)
 
@@ -309,6 +310,59 @@ Play/Pause do, and acts as it does on stock V2.1. The Back button is the only Re
 **Commits:** `47ee97e` (the fix and its tests), `e605e6b` (Back is M1's only Return, in
 m1plus.md, building.md and the roadmap's ground rule) and `3f74f4c` (the roadmap brought up to
 date with the code).
+
+## 14. The roadmap's small fixes (Oct 18)
+
+**Crossfade's page on V2.1.** Until now Crossfade's row only switched between Off and the saved
+length, because `crossfade.c` knew only V1.32's Boot volume page. V2.1's page was mapped from its
+asset and its init: `playset_bootvol_page_init` binds in a `widget_foreach` visit (`0x49cf60`).
+The switch is a settings row, `btn_memory` (`0x49d328`). The minus and plus are the buttons
+`btn_dec` (`0x49d39c`) and `btn_add` (`0x49d4c8`). `vol_slider` has `EVT_VALUE_CHANGING` only
+(`0x49d418`). `xfade_open` now re-dresses this page as it does V1.32's, with its names in
+`offsets.inc` (`VIEW_BOOTVOL*`, `ICON_SWITCH_*`). Two things came out of reading V2.1's code:
+- **V2.1 disables the view it hides.** With Volume memory on, V2.1 also disables `bootvol_view`,
+  so a page that was only shown again would have had a dead slider. `xfade_open` enables it too.
+- **The slider takes doubles.** V2.1 passes `slider_set_value` a double in `$a2:$a3`, as
+  `tools/build.py`'s prototypes already said.
+
+**Playback's rows after a sub-page.** V2.1's Playback init binds `EVT_WINDOW_FOREGROUND` (`0x12d`)
+to `0x4a0c50`, which empties the list and builds stock's 16 rows again. So the payload's rows
+(Year Order, Artists, Artist Album Order, Crossfade) disappeared once the page came back from any
+sub-page: EQ, Default Vol, or Crossfade's own. The device test had checked them only on first open.
+`ringnav_audioset` now binds its own handler, `audioset_again`, to that event, and it adds the rows
+again. AWTK runs a widget's newest handler first (`emitter_on_with_tag` puts each at the head,
+`0x6f4668`), so the handler is bound before stock's init runs. That makes it run after stock's
+rebuild. Idle's page also binds that event, but its handler (`0x4a9924`) only refreshes the sleep
+timer and keeps the rows.
+
+**The `test:` lines.**
+- **About's row:** ported. V2.1 has no row builder: the rows are in its asset, and the init's visit
+  (`0x4a12c0`) fills them. The test builds the page from V2.1's asset, runs that visit for Model and
+  FW. Version, then the payload's hook. The added row must match V2.1's row and label in type,
+  geometry and style.
+- **Display settings rows:** the check behind this line was Wheel Sensitivity's page, which is
+  Q2 only. On M1 its place goes to Crossfade's page.
+- **Library row title bounds** and **the info pages' Back:** not M1 work. What they test is the iPod
+  UI's (`compact_row_layout`, and `tools/ipod.py`'s `navigator_close` unwind). In the Stock UI they
+  run V1.32's own code as a control. They are noted under the roadmap's iPod section.
+
+**Tests.**
+- `test/patch.py`: V2.1's Boot volume page is built from its asset and bound by V2.1's own init.
+  The handlers it binds must be `offsets.inc`'s. After the row's click, none of them is left (Back
+  is). The view must be shown and enabled, and the switch, the slider and +/- must set and save
+  Off, the length and the clamps. The Playback test pins V2.1's foreground binding, the rebuild's
+  `widget_destroy_children` and the emitter's head insert. It checks that the payload's handler is
+  bound before stock's init and brings the rows back as they were.
+- `test/boot.py`: after the EQ steps, the walk scrolls Playback to its end and opens Crossfade. It
+  taps the slider, and goes Back to the list as it was but for Crossfade's row. The run must have
+  executed `xfade_open`. The walk's budget is 120 seconds.
+- Each new check failed against a deliberately broken build. Binding the handler after stock's init
+  was caught by `test/patch.py`, and by `test/boot.py` once it required `xfade_open`. Before that
+  requirement, the tap toggled Folder Skip instead and still changed the screens. Leaving
+  `bootvol_view` disabled was caught by `test/patch.py`.
+
+**Commits:** `5b7bb1d` (Playback's rows), `54eb321` (Crossfade's page and its test), `2c3f809` (the
+boot walk), `c2777fd` (About's test), `994451b` (the two iPod-UI checks) and this record.
 
 ## How to check a build now
 

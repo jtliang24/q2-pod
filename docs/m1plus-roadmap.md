@@ -32,21 +32,11 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 ## 1. Small fixes (S)
 
-- **Crossfade's length slider.** Today the row only toggles Off and 5 s.
-  - `crossfade.c` re-dresses V1.32's Boot volume page. V2.1's `bootvol_page` has other widgets
-    (`btn_add`, `vol_slider`, `btn_memory`) and handlers.
-  - Map them, unbind V2.1's handlers (their addresses come from V2.1's `playset_bootvol_page_init`),
-    and add a `test/boot.py` step that opens the page and moves the slider.
-- **Port the M1 tests still marked `test:`.** These cover features that now work on M1, but their tests
-  still use V1.32 addresses:
-  - About's row test, which uses V1.32's row builder `0x4bc274`;
-  - the Display settings rows;
-  - the library row title bounds;
-  - the info pages' Back.
+Done: Crossfade's page on V2.1, the Playback rows that V2.1's list rebuild dropped, and the `test:`
+lines that could be ported (see [m1plus-progress.md](m1plus-progress.md), section 14). What is left
+here goes with other sections' features:
 
-  Each needs V2.1's equivalent function. The emulator walk already covers About visually.
-
-  Five more `test:` lines cover features M1 can't reach yet, so each goes with its feature:
+- **The `test:` lines whose features M1 can't reach yet.** Five lines, each going with its feature:
   - Home's Coverflow card layout, Coverflow's track queue through `mclNextSong`, and other slide
     menus' next and previous: with Coverflow's entry point (section 3) and its scroll distance
     (section 2);
@@ -189,6 +179,8 @@ these may be fixed or offered natively.
 `--ipod` is refused for M1 Plus. The iPod UI patches V1.32's UI assets, styles and code layout, and
 assumes the Q2's 375x320 landscape screen and touch wheel. An M1 version would be a redesign for a
 320x480 portrait touchscreen with a knob, not a port. Decide whether it is wanted before starting.
+Two `test/patch.py` checks go with it: the library rows' title bounds (`compact_row_layout`) and the
+info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own code as a control.
 
 ## 6. Tooling and release
 
