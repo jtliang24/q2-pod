@@ -250,8 +250,6 @@ typedef struct {
     int greeted;       /* the first reachable list got its boot repaint */
 #endif
     int knob_mode;
-    int swipe_x, swipe_y, swipe_valid;
-    unsigned swipe_down[24]; /* the held edge press, replayed when it turns out not to be a swipe */
     void *setting_label[6];
     /* Queue menu: the hold's AWTK press time marks its release; the target is a track/list row
      * checked by count, record and browsing-state hashes; qm_cls is the class its list holds;
@@ -6278,56 +6276,11 @@ void dispatch_key_return(void) {
     stock_input_trampoline(window_manager(), (void *)ev);
 }
 
-#if M1PLUS
-#define EDGE_STRIP 32 /* a press this near the left edge may start a swipe */
-#define EDGE_SWIPE 40 /* the swipe right that is a Return, at least twice its rise or fall */
-#define EDGE_SLOP 16  /* further up, down or left, the touch is the page's after all */
-/* M1 Plus has no Return key: a swipe in from the left edge is one (dispatch_key_return). The input
- * thread's press in the edge strip is held back from the page until the touch is a swipe right
- * (the Return, and nothing of the touch reaches the page) or isn't: a tap (V2.1's title-bar back
- * button is in the strip) or a drag elsewhere, when the held press is replayed and the touch goes
- * on as it was. Returns 1 when e is taken. */
-static int edge_swipe(void *wm, void *e) {
-    unsigned type = (unsigned)I(e, EVENT_TYPE);
-    if (type == EVT_INPUT_POINTER_DOWN && I(e, EVENT_X) < EDGE_STRIP) {
-        unsigned size = (unsigned)I(e, 4); /* event_t's size: 48 for a pointer event */
-        memcpy(st.swipe_down, e, size >= 0x20 && size <= sizeof st.swipe_down ? size : sizeof st.swipe_down);
-        st.swipe_x = I(e, EVENT_X);
-        st.swipe_y = I(e, EVENT_Y);
-        st.swipe_valid = 1;
-        return 1;
-    }
-    if (!st.swipe_valid) return 0;
-    int pointer = type > EVT_INPUT_POINTER_DOWN && type <= EVT_POINTER_ABORT;
-    int lifted = type == EVT_POINTER_UP || type == EVT_POINTER_UP_BEFORE || type == EVT_POINTER_ABORT;
-    if (st.swipe_valid == 2) { /* the Return's touch: none of the rest of it reaches the page */
-        if (lifted) st.swipe_valid = 0;
-        return pointer;
-    }
-    if (pointer) {
-        int dx = I(e, EVENT_X) - st.swipe_x, dy = I(e, EVENT_Y) - st.swipe_y;
-        if (dy < 0) dy = -dy;
-        if (dx > EDGE_SWIPE && dx > 2 * dy) {
-            st.swipe_valid = lifted ? 0 : 2;
-            dispatch_key_return();
-            return 1;
-        }
-        if (!lifted && dx > -EDGE_SLOP && dy <= EDGE_SLOP) return 1; /* not decided yet */
-    }
-    st.swipe_valid = 0;
-    stock_input_trampoline(wm, st.swipe_down); /* not a swipe: the press, then e */
-    return 0;
-}
-#endif
-
 /* window_manager_dispatch_input_event: while q2video plays (books.c) no key or touch reaches the
  * UI; a key's release goes to the player instead. Every event times ringnav_sleep's idle. */
 int ringnav_input(void *wm, void *e) {
     if (e && wake_gate(e)) return 0;
     st.last_input = time_now_ms();
-#if M1PLUS
-    if (e && !video_on() && edge_swipe(wm, e)) return 0;
-#endif
     if (!video_on()) return stock_input_trampoline(wm, e);
     if (e && I(e, EVENT_TYPE) == EVT_KEY_UP) video_key((unsigned)I(e, EVENT_KEY));
     return 0;

@@ -8789,13 +8789,12 @@ else:
     not_ported("Now Playing's info lines (NP_INFO_CALL not patched in V2.1)")
 
 if is_m1plus:
-    # M1 Plus has no Return key, so three controls hand the window manager a Return press and release,
-    # as the input thread queues a key's (dispatch_key_return): a swipe in from the left edge, the back
-    # button on every payload page (back_button), and Back (Previous) while nothing plays. Every event
-    # stock's dispatch receives is recorded as (type, key) when it arrives; a pointer event's x sits
-    # where a key's code does (EVENT_X == EVENT_KEY). Touches arrive as the input thread queues them
-    # (tslib_run, V2.1 0x637634): EVT_INPUT_POINTER_DOWN on the press, then 0x101 moves and
-    # EVT_POINTER_UP.
+    # M1 Plus has no Return key, so two controls hand the window manager a Return press and release, as
+    # the input thread queues a key's (dispatch_key_return): the back button on every payload page
+    # (back_button), and Back (Previous) while nothing plays. Every event stock's dispatch receives is
+    # recorded as (type, key) when it arrives; a pointer event's x sits where a key's code does (EVENT_X
+    # == EVENT_KEY). Touches arrive as the input thread queues them (tslib_run, V2.1 0x637634):
+    # EVT_INPUT_POINTER_DOWN on the press, then 0x101 moves and EVT_POINTER_UP.
     INPUT=HOOKS['window_manager_dispatch_input_event'][0]
     RETURN=[(O['EVT_KEY_DOWN'],O['KEY_RETURN']),(O['EVT_KEY_UP'],O['KEY_RETURN'])]
     PRESS,MOVE,LIFT=O['EVT_INPUT_POINTER_DOWN'],0x101,O['EVT_POINTER_UP']
@@ -8815,17 +8814,9 @@ if is_m1plus:
             m.word(m.event+O['EVENT_Y'],y)
             assert m.call(x,address=INPUT,args=(m.wm,m.event,0,0),event_type=kind,gap=20,clear=False)==0
         return dispatched(m)
-    # An edge swipe right is a Return, and nothing of its touch reaches the page, its release included.
-    assert touch((PRESS,10,200),(MOVE,30,202),(MOVE,60,205),(MOVE,90,205),(LIFT,90,205))==RETURN
-    assert touch((PRESS,31,200),(MOVE,81,200))==RETURN
-    assert touch((PRESS,10,200),(LIFT,60,205))==RETURN  # one sample past the threshold, already lifted
-    # Not a swipe: the held press is replayed, then the touch goes on as it was.
-    assert touch((PRESS,10,200),(LIFT,10,200))==[(PRESS,10),(LIFT,10)]                         # a tap (the title's back button)
-    assert touch((PRESS,10,200),(MOVE,12,230),(MOVE,14,260))==[(PRESS,10),(MOVE,12),(MOVE,14)]  # a drag down
-    assert touch((PRESS,10,200),(MOVE,60,240))==[(PRESS,10),(MOVE,60)]                         # more diagonal than across
-    assert touch((PRESS,10,200),(MOVE,30,203),(LIFT,40,203))==[(PRESS,10),(LIFT,40)]            # too short: held moves dropped
-    assert touch((PRESS,32,200),(MOVE,82,200),(LIFT,82,200))==[(PRESS,32),(MOVE,82),(LIFT,82)]  # not from the edge
-    passed()
+    # Touches reach stock as they arrive: there is no edge gesture, so a swipe in from the left edge is the page's.
+    assert touch((PRESS,10,200),(MOVE,30,202),(MOVE,90,205),(LIFT,90,205))==[(PRESS,10),(MOVE,30),(MOVE,90),(LIFT,90)]
+    assert touch((PRESS,10,200),(LIFT,10,200))==[(PRESS,10),(LIFT,10)]; passed()
     # The back button, V2.1's btn_return at the top left: its click takes nothing else, and the Return
     # follows on a timer, outside the button's own dispatch (it closes the page).
     m=input_machine(); button=m.call(address=payload_syms['back_button'],args=(m.node('view'),0,0,0),gap=0)
