@@ -23,8 +23,10 @@ inferred from what the commit changed and is marked *(inferred)*.
 | Oct 17 | First device test, then fixes from it | `75bc4b3` … `d2fbfe5` |
 | Oct 17 | Keys in the emulator, second device test | `c265690`, `15f52d2` |
 | Oct 17 | A Back button replaces the edge swipe, third device test | `117bbc9` … `82c2866` |
+| Oct 18 | An artist's albums on V2.1 | `063416d` … `944ac29` |
+| Oct 18 | Previous is a media key again | `47ee97e` … `3f74f4c` |
 
-The branch leaves `main` at `b229c24`. There are 59 commits on `feature/m1plus-port`.
+The branch leaves `main` at `b229c24`. There are 79 commits on `feature/m1plus-port`.
 
 ## 1. Feasibility study (on `main`)
 
@@ -259,6 +261,55 @@ updater directly over `V122S`. The updater takes a new tag, so it didn't need st
 From now on, every page on M1 has an explicit Back button. The rule is in
 [m1plus-roadmap.md](m1plus-roadmap.md)'s ground rules and in [m1plus.md](m1plus.md) §4.1.
 
+## 12. An artist's albums on V2.1 (Oct 18)
+
+V1.32 lists an artist's albums through `load_localartist_list`, which Q2 Pod hooks to order them by
+year (or A–Z) and to keep each row's album for Rate Album. V2.1 has no such function. Its
+`album_page_init` calls `loadAlbumList`, which saves the artist in `classinfo_save` and runs
+`loadLocalClassList(0xff01)`. So on M1 the albums stayed in stock's order. Every artist albums test
+was V1.32-only, and the one `NOT PORTED` line named only the art keys, so nothing showed the order
+was missing.
+
+| Commit | Change | Why |
+|---|---|---|
+| `063416d` | The `QueueMachine` calloc mock rounds to a word | A byte-sized calloc (`coverflow_by_year`'s taken flags) left every later allocation misaligned, and the payload's next word store faulted. |
+| `d28932e` | An album artist's songs come from V2.1's album query | V2.1 has no `getMusicByAlbumArtist`, and `peq.h` stood `getMusicBySonger` in for it, so with Album Artist browsing the songs came from the Artist tag. `getMusicByAlbumAndAlbumSonger`, with its drop-the-album flag set, is the query. |
+| `11adf1e` | An artist's albums by year or A–Z | The work is now `artist_tab`. `ringnav_localclass` calls it for `0xff01` on M1, before `albumcoverinfo_init` builds the covers. M1's tests load the albums through the real hook. |
+| `315e805` | The ranking SQL runs on SQLite with stock's `songtable` | The C tests' canned rows answered any ORDER BY, so only the SQL's text was checked. |
+| `5a2c73d` | Docs | How V2.1 loads an artist's albums. |
+| `3b0f6e8`, `ad6dbf4` | Rate Album on an artist's albums marked `NOT PORTED` | The hold menu acts on the highlighted row, and nothing highlights one on M1, so a Play/Pause hold falls through to V2.1's List sort order dialog. The test highlights the row itself, so it checks the wiring only. |
+| `944ac29` | Roadmap: a touch long-press opens the hold menu | It is the natural way in on a touchscreen, with or without the knob. |
+
+## 13. Previous is a media key again (Oct 18)
+
+The M1 has no Return key. `e9b61f7` made Previous act as Return while nothing played, because
+Q2 Pod's pages then had no visible way out. Since section 11 every page has a Back button, so
+Previous-as-Return was a hidden second path, and it had a bug:
+- **It ran before the key lock.** `ringnav` turned Previous into Return before it tested `locked`
+  and before stock's key-up ran.
+- **Its Return skipped the screen-off drop.** On the Q2, `wake_gate` drops Return while the screen
+  is off, so a bump of Back leaves the page alone. `dispatch_key_return` calls the stock input
+  handler directly and skips that check.
+
+So with the screen off and nothing playing, a bump of Previous in a pocket closed a page nobody could
+see, locked or not. The roadmap listed this as `KNOWN GAP: Back with the screen off and the keys
+locked sends Return to the hidden page`.
+
+The fix removes the path. Previous goes through the key lock and `media_key`/stock, as Next and
+Play/Pause do, and acts as it does on stock V2.1. The Back button is the only Return.
+
+**Tests.**
+- `test/patch.py`: Previous dispatches no Return and reaches stock's key-up, both idle and with the
+  screen off and the keys locked. On Now Playing it dispatches no Return either. The known gap is
+  gone.
+- `test/boot.py`'s `eq_previous` step presses Previous with the PEQ editor open, and the editor
+  must stay as it was.
+- Both fail against the old code.
+
+**Commits:** `47ee97e` (the fix and its tests), `e605e6b` (Back is M1's only Return, in
+m1plus.md, building.md and the roadmap's ground rule) and `3f74f4c` (the roadmap brought up to
+date with the code).
+
 ## How to check a build now
 
 ```sh
@@ -282,4 +333,5 @@ card update.
 - **A skip has a name.** `KNOWN GAP` and `NOT PORTED` replace silent skips, and neither can quietly start
   passing.
 - **Prove each new check can fail,** once, against a deliberately broken build.
-- **A way out is on screen.** Every page has a visible Back button; a gesture can't be the only exit.
+- **A way out is on screen.** Every page has a visible Back button; a gesture or a key can't be the
+  only exit, and the hardware keys keep stock's meaning.
