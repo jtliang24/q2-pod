@@ -1235,8 +1235,8 @@ if not is_m1plus:
             assert len(buttons)==1
             check_title_bounds(m,buttons[0],drill=page=='playlist_page')
     passed()
-else:
-    not_ported("test: library row title bounds use V1.32's row builders")
+# (Not on M1 Plus: the payload's part here is the iPod UI's, compact_row_layout and the ARTWORK
+# insets; in the Stock UI it runs V1.32's builders untouched, as a control. M1 Plus has no iPod UI.)
 
 # Long Return executes the stock gates and release filter in both variants.
 def long_machine():
@@ -3178,8 +3178,8 @@ if not is_m1plus:
                 assert m.backs==0 if variant=='ipod' else m.backs==(len(pages) if unwind else 0)
                 assert m.closed==((list(reversed(pages)) if variant=='ipod' else [])+['playing_page'] if unwind else [])
                 passed()
-else:
-    not_ported("test: info pages' Back uses V1.32's page callbacks")
+# (Not on M1 Plus: the unwind is the iPod UI's (tools/ipod.py, navigator_close); in the Stock UI this
+# is V1.32's own Back loop, as a control. M1 Plus has no iPod UI.)
 
 SONG_MENU=['Play Next','Add to Queue','Add to Favourites','Add to Playlist','Go to Album','Go to Artist']
 # Now Playing targets the queue even when the last browsed list has unrelated rows.
