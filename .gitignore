@@ -19,3 +19,6 @@ graphify-out/
 .codex/skills/
 .agents/skills/
 /m1plus-build
+
+# A device library database (personal data), for local query checks
+/database.db
