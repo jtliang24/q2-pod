@@ -200,6 +200,7 @@ def swipe(x0, y0, x1, y1, steps=10):
     return [line for i in range(steps + 1) for line in (f'{x0 + (x1 - x0) * i // steps} {y0 + (y1 - y0) * i // steps} 200', 'wait 16')] + [f'{x1} {y1} 0']
 NEXT_PAGE = swipe(280, 250, 40, 250)  # Home's carousel, a page right
 DOWN_LIST = swipe(160, 420, 160, 60)  # a list scrolled towards its end
+UP_LIST = swipe(160, 100, 160, 460)    # and back towards its start
 BACK = tap(18, 53)                    # V2.1's title-bar back button, and the payload's (back_button)
 # Keys, as Linux reports them (keyboard_gpio_add.sh, keyboard_encoder): "keys CODE" on the buttons'
 # device, "knob CODE" on the knob's; each a press and a release.
@@ -209,7 +210,8 @@ PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
 # the patched screen as it was at that step; ('not', step, ...), unlike it at each of those steps; or
 # ('same', 'moved', step, box): same, and the box (x0, y0, x1, y1, the status bar's included) changed
 # on both since that step; ('as', step, same, differ), as at that step in the y band same and unlike
-# it in differ. Positions are V2.1's 320x480 layout.
+# it in differ; ('kept', step, box): unlike that step, but the box as it was then. Positions are
+# V2.1's 320x480 layout.
 WALK = [
     ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, 'same'),
     ('sysset', tap(82, 318), 4, 'same'),
@@ -233,7 +235,15 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('crossfade', tap(160, 446), 4, ('not', 'playset_end')),
                 ('crossfade_slid', tap(230, 247), 4, ('not', 'crossfade')),
                 # Back: the list as before (the rows V2.1 rebuilds, then ours again), Crossfade's row now 8 s.
-                ('crossfade_back', BACK, 4, ('as', 'playset_end', (30, 414), (414, 480)))]
+                ('crossfade_back', BACK, 4, ('as', 'playset_end', (30, 414), (414, 480))),
+                # Display's Knob: Navigation. The knob's turns then move System Setting's selection
+                # (its outline drawn), and the volume, in the status bar, stays as it was.
+                ('knob_home', BACK, 5, ('not', 'crossfade_back')),
+                ('knob_sysset', tap(82, 318) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('as', 'sysset')),
+                ('display', tap(160, 302), 4, ('not', 'knob_sysset')),
+                ('knob_row', tap(160, 430), 3, ('as', 'display', (30, 398), (398, 462))),  # Knob: Navigation
+                ('display_back', BACK, 4, ('as', 'knob_sysset')),
+                ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30)))]
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
@@ -326,6 +336,11 @@ if __name__ == '__main__':
             elif want[0] == 'rows':
                 assert not differing(shots['stock'], shots['patched'], *want[1]), f'{name}: rows {want[1]} differ from stock'
                 assert differing(shots['stock'], shots['patched'], *want[2]), f'{name}: rows {want[2]} are stock\'s'
+            elif want[0] == 'kept':
+                x0, y0, x1, y1 = want[2]
+                box = lambda px: [px[(y * W + x0) * 4:(y * W + x1) * 4] for y in range(y0, y1)]
+                assert differing(seen[want[1]], shots['patched']), f'{name}: still as at {want[1]}'
+                assert box(shots['patched']) == box(seen[want[1]]), f'{name}: {want[2]} changed since {want[1]}'
             elif want[0] == 'not':
                 for step in want[1:]:
                     assert differing(seen[step], shots['patched']), f'{name}: still as at {step}'
