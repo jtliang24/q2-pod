@@ -677,6 +677,9 @@ def known_gap(name, check):
     except AssertionError as e:  # the failing line is shown, so a harness assert can't pass for the gap
         GAPS.append(name); print(f'KNOWN GAP: {name}\n    {traceback.extract_tb(e.__traceback__)[-1].line} {e}'.rstrip()); return
     raise AssertionError(f'Gap fixed, remove its known_gap marker: {name}')
+def named(m,w,name):
+    if m.nodes[w]['name']==name: return w
+    return next((f for c in m.nodes[w]['children'] if (f:=named(m,c,name))),0)
 def row_button(m,row):
     """A list_row's tap target, which holds its icon and label: the list_item on V2.1, its button on V1.32."""
     return row if is_m1plus else m.nodes[row]['children'][0]
@@ -2983,6 +2986,32 @@ class QueueMachine(Machine):
     def names(self,h=None): return [self.text(self.get(e+O['REC_NAME'])) for e in self.items(h or self.get(syms['mcl_pdeqplaylist']))]
     def pool(self): return [signed(self.get(e)) for e in self.items(self.get(O['MCL_POOL']))]
     def mcl(self,k): return signed(self.get(O[k]))
+    def nested(self,address,args):
+        """Run code from inside a mock, as the mocked stock function would (Unicorn 2 nests
+        emu_start), on a stack below the caller's; the caller's registers come back as they were."""
+        regs=[UC_MIPS_REG_PC]+[globals()[f'UC_MIPS_REG_{i}'] for i in range(32)]
+        saved=[self.u.reg_read(r) for r in regs]
+        self.u.reg_write(UC_MIPS_REG_SP,(saved[30]-0x4000)&~7)  # $29, below the caller's frames
+        self.u.reg_write(UC_MIPS_REG_RA,0x1000000); self.u.reg_write(UC_MIPS_REG_T9,address)
+        for r,v in zip(REGS,args): self.u.reg_write(r,v&0xffffffff)
+        self.u.emu_start(address,0x1000000,count=self.budget)
+        assert self.u.reg_read(UC_MIPS_REG_PC)==0x1000000, 'Instruction limit reached'
+        ret=self.u.reg_read(UC_MIPS_REG_V0)
+        for r,v in zip(regs,saved): self.u.reg_write(r,v)
+        return ret
+    def v21_sortselect(self):
+        """M1 Plus: V2.1's navigator opening its sortselect_dialog: the asset's widgets, V2.1's init
+        through the hook (its rows; the widget_foreach visit only binds its button), then the modal
+        check. With to_modal left set V2.1 runs the dialog in its own loop, so navigator_to returns
+        once it has gone: the caller's page is still on top. Returns the dialog, or None."""
+        page=self.v21_page('dialog/sortselect_dialog')
+        self.mock('list_item_create','image_create','hscroll_label_create','widget_use_style','widget_set_name',
+                  'image_base_set_image','widget_foreach','widget_set_tr_text','get_sortselect_showinfo')
+        assert self.nested(HOOKS['dialog_sortselect_dialog_init'][0],(page,0))==0
+        self.v21_rows=[self.nodes[self.nodes[i]['children'][0]].get('style') for i in self.nodes[named(self,page,'scrollview_sortselect')]['children']]
+        if self.nodes[page].get('to_modal',1): return None
+        self.view,self.title,self.back=(named(self,page,n) for n in ('scrollview_sortselect','hscroll_label','button_return'))
+        return page
     def dialog(self):
         vname = 'scrollview_sortselect' if is_m1plus else 'scroll_view'
         bname = 'button_return' if is_m1plus else 'img_return'
@@ -3063,8 +3092,13 @@ class QueueMachine(Machine):
         elif name=='window_manager_get_input_device_status': ret=self.status
         elif name=='airplayGetFlag': ret=self.airplay
         elif name=='navigator_to':
-            page=self.text(a); self.top=self.dialog() if page=='dialog/sortselect_dialog' else self.bootvol() if page=='playset/bootvol_page' else self.node('window',page)
-            self.stack.append(self.top); self.opened.append((page,None))
+            page=self.text(a)
+            if page=='dialog/sortselect_dialog' and is_m1plus:
+                d=self.v21_sortselect(); self.opened.append((page,None if d else 'modal'))
+                if d: self.top=d; self.stack.append(d)
+            else:
+                self.top=self.dialog() if page=='dialog/sortselect_dialog' else self.bootvol() if page=='playset/bootvol_page' else self.node('window',page)
+                self.stack.append(self.top); self.opened.append((page,None))
         elif name=='navigator_to_with_context':
             page=self.text(a)
             if page=='dialog/msginfo_dialog': self.toasts.append((page,self.get(b),self.get(b+4),self.text(b+8)))
@@ -3476,6 +3510,23 @@ if is_m1plus:
         assert long_press(QueueMachine(),**{'y':60,**kw})==(None,True), kw; passed()
     assert long_press(QueueMachine(),60,moves=((7,-7),))[0]==('Row 1',SONG_MENU); passed()  # a tremor isn't a scroll
     m=QueueMachine(page='sysset_page'); assert long_press(m,60)==(None,True); passed()  # not a library page
+    # The menu is V2.1's sortselect_dialog from its asset, set up by V2.1's init (QueueMachine.
+    # v21_sortselect), which leaves to_modal set: V2.1's navigator would then run it in its own loop
+    # and navigator_to would return only once it had gone, so the hook clears it for the menu's open
+    # alone. The menu's rows replace V2.1's five, in V2.1's row style and sizes and its 260 px popup;
+    # the title is V2.1's hscroll_label. A sort dialog V2.1 opens itself stays modal.
+    m=QueueMachine(); m.press(5); assert m.hold()==11
+    assert m.opened==[('dialog/sortselect_dialog',None)] and m.top==m.stack[-1] and m.nodes[m.top]['to_modal']==0
+    assert m.v21_rows==['srlabel_leftwhite20_style']*5  # V2.1's own, before the menu's
+    rows=m.nodes[m.view]['children']; label=lambda i:m.nodes[i]['children'][0]
+    assert len(rows)==len(SONG_MENU) and m.nodes[m.title]['text']=='Row 0' and m.labels()==SONG_MENU
+    assert all(m.nodes[i]['style']=='list_itemsort_style' and m.nodes[label(i)]['style']=='srlabel_leftwhite20_style' for i in rows)
+    assert [[m.get(i+O[k]) for k in ('W_X','W_Y','W_W','W_H')] for i in rows]==[[0,50*j,260,50] for j in range(len(rows))]
+    assert all([m.get(label(i)+O[k]) for k in ('W_X','W_W')]==[12,236] for i in rows); m.release(); passed()
+    m=QueueMachine(); page=m.v21_page('dialog/sortselect_dialog')
+    m.mock('list_item_create','image_create','hscroll_label_create','widget_use_style','widget_set_name',
+           'image_base_set_image','widget_foreach','widget_set_tr_text','get_sortselect_showinfo')
+    assert m.nested(HOOKS['dialog_sortselect_dialog_init'][0],(page,0))==0 and 'to_modal' not in m.nodes[page]; passed()
 # Favourites: Add runs batch-select's Add to My Fav for the row alone, which tags a folder file;
 # Remove deletes it, and on My Fav itself flags the list to reload as Now Playing's heart does.
 m=QueueMachine(); assert m.run(2,steps=3)=='Added to Favourites' and m.names()==['A','B','C']
@@ -4103,9 +4154,6 @@ def asset_tree(m,path):
         m.nodes[a]['children']=[build(c,a,kind,[c[0] for c in children]) for c in children]
         return a
     return build(decode((B/'ui'/path).read_bytes()),m.wm)
-def named(m,w,name):
-    if m.nodes[w]['name']==name: return w
-    return next((f for c in m.nodes[w]['children'] if (f:=named(m,c,name))),0)
 def click_target(m,w):
     em=m.alloc(4); it=m.alloc(0x28); m.word(w+O['W_EMITTER'],em); m.word(em,it); m.word(it+O['EMIT_TYPE'],O['EVT_CLICK'])
 def home_list(m):

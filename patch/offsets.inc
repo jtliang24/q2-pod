@@ -661,11 +661,35 @@ static inline int arc_out(int r, int y) {
 #define SORTSELECT_CLOSE 0x47d0f0
 #define SORTSELECT_BACK "button_return"
 #define SORTSELECT_VIEW "scrollview_sortselect"
+/* The hold menu's rows as V2.1 builds its own (dialog_sortselect_dialog_init 0x47d440): in its
+ * 260 px popup (the asset's self_layout), 50 px rows, the label at 12, the check image at 224. */
+#define VIEW_SORTSELECT_TITLE "hscroll_label"
+#define STYLE_SORTSELECT_ROW "list_itemsort_style"
+#define STYLE_SORTSELECT_LABEL "srlabel_leftwhite20_style"
+#define ICON_SORTSELECT_CHECK "mulselected"
+#define SORTSELECT_W 260
+#define SORTSELECT_ROW 50
+#define SORTSELECT_LABEL_X 12
+#define SORTSELECT_CHOICE_W 184 /* a choice's label, beside its check */
+#define SORTSELECT_LABEL_W 236  /* an action's, the row less its margins */
+#define SORTSELECT_CHECK_X 224
+#define SORTSELECT_CHECK_W 26
 #else
 #define SORTSELECT_KEYUP 0x49f3e0
 #define SORTSELECT_CLOSE 0x49f3c0
 #define SORTSELECT_BACK "img_return"
 #define SORTSELECT_VIEW "scroll_view"
+#define VIEW_SORTSELECT_TITLE "scrlabel_title"
+#define STYLE_SORTSELECT_ROW STYLE_LISTITEM_BLACK
+#define STYLE_SORTSELECT_LABEL STYLE_SCRLABEL_WHITE24L
+#define ICON_SORTSELECT_CHECK "select"
+#define SORTSELECT_W UI_W
+#define SORTSELECT_ROW 66
+#define SORTSELECT_LABEL_X 30
+#define SORTSELECT_CHOICE_W (UI_W - 65)
+#define SORTSELECT_LABEL_W (UI_W - 109)
+#define SORTSELECT_CHECK_X (UI_W - 35)
+#define SORTSELECT_CHECK_W 24
 #endif
 
 /* Coverflow (docs/internals.md). slide_menu dispatches EVT_VALUE_CHANGED after its

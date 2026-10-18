@@ -261,6 +261,7 @@ typedef struct {
     unsigned lp_timer;
     void *lp_top;
     int lp_x, lp_y, lp_touch, lp_swallow;
+    int qm_opening; /* qm_open's navigator_to is running: its sortselect_dialog is the menu */
 #endif
     /* Queue menu: the hold's AWTK press time marks its release; the target is a track/list row
      * checked by count, record and browsing-state hashes; qm_cls is the class its list holds;
@@ -5455,18 +5456,40 @@ static int qm_pick(void *action, void *event) {
     return 0;
 }
 
+#if M1PLUS
+int stock_sortselect_trampoline(void *, void *);
+/* dialog_sortselect_dialog_init. V2.1's navigator runs a dialog modally (dialog_modal, its own
+ * event loop until the dialog closes) when to_modal is set after its init, and V2.1's sortselect
+ * leaves it at the default, set: navigator_to would return only once the menu had gone, and the
+ * menu would show V2.1's sort rows. The hold menu's own open clears it, as V1.32's init does; a
+ * sort dialog V2.1 opens itself stays modal. */
+int qm_sortselect_init(void *win, void *ctx) {
+    int result = stock_sortselect_trampoline(win, ctx);
+    if (st.qm_opening && win) widget_set_prop_int(win, "to_modal", 0);
+    return result;
+}
+#endif
+
 /* Deferred out of the long-press dispatch. The sortselect init is synchronous and non-modal
- * (it clears to_modal), so the dialog is the top window once navigator_to returns. */
+ * (it clears to_modal; on V2.1 qm_sortselect_init does), so the dialog is the top window once
+ * navigator_to returns. */
 /* Hold menu rows: stock sortselect's list is 210, so three whole rows and the reading margin
- * (SCROLL_MARGIN) show at every scroll, never a half row under the title. */
-#define QM_ROW 66
+ * (SCROLL_MARGIN) show at every scroll, never a half row under the title. V2.1's is 250: five of
+ * its own 50 px rows. */
+#define QM_ROW SORTSELECT_ROW
 static int qm_open(const void *unused) {
     (void)unused;
     st.qm_timer = 0;
     void *wm = window_manager(), *page = window_manager_get_top_window(wm);
     void *r = usable() && !window_manager_is_animating(wm) ? qm_record() : (void *)0;
     if (!r) return 0;
+#if M1PLUS
+    st.qm_opening = 1;
     navigator_to("dialog/sortselect_dialog");
+    st.qm_opening = 0;
+#else
+    navigator_to("dialog/sortselect_dialog");
+#endif
     void *dialog = window_manager_get_top_window(wm);
     if (dialog == page) return 0;
     if (tk_strcmp(widget_get_prop_str(dialog, "name", ""), "sortselect_dialog")) {
@@ -5509,18 +5532,21 @@ static int qm_open(const void *unused) {
         const char *const *names = kind == 0   ? shuffle[folder]
                                    : kind == 1 ? repeat[folder]
                                                : groups;
-        widget_set_text_utf8(widget_lookup(dialog, "scrlabel_title", 1), kind == 0   ? "Shuffle"
+        widget_set_text_utf8(widget_lookup(dialog, VIEW_SORTSELECT_TITLE, 1), kind == 0   ? "Shuffle"
                                                                          : kind == 1 ? "Repeat"
                                                                                      : "Group by");
         widget_destroy_children(view);
         for (int i = 0; i < count; ++i) {
-            void *item = list_item_create(view, 0, i * QM_ROW, UI_W, QM_ROW);
-            widget_use_style(item, STYLE_LISTITEM_BLACK);
-            void *label = hscroll_label_create(item, 30, 0, UI_W - 65, QM_ROW);
-            widget_use_style(label, STYLE_SCRLABEL_WHITE24L);
+            void *item = list_item_create(view, 0, i * QM_ROW, SORTSELECT_W, QM_ROW);
+            widget_use_style(item, STYLE_SORTSELECT_ROW);
+            void *label =
+                hscroll_label_create(item, SORTSELECT_LABEL_X, 0, SORTSELECT_CHOICE_W, QM_ROW);
+            widget_use_style(label, STYLE_SORTSELECT_LABEL);
             widget_set_text_utf8(label, names[i]);
             if (i == playback_option(kind))
-                image_base_set_image(image_create(item, UI_W - 35, 0, 24, QM_ROW), "select");
+                image_base_set_image(
+                    image_create(item, SORTSELECT_CHECK_X, 0, SORTSELECT_CHECK_W, QM_ROW),
+                    ICON_SORTSELECT_CHECK);
             widget_on(item, EVT_CLICK, qm_pick, (void *)(long)(100 + i));
         }
         widget_set_prop_int(view, "virtual_h", count * QM_ROW);
@@ -5539,7 +5565,7 @@ static int qm_open(const void *unused) {
                         : tag && *tag            ? tag
                         : song                   ? track_name(name, sizeof name, r)
                                                  : P(r, REC_NAME);
-    widget_set_text_utf8(widget_lookup(dialog, "scrlabel_title", 1), title ? title : "");
+    widget_set_text_utf8(widget_lookup(dialog, VIEW_SORTSELECT_TITLE, 1), title ? title : "");
     widget_destroy_children(view);
     /* Songs favourite, as stock's heart, and go to their album and artist; collections shuffle.
      * Go to is left out where its single-instance page is already open, or the album is the page.
@@ -5593,10 +5619,10 @@ static int qm_open(const void *unused) {
     char rated[32];
     /* stock sortselect row styles */
     for (int i = 0; i < n; ++i) {
-        void *item = list_item_create(view, 0, i * QM_ROW, UI_W, QM_ROW);
-        widget_use_style(item, STYLE_LISTITEM_BLACK);
-        void *label = hscroll_label_create(item, 30, 0, UI_W - 109, QM_ROW);
-        widget_use_style(label, STYLE_SCRLABEL_WHITE24L);
+        void *item = list_item_create(view, 0, i * QM_ROW, SORTSELECT_W, QM_ROW);
+        widget_use_style(item, STYLE_SORTSELECT_ROW);
+        void *label = hscroll_label_create(item, SORTSELECT_LABEL_X, 0, SORTSELECT_LABEL_W, QM_ROW);
+        widget_use_style(label, STYLE_SORTSELECT_LABEL);
         if (acts[i] == QA_RATE) {
             int h = aid ? album_hearts : checkFavExist(r) ? 5 : rate_kept(0, listen_key(r));
             const char *row = aid ? "Rate Album" : "Rate";
