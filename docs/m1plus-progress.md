@@ -393,6 +393,22 @@ Tests:
   Setting, two knob turns must change the list (the selection outline) and leave the status bar's
   volume as it was. With the row left at Volume, the same step fails.
 
+**The cover-worker mutex.** It needed no alias. `/tmp/.tmp_picture` is used only by
+`toolsGetAlbumCover`, which is called from two threads:
+- three calls in `parse_albumcovertask_thd`;
+- one in `parseplaycover_thd`, which holds `parse_cover_mutex` (`0xa04588`) around it.
+
+V2.1 has no second, player-cover lock. Coverflow's `build_art` already held `parse_cover_mutex`, so
+its worker was excluded all along. The second lock it took on M1 was the zero-filled
+`m1stub_g_playcover_mutex`, which was harmless, since zeroed memory is an unlocked default mutex.
+That lock is now Q2 only.
+
+`g_lastcover_url` (V2.1's `savecover_path`) matters only to Home's split view, which is iPod-only and
+not built for M1. So the roadmap's "Home never shows the playing cover" can't happen on M1.
+
+`test/build.py` pins the four `toolsGetAlbumCover` call sites and the lock before the player
+thread's call.
+
 ## How to check a build now
 
 ```sh

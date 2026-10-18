@@ -102,12 +102,6 @@ here goes with other sections' features:
     payload's own offset instead of the slide_menu's.
   - Both views are unreachable on M1 until there is an entry point (section 3), so do this with or after
     that.
-- **The cover-worker mutex.**
-  - **The problem:** on M1, `g_playcover_mutex` and `g_lastcover_url` are zero-filled payload storage
-    (`m1stub_`). Coverflow's worker therefore isn't excluded from V2.1's player cover thread, which
-    writes the same `/tmp/.tmp_picture`. Home's split view also never shows the playing cover.
-  - **The fix:** find V2.1's cover mutex and last-cover path (the users of `/tmp/.tmp_picture` in
-    V2.1's demo) and alias them in `M1PLUS_CONTEXT_ALIASES`.
 
 ## 3. Entry points for Q2 Pod's pages (L)
 
