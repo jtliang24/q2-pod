@@ -771,6 +771,8 @@ M1PLUS_HOOKS = {
     'loadLocalClassList': (0x4ee504, 'ringnav_localclass', 'localclass'),
     'loadAlbumdetailList': (0x4eea98, 'ringnav_album_detail', 'detail'),
     'change_music': (0x4e3cec, 'ringnav_change', 'change'),
+    # Bluetooth absolute volume: V2.1 merged V1.32's mclSetLocalVol and mclSetBtVol into mclSetVol
+    'mclSetVol': (0x5d4cb0, 'ringnav_btvol', 'btvol'),
 }
 ALL_TRAMPOLINES = [
     'dbquery', 'quicksettings', 'keyup', 'touch', 'paint', 'dispatch',

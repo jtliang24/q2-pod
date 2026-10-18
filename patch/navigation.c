@@ -6178,8 +6178,15 @@ static int bt_sync_volume(int left, int right) {
 
 int headset_gain(void) { return bt_audio_ready() && btvol.ready && g_volume ? 100 : g_volume; }
 
-/* Absolute zero still needs software mute. Unsupported/failed writes retain stock gain. */
+/* Absolute zero still needs software mute. Unsupported/failed writes retain stock gain.
+ * V2.1 has no mclSetBtVol: its mclSetVol sets the DAC and, on Bluetooth, hciplayer's gain. Over 100
+ * is its player's own full scale (the private routine at 0x5d4e00 sends 255, 255), never a volume,
+ * and stays stock's. Bluetooth's end puts the DAC back: checkBluetoothStatus and switchBluetooth
+ * stop the player, change the output and call set_devicevolume before they restart it. */
 int ringnav_btvol(int left, int right) {
+#if M1PLUS
+    if (left > 100 || right > 100) return stock_btvol_trampoline(left, right);
+#endif
     if (bt_audio_ready()) {
         btvol.ready = bt_sync_volume(left, right);
         if (btvol.ready && (left > 0 || right > 0)) return stock_btvol_trampoline(100, 100);
