@@ -2950,7 +2950,8 @@ class QueueMachine(Machine):
                   'getMusicBySonger','getMusicByAlbumArtist','getMusicByComposer','getMusicByGenre',
                   'getMusicByAlbumAndComposer','getMusicByAlbumAndGenre','checkFavExist','navigator_window_is_exist',
                   'mcl_shuffle_pick','airplayGetFlag','calloc@GLIBC_2.0','fopen@GLIBC_2.2'):
-            addr = syms.get(n) or (payload_syms.get(n) if is_m1plus else None)
+            # V2.1's getMusicByAlbumArtist is peq.h's, which runs: its album query is the mock
+            addr = syms.get(n) or (payload_syms.get(n) if is_m1plus and n!='getMusicByAlbumArtist' else None)
             if addr: self.handlers[addr]='q:'+n
         self.favs=set(); self.open_pages=set(); self.opened=[]
         if 'mclLoadPlayList' in syms: self.handlers.pop(syms['mclLoadPlayList'], None)
@@ -3346,7 +3347,9 @@ for cls,artist_type,page,query in ((0xff01,1,'album_page',('getMusicByAlbumAndAl
     assert m.names(m.get(syms['tools_pdeq_directory']))==['staged'] and m.pool()==[0,1,2,3,4]
     passed()
 # Artist, composer and genre rows, and their album lists, use batch_add_file's per-class queries.
-for cls,artist_type,query in ((0xf004,0,('getMusicBySonger','Artist',None)),(0xf004,1,(('getMusicBySonger' if is_m1plus else 'getMusicByAlbumArtist'),'Artist',None)),
+# V2.1 has no getMusicByAlbumArtist: an album artist's songs are its album query's All songs ("" album, flag 1).
+BY_ALBUM_ARTIST=(lambda artist:('getMusicByAlbumAndAlbumSonger','',artist)) if is_m1plus else (lambda artist:('getMusicByAlbumArtist',artist,None))
+for cls,artist_type,query in ((0xf004,0,('getMusicBySonger','Artist',None)),(0xf004,1,BY_ALBUM_ARTIST('Artist')),
         (0xf005,0,('getMusicByComposer','Comp',None)),(0xf006,0,('getMusicByGenre','Pop',None)),
         (0xff02,0,('getMusicByAlbumAndComposer','Album','Comp')),(0xff03,0,('getMusicByAlbumAndGenre','Album','Pop'))):
     m=QueueMachine(page='localclass_page',cls=cls,pos=2); m.word(syms['g_artist_type'],artist_type)
@@ -3686,13 +3689,13 @@ def unknown(cls,found,last=-1,artist=0,rows=3):
     # Artists follow the artist page's own switch (artist_type), which stock never copied to g_artist_type
     assert n==len(shown) and m.calls[0][:2]==('stock_localclass',cls) and m.get(syms['g_artist_type'])==artist
     return shown,m.query,m.items(m.get(syms['tools_pdeq_directory']))
-for cls,artist,query in ((0xf003,0,'getMusicByAlbum'),(0xf004,0,'getMusicBySonger'),
-                         (0xf004,1,'getMusicBySonger' if is_m1plus else 'getMusicByAlbumArtist'),
-                         (0xf005,0,'getMusicByComposer'),(0xf006,0,'getMusicByGenre')):
+for cls,artist,query in ((0xf003,0,('getMusicByAlbum',None,None)),(0xf004,0,('getMusicBySonger',None,None)),
+                         (0xf004,1,BY_ALBUM_ARTIST(None)),
+                         (0xf005,0,('getMusicByComposer',None,None)),(0xf006,0,('getMusicByGenre',None,None))):
     shown,q,staging=unknown(cls,0,artist=artist)
-    assert shown==['Row 0','Row 1'] and q[:2]==(query,None) and not staging, (cls,artist)
+    assert shown==['Row 0','Row 1'] and q[:3]==query and not staging, (cls,artist,q)
     shown,q,staging=unknown(cls,1,artist=artist)
-    assert shown==['Row 0','Row 1','Row 2'] and q[:2]==(query,None) and not staging, (cls,artist); passed()
+    assert shown==['Row 0','Row 1','Row 2'] and q[:3]==query and not staging, (cls,artist,q); passed()
 for cls,last,rows in ((0xf004,1,3),(0xff01,-1,3),(0xf007,-1,3),(0xf004,-1,0)):
     shown,q,_=unknown(cls,0,last=last,rows=rows)
     assert len(shown)==rows and q is None, (cls,last,rows); passed()

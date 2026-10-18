@@ -48,8 +48,12 @@ static inline int batch_set_selectitem(int n) { (void)n; return 0; }
 #ifndef switch_charge_enable
 static inline int switch_charge_enable(int n) { (void)n; return 0; }
 #endif
-#ifndef getMusicByAlbumArtist
-#define getMusicByAlbumArtist getMusicBySonger
+#if !defined(getMusicByAlbumArtist) && defined(getMusicByAlbumAndAlbumSonger)
+/* V2.1 has none: its album query's All songs flag drops the album (where albumsonger like the
+ * artist, or ="" for none); the album is copied even then, so it can't be null */
+static inline int getMusicByAlbumArtist(const char *artist) {
+    return getMusicByAlbumAndAlbumSonger("", artist, 1);
+}
 #endif
 #ifndef config_playmode
 static inline int config_playmode(int mode, int notify) { (void)mode; (void)notify; return 0; }
