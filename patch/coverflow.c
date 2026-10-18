@@ -171,11 +171,16 @@ static void build_art(const job_t *j) {
     art_path(tmp, j->key, ".tmp");
     /* toolsGetAlbumCover goes through the shared /tmp/.tmp_picture, which stock guards with
      * either lock (parse_albumcovertask_thd, player_parsecover_thd); hold both. Stock never
-     * nests them, so this order cannot deadlock. */
+     * nests them, so this order cannot deadlock. V2.1 has the one lock: its player cover thread
+     * (parseplaycover_thd) holds parse_cover_mutex too (test/build.py). */
     pthread_mutex_lock((void *)parse_cover_mutex);
+#if !M1PLUS
     pthread_mutex_lock((void *)g_playcover_mutex);
+#endif
     int ok = toolsGetAlbumCover(j->track, tmp, ART_SIZE, ART_SIZE) == 1;
+#if !M1PLUS
     pthread_mutex_unlock((void *)g_playcover_mutex);
+#endif
     pthread_mutex_unlock((void *)parse_cover_mutex);
     const char *slash = strrchr(j->track, '/');
     int folder = slash ? (int)(slash - j->track) : 0;

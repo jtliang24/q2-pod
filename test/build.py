@@ -279,6 +279,15 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'
     assert words(0x4cdbf4, 2) == (0x2443ff24, 0x2c630002) and compared(0x4cdc34, 0x4cdc44)[1] == b'dialog/volume_dialog'
     assert b'buzzer' not in stock and b'cmd_mcu' not in stock
+    # Coverflow's worker (coverflow.c build_art) holds parse_cover_mutex alone on M1: V2.1 has no
+    # player cover lock. Its toolsGetAlbumCover calls (lw $t9 from its GOT slot) are the three in
+    # parse_albumcovertask_thd and the one in parseplaycover_thd, which locks parse_cover_mutex first.
+    text = next(p for _, p in segments(stock) if p[0] == 1 and p[6] & 1)  # the executable LOAD segment
+    calls = [text[2] + i for i in range(0, text[4], 4) if struct.unpack_from('<I', stock, text[1] + i)[0] == 0x8f99b87c]
+    assert got(0x4df1e8) == stock_syms['toolsGetAlbumCover'] and calls == [0x4dd6a4, 0x4de894, 0x4de95c, 0x4df1e8]
+    assert all(stock_syms['parse_albumcovertask_thd'] <= c < stock_syms['parseplaycover_thd'] for c in calls[:3])
+    assert words(0x4df1c4, 3) == (0x8f99f8b4, 0x8f84b878, 0x0320f809) and got(0x4df1c8) == stock_syms['parse_cover_mutex']
+    assert got(0x4df1c4) == stock_syms['pthread_mutex_lock@GLIBC_2.0'] and stock_syms['parseplaycover_thd'] < 0x4df1c4 < 0x4df1e8
     for old, new in (RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H):  # same-length literals in place
         at = stock.index(old)
         assert stock.count(old) == 1 and len(new) == len(old) and demo[at:at+len(old)] == new, old
