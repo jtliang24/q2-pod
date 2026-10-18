@@ -409,6 +409,35 @@ not built for M1. So the roadmap's "Home never shows the playing cover" can't ha
 `test/build.py` pins the four `toolsGetAlbumCover` call sites and the lock before the player
 thread's call.
 
+**Bluetooth absolute volume.** V2.1 has no `mclSetBtVol`. It merged V1.32's `mclSetLocalVol` and
+`mclSetBtVol` into the exported `mclSetVol` (`0x5d4cb0`), which does two things:
+- it always issues the DAC's volume ioctl (`0xc0044d00`);
+- on Bluetooth, it also sends hciplayer `{mcl-setvol\%d}`.
+
+`set_devicevolume` calls it with 0–100. Two things differ from the Q2, and the hook
+(`M1PLUS_HOOKS['mclSetVol']` → `ringnav_btvol`) handles both:
+- **Full scale.** A private routine that `mclStartPlayer` and `mcl_tidalStartPlayer` call
+  (`0x5d4e00`) sends `mclSetVol(255, 255)`. On the Q2 that call goes to the unhooked `mclSetVol`.
+  Through the hook, 255 would clamp to 100 and push the headset to AVRCP 127. So on M1 anything
+  over 100 goes straight to stock.
+- **The DAC.** While a headset takes absolute volume, stock gets (100, 100), which now sets the DAC
+  to 100 as well. Bluetooth's end puts it back. Both `checkBluetoothStatus` (three paths) and
+  `switchBluetooth` run `save_stop_player`, `set_outputchannel`, `set_devicevolume`,
+  `save_start_player`, in that order, so the jack never plays at the DAC's 100. A restore in the
+  payload's poll was planned and dropped: it would bypass balance and the fixed line-out level that
+  `set_devicevolume` applies.
+
+`test/build.py` pins these:
+- the merged body, and that the old symbols are gone;
+- `set_devicevolume`'s clamps;
+- the 255 call;
+- the order of the four calls on each disconnect path.
+
+`test/patch.py`'s Bluetooth volume and volume-limit tests now run on M1 through the real hook.
+`mclSetVol` stands in for both of V1.32's setters. The 255 case passes to stock and leaves the
+headset as it was, and it fails without the pass-through. The device test still has to check, at
+low volume, that wired headphones come back at the slider's level after a headset disconnects.
+
 ## How to check a build now
 
 ```sh

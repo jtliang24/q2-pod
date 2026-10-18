@@ -89,11 +89,6 @@ here goes with other sections' features:
   - **Test it:** in `test/patch.py`, a still press held on a row of each reachable page opens that
     row's menu and no click, and a moving press doesn't. In `test/boot.py`, a step long-presses an
     album tile on an artist's page; that needs the card library (section 6).
-- **Bluetooth absolute volume.** `NOT PORTED: Bluetooth headset volume scaling`.
-  - **The problem:** `mclSetBtVol` isn't hooked, so `stock_btvol_trampoline` is a stub. An
-    absolute-volume headset gets the volume twice: as AVRCP and as software gain.
-  - **The fix:** find V2.1's Bluetooth volume setter (it has no symbol: look for the caller of the
-    AVRCP volume D-Bus call), hook it, and turn the Unicorn test back on.
 - **Coverflow and Photos scroll distance.** `KNOWN GAP`s.
   - **The problem:** V2.1's `slide_menu` steps by its own height (260 and 450 px), not by
     `slide_menu_item_width` plus a spacer as V1.32's does. Photos leave a black gap mid-swipe, and a
