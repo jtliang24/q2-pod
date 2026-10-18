@@ -51,27 +51,15 @@ here goes with other sections' features:
   - Home's Coverflow card layout, Coverflow's track queue through `mclNextSong`, and other slide
     menus' next and previous: with Coverflow's entry point (section 3) and its scroll distance
     (section 2);
-  - the stock key-down helper with STOP (`0x65f688`): with Knob Navigation Mode's key-down hook;
+  - the stock key-down helper with STOP (`0x65f688`): with V2.1's copy of that private AWTK
+    helper, still to be found (V2.1 binds no key-down handler for the payload to hook);
   - folder rollover and the UI scheduler delay: with the player call sites (section 4).
 
 ## 2. Hardware-specific behaviour (M)
 
-- **Knob Navigation Mode.** `KNOWN GAP: Knob Navigation Mode`.
-  - **The problem:** `ringnav` already remaps the knob's key-up on M1, but nothing turns it on.
-    `knob_nav_active` calls `accent()`, which reads `config.ini [IPOD] KNOB`, only in iPod builds.
-    `ringnav_display` adds the Knob row only under `#if IPOD`. V2.1's key-down isn't hooked, so
-    the remap in `ringnav_keydown` never runs, and the press still turns the volume.
-  - Call `accent()` in M1's `knob_nav_active`, and add the row to Display outside `#if IPOD`.
-  - Find V2.1's key-down-before handler (registered in `home_page_init` beside `on_wm_keyup_fun`) and
-    add it to `M1PLUS_HOOKS`. The same hook brings Key Tone's click control
-    (`NOT PORTED: Key Tone and the knob remap on key-down`, `buzzeer_switch`).
-  - Back stays the on-screen button. Previous is a media key on M1, so knob navigation has no Back
-    key.
-  - Test it with `test/boot.py`'s knob FIFO: with the setting on, a knob turn must move a list's
-    selection, not the volume.
 - **Touch long-press opens the hold menu.** `NOT PORTED: Rate Album from an artist's albums`.
   - **The problem:** a Play/Pause hold opens the menu for the highlighted row (`qm_hold`). On M1
-    nothing highlights a row until Knob Navigation Mode lands, so the hold falls through to V2.1's
+    nothing highlights a row unless Knob Navigation Mode is on, so the hold falls through to V2.1's
     List sort order dialog. The menu's actions are wired but unreachable. On a touchscreen, a long
     press on the row itself is the natural way in, with or without the knob.
   - **The fix:** in the input hook (`ringnav_input`), treat a press held still on a row or tile as
@@ -220,7 +208,8 @@ These are skipped on M1 on purpose (marked `Q2 only` in the tests), not gaps:
 - the touch wheel and its sensitivity;
 - long Return;
 - the sideways splash rotation;
-- the Q2's Centre-key Wake setting (V2.1 has its own Double wake).
+- the Q2's Centre-key Wake setting (V2.1 has its own Double wake);
+- Key Tone: V2.1 has no buzzer command, and binds no key-down handler to hook.
 
 The Rockbox dual boot stays: there is no Rockbox for the M1 Plus yet, but the hook serves as a boot-time
 diagnostic.

@@ -364,6 +364,35 @@ timer and keeps the rows.
 **Commits:** `5b7bb1d` (Playback's rows), `54eb321` (Crossfade's page and its test), `2c3f809` (the
 boot walk), `c2777fd` (About's test), `994451b` (the two iPod-UI checks) and this record.
 
+## 15. Hardware-specific behaviour (Oct 18)
+
+The roadmap's section 2, apart from the Coverflow and Photos scroll distance, which waits for an
+entry point. Reading V2.1's code changed two of the plans before any code did.
+
+**Knob Navigation Mode.** The roadmap planned a V2.1 key-down hook, but V2.1 has none to hook.
+`home_page_init` binds the window manager's touch events, key-up (`0x113`, `on_wm_keyup_fun`) and
+key-long (`0x110`), and no key-down or key-down-before. V2.1 turns the volume on the release:
+`on_wm_keyup_fun` tests `key - 220 < 2` (`0x4cdbf4`) and opens `dialog/volume_dialog`. So the remap
+`ringnav` already made on the release was enough. What was wrong was the setting:
+- M1 builds always compile with `IPOD=0`, so the KNOB read in `accent()` and the Knob row in
+  `ringnav_display` were dead code;
+- `st.knob_mode` stayed 0.
+
+The Knob row is now one of the `pod_*` settings, on M1 only. It sits after Artist Albums in Display
+setting, saved as `[Q2POD] KNOB`. `knob_nav_active` reads it through `pod_settings()`. The dead
+iPod-and-M1 code and `ringnav_keydown`'s unreachable M1 remap are gone. V2.1 has no buzzer command
+either, so Key Tone moved from `NOT PORTED` to Q2 only.
+
+Tests:
+- `test/patch.py`: the `KNOWN GAP` is now a check. Turns become Previous and Next, and the press
+  Centre. Volume mode, a dark screen, Now Playing and a press held by the boot guard keep the
+  knob's keys. The Display test covers the new row, its click and its saved value.
+- `test/build.py`: pins the key-up binding, the absence of a key-down binding in `home_page_init`,
+  the 220/221 test, and the missing buzzer strings.
+- `test/boot.py`: after Crossfade, the walk opens Display setting and taps Knob. Back on System
+  Setting, two knob turns must change the list (the selection outline) and leave the status bar's
+  volume as it was. With the row left at Volume, the same step fails.
+
 ## How to check a build now
 
 ```sh

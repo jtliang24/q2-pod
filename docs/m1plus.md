@@ -81,7 +81,7 @@ Discovered from `/module_driver/driver_default_init_script.sh`:
 - **Amplifiers**: Dual SGM8262 op-amps supporting 3.5mm Single-Ended (`g_po_status`) and 4.4mm Balanced (`g_bal_status`) outputs, plus 3.5mm coaxial S/PDIF digital output.
 - **Wi-Fi / Bluetooth**: Realtek `rtl8733bs.ko` + `hci_uart_h5_kernel_5_10_21.ko`.
 - **Atmosphere LED**: `led_ktd2026.ko` on `i2c_bus_num=5` (multi-color status ring around knob).
-- **Buzzer / Key Tone**: Note that `/module_driver/driver_default_init_script.sh` has `#sh ./mcu_uart.sh` commented out. Verify whether `buzzeer_switch` ([`ringnav_buzzer`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6147-L6150)) is a no-op on M1 Plus.
+- **Buzzer / Key Tone**: none. V2.1's `demo` has no buzzer command (`cmd_mcu write_str buzzer`) and no `buzzeer_switch`, so Key Tone is Q2 only (`test/build.py` checks the strings are absent).
 
 ### 3.4 Physical Inputs, Kernel Drivers & AWTK Key Translation
 Discovered from `/module_driver/keyboard_encoder_add.sh`, `/module_driver/keyboard_gpio_add.sh`, `/module_driver/gt9xx_touch.sh`, and `/etc/init.d/S90play`:
@@ -174,8 +174,14 @@ Three earlier ways in are gone:
 ### 4.2 Side Rotary Knob (Volume by Default, Navigation Optional)
 The side rotary knob defaults to **standard hardware volume control** out of the box, preserving normal M1 Plus volume wheel behavior.
 
-An opt-in setting in **System Settings $\rightarrow$ Display** provides:
-- `Knob Function: Volume (Default) | Navigation`
+An opt-in row in **System Settings $\rightarrow$ Display setting** provides:
+- `Knob: Volume (Default) | Navigation`, saved as `config.ini [Q2POD] KNOB` (0 or 1).
+
+The remap happens on the key's release, in [`ringnav()`](../patch/navigation.c) (the
+`on_wm_keyup_fun` hook), before stock's key-up runs. That is enough, because V2.1 turns the volume
+there: `on_wm_keyup_fun` opens the volume dialog for keys 220/221. V2.1 binds no key-down handler
+(`home_page_init` binds key-up and key-long only), so there is no key-down to remap. `test/build.py`
+pins both facts.
 
 When switched to **Navigation**:
 - **In Menus, Lists, Coverflow, Books & EQ**:
@@ -184,7 +190,7 @@ When switched to **Navigation**:
   - In Navigation mode: Single press activates the selected row (`confirm_center`), while double press toggles the screen off (`DOUBLE_CLICK_MS`).
   - In Volume mode: Single press wakes or sleeps the display immediately (stock behavior).
 - **Context Fallback to Volume**:
-  - Even in Navigation mode, when on `playing_page` (outside of scrub/lyrics/rating picker) or when the screen is off (`!g_backlight_status`), turning the knob controls master audio volume.
+  - Even in Navigation mode, when on `playing_page` or when the screen is off (`!g_backlight_status`), turning the knob controls master audio volume. A knob press held by the boot guard stays Power.
 
 ---
 
