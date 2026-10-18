@@ -63,7 +63,7 @@ WM_VT_SLOT, WM_VTABLE = (0x88, 0x97d6a0) if is_m1plus else (0x94, 0x9a0490)
 # The payload's styles (offsets.inc STYLE_*) as this model compiles them: S('s_listitem_black') is that
 # V1.32 name, or V2.1's nearest on M1 Plus.
 from build import run as _run
-NAMES = dict(re.findall(r'^#define ((?:STYLE|VIEW|ICON)_\w+) "([^"]+)"', _run('clang', '-E', '-dM', f'-DM1PLUS={int(is_m1plus)}', '-x', 'c', str(ROOT/'patch/offsets.inc')), re.M))
+NAMES = dict(re.findall(r'^#define ((?:STYLE|VIEW|ICON|ROW|ABOUT)_\w+) "([^"]+)"', _run('clang', '-E', '-dM', f'-DM1PLUS={int(is_m1plus)}', '-x', 'c', str(ROOT/'patch/offsets.inc')), re.M))
 def S(name): return NAMES['STYLE_' + name[2:].upper()]
 DC=O['DOUBLE_CLICK_MS']  # centre double-press window
 # iPod accent presets: {gradient top, bottom, light tone, red tone, highlight} per Accent setting value.
@@ -3040,6 +3040,8 @@ class QueueMachine(Machine):
         if name=='widget_off_by_func' and u.reg_read(REGS[0]) in self.nodes:  # AWTK removes the matching handler
             a,b,c,d=[u.reg_read(r) for r in REGS]
             self.nodes[a]['handlers']=[h for h in self.nodes[a].get('handlers',[]) if h!=(b,c,d)]
+        elif name=='getFormatString':  # a string table key: the key itself, as an untranslated one
+            a,b,c=(u.reg_read(r) for r in REGS[:3]); self.u.mem_write(b,self.text(a).encode()[:c-1]+b'\0')
         elif name in ('slider_set_min','slider_set_max','slider_set_step','slider_set_value'):
             a,_,c,d=[u.reg_read(r) for r in REGS]  # a double: $a2, $a3 (o32 aligns it past $a1)
             self.nodes[a][name.removeprefix('slider_set_')]=round(struct.unpack('<d',struct.pack('<II',c,d))[0])
@@ -7957,8 +7959,23 @@ if not is_m1plus:
     assert m.nodes[item]['style']==S('s_listitem_black') and tree(button)==want
     assert m.nodes[title]['text']=='CFW. Version' and m.nodes[value]['text']==f"{VERSION}{' Pod' if variant=='ipod' else ''}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
     assert not m.nodes[button].get('handlers') and not m.nodes[button].get('name'); passed()
-else:
-    not_ported("test: About's CFW. Version row uses V1.32's row builder 0x4bc274")
+else:  # M1 Plus: V2.1's About rows are in its asset; its init's widget_foreach visit fills them
+    m=QueueMachine(); m.restack=True; tramp=int(manifest['patch_symbols']['stock_about_trampoline'],16)
+    m.mock('getDiskMemoryInfo','getFormatString')
+    page=m.v21_page('systemset/about_page'); m.top=page; view=named(m,page,NAMES['VIEW_ABOUT'])
+    m.v21_init(tramp,page,only=('scrlabel0','scrlabel1'))  # stock's own Model and FW. Version
+    model,fw=named(m,page,'scrlabel0'),named(m,page,NAMES['ABOUT_FW_LABEL'])
+    assert m.nodes[model]['text']=='about_model:Shanling M1 Plus' and m.nodes[fw]['text']==f"about_version:{manifest['version']}"  # the tag in demo's literal
+    rows=list(m.nodes[view]['children']); m.handlers[tramp]='stock_about'
+    assert m.call(address=HOOKS['systemset_about_page_init'][0],args=(page,5,0,0),gap=0)==0 and m.calls[0][:3]==('stock_about',page,5)
+    kids=m.nodes[view]['children']; assert kids[:2]==rows[:2] and kids[3:]==rows[2:] and m.nodes[fw]['text']=='about_version:V2.1'
+    def tree(w):
+        n=m.nodes[w]
+        return (n['type'],[m.get(w+O[k]) for k in ('W_X','W_Y','W_W','W_H')],n.get('style'),[tree(c) for c in n['children']])
+    item=kids[2]; label,=m.nodes[item]['children']
+    assert tree(item)==tree(rows[1]) and m.nodes[item]['style']==NAMES['ROW_STYLE']  # stock's row and label alike
+    assert m.nodes[label]['text']==f"CFW. Version:{VERSION}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
+    assert not m.nodes[item].get('handlers') and not m.nodes[item].get('name'); passed()
 
 # Resume: once a second the UI loop polls the playing track; one of RESUME_MIN_S or longer keeps its
 # place in a ring written whole to /mnt/data (a .tmp, renamed), every RESUME_SAVE_S of play, after a
