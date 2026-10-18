@@ -288,6 +288,23 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert all(stock_syms['parse_albumcovertask_thd'] <= c < stock_syms['parseplaycover_thd'] for c in calls[:3])
     assert words(0x4df1c4, 3) == (0x8f99f8b4, 0x8f84b878, 0x0320f809) and got(0x4df1c8) == stock_syms['parse_cover_mutex']
     assert got(0x4df1c4) == stock_syms['pthread_mutex_lock@GLIBC_2.0'] and stock_syms['parseplaycover_thd'] < 0x4df1c4 < 0x4df1e8
+    # Bluetooth absolute volume hooks mclSetVol (navigation.c ringnav_btvol): V2.1 has no
+    # mclSetLocalVol or mclSetBtVol, and its mclSetVol issues the DAC's volume ioctl (0xc0044d00)
+    # and sends hciplayer {mcl-setvol%d}. set_devicevolume calls it with 0-100 (its clamps); the
+    # private routine mclStartPlayer and mcl_tidalStartPlayer call (0x5d4e00) sends 255, 255,
+    # which the hook passes to stock. Bluetooth's end stops the player, changes the output and
+    # resets the volume before playing again, so the DAC is never left at 100 for the jack.
+    assert 'mclSetLocalVol' not in stock_syms and 'mclSetBtVol' not in stock_syms
+    assert words(0x5d4cf4, 1) == (0x3c05c004,) and words(0x5d4d04, 1) == (0x24a54d00,)
+    assert compared(0x5d4d48, 0x5d4d54)[1] == b'{mcl-setvol\\%d}'
+    assert got(0x4d6d40) == got(0x4d6e8c) == got(0x5d50bc) == stock_syms['mclSetVol']
+    assert words(0x4d6e64, 1) == (0x28820065,) and words(0x4d6e7c, 1) == (0x28a20065,)  # slti 101
+    assert words(0x5d50c0, 3) == (0x240400ff, 0x0411fefa, 0x240500ff)  # li $a0, 255; bal mclSetVol; li $a1, 255
+    order = [stock_syms[n] for n in ('save_stop_player', 'set_outputchannel', 'set_devicevolume', 'save_start_player')]
+    for name, size, times in (('checkBluetoothStatus', 2800, 3), ('switchBluetooth', 412, 1)):
+        start = stock_syms[name]
+        callees = [got(a) for a in range(start, start + size, 4) if words(a, 1)[0] >> 16 == 0x8f99]  # lw $t9, GOT
+        assert [c for c in callees if c in order] == order * times, name
     for old, new in (RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H):  # same-length literals in place
         at = stock.index(old)
         assert stock.count(old) == 1 and len(new) == len(old) and demo[at:at+len(old)] == new, old
