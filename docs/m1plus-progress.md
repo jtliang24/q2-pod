@@ -462,6 +462,18 @@ opens nothing. The `NOT PORTED` line for Rate Album on an artist's albums is now
 second album. `tslib_run`'s `0x101` and `0x103` are pinned beside its `0xff`. Without the swallow,
 the suite fails.
 
+**The hold menu on V2.1 (fourth device test, V004s).** The long press reached the menu's open, but
+V2.1's own sort window came up. V2.1's navigator runs a dialog modally when its `to_modal` reads set,
+and V2.1's sortselect init, unlike V1.32's, never clears it. So `navigator_to` returned only once the
+dialog had closed, and the menu's re-dress found nothing to dress. The tests had missed it because
+`test/patch.py` stood in a V1.32-style dialog.
+- **The fix.** `qm_sortselect_init` (`M1PLUS_HOOKS`) clears `to_modal` for the menu's own open
+  alone. The menu takes V2.1's row sizes and styles, in its 260 px popup.
+- **Tests.** `test/patch.py` now opens V2.1's real dialog from its asset, through V2.1's init and the
+  hook, with the navigator's modal check modelled; `QueueMachine.nested` runs stock code from inside
+  a mock. Without the clear, the suite fails. `test/build.py` pins the navigator's init call, its
+  `to_modal` default and `dialog_modal`, an init that sets no property, and the asset.
+
 What is left for the device test, at low volume first:
 - a Bluetooth headset with absolute volume, then wired headphones after it disconnects;
 - the knob in both modes;
