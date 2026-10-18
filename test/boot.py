@@ -11,8 +11,8 @@ status bar's clock and battery), and enter the payload through the hooks startup
 Then both take the same input through WALK: touches (the shim stands in for tslib, as the
 touchscreen's samples) and keys (the buttons' and knob's devices, /dev/input/event1 and event2, are
 FIFOs the harness writes Linux key events to). Home's pages, System Setting, About, Playback Setting
-and its EQ: each screen must match stock's, or differ where the payload changes it, and an edge swipe
-and Previous must each close the payload's EQ.
+and its EQ: each screen must match stock's, or differ where the payload changes it, and the payload's
+back button and Previous must each close its EQ.
 Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
 import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
@@ -200,15 +200,15 @@ def swipe(x0, y0, x1, y1, steps=10):
     return [line for i in range(steps + 1) for line in (f'{x0 + (x1 - x0) * i // steps} {y0 + (y1 - y0) * i // steps} 200', 'wait 16')] + [f'{x1} {y1} 0']
 NEXT_PAGE = swipe(280, 250, 40, 250)  # Home's carousel, a page right
 DOWN_LIST = swipe(160, 420, 160, 60)  # a list scrolled towards its end
-BACK = tap(18, 53)                    # V2.1's title-bar back button
-EDGE_SWIPE = swipe(5, 240, 160, 240)  # navigation.c edge_swipe: a Return
+BACK = tap(18, 53)                    # V2.1's title-bar back button, and the payload's (back_button)
 # Keys, as Linux reports them (keyboard_gpio_add.sh, keyboard_encoder): "keys CODE" on the buttons'
 # device, "knob CODE" on the knob's; each a press and a release.
 PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
 # (name, touches for both, seconds to settle, expectation): 'same', stock's below the status bar;
 # ('rows', same, differ), the y bands that match stock's and that must not; 'differs'; ('as', step),
-# the patched screen as it was at that step; or ('same', 'moved', step, box): same, and the box (x0, y0,
-# x1, y1, the status bar's included) changed on both since that step. Positions are V2.1's 320x480 layout.
+# the patched screen as it was at that step; ('not', step, ...), unlike it at each of those steps; or
+# ('same', 'moved', step, box): same, and the box (x0, y0, x1, y1, the status bar's included) changed
+# on both since that step. Positions are V2.1's 320x480 layout.
 WALK = [
     ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, 'same'),
     ('sysset', tap(82, 318), 4, 'same'),
@@ -220,9 +220,15 @@ WALK = [
     ('knob', [KNOB_UP, KNOB_UP], 3, ('same', 'moved', 'playset', (0, 0, 60, 30))),  # the volume, as stock's, and its figure up
     ('eq', tap(160, 238), 5, 'differs'),  # the PEQ editor in stock's EQ page
 ]
-PATCHED_ONLY = [('eq_closed', EDGE_SWIPE, 4, ('as', 'playset')),  # stock's EQ page has its own back
+PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back button; stock's EQ page has its own
                 ('eq_again', tap(160, 238), 5, ('as', 'eq')),
-                ('eq_previous', [PREVIOUS], 4, ('as', 'playset'))]  # Previous, nothing playing: Return
+                ('eq_previous', [PREVIOUS], 4, ('as', 'playset')),  # Previous, nothing playing: Return
+                # Back steps back one screen: Advanced's Preamp row, then Back to Advanced, then out.
+                ('eq_third', tap(160, 238), 5, ('as', 'eq')),
+                ('advanced', tap(250, 53), 4, ('not', 'eq')),           # the tab bar's right half
+                ('preamp', tap(160, 318), 4, ('not', 'advanced')),      # the third row, under the graph
+                ('preamp_back', BACK, 4, ('not', 'preamp', 'playset')),
+                ('advanced_back', BACK, 4, ('as', 'playset'))]
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
@@ -315,6 +321,9 @@ if __name__ == '__main__':
             elif want[0] == 'rows':
                 assert not differing(shots['stock'], shots['patched'], *want[1]), f'{name}: rows {want[1]} differ from stock'
                 assert differing(shots['stock'], shots['patched'], *want[2]), f'{name}: rows {want[2]} are stock\'s'
+            elif want[0] == 'not':
+                for step in want[1:]:
+                    assert differing(seen[step], shots['patched']), f'{name}: still as at {step}'
             else:
                 differ = differing(seen[want[1]], shots['patched'])
                 assert not differ, f'{name}: not back at {want[1]} ({len(differ)} pixels differ)'
