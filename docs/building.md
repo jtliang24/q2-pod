@@ -37,6 +37,10 @@ python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out /tmp/m1plus-build   # o
 
 M1 Plus has only the Stock UI so far: `--ipod` is refused for it.
 
+M1 Plus work must not break the Q2. Q2 builds stay byte-identical to the last verified Q2 build, and every Q2
+test keeps passing. The rule, the current differences and how to check are in
+[m1plus-integration.md](m1plus-integration.md).
+
 On Q2, rebuilt firmware uses `assets/boot-logo.jpg` (320x375) as the boot splash. `assets/boot-logo.jpg` doesn't fit M1 Plus's 320x480 splash, so an M1 Plus build keeps V2.1's own splash (the manifest records `logo_source: stock`). Pass a JPEG of the device's size with `--logo` to use your own; see [boot.md](boot.md#custom-boot-logo).
 
 Both variants replace the stock equalizer page with a 30-band PEQ editor (bands, shelves, preamp, on/off, presets, stock's built-in genre presets, `/EQ` import) and patch `hciplayer`'s equalizer filter with the matching DSP. Both also clear the 44.1 kHz AAC capability bit in `bluealsa` (see [internals.md](internals.md#bluetooth-aac)).

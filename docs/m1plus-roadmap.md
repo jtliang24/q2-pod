@@ -3,9 +3,13 @@
 What is left before the M1 Plus build has Q2 Pod's features, ordered by value and effort. What has been
 done, and why, is in [m1plus-progress.md](m1plus-progress.md).
 
-Every item ends in the same loop. First the build's name check, `test/build.py --build`,
-`test/patch.py` and `test/boot.py` must pass. Then flash through the menu updater, and use the menu
-updater with stock `update.bin` to get back. Where an item's test is a `KNOWN GAP` or `NOT PORTED`
+Every item ends in the same loop. First the Q2 checks must pass:
+- Q2 Legacy and iPod still build byte-identical to the last verified Q2 build;
+- the Q2 suites pass on both.
+
+See [m1plus-integration.md](m1plus-integration.md#checklist). Then the build's name check,
+`test/build.py --build`, `test/patch.py` and `test/boot.py` must pass on M1. Then flash through the
+menu updater, and use the menu updater with stock `update.bin` to get back. Where an item's test is a `KNOWN GAP` or `NOT PORTED`
 line today, the fix removes that marker. `known_gap` fails the run once its check passes, so a fixed
 gap can't be left marked.
 
@@ -13,6 +17,13 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 ## Ground rules
 
+- **Don't break Q2.** No change for M1 may change the Q2 firmware or its tests:
+  - Q2 Legacy and iPod `update.tar` stay byte-identical to the last verified Q2 build, and every Q2 suite
+    and case keeps running and passing.
+  - M1 code goes behind `#if M1PLUS` / `if m1plus` or into a per-model table. That includes defensive checks
+    only V2.1 needs.
+  - A deliberate Q2 change says so in its commit, with its reason and its test.
+  - The full rule is in [m1plus-integration.md](m1plus-integration.md#rule-for-future-work-dont-break-q2).
 - **Find each V2.1 address in V2.1's code, then pin it in a test.** Read the same-named or same-role
   function in V2.1's demo, and pin the instruction or string the change relies on, as
   `test/build.py`'s updater check and `test/patch.py`'s `tslib_run` check do. Never reuse a V1.32
