@@ -8305,10 +8305,14 @@ if not is_m1plus:  # Q2 only: the touch wheel's
         assert texts()[-1]==f'Wheel Sensitivity: {pct}%' and icons[-1]=='system_display' and m.nodes[label]['name']=='label_wheel'
         assert m.nodes[named(m,m.top,'scroll_view_display')]['children'][-1]==rows[-1],config  # the list's end
     passed()
-else:  # M1 Plus: Display gains Artist Albums alone, icon-less as V2.1's display rows
+else:  # M1 Plus: Display gains Artist Albums and Knob, icon-less as V2.1's display rows
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=3)
-    assert texts()==['Artist Albums: Coverflow'] and icons==[None]
-    assert m.nodes[named(m,m.top,NAMES['VIEW_DISPLAY'])]['children'][-1]==rows[-1]; passed()
+    assert texts()==['Artist Albums: Coverflow','Knob: Volume'] and icons==[None,None]
+    assert m.nodes[named(m,m.top,NAMES['VIEW_DISPLAY'])]['children'][-1]==rows[-1]
+    assert click(1)==[(1,'Q2POD','KNOB')] and texts()[1]=='Knob: Navigation'
+    assert click(1)==[(0,'Q2POD','KNOB')] and texts()[1]=='Knob: Volume'
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1'},stock_rows=3)
+    assert texts()[1]=='Knob: Navigation'; passed()
 # Its row opens stock's Boot volume page re-dressed (crossfade.c): titled, no switch, the percent
 # beside the slider, which runs 50-200 in tens. The wheel and +/- step 10%, live and saved, the
 # slider snaps to a ten, and Centre goes back (edit_key, as on Brightness).
@@ -9002,10 +9006,20 @@ if is_m1plus:
     m=input_machine('playing_page'); m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]
     m=input_machine(); m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
     m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[] and 'on_wm_keyup_fun' in [c[0] for c in m.calls]; passed()
-    def knob_navigates():  # [IPOD] KNOB=1: the knob's turns move the selection, not the volume
-        m=input_machine(); m.config['KNOB']='1'; m.call(O['KEY_VOLUMEUP'],gap=1000)
-        assert m.get(m.event+O['EVENT_KEY'])==O['KEY_NEXT']
-    known_gap('Knob Navigation Mode: the KNOB setting is never read outside iPod builds', knob_navigates)
+    # Display's Knob: Navigation (Q2POD KNOB=1). The knob's turns are Previous and Next and its press
+    # Centre, on the release, before stock's key-up, which is where V2.1 opens the volume dialog
+    # (on_wm_keyup_fun's 220/221 test, pinned in test/build.py). Volume (the default), a dark screen,
+    # Now Playing and a press the boot guard holds keep the knob's own keys.
+    def knob(key,mode='1',page='sysset_page',setup=lambda m:None):
+        m=input_machine(page)
+        if mode is not None: m.config['KNOB']=mode
+        setup(m); m.call(O[key],gap=1000); return m.get(m.event+O['EVENT_KEY'])
+    assert [knob(k) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN','KEY_POWER')]==[O['KEY_NEXT'],O['KEY_PREV'],O['KEY_CENTER']]
+    for kw in (dict(mode=None),dict(mode='0'),dict(page='playing_page'),
+               dict(setup=lambda m:m.byte(syms['g_backlight_status'],0))):
+        assert [knob(k,**kw) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']],kw
+    assert knob('KEY_POWER',setup=lambda m:m.byte(syms['g_power_longkey'],1))==O['KEY_POWER']
+    assert knob('KEY_POWER',setup=lambda m:m.byte(O['BOOT_KEY_GUARD'],1))==O['KEY_POWER']; passed()
 
 print(f'{checks} MIPS execution scenarios passed; toolkit services mocked, stock lock filter executed.')
 if is_m1plus:

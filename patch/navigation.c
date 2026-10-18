@@ -186,7 +186,11 @@ typedef struct {
      * Bluetooth's Resume on connect on. */
     int pod_read, charge_limit, low_power, wake_double, wake_pass, charge_held, cpu_off, cpu_bad,
         cpu_marked, artist_cf, year_old, resume, lock_clock, artist_az;
+#if M1PLUS
+    void *pod_label[10];
+#else
     void *pod_label[9];
+#endif
     void *art_cf_win, *art_cf_list; /* the artist page given its Coverflow, the albums pending */
     void *art_cf_veil;              /* the artist page unseen until they show, and its anim_hint */
     char art_cf_hint[64];
@@ -1340,25 +1344,15 @@ int config_digit(const char *key, int n) {
     return config_value("IPOD", key, n);
 } /* and visualizer.c's */
 /* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme, 4 Shortcut. */
-#if M1PLUS
-static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT", "KNOB" };
-static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 5, 2 };
-static int *const setting_values[] = { &st.accent, &st.home_full, &st.battery, &st.classic,
-                                       &st.shortcut, &st.knob_mode };
-#else
 static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT" };
 static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 5 };
 static int *const setting_values[] = { &st.accent, &st.home_full, &st.battery, &st.classic,
                                        &st.shortcut };
-#endif
 static int accent(void) {
     if (!st.settings_read) {
         for (int i = 0; i < 4; ++i)
             *setting_values[i] = config_digit(setting_keys[i], setting_counts[i]);
         st.shortcut = config_or("IPOD", "SHORTCUT", 5, 5); /* 5: no key, see shortcut() */
-#if M1PLUS
-        st.knob_mode = config_or("IPOD", "KNOB", 2, 0);    /* 0: Volume (Default), 1: Navigation */
-#endif
         st.settings_read = 1;
     }
     return st.classic ? st.accent : 0; /* Graphite */
@@ -1995,15 +1989,26 @@ enum {
     POD_ARTISTS,
     POD_RESUME,
     POD_LOCKCLOCK,
-    POD_ARTIST_AZ
+    POD_ARTIST_AZ,
+#if M1PLUS
+    POD_KNOB, /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
+#endif
 };
 static int *const pod_values[] = { &st.charge_limit, &st.low_power,  &st.wake_double,
                                    &st.artist_cf,    &st.year_old,   0,
-                                   &st.resume,       &st.lock_clock, &st.artist_az };
+                                   &st.resume,       &st.lock_clock, &st.artist_az,
+#if M1PLUS
+                                   &st.knob_mode,
+#endif
+};
 _Static_assert(POD_LOCKCLOCK == 7, "lockscreen.c passes pod_rows 7");
 static const char *const pod_keys[] = { "CHARGELIMIT", "LOWPOWER",  "WAKEDOUBLE",
                                         "ARTISTCF",    "YEAROLD",   0,
-                                        "RESUME",      "LOCKCLOCK", "ARTISTAZ" };
+                                        "RESUME",      "LOCKCLOCK", "ARTISTAZ",
+#if M1PLUS
+                                        "KNOB",
+#endif
+};
 static void pod_settings(void) {
     if (st.pod_read) return;
     for (unsigned i = 0; i < sizeof pod_keys / sizeof *pod_keys; ++i)
@@ -2057,6 +2062,9 @@ static void pod_text(int i) {
         { "Resume on Connect: Off", "Resume on Connect: On" },
         { "Clock: Standard", "Clock: Large" },
         { "Artist Album Order: Year", "Artist Album Order: A–Z" },
+#if M1PLUS
+        { "Knob: Volume", "Knob: Navigation" },
+#endif
     };
     int v = i != POD_ARTISTS ? *pod_values[i] : I(artist_type, 0) == 1;
     widget_set_text_utf8(st.pod_label[i], names[i][v]);
@@ -3113,11 +3121,7 @@ static void setting_text(int i) {
                              *const battery[] = { "Battery: Icon", "Battery: Percent",
                                                   "Battery: Icon + Percent",
                                                   "Battery: Percent Inside" },
-                             *const theme[] = { "Theme: Minimal", "Theme: Classic" }
-#if M1PLUS
-                             , *const knob[] = { "Knob: Volume", "Knob: Navigation" }
-#endif
-                             ;
+                             *const theme[] = { "Theme: Minimal", "Theme: Classic" };
     accent(); /* reads the settings */
     const char *const names[] = { accent_names[st.accent], home[st.home_full], battery[st.battery],
                                   theme[st.classic] };
@@ -3127,12 +3131,6 @@ static void setting_text(int i) {
         widget_set_text_utf8(st.setting_label[i], shortcut);
         return;
     }
-#if M1PLUS
-    if (i == 5) {
-        widget_set_text_utf8(st.setting_label[i], knob[st.knob_mode]);
-        return;
-    }
-#endif
     widget_set_text_utf8(st.setting_label[i], names[i]);
 }
 
@@ -3274,13 +3272,12 @@ int ringnav_display(void *win, void *ctx) {
         st.setting_label[4] = list_row(view, "playset_covermode", setting_click, (void *)4);
         setting_text(4);
         accent_row();
-#if M1PLUS
-        st.setting_label[5] = list_row(view, "system_display", setting_click, (void *)5);
-        setting_text(5);
-#endif
     }
 #else
     pod_rows(win, VIEW_DISPLAY, POD_ARTIST_CF, 1, cf_icon);
+#if M1PLUS /* the volume knob's role, read by knob_nav_active */
+    pod_rows(win, VIEW_DISPLAY, POD_KNOB, 1, cf_icon);
+#endif
 #endif
 #if !M1PLUS /* the touch wheel's sensitivity */
     if (view) wheel_row(list_row(view, ICON_DISPLAY, xfade_open, (void *)1));
@@ -6332,15 +6329,13 @@ int ringnav_buzzer(int on) {
 }
 
 #if M1PLUS
+/* Display's Knob: Navigation. The knob's turns are Previous and Next and its press Centre, on
+ * their release, which is where V2.1 changes the volume (on_wm_keyup_fun opens the volume dialog
+ * for 220/221); V2.1 binds no key-down handler. Now Playing and a dark screen keep the volume. */
 static int knob_nav_active(void) {
-#if IPOD
-    accent();
-    if (!st.knob_mode || !g_backlight_status) return 0;
-    if (now_playing() && !st.scrub && !st.rate_win) return 0;
-#else
+    pod_settings();
     if (!st.knob_mode || !g_backlight_status) return 0;
     if (now_playing()) return 0;
-#endif
     return 1;
 }
 #endif
@@ -6353,13 +6348,6 @@ static int knob_nav_active(void) {
  * scrub, the volume and every other key keep the stock click. */
 int ringnav_keydown(void *ctx, void *event) {
     unsigned key = event ? (unsigned)I(event, EVENT_KEY) : 0;
-#if M1PLUS
-    if (knob_nav_active() && event) {
-        if (key == KEY_VOLUMEDOWN) key = KEY_PREV, I(event, EVENT_KEY) = KEY_PREV;
-        else if (key == KEY_VOLUMEUP) key = KEY_NEXT, I(event, EVENT_KEY) = KEY_NEXT;
-        else if (key == KEY_POWER) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
-    }
-#endif
     void *top = window_manager_get_top_window(window_manager());
 #if IPOD
     unsigned char tone = g_keytone_flag;
