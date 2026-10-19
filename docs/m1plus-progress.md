@@ -492,10 +492,16 @@ temporary log on the card showed why: V2.1 keeps Bluetooth's level apart from th
   and the jacks' volume left alone. `test/build.py` pins the dialog's two levels and keys, the
   refresh's reads and the status bar's.
 
+**Knob direction (after the fifth device test).** In Navigation, a turn toward volume up went down
+the list. It now goes up by default (`KEY_PREV`). A new Display row under Knob, `Knob Up: List Up` or
+`List Down` (`POD_KNOB_DIR`, `[Q2POD] KNOBDIR`), flips it back. `test/patch.py` checks both
+directions, the default, Volume mode ignoring the row, and the row's click and saved value.
+
 What is left for the device test, at low volume first:
 - a Bluetooth headset: the headset's buttons move the M1's indicator, and the knob steps from there;
 - wired headphones after the headset disconnects, at the jacks' own level;
-- Rate Album's hearts (V2.1 has no `play_fav`/`play_unfav` images).
+- Rate Album's hearts (V2.1 has no `play_fav`/`play_unfav` images);
+- the knob in Navigation, both ways of Knob Up.
 
 ## How to check a build now
 

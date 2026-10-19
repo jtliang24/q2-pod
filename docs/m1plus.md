@@ -174,8 +174,10 @@ Three earlier ways in are gone:
 ### 4.2 Side Rotary Knob (Volume by Default, Navigation Optional)
 The side rotary knob defaults to **standard hardware volume control** out of the box, preserving normal M1 Plus volume wheel behavior.
 
-An opt-in row in **System Settings $\rightarrow$ Display setting** provides:
+Two rows in **System Settings $\rightarrow$ Display setting** provide:
 - `Knob: Volume (Default) | Navigation`, saved as `config.ini [Q2POD] KNOB` (0 or 1).
+- `Knob Up: List Up (Default) | List Down`, saved as `[Q2POD] KNOBDIR` (0 or 1): which way
+  Navigation moves the list for a turn in the volume-up direction. List Up makes it `KEY_PREV`.
 
 The remap happens on the key's release, in [`ringnav()`](../patch/navigation.c) (the
 `on_wm_keyup_fun` hook), before stock's key-up runs. That is enough, because V2.1 turns the volume
@@ -185,7 +187,7 @@ pins both facts.
 
 When switched to **Navigation**:
 - **In Menus, Lists, Coverflow, Books & EQ**:
-  - Turning the knob translates encoder ticks into AWTK `KEY_PREV` (`172`) / `KEY_NEXT` (`173`) events (suppressing stock volume changes) and feeds them into [`ringnav()`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6353) with duration acceleration (`ramp()`), edge bumping (`BUMP_PX`), and list wrap-around (`EDGE_PAUSE_MS`).
+  - Turning the knob translates encoder ticks into AWTK `KEY_PREV` (`172`) / `KEY_NEXT` (`173`) events (volume up is `KEY_PREV`, up the list, unless `Knob Up: List Down`) (suppressing stock volume changes) and feeds them into [`ringnav()`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6353) with duration acceleration (`ramp()`), edge bumping (`BUMP_PX`), and list wrap-around (`EDGE_PAUSE_MS`).
 - **Knob Push (`KEY_POWER` $\to$ `KEY_CENTER`)**:
   - In Navigation mode: Single press activates the selected row (`confirm_center`), while double press toggles the screen off (`DOUBLE_CLICK_MS`).
   - In Volume mode: Single press wakes or sleeps the display immediately (stock behavior).
