@@ -243,7 +243,11 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('display', tap(160, 302), 4, ('not', 'knob_sysset')),
                 ('knob_row', tap(160, 430), 3, ('as', 'display', (30, 398), (398, 462))),  # Knob: Navigation
                 ('display_back', BACK, 4, ('as', 'knob_sysset')),
-                ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30)))]
+                ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
+                # With Knob: Navigation, Previous is Back: System Setting closes to Home, where it
+                # stays Previous track (nothing plays) and Home stays.
+                ('previous_back', [PREVIOUS], 4, ('as', 'knob_home')),
+                ('previous_home', [PREVIOUS], 4, ('as', 'previous_back'))]
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its

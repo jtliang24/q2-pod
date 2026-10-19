@@ -401,8 +401,9 @@ class Machine:
         elif name=='widget_get_visible': ret=n.get('visible',0)
         elif name=='widget_get_type': ret=self.string(n.get('type',''))
         elif name=='widget_get_prop_str':
-            # Stock text is VALUE_TYPE_WSTRING; value_str does not convert it to UTF-8.
-            ret=0 if self.text(b)=='text' else self.string(n.get(self.text(b),''))
+            # Stock text is VALUE_TYPE_WSTRING; value_str does not convert it to UTF-8. A widget with
+            # no style reads NULL (value_str of widget->style), not the default.
+            ret=0 if self.text(b)=='text' or (self.text(b)=='style' and 'style' not in n) else self.string(n.get(self.text(b),''))
         elif name=='widget_get_text': ret=self.wide_string(n.get('text',''))
         elif name=='player_playtime_and_length' and hasattr(self,'playtime'): self.word(a,self.playtime); self.word(b,225); ret=0
         elif name=='widget_get_text_utf8': self.u.mem_write(b,n.get('text','').encode()[:c-1]+b'\0'); ret=0
@@ -9119,6 +9120,37 @@ if is_m1plus:
     m=input_machine('playing_page'); m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]
     m=input_machine(); m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
     m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[] and 'on_wm_keyup_fun' in [c[0] for c in m.calls]; passed()
+    # With Knob: Navigation, Previous is Back as well: after the key's own dispatch, a click on the
+    # page's title-bar back button, the first one showing in navbar_btnreturn_style (V2.1's pages
+    # take no Return: their buttons' click, on_back_onclick, goes back). Stock's key-up doesn't run.
+    # It goes back with Spotify or Internet Radio owning playback too (media_owner 2), where it would
+    # be that source's Previous. On a rotated screen V2.1 swaps Previous and Next (on_wm_keyup_fun,
+    # rotate_mode 1), so the button stock takes as Previous is the other one. Next stays Next.
+    def previous(key='KEY_BACK_BTN',mode='1',page='sysset_page',setup=lambda m:None):
+        m=input_machine(page); m.config['KNOB']=mode; m.mock('media_key')
+        hidden,back=m.node('button',style='navbar_btnreturn_style',visible=0),m.node('button',style='navbar_btnreturn_style')
+        m.top=m.node('window',page,[m.node('view','navigationbar_view',[m.node('label'),m.node('button'),hidden,back]),m.node()]); setup(m)
+        m.call(O[key],gap=1000); ran=[c[0] for c in m.calls]; m.advance(0)
+        assert dispatched(m)==[]  # no Return
+        return m.clicks==[back],'on_wm_keyup_fun' in ran,'media_key' in ran
+    rotated=lambda m:m.byte(syms['g_rotate_mode'],1)
+    assert previous()==(True,False,False)
+    assert previous(setup=lambda m:m.mock('media_owner'))==(True,False,False)  # the mock's 0: not local
+    assert previous('KEY_FWD_BTN',setup=rotated)==(True,False,False)
+    assert previous('KEY_BACK_BTN',setup=rotated)==(False,True,False)
+    assert previous('KEY_FWD_BTN')==(False,True,False); passed()
+    # Volume mode, Home (nothing to go back to: it is Previous track, the playing source's too), Now
+    # Playing and its enlarged art, and a dark screen, locked or not, keep Previous a media key.
+    for kw in (dict(mode='0'),dict(page='home_page'),dict(page='playing_page'),dict(page='bigcover_page'),
+               dict(setup=lambda m:m.byte(syms['g_backlight_status'],0)),
+               dict(setup=lambda m:(m.byte(syms['g_backlight_status'],0),m.byte(syms['g_keylock_flag'],1),m.byte(syms['g_keylock_mode'],0)))):
+        assert previous(**kw)==(False,True,False),kw
+    assert previous(page='home_page',setup=lambda m:m.mock('media_owner'))==(False,False,True); passed()
+    # A payload page's back button (back_button) is found the same way; its click is the Return the
+    # back button test above follows.
+    m=input_machine('shuffle_page'); m.config['KNOB']='1'; page=m.top
+    button=m.call(address=payload_syms['back_button'],args=(page,0,0,0),gap=0)
+    m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0); assert m.clicks==[button]; passed()
     # Display's Knob: Navigation (Q2POD KNOB=1). The knob's turns are Previous and Next, volume up
     # Previous (up the list) unless Knob Up: List Down (KNOBDIR=1), and its press Centre, on the release, before stock's key-up, which is where V2.1 opens the volume dialog
     # (on_wm_keyup_fun's 220/221 test, pinned in test/build.py). Volume (the default), a dark screen,
