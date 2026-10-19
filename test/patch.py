@@ -3582,13 +3582,15 @@ else:
 # Bluetooth volume runs through the shared hook in both variants and on M1 Plus, where V2.1's
 # mclSetVol sets the DAC and Bluetooth's gain in one (HOOKS['mclSetBtVol'] is that entry). Mock only
 # headset I/O and stock gain; device_set_volume itself executes its native output routing.
+# V2.1 keeps Bluetooth's level apart from the jacks' g_volume (test/build.py pins it).
+BTVOL='g_btvolume' if is_m1plus else 'g_volume'
 class BtVolumeMachine(Machine):
     def __init__(self):
         super().__init__()
         self.absolute=10; self.write_result=0; self.way=1
         self.byte(syms['g_bluetoothflag'],1); self.byte(syms['bt_linkstatus'],1)
-        self.word(syms['bt_showcoding'],1); self.byte(syms['g_volume'],20); self.byte(syms['g_maxvolume'],100)
-        self.handlers[HOOKS['mclSetBtVol'][0]+12]='stock_btvol'
+        self.word(syms['bt_showcoding'],1); self.byte(syms['g_volume'],20); self.byte(syms[BTVOL],20)
+        self.byte(syms['g_maxvolume'],100); self.handlers[HOOKS['mclSetBtVol'][0]+12]='stock_btvol'
         self.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
         self.mock('dmrSendVolume' if is_m1plus else 'mclSetLocalVol','mclUsbAudioSetVol','notifyVolume','airplaySendVol')
     def hook(self,u,address,size,unused):
@@ -3624,7 +3626,7 @@ if is_m1plus:
 # Volume 0 and back up: the headset gets 0 then 1, stock gain 0 then full.
 b=BtVolumeMachine(); assert b.volume(0,0)==[(0,0)] and b.writes()==[0]
 assert b.volume(1,1)==[(100,100)] and b.writes()==[1]; passed()
-b=BtVolumeMachine(); b.byte(syms['g_volume'],0); b.poll()
+b=BtVolumeMachine(); b.byte(syms[BTVOL],0); b.poll()
 assert b.writes()==[0] and [c[1:3] for c in b.calls if c[0]=='stock_btvol']==[(0,0)]; passed()
 for cur in (-1,128,255):
     b=BtVolumeMachine(); b.absolute=cur
@@ -8940,14 +8942,23 @@ for owner in (1,2,3,4):
 for absolute,limit,want in ((127,40,40),(0,100,0),(64,100,50),(1,100,1),(126,100,99)):
     b=BtVolumeMachine(); b.poll(); b.byte(syms['g_maxvolume'],limit)
     b.absolute=absolute; b.poll()
-    assert b.u.mem_read(syms['g_volume'],1)[0]==want
+    assert b.u.mem_read(syms[BTVOL],1)[0]==want
     assert b.absolute==(want*127+50)//100
     b.poll(); assert not b.writes()
     passed()
 # A headset step that already reads as the Q2 volume stays: 2 is volume 2, never rewritten to 3.
 b=BtVolumeMachine(); b.poll(); b.absolute=2; b.poll()
-assert b.u.mem_read(syms['g_volume'],1)[0]==2 and not b.writes() and b.absolute==2
+assert b.u.mem_read(syms[BTVOL],1)[0]==2 and not b.writes() and b.absolute==2
 assert b.volume(2,2)==[(100,100)] and not b.writes(); b.poll(); assert not b.writes(); passed()
+if is_m1plus:
+    # The headset's own steps move V2.1's Bluetooth level, save it as [PLAYSET] BTVOLUME and refresh
+    # an open volume dialog through V2.1's own routine (it reads the output's level); the jacks'
+    # volume is left alone. Connecting puts the headset at the Bluetooth level, not the jacks'.
+    b=BtVolumeMachine(); b.byte(syms['g_volume'],33); b.poll(); assert b.writes()==[25]
+    b.top=b.node('dialog','volume_dialog'); b.absolute=64; b.poll()
+    assert b.u.mem_read(syms['g_btvolume'],1)[0]==50 and b.u.mem_read(syms['g_volume'],1)[0]==33
+    assert [(c[1],b.text(c[2]),b.text(c[3])) for c in b.calls if c[0]=='write_int_config']==[(50,'PLAYSET','BTVOLUME')]
+    assert [c[1] for c in b.calls if c[0]=='volume_refresh']==[b.top]; passed()
 print('M4B recognition/resume and headset routing, ear masks, manual cancellation, malformed packets and volume limits passed.')
 
 # Real helper APIs: explicit pause/resume is observable and repeatable, with shared gain changes.
@@ -8956,7 +8967,7 @@ def endpoint(m,name,value=0):
 def ready_gain(m,ready,volume):
     m.way=1
     for name in ('g_bluetoothflag','bt_linkstatus'): m.byte(syms[name],1)
-    m.word(syms['bt_showcoding'],1); m.byte(syms['g_volume'],volume)
+    m.word(syms['bt_showcoding'],1); m.byte(syms['g_volume'],volume); m.byte(syms[BTVOL],volume)
     m.word(payload_syms['btvol']+4 if 'btvol' in payload_syms else payload_syms['btvol.1'],ready)  # clang may split scalar fields
 m=SpotMachine({BIN:bytearray()}); spot_open(m,stream_page(m)); m.state('playing'); m.poll()
 for playing,command in ((0,'s'),(1,'P')):

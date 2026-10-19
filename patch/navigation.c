@@ -6236,7 +6236,20 @@ static int bt_sync_volume(int left, int right) {
     return 1;
 }
 
+#if M1PLUS
+/* V2.1 keeps Bluetooth's level apart, [PLAYSET] BTVOLUME: its volume dialog, status bar and
+ * set_devicevolume use it while the output is Bluetooth, and g_volume stays the jacks'. */
+#define BT_VOLUME g_btvolume
+#define BT_VOLUME_KEY "BTVOLUME"
+int headset_gain(void) {
+    if (!bt_audio_ready()) return g_volume;
+    return btvol.ready && BT_VOLUME ? 100 : BT_VOLUME;
+}
+#else
+#define BT_VOLUME g_volume
+#define BT_VOLUME_KEY "VOLUME"
 int headset_gain(void) { return bt_audio_ready() && btvol.ready && g_volume ? 100 : g_volume; }
+#endif
 
 /* Absolute zero still needs software mute. Unsupported/failed writes retain stock gain.
  * V2.1 has no mclSetBtVol: its mclSetVol sets the DAC and, on Bluetooth, hciplayer's gain. Over 100
@@ -6263,11 +6276,11 @@ static void bt_volume_poll(void) {
         return;
     }
     if (!btvol.ready) {
-        if (bt_sync_volume(g_volume, g_volume)) {
-            stock_btvol_trampoline(g_volume ? 100 : 0, g_volume ? 100 : 0);
+        if (bt_sync_volume(BT_VOLUME, BT_VOLUME)) {
+            stock_btvol_trampoline(BT_VOLUME ? 100 : 0, BT_VOLUME ? 100 : 0);
             btvol.ready = 1;
         }
-        return; /* Initial connection preserves Q2 volume. */
+        return; /* Initial connection preserves the player's volume. */
     }
     int cur = btctl_transport_get_volume();
     if (cur < 0 || cur > 127) {
@@ -6280,19 +6293,23 @@ static void bt_volume_poll(void) {
     int limit = g_maxvolume < 100 ? g_maxvolume : 100;
     if (v > limit) v = limit;
     btvol.last = cur;
-    g_volume = (unsigned char)v;
+    BT_VOLUME = (unsigned char)v;
 #if !M1PLUS /* V2.1's responseSetVolume (0x50eecc) keeps only volume, g_volume */
     *(volatile signed char *)0xa38c41u = (signed char)v; /* stock responseSetVolume's level */
 #endif
     device_set_volume(v, 1);
-    write_int_config(v, "PLAYSET", "VOLUME");
+    write_int_config(v, "PLAYSET", BT_VOLUME_KEY);
     /* device_set_volume invokes our gain hook; enforce the limit even when mocked/unsupported. */
     btvol.ready = bt_sync_volume(v, v);
     stock_btvol_trampoline(btvol.ready && v ? 100 : v, btvol.ready && v ? 100 : v);
     void *top = window_manager_get_top_window(window_manager());
     if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog")) {
+#if M1PLUS
+        volume_refresh(top);
+#else
         void *slider = widget_lookup(top, "slider_vol", 1);
         if (slider) widget_set_prop_int(slider, "value", v);
+#endif
     }
 }
 

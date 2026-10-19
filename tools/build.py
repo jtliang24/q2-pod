@@ -629,6 +629,7 @@ FUNCTIONS = {
  'np_info': ('int', 'void *'),  # Now Playing's info page labels (ringnav_np_info)
  'getFormatString': ('int', 'const char *, char *, int'),  # a string's label in the language: key, out, size
  'mclSetSeek': ('int', 'int'),  # the player's seek in file seconds; it plays on from there, or on Play once paused
+ 'volume_refresh': ('void', 'void *'),  # V2.1 only: the volume dialog shows the output's level
 }
 # Local stock routines in the SHA-256-pinned V1.32 executable.
 PRIVATE_FUNCTIONS = {
@@ -689,7 +690,12 @@ M1PLUS_GLOBAL_ALIASES = {
     # folder_back clear the navbar state).
     'g_guideflag': 'first_guideflag',
     'g_navbar_status': 'navigation_status',
+    'g_btvolume': 'btsource_volume',
 }
+# V2.1 globals V1.32 lacks, read as GLOBALS are. Bluetooth keeps its own level, [PLAYSET] BTVOLUME:
+# the volume dialog (on_volume_tsup_fun), status bar and set_devicevolume use it while headset_output
+# is 2, and `volume` stays the jacks'.
+M1PLUS_GLOBALS = ['g_btvolume']
 # Renamed in V2.1; each has the size of its V1.32 counterpart (checked in m1plus_symbols).
 M1PLUS_CONTEXT_ALIASES = {
     'g_folder_path': 'folder_path',
@@ -719,6 +725,7 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'folder_refresh': 0x5318ac,  # folder_page_init's (0x53354c): navbar and table from pdeq_showlist
     'album_row': 0x4e93c8,  # getAllAlbum's toolsQueryDbTable callback (0x4ea458): a record to tools_pdeq_directory
     'gif_image_create': 0x5fb69c,
+    'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
 }
 M1PLUS_FUNCTION_ALIASES = {
     'device_set_volume': 'set_devicevolume',
@@ -839,11 +846,12 @@ def m1plus_symbols(syms, symbol_table):
         if v in syms: syms[k] = syms[v]
     syms.update(M1PLUS_PRIVATE_FUNCTIONS)
     stubs = []
-    for name in GLOBALS:  # payload reads one byte: little-endian, a 4-byte flag's low byte
+    for name in GLOBALS + M1PLUS_GLOBALS:  # payload reads one byte: little-endian, a 4-byte flag's low byte
         alias = M1PLUS_GLOBAL_ALIASES.get(name, name)
         if name in M1PLUS_RAW_GLOBALS:
             syms[name] = M1PLUS_RAW_GLOBALS[name]
             continue
+        check(name not in M1PLUS_GLOBALS or size(alias) is not None, f'{name}: no {alias} in V2.1')
         if size(alias) is None:
             stubs.append((name, 1))
             continue
