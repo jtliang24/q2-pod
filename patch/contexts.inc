@@ -84,3 +84,6 @@
 { "tidal_quality_select_dialog", CTX_DYNAMIC, BUTTONS },
 { "tidal_sortmode_dialog", CTX_DYNAMIC, BUTTONS },
 #endif
+#if M1PLUS
+{ "library_page", CTX_FIXED, 0 }, /* runtime window (patch/navigation.c): the Q2 Pod Home card's */
+#endif

@@ -141,6 +141,25 @@
 #define ICON_RETURN "return"
 #define ICON_RETURN_DOWN "return_down"
 #define BACK_W 48 /* back_button's width, the payload's title-bar height: titles start after it */
+/* V2.1's Home: home_page_init's grid builder (0x534064) fills home_sview, a slide_view, with one
+ * 320x364 page view per HOME_CARDS ids of pdeq_choicemenu and sets home_sindicator's max to the pages.
+ * Each card (0x533d8c) is a HOME_CARD_W x HOME_CARD_H view, two columns from HOME_CARD_X, rows from 0:
+ * a clickable 66 px image at HOME_ICON_X, HOME_ICON_Y in home_<name>_style (bg_image <name>, pressed
+ * <name>_down) and a line-wrapped label under it in STYLE_HOME_LABEL, from Home's own style file. */
+#define VIEW_HOME_SLIDES "home_sview"
+#define VIEW_HOME_DOTS "home_sindicator"
+#define STYLE_HOME_LABEL "label_centerwhitehome_white"
+#define HOME_CARDS 6
+#define HOME_PAGE_W 320
+#define HOME_PAGE_H 364
+#define HOME_CARD_X 6
+#define HOME_CARD_W 154
+#define HOME_CARD_H 118
+#define HOME_ICON_X 44
+#define HOME_ICON_Y 20
+#define HOME_ICON 66
+#define HOME_LABEL_Y 92
+#define HOME_LABEL_H 36
 #else
 #define STYLE_LISTITEM_BLACK "s_listitem_black"
 #define STYLE_BTN_LISTITEM "s_btn_listitem"

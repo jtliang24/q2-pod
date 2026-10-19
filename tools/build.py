@@ -781,7 +781,6 @@ M1PLUS_HOOKS = {
     'playing_page_init': (0x53d1e4, 'ringnav_playing', 'playing'),
     'on_wm_keyup_fun': (0x4cd9ac, 'ringnav', 'keyup'),
     'on_wm_before_tsdown_fun': (0x4cd608, 'ringnav_touch', 'touch'),
-    'localclass_page_init': (0x536b30, 'ringnav_localmusic', 'localmusic'),
     'screensaver_page_init': (0x53fd44, 'lockscreen_init', 'saver'),
     'loadLocalClassList': (0x4ee504, 'ringnav_localclass', 'localclass'),
     'loadAlbumdetailList': (0x4eea98, 'ringnav_album_detail', 'detail'),

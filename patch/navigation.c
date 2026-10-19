@@ -263,6 +263,7 @@ typedef struct {
     void *lp_top;
     int lp_x, lp_y, lp_touch, lp_swallow;
     int qm_opening; /* qm_open's navigator_to is running: its sortselect_dialog is the menu */
+    void *lib_page; /* the Q2 Pod Home card's page (library_open) */
 #endif
     /* Queue menu: the hold's AWTK press time marks its release; the target is a track/list row
      * checked by count, record and browsing-state hashes; qm_cls is the class its list holds;
@@ -4277,6 +4278,9 @@ static int page_closed(void *ctx, void *event) {
     if (ctx == st.rt_menu) st.rt_menu = 0;
     if (ctx == st.mp_page) st.mp_page = 0;
     if (ctx == st.sp_page) st.sp_page = 0;
+#if M1PLUS
+    if (ctx == st.lib_page) st.lib_page = 0;
+#endif
     return 0;
 }
 
@@ -5193,6 +5197,34 @@ int ringnav_localmusic(void *win, void *ctx) {
                        n++);
     return result;
 }
+
+#if M1PLUS
+extern int coverflow_row(void *ctx, void *event); /* coverflow.c */
+/* The Q2 Pod Home card's page (coverflow.c home_card): the Library's added rows, which V2.1 has no
+ * menu for (its Home is the library, and its categories stay there), in V2.1's rows and the Library's
+ * order, with Coverflow, Q2's own Home card, after the media. Videos waits for q2video on the M1's DAC
+ * (docs/m1plus-roadmap.md). */
+int library_open(void *ctx, void *event) {
+    (void)ctx;
+    (void)event;
+    if (st.lib_page || !(st.lib_page = page_open("library_page", page_closed, page_keyup))) return 0;
+    static const char *const icons[] = { "local_podcasts", "local_audiobooks", "local_photos",
+                                         "local_books" };
+    char path[sizeof st.media_root];
+    int media[BOOKS], scrobbles = scrobble_ready(), n = 5 + scrobbles;
+    for (int k = 0; k < BOOKS; k++) n += media[k] = media_find(k + 1, path);
+    void *view = page_list(st.lib_page, st.lib_page, 0, "Q2 Pod", n, 64);
+    library_into(view, "local_shuffle", shuffle_menu, 0, "Shuffle");
+    library_into(view, "local_fav", ratings_menu, 0, "Ratings");
+    library_row(view, "local_frequentplay", most_played, 0, "Most Played");
+    library_row(view, "local_longsongs", long_songs, 0, "Long Songs");
+    for (int k = 0; k < BOOKS; k++)
+        if (media[k]) library_row(view, icons[k], media_click, (void *)(long)(k + 1), MEDIA[k]);
+    library_row(view, "local_coverflow", coverflow_row, 0, "Coverflow");
+    if (scrobbles) library_row(view, "local_scrobble", upload_scrobbles, 0, "Upload Scrobbles");
+    return 0;
+}
+#endif
 
 /* Streaming's AirPlay row: stock's own receiver (Shairport 1.1.1, AirPlay 1), whose switch is on
  * System settings' Network service page; that page, one press from Streaming. */
