@@ -37,9 +37,10 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 - **Every page has an explicit Back button.** Every page Q2 Pod opens or replaces on M1 shows V2.1's
   title-bar back button at its top left. Make it with `back_button`, or with `page_title`, which adds
   one; its click sends Return, and the page's keyup decides whether that closes the page or steps
-  back one screen. The M1 has no Return key, and Previous, Next and Play/Pause are media keys, as
-  on stock: no gesture, hidden tap or key may be a page's only way out. Each new page's
-  `test/boot.py` step closes it with the button (`BACK`).
+  back one screen. The M1 has no Return key. Previous, Next and Play/Pause are media keys, as on
+  stock, except that in Knob: Navigation Previous also presses the page's back button. So no
+  gesture, hidden tap or key may be a page's only way out. Each new page's `test/boot.py` step
+  closes it with the button (`BACK`).
 
 ## 1. Small fixes (S)
 

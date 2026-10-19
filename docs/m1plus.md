@@ -92,8 +92,8 @@ Discovered from `/module_driver/keyboard_encoder_add.sh`, `/module_driver/keyboa
 | **Rotary Knob (Turn CW/Up)** | GPIO `PB18` (`keyboard_encoder.ko`) | `KEY_VOLUMEUP` (`115`) | Verify in M1 Plus `demo` (`KEY_NEXT = 173` on Q2) | Discrete GPIO encoder pulses (not `tslib`!) |
 | **Rotary Knob (Press In)** | GPIO `PE31` (`keyboard_gpio_add.ko`) | `KEY_POWER` (`116`) | `KEY_CENTER` (`218`) | Also wakes hardware (`wakeup=y`) |
 | **Play / Pause Button** | GPIO `PB02` (`keyboard_gpio_add.ko`) | `KEY_PLAYPAUSE` (`164`) | `KEY_PLAY` (`171`) | On Q2 Linux code was `108` (`KEY_DOWN`) |
-| **Next Track Button** | GPIO `PE26` (`keyboard_gpio_add.ko`) | `KEY_NEXTSONG` (`163`) | `KEY_FWD_BTN` (`223`) | Active high (`active_level=1`) |
-| **Previous Track Button** | GPIO `PB03` (`keyboard_gpio_add.ko`) | `KEY_PREVIOUSSONG` (`165`) | `KEY_BACK_BTN` (`222`) | Active low (`active_level=0`) |
+| **Next Track Button** | GPIO `PE26` (`keyboard_gpio_add.ko`) | `KEY_NEXTSONG` (`163`) | `KEY_FWD_BTN` (`215` on V2.1, `223` on Q2) | Active high (`active_level=1`) |
+| **Previous Track Button** | GPIO `PB03` (`keyboard_gpio_add.ko`) | `KEY_PREVIOUSSONG` (`165`) | `KEY_BACK_BTN` (`214` on V2.1, `222` on Q2) | Active low (`active_level=0`). Back in Knob: Navigation (§4.2) |
 | **Physical Return Button** | **None on M1 Plus** | N/A | `KEY_RETURN` (`170`) | **Missing in hardware — must be synthesized** |
 | **Touchscreen** | Goodix (`gt9xx_touch.ko`, I2C0) | `/dev/input/event2` (`TSLIB_TSDEVICE`) | `EVT_POINTER_DOWN/MOVE/UP` | `320 × 480`, `flip=0`, `exchange=0` |
 
@@ -160,8 +160,9 @@ what Back means: close the page, or step back one screen as the PEQ editor's Adv
 No gesture, hidden tap or key may be a page's only way out. A new page's `test/boot.py` step
 closes it with that button.
 
-**The Back button is M1 Plus's only Return.** V2.1's own pages have theirs. Previous, Next and
-Play/Pause stay media keys, as on stock.
+**The Back button is always there.** V2.1's own pages have theirs. In Knob: Volume, Previous, Next
+and Play/Pause stay media keys, as on stock. In Knob: Navigation, Previous also goes back: it
+presses the page's back button (§4.2). It is a second way out, never the only one.
 
 Three earlier ways in are gone:
 - **The left-edge swipe and the title tap.** Nothing on screen showed them, and the swipe had to
@@ -169,7 +170,8 @@ Three earlier ways in are gone:
   ([m1plus-progress.md](m1plus-progress.md) §11).
 - **Previous as Return while nothing played.** Its Return skipped `wake_gate`'s screen-off drop, so
   a bump of Previous with the screen off closed a page nobody could see, even with the keys locked
-  ([m1plus-progress.md](m1plus-progress.md) §13).
+  ([m1plus-progress.md](m1plus-progress.md) §13). Previous as Back in Knob: Navigation (§4.2) only
+  acts where the knob navigates, which needs the screen on.
 
 ### 4.2 Side Rotary Knob (Volume by Default, Navigation Optional)
 The side rotary knob defaults to **standard hardware volume control** out of the box, preserving normal M1 Plus volume wheel behavior.
@@ -188,6 +190,12 @@ pins both facts.
 When switched to **Navigation**:
 - **In Menus, Lists, Coverflow, Books & EQ**:
   - Turning the knob translates encoder ticks into AWTK `KEY_PREV` (`172`) / `KEY_NEXT` (`173`) events (volume up is `KEY_PREV`, up the list, unless `Knob Up: List Down`) (suppressing stock volume changes) and feeds them into [`ringnav()`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6353) with duration acceleration (`ramp()`), edge bumping (`BUMP_PX`), and list wrap-around (`EDGE_PAUSE_MS`).
+- **Previous is Back** (`KEY_BACK_BTN`, or `KEY_FWD_BTN` while `rotate_mode` is 1, since V2.1 swaps
+  the two on a rotated screen): on its release, a timer clicks the top page's first showing button
+  in `navbar_btnreturn_style`. That is V2.1's own back button, whose click is `on_back_onclick` (its
+  pages take no `KEY_RETURN`), or the payload's `back_button`, whose click is a Return. On Home,
+  Previous stays Previous track: there is nothing to go back to. Where the knob keeps the volume
+  (below), Previous stays a media key too.
 - **Knob Push (`KEY_POWER` $\to$ `KEY_CENTER`)**:
   - In Navigation mode: Single press activates the selected row (`confirm_center`), while double press toggles the screen off (`DOUBLE_CLICK_MS`).
   - In Volume mode: Single press wakes or sleeps the display immediately (stock behavior).

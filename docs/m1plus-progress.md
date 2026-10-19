@@ -519,6 +519,50 @@ What is left for the device test, at low volume first:
 - both ways of Knob Up;
 - Rate Album's hearts (V2.1 has no `play_fav`/`play_unfav` images), deferred for now.
 
+## 16. Previous is Back in Knob: Navigation (Oct 19)
+
+With the knob navigating, the hand is already on the hardware, and Previous is where a Back key
+would be. Section 13 took Previous-as-Return away because it was a hidden path with a bug. It comes
+back in a narrower form: Back, only in Knob: Navigation, and only where the knob navigates. The
+on-screen Back button stays on every page in both modes, so Knob: Volume always has a visible way
+out.
+
+**Where.** `ringnav` (the `on_wm_keyup_fun` hook) takes Previous inside `knob_nav_active()`, beside
+the knob's remap. That gate needs the screen on and a context page, and it excludes Now Playing,
+the enlarged art, the volume dialog, and Bluetooth receiver and USB DAC modes. Section 13's two
+bugs (the key lock, the screen-off drop) both need the screen off, so they can't happen. On Home
+Previous stays Previous track, because there is nothing to go back to. Previous is the button stock
+takes as Previous: on a rotated screen (`rotate_mode` 1) `on_wm_keyup_fun` swaps 214 and 215
+(`0x4cd9f8`), so there it is 215. `rotate_mode` is a new M1 global (`M1PLUS_GLOBALS`).
+
+**How.** The first try sent a Return, as the payload's back button does. `test/boot.py` showed
+System Setting stayed open: V2.1's pages take no `KEY_RETURN` (the M1 has none, and
+`on_wm_keyup_fun` has no case for 170). Their back buttons are built by each page's init: a
+`button_create` in `navbar_btnreturn_style` whose click is `on_back_onclick` (`0x47f12c` is one of 42
+such sites). Section 10's check that Previous closed a page only covered the PEQ, a payload page. So
+Previous now presses the page's own button. A timer, after the key's dispatch, finds the top page's
+first showing button in that style and dispatches a click to it. That is V2.1's own button on its
+pages, and `back_button` (same style) on the payload's, which then sends its Return.
+
+The second build crashed demo on the first Previous. `widget_get_prop_str(w, "style", "")` returns
+NULL, not the default, for a widget with no style (`value_str` of a NULL `widget->style`), and the
+payload's `strcmp` doesn't take NULL. The search now reads the style of buttons only and checks for
+NULL. The test machine's `widget_get_prop_str` now returns NULL for an unset style too.
+
+**Tests.**
+- `test/patch.py`, with KNOB=1:
+  - on System Setting, Previous clicks the showing back button, not a hidden one or a styleless
+    button, and runs neither stock's key-up nor a media key;
+  - the same with another source owning playback, and with the rotated screen's swapped button;
+  - Next stays Next;
+  - on a payload page, it clicks `back_button`'s button.
+
+  Volume mode, Home, Now Playing, the enlarged art, and a dark screen (locked or not) keep Previous
+  a media key. On Home with Spotify or Radio owning playback, it is that source's Previous.
+- `test/boot.py`: after `knob_nav`, Previous closes System Setting to Home (`previous_back`), and a
+  second Previous leaves Home as it was (`previous_home`). The first build (a Return) failed
+  `previous_back`, and the second crashed there.
+
 ## How to check a build now
 
 ```sh
@@ -542,5 +586,6 @@ card update.
 - **A skip has a name.** `KNOWN GAP` and `NOT PORTED` replace silent skips, and neither can quietly start
   passing.
 - **Prove each new check can fail,** once, against a deliberately broken build.
-- **A way out is on screen.** Every page has a visible Back button; a gesture or a key can't be the
-  only exit, and the hardware keys keep stock's meaning.
+- **A way out is on screen.** Every page has a visible Back button. A gesture or a key can't be the
+  only exit. The hardware keys keep stock's meaning, except Previous in Knob: Navigation, which
+  presses that same button.
