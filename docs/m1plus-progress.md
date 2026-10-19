@@ -474,10 +474,28 @@ dialog had closed, and the menu's re-dress found nothing to dress. The tests had
   a mock. Without the clear, the suite fails. `test/build.py` pins the navigator's init call, its
   `to_modal` default and `dialog_modal`, an init that sets no property, and the asset.
 
+**Bluetooth's own level (fifth device test, V005s).** With a Sony WH-1000XM6, the headset's buttons
+changed its volume but not the M1's indicator, and the knob made the headset jump back first. A
+temporary log on the card showed why: V2.1 keeps Bluetooth's level apart from the jacks'.
+- **V2.1's two levels.** The volume dialog (`on_volume_tsup_fun`) steps `btsource_volume` while
+  `headset_output` is 2 and saves it as `[PLAYSET] BTVOLUME`. It steps `volume` (`[PLAYSET] VOLUME`)
+  only for the jacks. The dialog's refresh (`0x47d664`) and the status bar show the output's level.
+- **What went wrong.** The payload, as on the Q2, synced `g_volume`, which on V2.1 is the jacks'.
+  On connect it put the headset at the jacks' level, so the knob, stepping from Bluetooth's own,
+  jumped. The headset's own steps moved and saved the jacks' level instead of Bluetooth's.
+- **The fix.** On M1, `BT_VOLUME` is `g_btvolume` (`M1PLUS_GLOBALS`, V2.1's `btsource_volume`).
+  The poll and `headset_gain` use it, and it is saved as `BTVOLUME`. An open volume dialog is
+  refreshed through V2.1's own routine (`volume_refresh`), since V2.1's dialog has no `slider_vol`.
+  `g_volume` stays the jacks', and so does the DAC restore when a headset stops answering.
+- **Tests.** `test/patch.py`'s Bluetooth tests set and read Bluetooth's level on M1. A new case
+  checks four things for a headset step: Bluetooth's level, the `BTVOLUME` save, the dialog refresh,
+  and the jacks' volume left alone. `test/build.py` pins the dialog's two levels and keys, the
+  refresh's reads and the status bar's.
+
 What is left for the device test, at low volume first:
-- a Bluetooth headset with absolute volume, then wired headphones after it disconnects;
-- the knob in both modes;
-- a long press on an artist's album tile, then Rate Album.
+- a Bluetooth headset: the headset's buttons move the M1's indicator, and the knob steps from there;
+- wired headphones after the headset disconnects, at the jacks' own level;
+- Rate Album's hearts (V2.1 has no `play_fav`/`play_unfav` images).
 
 ## How to check a build now
 
