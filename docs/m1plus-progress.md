@@ -502,7 +502,8 @@ the phone's slider worked but the knob, in Navigation, did nothing. The receiver
 (`bluetoothrecv_page`) isn't Now Playing, so the turn became Previous or Next, which neither the page
 nor the payload takes there. `knob_nav_active` now remaps only where `ringnav` navigates: `usable()`
 (which leaves Bluetooth receiver and USB DAC modes to stock) and a context page. So the receiver page,
-USB DAC mode's `usbmode_page` and the volume dialog keep the volume. In receiver mode V2.1 scales the
+USB DAC mode's `usbmode_page`, the volume dialog and Now Playing's enlarged art (`bigcover_page`,
+which V007s had also lost) keep the volume. In receiver mode V2.1 scales the
 jacks' `volume` by the phone's AVRCP level (`bt_recv_volume` / 127, in `set_devicevolume`), and the
 payload's Bluetooth hook passes it through. `test/patch.py` checks each page and both flags. With
 the old gate, the suite fails.
