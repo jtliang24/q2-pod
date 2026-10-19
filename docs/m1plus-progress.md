@@ -508,12 +508,16 @@ jacks' `volume` by the phone's AVRCP level (`bt_recv_volume` / 127, in `set_devi
 payload's Bluetooth hook passes it through. `test/patch.py` checks each page and both flags. With
 the old gate, the suite fails.
 
+Confirmed on the device:
+- the knob in both modes, and a long press opening the hold menu (V004s, V005s);
+- Bluetooth output volume with a Sony WH-1000XM6: the headset's buttons and the knob agree (V006s);
+- with Knob on Navigation, the knob's volume on the enlarged art and in Bluetooth receiver and USB
+  DAC modes (V008s).
+
 What is left for the device test, at low volume first:
-- a Bluetooth headset: the headset's buttons move the M1's indicator, and the knob steps from there;
-- wired headphones after the headset disconnects, at the jacks' own level;
-- Rate Album's hearts (V2.1 has no `play_fav`/`play_unfav` images);
-- the knob in Navigation, both ways of Knob Up;
-- the knob's volume in Bluetooth receiver and USB DAC modes, with Knob on Navigation.
+- wired headphones after a headset disconnects, at the jacks' own level;
+- both ways of Knob Up;
+- Rate Album's hearts (V2.1 has no `play_fav`/`play_unfav` images), deferred for now.
 
 ## How to check a build now
 
