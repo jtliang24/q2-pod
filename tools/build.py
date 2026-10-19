@@ -426,6 +426,9 @@ FUNCTIONS = {
  'widget_to_local': ('int', 'void *, void *'),
  'widget_dispatch_event_to_target_recursive': ('int', 'void *, void *'),
  'label_create': ('void *', 'void *, int, int, int, int'),
+ 'view_create': ('void *', 'void *, int, int, int, int'),  # M1 Plus: the Home card's page and card views
+ 'label_set_line_wrap': ('int', 'void *, int'),
+ 'slide_indicator_set_max': ('int', 'void *, unsigned'),
  'stock_search': ('int', 'void *, void *'),
  'widget_set_children_layout': ('int', 'void *, const char *'),
  'widget_resize': ('int', 'void *, int, int'),
@@ -698,6 +701,9 @@ M1PLUS_GLOBAL_ALIASES = {
 # is 2, and `volume` stays the jacks'. on_wm_keyup_fun swaps Previous and Next, and the volume keys,
 # while rotate_mode is 1 (the rotated screen, 0x4cd9f8).
 M1PLUS_GLOBALS = ['g_btvolume', 'g_rotate_mode']
+# V2.1 data V1.32 lacks, read as CONTEXT_DATA is (sizes checked). pdeq_choicemenu: the Home menu's
+# chosen cards, a deque of ids that home_page_init's grid builder (0x534064) lays out six to a page.
+M1PLUS_CONTEXT_DATA = {'pdeq_choicemenu': 4}
 # Renamed in V2.1; each has the size of its V1.32 counterpart (checked in m1plus_symbols).
 M1PLUS_CONTEXT_ALIASES = {
     'g_folder_path': 'folder_path',
@@ -811,7 +817,8 @@ CONTEXT_DATA = {'bt_showcoding': 4, 'g_memory_info': 3476, 'g_folder_path': 1024
                 'g_screensaver_picture': 256, 'p_deque_screensaverlist': 4}
 # Windows the payload creates at runtime (window_create), so no rootfs asset names them.
 PAYLOAD_WINDOWS = {'coverflow_page', 'photos_page', 'books_page', 'mostplayed_page', 'shuffle_page', 'ratings_page', 'rated_page', 'longsongs_page', 'spotify_page',
-                   'spotbrowse_page', 'radio_page', 'radionp_page'}
+                   'spotbrowse_page', 'radio_page', 'radionp_page',
+                   'library_page'}  # M1 Plus only: the Q2 Pod Home card's page
 ICONS = ['menu_coverflow.png', 'menu_coverflowdown.png']
 # The stock EQ preset page and the images only it and the stock equalizer page show: the PEQ
 # editor clears that page's widgets on init and never binds the preset button, so none can load.
@@ -866,6 +873,8 @@ def m1plus_symbols(syms, symbol_table):
             continue
         check(size(alias) == want, f'{name}: {alias} context data size mismatch')
         syms[name] = syms[alias]
+    for name, want in M1PLUS_CONTEXT_DATA.items():
+        check(size(name) == want, f'{name}: no {want}-byte {name} in V2.1')
     return syms, stubs
 
 def m1plus_names(sq, out):
@@ -878,10 +887,12 @@ def m1plus_names(sq, out):
     check(defines, 'No M1 Plus asset names in patch/offsets.inc')
     tree = out/'v21-assets'
     run('unsquashfs', '-q', '-no-xattrs', '-f', '-d', tree, sq, 'release/assets/default/raw/ui',
-        'release/assets/default/raw/styles/default.bin', 'release/assets/default/raw/images/xx')
+        'release/assets/default/raw/styles/default.bin', 'release/assets/default/raw/styles/home_page.bin',
+        'release/assets/default/raw/images/xx')
     raw = tree/'release/assets/default/raw'
     widgets = {n[2].get('name') for p in raw.glob('ui/**/*.bin') for n in walk(decode(p.read_bytes()))}
-    styles = {s for _, s, *_ in style_props((raw/'styles/default.bin').read_bytes())}
+    # Home's cards are styled from its own file (styles/home_page.bin), which home_page's widgets use.
+    styles = {s for f in ('default', 'home_page') for _, s, *_ in style_props((raw/f'styles/{f}.bin').read_bytes())}
     images = {p.stem for p in raw.glob('images/xx/*')}
     for key, value in sorted(defines.items()):
         kind = ('image', images) if key.startswith('ICON_') or key == 'ROW_CHEVRON' else \
@@ -1123,7 +1134,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
     if m1plus:
         syms, stubs = m1plus_symbols(syms, symbol_table)
         stubbed = dict(stubs)
-        for name in CONTEXT_DATA:
+        for name in [*CONTEXT_DATA, *M1PLUS_CONTEXT_DATA]:
             if name in stubbed:
                 header += [f'extern unsigned char {M1PLUS_STUB}{name}[{stubbed[name]}];',
                            f'#define {name} ((const unsigned char *){M1PLUS_STUB}{name})']
@@ -1330,6 +1341,20 @@ def build(target_path, out, logo, ipod=False, dev=False):
                                      else cat(xx+like)) for n, like in mapping.items()})
     for n in ('spotify', 'radio'):  # Streaming's Spotify and Internet Radio rows
         icons[f'stream_{n}.png'] = ('tidal.png' if m1plus else 'list_tidal.png', (ROOT/'assets/icons'/f'stream_{n}.png').read_bytes())
+    if m1plus:
+        # V2.1's rows draw a 40 px icon (list_row_core) where V1.32's drew 52: the drawn ones at its size,
+        # and the Q2 Pod page's Coverflow row from the Coverflow card's art. The Home card's pair is V2.1's
+        # 66 px card art (mymusic.png's).
+        for n in drawn:
+            like, data = icons[f'local_{n}.png']
+            icons[f'local_{n}.png'] = (like, sized_art(data, 40))
+        icons['local_coverflow.png'] = ('pset_playmode.png', sized_art((ROOT/'assets/icons/menu_coverflow.png').read_bytes(), 40))
+        # V1.32's Local Music icons Ratings and Most Played name, which V2.1 lacks: its Favourites and
+        # Frequent cards' art at the rows' size.
+        icons['local_fav.png'] = ('pset_playmode.png', sized_art(cat(xx+'fav.png'), 40))
+        icons['local_frequentplay.png'] = ('pset_playmode.png', sized_art(cat(xx+'many.png'), 40))
+        for n in ('home_q2pod', 'home_q2pod_down'):
+            icons[f'{n}.png'] = ('mymusic.png', (ROOT/'assets/icons'/f'{n}.png').read_bytes())
     stream_airplay_like = 'airplay.png' if m1plus else 'netservice_airplay.png'
     icons['stream_airplay.png'] = (stream_airplay_like, cat(xx+stream_airplay_like))  # iPod resizes stock's
     art = (ROOT/'assets/icons/default_album_home.png').read_bytes() if (ipod and not m1plus) else None
@@ -1427,7 +1452,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
         version=version, variant=variant, dev=dev, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=code_changes, changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
         patch_symbols={n:hex(v) for n,v in ps.items() if n.startswith('stock_')},
         tools={t:run(t,'--version').splitlines()[0] for t in ['clang','ld.lld','llvm-objcopy']} |
-              ({'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]} if (ipod and not m1plus) else {}))
+              ({'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]} if ipod or m1plus else {}))
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print(json.dumps({k:manifest[k] for k in ['update_sha256','patch_bytes','version']},indent=2))
 
