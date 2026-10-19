@@ -1472,6 +1472,9 @@ static void covers(void) {
         cf.artist = text(cf.covers, CF_EDGE, CF_TEXT_Y + CF_NAME_H, UI_W - 2 * CF_EDGE, CF_ARTIST_H);
         widget_set_prop_int(cf.artist, "style:normal:font_size", CF_ARTIST_PX);
         widget_set_prop_int(cf.artist, "style:normal:text_color", (int)CF_GREY);
+#if M1PLUS
+        back_button(cf.covers);
+#endif
         slide_menu_set_value(cf.slide, cf.album);
         widget_on(cf.slide, EVT_VALUE_CHANGED, changed, 0);
         changed(0, 0);
@@ -1730,7 +1733,7 @@ static int pick(void *ctx, void *event) {
 }
 
 /* Return: tracks -> covers (the slide_menu kept its album), preparing -> cancel and covers,
- * covers or the message -> Home, or back out of a scoped page. */
+ * covers or the message -> Home (M1 Plus: the Q2 Pod page), or back out of a scoped page. */
 static int keyup(void *ctx, void *event) {
     (void)ctx;
     if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
@@ -1747,7 +1750,11 @@ static int keyup(void *ctx, void *event) {
             window_manager_close_window_force(wm, under);
         navigator_back();
     } else
+#if M1PLUS /* opened from the Q2 Pod page, which Return goes back to */
+        navigator_back();
+#else
         navigator_back_to_home();
+#endif
     return 11; /* RET_STOP */
 }
 

@@ -322,6 +322,9 @@ static int to_viewer(const void *unused) {
             widget_on(img, EVT_CLICK, toggle_info, 0);
         }
         ph.info = bottom_caption(ph.viewer, h);
+#if M1PLUS
+        back_button(ph.viewer); /* over the photo; Return goes back to the grid */
+#endif
         widget_on(ph.slide, EVT_VALUE_CHANGED, moved, 0);
     }
     ph.screen = VIEWER;
