@@ -691,11 +691,13 @@ M1PLUS_GLOBAL_ALIASES = {
     'g_guideflag': 'first_guideflag',
     'g_navbar_status': 'navigation_status',
     'g_btvolume': 'btsource_volume',
+    'g_rotate_mode': 'rotate_mode',
 }
 # V2.1 globals V1.32 lacks, read as GLOBALS are. Bluetooth keeps its own level, [PLAYSET] BTVOLUME:
 # the volume dialog (on_volume_tsup_fun), status bar and set_devicevolume use it while headset_output
-# is 2, and `volume` stays the jacks'.
-M1PLUS_GLOBALS = ['g_btvolume']
+# is 2, and `volume` stays the jacks'. on_wm_keyup_fun swaps Previous and Next, and the volume keys,
+# while rotate_mode is 1 (the rotated screen, 0x4cd9f8).
+M1PLUS_GLOBALS = ['g_btvolume', 'g_rotate_mode']
 # Renamed in V2.1; each has the size of its V1.32 counterpart (checked in m1plus_symbols).
 M1PLUS_CONTEXT_ALIASES = {
     'g_folder_path': 'folder_path',
