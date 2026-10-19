@@ -22,3 +22,5 @@ graphify-out/
 
 # A device library database (personal data), for local query checks
 /database.db
+/.direnv
+/.envrc
