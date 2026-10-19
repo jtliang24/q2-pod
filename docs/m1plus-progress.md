@@ -563,6 +563,17 @@ NULL. The test machine's `widget_get_prop_str` now returns NULL for an unset sty
   second Previous leaves Home as it was (`previous_home`). The first build (a Return) failed
   `previous_back`, and the second crashed there.
 
+**On the device** (V009s, `update.bin` `fa861687…`, through the menu updater over V008s):
+- it boots, and About shows dev 9;
+- the on-screen back button works as before;
+- with Knob: Navigation, Previous goes back on System Setting and its pages, V2.1's library pages and
+  the PEQ editor's screens, stays Previous track on Home, Now Playing and the enlarged art, and does
+  nothing to the page with the screen off;
+- no crashes or freezes.
+
+Still to check: Previous with Spotify or Internet Radio playing, once Streaming's rows are ported
+(roadmap §3).
+
 ## How to check a build now
 
 ```sh
