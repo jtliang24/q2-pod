@@ -305,6 +305,16 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         start = stock_syms[name]
         callees = [got(a) for a in range(start, start + size, 4) if words(a, 1)[0] >> 16 == 0x8f99]  # lw $t9, GOT
         assert [c for c in callees if c in order] == order * times, name
+    # Bluetooth keeps its own level (navigation.c BT_VOLUME): on headset_output 2 the volume dialog
+    # (on_volume_tsup_fun) steps btsource_volume and saves it as [PLAYSET] BTVOLUME, the jacks' volume
+    # as VOLUME. Its refresh (volume_refresh) and the status bar show the output's level.
+    volume, bt = stock_syms['volume'], stock_syms['btsource_volume']
+    assert got(0x47df18) == got(0x47d698) == stock_syms['headset_output'] and words(0x47df30, 1) == words(0x47d6a0, 1) == (0x24020002,)
+    assert got(0x47df3c) == bt and words(0x47df5c, 1) == (0xae240000,) and got(0x47df70) == stock_syms['write_int_config']  # sw $a0, 0($s1)
+    assert compared(0x47df64, 0x47df68)[1] == b'BTVOLUME' and compared(0x47df6c, 0x47df7c)[1] == b'PLAYSET'
+    assert got(0x47dff0) == volume and compared(0x47e028, 0x47e030)[1] == b'VOLUME'
+    assert got(0x47d674) == volume and got(0x47d6ac) == bt and got(0x544db0) == bt
+    assert got(0x47d768) == stock_syms['progress_bar_set_value'] and got(0x47d8a8) == stock_syms['slider_set_value']
     # The hold menu is V2.1's sortselect_dialog (navigation.c qm_sortselect_init). V2.1's navigator
     # (0x4d00c0, navigator_to's) runs its init, and when that returns 0 tail-calls dialog_modal for a
     # dialog whose to_modal reads set, by default: V2.1's init sets no property, and the asset has
