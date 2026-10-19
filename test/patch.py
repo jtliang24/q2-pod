@@ -9132,9 +9132,9 @@ if is_m1plus:
     assert [knob(k,reverse='0') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_PREV'],O['KEY_NEXT']]
     assert [knob(k,reverse='1') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN','KEY_POWER')]==[O['KEY_NEXT'],O['KEY_PREV'],O['KEY_CENTER']]
     assert [knob(k,mode='0',reverse='1') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']]
-    # Only where the payload navigates: Bluetooth receiver and USB DAC modes, by page or flag, and
-    # the volume dialog keep the volume too.
-    for kw in (dict(mode=None),dict(mode='0'),dict(page='playing_page'),
+    # Only where the payload navigates: Now Playing's enlarged art, Bluetooth receiver and USB DAC
+    # modes, by page or flag, and the volume dialog keep the volume too.
+    for kw in (dict(mode=None),dict(mode='0'),dict(page='playing_page'),dict(page='bigcover_page'),
                dict(setup=lambda m:m.byte(syms['g_backlight_status'],0)),
                dict(page='bluetoothrecv_page'),dict(page='usbmode_page'),dict(page='volume_dialog'),
                dict(setup=lambda m:m.byte(syms['bt__recv_pageflag'],2)),
