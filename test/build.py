@@ -298,6 +298,34 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert words(0x5d4cf4, 1) == (0x3c05c004,) and words(0x5d4d04, 1) == (0x24a54d00,)
     assert compared(0x5d4d48, 0x5d4d54)[1] == b'{mcl-setvol\\%d}'
     assert got(0x4d6d40) == got(0x4d6e8c) == got(0x5d50bc) == stock_syms['mclSetVol']
+    # The Q2 Pod Home card (coverflow.c home_card) copies V2.1's Home grid. Its builder (0x534064)
+    # lays pdeq_choicemenu's ids six to a page (li $s0, 6), each page a view_create(home_sview, 0, 0,
+    # 320, 364) and home_sindicator's max set to the pages; each card (0x533d8c) a 154x118 view, two
+    # columns from x 6, rows 0, 118 and 236, holding a 66 px image at 44, 20 and a 154x36 label at 0,
+    # 92 in label_centerwhitehome_white. A card's click (0x533b80) reads atoi(name) as one of 18 ids.
+    assert got(0x534100) == stock_syms['pdeq_choicemenu'] and words(0x5340f0, 1) == (0x24100006,)
+    assert compared(0x5340a8, 0x5340b0)[1] == b'home_sview' and compared(0x5340c4, 0x5340d0)[1] == b'home_sindicator'
+    assert words(0x534168, 2) == (0x2402016c, 0x24070140) and got(0x534140) == stock_syms['view_create']
+    assert got(0x534144) == stock_syms['slide_indicator_set_max']
+    assert words(0x533dc0, 1) == (0x24140006,) and words(0x534010, 1) == (0x2694009a,)  # x 6, + 154 a column
+    assert words(0x533e14, 2) == (0x24020076, 0x2407009a) and got(0x533e10) == stock_syms['view_create']
+    assert words(0x534058, 1) == (0x24030076,) and words(0x534008, 1) == (0x240300ec,)  # rows at 118, 236
+    assert words(0x533e8c, 1) == (0x24020042,) and words(0x533e94, 2) == (0x24070042, 0x24060014)
+    assert words(0x533ea0, 1) == (0x2405002c,) and got(0x533ea4) == stock_syms['image_create']
+    assert words(0x533f80, 1) == (0x24020024,) and words(0x533f88, 2) == (0x2407009a, 0x2406005c)
+    assert got(0x533f98) == stock_syms['label_create'] and compared(0x533fb0, 0x533fbc)[1] == b'label_centerwhitehome_white'
+    assert words(0x533f60, 1) == (0x2405010c,) and got(0x533b90) == stock_syms['atoi@GLIBC_2.0'] and words(0x533ba8, 1) == (0x2c430012,)
+    # The grid is rebuilt only from home_page_init and from Home's refresh (0x534858, when
+    # homemenu_changeflag is 2), which its to-foreground handler (0x534b88, bound to 0x12d) runs:
+    # the card comes back from its own to-foreground handler. Nothing loaded points to the builder
+    # (.pdr, which isn't loaded, describes it).
+    def bal(i):
+        x = struct.unpack_from('<I', stock, text[1] + i)[0]
+        return x >> 16 == 0x0411 and text[2] + i + 4 + 4 * struct.unpack_from('<h', stock, text[1] + i)[0] == 0x534064
+    assert [text[2] + i for i in range(0, text[4], 4) if bal(i)] == [0x5348d0, 0x534de4]
+    loaded = [stock[o:o + f] for _, (t, o, _, _, f, *_) in segments(stock) if t == 1]
+    assert stock_syms['home_page_init'] <= 0x534de4 and not any(struct.pack('<I', 0x534064) in p for p in loaded)
+    assert words(0x534e0c, 1) == (0x2405012d,) and words(0x534c40, 1) == (0x27394858,)  # 0x12d; the refresh
     assert words(0x4d6e64, 1) == (0x28820065,) and words(0x4d6e7c, 1) == (0x28a20065,)  # slti 101
     assert words(0x5d50c0, 3) == (0x240400ff, 0x0411fefa, 0x240500ff)  # li $a0, 255; bal mclSetVol; li $a1, 255
     order = [stock_syms[n] for n in ('save_stop_player', 'set_outputchannel', 'set_devicevolume', 'save_start_player')]
@@ -359,6 +387,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added = {xx+n for n in ICONS} | {xx+f'local_{n}.png' for n in ('shuffle', 'scrobble', 'podcasts', 'audiobooks', 'photos',
                                                                     'books', 'videos', 'longsongs')} | {
              xx+f'stream_{n}.png' for n in ('spotify', 'radio', 'airplay')} | {HELPER, SCROBBLE_CA, BOOT} | ({REMOTE} if manifest['dev'] else set())
+    # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
+    added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, WATCHDOG, S90PLAY, S11LOGO, TAG_C}
     logo = xx+'logo.jpg'
     with tempfile.TemporaryDirectory(prefix='m1-rootfs-') as tmp:

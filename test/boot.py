@@ -159,12 +159,14 @@ def shim(out, root, sn_addr):
     run('ld.lld', '-m', 'elf32ltsmip', '-shared', '--hash-style=sysv', '-soname', 'shim.so', out/'shim.o',
         root/'lib/libc-2.28.so', root/'lib/libdl-2.28.so', '-o', out/'shim.so')
 
-def start(image, out, seconds, sn_addr, trace=''):
+def start(image, out, seconds, sn_addr, trace='', home_menu=''):
     """Unpack image as a sandbox root and start dbus-daemon, then demo for seconds; returns the bwrap."""
     root = out/'root'
     run('unsquashfs', '-q', '-no-xattrs', '-d', root, image)
     for d in ('mnt/data', 'mnt/mmc', 'var/run/dbus'): (root/d).mkdir(parents=True, exist_ok=True)
-    (root/'mnt/data/config.ini').write_text('[SYSSET]\nLANGUAGE=2\n')  # past the first-boot language choice
+    # Past the first-boot language choice; with home_menu, V2.1's Home cards ([MAIN] HOMEMENU, ids each
+    # followed by |, as saveHomemenu 0x4d7940 writes them).
+    (root/'mnt/data/config.ini').write_text('[SYSSET]\nLANGUAGE=2\n' + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
     conf = (root/'etc/dbus-1/system.conf').read_text()
     # No other users exist in the sandbox: the bus runs as its caller.
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))
@@ -193,7 +195,7 @@ def executed(log, elf):
         if i >= 0: hits[funcs[i][1]] += 1
     return hits
 
-WALK_SECONDS = 120  # the walk's budget after startup, inside the same run
+WALK_SECONDS = 180  # the walk's budget after startup, inside the same run
 
 def tap(x, y): return [f'{x} {y} 200', 'wait 80', f'{x} {y} 0']
 def swipe(x0, y0, x1, y1, steps=10):
@@ -212,13 +214,17 @@ PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
 # on both since that step; ('as', step, same, differ), as at that step in the y band same and unlike
 # it in differ; ('kept', step, box): unlike that step, but the box as it was then. Positions are
 # V2.1's 320x480 layout.
+# Home's last page: V2.1's five cards (seventeen in all), then, patched, the Q2 Pod card in the
+# sixth slot (its row's right half, y 266 to 394 with its label); stock's slot is empty.
+Q2POD_CARD = (237, 318)
+HOME3_ROWS = ('rows', (30, 266), (266, 394))
 WALK = [
-    ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, 'same'),
+    ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, HOME3_ROWS),
     ('sysset', tap(82, 318), 4, 'same'),
     ('sysset_end', DOWN_LIST + ['wait 800'] + DOWN_LIST, 4, 'same'),
     # About: Model and FW. Version (the stock firmware's, ringnav_about) as stock's, then CFW. Version.
     ('about', tap(160, 446), 4, ('rows', (30, 208), (208, 272))),
-    ('home3_again', BACK + ['wait 2500'] + BACK, 5, 'same'),
+    ('home3_again', BACK + ['wait 2500'] + BACK, 5, HOME3_ROWS),
     ('playset', tap(237, 230), 4, 'same'),
     ('knob', [KNOB_UP, KNOB_UP], 3, ('same', 'moved', 'playset', (0, 0, 60, 30))),  # the volume, as stock's, and its figure up
     ('eq', tap(160, 238), 5, 'differs'),  # the PEQ editor in stock's EQ page
@@ -247,7 +253,26 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 # With Knob: Navigation, Previous is Back: System Setting closes to Home, where it
                 # stays Previous track (nothing plays) and Home stays.
                 ('previous_back', [PREVIOUS], 4, ('as', 'knob_home')),
-                ('previous_home', [PREVIOUS], 4, ('as', 'previous_back'))]
+                ('previous_home', [PREVIOUS], 4, ('as', 'previous_back')),
+                # The Q2 Pod card opens its page (rows of 64 px under the 48 px title bar); its
+                # Shuffle row opens Shuffle, which the back button closes. Previous (Knob:
+                # Navigation) closes the page, and so does the back button.
+                ('q2pod', tap(*Q2POD_CARD), 4, ('not', 'previous_home')),
+                ('q2pod_shuffle', tap(160, 110), 4, ('not', 'q2pod')),
+                ('q2pod_shuffle_back', BACK, 4, ('as', 'q2pod')),
+                ('q2pod_previous', [PREVIOUS], 4, ('as', 'previous_home')),
+                ('q2pod_again', tap(*Q2POD_CARD), 4, ('as', 'q2pod')),
+                ('q2pod_back', BACK, 4, ('as', 'previous_home'))]
+# --home-menu: V2.1's Home with six cards (My Music to Composer), a full page, so the Q2 Pod card starts a
+# second page and the dots count it: Home is stock's but for the dots (y 390 to 404). The walk goes to
+# the second page, opens the card (its first slot) and closes the page with the back button.
+HOME_MENU = '3|4|5|6|7|8|'
+HOME_DOTS = (390, 404)
+MENU_WALK = [('menu_page2', NEXT_PAGE, 4, ('not', 'home')),
+             ('menu_q2pod', tap(83, 83), 4, ('not', 'menu_page2')),
+             # Back on Home, V2.1's refresh retitles the bottom bar (y 414 on) without the asset's full
+             # stop ("Life is short,Play more", 0x53438c): the rest is as before.
+             ('menu_back', BACK, 4, ('as', 'menu_page2', (30, 414), (414, 480)))]
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
@@ -278,6 +303,8 @@ if __name__ == '__main__':
     ap.add_argument('build', type=pathlib.Path)
     ap.add_argument('--seconds', type=int, default=60)
     ap.add_argument('--captures', type=pathlib.Path, help='write stock.png and patched.png here')
+    ap.add_argument('--home-menu', action='store_true',
+                    help=f'V2.1 Home with six cards ({HOME_MENU}): the Q2 Pod card on a page of its own, and a short walk to it')
     args = ap.parse_args()
     manifest = json.loads((args.build/'manifest.json').read_text())
     if manifest.get('source_sha256') != source_sha256():
@@ -291,7 +318,8 @@ if __name__ == '__main__':
         for name, image, trace in (('stock', 'stock.squashfs', ''),
                                    ('patched', 'rootfs.squashfs', f'-d exec,nochain -dfilter {BASE:#x}+{SCRATCH-BASE:#x} -D /out/exec.log')):
             (tmp/name).mkdir()
-            runs[name] = start(args.build/image, tmp/name, args.seconds + WALK_SECONDS, sn_addr, trace)
+            runs[name] = start(args.build/image, tmp/name, args.seconds + WALK_SECONDS, sn_addr, trace,
+                               HOME_MENU if args.home_menu else '')
         deadline = time.monotonic() + args.seconds
         while time.monotonic() < deadline:  # startup: either demo dying early fails below
             if any(p.poll() is not None for p in runs.values()): break
@@ -310,12 +338,17 @@ if __name__ == '__main__':
         bar = 30 * W * 4  # the status bar, whose clock and battery change from run to run
         def differing(a, b, y0=30, y1=H):
             return [i // 4 for i in range(y0 * W * 4, y1 * W * 4, 4) if a[i:i+4] != b[i:i+4]]
-        differ = differing(stock, patched)
+        if args.home_menu:
+            differ = differing(stock, patched, 30, HOME_DOTS[0]) + differing(stock, patched, HOME_DOTS[1])
+            assert differing(stock, patched, *HOME_DOTS), 'six cards: the dots show no page for the Q2 Pod card'
+        else:
+            differ = differing(stock, patched)
         assert not differ, f'patched Home differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
         # The walk: the same touches to both, a screen each step.
-        seen, seen_all = {}, {}
-        for name, touches, settle, want in WALK + PATCHED_ONLY:
-            targets = ['patched'] if (name, touches, settle, want) in PATCHED_ONLY else ['stock', 'patched']
+        seen, seen_all = {'home': patched}, {}
+        walk, patched_only = (MENU_WALK, MENU_WALK) if args.home_menu else (WALK + PATCHED_ONLY, PATCHED_ONLY)
+        for name, touches, settle, want in walk:
+            targets = ['patched'] if (name, touches, settle, want) in patched_only else ['stock', 'patched']
             for t in targets:
                 send(tmp/t, touches)
             time.sleep(settle)
@@ -369,6 +402,7 @@ if __name__ == '__main__':
         assert STARTUP <= reached, f'startup never entered {sorted(STARTUP - reached)}'
         # crossfade's tap opened crossfade.c's page: its row was there again after EQ, when V2.1
         # rebuilt the list (a tap on a stock row there would change the screens as well).
-        assert hits['xfade_open'], 'crossfade: the Crossfade row was not there to open its page'
-    print(f'M1 Plus under qemu: both demos up, the same Home below the status bar; the walk ({", ".join(n for n, *_ in WALK + PATCHED_ONLY)}) '
+        assert args.home_menu or hits['xfade_open'], 'crossfade: the Crossfade row was not there to open its page'
+        assert hits['library_open'], 'q2pod: the card was not there to open its page'
+    print(f'M1 Plus under qemu: both demos up, the same Home below the status bar{" but for the dots" if args.home_menu else ""}; the walk ({", ".join(n for n, *_ in walk)}) '
           f'as expected; the payload entered through {len(reached)} hooks ({", ".join(sorted(reached))}), {len(hits)} payload functions ran.')

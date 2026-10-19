@@ -32,7 +32,6 @@ if is_m1plus:
     HOOKS = dict(M1PLUS_HOOKS)
     HOOKS['on_wm_keyup_before_fun'] = M1PLUS_HOOKS['on_wm_keyup_fun']
     HOOKS['on_wm_tsdown_before_fun'] = M1PLUS_HOOKS['on_wm_before_tsdown_fun']
-    HOOKS['localmusic_page_init'] = M1PLUS_HOOKS['localclass_page_init']
     HOOKS['load_localclass_list'] = M1PLUS_HOOKS['loadLocalClassList']
     HOOKS['load_album_detaillist'] = M1PLUS_HOOKS['loadAlbumdetailList']
     HOOKS['player_change_music'] = M1PLUS_HOOKS['change_music']
@@ -48,6 +47,10 @@ if is_m1plus:
 else:
     FREE_GOT = 0xa2638c
     STREAM_ENTRY = HOOKS['stream_page_init'][0]
+# The Library's rows: Q2's Local Music hook. V2.1 has no Local Music menu, so M1 Plus binds nothing
+# there and its rows are on the Q2 Pod page (library_open, checked on its own); the tests that click
+# the rows reach their handlers, the ones that page uses, through Q2's builder, entered directly.
+LIBRARY_INIT = payload_syms['ringnav_localmusic'] if is_m1plus else HOOKS['localmusic_page_init'][0]
 # The built demo enters the payload at every hook the tests call through.
 _demo = (B/'demo').read_bytes()
 from build import fileoff
@@ -4127,14 +4130,13 @@ assert m.names(m.get(syms['p_deque_showlist']))==['Row 0'] and ('stock_localclas
 
 # Coverflow (docs/internals.md): the Home card, the runtime coverflow_page over a stock slide_menu,
 # the tracks query and handoff. The art thread itself runs on the host (test/coverflow.py).
+# Q2 only: the Home card's layout. V2.1's Home has no Coverflow card; the Q2 Pod page's row opens it.
 if not is_m1plus:
     from ipod import HOME_TEXT_X, HOME_LIST_W, HOME_PAGE, HOME_ROW, HOME_ROWS, HOME_TOP, decode
     cards=decode((B/'ui'/HOME_PAGE).read_bytes())[3][1 if variant=='ipod' else 0]  # the carousel, or iPod's list_view
     if variant=='ipod': cards=cards[3][0]  # its scroll_view of rows
     cards=[c[2]['name'] for c in cards[3]]
     assert len(cards)==7 and cards[2]=='btn_coverflow', cards
-else:
-    not_ported("test: Home's Coverflow card layout reads V1.32's home_page.bin")
 home_hook=HOOKS['home_page_init']
 assert struct.unpack_from('<I',demo,fileoff(demo,home_hook[0]))[0]==0x08000000|symbols(B/'patch.elf')['coverflow_home']>>2
 passed()
@@ -4397,9 +4399,9 @@ class CoverflowMachine(QueueMachine):
     FREE=0x1000010  # stock free's GOT slot is 0 until lazy binding; give it a stub
     def __init__(self,albums=3,cached=True,**queue):
         super().__init__(rows=4,**queue)
-        self.cached=cached; self.missing=False; self.joins=[]; self.threads=[]; self.plays=[]; self.homes=0; self.freed=0
+        self.cached=cached; self.missing=False; self.joins=[]; self.threads=[]; self.plays=[]; self.homes=0; self.backs=0; self.freed=0
         for n in ('window_create','widget_factory_create_widget','image_base_set_image','getAllAlbum','list_view_create',
-                  'scroll_view_create','navigator_back_to_home','navigator_to_with_context','access@GLIBC_2.0',
+                  'scroll_view_create','navigator_back_to_home','navigator_back','navigator_to_with_context','access@GLIBC_2.0',
                   'calloc@GLIBC_2.0','strdup@GLIBC_2.0','mkdir@GLIBC_2.0','statfs@GLIBC_2.0','pthread_create@GLIBC_2.2',
                   'pthread_join@GLIBC_2.0','fopen@GLIBC_2.2','qsort@GLIBC_2.0','toolsQueryDbTable'): self.handlers[syms[n]]='c:'+n
         self.word(FREE_GOT,self.FREE); self.handlers[self.FREE]='c:free'
@@ -4428,6 +4430,7 @@ class CoverflowMachine(QueueMachine):
         elif name=='getAllAlbum':
             self.deqs[self.get(syms['tools_pdeq_directory'])][1]=[self.copy('stSongInfo',e) for e in self.albums]; ret=len(self.albums)
         elif name=='navigator_back_to_home': self.homes+=1
+        elif name=='navigator_back': self.backs+=1
         elif name=='navigator_to_with_context':
             if self.text(a)=='playing_page':
                 self.play_names=self.names(self.get(b))
@@ -4457,7 +4460,13 @@ class CoverflowMachine(QueueMachine):
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
     def open(self):
-        """Home with the card at index 2: centre confirms its image, whose click opens Coverflow."""
+        """Home with the card at index 2: centre confirms its image, whose click opens Coverflow.
+        M1 Plus: V2.1's Home has no Coverflow card; the Q2 Pod page's row opens it."""
+        if is_m1plus:
+            self.home=self.top=self.node('window','library_page'); self.stack=[self.top]
+            assert self.call(address=payload_syms['coverflow_row'],args=(0,self.event,0,0),gap=0)==0
+            self.page=self.top; self.slide=self.find('slide_menu')
+            return self.page
         if variant=='ipod':
             view,self.imgs=home_list(self); self.img=self.imgs[2]; self.home=self.top; self.stack=[self.top]
             self.art=named(self,self.top,'img_homeart'); self.list=named(self,self.top,'list_view_home')
@@ -5034,9 +5043,13 @@ assert len(m.plays)==1 and m.plays[0][0]=='playing_page' and m.plays[0][2:]==(1,
 assert m.text(syms['g_memory_info']+0x611)=='Album 1' and m.u.mem_read(syms['g_memory_info']+0x60d,1)==b'\0'
 dq=m.plays[-1][1]&0xffffffff; assert m.names(dq)==['T1','T2']; passed()
 m.missing=True; m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert len(m.plays)==1 and 'Storage unavailable' in m.texts(); passed()
-# Return: tracks -> covers on the same album, covers -> Home.
+# M1 Plus: the covers' back button, over the carousel.
+backs=[x for x in m.nodes[m.get(m.slide+O['W_PARENT'])]['children'] if m.nodes[x].get('style')=='navbar_btnreturn_style']
+assert len(backs)==int(is_m1plus)
+# Return: tracks -> covers on the same album, covers -> Home (M1 Plus: back to the Q2 Pod page, which
+# opened it).
 assert m.key()==11 and m.nodes[m.get(m.slide+O['W_PARENT'])]['visible'] and m.get(m.slide+O['SLIDE_INDEX'])==1 and not m.homes
-assert m.key(O['KEY_NEXT'])==0 and m.key()==11 and m.homes==1; passed()
+assert m.key(O['KEY_NEXT'])==0 and m.key()==11 and (m.homes,m.backs)==((0,1) if is_m1plus else (1,0)); passed()
 # The album list outlives the page: a reopen queries nothing until one of the songtable writers runs.
 m=CoverflowMachine(); m.open(); m.close(); m.calls=[]
 m.open(); assert not m.queried() and len(m.nodes[m.slide]['children'])==5; m.close(); passed()
@@ -6600,16 +6613,15 @@ class ShuffleMachine(CoverflowMachine):
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
 m=ShuffleMachine(); stock=[m.node('list_item') for _ in range(11)]
 view=m.node('scroll_view','scroll_view_localmusic',stock); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)==0
+assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0
 assert m.calls[0][:3]==('stock_localmusic',m.top,5)
 # Library order: Shuffle; Artist, Album, All Songs, Genre, Playlist, Ratings (in My Fav's place, hidden);
 # Recently Added, Recent, Most Played, Frequent, Hi-Res, Long Songs; then Update Local Music, last (stock rows by
 # get_localmusic_showinfo index).
 kids=m.nodes[view]['children']; row,rated,top,long=kids[0],kids[6],kids[10],kids[13]
 # M1 Plus builds V2.1's rows (navigation.c list_row_core): the parts are the list_item's own, and its
-# click; V1.32's rows hold them in a button. V2.1 has no Local Music menu to show these on (its Home is
-# the library), so on M1 Plus this covers the rows and the pages they open, not the device's path.
-if is_m1plus: not_ported("Library's Shuffle, Ratings, Most Played and media rows (V2.1's Home is the library: no menu to add them to)")
+# click; V1.32's rows hold them in a button. V2.1 has no Local Music menu (its Home is the library), so
+# on M1 Plus this covers the rows and the pages they open; the Q2 Pod page that shows them is below.
 def parts(r): return m.nodes[r]['children'] if is_m1plus else m.nodes[m.nodes[r]['children'][0]]['children']
 assert [kids[i] for i in (*range(1,6),7,8,9,11,12,14)]==[stock[i] for i in (3,2,1,4,10,6,9,8,7,5,0)]
 assert m.nodes[row]['style']==('list_item_style' if is_m1plus else S('s_listitem_black'))
@@ -6672,6 +6684,115 @@ fk,ck=m.handler(page,O['EVT_KEY_UP'])
 ev=m.alloc(0x40); m.word(ev,O['EVT_KEY_UP']); m.word(ev+O['EVENT_KEY'],O['KEY_RETURN'])
 assert m.call(address=fk,args=(ck,ev,0,0),gap=0)==11 and [c[0] for c in m.calls].count('navigator_back')==1
 m.close(); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.top!=page and m.nodes[m.top]['name']=='shuffle_page'; passed()
+def q2pod_page():
+    # M1 Plus: the Library's rows are on the Q2 Pod page, which a Home card opens. V2.1's Home grid
+    # (home_page_init's builder, 0x534064, pinned in test/build.py): home_sview, a slide_view, holds
+    # one 320x364 page view per six ids of pdeq_choicemenu, and home_sindicator's max is the pages.
+    # The card takes the next slot as V2.1 lays its cards out (0x533d8c), or a new page when the last
+    # is full. Its image has no name, so V2.1's card click (atoi of the name) never sees it.
+    def v21_home(n,pages=None):
+        m=ShuffleMachine(); pages=(n+5)//6 if pages is None else pages
+        slides=m.node('slide_view','home_sview',[m.node('view',children=[m.node('view') for _ in range(min(6,n-6*p))]) for p in range(pages)])
+        dots=m.node('slide_indicator','home_sindicator')
+        m.top=m.node('window','home_page',[m.node('gesture','app_gesture',[m.node('view','home_svview',[slides,dots])])])
+        m.word(syms['pdeq_choicemenu'],m.deque(list(range(n)),'int'))
+        assert m.call(address=home_hook[0],args=(m.top,0,0,0),gap=0)==0
+        return m,slides,dots
+    geometry=lambda m,w: [signed(m.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H')]
+    def card(m,slides):
+        cards=[w for p in m.nodes[slides]['children'] for w in m.nodes[p]['children'] if m.nodes[w]['name']=='q2pod_card']
+        assert len(cards)<=1; return cards[0] if cards else 0
+    m,slides,dots=v21_home(17); c=card(m,slides)
+    assert len(m.nodes[slides]['children'])==3 and m.get(c+O['W_PARENT'])==m.nodes[slides]['children'][2]
+    assert geometry(m,c)==[160,236,154,118] and not [x for x in m.calls if x[0]=='slide_indicator_set_max']
+    icon,label=m.nodes[c]['children']
+    assert m.nodes[icon]['type']=='image' and geometry(m,icon)==[44,20,66,66] and not m.nodes[icon]['name']
+    assert (m.nodes[icon]['clickable'],m.nodes[icon]['style:normal:bg_image'],m.nodes[icon]['style:pressed:bg_image'])==(1,'home_q2pod','home_q2pod_down')
+    assert m.handler(icon,O['EVT_CLICK'])[0]==payload_syms['library_open']
+    assert m.nodes[label]['type']=='label' and geometry(m,label)==[0,92,154,36] and m.nodes[label]['text']=='Q2 Pod'
+    assert m.nodes[label]['style']=='label_centerwhitehome_white' and ('label_set_line_wrap',label,1) in [x[:3] for x in m.calls]; passed()
+    # A full last page: the card starts a new one, and the dots count it.
+    m,slides,dots=v21_home(18); c=card(m,slides)
+    assert len(m.nodes[slides]['children'])==4 and m.get(c+O['W_PARENT'])==m.nodes[slides]['children'][3] and geometry(m,c)==[6,0,154,118]
+    page=m.nodes[slides]['children'][3]; assert geometry(m,page)==[0,0,320,364]
+    assert [x[1:3] for x in m.calls if x[0]=='slide_indicator_set_max']==[(dots,4)]; passed()
+    # V2.1's rebuild (the Home menu edited, the language changed) destroys every card. Coming to the
+    # front again, after V2.1's own rebuild, puts the card back, once.
+    m,slides,dots=v21_home(17)
+    m.nodes[slides]['children']=[m.node('view',children=[m.node('view') for _ in range(min(6,17-6*p))]) for p in range(3)]
+    fg=[(f,ctx) for t,f,ctx in m.nodes[m.top]['handlers'] if t==O['EVT_WINDOW_FOREGROUND']]
+    assert len(fg)==1 and fg[0][1]==m.top and not card(m,slides)
+    for _ in range(2): assert m.call(address=fg[0][0],args=(fg[0][1],m.event,0,0),gap=0)==0 and card(m,slides)
+    # A grid not as V2.1 builds it (a page short) gets no card.
+    m,slides,dots=v21_home(17,pages=2); assert not card(m,slides); passed()
+    # The card opens the Q2 Pod page: a title bar with the back button over V2.1's 64 px rows (list_row),
+    # in the Library's order. Podcasts, Audiobooks, Photos and Books only with their folders; never
+    # Videos (q2video on the M1's DAC waits); Upload Scrobbles only with an account. A second press
+    # opens nothing new.
+    m,slides,dots=v21_home(17); m.card=[('Podcasts',4),('Photos',4),('Videos',4)]
+    f,ctx=m.handler(m.nodes[card(m,slides)]['children'][0],O['EVT_CLICK'])
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; page=m.top
+    assert m.nodes[page]['name']=='library_page' and m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.top==page
+    m.page=page; view=m.find('scroll_view'); rows=m.nodes[view]['children']
+    lv=m.get(view+O['W_PARENT']); assert m.nodes[lv]['item_height']==64
+    assert [b for b in m.nodes[page]['children'] if m.nodes[b].get('style')=='navbar_btnreturn_style']
+    assert 'Q2 Pod' in m.texts()
+    labels=[m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]
+    icons=[m.nodes[m.nodes[r]['children'][0]]['image'] for r in rows]
+    assert labels==['Shuffle','Ratings','Most Played','Long Songs','Podcasts','Photos','Coverflow'],labels
+    assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_podcasts','local_photos','local_coverflow']
+    assert [len(m.nodes[r]['children']) for r in rows]==[3,3,2,2,2,2,2]  # Shuffle and Ratings open lists: the chevron
+    # Each row's click is the Library's handler; Shuffle's opens its menu, Coverflow's the carousel.
+    f,ctx=m.handler(rows[0],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='shuffle_page'
+    m.top=page; f,ctx=m.handler(rows[6],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
+    m,slides,dots=v21_home(17); m.config['TOKEN']='tok'; m.card=[('Audiobooks',4),('Books',4)]
+    f,ctx=m.handler(m.nodes[card(m,slides)]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    m.page=m.top; rows=m.nodes[m.find('scroll_view')]['children']
+    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==['Shuffle','Ratings','Most Played','Long Songs','Audiobooks','Books','Coverflow','Upload Scrobbles']; passed()
+if is_m1plus: q2pod_page()  # its own names: the Library's machine (m, top) is used again below
+def q2pod_real_grid():
+    # The same card on V2.1's own grid: its real home_page asset, and its real builder (0x534064, with
+    # its card builder 0x533d8c) run for every number of cards the Home menu editor can leave on. Each
+    # case is home_page_init's order: V2.1 builds the grid, then the card follows it (the hook's own
+    # call, or its to-foreground handler after a rebuild; one routine, home_card).
+    GRID=0x534064
+    def real_home(ids):
+        m=ShuffleMachine(); win=m.v21_page('home_page'); m.top=win; m.stack=[win]
+        m.mock('get_homemenu_showinfo','widget_set_prop_bool','widget_set_tr_text','slide_indicator_set_value',
+               'hscroll_label_stop','hscroll_label_start','hscroll_label_set_ellipses','hscroll_label_set_speed',
+               'widget_load_image','widget_unload_image','on_backtoplayer_onclick','access@GLIBC_2.0','snprintf@GLIBC_2.0',
+               'memset@GLIBC_2.0')
+        m.word(syms['pdeq_choicemenu'],m.deque(ids,'int'))
+        assert m.call(address=home_hook[0],args=(win,0,0,0),gap=0)==0  # V2.1's own body mocked: no grid yet
+        return m,win
+    def rebuild(m,win,ids=None):
+        if ids is not None: m.word(syms['pdeq_choicemenu'],m.deque(ids,'int'))
+        m.calls=[]; assert m.call(address=GRID,args=(win,1,0,0),gap=0,clear=False)==0
+        (f,ctx),=[(f,ctx) for t,f,ctx in m.nodes[win]['handlers'] if t==O['EVT_WINDOW_FOREGROUND']]
+        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,clear=False)==0
+        return [x[2] for x in m.calls if x[0]=='slide_indicator_set_max']
+    def where(m,win):
+        slides=named(m,win,'home_sview'); pages=m.nodes[slides]['children']
+        at=[(i,j) for i,p in enumerate(pages) for j,c in enumerate(m.nodes[p]['children']) if m.nodes[c]['name']=='q2pod_card']
+        assert len(at)==1, at
+        (i,j),=at; c=m.nodes[pages[i]]['children'][j]
+        return len(pages),i,j,[signed(m.get(c+O[k])) for k in ('W_X','W_Y','W_W','W_H')],[len(m.nodes[p]['children']) for p in pages]
+    for n in (1,5,6,12,17,18):
+        m,win=real_home(list(range(n))); maxes=rebuild(m,win)
+        pages,page,slot,geometry,sizes=where(m,win); full=n%6==0
+        assert pages==n//6+1 and page==pages-1 and slot==n%6 and sizes==[6]*(n//6)+[n%6+1], (n,pages,page,slot,sizes)
+        assert geometry==[6+slot%2*154,slot//2*118,154,118] and maxes==[(n+5)//6]+([n//6+1] if full else []), (n,geometry,maxes)
+        # V2.1's cards in the same pages are where the card's copy puts them.
+        p=m.nodes[named(m,win,'home_sview')]['children'][0]; v21=m.nodes[p]['children'][0]
+        assert [signed(m.get(v21+O[k])) for k in ('W_X','W_Y','W_W','W_H')]==[6,0,154,118]
+    passed()
+    # Cards turned off in the editor: V2.1 rebuilds with fewer (here 17 then 6, a full page), the
+    # card goes with its cards and comes back once, on a page of its own, with the dots counting it;
+    # turned on again (6 then 13), it follows them on the last page.
+    m,win=real_home(list(range(17))); rebuild(m,win); assert where(m,win)[:3]==(3,2,5)
+    assert rebuild(m,win,list(range(6)))==[1,2] and where(m,win)[:3]==(2,1,0)
+    assert rebuild(m,win,list(range(13)))==[3] and where(m,win)[:3]==(3,2,1); passed()
+if is_m1plus: q2pod_real_grid()
 def home_settings(full,classic=0):
         # Home's Rockbox row shows only while the card has Rockbox: hidden, it moves after Settings, so the
         # list's layout leaves no gap; it comes back after Folder once the card has it.
@@ -6902,7 +7023,7 @@ else:
 m=RateMachine(b''.join(struct.pack('<I',(key_of(n)&~7)|h) for n,h in (('A',1),('C',4),('E',2))).ljust(4*O['RATE_SLOTS'],b'\0'))
 m.found=[m.song(n) for n in ('A','B','C','D','E')]; m.fav_songs=[m.song('D')]
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
-m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
+m.nodes[m.top]['children']=[view]; m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)
 f,ctx=row_click(m,m.nodes[view]['children'][6])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; menu=m.top; m.page=menu
 assert m.nodes[menu]['name']=='ratings_page' and m.texts()==['Ratings','Top Rated','Loved','Albums','All Rated','Disliked']
@@ -6928,7 +7049,7 @@ m=RateMachine(); m.files['/mnt/data/ringnav-lengths']=cached
 m.found=[m.song(n) for n in 'ABCDE']; m.word(m.found[2]+O['REC_CUE_END'],900)
 m.lengths={'/p/A':700,'/p/B':300}
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
-m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
+m.nodes[m.top]['children']=[view]; m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)
 f,ctx=row_click(m,m.nodes[view]['children'][13])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; m.page=m.top
 assert m.nodes[m.page]['name']=='longsongs_page' and m.texts()==['Measuring songs…','Cancel'] and len(m.threads)==1
@@ -6945,7 +7066,7 @@ m.close(); m.probed=[]; m.threads=[]; m.call(address=f,args=(ctx,m.event,0,0),ga
 assert not m.threads and not m.probed and m.texts()==want; m.close(); passed()
 m=RateMachine(); m.found=[m.song(n) for n in 'AB']; m.lengths={'/p/A':700,'/p/B':900}
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
-m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
+m.nodes[m.top]['children']=[view]; m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)
 f,ctx=row_click(m,m.nodes[view]['children'][13]); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.page=m.top
 cancel=m.nodes[m.find('scroll_view')]['children'][0]; g,c=m.handler(cancel,O['EVT_CLICK']); m.call(address=g,args=(c,m.event,0,0),gap=0)
 worker,arg=m.threads[0]; m.call(address=worker,args=(arg,0,0,0),gap=0); assert m.probed==[]  # cancelled before the first
@@ -6953,7 +7074,7 @@ m.advance(250); assert m.texts()==['Long Songs','No songs over 10 minutes'] and 
 # Two CUE tracks to the end of one file probe it twice; the cache keeps it once.
 m=RateMachine(); m.found=[m.song('A'),m.song('A')]; m.lengths={'/p/A':1300}; m.word(m.found[1]+O['REC_CUE_START'],600)
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
-m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
+m.nodes[m.top]['children']=[view]; m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)
 f,ctx=row_click(m,m.nodes[view]['children'][13]); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.page=m.top
 worker,arg=m.threads[0]; m.call(address=worker,args=(arg,0,0,0),gap=0); m.advance(250)
 assert m.files['/mnt/data/ringnav-lengths']==struct.pack('<2I',fnv('/p/A'),1300)
@@ -6964,10 +7085,10 @@ assert m.texts()==['Long Songs','A','Artist · 21:40','A','Artist · 11:40']; pa
 # starts, a second press finds it running, and a timer reports the result once the thread ends.
 m=ShuffleMachine(); m.config.update(USER='u',PASSWORD='p',API_KEY='k')  # no API_SECRET: no row
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==15
+assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==15
 assert ('/mnt/mmc/.scrobble.ini','LASTFM','API_SECRET','') in m.config_reads
 m.config['TOKEN']='tok'; m.nodes[view]['children']=[m.node('list_item') for _ in range(11)]
-assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==16
+assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==16
 button=row_button(m,m.nodes[view]['children'][-2]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_scrobble' and m.nodes[label]['text']=='Upload Scrobbles' and not m.nodes[button].get('name')
 f,ctx=m.handler(button,O['EVT_CLICK'])
@@ -6985,7 +7106,7 @@ m=ShuffleMachine(); m.card=[('Music',4),('PODCASTS',4),('Audiobooks',8)]
 m.handlers[int(manifest['patch_symbols']['stock_folder_trampoline'],16)]='stock_folder'
 m.handlers[int(manifest['patch_symbols']['stock_folder_back_trampoline'],16)]='stock_folder_back'
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==16
+assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==16
 button=row_button(m,m.nodes[view]['children'][-2]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_podcasts' and m.nodes[label]['text']=='Podcasts' and not m.nodes[button].get('name')
 f,ctx=m.handler(button,O['EVT_CLICK']); m.calls=[]
@@ -7006,7 +7127,7 @@ m.handlers[int(manifest['patch_symbols']['stock_folder_trampoline'],16)]='stock_
 m.handlers[int(manifest['patch_symbols']['stock_folder_back_trampoline'],16)]='stock_folder_back'
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
 m.top=m.node('window','localmusic_page',[view])
-m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
+m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)
 button=row_button(m,m.nodes[view]['children'][-2])
 f,ctx=m.handler(button,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
 win=m.node('window','folder_page'); m.call(address=HOOKS['folder_page_init'][0],args=(win,0,0,0),gap=0)
@@ -7160,7 +7281,7 @@ tree={'/mnt/mmc':[('Music',4),('photos',4)],R:[('b.jpg',8),('A.png',8),('._b.jpg
 data={R+'/b.jpg':exif(6),R+'/A.png':b'\x89PNG',R+'/Trip/1.jpg':b'corrupt',R+'/Trip/2.JPG':exif(1)}
 m=PhotosMachine(tree,data)
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
+assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0,count=5_000_000)==0
 button=row_button(m,m.nodes[view]['children'][-1]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_photos' and m.nodes[label]['text']=='Photos' and len(m.nodes[view]['children'])==16
 f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
@@ -7219,6 +7340,8 @@ assert len(m.draws)==2 and a[0]-rest_x==b[0]+stride and 0<a[0]-rest_x<stride//2 
 m.word(s+O['SLIDE_OFFSET'],0); passed()
 # Centre shows "2 of 4" and the name; a bad photo says so whatever.
 info=[x for x in m.nodes[viewer]['children'] if m.nodes[x]['type']=='hscroll_label'][0]
+# M1 Plus: the viewer's back button, over the photo (Return goes back to the grid).
+assert len([x for x in m.nodes[viewer]['children'] if m.nodes[x].get('style')=='navbar_btnreturn_style'])==int(is_m1plus)
 x,y,bw,bh=cf_geometry(m,info); inset=0 if is_m1plus else max(corner_inset(30+y),corner_inset(30+y+bh))
 assert not m.nodes[info]['visible'] and inset<=x and x+bw<=O['UI_W']-inset  # the whole rounded band clears the glass
 f,ctx=m.handler(m.nodes[s]['children'][1],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
@@ -7333,12 +7456,14 @@ tree={'/mnt/mmc':[('Music',4),('books',4)],R:[('Zed.txt',8),('notes.md',8),('._Z
 files={R+'/Zed.txt':bytearray(txt.encode()),R+'/Series/A Tale.EPUB':bytearray(buf.getvalue())}
 m=BooksMachine(tree,files)
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
+assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0,count=5_000_000)==0
 button=row_button(m,m.nodes[view]['children'][-1]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_books' and m.nodes[label]['text']=='Books' and len(m.nodes[view]['children'])==16
 f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
 page=m.page=m.top; assert m.nodes[page]['name']=='books_page' and m.nodes[page]['style:normal:bg_color']==-0x1000000
-books,reader=m.nodes[page]['children']; sheet,info=m.nodes[reader]['children']
+books,reader=m.nodes[page]['children']; sheet,info,*back=m.nodes[reader]['children']
+# M1 Plus: the reader's back button, over the page (Return goes back to the books).
+assert [m.nodes[b]['style'] for b in back]==(['navbar_btnreturn_style'] if is_m1plus else [])
 assert not m.nodes[reader]['visible'] and labels(books)==['Books','A Tale','Zed']; passed()
 # A .txt opens on its first page: up to ten white lines of the default font, the BOM dropped,
 # wrapped at spaces within the margins, every line clear of the glass's rounded corners.
@@ -7388,7 +7513,7 @@ R='/mnt/mmc/VIDEOS'
 tree={'/mnt/mmc':[('Music',4),('VIDEOS',4)],R:[('b.MKV',8),('a.mp4',8),('notes.txt',8),('._a.mp4',8),('Trip',4)],R+'/Trip':[('c.avi',8)]}
 m=BooksMachine(tree,{})
 view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
+assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0,count=5_000_000)==0
 button=row_button(m,m.nodes[view]['children'][-1]); icon,label=m.nodes[button]['children']
 assert m.nodes[icon]['image']=='local_videos' and m.nodes[label]['text']=='Videos' and len(m.nodes[view]['children'])==16
 f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
