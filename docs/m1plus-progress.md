@@ -497,11 +497,22 @@ the list. It now goes up by default (`KEY_PREV`). A new Display row under Knob, 
 `List Down` (`POD_KNOB_DIR`, `[Q2POD] KNOBDIR`), flips it back. `test/patch.py` checks both
 directions, the default, Volume mode ignoring the row, and the row's click and saved value.
 
+**The knob in Bluetooth receiver mode (sixth device test, V007s).** With the phone as the source,
+the phone's slider worked but the knob, in Navigation, did nothing. The receiver page
+(`bluetoothrecv_page`) isn't Now Playing, so the turn became Previous or Next, which neither the page
+nor the payload takes there. `knob_nav_active` now remaps only where `ringnav` navigates: `usable()`
+(which leaves Bluetooth receiver and USB DAC modes to stock) and a context page. So the receiver page,
+USB DAC mode's `usbmode_page` and the volume dialog keep the volume. In receiver mode V2.1 scales the
+jacks' `volume` by the phone's AVRCP level (`bt_recv_volume` / 127, in `set_devicevolume`), and the
+payload's Bluetooth hook passes it through. `test/patch.py` checks each page and both flags. With
+the old gate, the suite fails.
+
 What is left for the device test, at low volume first:
 - a Bluetooth headset: the headset's buttons move the M1's indicator, and the knob steps from there;
 - wired headphones after the headset disconnects, at the jacks' own level;
 - Rate Album's hearts (V2.1 has no `play_fav`/`play_unfav` images);
-- the knob in Navigation, both ways of Knob Up.
+- the knob in Navigation, both ways of Knob Up;
+- the knob's volume in Bluetooth receiver and USB DAC modes, with Knob on Navigation.
 
 ## How to check a build now
 
