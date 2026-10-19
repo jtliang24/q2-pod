@@ -48,10 +48,10 @@ Done: Crossfade's page on V2.1, the Playback rows that V2.1's list rebuild dropp
 lines that could be ported (see [m1plus-progress.md](m1plus-progress.md), section 14). What is left
 here goes with other sections' features:
 
-- **The `test:` lines whose features M1 can't reach yet.** Five lines, each going with its feature:
-  - Home's Coverflow card layout, Coverflow's track queue through `mclNextSong`, and other slide
-    menus' next and previous: with Coverflow's entry point (section 3) and its scroll distance
-    (section 2);
+- **The `test:` lines whose features M1 can't reach yet.** Four lines, each going with its feature:
+  - Coverflow's track queue through `mclNextSong`, and other slide menus' next and previous: with
+    Coverflow's scroll distance (section 2). Coverflow now opens from the Q2 Pod page. Home's
+    Coverflow card layout is Q2 only: V2.1's Home has no Coverflow card;
   - the stock key-down helper with STOP (`0x65f688`): with V2.1's copy of that private AWTK
     helper, still to be found (V2.1 binds no key-down handler for the payload to hook);
   - folder rollover and the UI scheduler delay: with the player call sites (section 4).
@@ -64,8 +64,8 @@ here goes with other sections' features:
     swipe must travel 450 px.
   - **The fix:** size the slide_menu to one item and draw the neighbours as V1.32 did, or animate the
     payload's own offset instead of the slide_menu's.
-  - Both views are unreachable on M1 until there is an entry point (section 3), so do this with or after
-    that.
+  - Both views now open from the Q2 Pod page (section 3, [m1plus-progress.md](m1plus-progress.md)
+    section 17), so this is next.
 
 ## 3. Entry points for Q2 Pod's pages (L)
 
@@ -75,9 +75,10 @@ Each page reached this way needs a Back button (ground rules):
 - **Already have one:** the list pages, through `page_list` and `page_title`. These are Shuffle,
   Ratings, Most Played, Long Songs, Photos' albums and grid, Books' list, and Spotify's and Radio's
   browsers.
-- **Still need one:** the full-screen views with no title bar. These are Coverflow's carousel, the photo
-  viewer, the book reader and video player, and Spotify's and Radio's Now Playing pages
-  (`spotify_page`, `radionp_page`). Add `back_button` to each, over its content.
+- **Given one with the Q2 Pod page:** Coverflow's carousel, the photo viewer and the book reader
+  (`back_button` over the content).
+- **Still need one:** the video player, and Spotify's and Radio's Now Playing pages (`spotify_page`,
+  `radionp_page`). Add `back_button` to each, over its content, with their entry points below.
 
 Each list page reached this way should also take the touch long-press (`lp_input`), which today arms
 only on V2.1's library pages (`CTX_FOLDER`, `CTX_LOCAL`). On the Q2 these holds are Play/Pause held on
@@ -91,18 +92,12 @@ a highlighted row:
 `radio_hold` and `spot_hold` read the row from the list's `_ringnav_index`, so a long press sets that
 first. Now Playing needs none: its hold menu acts on the playing track.
 
-- **The Library's extras.** `NOT PORTED: Library's Shuffle, Ratings, Most Played and media rows`.
-  - **The problem:** V1.32 has a Local Music menu that the payload extends. V2.1's Home carousel *is* the
-    library, and `ringnav_localmusic` is bound to `localclass_page_init`, the per-category page.
-  - **Options:**
-    1. Add Home cards by patching V2.1's `home_page.bin`, as the Q2's Coverflow card does. That needs an
-       asset patcher for V2.1's UI format and new card icons.
-    2. Add a single "Q2 Pod" Home card that opens a payload page listing Shuffle, Ratings, Most Played,
-       Long Songs, Podcasts, Audiobooks, Photos, Books, Videos and Coverflow.
-
-    Option 2 is less invasive, and it fits the build's no-asset-changes M1 policy.
-    Either way the new page gets a Back button (ground rules), as must each page it opens.
-  - Then unbind `localclass_page_init` from `ringnav_localmusic`.
+- **The Library's extras.** Done: a "Q2 Pod" Home card after V2.1's own opens a page with Shuffle,
+  Ratings, Most Played, Long Songs, Podcasts, Audiobooks, Photos, Books, Coverflow and Upload
+  Scrobbles ([m1plus-progress.md](m1plus-progress.md) section 17). `localclass_page_init` is no longer
+  hooked. Left:
+  - **Videos.** Its row waits for q2video on the M1's DAC (the Streaming item's device dependency
+    below) and a back button on the player.
 - **Streaming's Spotify, Internet Radio and AirPlay rows.** `NOT PORTED`.
   - **The problem:** V2.1 has no `stream_page_init` symbol.
   - **The fix:** find the Streaming page's init through the page-name dispatch table, which maps
@@ -180,6 +175,8 @@ These are skipped on M1 on purpose (marked `Q2 only` in the tests), not gaps:
 - long Return;
 - the sideways splash rotation;
 - the Q2's Centre-key Wake setting (V2.1 has its own Double wake);
+- Home's Coverflow card: V2.1's Home is a grid of its own cards, and Coverflow opens from the Q2 Pod
+  page;
 - Key Tone: V2.1 has no buzzer command, and binds no key-down handler to hook.
 
 The Rockbox dual boot stays: there is no Rockbox for the M1 Plus yet, but the hook serves as a boot-time

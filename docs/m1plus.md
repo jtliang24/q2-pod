@@ -205,6 +205,14 @@ When switched to **Navigation**:
 ### 4.3 Touch Long-Press Opens the Hold Menu
 On the Q2, Play/Pause held on a highlighted row opens Q2 Pod's hold menu for that row: Play Next, Add to Queue, Favourites, Rate Album and the rest. On the M1 nothing is highlighted unless the knob is in Navigation mode. So a finger held still for 500 ms (`LONG_PRESS_MS`) on a row or tile of a library page opens the same menu for the row under the finger. That covers an artist's albums, Albums, Artists, Composers, Genres, All Songs, an album's tracks, Folders and Playlists. A press that moves is the list's scroll, and the row doesn't open on the release. Play/Pause held with nothing highlighted is still V2.1's own sort dialog. See [internals.md](internals.md#queue-menu).
 
+### 4.4 The Q2 Pod Home Card and Page
+V1.32 has a Local Music menu that Q2 Pod extends with its own rows. V2.1 has none: its Home *is* the library, a grid of cards the user picks in V2.1's Home menu editor. So the M1 build adds one card, **Q2 Pod**, after V2.1's own, and it opens a payload page (`library_page`) with the rows Q2 Pod adds to the Q2's Library: Shuffle, Ratings, Most Played, Long Songs, then Podcasts, Audiobooks, Photos and Books (each only when its folder is on the card), Coverflow, and Upload Scrobbles (only with an account). Videos waits for q2video on the M1's DAC.
+
+- **No asset changes.** V2.1 builds the grid in code: `home_page_init`'s builder (`0x534064`) lays out `pdeq_choicemenu`'s ids six to a page of `home_sview` (a slide_view) and sets `home_sindicator`'s count. [`home_card`](../patch/coverflow.c) adds the card in the next slot exactly as V2.1's card builder (`0x533d8c`) places its own, or on a new page when the last one is full. The icon pair (`home_q2pod.png`, `_down`) is new art in V2.1's 66 px card style, added to the rootfs like the row icons.
+- **V2.1's card click can't see it.** V2.1's card click (`0x533b80`) reads `atoi(name)` as one of its 18 ids, and the card's image has no name and its own click.
+- **It survives V2.1's rebuilds.** Turning cards on or off in the editor, or changing the language, makes V2.1 rebuild the grid the next time Home comes to the front, which destroys every card. The card binds its own to-foreground handler before V2.1's init binds V2.1's, so it runs after V2.1's rebuild and puts the card back once. `test/build.py` pins the builder's only two callers.
+- **The page** is built from `page_open` and `page_list` (title bar and back button) with V2.1's 64 px rows (`list_row`). Coverflow's carousel, the photo viewer and the book reader got the back button over their content, and Coverflow's covers go back to this page, not Home.
+
 ---
 
 ## 5. Verified Memory Addresses, Symbols & Patch Inventory

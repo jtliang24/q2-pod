@@ -574,12 +574,74 @@ NULL. The test machine's `widget_get_prop_str` now returns NULL for an unset sty
 Still to check: Previous with Spotify or Internet Radio playing, once Streaming's rows are ported
 (roadmap §3).
 
+## 17. The Q2 Pod Home card and page (Oct 19)
+
+The roadmap's section 3, the Library's extras: on M1, Shuffle, Ratings, Most Played, Long Songs, the
+media folders and Coverflow had no way in. V1.32 has a Local Music menu Q2 Pod extends; V2.1 has
+none, because its Home is the library. The roadmap chose one Home card opening a payload page.
+
+**V2.1's Home, read from its code.** `home_page.bin` holds only an empty `home_sview` (a
+slide_view) and `home_sindicator`. A private routine at `0x534064` builds the grid: it destroys
+`home_sview`'s children and makes one 320x364 page view per six ids of `pdeq_choicemenu` (the cards
+picked in V2.1's Home menu editor, `[MAIN] HOMEMENU` in config.ini), then sets the dots' count. Its
+card builder (`0x533d8c`) places each card: a 154x118 view in two columns from x 6, rows at 0, 118
+and 236, holding a clickable 66 px image (`home_<name>_style`: `bg_image` `<name>`, pressed
+`<name>_down`) and a line-wrapped label in Home's own style file. A card's click (`0x533b80`) reads
+`atoi(name)` as one of 18 ids. The grid is rebuilt only by `home_page_init` and by Home's refresh
+(`0x534858`), which runs when Home comes to the front and rebuilds only after the editor or a
+language change (`homemenu_changeflag` 2).
+
+**The card.** `home_card` (`patch/coverflow.c`) adds "Q2 Pod" in the next slot exactly as V2.1
+places its own, or on a new page with the dots counting it when the last page is full. Its image has
+no name, so V2.1's click never sees it, and its own click opens the page. V2.1's rebuild destroys it
+with the other cards. The card binds its own to-foreground handler before V2.1's init binds V2.1's,
+so it runs after V2.1's rebuild (the emitter runs the newest first) and puts the card back once.
+The icon pair is new art in V2.1's flat card style (a gold circle no stock card uses, with a white
+iPod), added as new rootfs images.
+
+**The page.** `library_open` (`patch/navigation.c`) opens `library_page`: `page_open` and
+`page_list` (title bar and back button) over V2.1's 64 px rows (`list_row`), in the Q2 Library's
+order: Shuffle, Ratings, Most Played, Long Songs, Podcasts, Audiobooks, Photos and Books (each only
+with its folder), Coverflow, and Upload Scrobbles (only with an account). Videos waits for q2video on
+the M1's DAC. `localclass_page_init` is no longer hooked: `ringnav_localmusic` found no Local Music
+list there.
+
+**What the page needed.**
+- **Row icons.** V2.1 has no `local_fav` or `local_frequentplay`, so Ratings and Most Played had
+  none: they are now V2.1's Favourites and Frequent card art at the rows' 40 px. The drawn icons
+  (52 px, V1.32's size) and a Coverflow icon from its card art are resized to 40 px too.
+- **Back buttons** over Coverflow's carousel, the photo viewer and the book reader. On M1 Coverflow's
+  covers go back to the Q2 Pod page, not Home.
+- **The name check** reads Home's style file as well as `default.bin`, since the card's label style
+  is in it.
+
+**Tests.**
+- `test/patch.py`:
+  - V2.1's real `home_page` asset and V2.1's real grid code, run under Unicorn for 1, 5, 6, 12, 17
+    and 18 cards: the card lands where V2.1 would put the next card, with a new page and the dots'
+    count when the last page is full;
+  - cards turned off and on in the editor (17, then 6, then 13), through V2.1's rebuild and the
+    to-foreground handler: the card comes back once, on the right page;
+  - the card's image, label and click, and a grid not as V2.1 builds it getting no card;
+  - the page's rows, icons, order and conditions, and the rows' clicks. The `NOT PORTED` line is
+    gone. The Library tests that click rows reach their handlers, the ones this page uses, through
+    Q2's builder.
+- `test/build.py` pins V2.1's grid: six to a page, the page and card geometry, the label style,
+  the click's 18 ids, and the builder's only two callers. The rootfs check expects the five new
+  images.
+- `test/boot.py`: Home's last page matches stock's but for the card; the card opens the page, its
+  Shuffle row opens Shuffle, and Previous and the back button close the page. With `--home-menu`,
+  V2.1's Home has six cards (seeded `[MAIN] HOMEMENU`): Home matches stock's but for the dots, and
+  the card, alone on the second page, opens its page. The walk's budget is now 180 s.
+- Without the to-foreground binding, the rebuild tests fail.
+
 ## How to check a build now
 
 ```sh
 python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses unknown inputs and V2.1 names
 python3 test/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
 python3 test/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
+python3 test/boot.py build-m1 --home-menu  # the same with six Home cards: the Q2 Pod card on a page of its own
 python3 test/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/playback.py build-m1        # and m4b, id3, ldac, headset_io, bluealsa
 ```
