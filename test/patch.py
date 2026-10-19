@@ -8410,14 +8410,16 @@ if not is_m1plus:  # Q2 only: the touch wheel's
         assert texts()[-1]==f'Wheel Sensitivity: {pct}%' and icons[-1]=='system_display' and m.nodes[label]['name']=='label_wheel'
         assert m.nodes[named(m,m.top,'scroll_view_display')]['children'][-1]==rows[-1],config  # the list's end
     passed()
-else:  # M1 Plus: Display gains Artist Albums and Knob, icon-less as V2.1's display rows
+else:  # M1 Plus: Display gains Artist Albums, Knob and its direction, icon-less as V2.1's display rows
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=3)
-    assert texts()==['Artist Albums: Coverflow','Knob: Volume'] and icons==[None,None]
+    assert texts()==['Artist Albums: Coverflow','Knob: Volume','Knob Up: List Up'] and icons==[None,None,None]
     assert m.nodes[named(m,m.top,NAMES['VIEW_DISPLAY'])]['children'][-1]==rows[-1]
     assert click(1)==[(1,'Q2POD','KNOB')] and texts()[1]=='Knob: Navigation'
     assert click(1)==[(0,'Q2POD','KNOB')] and texts()[1]=='Knob: Volume'
-    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1'},stock_rows=3)
-    assert texts()[1]=='Knob: Navigation'; passed()
+    assert click(2)==[(1,'Q2POD','KNOBDIR')] and texts()[2]=='Knob Up: List Down'
+    assert click(2)==[(0,'Q2POD','KNOBDIR')] and texts()[2]=='Knob Up: List Up'
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1','KNOBDIR':'1'},stock_rows=3)
+    assert texts()[1:]==['Knob: Navigation','Knob Up: List Down']; passed()
 # Its row opens stock's Boot volume page re-dressed (crossfade.c): titled, no switch, the percent
 # beside the slider, which runs 50-200 in tens. The wheel and +/- step 10%, live and saved, the
 # slider snaps to a ten, and Centre goes back (edit_key, as on Brightness).
@@ -9117,15 +9119,19 @@ if is_m1plus:
     m=input_machine('playing_page'); m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]
     m=input_machine(); m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
     m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[] and 'on_wm_keyup_fun' in [c[0] for c in m.calls]; passed()
-    # Display's Knob: Navigation (Q2POD KNOB=1). The knob's turns are Previous and Next and its press
-    # Centre, on the release, before stock's key-up, which is where V2.1 opens the volume dialog
+    # Display's Knob: Navigation (Q2POD KNOB=1). The knob's turns are Previous and Next, volume up
+    # Previous (up the list) unless Knob Up: List Down (KNOBDIR=1), and its press Centre, on the release, before stock's key-up, which is where V2.1 opens the volume dialog
     # (on_wm_keyup_fun's 220/221 test, pinned in test/build.py). Volume (the default), a dark screen,
     # Now Playing and a press the boot guard holds keep the knob's own keys.
-    def knob(key,mode='1',page='sysset_page',setup=lambda m:None):
+    def knob(key,mode='1',page='sysset_page',setup=lambda m:None,reverse=None):
         m=input_machine(page)
         if mode is not None: m.config['KNOB']=mode
+        if reverse is not None: m.config['KNOBDIR']=reverse
         setup(m); m.call(O[key],gap=1000); return m.get(m.event+O['EVENT_KEY'])
-    assert [knob(k) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN','KEY_POWER')]==[O['KEY_NEXT'],O['KEY_PREV'],O['KEY_CENTER']]
+    assert [knob(k) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN','KEY_POWER')]==[O['KEY_PREV'],O['KEY_NEXT'],O['KEY_CENTER']]
+    assert [knob(k,reverse='0') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_PREV'],O['KEY_NEXT']]
+    assert [knob(k,reverse='1') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN','KEY_POWER')]==[O['KEY_NEXT'],O['KEY_PREV'],O['KEY_CENTER']]
+    assert [knob(k,mode='0',reverse='1') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']]
     for kw in (dict(mode=None),dict(mode='0'),dict(page='playing_page'),
                dict(setup=lambda m:m.byte(syms['g_backlight_status'],0))):
         assert [knob(k,**kw) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']],kw

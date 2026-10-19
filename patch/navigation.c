@@ -187,7 +187,8 @@ typedef struct {
     int pod_read, charge_limit, low_power, wake_double, wake_pass, charge_held, cpu_off, cpu_bad,
         cpu_marked, artist_cf, year_old, resume, lock_clock, artist_az;
 #if M1PLUS
-    void *pod_label[10];
+    void *pod_label[11];
+    int knob_reverse; /* Display's Knob Up: 0 List Up (Previous), 1 List Down (Next) */
 #else
     void *pod_label[9];
 #endif
@@ -2000,13 +2001,14 @@ enum {
     POD_ARTIST_AZ,
 #if M1PLUS
     POD_KNOB, /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
+    POD_KNOB_DIR, /* Navigation's volume-up turn: 0 up the list, 1 down */
 #endif
 };
 static int *const pod_values[] = { &st.charge_limit, &st.low_power,  &st.wake_double,
                                    &st.artist_cf,    &st.year_old,   0,
                                    &st.resume,       &st.lock_clock, &st.artist_az,
 #if M1PLUS
-                                   &st.knob_mode,
+                                   &st.knob_mode,    &st.knob_reverse,
 #endif
 };
 _Static_assert(POD_LOCKCLOCK == 7, "lockscreen.c passes pod_rows 7");
@@ -2014,7 +2016,7 @@ static const char *const pod_keys[] = { "CHARGELIMIT", "LOWPOWER",  "WAKEDOUBLE"
                                         "ARTISTCF",    "YEAROLD",   0,
                                         "RESUME",      "LOCKCLOCK", "ARTISTAZ",
 #if M1PLUS
-                                        "KNOB",
+                                        "KNOB",        "KNOBDIR",
 #endif
 };
 static void pod_settings(void) {
@@ -2072,6 +2074,7 @@ static void pod_text(int i) {
         { "Artist Album Order: Year", "Artist Album Order: A–Z" },
 #if M1PLUS
         { "Knob: Volume", "Knob: Navigation" },
+        { "Knob Up: List Up", "Knob Up: List Down" },
 #endif
     };
     int v = i != POD_ARTISTS ? *pod_values[i] : I(artist_type, 0) == 1;
@@ -3283,8 +3286,9 @@ int ringnav_display(void *win, void *ctx) {
     }
 #else
     pod_rows(win, VIEW_DISPLAY, POD_ARTIST_CF, 1, cf_icon);
-#if M1PLUS /* the volume knob's role, read by knob_nav_active */
-    pod_rows(win, VIEW_DISPLAY, POD_KNOB, 1, cf_icon);
+#if M1PLUS /* the volume knob's role, read by knob_nav_active, and Navigation's direction */
+    static const char *const knob_icons[] = { 0, 0 };
+    pod_rows(win, VIEW_DISPLAY, POD_KNOB, 2, knob_icons);
 #endif
 #endif
 #if !M1PLUS /* the touch wheel's sensitivity */
@@ -6464,9 +6468,10 @@ int ringnav_buzzer(int on) {
 }
 
 #if M1PLUS
-/* Display's Knob: Navigation. The knob's turns are Previous and Next and its press Centre, on
- * their release, which is where V2.1 changes the volume (on_wm_keyup_fun opens the volume dialog
- * for 220/221); V2.1 binds no key-down handler. Now Playing and a dark screen keep the volume. */
+/* Display's Knob: Navigation. The knob's turns are Previous and Next (volume up is Previous, up the
+ * list, unless Knob Up: List Down) and its press Centre, on their release, which is where V2.1
+ * changes the volume (on_wm_keyup_fun opens the volume dialog for 220/221); V2.1 binds no key-down
+ * handler. Now Playing and a dark screen keep the volume. */
 static int knob_nav_active(void) {
     pod_settings();
     if (!st.knob_mode || !g_backlight_status) return 0;
@@ -6689,8 +6694,10 @@ int ringnav(void *ctx, void *event) {
 #if M1PLUS
     int boot_guard = g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD;
     if (knob_nav_active()) {
-        if (key == KEY_VOLUMEDOWN) key = KEY_PREV, I(event, EVENT_KEY) = KEY_PREV;
-        else if (key == KEY_VOLUMEUP) key = KEY_NEXT, I(event, EVENT_KEY) = KEY_NEXT;
+        /* Knob Up: List Up, the default, takes the volume-up turn toward the list's top */
+        unsigned up = st.knob_reverse ? KEY_NEXT : KEY_PREV, down = st.knob_reverse ? KEY_PREV : KEY_NEXT;
+        if (key == KEY_VOLUMEUP) key = up, I(event, EVENT_KEY) = up;
+        else if (key == KEY_VOLUMEDOWN) key = down, I(event, EVENT_KEY) = down;
         else if (key == KEY_POWER && !boot_guard) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
     }
 #else
