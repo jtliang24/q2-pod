@@ -6471,12 +6471,13 @@ int ringnav_buzzer(int on) {
 /* Display's Knob: Navigation. The knob's turns are Previous and Next (volume up is Previous, up the
  * list, unless Knob Up: List Down) and its press Centre, on their release, which is where V2.1
  * changes the volume (on_wm_keyup_fun opens the volume dialog for 220/221); V2.1 binds no key-down
- * handler. Now Playing and a dark screen keep the volume. */
+ * handler. Only where ringnav navigates: elsewhere the turn would do nothing, so Now Playing, the
+ * volume dialog, Bluetooth receiver and USB DAC modes (their pages are no context, and usable()
+ * leaves both modes to stock) and a dark screen keep the volume. */
 static int knob_nav_active(void) {
     pod_settings();
-    if (!st.knob_mode || !g_backlight_status) return 0;
-    if (now_playing()) return 0;
-    return 1;
+    if (!st.knob_mode || !usable() || now_playing()) return 0;
+    return allowed_top(window_manager_get_top_window(window_manager()));
 }
 #endif
 
