@@ -95,14 +95,16 @@ Discovered from `/module_driver/keyboard_encoder_add.sh`, `/module_driver/keyboa
 | **Next Track Button** | GPIO `PE26` (`keyboard_gpio_add.ko`) | `KEY_NEXTSONG` (`163`) | `KEY_FWD_BTN` (`215` on V2.1, `223` on Q2) | Active high (`active_level=1`) |
 | **Previous Track Button** | GPIO `PB03` (`keyboard_gpio_add.ko`) | `KEY_PREVIOUSSONG` (`165`) | `KEY_BACK_BTN` (`214` on V2.1, `222` on Q2) | Active low (`active_level=0`). Back in Knob: Navigation (§4.2) |
 | **Physical Return Button** | **None on M1 Plus** | N/A | `KEY_RETURN` (`170`) | **Missing in hardware — must be synthesized** |
-| **Touchscreen** | Goodix (`gt9xx_touch.ko`, I2C0) | `/dev/input/event2` (`TSLIB_TSDEVICE`) | `EVT_POINTER_DOWN/MOVE/UP` | `320 × 480`, `flip=0`, `exchange=0` |
+| **Touchscreen** | Goodix (`gt9xx_touch.ko`, I2C0), `Goodix-CTP` | `/dev/input/event3` on the device | `EVT_POINTER_DOWN/MOVE/UP` | `320 × 480`, `flip=0`, `exchange=0` |
+
+On the device (V00A, read over `q2remote`), the kernel lists event0 as `axp2101-pek` (the PMIC's power key, 116), event1 as `md-gpio-keys` (116, 163, 164, 165), event2 as `md-rotary-knob` (114, 115) and event3 as `Goodix-CTP`. `demo` holds event1, event2 and event3 open. `S90play`'s `TSLIB_TSDEVICE=/dev/input/event2` is the knob, not the touchscreen. The panel reports upright screen pixels in `ABS_X`/`ABS_Y`, with no `BTN_TOUCH` and no multitouch positions. A tap is `X, Y, ABS_PRESSURE 1, ABS_PRESSURE 0, SYN`, then `ABS_PRESSURE 1, SYN` about 11 ms later, then `ABS_PRESSURE 0, SYN` at the release.
 
 > [!WARNING]
 > **1. Linux Keycodes vs. AWTK `EVENT_KEY` Codes:**
 > Linux kernel keycodes (`114`, `115`, `116`, `163`, `164`, `165`) are read from `/dev/input/event*` by `demo`'s input thread and translated into AWTK's internal `EVENT_KEY` numbers (`170`–`223` in [`patch/offsets.inc`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L329-L335)) *before* reaching [`window_manager_dispatch_input_event`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6126) or [`on_wm_keyup_before_fun` (`ringnav`)](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6353). Do not compare `I(event, EVENT_KEY)` against raw Linux keycodes `114`/`115`/`116` inside AWTK hooks; inspect M1 Plus's key translation table in `demo` (and `encoderknob_thread_run` / `gpio_keys` reader) first.
 >
 > **2. Do Not Hook `ts_read` (`WHEEL_TS_READ`) on M1 Plus:**
-> On the Q2, the touch wheel is a capacitive strip on `/dev/input/event1` read via `ts_read` ([`WHEEL_TS_READ = 0x6258cc`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L140), hooked by [`ringnav_ts_read`](file:///home/jtliang/Projects/q2-pod/patch/playback.c#L684-L699)). On the M1 Plus, `TSLIB_TSDEVICE=/dev/input/event2` is the main touchscreen, while the rotary knob uses `keyboard_encoder.ko`. Hooking `ts_read` with `ringnav_ts_read` on M1 Plus would corrupt touchscreen coordinates!
+> On the Q2, the touch wheel is a capacitive strip on `/dev/input/event1` read via `ts_read` ([`WHEEL_TS_READ = 0x6258cc`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L140), hooked by [`ringnav_ts_read`](file:///home/jtliang/Projects/q2-pod/patch/playback.c#L684-L699)). On the M1 Plus, the main touchscreen is `Goodix-CTP` (event3 on the device), while the rotary knob uses `keyboard_encoder.ko`. Hooking `ts_read` with `ringnav_ts_read` on M1 Plus would corrupt touchscreen coordinates!
 
 ---
 
