@@ -212,6 +212,10 @@ V1.32 has a Local Music menu that Q2 Pod extends with its own rows. V2.1 has non
 - **V2.1's card click can't see it.** V2.1's card click (`0x533b80`) reads `atoi(name)` as one of its 18 ids, and the card's image has no name and its own click.
 - **It survives V2.1's rebuilds.** Turning cards on or off in the editor, or changing the language, makes V2.1 rebuild the grid the next time Home comes to the front, which destroys every card. The card binds its own to-foreground handler before V2.1's init binds V2.1's, so it runs after V2.1's rebuild and puts the card back once. `test/build.py` pins the builder's only two callers.
 - **The page** is built from `page_open` and `page_list` (title bar and back button) with V2.1's 64 px rows (`list_row`). Coverflow's carousel, the photo viewer and the book reader got the back button over their content, and Coverflow's covers go back to this page, not Home.
+- **What its rows needed on V2.1.** The details are in [m1plus-progress.md](m1plus-progress.md) section 18.
+  - Long Songs passes TagLib's `readAudioProperties` (`taglib_file_open(path, 1)`). V2.1's scanner passes 0, and an unset flag read every length as 0.
+  - Books and Photos make their hidden full-size views insensitive (`view_show`), because AWTK's hit test skips insensitive children but not hidden ones.
+  - Shuffle Songs sets the play mode as V2.1's Play mode page does, since V2.1 has no `config_playmode`.
 
 ---
 

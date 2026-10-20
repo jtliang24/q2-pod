@@ -635,6 +635,47 @@ list there.
   the card, alone on the second page, opens its page. The walk's budget is now 180 s.
 - Without the to-foreground binding, the rebuild tests fail.
 
+## 18. The dev 10 (V00A) device pass (Oct 19)
+
+Section 17's build on the device. The card and the page worked through Home edits, themes and
+languages, and nothing crashed. Three rows didn't work. Each was diagnosed in the emulator, and
+Long Songs was also confirmed on the device over `q2remote`.
+
+- **Long Songs found nothing, and never measured again.** Shanling's libtag_c `taglib_file_new`
+  takes a second argument, `readAudioProperties`: it is `new FileRef(name, flag, Average)` (`0x98a0`,
+  the same on V1.32), and V2.1's scanner passes 0 (`0x5ec818`). The payload declared one argument,
+  which left the flag to whatever `$a1` held. On the worker thread that was 0, so no file had
+  properties, and all 417 of the device's songs were cached as 0 s, which counts as measured. The
+  M1 now calls `taglib_file_open(path, 1)`, an alias of the same import. A cache
+  written before the fix (dev builds only) has to be deleted once, by hand (`/mnt/data/ringnav-lengths`). The worker's `$gp` is
+  not V2.1's GOT pointer, which looked like a cause, but isn't: glibc's MIPS resolver finds the
+  object by the stub's address. The Q2's call is unchanged: the bug is latent there.
+- **Book rows and photo tiles didn't open by tap.** A tap's down and up landed on the page's hidden
+  full-size view (the reader or the viewer, created after the list). AWTK's hit test
+  (`widget_find_target_default`, V2.1 `0x6747d4`) skips a child by `flags & 9` (enable, sensitive),
+  never by visible (bit 2), and searches the newest child first. On the M1 the pages now make hidden
+  views insensitive (`view_show`, `patch/peq.h`), as Coverflow's Settings list already did. V1.32's
+  hit test is the same, so the Q2 has it too, behind its wheel; its build is unchanged.
+- **Shuffle Songs played the library in order.** It saves stock's Shuffle with `config_playmode`,
+  which V2.1 doesn't have, and the stand-in did nothing. On the M1 it is now V2.1's Play mode page's
+  own sequence (`0x49fc78`): the mode through the `mclSetPlayMode` hook (`ringnav_mode`), then
+  `notifyPlayMode()`, `dmrSendPlayMode(mode)` and `write_int_config(mode, "PLAYSET", "PLAYMODE")`.
+  2 is Shuffle on V2.1 too (`playset/playmode_page`'s third row).
+
+Not bugs: Shuffle Albums and Folders work (the queue view shows the whole library, as on the Q2);
+Coverflow's covers don't take taps by design (the Q2 turns them by wheel); the card isn't in V2.1's
+Home menu editor, which knows only its 18 ids; long press on these rows waits for roadmap section 3.
+
+**Tests.** `test/boot.py --media` mounts a tmpfs card in the sandbox. On ext4, a 32-bit guest's
+`readdir` under qemu-user fails with EOVERFLOW, so the payload found the card empty. The card holds
+two 11-minute songs (generated FLAC and MP3 headers), a book and a photo, and V2.1's `songtable`
+lists the songs. The walk:
+- opens Long Songs, which must cache 660 s for both;
+- taps the first book and the first photo, which must reach `to_reader` and `to_viewer`;
+- taps Shuffle Songs, which must save `PLAYMODE=2`.
+
+On the unfixed build, the walk fails at the book tap.
+
 ## How to check a build now
 
 ```sh
@@ -642,6 +683,7 @@ python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses un
 python3 test/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
 python3 test/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
 python3 test/boot.py build-m1 --home-menu  # the same with six Home cards: the Q2 Pod card on a page of its own
+python3 test/boot.py build-m1 --media    # a card with long songs, a book and a photo: Long Songs, Books, Photos, Shuffle Songs
 python3 test/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/playback.py build-m1        # and m4b, id3, ldac, headset_io, bluealsa
 ```
