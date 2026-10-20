@@ -4857,7 +4857,11 @@ static int by_key(const void *a, const void *b) {
 static void *ls_worker(void *unused) {
     (void)unused;
     while (ls.done < ls.total && !ls.cancel) {
+#if M1PLUS
+        void *f = taglib_file_open(ls.paths[ls.done], 1); /* read audio properties: the length */
+#else
         void *f = taglib_file_new(ls.paths[ls.done]);
+#endif
         void *p = f ? taglib_file_audioproperties(f) : (void *)0;
         int sec = p ? ((int (*)(void *))(*(void ***)p)[3])(p) : 0;
         ls.jobs[ls.done].sec = sec > 0 ? (unsigned)sec : 0;

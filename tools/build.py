@@ -538,6 +538,8 @@ FUNCTIONS = {
  'getAllFav': ('int', 'void'),
  # Long Songs (navigation.c): a file's length, probed once, as stock's scanner reads tags
  'taglib_file_new': ('void *', 'const char *'),
+ # Shanling's real signature, (name, readAudioProperties): the M1 Plus passes 1 (V2.1's scanner passes 0)
+ 'taglib_file_open': ('void *', 'const char *, int'),
  'taglib_file_audioproperties': ('void *', 'void *'),
  'taglib_file_free': ('void', 'void *'),
  'deleteMusicFromFav': ('int', 'void *'),
@@ -747,6 +749,7 @@ M1PLUS_FUNCTION_ALIASES = {
     'player_playtime_and_length': 'get_playtimeandlength',
     'player_seek_time': 'seek_time',
     'switch_charge_enable': 'toolsSetChargeSwitch',
+    'taglib_file_open': 'taglib_file_new',
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
