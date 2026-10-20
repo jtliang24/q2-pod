@@ -156,8 +156,9 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   - a reproducible `update.bin`;
   - a manifest check (`model`, `input_sha256`, `logo_source`);
   - a release note with the reflash-to-stock instructions.
-- **A card library in the emulator.** `test/boot.py` runs with an empty card. A small generated library
-  (a few tagged FLAC/MP3 files) would let the walk open Album, Artist and Now Playing. Playback itself
+- **A card library in the emulator.** `test/boot.py --media` mounts a small card on a tmpfs: two long
+  songs (header-only FLAC and MP3), a book and a photo, with V2.1's `songtable` seeded. Tags (album,
+  artist) in the files and a scan would let the walk open Album, Artist and Now Playing. Playback itself
   would still need a stand-in for `hciplayer`'s audio output. The touch long-press's walk step (hold an
   album tile on an artist's page; the menu opens and the tile doesn't) waits for this.
 - **An after-boot log on the device.** The `.rockbox/rockbox` diagnostic script can leave a background

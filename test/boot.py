@@ -159,11 +159,13 @@ def shim(out, root, sn_addr):
     run('ld.lld', '-m', 'elf32ltsmip', '-shared', '--hash-style=sysv', '-soname', 'shim.so', out/'shim.o',
         root/'lib/libc-2.28.so', root/'lib/libdl-2.28.so', '-o', out/'shim.so')
 
-def start(image, out, seconds, sn_addr, trace='', home_menu=''):
-    """Unpack image as a sandbox root and start dbus-daemon, then demo for seconds; returns the bwrap."""
+def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None):
+    """Unpack image as a sandbox root and start dbus-daemon, then demo for seconds; returns the bwrap.
+    With card, a directory mounted as the card, and V2.1's library database listing its songs."""
     root = out/'root'
     run('unsquashfs', '-q', '-no-xattrs', '-d', root, image)
     for d in ('mnt/data', 'mnt/mmc', 'var/run/dbus'): (root/d).mkdir(parents=True, exist_ok=True)
+    if card: media_db(root/'mnt/data/database.db')
     # Past the first-boot language choice; with home_menu, V2.1's Home cards ([MAIN] HOMEMENU, ids each
     # followed by |, as saveHomemenu 0x4d7940 writes them).
     (root/'mnt/data/config.ini').write_text('[SYSSET]\nLANGUAGE=2\n' + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
@@ -175,7 +177,8 @@ def start(image, out, seconds, sn_addr, trace='', home_menu=''):
     for fifo in ('keys', 'knob'): os.mkfifo(out/fifo)
     qemu = tool('qemu-mipsel')
     (out/'inner.sh').write_text(INNER.format(qemu=qemu, seconds=seconds, trace=trace))
-    return subprocess.Popen([tool('bwrap'), '--bind', root, '/', '--bind', out, '/out', '--ro-bind', '/nix/store', '/nix/store',
+    return subprocess.Popen([tool('bwrap'), '--bind', root, '/', *(['--bind', card, '/mnt/mmc'] if card else []),
+                             '--bind', out, '/out', '--ro-bind', '/nix/store', '/nix/store',
                              '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-all', '--uid', '0', '--gid', '0',
                              '--die-with-parent', '--new-session', tool('bash'), '/out/inner.sh'])
 
@@ -274,6 +277,63 @@ MENU_WALK = [('menu_page2', NEXT_PAGE, 4, ('not', 'home')),
              # stop ("Life is short,Play more", 0x53438c): the rest is as before.
              ('menu_back', BACK, 4, ('as', 'menu_page2', (30, 414), (414, 480)))]
 
+# --media: a card with two 11-minute songs, a book and a photo, and V2.1's songtable listing the songs
+# as its scan writes them (time and time_end 0: not CUE tracks). The card is on a tmpfs: on ext4, a
+# 32-bit guest's readdir under qemu-user fails on 64-bit directory offsets (EOVERFLOW), so the
+# payload would find it empty. The walk, patched only: Long Songs measures and lists both songs; a
+# tap opens the book and the photo (a hidden reader or viewer must not take it); Shuffle Songs saves
+# stock's Shuffle play mode.
+LONG_S = 660
+MEDIA_SONGS = ('long.flac', 'long.mp3')
+def media_card(card):
+    """The card's files. TagLib reads a length from the headers alone: a FLAC STREAMINFO counting
+    LONG_S of samples, and an MP3 whose Xing frame counts LONG_S of frames."""
+    rate = 44100
+    info = struct.pack('>HH', 4096, 4096) + bytes(6) + ((rate << 44) | (1 << 41) | (15 << 36) | LONG_S * rate).to_bytes(8, 'big') + bytes(16)
+    (card/'Music').mkdir()
+    (card/'Music/long.flac').write_bytes(b'fLaC\x80' + len(info).to_bytes(3, 'big') + info + bytes(8192))
+    frames, size, head = LONG_S * rate // 1152, 144 * 128000 // rate, bytes((0xff, 0xfb, 0x90, 0x64))
+    xing = head + bytes(32) + b'Xing' + struct.pack('>III', 3, frames, frames * size)
+    (card/'Music/long.mp3').write_bytes(xing + bytes(size - len(xing)) + (head + bytes(size - 4)) * 50)
+    (card/'Books').mkdir()
+    (card/'Books/Alpha.txt').write_text('A short book.\n' * 200)
+    (card/'Photos').mkdir()
+    from ipod import imagemagick
+    (card/'Photos/one.jpg').write_bytes(imagemagick('-size', '200x150', 'gradient:red-blue', 'jpg:-', data=b''))
+
+def media_db(path):
+    import sqlite3
+    db = sqlite3.connect(path)
+    # V2.1's own create statement (its demo's strings)
+    db.execute('create table songtable(id INTEGER PRIMARY KEY, filename VARCHAR(512), fileurl VARCHAR(1024), '
+               'album VARCHAR(512), songer VARCHAR(256), style VARCHAR(128), name VARCHAR(512), composer VARCHAR(256), '
+               'albumsonger VARCHAR(256), year INTEGER, track INTEGER, cd_num INTEGER, time INTEGER, time_end INTEGER, '
+               'time_create INTEGER, Initial INTEGER, bitdepth INTEGER, samprate INTEGER)')
+    for i, n in enumerate(MEDIA_SONGS):
+        db.execute('insert into songtable values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                   (i + 1, n, f'/mnt/mmc/Music/{n}', 'Long', 'Tester', '', f'Long {n}', '', 'Tester', 2024, i + 1, 1,
+                    0, 0, 0, 0, 16, 44100))
+    db.commit()
+    db.close()
+
+# The Q2 Pod page's rows, 64 px under the 48 px title: Shuffle, Ratings, Most Played, Long Songs,
+# Photos, Books (with their folders), Coverflow.
+def q2pod_row(i): return tap(160, 80 + 64 * i)
+MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
+              ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
+              ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
+              ('long_songs_back', BACK, 4, ('as', 'media_q2pod')),
+              ('books', q2pod_row(5), 4, ('not', 'media_q2pod')),
+              ('book', tap(160, 102), 5, ('not', 'books')),          # the first book's row
+              ('book_back', BACK, 4, ('not', 'book')),
+              ('books_back', BACK, 4, ('as', 'media_q2pod')),
+              ('photos', q2pod_row(4), 6, ('not', 'media_q2pod')),
+              ('photo', tap(56, 126), 5, ('not', 'photos')),         # the first tile
+              ('photo_back', BACK, 4, ('not', 'photo')),
+              ('photos_back', BACK, 4, ('as', 'media_q2pod')),
+              ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
+              ('shuffle_songs', tap(160, 101), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
+
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
     EV_SYN; the rest to the touch file."""
@@ -305,21 +365,30 @@ if __name__ == '__main__':
     ap.add_argument('--captures', type=pathlib.Path, help='write stock.png and patched.png here')
     ap.add_argument('--home-menu', action='store_true',
                     help=f'V2.1 Home with six cards ({HOME_MENU}): the Q2 Pod card on a page of its own, and a short walk to it')
+    ap.add_argument('--media', action='store_true',
+                    help='a card with long songs, a book and a photo: Long Songs, a tap into Books and Photos, Shuffle Songs')
     args = ap.parse_args()
+    if args.home_menu and args.media: raise SystemExit('--home-menu and --media are separate runs')
     manifest = json.loads((args.build/'manifest.json').read_text())
     if manifest.get('source_sha256') != source_sha256():
         raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
     if manifest['model'] != 'Shanling M1 Plus':
         raise SystemExit('test/boot.py emulates M1 Plus builds only')
     sn_addr = symbols(args.build/'stock-demo')['product_sncode']
-    with tempfile.TemporaryDirectory(prefix='m1-boot-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='m1-boot-') as tmp, \
+         tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
         tmp = pathlib.Path(tmp)
         runs = {}
         for name, image, trace in (('stock', 'stock.squashfs', ''),
                                    ('patched', 'rootfs.squashfs', f'-d exec,nochain -dfilter {BASE:#x}+{SCRATCH-BASE:#x} -D /out/exec.log')):
             (tmp/name).mkdir()
+            card = None
+            if args.media:
+                card = pathlib.Path(cards)/name
+                card.mkdir()
+                media_card(card)
             runs[name] = start(args.build/image, tmp/name, args.seconds + WALK_SECONDS, sn_addr, trace,
-                               HOME_MENU if args.home_menu else '')
+                               HOME_MENU if args.home_menu else '', card)
         deadline = time.monotonic() + args.seconds
         while time.monotonic() < deadline:  # startup: either demo dying early fails below
             if any(p.poll() is not None for p in runs.values()): break
@@ -346,7 +415,8 @@ if __name__ == '__main__':
         assert not differ, f'patched Home differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
         # The walk: the same touches to both, a screen each step.
         seen, seen_all = {'home': patched}, {}
-        walk, patched_only = (MENU_WALK, MENU_WALK) if args.home_menu else (WALK + PATCHED_ONLY, PATCHED_ONLY)
+        walk, patched_only = ((MENU_WALK, MENU_WALK) if args.home_menu else (MEDIA_WALK, MEDIA_WALK) if args.media
+                              else (WALK + PATCHED_ONLY, PATCHED_ONLY))
         for name, touches, settle, want in walk:
             targets = ['patched'] if (name, touches, settle, want) in patched_only else ['stock', 'patched']
             for t in targets:
@@ -402,7 +472,18 @@ if __name__ == '__main__':
         assert STARTUP <= reached, f'startup never entered {sorted(STARTUP - reached)}'
         # crossfade's tap opened crossfade.c's page: its row was there again after EQ, when V2.1
         # rebuilt the list (a tap on a stock row there would change the screens as well).
-        assert args.home_menu or hits['xfade_open'], 'crossfade: the Crossfade row was not there to open its page'
+        assert args.home_menu or args.media or hits['xfade_open'], 'crossfade: the Crossfade row was not there to open its page'
         assert hits['library_open'], 'q2pod: the card was not there to open its page'
+        if args.media:
+            data = tmp/'patched/root/mnt/data'
+            lengths = (data/'ringnav-lengths').read_bytes() if (data/'ringnav-lengths').exists() else b''
+            secs = sorted(struct.unpack_from('<2I', lengths, i)[1] for i in range(0, len(lengths), 8))
+            # TagLib rounds the MP3's frames down a second
+            assert len(secs) == len(MEDIA_SONGS) and all(LONG_S - 1 <= x <= LONG_S for x in secs), (
+                f'long_songs: lengths cached as {secs}, not {LONG_S} s each')
+            assert hits['to_reader'], 'book: the tap on the book\'s row never opened the reader'
+            assert hits['to_viewer'], 'photo: the tap on the tile never opened the viewer'
+            config = (data/'config.ini').read_text(errors='replace')
+            assert re.search(r'^PLAYMODE=2$', config, re.M), 'shuffle_songs: Shuffle (2) not saved as the play mode'
     print(f'M1 Plus under qemu: both demos up, the same Home below the status bar{" but for the dots" if args.home_menu else ""}; the walk ({", ".join(n for n, *_ in walk)}) '
           f'as expected; the payload entered through {len(reached)} hooks ({", ".join(sorted(reached))}), {len(hits)} payload functions ran.')
