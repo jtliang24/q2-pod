@@ -248,9 +248,9 @@ static int to_grid(const void *unused) {
     }
     for (int i = 0; i < n; ++i) ph.key[i] = fnv(FNV_SEED, (const unsigned char *)ph.path[i]);
     ph.screen = GRID;
-    widget_set_visible(ph.albums, 0, 0);
+    view_show(ph.albums, 0);
     widget_destroy_children(ph.grid);
-    widget_set_visible(ph.grid, 1, 0);
+    view_show(ph.grid, 1);
     page_title(ph.grid, !n           ? "No photos"
                         : a >= 0     ? ph.album[a]
                         : ph.nalbums ? "All Photos"
@@ -330,8 +330,8 @@ static int to_viewer(const void *unused) {
     ph.screen = VIEWER;
     ph.current = ph.want = ph.target;
     slide_menu_set_value(ph.slide, ph.target);
-    widget_set_visible(ph.grid, 0, 0);
-    widget_set_visible(ph.viewer, 1, 0);
+    view_show(ph.grid, 0);
+    view_show(ph.viewer, 1);
     info();
     widget_invalidate_force(ph.page, 0);
     return 0;
@@ -341,8 +341,8 @@ static int to_viewer(const void *unused) {
 static void to_tiles(void) {
     ph.screen = GRID;
     ph.want = -1;
-    widget_set_visible(ph.viewer, 0, 0);
-    widget_set_visible(ph.grid, 1, 0);
+    view_show(ph.viewer, 0);
+    view_show(ph.grid, 1);
     ringnav_select(ph.view, ph.current, ph.n);
     int y = ph.current / PH_COLS * PH_TILE_H, top = I(ph.view, SCROLL_Y);
     if (y < top) top = y;
@@ -383,8 +383,8 @@ static int leave(const void *unused) {
         drop_photos();
         widget_destroy_children(ph.grid);
         ph.view = 0;
-        widget_set_visible(ph.grid, 0, 0);
-        widget_set_visible(ph.albums, 1, 0);
+        view_show(ph.grid, 0);
+        view_show(ph.albums, 1);
         ph.screen = ALBUMS;
         widget_invalidate_force(ph.page, 0);
     } else
@@ -508,8 +508,8 @@ void photos_open(const char *root) {
     ph.albums = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     ph.grid = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     ph.viewer = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
-    widget_set_visible(ph.grid, 0, 0);
-    widget_set_visible(ph.viewer, 0, 0);
+    view_show(ph.grid, 0);
+    view_show(ph.viewer, 0);
     ph.album = calloc(ALBUMS_MAX, sizeof *ph.album);
     if (ph.album) scan(root, ph.album, &ph.nalbums, ALBUMS_MAX, 1);
     if (!ph.nalbums) {

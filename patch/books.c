@@ -607,8 +607,8 @@ static int to_reader(const void *unused) {
     bk.key |= !bk.key;
     bk.screen = READER;
     bk.info_on = 0;
-    widget_set_visible(bk.list, 0, 0);
-    widget_set_visible(bk.reader, 1, 0);
+    view_show(bk.list, 0);
+    view_show(bk.reader, 1);
     bk.file = path;
     bk.state = READY;
     if (book_kind(path) == 2) {
@@ -647,8 +647,8 @@ static int leave(const void *unused) {
     stop_worker();
     bk.screen = LIST;
     bk.state = READY;
-    widget_set_visible(bk.reader, 0, 0);
-    widget_set_visible(bk.list, 1, 0);
+    view_show(bk.reader, 0);
+    view_show(bk.list, 1);
     ringnav_select(bk.view, bk.current, bk.n);
     widget_invalidate_force(bk.page, 0);
     return 0;
@@ -896,7 +896,7 @@ void books_open(const char *root, int videos) {
 #if M1PLUS
     back_button(bk.reader); /* over the page; Return goes back to the books */
 #endif
-    widget_set_visible(bk.reader, 0, 0);
+    view_show(bk.reader, 0);
     bk.buf = calloc(BOOK_WIN, 1);
     bk.path = calloc(BOOKS_MAX, sizeof *bk.path);
     if (bk.buf && bk.path) scan(root, 1, videos);
