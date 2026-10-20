@@ -55,7 +55,19 @@ static inline int getMusicByAlbumArtist(const char *artist) {
     return getMusicByAlbumAndAlbumSonger("", artist, 1);
 }
 #endif
-#ifndef config_playmode
+#if !defined(config_playmode) && defined(dmrSendPlayMode)
+/* V2.1 has none: its Play mode page's sequence (0x49fc78). The mode goes through the payload's
+ * mclSetPlayMode hook, as stock's own call does; then the remote apps, the DLNA renderer, and the
+ * saved setting. */
+int ringnav_mode(int mode);
+static inline int config_playmode(int mode, int notify) {
+    int result = ringnav_mode(mode);
+    if (notify) notifyPlayMode();
+    dmrSendPlayMode(mode);
+    write_int_config(mode, "PLAYSET", "PLAYMODE");
+    return result;
+}
+#elif !defined(config_playmode)
 static inline int config_playmode(int mode, int notify) { (void)mode; (void)notify; return 0; }
 #endif
 #ifndef window_manager_dispatch_input_event

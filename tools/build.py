@@ -574,6 +574,9 @@ FUNCTIONS = {
  'scroll_view_create': ('void *', 'void *, int, int, int, int'),
  'navigator_back': ('int', 'void'),
  'write_int_config': ('int', 'int, const char *, const char *'),
+ # V2.1's Play mode page's other two calls (0x49fc88): the M1 Plus's config_playmode (patch/peq.h)
+ 'notifyPlayMode': ('int', 'void'),
+ 'dmrSendPlayMode': ('int', 'int'),
  'toolsWriteConfig': ('int', 'const char *, const char *, const char *, const char *'),
  'toolsReadConfig': ('int', 'const char *, const char *, const char *, char *, const char *'),
  'button_create': ('void *', 'void *, int, int, int, int'),
