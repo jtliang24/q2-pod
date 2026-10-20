@@ -15,6 +15,9 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
+**Next:** q2remote's tooling (section 6), because every fix after it can be checked on the device
+without a manual pass. Then the touch long-press regression (section 3), which `peek` is for.
+
 ## Ground rules
 
 - **Don't break Q2.** No change for M1 may change the Q2 firmware or its tests:
@@ -55,6 +58,10 @@ here goes with other sections' features:
   - the stock key-down helper with STOP (`0x65f688`): with V2.1's copy of that private AWTK
     helper, still to be found (V2.1 binds no key-down handler for the payload to hook);
   - folder rollover and the UI scheduler delay: with the player call sites (section 4).
+- **The Photos row's icon is a loading spinner.** On M1 the build copies `local_photos.png` from V2.1's
+  `scover_wait0.png` (`tools/build.py`, the M1 icon mapping), the first frame of a wait animation. The
+  Q2 Pod page shows it as a thin white ring at 54 px, where the other rows' icons are 40 px. Pick V2.1
+  art that reads as photos and size it to 40 px, as the drawn icons are. Seen over q2remote on dev 11.
 - **The Shuffle page's note.** "Albums and folders take a moment to shuffle" is cut off at the right
   edge ("…to shuf"). `shuffle_menu` makes it 335 px wide at x 20 (`patch/navigation.c`, `text(st.sp_page,
   20, 200, 335, 24)`), a width for the Q2's 375 px screen. On M1 it needs `UI_W - 40`, behind
@@ -98,6 +105,13 @@ a highlighted row:
 - Internet Radio's stations: add to or remove from favourites (`radio_hold`);
 - Spotify's tracks: add to Spotify's queue (`spot_hold`);
 - Coverflow's centre cover: the album menu.
+
+**The touch long-press stops working.** On dev 11 a hold on an album in Album opened the hold menu once.
+Later in the same session, a real finger's hold on Album opened the album instead, and so did q2remote's
+held taps, which send the same frames. `st`'s long-press and menu fields read clean then (no
+pending timer, dialog or playlist). So one of `qm_hold`'s other checks refuses: `usable()`'s globals,
+the list's size against the rows the payload counts, or the list's class. Find which with `peek`
+during a failing hold, then make `test/boot.py --media` hold an album twice.
 
 `radio_hold` and `spot_hold` read the row from the list's `_ringnav_index`, so a long press sets that
 first. Now Playing needs none: its hold menu acts on the playing track. On the device (dev 10 and
@@ -168,12 +182,17 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   - a reproducible `update.bin`;
   - a manifest check (`model`, `input_sha256`, `logo_source`);
   - a release note with the reflash-to-stock instructions.
-- **q2remote on M1.** Done: `tools/q2remote.py` takes upright screenshots and sends keys, knob
-  turns and taps on the M1 ([remote.md](remote.md#m1-plus), [m1plus-progress.md](m1plus-progress.md)
-  section 18). Left: a `swipe X0 Y0 X1 Y1` command, which needs Goodix-CTP's move frames, recorded on the
-  device the way its taps were, and a held `tap` (a longer press) for the long press. Without a swipe, a remote
-  session can't reach Home's second page (where the Q2 Pod card is) or scroll a list, so those
-  steps still need the user.
+- **q2remote on M1 (first: it makes the rest faster).** Done ([remote.md](remote.md#m1-plus)):
+  - upright screenshots, keys, knob turns and taps;
+  - `swipe X0 Y0 X1 Y1 [MS]`, from Goodix-CTP's move frames recorded on the device;
+  - `tap X Y MS`, a held tap for the long press.
+
+  A remote session now reaches the Q2 Pod page by itself. Next:
+  - **`peek NAME`:** read a payload or demo variable by name from the running `demo`
+    (`/proc/<pid>/mem`, with the address from the build's `patch.elf` or `peq_platform.h` and the
+    field offset from clang's record layout). Reading `st`'s long-press fields that way took a dozen
+    manual steps.
+  - **An on-device log:** a small ring buffer the payload writes, which q2remote reads.
 - **Latent Q2 bugs found through M1.** Both were fixed only behind `M1PLUS`, to keep the Q2 build
   byte-identical (ground rules). Fixing them on the Q2 is a deliberate Q2 change, best made
   upstream, with a Q2 device check:
