@@ -40,6 +40,31 @@ B: KEY=28 0 101080 0 0 0
 ''')[0]
 assert gpio["event"] == 1 and q.bits(gpio["KEY"]) == {103, 108, 116, 163, 165}
 assert q.bits(1 << 116) == {116}
+# The M1 Plus's devices as its kernel lists them (V00A): the buttons, the knob and the touch panel.
+m1 = {d["name"]: d for d in q.parse_devices('''N: Name="md-gpio-keys"
+H: Handlers=kbd event1
+B: KEY=38 0 100000 0 0 0
+
+N: Name="md-rotary-knob"
+H: Handlers=kbd event2
+B: KEY=c0000 0 0 0
+
+N: Name="Goodix-CTP"
+H: Handlers=kbd event3
+B: KEY=20 0 0 0 0 0 0 100000 0 0 0
+B: ABS=2008000 1000003
+''')}
+assert q.bits(m1["md-gpio-keys"]["KEY"]) == set(q.M1_KEYS.values()) == {116, 163, 164, 165}
+assert q.bits(m1[q.M1_KNOB]["KEY"]) == {q.KEY_VOLUMEUP, q.KEY_VOLUMEDOWN}
+assert {q.ABS_X, q.ABS_Y, q.ABS_PRESSURE} <= q.bits(m1["Goodix-CTP"]["ABS"]) and 330 not in q.bits(m1["Goodix-CTP"]["KEY"])
+# A tap as the panel sent the user's: point, pressure 1 then 0, pressure 1, then 0 at the release.
+tap = [q.decode_events(b) for b in q.m1_tap(29, 462)]
+assert [[e[2:] for e in b] for b in tap] == [
+    [(q.EV_ABS, q.ABS_X, 29), (q.EV_ABS, q.ABS_Y, 462), (q.EV_ABS, q.ABS_PRESSURE, 1), (q.EV_ABS, q.ABS_PRESSURE, 0), (q.EV_SYN, 0, 0)],
+    [(q.EV_ABS, q.ABS_PRESSURE, 1), (q.EV_SYN, 0, 0)], [(q.EV_ABS, q.ABS_PRESSURE, 0), (q.EV_SYN, 0, 0)]]
+# Two detents clockwise, one back: a press and a release each.
+assert [q.decode_events(b)[0][2:] for b in q.knob_events(2)] == [(q.EV_KEY, 115, 1), (q.EV_KEY, 115, 0)] * 2
+assert [q.decode_events(b)[0][2:] for b in q.knob_events(-1)] == [(q.EV_KEY, 114, 1), (q.EV_KEY, 114, 0)]
 
 # A padded framebuffer page with four distinct corners validates metadata, orientation and BGRA conversion.
 w, h, stride = 320, 375, 320 * 4 + 8
@@ -62,6 +87,23 @@ assert pixel(0, 0) == bytes((0, 255, 0, 255))
 assert pixel(374, 0) == bytes((255, 255, 255, 255))
 assert pixel(0, 319) == bytes((255, 0, 0, 255))
 assert pixel(374, 319) == bytes((0, 0, 255, 255))
+# The M1 Plus's 320x480 page stays upright: the same corners where they were.
+w1, h1, stride1 = 320, 480, 320 * 4
+page1 = bytearray(stride1 * h1)
+for x, y, bgra in ((0, 0, bytes((0, 0, 255, 255))), (319, 0, bytes((0, 255, 0, 255))),
+                   (0, 479, bytes((255, 0, 0, 255))), (319, 479, bytes((255, 255, 255, 255)))):
+    page1[y * stride1 + x * 4:y * stride1 + x * 4 + 4] = bgra
+png1 = q.framebuffer_png(b"Q2FB\0" + struct.pack("<IIII", w1, h1, stride1, len(page1)) + page1)
+assert struct.unpack_from(">II", png1, 16) == (320, 480)
+at, compressed = 8, bytearray()
+while at < len(png1):
+    n = struct.unpack_from(">I", png1, at)[0]; tag = png1[at + 4:at + 8]; body = png1[at + 8:at + 8 + n]
+    if tag == b"IDAT": compressed.extend(body)
+    at += n + 12
+decoded1 = zlib.decompress(compressed)
+def pixel1(x, y): return decoded1[y * (1 + 320 * 4) + 1 + x * 4:y * (1 + 320 * 4) + 1 + x * 4 + 4]
+assert pixel1(0, 0) == bytes((255, 0, 0, 255)) and pixel1(319, 0) == bytes((0, 255, 0, 255))
+assert pixel1(0, 479) == bytes((0, 0, 255, 255)) and pixel1(319, 479) == bytes((255, 255, 255, 255))
 for bad in (frame[:20], frame[:-1], frame[:5] + struct.pack("<IIII", w + 1, h, stride, len(page)) + page):
     try: q.framebuffer_png(bad)
     except ValueError: pass

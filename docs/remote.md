@@ -1,4 +1,4 @@
-# q2remote: drive a development Q2 over Wi-Fi
+# q2remote: drive a development Q2 or M1 Plus over Wi-Fi
 
 `q2remote` gives a developer, or an AI agent working on the project, a root shell, screenshots and input on a Q2 over the local network, so a change can be tried and checked without touching the device. It ships **only in `--dev` builds** ([building.md](building.md)): `tools/build.py --dev` compiles `patch/remote.c` into `/usr/bin/q2remote` and starts it from `S90play` after dbus; release builds don't contain it, and `test/build.py` checks that.
 
@@ -53,6 +53,22 @@ Each connection rereads `/mnt/mmc/q2remote.key` while the card is mounted, so re
 | Touch          | `tap X Y`                                                          | `hyn_ts`: the portrait panel's axes, which `tap` converts |
 
 All of it is injected by writing input events to `/dev/input/eventN`, so the firmware sees exactly what the hardware would send and `demo` needs no change. `wheel` reads the saved **Wheel Sensitivity** from `/mnt/data/config.ini`, so one tick is one tick of the firmware at any setting ([internals.md](internals.md), the wheel). The PMIC's 10-15 s Centre reset is wired in hardware and can't be injected; use `reboot`.
+
+## M1 Plus
+
+M1 Plus `--dev` builds ship the same helper, started the same way, and the setup is the same. The
+client tells the models apart by their devices (the M1's `md-rotary-knob`) and by the
+framebuffer's size:
+
+| Command | On the M1 Plus |
+| --- | --- |
+| `shot OUT.png` | An upright 320×480 PNG, as the screen is: no rotation. |
+| `key NAME [MS]` | `centre` (the knob's press, KEY_POWER 116), `play` (KEY_PLAYPAUSE 164), `next` 163, `prev` 165, on `md-gpio-keys`. There is no Return button. A single `centre` is a select; turning the screen off needs a double press within 250 ms, which two client calls are too slow for. |
+| `knob N` | Turns the knob `N` detents on `md-rotary-knob`: positive is clockwise (KEY_VOLUMEUP 115), negative anticlockwise (114). It is the volume, or moves the selection with Knob: Navigation. With the volume bar closed, stock's first detent only opens it, so `knob 1` from a closed bar changes nothing; the bar closes again after a few seconds. |
+| `tap X Y` | Upright screen pixels (0-319, 0-479) on `Goodix-CTP`, sent as the panel sends a real tap (see [m1plus.md](m1plus.md), the input table). |
+
+`wheel` is the Q2's only. On the M1, `knob` is; each command says so if it's used on the other model. With
+**Knob: Navigation** on, `key prev` is Back.
 
 ## Working with it
 

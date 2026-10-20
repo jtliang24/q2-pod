@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive a --dev Q2 over Wi-Fi (Q2_HOST and Q2_KEY required; see docs/remote.md).
 
-usage: q2remote.py {sh COMMAND|shot OUT.png|devices|key NAME [MS]|wheel N|tap X Y|events EVENT [S]|reboot}"""
+usage: q2remote.py {sh COMMAND|shot OUT.png|devices|key NAME [MS]|wheel N|knob N|tap X Y|events EVENT [S]|reboot}"""
 import os
 import re
 import shlex
@@ -14,6 +14,14 @@ PORT = 2302
 W, H = 320, 375
 # md-gpio-keys codes; Centre is KEY_POWER (hold 5 s for the shutdown prompt), Return is KEY_UP.
 KEYS = {"centre": 116, "center": 116, "return": 103, "play": 108, "next": 163, "prev": 165}
+# The M1 Plus (told by its md-rotary-knob): an upright 320x480 screen; its md-gpio-keys have the
+# knob's press as Centre and Play/Pause as KEY_PLAYPAUSE, and no Return. The knob turns clockwise as
+# KEY_VOLUMEUP, anticlockwise as KEY_VOLUMEDOWN. Goodix-CTP reports screen pixels.
+M1_W, M1_H = 320, 480
+M1_KEYS = {"centre": 116, "center": 116, "play": 164, "next": 163, "prev": 165}
+M1_KNOB = "md-rotary-knob"
+KEY_VOLUMEUP, KEY_VOLUMEDOWN = 115, 114
+M1_TAP_US = 60000
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 BTN_TOUCH, ABS_X, ABS_Y, ABS_PRESSURE = 0x14a, 0, 1, 0x18
 WHEEL_UNITS, WHEEL_STEP, WHEEL_SETTLE, SAMPLE_US = 28, 11, 4, 20000
@@ -83,6 +91,21 @@ def touch_xy(x, y):
     return W - 1 - y, x
 
 
+def m1_tap(x, y):
+    """A tap as the M1 Plus's Goodix-CTP sends one: the point with pressure 1 then 0 in one frame,
+    pressure 1 alone, then 0 at the release (no BTN_TOUCH)."""
+    return [event(EV_ABS, ABS_X, x) + event(EV_ABS, ABS_Y, y) + event(EV_ABS, ABS_PRESSURE, 1) +
+            event(EV_ABS, ABS_PRESSURE, 0) + event(EV_SYN, 0, 0),
+            event(EV_ABS, ABS_PRESSURE, 1) + event(EV_SYN, 0, 0),
+            event(EV_ABS, ABS_PRESSURE, 0) + event(EV_SYN, 0, 0)]
+
+
+def knob_events(ticks):
+    """One press and release a detent: positive turns clockwise."""
+    code = KEY_VOLUMEUP if ticks > 0 else KEY_VOLUMEDOWN
+    return [batch for _ in range(abs(ticks)) for batch in key_events(code)]
+
+
 def wheel_positions(ticks, units=WHEEL_UNITS, start=100):
     """x samples (1-200 a turn) for `ticks` firmware ticks; positive falls, which is next/down.
 
@@ -123,18 +146,24 @@ def framebuffer_png(data):
         raise ValueError("invalid framebuffer response")
     w, h, stride, size = struct.unpack_from("<IIII", data, 5)
     pixels = data[21:]
-    if (w, h) != (W, H) or stride < w * 4 or size != stride * h or len(pixels) != size:
+    if (w, h) not in ((W, H), (M1_W, M1_H)) or stride < w * 4 or size != stride * h or len(pixels) != size:
         raise ValueError("invalid or truncated framebuffer data")
     rows = [pixels[y * stride:y * stride + w * 4] for y in range(h)]
-    # FB pixels are BGRA; rotate portrait framebuffer counterclockwise to upright 375x320.
-    raw = b"".join(bytes((p[2], p[1], p[0], p[3])) for y in range(w) for x in range(h)
-                    for p in (rows[x][(w - 1 - y) * 4:(w - y) * 4],))
+    # FB pixels are BGRA. The Q2's portrait framebuffer rotates counterclockwise to upright 375x320;
+    # the M1 Plus's is upright already.
+    if h == M1_H:
+        out_w, out_h = w, h
+        raw = b"".join(bytes((p[2], p[1], p[0], p[3])) for row in rows for p in (row[i:i + 4] for i in range(0, w * 4, 4)))
+    else:
+        out_w, out_h = h, w
+        raw = b"".join(bytes((p[2], p[1], p[0], p[3])) for y in range(w) for x in range(h)
+                        for p in (rows[x][(w - 1 - y) * 4:(w - y) * 4],))
     png = bytearray(b"\x89PNG\r\n\x1a\n")
     def chunk(tag, body):
         payload = tag + body
         png.extend(struct.pack(">I", len(body)) + payload + struct.pack(">I", zlib.crc32(payload) & 0xffffffff))
-    chunk(b"IHDR", struct.pack(">2I5B", H, W, 8, 6, 0, 0, 0))
-    chunk(b"IDAT", zlib.compress(b"".join(b"\0" + raw[y * H * 4:(y + 1) * H * 4] for y in range(W))))
+    chunk(b"IHDR", struct.pack(">2I5B", out_w, out_h, 8, 6, 0, 0, 0))
+    chunk(b"IDAT", zlib.compress(b"".join(b"\0" + raw[y * out_w * 4:(y + 1) * out_w * 4] for y in range(out_h))))
     chunk(b"IEND", b"")
     return bytes(png)
 
@@ -147,16 +176,30 @@ def screenshot(out):
 
 def input_action(kind, args):
     devs = {d["name"]: f"/dev/input/event{d['event']}" for d in devices()}
-    need = {"key": "md-gpio-keys", "tap": "hyn_ts", "wheel": "hyn_sliderbar"}[kind]
+    m1 = M1_KNOB in devs
+    if kind == "wheel" and m1: raise ValueError("the M1 Plus has a knob: use knob N")
+    if kind == "knob" and not m1: raise ValueError("the Q2 has a wheel: use wheel N")
+    need = {"key": "md-gpio-keys", "tap": "Goodix-CTP" if m1 else "hyn_ts", "wheel": "hyn_sliderbar", "knob": M1_KNOB}[kind]
     if need not in devs: raise ValueError(f"no {need} input device; inspect `devices`")
     path = devs[need]
     if kind == "key":
-        code = KEYS.get(args[0].lower())
-        if code is None: raise ValueError(f"key must be one of {', '.join(KEYS)}")
+        keys = M1_KEYS if m1 else KEYS
+        code = keys.get(args[0].lower())
+        if code is None: raise ValueError(f"key must be one of {', '.join(keys)}")
         try: ms = int(args[1]) if len(args) > 1 else 80
         except ValueError: raise ValueError("key duration must be an integer number of milliseconds")
         if not 1 <= ms <= 60000: raise ValueError("key duration must be 1..60000 ms")
         shell("sh", event_writer(path, key_events(code), ms * 1000).encode())
+    elif kind == "tap" and m1:
+        try: x, y = map(int, args)
+        except ValueError: raise ValueError("tap coordinates must be integers")
+        if not 0 <= x < M1_W or not 0 <= y < M1_H: raise ValueError(f"coordinates must be x=0..{M1_W-1}, y=0..{M1_H-1}")
+        shell("sh", event_writer(path, m1_tap(x, y), M1_TAP_US).encode())
+    elif kind == "knob":
+        try: ticks = int(args[0])
+        except ValueError: raise ValueError("knob turn must be an integer")
+        if not -100 <= ticks <= 100 or not ticks: raise ValueError("knob turn must be -100..100 detents, not 0")
+        shell("sh", event_writer(path, knob_events(ticks)).encode())
     elif kind == "tap":
         try: x, y = map(int, args)
         except ValueError: raise ValueError("tap coordinates must be integers")
@@ -195,8 +238,8 @@ def main(argv):
         for d in devices():
             print(f"event{d['event']} {d['name']} handlers={d['handlers']} keys={sorted(bits(d['KEY']))} abs={sorted(bits(d['ABS']))}")
         return 0
-    if cmd in ("key", "tap", "wheel"):
-        if len(a) not in {"key": (1, 2), "wheel": (1,), "tap": (2,)}[cmd]: raise ValueError(f"invalid arguments for {cmd}")
+    if cmd in ("key", "tap", "wheel", "knob"):
+        if len(a) not in {"key": (1, 2), "wheel": (1,), "knob": (1,), "tap": (2,)}[cmd]: raise ValueError(f"invalid arguments for {cmd}")
         input_action(cmd, a); return 0
     if cmd == "reboot" and not a:
         # Detached so the reply arrives before the network drops; the PMIC's 10-15 s Centre reset can't be injected.
