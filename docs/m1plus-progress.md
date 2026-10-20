@@ -676,6 +676,27 @@ lists the songs. The walk:
 
 On the unfixed build, the walk fails at the book tap.
 
+**q2remote on M1.** The device side already ran in every M1 `--dev` build; the client
+`tools/q2remote.py` is now ported to the M1 ([remote.md](remote.md#m1-plus)):
+- `shot` saves the 320x480 page upright;
+- `key` uses V2.1's codes;
+- `knob N` turns `md-rotary-knob`;
+- `tap` replays the Goodix panel's tap, as recorded on the device: upright pixels, pressure only,
+  no `BTN_TOUCH`.
+
+The device's input list also corrected `m1plus.md`: the touchscreen is event3, not
+`TSLIB_TSDEVICE`'s event2, which is the knob.
+
+**On the device (dev 11, `V00Bs`, commit `e1f897c`).** The user checked:
+- Long Songs lists their four songs over 10 minutes;
+- book rows and photo tiles open by touch;
+- Shuffle Songs shuffles.
+
+Over q2remote, `/mnt/data/ringnav-lengths` holds 417 lengths and no zeros, four over 600 s, and
+`config.ini` has `PLAYMODE=2`. The dev 10 cache was deleted over q2remote before Long Songs first
+opened. Left for later (roadmap): the Shuffle page's clipped note, Coverflow's covers by touch, long
+press on these lists, a q2remote swipe, and the two latent Q2 bugs.
+
 ## How to check a build now
 
 ```sh
@@ -687,6 +708,9 @@ python3 test/boot.py build-m1 --media    # a card with long songs, a book and a 
 python3 test/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/playback.py build-m1        # and m4b, id3, ldac, headset_io, bluealsa
 ```
+
+On a `--dev` build, `python3 tools/q2remote.py` reaches the device over Wi-Fi: files, settings,
+screenshots and input, without a manual pass ([remote.md](remote.md)).
 
 To return a device to stock: put stock V2.1's `update.bin` at the card root and use System Update → TF
 card update.

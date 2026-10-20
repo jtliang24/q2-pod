@@ -55,6 +55,10 @@ here goes with other sections' features:
   - the stock key-down helper with STOP (`0x65f688`): with V2.1's copy of that private AWTK
     helper, still to be found (V2.1 binds no key-down handler for the payload to hook);
   - folder rollover and the UI scheduler delay: with the player call sites (section 4).
+- **The Shuffle page's note.** "Albums and folders take a moment to shuffle" is cut off at the right
+  edge ("…to shuf"). `shuffle_menu` makes it 335 px wide at x 20 (`patch/navigation.c`, `text(st.sp_page,
+  20, 200, 335, 24)`), a width for the Q2's 375 px screen. On M1 it needs `UI_W - 40`, behind
+  `M1PLUS` so the Q2's build doesn't change. Seen on the device with dev 10 and dev 11.
 
 ## 2. Hardware-specific behaviour (M)
 
@@ -66,6 +70,12 @@ here goes with other sections' features:
     payload's own offset instead of the slide_menu's.
   - Both views now open from the Q2 Pod page (section 3, [m1plus-progress.md](m1plus-progress.md)
     section 17), so this is next.
+- **Coverflow's covers by touch.** On the Q2, touch neither drags nor taps the covers: the covers'
+  slide_menu is insensitive (`covers()`, `widget_set_sensitive(cf.slide, 0)`), and the wheel turns
+  them. The M1 has no wheel, so a cover opens only with Knob: Navigation and Centre. That was confirmed
+  on the device with dev 10. It needs a touch design with the scroll distance fix above: a swipe that
+  turns the covers, and a tap on the centre cover that opens it. The tap should go through
+  Coverflow's `pick` (`patch/coverflow.c`), as a click on the cover does.
 
 ## 3. Entry points for Q2 Pod's pages (L)
 
@@ -90,7 +100,9 @@ a highlighted row:
 - Coverflow's centre cover: the album menu.
 
 `radio_hold` and `spot_hold` read the row from the list's `_ringnav_index`, so a long press sets that
-first. Now Playing needs none: its hold menu acts on the playing track.
+first. Now Playing needs none: its hold menu acts on the playing track. On the device (dev 10 and
+dev 11), a long press on Most Played, Ratings or Long Songs still opens the row on release, as
+expected until this lands.
 
 - **The Library's extras.** Done: a "Q2 Pod" Home card after V2.1's own opens a page with Shuffle,
   Ratings, Most Played, Long Songs, Podcasts, Audiobooks, Photos, Books, Coverflow and Upload
@@ -156,6 +168,19 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   - a reproducible `update.bin`;
   - a manifest check (`model`, `input_sha256`, `logo_source`);
   - a release note with the reflash-to-stock instructions.
+- **q2remote on M1.** Done: `tools/q2remote.py` takes upright screenshots and sends keys, knob
+  turns and taps on the M1 ([remote.md](remote.md#m1-plus), [m1plus-progress.md](m1plus-progress.md)
+  section 18). Left: a `swipe X0 Y0 X1 Y1` command, which needs Goodix-CTP's move frames, recorded on the
+  device the way its taps were, and a held `tap` (a longer press) for the long press. Without a swipe, a remote
+  session can't reach Home's second page (where the Q2 Pod card is) or scroll a list, so those
+  steps still need the user.
+- **Latent Q2 bugs found through M1.** Both were fixed only behind `M1PLUS`, to keep the Q2 build
+  byte-identical (ground rules). Fixing them on the Q2 is a deliberate Q2 change, best made
+  upstream, with a Q2 device check:
+  - Long Songs' `taglib_file_new` call passes no `readAudioProperties`, so it reads whatever `$a1`
+    holds; when that is 0, every length reads as 0 and is cached as measured;
+  - AWTK's hit test doesn't skip hidden views, so the hidden book reader and photo viewer take taps
+    meant for the list under them. The wheel hides this on the Q2; `view_show` is the M1's fix.
 - **A card library in the emulator.** `test/boot.py --media` mounts a small card on a tmpfs: two long
   songs (header-only FLAC and MP3), a book and a photo, with V2.1's `songtable` seeded. Tags (album,
   artist) in the files and a scan would let the walk open Album, Artist and Now Playing. Playback itself
