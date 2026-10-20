@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive a --dev Q2 over Wi-Fi (Q2_HOST and Q2_KEY required; see docs/remote.md).
 
-usage: q2remote.py {sh COMMAND|shot OUT.png|devices|key NAME [MS]|wheel N|knob N|tap X Y|events EVENT [S]|reboot}"""
+usage: q2remote.py {sh COMMAND|shot OUT.png|devices|key NAME [MS]|wheel N|knob N|tap X Y [MS]|swipe X0 Y0 X1 Y1 [MS]|events EVENT [S]|reboot}"""
 import os
 import re
 import shlex
@@ -21,7 +21,11 @@ M1_W, M1_H = 320, 480
 M1_KEYS = {"centre": 116, "center": 116, "play": 164, "next": 163, "prev": 165}
 M1_KNOB = "md-rotary-knob"
 KEY_VOLUMEUP, KEY_VOLUMEDOWN = 115, 114
-M1_TAP_US = 60000
+# Goodix-CTP's timing, as recorded on the device: its second down frame and its move frames come
+# about 12 ms apart. A tap holds TAP_HOLD_MS unless told otherwise; a swipe takes SWIPE_MS.
+M1_FRAME_US = 12000
+USLEEP_US = 2500  # busybox usleep's own start-up on the M1 Plus, taken off each delay
+TAP_HOLD_MS, SWIPE_MS = 100, 300
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 BTN_TOUCH, ABS_X, ABS_Y, ABS_PRESSURE = 0x14a, 0, 1, 0x18
 WHEEL_UNITS, WHEEL_STEP, WHEEL_SETTLE, SAMPLE_US = 28, 11, 4, 20000
@@ -100,6 +104,21 @@ def m1_tap(x, y):
             event(EV_ABS, ABS_PRESSURE, 0) + event(EV_SYN, 0, 0)]
 
 
+def m1_swipe(x0, y0, x1, y1, ms=SWIPE_MS):
+    """A drag as Goodix-CTP sends one: the tap's two down frames, a move frame every M1_FRAME_US
+    with only the axes that changed (the input core drops the rest), then the release."""
+    n = max(1, round(ms * 1000 / M1_FRAME_US))
+    moves, at = [], (x0, y0)
+    for i in range(1, n + 1):
+        x, y = round(x0 + (x1 - x0) * i / n), round(y0 + (y1 - y0) * i / n)
+        frame = (event(EV_ABS, ABS_X, x) if x != at[0] else b"") + (event(EV_ABS, ABS_Y, y) if y != at[1] else b"")
+        if frame:
+            moves.append(frame + event(EV_SYN, 0, 0))
+            at = (x, y)
+    down, release = m1_tap(x0, y0)[:2], m1_tap(x0, y0)[2:]
+    return down + moves + release
+
+
 def knob_events(ticks):
     """One press and release a detent: positive turns clockwise."""
     code = KEY_VOLUMEUP if ticks > 0 else KEY_VOLUMEDOWN
@@ -126,13 +145,17 @@ def wheel_units(config):
     return WHEEL_UNITS * 50 / (pct if 50 <= pct <= 200 and pct % 10 == 0 else 50)
 
 
-def event_writer(path, batches, delay_us=SAMPLE_US):
-    commands = []
+def event_writer(path, batches, delay_us=SAMPLE_US, once=False):
+    """Shell writing each batch to path: delay_us between every two, or a list, one per gap. With
+    once, path is opened once for all of them: on the M1 Plus, opening Goodix-CTP's device costs about
+    45 ms, which made a 12 ms move period 60 ms. (The Q2's wheel timing was tuned reopening it.)"""
+    delays = delay_us if isinstance(delay_us, list) else [delay_us] * len(batches)
+    commands = [f"exec 3> {shlex.quote(path)}"] if once else []
     for i, batch in enumerate(batches):
         if i:
-            commands.append(f"usleep {delay_us}")
+            commands.append(f"usleep {delays[i - 1]}")
         octets = "".join(f"\\{byte:03o}" for byte in batch)
-        commands.append(f"printf '%b' {shlex.quote(octets)} > {shlex.quote(path)}")
+        commands.append(f"printf '%b' {shlex.quote(octets)} " + (">&3" if once else f"> {shlex.quote(path)}"))
     return "; ".join(commands)
 
 
@@ -179,7 +202,9 @@ def input_action(kind, args):
     m1 = M1_KNOB in devs
     if kind == "wheel" and m1: raise ValueError("the M1 Plus has a knob: use knob N")
     if kind == "knob" and not m1: raise ValueError("the Q2 has a wheel: use wheel N")
-    need = {"key": "md-gpio-keys", "tap": "Goodix-CTP" if m1 else "hyn_ts", "wheel": "hyn_sliderbar", "knob": M1_KNOB}[kind]
+    if kind == "swipe" and not m1: raise ValueError("swipe is M1 Plus only for now: the Q2's move frames aren't recorded")
+    need = {"key": "md-gpio-keys", "tap": "Goodix-CTP" if m1 else "hyn_ts", "swipe": "Goodix-CTP",
+            "wheel": "hyn_sliderbar", "knob": M1_KNOB}[kind]
     if need not in devs: raise ValueError(f"no {need} input device; inspect `devices`")
     path = devs[need]
     if kind == "key":
@@ -191,24 +216,35 @@ def input_action(kind, args):
         if not 1 <= ms <= 60000: raise ValueError("key duration must be 1..60000 ms")
         shell("sh", event_writer(path, key_events(code), ms * 1000).encode())
     elif kind == "tap" and m1:
-        try: x, y = map(int, args)
-        except ValueError: raise ValueError("tap coordinates must be integers")
+        try: x, y = map(int, args[:2]); hold = int(args[2]) if len(args) > 2 else TAP_HOLD_MS
+        except ValueError: raise ValueError("tap coordinates and hold must be integers")
         if not 0 <= x < M1_W or not 0 <= y < M1_H: raise ValueError(f"coordinates must be x=0..{M1_W-1}, y=0..{M1_H-1}")
-        shell("sh", event_writer(path, m1_tap(x, y), M1_TAP_US).encode())
+        if not 1 <= hold <= 10000: raise ValueError("tap hold must be 1..10000 ms")
+        shell("sh", event_writer(path, m1_tap(x, y), [M1_FRAME_US - USLEEP_US, max(0, hold * 1000 - USLEEP_US)], once=True).encode())
+    elif kind == "swipe":
+        try: x0, y0, x1, y1 = map(int, args[:4]); ms = int(args[4]) if len(args) > 4 else SWIPE_MS
+        except ValueError: raise ValueError("swipe coordinates and duration must be integers")
+        if not all(0 <= x < M1_W for x in (x0, x1)) or not all(0 <= y < M1_H for y in (y0, y1)):
+            raise ValueError(f"coordinates must be x=0..{M1_W-1}, y=0..{M1_H-1}")
+        if not 50 <= ms <= 5000: raise ValueError("swipe duration must be 50..5000 ms")
+        batches = m1_swipe(x0, y0, x1, y1, ms)
+        # stdin: a slow swipe's frames outgrow the 4 KB command line
+        shell("sh", event_writer(path, batches, [M1_FRAME_US - USLEEP_US] * (len(batches) - 1), once=True).encode())
     elif kind == "knob":
         try: ticks = int(args[0])
         except ValueError: raise ValueError("knob turn must be an integer")
         if not -100 <= ticks <= 100 or not ticks: raise ValueError("knob turn must be -100..100 detents, not 0")
-        shell("sh", event_writer(path, knob_events(ticks)).encode())
+        shell("sh", event_writer(path, knob_events(ticks), once=True).encode())
     elif kind == "tap":
-        try: x, y = map(int, args)
-        except ValueError: raise ValueError("tap coordinates must be integers")
+        try: x, y = map(int, args[:2]); hold = int(args[2]) if len(args) > 2 else SAMPLE_US // 1000
+        except ValueError: raise ValueError("tap coordinates and hold must be integers")
         if not 0 <= x < H or not 0 <= y < W: raise ValueError(f"coordinates must be x=0..{H-1}, y=0..{W-1}")
+        if not 1 <= hold <= 10000: raise ValueError("tap hold must be 1..10000 ms")
         # The touchscreen axes follow the 320x375 portrait panel, while CLI coordinates are upright.
         px, py = touch_xy(x, y)
         batches = [event(EV_ABS, ABS_X, px) + event(EV_ABS, ABS_Y, py) + event(EV_ABS, ABS_PRESSURE, 1) + event(EV_KEY, BTN_TOUCH, 1) + event(EV_SYN, 0, 0),
                    event(EV_ABS, ABS_PRESSURE, 0) + event(EV_KEY, BTN_TOUCH, 0) + event(EV_SYN, 0, 0)]
-        shell("sh", event_writer(path, batches).encode())
+        shell("sh", event_writer(path, batches, hold * 1000).encode())
     elif kind == "wheel":
         try: ticks = int(args[0])
         except ValueError: raise ValueError("wheel travel must be an integer")
@@ -238,8 +274,9 @@ def main(argv):
         for d in devices():
             print(f"event{d['event']} {d['name']} handlers={d['handlers']} keys={sorted(bits(d['KEY']))} abs={sorted(bits(d['ABS']))}")
         return 0
-    if cmd in ("key", "tap", "wheel", "knob"):
-        if len(a) not in {"key": (1, 2), "wheel": (1,), "knob": (1,), "tap": (2,)}[cmd]: raise ValueError(f"invalid arguments for {cmd}")
+    if cmd in ("key", "tap", "swipe", "wheel", "knob"):
+        if len(a) not in {"key": (1, 2), "wheel": (1,), "knob": (1,), "tap": (2, 3), "swipe": (4, 5)}[cmd]:
+            raise ValueError(f"invalid arguments for {cmd}")
         input_action(cmd, a); return 0
     if cmd == "reboot" and not a:
         # Detached so the reply arrives before the network drops; the PMIC's 10-15 s Centre reset can't be injected.

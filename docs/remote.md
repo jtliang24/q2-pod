@@ -36,7 +36,7 @@ Each connection rereads `/mnt/mmc/q2remote.key` while the card is mounted, so re
 | `shot OUT.png`  | Saves the displayed framebuffer as an upright 375×320 PNG.                                                                                 |
 | `key NAME [MS]` | Presses a button for `MS` ms (default 80).                                                                                                 |
 | `wheel N`       | Turns the wheel `N` ticks: positive is down/next, negative up/back.                                                                        |
-| `tap X Y`       | Taps the screen at upright screenshot coordinates (0-374, 0-319).                                                                          |
+| `tap X Y [MS]`  | Taps the screen at upright screenshot coordinates (0-374, 0-319), holding `MS` ms (default 20).                                             |
 | `events N [S]`  | Prints raw events from `/dev/input/eventN` for `S` seconds (default 5).                                                                    |
 | `devices`       | Lists the input devices and their key and axis codes.                                                                                      |
 | `reboot`        | Syncs and reboots into the saved boot target; q2remote answers again once the Q2 rejoins Wi-Fi, which can take a few minutes.              |
@@ -65,9 +65,10 @@ framebuffer's size:
 | `shot OUT.png` | An upright 320×480 PNG, as the screen is: no rotation. |
 | `key NAME [MS]` | `centre` (the knob's press, KEY_POWER 116), `play` (KEY_PLAYPAUSE 164), `next` 163, `prev` 165, on `md-gpio-keys`. There is no Return button. A single `centre` is a select; turning the screen off needs a double press within 250 ms, which two client calls are too slow for. |
 | `knob N` | Turns the knob `N` detents on `md-rotary-knob`: positive is clockwise (KEY_VOLUMEUP 115), negative anticlockwise (114). It is the volume, or moves the selection with Knob: Navigation. With the volume bar closed, stock's first detent only opens it, so `knob 1` from a closed bar changes nothing; the bar closes again after a few seconds. |
-| `tap X Y` | Upright screen pixels (0-319, 0-479) on `Goodix-CTP`, sent as the panel sends a real tap (see [m1plus.md](m1plus.md), the input table). |
+| `tap X Y [MS]` | Upright screen pixels (0-319, 0-479) on `Goodix-CTP`, sent as the panel sends a real tap (see [m1plus.md](m1plus.md), the input table). `MS` holds the finger down that long, 100 ms by default: `tap X Y 1000` is a long press. |
+| `swipe X0 Y0 X1 Y1 [MS]` | A drag from one point to the other over `MS` (300 ms by default; 50-5000). It sends a move frame every 12 ms, as the panel does, carrying only the axes that changed. A short one flings a list or turns Home's page (`swipe 280 250 40 250`); a long one (`800` and up) drags with little fling. |
 
-`wheel` is the Q2's only. On the M1, `knob` is; each command says so if it's used on the other model. With
+`wheel` is the Q2's only; `knob` and `swipe` are the M1's. Each command says so if it's used on the other model. The M1's input commands open the device once and write every frame to it: opening `Goodix-CTP` costs about 45 ms, which would stretch a 12 ms frame to 60. With
 **Knob: Navigation** on, `key prev` is Back.
 
 ## Working with it

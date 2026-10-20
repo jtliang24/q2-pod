@@ -62,6 +62,29 @@ tap = [q.decode_events(b) for b in q.m1_tap(29, 462)]
 assert [[e[2:] for e in b] for b in tap] == [
     [(q.EV_ABS, q.ABS_X, 29), (q.EV_ABS, q.ABS_Y, 462), (q.EV_ABS, q.ABS_PRESSURE, 1), (q.EV_ABS, q.ABS_PRESSURE, 0), (q.EV_SYN, 0, 0)],
     [(q.EV_ABS, q.ABS_PRESSURE, 1), (q.EV_SYN, 0, 0)], [(q.EV_ABS, q.ABS_PRESSURE, 0), (q.EV_SYN, 0, 0)]]
+# A swipe: the tap's two down frames, moves with only the axes that changed, then the release. A
+# vertical drag's moves carry Y alone, as the panel's did; 120 ms is ten 12 ms frames.
+swipe = [q.decode_events(b) for b in q.m1_swipe(160, 400, 160, 100, 120)]
+assert swipe[:2] == tap[:2] or [[e[2:] for e in b] for b in swipe[:2]] == [
+    [(q.EV_ABS, q.ABS_X, 160), (q.EV_ABS, q.ABS_Y, 400), (q.EV_ABS, q.ABS_PRESSURE, 1), (q.EV_ABS, q.ABS_PRESSURE, 0), (q.EV_SYN, 0, 0)],
+    [(q.EV_ABS, q.ABS_PRESSURE, 1), (q.EV_SYN, 0, 0)]]
+moves = [[e[2:] for e in b] for b in swipe[2:-1]]
+assert len(moves) == 10 and all(m[0][:2] == (q.EV_ABS, q.ABS_Y) and len(m) == 2 for m in moves)
+assert [m[0][2] for m in moves] == [400 - 30 * i for i in range(1, 11)]
+assert [e[2:] for e in swipe[-1]] == [(q.EV_ABS, q.ABS_PRESSURE, 0), (q.EV_SYN, 0, 0)]
+diagonal = [[e[2:] for e in q.decode_events(b)] for b in q.m1_swipe(0, 0, 3, 30, 120)[2:-1]]
+end = {}
+for m in diagonal: end.update({code: value for _, code, value in m[:-1]})
+assert all(m[-1] == (q.EV_SYN, 0, 0) for m in diagonal) and end == {q.ABS_X: 3, q.ABS_Y: 30}
+assert sum(1 for m in diagonal if m[0][1] == q.ABS_X) == 3  # X changes three times, Y every frame
+# Per-gap delays: a held tap waits the hold before its release.
+writer = q.event_writer("/dev/input/event3", q.m1_tap(1, 2), [12000, 1000000])
+assert writer.count("usleep") == 2 and "usleep 12000" in writer and writer.index("usleep 1000000") > writer.index("usleep 12000")
+assert q.event_writer("/dev/null", q.key_events(116), 5).count("usleep 5;") == 1
+# Opened once: one exec, every frame to fd 3; otherwise each frame reopens the path, as the Q2's did.
+once = q.event_writer("/dev/input/event3", q.m1_swipe(0, 0, 0, 100, 120), q.M1_FRAME_US, once=True)
+assert once.startswith("exec 3> /dev/input/event3;") and once.count(">&3") == 13 and once.count("/dev/input/event3") == 1
+assert q.event_writer("/dev/input/event1", q.key_events(116)).count("> /dev/input/event1") == 2
 # Two detents clockwise, one back: a press and a release each.
 assert [q.decode_events(b)[0][2:] for b in q.knob_events(2)] == [(q.EV_KEY, 115, 1), (q.EV_KEY, 115, 0)] * 2
 assert [q.decode_events(b)[0][2:] for b in q.knob_events(-1)] == [(q.EV_KEY, 114, 1), (q.EV_KEY, 114, 0)]
