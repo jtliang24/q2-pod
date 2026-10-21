@@ -277,12 +277,14 @@ MENU_WALK = [('menu_page2', NEXT_PAGE, 4, ('not', 'home')),
              # stop ("Life is short,Play more", 0x53438c): the rest is as before.
              ('menu_back', BACK, 4, ('as', 'menu_page2', (30, 414), (414, 480)))]
 
-# --media: a card with two 11-minute songs, a book and a photo, and V2.1's songtable listing the songs
-# as its scan writes them (time and time_end 0: not CUE tracks). The card is on a tmpfs: on ext4, a
-# 32-bit guest's readdir under qemu-user fails on 64-bit directory offsets (EOVERFLOW), so the
-# payload would find it empty. The walk, patched only: Long Songs measures and lists both songs; a
-# tap opens the book and the photo (a hidden reader or viewer must not take it); Shuffle Songs saves
-# stock's Shuffle play mode.
+# --media: a card with two 11-minute songs, a book and two photos, and V2.1's songtable listing the
+# songs as its scan writes them (time and time_end 0: not CUE tracks). The card is on a tmpfs: on
+# ext4, a 32-bit guest's readdir under qemu-user fails on 64-bit directory offsets (EOVERFLOW), so
+# the payload would find it empty. The walk, patched only: Long Songs measures and lists both songs;
+# a tap opens the book and the photo (a hidden reader or viewer must not take it); a swipe moves to
+# the next photo and back; Coverflow's covers (one album, then the Sort
+# and Refresh cards) turn by swipe and open by a tap on the centre cover; Shuffle Songs saves stock's
+# Shuffle play mode.
 LONG_S = 660
 MEDIA_SONGS = ('long.flac', 'long.mp3')
 def media_card(card):
@@ -300,6 +302,7 @@ def media_card(card):
     (card/'Photos').mkdir()
     from ipod import imagemagick
     (card/'Photos/one.jpg').write_bytes(imagemagick('-size', '200x150', 'gradient:red-blue', 'jpg:-', data=b''))
+    (card/'Photos/two.jpg').write_bytes(imagemagick('-size', '200x150', 'gradient:green-yellow', 'jpg:-', data=b''))
 
 def media_db(path):
     import sqlite3
@@ -317,8 +320,9 @@ def media_db(path):
     db.close()
 
 # The Q2 Pod page's rows, 64 px under the 48 px title: Shuffle, Ratings, Most Played, Long Songs,
-# Photos, Books (with their folders), Coverflow.
+# Photos, Books (with their folders), Coverflow, the last row under the screen's end until scrolled.
 def q2pod_row(i): return tap(160, 80 + 64 * i)
+COVERFLOW_ROW = tap(160, 430)  # the list scrolled to its end
 MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
               ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
               ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
@@ -329,8 +333,19 @@ MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 
               ('books_back', BACK, 4, ('as', 'media_q2pod')),
               ('photos', q2pod_row(4), 6, ('not', 'media_q2pod')),
               ('photo', tap(56, 126), 5, ('not', 'photos')),         # the first tile
+              # qemu's demo decodes neither photo ("Can't open this photo"), so the move to the
+              # second and back shows only in the trace (photos.c moved); the viewer stays open.
+              ('photo_swipes', swipe(240, 250, 60, 250) + ['wait 1500'] + swipe(60, 250, 240, 250), 4, ('as', 'photo')),
               ('photo_back', BACK, 4, ('not', 'photo')),
               ('photos_back', BACK, 4, ('as', 'media_q2pod')),
+              ('q2pod_end', DOWN_LIST, 4, ('not', 'media_q2pod')),
+              ('coverflow', COVERFLOW_ROW, 10, ('not', 'q2pod_end')),
+              ('cover_next', swipe(220, 150, 120, 150), 4, ('not', 'coverflow')),  # one cover: the Sort card
+              ('cover_prev', swipe(120, 150, 220, 150), 4, ('as', 'coverflow')),
+              ('cover_open', tap(160, 120), 5, ('not', 'coverflow')),               # the centre cover's tracks
+              ('cover_back', BACK, 4, ('as', 'coverflow')),
+              ('coverflow_back', BACK, 4, ('as', 'q2pod_end')),
+              ('q2pod_top', UP_LIST, 4, ('as', 'media_q2pod')),
               ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
               ('shuffle_songs', tap(160, 101), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
 
@@ -366,7 +381,7 @@ if __name__ == '__main__':
     ap.add_argument('--home-menu', action='store_true',
                     help=f'V2.1 Home with six cards ({HOME_MENU}): the Q2 Pod card on a page of its own, and a short walk to it')
     ap.add_argument('--media', action='store_true',
-                    help='a card with long songs, a book and a photo: Long Songs, a tap into Books and Photos, Shuffle Songs')
+                    help='a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Shuffle Songs')
     args = ap.parse_args()
     if args.home_menu and args.media: raise SystemExit('--home-menu and --media are separate runs')
     manifest = json.loads((args.build/'manifest.json').read_text())
@@ -483,6 +498,9 @@ if __name__ == '__main__':
                 f'long_songs: lengths cached as {secs}, not {LONG_S} s each')
             assert hits['to_reader'], 'book: the tap on the book\'s row never opened the reader'
             assert hits['to_viewer'], 'photo: the tap on the tile never opened the viewer'
+            assert hits['swiped'] and hits['moved'], 'photo_swipes: the swipes never moved the viewer to another photo'
+            assert hits['touched'], 'cover_next: no touch reached the covers'
+            assert hits['to_tracks'], 'cover_open: the tap on the centre cover never opened its tracks'
             config = (data/'config.ini').read_text(errors='replace')
             assert re.search(r'^PLAYMODE=2$', config, re.M), 'shuffle_songs: Shuffle (2) not saved as the play mode'
     print(f'M1 Plus under qemu: both demos up, the same Home below the status bar{" but for the dots" if args.home_menu else ""}; the walk ({", ".join(n for n, *_ in walk)}) '
