@@ -725,6 +725,12 @@ against V2.1's code). Holds on a table scrolled two rows and eight rows take the
 finger, and both failed before the fix. The Q2's `update.tar` (Legacy and iPod) is byte-identical:
 `lp_entry` is M1 only.
 
+**On the device (dev 12, `V00Cs`, commit `76830bd`).** The user checked by finger that taps, holds
+and Play/Pause held on a row behave. Over q2remote, holds on Album scrolled near its end (a scroll
+view) opened "Pop 2", "Lies of P: Overture" and "No Mythologies to Follow", each the row held, one
+after another with OK between. Holds on All Songs scrolled (a table) opened "Amalfi Coast" and
+"All That".
+
 ## How to check a build now
 
 ```sh

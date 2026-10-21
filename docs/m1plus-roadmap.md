@@ -15,8 +15,7 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** the touch long-press fix on the device (dev 12, section 3). Then section 1's small fixes:
-the Shuffle page's note and the Photos row's icon.
+**Next:** section 1's small fixes: the Shuffle page's note and the Photos row's icon.
 
 ## Ground rules
 
@@ -107,7 +106,7 @@ a highlighted row:
 - Coverflow's centre cover: the album menu.
 
 **The touch long-press's row.** Fixed ([m1plus-progress.md](m1plus-progress.md) section 19): a hold on a
-scrolled list took a row below the finger, and scrolled further, none. Left: the dev 12 device check.
+scrolled list took a row below the finger, and scrolled further, none. Checked on the device with dev 12.
 
 `radio_hold` and `spot_hold` read the row from the list's `_ringnav_index`, so a long press sets that
 first. Now Playing needs none: its hold menu acts on the playing track. On the device (dev 10 and
