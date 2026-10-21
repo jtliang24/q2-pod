@@ -729,11 +729,13 @@ void books_paint(void *w, void *canvas) {
 #define VIDEO_BIN "/usr/bin/q2video"
 #define VIDEO_SOCK "/tmp/q2video.sock" /* video.c Q2VIDEO_SOCK */
 #define VIDEO_PLACE "/tmp/q2video.place" /* video.c Q2VIDEO_PLACE: the second to start at, then left */
+#define VIDEO_QUIT_MS 3000 /* M1 Plus: a quit not done by then is forced */
 static struct {
     int paused, volume, gain, pid, sock, seek; /* seek: the wheel seeks, since seek_at (time_now_ms) */
     unsigned polled, control_at, seek_at, key, at; /* key: the video's in BOOK_MARKS, at its second there */
 #if M1PLUS
-    int back; /* a press in the back chevron's square, not yet lifted or moved out */
+    int back;        /* a press in the back chevron's square, not yet lifted or moved out */
+    unsigned quit_at; /* when Return (the chevron) asked q2video to quit */
 #endif
 } vid __attribute__((section(".scratch")));
 
@@ -810,6 +812,9 @@ static int play_video(void *ctx, void *event) {
     BLOB_IO(VIDEO_PLACE, vid.at, 1);
     vid.pid = video_start(path, 0);
     vid.seek = vid.paused = 0;
+#if M1PLUS
+    vid.quit_at = 0;
+#endif
     vid.volume = g_volume; /* the helper starts at output_device's level: nothing to send, no bar */
     vid.gain = headset_gain();
     unlink("/tmp/q2video.state");
@@ -841,10 +846,18 @@ void video_poll(void) {
         reset_poweroptions_timer(1, 1, 1);
         if (I(g_dacoff_time, 0) > 0) I(g_dacoff_time, 0) = 0;
         if (vid.seek && time_now_ms() - vid.seek_at >= SCRUB_MS) vid.seek = 0; /* back on volume */
+#if M1PLUS
+        /* A quit q2video can't act on (its sound stuck in ALSA) would hold every key and touch:
+         * it goes, as radio.c's stop makes it. */
+        if (vid.quit_at && time_now_ms() - vid.quit_at >= VIDEO_QUIT_MS) system("killall -9 q2video");
+#endif
         return;
     }
     close(vid.sock);
     vid.pid = 0;
+#if M1PLUS
+    vid.quit_at = 0;
+#endif
     unsigned at;
     /* where it stopped; a video never resumed takes no slot from the books */
     if (bk.page && BLOB_IO(VIDEO_PLACE, at, 0) && (at || vid.at)) mark(vid.key, at);
@@ -883,6 +896,9 @@ void video_key(unsigned key) {
         char path[108];
     } to = { 1, VIDEO_SOCK };
     if (c[0]) sendto(vid.sock, c, c[0] == 'v' ? 2 : 1, 0x40, &to, sizeof to); /* MSG_DONTWAIT */
+#if M1PLUS
+    if (c[0] == 'q' && !vid.quit_at) vid.quit_at = time_now_ms() | 1;
+#endif
     if (c[0] == 'p') {
         vid.paused = !vid.paused;
         vid.control_at = time_now_ms();

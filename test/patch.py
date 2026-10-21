@@ -7732,6 +7732,12 @@ if is_m1plus:
         return sent
     assert touch((20,20),(63,63))==['q']
     assert touch((100,200),(100,200))==[] and touch((20,20),(100,20),(20,20))==[] and touch((100,20),(20,20))==[] and touch((20,20),(64,20))==[]
+    # A quit q2video doesn't act on (its sound stuck in ALSA on dev 17) is forced after 3 s, as
+    # radio.c's stop does, so the chevron and every key work again.
+    m.mock('system@GLIBC_2.0'); m.calls=[]
+    def forced(): return [m.text(c[1]) for c in m.calls if c[0]=='system@GLIBC_2.0']
+    for _ in range(5): vpoll()  # 2.5 s
+    assert forced()==[]; vpoll(); vpoll(); assert forced()==['killall -9 q2video']
     passed()
 # Centre toggles the wheel to seeking (s, then f and b, no volume) and back (v); seeking also ends
 # SCRUB_MS after the last tick, on the UI loop's poll.
