@@ -476,11 +476,32 @@ int main(int argc, char **argv) {
         fcntl(vp[0], F_SETPIPE_SZ, 4 << 20); /* frames ahead, so the sound paces ffmpeg */
         const char *args[27];
         char ss[16];
+#if M1PLUS
+        /* The sound from an ffmpeg of its own. One ffmpeg writing both stops on the picture's pipe
+         * until it reaches the file's first sound, which an mp4 interleaved by the second puts 25
+         * frames (15 MB here) on, while the picture waits for the sound's clock: the first frame
+         * stays. Without a sound stream this one ends at once, and the picture goes by the wall. */
+        ffmpeg_argv(args, ss, at, argv[2], 0);
+        int apid = -1;
+        if (audio) {
+            const char *aa[] = { FFMPEG, "-nostdin", "-loglevel", "quiet", "-ss", ss, "-i", argv[2],
+                                 "-vn", "-map", "0:a:0", "-ac", "2", "-ar", "48000", "-f", "s16le",
+                                 "pipe:4", 0 };
+            if (!(apid = fork())) {
+                move_fd(ap[1], 4);
+                execv(FFMPEG, aa);
+                _exit(127);
+            }
+        }
+#else
         ffmpeg_argv(args, ss, at, argv[2], audio);
+#endif
         int pid = fork();
         if (!pid) {
             move_fd(vp[1], 3);
+#if !M1PLUS
             if (audio) move_fd(ap[1], 4);
+#endif
             execv(FFMPEG, args);
             _exit(127);
         }
@@ -556,6 +577,9 @@ int main(int argc, char **argv) {
             }
         }
         if (pid > 0) kill(pid, SIGKILL), waitpid(pid, 0, 0);
+#if M1PLUS
+        if (apid > 0) kill(apid, SIGKILL), waitpid(apid, 0, 0);
+#endif
         held = au.paused && !quit; /* a seek keeps the pause, showing its first frame */
         au.paused = 0;             /* so the writer reads to the end and stops */
         if (thread) pthread_join(thread, 0);
