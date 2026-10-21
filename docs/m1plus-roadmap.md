@@ -15,7 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** section 1's small fixes: the Shuffle page's note and the Photos row's icon.
+**Next:** the note and icon fixes on the device (section 1), then Coverflow and Photos' scroll
+distance (section 2).
 
 ## Ground rules
 
@@ -57,14 +58,13 @@ here goes with other sections' features:
   - the stock key-down helper with STOP (`0x65f688`): with V2.1's copy of that private AWTK
     helper, still to be found (V2.1 binds no key-down handler for the payload to hook);
   - folder rollover and the UI scheduler delay: with the player call sites (section 4).
-- **The Photos row's icon is a loading spinner.** On M1 the build copies `local_photos.png` from V2.1's
-  `scover_wait0.png` (`tools/build.py`, the M1 icon mapping), the first frame of a wait animation. The
-  Q2 Pod page shows it as a thin white ring at 54 px, where the other rows' icons are 40 px. Pick V2.1
-  art that reads as photos and size it to 40 px, as the drawn icons are. Seen over q2remote on dev 11.
-- **The Shuffle page's note.** "Albums and folders take a moment to shuffle" is cut off at the right
-  edge ("…to shuf"). `shuffle_menu` makes it 335 px wide at x 20 (`patch/navigation.c`, `text(st.sp_page,
-  20, 200, 335, 24)`), a width for the Q2's 375 px screen. On M1 it needs `UI_W - 40`, behind
-  `M1PLUS` so the Q2's build doesn't change. Seen on the device with dev 10 and dev 11.
+- **The Shuffle page's rows.** Its three rows (`shuffle_menu`, `page_row_detail`) show on M1 as bare
+  centred text, with no row background or separator, where the Q2 Pod page's rows are V2.1's (ground
+  rules: `list_row`/`row_of`). Seen over q2remote on dev 12. Check the other `page_list` pages
+  (Ratings) for the same.
+
+Done since: the Shuffle page's note and the Photos row's icon ([m1plus-progress.md](m1plus-progress.md)
+section 20).
 
 ## 2. Hardware-specific behaviour (M)
 

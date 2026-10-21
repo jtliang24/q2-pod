@@ -731,6 +731,17 @@ view) opened "Pop 2", "Lies of P: Overture" and "No Mythologies to Follow", each
 after another with OK between. Holds on All Songs scrolled (a table) opened "Amalfi Coast" and
 "All That".
 
+## 20. The Shuffle page's note and the Photos icon (Oct 20)
+
+Two of the roadmap's small fixes, both M1 only:
+- **The Shuffle page's note** was the Q2's 335 px scrolling label at x 20, past the M1's 320 px
+  screen ("…to shuf"). The whole sentence is about 290 px at 16 px, wider than the screen less its
+  margins, so on M1 it is a centred label `UI_W - 40` wide that wraps onto two lines.
+  `test/patch.py` checks the label, its width and the wrap.
+- **The Photos row's icon** was a copy of V2.1's `scover_wait0.png`, a frame of the 54 px loading
+  spinner. V2.1 has no photo art, so it is now `pset_covermode.png`, V2.1's 40 px cover-mode badge,
+  as the Q2 uses V1.32's `playset_covermode`. `test/build.py --build` checks the copy and its size.
+
 ## How to check a build now
 
 ```sh
