@@ -1456,6 +1456,17 @@ static int touched(void *ctx, void *e) {
     slide_step(cf.slide, d < 0 ? -k : k, bounded);
     return 0;
 }
+
+/* A touch long-press's point (screen pixels) on the centre cover, whose album menu it opens
+ * (navigation.c qm_hold), at rest. */
+int coverflow_centre(int x, int y) {
+    if (!cf.slide || cf.screen != COVERS || P(cf.slide, SLIDE_ANIMATOR) || I(cf.slide, SLIDE_OFFSET))
+        return 0;
+    int xy[2] = { x, y }, top = fx.frame ? CF_TOP : I(cf.slide, W_Y);
+    widget_to_local(cf.covers, xy);
+    return xy[0] >= CF_CX - ART_SIZE / 2 && xy[0] < CF_CX + ART_SIZE / 2 && xy[1] >= top &&
+           xy[1] < top + ART_SIZE;
+}
 #endif
 
 /* One child per album plus the Sort and Refresh cards, moved by the wheel only: the slide_menu takes no

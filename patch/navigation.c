@@ -42,6 +42,9 @@ extern int stock_keyup_trampoline(void *, void *), stock_touch_trampoline(void *
 extern void *coverflow_tracks(void *page);
 extern int coverflow_jump(void *w, int from, int dir, unsigned *letter), coverflow_bounded(void *w);
 extern void *coverflow_album(void *page), *coverflow_album_tracks(void *r);
+#if M1PLUS
+extern int coverflow_centre(int x, int y);
+#endif
 extern unsigned coverflow_scope(void *page);
 extern void coverflow_home_art(void *top);
 extern void coverflow_home_layout(void);
@@ -5869,11 +5872,14 @@ static int qm_hold(void) {
     void *album = coverflow_album(top);
     char *key = play_key();
     if (album) {
-        if (!key || !(st.qm_timer = timer_add(qm_open, (void *)0, 0))) return 0;
+#if M1PLUS
+        if (LP_TOUCH && !coverflow_centre(st.lp_x, st.lp_y)) return 0;
+#endif
+        if ((!key && !LP_TOUCH) || !(st.qm_timer = timer_add(qm_open, (void *)0, 0))) return 0;
         st.qm_kind = QM_COVERALBUM;
         st.qm_cls = CLASS_ALBUMS;
         st.qm_hash = rec_hash(album);
-        st.qm_press = *(unsigned long long *)((char *)key + INPUT_KEY_TIME);
+        st.qm_press = LP_TOUCH ? 0 : *(unsigned long long *)((char *)key + INPUT_KEY_TIME);
         drop_input();
         return 1;
     }
@@ -6555,13 +6561,37 @@ void dispatch_key_return(void) {
  * that row's hold menu, as Play/Pause held on a highlighted row does (qm_hold takes the row under
  * the finger). The native press is aborted, as a claimed pull is (pull_event), and the release's
  * click swallowed, so the row doesn't open as well. A press that moves is the list's scroll. */
+/* Internet Radio's stations and Spotify's tracks: their holds (radio_hold, spot_hold) take the
+ * highlighted row, as Play/Pause held does, so the row under the finger is highlighted first. */
+static int lp_select(void *top) {
+    const char *name = widget_get_prop_str(top, "name", "");
+    if (tk_strcmp(name, "radio_page") && tk_strcmp(name, "spotbrowse_page")) return 0;
+    void *w = surface_under(top, (void *)0, (void *)0, 0);
+    int cur = w && load(&g_menu, w, 0) && g_menu.kind == 1 ? lp_entry(&g_menu) : -1;
+    if (cur < 0) return 0;
+    ringnav_select(w, g_menu.id[cur], g_menu.rows);
+    return 1;
+}
+
+/* The pages a hold can act on: V2.1's library pages, the payload's track lists (Most Played,
+ * Ratings' and Long Songs', Coverflow's tracks), Coverflow's covers, the stations and the tracks. */
+static int lp_page(void *top) {
+    const char *name = top ? widget_get_prop_str(top, "name", "") : "";
+    int ctx = top ? context_id(name) : -1;
+    return ctx >= 0 && (contexts[ctx].kind >= CTX_FOLDER || page_tracks(top) || coverflow_album(top) ||
+                        !tk_strcmp(name, "radio_page") || !tk_strcmp(name, "spotbrowse_page"));
+}
+
 static int lp_fire(const void *unused) {
     (void)unused;
     st.lp_timer = 0;
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
     if (!top || top != st.lp_top || !window_manager_get_pointer_pressed(wm)) return 0;
     st.lp_touch = 1;
-    int taken = qm_hold();
+    const char *fav = (void *)0;
+    int taken = lp_select(top) && ((fav = radio_hold(top)) || spot_hold(top));
+    if (fav) toast(fav);
+    if (!taken) taken = qm_hold();
     st.lp_touch = 0;
     if (!taken) return 0;
     st.lp_swallow = 1;
@@ -6577,8 +6607,7 @@ static void lp_input(void *e) {
         st.lp_swallow = 0;
         stop_timer(&st.lp_timer);
         void *top = window_manager_get_top_window(window_manager());
-        int ctx = top ? context_id(widget_get_prop_str(top, "name", "")) : -1;
-        if (ctx < 0 || contexts[ctx].kind < CTX_FOLDER) return;
+        if (!lp_page(top)) return;
         st.lp_top = top;
         st.lp_x = I(e, EVENT_X);
         st.lp_y = I(e, EVENT_Y);

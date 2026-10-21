@@ -691,6 +691,22 @@ def row_button(m,row):
 def row_click(m,row):
     """A list_row's click (navigation.c list_row_core): the list_item's own on V2.1, its button's on V1.32."""
     return m.handler(row if is_m1plus else m.nodes[row]['children'][0],O['EVT_CLICK'])
+def touch_hold(m,x,y,held=None):
+    """M1 Plus: a press at screen (x, y) held still held ms (LONG_PRESS_MS) through the input hook
+    (navigation.c lp_input), then the release. Returns the abort the hold sent, or None."""
+    entry=HOOKS['window_manager_dispatch_input_event'][0]; m.handlers[entry+12]='stock_input'
+    def send(kind):
+        m.word(m.event+O['EVENT_Y'],y)
+        assert m.call(x,address=entry,args=(m.wm,m.event,0,0),event_type=kind,gap=0,clear=False)==0
+    m.calls=[]; m.pressed=1; send(O['EVT_INPUT_POINTER_DOWN'])
+    m.advance(O['LONG_PRESS_MS'] if held is None else held,clear=False)
+    aborted=[c[1] for c in m.calls if c[0]=='widget_dispatch_event_to_target_recursive']
+    m.pressed=0; send(O['EVT_POINTER_UP']); m.advance(0,clear=False)
+    return aborted[0] if aborted else None
+def titled(m,view):
+    """A page_list's list where page_list puts it, under the 48 px title (the harness's
+    list_view_create keeps no position); returns view."""
+    m.word(m.get(view+O['W_PARENT'])+O['W_Y'],48); return view
 def not_ported(name):
     """A check M1 Plus skips: its feature is not in the M1 Plus build, or the test needs V1.32 code."""
     assert is_m1plus, name
@@ -5115,6 +5131,13 @@ for action,want in ((0,['A','early','late','B','C']),(1,['A','B','C','early','la
 for index in (3,4):
     m=CoverflowMachine(); m.open(); m.word(m.slide+O['SLIDE_INDEX'],index)
     m.press(100); assert m.hold()==0 and m.top==m.page; passed()
+if is_m1plus:
+    # By touch (navigation.c lp_input): a long press on the centre cover opens its album's menu; one
+    # on a side cover, or on moving covers, opens nothing.
+    m=CoverflowMachine(); m.open(); m.word(m.slide+O['SLIDE_INDEX'],2); y=m.get(m.slide+O['W_Y'])+80
+    assert touch_hold(m,O['CF_CX']+O['CF_X1'],y) is None and m.top==m.page
+    m.word(m.slide+O['SLIDE_OFFSET'],-30); assert touch_hold(m,O['CF_CX'],y) is None; m.word(m.slide+O['SLIDE_OFFSET'],0)
+    assert touch_hold(m,O['CF_CX'],y)==m.page and m.nodes[m.title]['text']=='Album 2' and m.labels()==[*COVER_ALBUM,'Go to Artist']; passed()
 for kwargs in ({'albums':0},{'cached':False}):
     m=CoverflowMachine(**kwargs); m.open(); m.press(100); assert m.hold()==0; passed()
 for invalidate in ('selection','closed','tracks'):
@@ -6992,6 +7015,16 @@ assert m.queued==ranked and m.plays==[('playing_page',m.plays[0][1],2,0xf001,2)]
 m.handlers[syms['navigator_to']]='q:navigator_to'; view=m.find('scroll_view'); m.paint(view); m.call()
 m.press(100); assert m.hold()==11 and m.nodes[m.title]['text']=='T7' and m.release()==0
 assert m.labels()==['Play Next','Add to Queue','Add to Favourites','Go to Artist']; passed()
+if is_m1plus:
+    # A touch long-press on a row opens the same menu, for the row under the finger (64 px rows
+    # under the 48 px title); one on the title bar opens nothing.
+    m2=ShuffleMachine(); m2.found=[m2.song(f'T{i}') for i in range(8)]
+    m2.counts=b''.join(struct.pack('<2I',fnv(f'/p/T{i}'),8-i) for i in range(8)).ljust(8*O['PLAYS_SLOTS'],b'\0')
+    assert m2.call(address=payload_syms['most_played'],args=(0,m2.event,0,0),gap=0,count=50_000_000)==0; m2.page=m2.top
+    m2.handlers[syms['navigator_to']]='q:navigator_to'; m2.paint(m2.find('scroll_view'))
+    titled(m2,m2.find('scroll_view')); assert touch_hold(m2,100,24) is None and m2.top==m2.page
+    assert touch_hold(m2,100,48+2*64+30)==m2.page and m2.nodes[m2.title]['text']=='T2'
+    assert m2.labels()==['Play Next','Add to Queue','Add to Favourites','Go to Artist']; passed()
 # Opened again, the kept tracks are ranked again without reading the library; a library change reads it again.
 m.close(); m.found=m.found[:8]; m.calls=[]
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=50_000_000)==0 and not called('getAllMusic')
@@ -8077,6 +8110,13 @@ assert m.files[RDIR+'/favourites.m3u']==b'#EXTM3U\n#EXTINF:-1,http://two/b\nhttp
 m.nodes[m.find('scroll_view')]['_ringnav_index']=1; assert m.hold()==11 and m.toasts[-1][3]=='Added to Favourites'
 assert m.files[RDIR+'/favourites.m3u'].endswith(b'#EXTINF:-1,Three\nhttps://three/c?x=1\n')
 assert m.call(O['KEY_PLAY'],gap=0)==11 and not m.sent; passed()
+if is_m1plus:
+    # By touch: a long press on a station highlights it and toggles it, whatever was highlighted
+    # (48 px rows under the 48 px title: Three is the second).
+    titled(m,m.find('scroll_view'))
+    m.nodes[m.find('scroll_view')]['_ringnav_index']=0; toasts=len(m.toasts)
+    assert touch_hold(m,100,48+48+20)==page and m.toasts[-1][3]=='Removed from Favourites' and len(m.toasts)==toasts+1
+    assert m.nodes[m.find('scroll_view')]['_ringnav_index']==1 and not m.files[RDIR+'/favourites.m3u'].endswith(b'https://three/c?x=1\n'); passed()
 # Editing a capped or partially read list must never discard unseen favourites. Exactly 200
 # stations still supports removal; adding to a full list keeps the existing limit.
 for count, padding, saved in ((200, b'', True), (201, b'', False),
@@ -8257,7 +8297,14 @@ m.row(0); m.answer(*OK,[track('spotify:track:1','One','c','0'),('album','spotify
 m.top=m.page; m.status=m.alloc(0x200); m.nodes[m.find('scroll_view')]['_ringnav_index']=0; m.press(77)
 assert m.hold()==11 and m.asked()==('enqueue','spotify:track:1'); m.answer(*OK,[]); assert m.toasts[-1][3]=='Added to Queue'
 m.press(78); assert m.hold()==11; m.answer('unavailable','Nothing is playing on Q2','',[]); assert m.toasts[-1][3]=='Nothing is playing on Q2'
-m.nodes[m.find('scroll_view')]['_ringnav_index']=1; m.press(79); asked=len(m.threads); m.hold(); assert len(m.threads)==asked; m.back(); passed()
+m.nodes[m.find('scroll_view')]['_ringnav_index']=1; m.press(79); asked=len(m.threads); m.hold(); assert len(m.threads)==asked
+if is_m1plus:
+    # By touch: a long press on the track row enqueues it, whatever was highlighted; one on the
+    # album row, its second, sends nothing.
+    titled(m,m.find('scroll_view')); asked=len(m.threads); assert touch_hold(m,100,48+48+20) is None and len(m.threads)==asked
+    assert touch_hold(m,100,48+20)==m.page and m.asked()==('enqueue','spotify:track:1'); m.answer(*OK,[])
+    assert m.toasts[-1][3]=='Added to Queue'
+m.back(); passed()
 # Playing: Queue's rows play by their place and URI, then Now Playing. Playback settings: shuffle and
 # repeat as they are, a press setting the next and reading them again; never sent again on failure.
 m.state('playing'); m.poll(); m.advance(250); m.row(6); assert m.asked()==('queue',)
