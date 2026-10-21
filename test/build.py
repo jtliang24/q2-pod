@@ -294,6 +294,14 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert all(stock_syms['parse_albumcovertask_thd'] <= c < stock_syms['parseplaycover_thd'] for c in calls[:3])
     assert words(0x4df1c4, 3) == (0x8f99f8b4, 0x8f84b878, 0x0320f809) and got(0x4df1c8) == stock_syms['parse_cover_mutex']
     assert got(0x4df1c4) == stock_syms['pthread_mutex_lock@GLIBC_2.0'] and stock_syms['parseplaycover_thd'] < 0x4df1c4 < 0x4df1e8
+    # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
+    # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
+    # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores
+    # xdown (@0x84) on the press and sets xoffset to x - xdown, the finger's px one for one, once it
+    # has moved 10 px.
+    assert words(0x6123a0, 4) == (0x8c620088, 0x44820000, 0x8e02000c, 0x44820800)
+    assert words(0x6125c8, 1) == (0xae020084,) and words(0x612970, 1) == (0x2842000a,)
+    assert words(0x6128f0, 3) == (0x8e030084, 0x8e220018, 0x00431023) and words(0x612914, 1) == (0xae020088,)
     # Bluetooth absolute volume hooks mclSetVol (navigation.c ringnav_btvol): V2.1 has no
     # mclSetLocalVol or mclSetBtVol, and its mclSetVol issues the DAC's volume ioctl (0xc0044d00)
     # and sends hciplayer {mcl-setvol%d}. set_devicevolume calls it with 0-100 (its clamps); the

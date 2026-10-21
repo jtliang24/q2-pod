@@ -175,6 +175,10 @@ void *page_row_detail(void *view, int index, const char *caption, const char *de
 void page_row_into(void *view, int index, const char *caption, int (*click)(void *, void *));
 void *bottom_caption(void *parent, int h);
 int visual(void *s, int n, int *c, int *frac);
+#if M1PLUS
+int slide_swipe(void *s, void *e, int px, int bounded); /* navigation.c: a finger on a carousel */
+void slide_step(void *s, int k, int bounded);
+#endif
 int thumb(const char *src, const char *dst, int w, int h);
 int card_space(const char *dir);
 /* A page's full-size view shown or hidden. AWTK's hit test skips insensitive children but not

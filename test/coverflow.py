@@ -55,7 +55,7 @@ canvas_get_clip_rect canvas_set_clip_rect widget_set_sensitive widget_get_type t
 timer_add timer_remove navigator_back_to_home navigator_back window_manager_close_window_force navigator_to_with_context bitmap_create_ex bitmap_destroy bitmap_unlock_buffer
 bitmap_lock_buffer_for_read bitmap_lock_buffer_for_write bitmap_get_line_length
 canvas_draw_image slide_menu_set_spacer window_manager
-view_create label_create label_set_line_wrap slide_indicator_set_max
+view_create label_create label_set_line_wrap slide_indicator_set_max widget_to_local
 """.split() for r, a in [PROTOTYPES[n]]) + r"""
 void *shim_calloc(size_t, size_t);
 #define calloc shim_calloc

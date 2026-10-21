@@ -4532,6 +4532,15 @@ class CoverflowMachine(QueueMachine):
     def key(self,k=O['KEY_RETURN']):
         f,ctx=self.handler(self.page,O['EVT_KEY_UP']); ev=self.alloc(0x40); self.word(ev,O['EVT_KEY_UP']); self.word(ev+O['EVENT_KEY'],k)
         ret=self.call(address=f,args=(ctx,ev,0,0),gap=0); self.advance(0); return ret
+def finger(m,view,points,ms=400,kinds=None):
+    """M1 Plus touch on a view's own handlers: a press at points[0], moves to the rest, then the
+    release (or kinds' events), ms apart in all."""
+    ev=m.alloc(0x40); kinds=kinds or [0xff]+[0x101]*(len(points)-2)+[O['EVT_POINTER_UP']]
+    for i,((x,y),k) in enumerate(zip(points,kinds)):
+        if i: m.now+=ms//(len(points)-1)
+        m.word(ev,k); m.word(ev+O['EVENT_X'],x); m.word(ev+O['EVENT_Y'],y)
+        f,ctx=m.handler(view,k); assert m.call(address=f,args=(ctx,ev,0,0),gap=0,clear=False)==0
+
 
 if variant=='ipod':
     # Both themes: the art itself follows the playing track, when Home or the status bar paints, in
@@ -5267,6 +5276,15 @@ assert m.call(O['KEY_PREV'],gap=500)==11; _,kick,goal,_=slide(m,w); assert kick>
 m.advance(300); assert index()==0 and not m.slides
 m.call(O['KEY_NEXT'],gap=500); m.advance(300); assert index()==1
 m.call(O['KEY_NEXT'],gap=500); assert slide(m,w)[1:3]==(-kick,0)
+if is_m1plus:
+    # By touch too: a drag past either end gives at most the knob's bounce and springs back.
+    view=m.get(w+O['W_PARENT']); step=m.get(w+O['W_H'])
+    for i,x1,kick in ((0,300,step//5),(1,20,-step//5)):  # the first album dragged right, the last left
+        m.word(w+O['SLIDE_INDEX'],i)
+        finger(m,view,[(160,100),(x1,100)],kinds=[0xff,0x101]); assert signed(m.get(w+O['SLIDE_OFFSET']))==kick
+        finger(m,view,[(x1,100),(x1,100)],kinds=[0x101,0x103]); m.advance(300)
+        assert index()==i and m.get(w+O['SLIDE_OFFSET'])==0
+    passed()
 m.advance(300); assert index()==1 and not m.slides and m.get(w+O['SLIDE_OFFSET'])==0; passed()
 # The covers' Return closes the unseen artist page under them first, so the Artists list is next.
 artist=m.stack[0]; m.stack.insert(0,m.node('window','localclass_page')); m.nodes[m.wm]={'children':m.stack}; m.mock('navigator_back','window_manager_close_window_force')
@@ -5669,9 +5687,8 @@ m=DepthMachine(); page=m.open(); s=m.slide
 assert len(m.frames)==1 and cf_geometry(m,s)==(0,0,O['CF_VIEW_W'],O['CF_VIEW_H'])
 # slide_stride (offsets.inc): V2.1's slide_menu steps its own height, V1.32's an item and the spacer.
 stride=m.get(s+O['W_H']) if is_m1plus else signed(m.get(s+O['SLIDE_SPACER']))+O['CF_VIEW_H']
-def cf_stride(): assert stride==O['CF_STRIDE'], stride
-if is_m1plus: known_gap(f"Coverflow steps CF_STRIDE ({O['CF_STRIDE']} px) per album; V2.1's slide_menu steps its height", cf_stride)
-else: cf_stride()
+if is_m1plus: assert stride==O['CF_VIEW_H']  # pinned below: V2.1's on_scroll_done divides by the height
+else: assert stride==O['CF_STRIDE'], stride
 assert all('image' not in m.nodes[c] for c in m.nodes[s]['children'])
 def paint(m):
     return m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.slide,m.canvas,0,0),gap=0,clear=False,count=50_000_000)
@@ -5704,6 +5721,48 @@ class Starved(DepthMachine):
             u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
         return super().hook(u,address,size,unused)
 m=Starved(); m.open(); s=m.slide
+if is_m1plus:
+    # M1 Plus: the covers' view takes the touch (coverflow.c touched, navigation.c slide_swipe), the
+    # slide_menu none. A finger moves the covers a cover per CF_STRIDE px, as the frame draws them,
+    # though V2.1's slide_menu steps by its height; the release settles through the knob's animator.
+    CF_X,STEP=O['CF_STRIDE'],O['CF_VIEW_H']
+    m=DepthMachine(); page=m.open(); s=m.slide; view=m.get(s+O['W_PARENT'])
+    assert m.nodes[s].get('sensitive')==0 and all(m.handler(view,k) for k in (0xff,0x101,0x103,0x107))
+    # A slow drag left of one cover's width: the offset follows the finger a whole step, mid-way half
+    # of one; the release settles there and commits the next album.
+    finger(m,view,[(200,100),(200-CF_X//2,100)],kinds=[0xff,0x101]); assert signed(m.get(s+O['SLIDE_OFFSET']))==-STEP//2
+    paint(m); assert len(m.draws)==1  # the frame half a turn on, from the live offset
+    finger(m,view,[(200-CF_X//2,100),(200-CF_X,100),(200-CF_X,100)],kinds=[0x101,0x101,0x103])
+    assert signed(m.get(s+O['SLIDE_OFFSET']))==-STEP and len(m.slides)==1
+    m.advance(200); assert m.get(s+O['SLIDE_INDEX'])==1 and m.get(s+O['SLIDE_OFFSET'])==0 and not m.slides; passed()
+    # Under half a cover, slowly: back where it was. 2.4 covers right: two albums back.
+    finger(m,view,[(100,100),(100+CF_X*2//5,100),(100+CF_X*2//5,100)]); m.advance(200)
+    assert m.get(s+O['SLIDE_INDEX'])==1 and m.get(s+O['SLIDE_OFFSET'])==0
+    finger(m,view,[(40,100),(40+CF_X*12//5,100),(40+CF_X*12//5,100)]); m.advance(200)
+    assert m.get(s+O['SLIDE_INDEX'])==4; passed()  # round the ring: 1 - 2 of 5 (three albums, Sort, Refresh)
+    # A flick (20 px in 100 ms) turns one cover; a 7 px tremor turns none, and is a tap.
+    finger(m,view,[(150,100),(130,100),(130,100)],ms=100); m.advance(200); assert m.get(s+O['SLIDE_INDEX'])==0
+    m.word(s+O['SLIDE_INDEX'],1); m.query=None
+    finger(m,view,[(O['CF_CX'],100),(O['CF_CX']+7,100),(O['CF_CX']+7,100)],ms=100); m.advance(0)
+    assert m.query[:2]==('getMusicByAlbum','Album 1') and not m.slides; passed()
+    # A tap on a side cover brings it to the centre: the first right, the second left.
+    m=DepthMachine(); m.open(); s=m.slide; view=m.get(s+O['W_PARENT']); m.query=None
+    finger(m,view,[(O['CF_CX']+O['CF_X1'],100),(O['CF_CX']+O['CF_X1'],100)]); m.advance(200)
+    assert m.get(s+O['SLIDE_INDEX'])==1 and m.query is None
+    finger(m,view,[(O['CF_CX']-O['CF_X1']-O['CF_XS'],100)]*2); m.advance(200)
+    assert m.get(s+O['SLIDE_INDEX'])==4 and m.query is None; passed()
+    # A press on moving covers catches them: let go, they finish the step, and nothing opens.
+    finger(m,view,[(O['CF_CX']+O['CF_X1'],100)]*2); m.advance(50); moving=signed(m.get(s+O['SLIDE_OFFSET']))
+    assert -STEP<moving<0
+    finger(m,view,[(O['CF_CX'],100)]*2); assert signed(m.get(s+O['SLIDE_OFFSET']))==moving and len(m.slides)==1
+    m.advance(200); assert m.get(s+O['SLIDE_INDEX'])==0 and m.query is None; passed()
+    # The back button's press, a tap under the frame and an aborted press do nothing; a drag from
+    # the back button doesn't turn the covers.
+    for points,kinds in (([(10,10),(10,10)],None),([(O['CF_CX'],O['CF_VIEW_H']+20)]*2,None),
+                         ([(10,10),(10+2*CF_X,10),(10+2*CF_X,10)],None),([(O['CF_CX'],100)]*2,[0xff,0x107])):
+        finger(m,view,points,kinds=kinds); m.advance(200)
+        assert m.get(s+O['SLIDE_INDEX'])==0 and m.get(s+O['SLIDE_OFFSET'])==0 and m.query is None and not m.timers
+    passed()
 assert cf_geometry(m,s)==(0,24,O['UI_W'],160) and all(m.nodes[c].get('image') for c in m.nodes[s]['children'])
 paint(m); assert not m.draws; passed()
 print(f'Coverflow depth on MIPS: {rest_cost} instructions for the first paint (decoding the covers in reach, then the frame), {turn_cost} for a frame a quarter turn on (payload only; stock drawing mocked)')
@@ -7355,20 +7414,37 @@ border(tiles[2]); assert m.bands[-1][4]==O['PH_GREY']
 f,ctx=m.handler(tiles[1],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.advance(0)
 s=m.find('slide_menu',viewer); m.slide=s
 assert m.nodes[viewer]['visible'] and not m.nodes[grid]['visible'] and len(m.nodes[s]['children'])==4
-stride=m.get(s+O['W_H']) if is_m1plus else signed(m.get(s+O['SLIDE_SPACER']))+O['PH_SHOT_H']  # slide_stride
-def photo_stride(): assert stride==O['UI_W'], stride
-if is_m1plus: known_gap(f"Photos step one screen width ({O['UI_W']} px) per photo; V2.1's slide_menu steps its height", photo_stride)
-else: photo_stride()
+# slide_stride: V2.1's slide_menu steps its height; the photos are still drawn a screen apart.
+stride=m.get(s+O['W_H']) if is_m1plus else signed(m.get(s+O['SLIDE_SPACER']))+O['PH_SHOT_H']
+assert stride==(O['PH_SHOT_H'] if is_m1plus else O['UI_W']), stride
 assert m.get(s+O['SLIDE_INDEX'])==1
 m.draws=[]; m.loads=[]; paint(m)
 want_draws = [((0,0,281,320),(19,65,281,320))] if is_m1plus else [((0,0,281,375),((375-217)//2,0,217,290))]
 assert m.draws==want_draws and m.loads==['file://'+cache(1,'.jpg'),'file://'+cache(0,'.jpg')]
-# Mid-slide back to the first photo: this one moves right and the first follows a stride behind it.
+# Mid-slide back to the first photo: this one moves right and the first follows a screen behind it,
+# with no gap between them.
 m.draws=[]; m.word(s+O['SLIDE_OFFSET'],stride//4); paint(m)
 (_,a),(_,b)=m.draws
 rest_x = (320-281)//2 if is_m1plus else (375-217)//2
 want_b = (84,320,281) if is_m1plus else (4,375,281)
-assert len(m.draws)==2 and a[0]-rest_x==b[0]+stride and 0<a[0]-rest_x<stride//2 and b[1:]==want_b
+if is_m1plus:
+    # The viewer takes the touch (photos.c swiped), the slide_menu none: a finger moves the photo
+    # with it, a screen per photo; past half a screen the next photo settles in, and a flick moves
+    # one. A tap shows the caption; the back button's press doesn't move or caption anything.
+    assert m.nodes[s].get('sensitive')==0 and all(m.handler(viewer,k) for k in (0xff,0x101,0x103,0x107))
+    finger(m,viewer,[(100,200),(180,200)],kinds=[0xff,0x101])
+    m.draws=[]; paint(m); (_,a),(_,b)=m.draws; assert abs(a[0]-rest_x-80)<=1 and a[0]-rest_x==b[0]+O['UI_W']
+    finger(m,viewer,[(180,200),(270,200),(270,200)],kinds=[0x101,0x101,0x103]); m.advance(200)
+    assert m.get(s+O['SLIDE_INDEX'])==0 and m.get(s+O['SLIDE_OFFSET'])==0
+    finger(m,viewer,[(240,200),(100,200),(100,200)]); m.advance(200); assert m.get(s+O['SLIDE_INDEX'])==0
+    finger(m,viewer,[(200,200),(170,200),(170,200)],ms=150); m.advance(200); assert m.get(s+O['SLIDE_INDEX'])==1
+    shown=lambda: m.nodes[info].get('visible')
+    info=[x for x in m.nodes[viewer]['children'] if m.nodes[x]['type']=='hscroll_label'][0]
+    before=shown(); finger(m,viewer,[(160,200)]*2); assert shown()!=before
+    finger(m,viewer,[(160,200)]*2); assert shown()==before
+    finger(m,viewer,[(10,10)]*2); finger(m,viewer,[(10,10),(300,10),(300,10)]); m.advance(200)
+    assert shown()==before and m.get(s+O['SLIDE_INDEX'])==1; passed()
+assert len(m.draws)==2 and a[0]-rest_x==b[0]+O['UI_W'] and a[0]-rest_x==O['UI_W']//4 and b[1:]==want_b
 m.word(s+O['SLIDE_OFFSET'],0); passed()
 # Centre shows "2 of 4" and the name; a bad photo says so whatever.
 info=[x for x in m.nodes[viewer]['children'] if m.nodes[x]['type']=='hscroll_label'][0]

@@ -296,6 +296,19 @@ static void info(void) {
     widget_set_visible(ph.info, ph.info_on || !s || s == PH_BAD, 0);
 }
 
+#if M1PLUS
+/* The viewer's touch (navigation.c slide_swipe): a swipe moves a photo per screen width, as the
+ * paint draws them, and a tap shows or hides the caption. The back button's press is its own. */
+static int swiped(void *ctx, void *e) {
+    (void)ctx;
+    if (ph.screen != VIEWER || !ph.slide) return 0;
+    int xy[2] = { I(e, EVENT_X), I(e, EVENT_Y) };
+    widget_to_local(ph.viewer, xy);
+    if (slide_swipe(ph.slide, e, xy[0] < BACK_W && xy[1] < 48 ? 0 : UI_W, 0)) toggle_info(0, 0);
+    return 0;
+}
+#endif
+
 static int moved(void *ctx, void *event) {
     (void)ctx;
     (void)event;
@@ -307,7 +320,8 @@ static int moved(void *ctx, void *event) {
 /* One photo full screen: a slide_menu of empty children, one per photo, whose items are the
  * page's height square with a spacer making the stride the screen's width. The wheel steps it as
  * Coverflow's covers (ringnav's carousel), and the paint hook draws the photos at its live
- * offset, so they slide. */
+ * offset, so they slide. V2.1's slide_menu has no spacer and steps by its height, so on M1 Plus
+ * the viewer takes the touch (swiped) and the paint spaces the photos a screen apart. */
 static int to_viewer(const void *unused) {
     (void)unused;
     ph.timer = 0;
@@ -324,6 +338,11 @@ static int to_viewer(const void *unused) {
         ph.info = bottom_caption(ph.viewer, h);
 #if M1PLUS
         back_button(ph.viewer); /* over the photo; Return goes back to the grid */
+        widget_set_sensitive(ph.slide, 0);
+        static const unsigned touch[] = { EVT_INPUT_POINTER_DOWN, EVT_INPUT_POINTER_MOVE,
+                                          EVT_POINTER_UP, EVT_POINTER_ABORT };
+        for (unsigned i = 0; i < sizeof touch / sizeof *touch; ++i)
+            widget_on(ph.viewer, touch[i], swiped, 0);
 #endif
         widget_on(ph.slide, EVT_VALUE_CHANGED, moved, 0);
     }
@@ -487,6 +506,9 @@ void photos_paint(void *w, void *canvas) {
     } else if (ph.screen == VIEWER && w == ph.slide) {
         int c, frac, stride = visual(w, ph.n, &c, &frac), h = I(w, W_H);
         if (!stride) return;
+#if M1PLUS
+        stride = UI_W; /* the slide_menu's own stride is its height */
+#endif
         ph.want = c;
         int dx = -(frac * stride >> 16), next = frac >= 0 ? 1 : -1;
         draw(canvas, shot(c), dx, 0, PH_SHOT_W, h);
