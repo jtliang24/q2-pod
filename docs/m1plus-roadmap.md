@@ -15,8 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** the Shuffle and Ratings pages' rows (section 1), then Coverflow and Photos' scroll
-distance (section 2).
+**Next:** Coverflow and Photos' scroll distance (section 2). Functionality comes first: items that
+only change how something looks wait for the final pass (section 7).
 
 ## Ground rules
 
@@ -58,10 +58,6 @@ here goes with other sections' features:
   - the stock key-down helper with STOP (`0x65f688`): with V2.1's copy of that private AWTK
     helper, still to be found (V2.1 binds no key-down handler for the payload to hook);
   - folder rollover and the UI scheduler delay: with the player call sites (section 4).
-- **The Shuffle page's rows.** Its three rows (`shuffle_menu`, `page_row_detail`) show on M1 as bare
-  centred text, with no row background or separator, where the Q2 Pod page's rows are V2.1's (ground
-  rules: `list_row`/`row_of`). Seen over q2remote on dev 12; Ratings' page has the same rows (dev 14).
-  Check the other `page_list` pages too.
 
 Done since: the Shuffle page's note and the Photos row's icon ([m1plus-progress.md](m1plus-progress.md)
 section 20).
@@ -206,6 +202,15 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
 - **Recovery mode.** The device has a separate recovery system (`kernel2`, `rootfs2`) and an `ota`
   partition. Finding how to start it without demo would give a way back to stock even if demo can't
   start, which would make riskier experiments safe.
+
+## 7. Final pass: look and feel (after sections 1–4)
+
+Items that only change how something looks, gathered once all the functionality is ported:
+
+- **The Shuffle page's rows.** Its three rows (`shuffle_menu`, `page_row_detail`) show on M1 as bare
+  centred text, with no row background or separator, where the Q2 Pod page's rows are V2.1's (ground
+  rules: `list_row`/`row_of`). Seen over q2remote on dev 12; Ratings' page has the same rows (dev 14).
+  Check the other `page_list` pages too.
 
 ## Already Q2-only by design
 
