@@ -302,6 +302,11 @@ class Machine:
         elif name=='widget_to_local':
             x,y=signed(self.get(b)),signed(self.get(b+4))
             while a:
+                # V2.1's adds each widget's own get_offset, the widget's too: a scroll_view's
+                # (SCROLL_X, SCROLL_Y) and a table_client's (0, TABLE_TOP), pinned below
+                t=self.nodes.get(a,{}).get('type') if is_m1plus else None
+                if t=='scroll_view': x+=signed(self.get(a+O['SCROLL_X'])); y+=signed(self.get(a+O['SCROLL_Y']))
+                elif t=='table_client': y+=signed(self.get(a+O['TABLE_TOP']))
                 x-=signed(self.get(a+O['W_X'])); y-=signed(self.get(a+O['W_Y']))
                 a=self.get(a+O['W_PARENT'])
             self.word(b,x); self.word(b+4,y); ret=0
@@ -3493,7 +3498,8 @@ if is_m1plus:
         aborted=[c for c in m.calls if c[0]=='widget_dispatch_event_to_target_recursive']
         assert [c[1] for c in aborted]==([page] if opened else [])
         if opened: assert m.get(aborted[0][2]+O['EVENT_TYPE'])==O['EVT_POINTER_ABORT']
-        row=next(r for r in m.nodes[m.surface]['children'] if m.get(r+O['W_Y'])<=y<m.get(r+O['W_Y'])+48)
+        top=m.get(m.surface+O['TABLE_TOP'])  # rows sit at their content y; the finger's is on screen
+        row=next(r for r in m.nodes[m.surface]['children'] if m.get(r+O['W_Y'])<=y+top<m.get(r+O['W_Y'])+48)
         m.calls=[]; m.call(address=HOOKS['widget_dispatch'][0],args=(m.nodes[row]['children'][0],m.event,0,0),event_type=O['EVT_CLICK'],gap=0,clear=False)
         clicked=bool(m.dispatched())
         m.pressed=0; send(O['EVT_POINTER_UP'],x,y); m.advance(1000)
@@ -3514,6 +3520,23 @@ if is_m1plus:
         assert long_press(QueueMachine(),**{'y':60,**kw})==(None,True), kw; passed()
     assert long_press(QueueMachine(),60,moves=((7,-7),))[0]==('Row 1',SONG_MENU); passed()  # a tremor isn't a scroll
     m=QueueMachine(page='sysset_page'); assert long_press(m,60)==(None,True); passed()  # not a library page
+    # V2.1's widget_to_local adds each widget's own scroll offset, the list's too (vtable +0x34,
+    # get_offset), where the harness's stand-in follows it: scroll_view's is (SCROLL_X, SCROLL_Y),
+    # table_client's (0, TABLE_TOP).
+    code=Machine().u.mem_read
+    word=lambda a: struct.unpack('<I',bytes(code(a,4)))[0]
+    to_local=syms['widget_to_local']
+    assert word(to_local+0x34)==0x8e220000|O['W_VT'] and word(to_local+0xac)==0x8c590034  # lw vt; lw get_offset
+    for vt,loads in ((syms['g_scroll_view_vtable'],[0x8c620000|O['SCROLL_X'],0x8c620000|O['SCROLL_Y']]),
+                     (syms['g_table_client_vtable'],[0x8c620000|O['TABLE_TOP']])):
+        body=[word(word(vt+0x34)+i) for i in range(0,0x60,4)]
+        assert [w for w in body if w&0xffff0000==0x8c620000]==loads, hex(vt)
+    # On the device (dev 11), a hold on a scrolled Album list opened the album a row or more below
+    # the finger, or, scrolled further, nothing: the point was the list's content y, the rows'
+    # bounds on screen. Scrolled two rows, the finger at 60 is row 3; scrolled eight, row 9.
+    for offset,want in ((96,'Row 3'),(384,'Row 9')):
+        m=QueueMachine(); m.word(m.surface+O['TABLE_TOP'],offset); m.rebind(m.surface,offset); m.paint(m.surface)
+        assert long_press(m,60)==((want,SONG_MENU),False), offset; passed()
     # The menu is V2.1's sortselect_dialog from its asset, set up by V2.1's init (QueueMachine.
     # v21_sortselect), which leaves to_modal set: V2.1's navigator would then run it in its own loop
     # and navigator_to would return only once it had gone, so the hook clears it for the menu's open
