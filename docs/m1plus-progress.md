@@ -940,6 +940,10 @@ before playing (`on[1]`, an FPGA load, `on[2]` in the kernel's log); a cold q2vi
 `set_outputchannel`'s choice, `start_player`'s 0 and `mclSetDacPwr`'s full path. The Q2's
 `update.tar` is byte-identical.
 
+**On the device (dev 18, `V00Is`, commit `5752670`).** Straight after a reboot, before any music, the
+user played the video and an Internet Radio station. Over q2remote, the kernel's log showed the DAC's
+full power-on (the FPGA load, `on[2]`) at 19 s, with no segfault, and no q2video left running.
+
 ## How to check a build now
 
 ```sh
