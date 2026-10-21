@@ -867,6 +867,36 @@ On Coverflow a long press's abort ends the swipe without a tap.
 
 The Q2's `update.tar` (Legacy and iPod) is byte-identical.
 
+## 23. The dev 15 (V00F) device pass (Oct 21)
+
+Sections 21 and 22 on the device. The user checked:
+- Coverflow turns by swipe, and a tap opens the centre cover;
+- the photo viewer's swipes and captions;
+- AirPlay opens Network service;
+- Spotify, not on the card, says so, and its back button closes the page.
+
+Two bugs:
+- **Internet Radio rebooted the device on a station's first play.** Reproduced over q2remote, with
+  the kernel's messages and `ps` logged to the card each second. q2video started and opened the DAC
+  at 48 kHz, then demo took a SIGSEGV, a NULL read in libc's `strcmp`, called from radio.c's `set()`.
+  The device restarts when demo dies. `set()` compares a label's text through `tk_strcmp` before
+  setting it. V2.1 has no `tk_strcmp`, so on the M1 it was glibc's `strcmp`, and V2.1's
+  `widget_get_prop_str` returns NULL, not the default, for a label with no text yet. AWTK's
+  `tk_strcmp`, which the Q2 calls, takes NULL. On the M1, `tk_strcmp` is now that same NULL-safe
+  compare (`peq.h`), which fixes all ten such sites, Spotify's Now Playing title among them.
+  `test/patch.py`'s glibc `strcmp` now fails on NULL, as libc does. Against the unfixed build it fails
+  at Spotify's Now Playing, which would have crashed once a track played. The tests had missed it
+  because the harness's `strcmp` was its NULL-safe `tk_strcmp`.
+- **Coverflow's track list didn't scroll by swipe.** Opening an album hid the covers' view without
+  making it insensitive. AWTK's hit test doesn't skip hidden views (section 18), and that view lies
+  over the list. Coverflow's views now use `view_show`, and so does `page_list`'s body when it is
+  shown again.
+
+Not a bug: on Spotify's page, Previous with Knob: Navigation is a media key, not Back. It's a Now
+Playing page, where Previous stays the media key (section 16).
+
+Both fixes are M1 only, so the Q2's `update.tar` is byte-identical.
+
 ## How to check a build now
 
 ```sh
