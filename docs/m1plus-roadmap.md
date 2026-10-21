@@ -79,9 +79,10 @@ from the Q2 Pod page, a back button, and the touch long-press where the Q2 has a
 - **Long presses.** Most Played, the Ratings lists and Long Songs (the song menu), a station (in or
   out of favourites), a Spotify track (Spotify's queue) and Coverflow's centre cover (the album menu).
 
-Internet Radio and a video play through q2video on the ES9069Q, the video's chevron quits and the knob
-is its volume (dev 16, with the video fix checked by hand, [m1plus-progress.md](m1plus-progress.md)
-section 23). Left for the device:
+Internet Radio plays through q2video on the ES9069Q (dev 16). A video played by hand with the DAC
+already on; from a cold DAC it froze the device on dev 17, fixed for dev 18 (`V00Is`,
+[m1plus-progress.md](m1plus-progress.md) section 23). Left for the device:
+- a video and Internet Radio straight after a boot, before any music: the DAC's full power-on;
 - Spotify, with q2-librespot on the card: its `aplay` on `plughw:0,0`, and whether the Q2's static
   MIPS build runs on the M1's kernel.
 

@@ -919,6 +919,27 @@ flashing, bind-mounted over `/usr/bin/q2video` and played from the Videos row: t
 quit to the list. The Q2's q2video is unchanged, though its one-ffmpeg design has the same latent
 bug (roadmap section 6).
 
+**Dev 17 (`V00Hs`): the video froze the device.** Flashed, so from a cold boot, the video showed
+nothing and the back chevron did nothing. Over q2remote:
+- the PCM was running with its buffer full (`avail 0`) and the hardware pointer never moved;
+- q2video's sound thread was blocked in `snd_pcm_writei`, and its main thread waited to join it after
+  a quit. While q2video lives, `ringnav_input` hands it every key and touch.
+
+The by-hand check had passed only because music had played first. V2.1's own player powers the DAC on
+before playing (`on[1]`, an FPGA load, `on[2]` in the kernel's log); a cold q2video never did.
+- **The cause.** V2.1's `set_outputchannel` takes a third argument, which V1.32's lacks. On the
+  output path it calls `mclSetDacPwr(a2 ? 100 : 1)` (`0x4d6fd4`), and only 1 does the full power-on
+  (ioctl `0x4d1a` 1, `toolsDownFpgafirmware`, `0x4d1a` 2). `start_player` passes 0. The payload's
+  `dac_take` passed V1.32's two, leaving whatever the register held. On M1 it now passes 0. Radio had
+  the same gap; it played for the user only after music.
+- **The freeze.** On M1, a quit (the chevron) that q2video hasn't acted on within 3 s is forced, as
+  radio.c's stop forces one (`killall -9 q2video`). So the chevron and every key work again,
+  whatever ALSA does.
+
+`test/patch.py` checks the third argument and the forced quit. `test/build.py` pins
+`set_outputchannel`'s choice, `start_player`'s 0 and `mclSetDacPwr`'s full path. The Q2's
+`update.tar` is byte-identical.
+
 ## How to check a build now
 
 ```sh
