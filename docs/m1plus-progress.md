@@ -805,6 +805,68 @@ The Q2's `update.tar` (Legacy and iPod) is byte-identical: all of it is M1 only.
   now holds two photos, and swipes move the viewer to the second photo and back. qemu decodes neither
   photo, so this shows in the trace (`moved`), not on screen.
 
+## 22. Entry points: Streaming, Videos and the long presses (Oct 21)
+
+The roadmap's section 3, the rest of it.
+
+**Streaming.** The roadmap planned to hook V2.1's Streaming page through its page-name table. V2.1 has
+no Streaming page at all: no `stream_page` asset or init, and its Tidal is one of Home's 18 cards. It
+also has no AirPlay card; AirPlay's switch is on System settings' Network service page
+(`netservice_airplay`), as on V1.32. So on M1, Spotify, Internet Radio and AirPlay are rows on the Q2
+Pod page, after Coverflow, with the Q2's handlers. `ringnav_stream` is Q2 only. The tests that went
+through `ringnav_stream` on M1 now open the Q2 Pod page and click its rows, and the `NOT PORTED` line
+is gone.
+
+**Their Now Playing pages.** Spotify's (`spotify_page`) and Radio's (`radionp_page`) Now Playing pages
+get the back button. Their title, artist and album sat at `SPOT_ART_Y + 41`, which beside the Q2's art
+is right, but on the M1 put them over its 254 px art. On M1 the art is 220 px, centred, and the text,
+bar and times are under it (`SPOT_TITLE_Y`, `SPOT_ARTIST_Y`, `SPOT_ALBUM_Y`). The page's tag starts
+after the back button, and Radio's heart is at the top right. `test/patch.py` checks that no text or
+bar meets the art or the back button.
+
+**Videos.** The device dependency was checked over q2remote on dev 14:
+- `/dev/shanling_dac` is there, and V2.1's `hciplayer` issues the two ioctls q2video does (`0x4d1b`
+  once, `0x4d1f` six times);
+- ALSA card 0 has `pcmC0D0p`, so `plughw:0,0`, and `aplay` and `ffmpeg` are in the rootfs;
+- `/dev/fb0` is `jzfb`, 320x480 with a 320x960 virtual size at 32 bpp, which is what q2video's
+  check takes.
+
+The Videos row now shows on the Q2 Pod page with a Videos folder. The player needed a way out and its
+volume:
+- q2video owns the framebuffer while it plays, so no widget can show over it. On the M1 build it draws
+  a back chevron at the top left of every frame (`back_glyph`, white, in V2.1's title bar's place).
+  `ringnav_input` already diverts all input while a video plays: a tap pressed and lifted in the 64 px
+  square there quits, as Return does (`video_touch`).
+- The knob's keys (220 and 221) are the Q2's wheel: the volume, or the seek after Centre.
+
+The Q2's q2video is unchanged: the chevron is `#if M1PLUS`, and `test/peq.py` builds it for the host.
+
+**The long presses.** `lp_input` armed only on V2.1's library pages (`CTX_FOLDER`, `CTX_LOCAL`).
+Most Played, the rated lists and Long Songs are `CTX_FIXED`, though `qm_hold` already reads their
+tracks (`page_tracks`). It now arms on any page a hold can act on:
+- those lists, where it opens the song menu;
+- Coverflow's covers, where `qm_hold`'s album branch took only the Play key. A touch needs the finger
+  on the centre cover at rest (`coverflow_centre`);
+- the stations and Spotify's tracks. `radio_hold` and `spot_hold` take the highlighted row, so the
+  hold highlights the row under the finger first (`lp_select`), then toasts as the key's hold does.
+
+On Coverflow a long press's abort ends the swipe without a tap.
+
+**Tests.**
+- `test/patch.py`:
+  - the Q2 Pod page's rows, Videos and Streaming's included;
+  - the Now Playing pages' back buttons and layout, and Radio's heart;
+  - holds on Most Played (the row under the finger, nothing on the title bar), a station, a Spotify
+    track (nothing on an album row) and the centre cover (nothing on a side cover or on moving
+    covers);
+  - in a video, the knob's volume steps and the chevron's tap, which quits only when pressed and
+    lifted in its square.
+- `test/peq.py` checks the chevron's pixels and that nothing else changes.
+- `test/boot.py --media`: on V2.1's real dispatch, Spotify (not on the card) shows its message, and
+  Internet Radio its menu, and each closes with its back button.
+
+The Q2's `update.tar` (Legacy and iPod) is byte-identical.
+
 ## How to check a build now
 
 ```sh
@@ -812,7 +874,7 @@ python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses un
 python3 test/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
 python3 test/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
 python3 test/boot.py build-m1 --home-menu  # the same with six Home cards: the Q2 Pod card on a page of its own
-python3 test/boot.py build-m1 --media    # a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Shuffle Songs
+python3 test/boot.py build-m1 --media    # a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Streaming, Shuffle Songs
 python3 test/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/playback.py build-m1        # and m4b, id3, ldac, headset_io, bluealsa
 ```

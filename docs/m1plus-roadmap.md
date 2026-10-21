@@ -15,8 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** the entry points for Q2 Pod's pages (section 3). Functionality comes first: items that only
-change how something looks wait for the final pass (section 7).
+**Next:** the device checks left in section 3, then section 4's call sites. Functionality comes first:
+items that only change how something looks wait for the final pass (section 7).
 
 ## Ground rules
 
@@ -68,49 +68,22 @@ cover per 100 px, and a tap opens the centre cover or brings a side one to the c
 
 ## 3. Entry points for Q2 Pod's pages (L)
 
-V2.1 lays out navigation differently from V1.32, so several payload pages have no way in on M1.
+Done ([m1plus-progress.md](m1plus-progress.md) sections 17 and 22): every payload page has a way in
+from the Q2 Pod page, a back button, and the touch long-press where the Q2 has a Play/Pause hold.
+- **Streaming.** V2.1 has no Streaming page (its Tidal is a Home card), so Spotify, Internet Radio and
+  AirPlay are rows on the Q2 Pod page, after Coverflow. Their Now Playing pages have back buttons,
+  with their text under the art on the portrait screen.
+- **Videos.** Its row shows with a Videos folder. q2video draws a back chevron at the top left, where
+  a tap quits, and the knob is its wheel.
+- **Long presses.** Most Played, the Ratings lists and Long Songs (the song menu), a station (in or
+  out of favourites), a Spotify track (Spotify's queue) and Coverflow's centre cover (the album menu).
 
-Each page reached this way needs a Back button (ground rules):
-- **Already have one:** the list pages, through `page_list` and `page_title`. These are Shuffle,
-  Ratings, Most Played, Long Songs, Photos' albums and grid, Books' list, and Spotify's and Radio's
-  browsers.
-- **Given one with the Q2 Pod page:** Coverflow's carousel, the photo viewer and the book reader
-  (`back_button` over the content).
-- **Still need one:** the video player, and Spotify's and Radio's Now Playing pages (`spotify_page`,
-  `radionp_page`). Add `back_button` to each, over its content, with their entry points below.
-
-Each list page reached this way should also take the touch long-press (`lp_input`), which today arms
-only on V2.1's library pages (`CTX_FOLDER`, `CTX_LOCAL`). On the Q2 these holds are Play/Pause held on
-a highlighted row:
-- Most Played, the Ratings lists and Long Songs: the song menu (`qm_hold` already reads their tracks
-  through `page_tracks`);
-- Internet Radio's stations: add to or remove from favourites (`radio_hold`);
-- Spotify's tracks: add to Spotify's queue (`spot_hold`);
-- Coverflow's centre cover: the album menu.
-
-**The touch long-press's row.** Fixed ([m1plus-progress.md](m1plus-progress.md) section 19): a hold on a
-scrolled list took a row below the finger, and scrolled further, none. Checked on the device with dev 12.
-
-`radio_hold` and `spot_hold` read the row from the list's `_ringnav_index`, so a long press sets that
-first. Now Playing needs none: its hold menu acts on the playing track. On the device (dev 10 and
-dev 11), a long press on Most Played, Ratings or Long Songs still opens the row on release, as
-expected until this lands.
-
-- **The Library's extras.** Done: a "Q2 Pod" Home card after V2.1's own opens a page with Shuffle,
-  Ratings, Most Played, Long Songs, Podcasts, Audiobooks, Photos, Books, Coverflow and Upload
-  Scrobbles ([m1plus-progress.md](m1plus-progress.md) section 17). `localclass_page_init` is no longer
-  hooked. Left:
-  - **Videos.** Its row waits for q2video on the M1's DAC (the Streaming item's device dependency
-    below) and a back button on the player.
-- **Streaming's Spotify, Internet Radio and AirPlay rows.** `NOT PORTED`.
-  - **The problem:** V2.1 has no `stream_page_init` symbol.
-  - **The fix:** find the Streaming page's init through the page-name dispatch table, which maps
-    `"stream_page"`-like names to init functions (the table that holds `systemset/fwupdate_page`). Hook
-    it as a private function (`M1PLUS_PRIVATE_FUNCTIONS`, PIC entry checked). Then the existing
-    Spotify and Radio tests can go through the real hook instead of calling `ringnav_stream`.
-  - **Device dependency:** librespot's sink and the radio helper use the DAC and ALSA. Check
-    `patch/video.c`'s `/dev/shanling_dac` use against the ES9069Q driver first. The device's dmesg
-    already shows codec I²C errors at probe.
+Left for the device, which the emulator can't show:
+- Internet Radio and a video playing through q2video on the ES9069Q: V2.1's `hciplayer` issues the
+  same DAC ioctls (`0x4d1b` PCM mode, `0x4d1f` mute), the M1 has ALSA card 0 (`plughw:0,0`), and its
+  framebuffer is the 320x960 two-page buffer q2video expects (checked over q2remote on dev 14);
+- Spotify, with q2-librespot on the card: its `aplay` on `plughw:0,0`, and whether the Q2's static
+  MIPS build runs on the M1's kernel.
 
 ## 4. Re-pointing V1.32 call-site patches (M each, many)
 
@@ -197,7 +170,12 @@ Items that only change how something looks, gathered once all the functionality 
 - **The Shuffle page's rows.** Its three rows (`shuffle_menu`, `page_row_detail`) show on M1 as bare
   centred text, with no row background or separator, where the Q2 Pod page's rows are V2.1's (ground
   rules: `list_row`/`row_of`). Seen over q2remote on dev 12; Ratings' page has the same rows (dev 14).
-  Check the other `page_list` pages too.
+  Check the other `page_list` pages too: Internet Radio's menu shows the same in the emulator.
+- **The Streaming rows' icons.** On the Q2 Pod page, Spotify's and Internet Radio's icons are wider
+  than V2.1's 40 px row icons and reach the row's left edge (`stream_spotify`, `stream_radio`).
+- **Coverflow's covers by touch.** A tap on a side cover moves it to the centre, sized by the
+  renderer's geometry; whether a swipe's feel (100 px a cover, a flick within 300 ms) suits the
+  device's panel.
 
 ## Already Q2-only by design
 
