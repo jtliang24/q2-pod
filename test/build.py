@@ -171,6 +171,12 @@ def shared_checks(directory, manifest, stock, demo, read):
     check_bluetooth_drop(directory)
     from build import SCROBBLE_CA
     assert read('rootfs.squashfs', SCROBBLE_CA) == (ROOT/'assets/scrobble-ca.pem').read_bytes()
+    if m1plus:
+        # The Q2 Pod page's Photos row: V2.1's 40 px cover-mode badge, as the Q2 uses V1.32's. It was
+        # a frame of the 54 px loading spinner (scover_wait0) through dev 11.
+        xx = 'release/assets/default/raw/images/xx/'
+        photos = read('rootfs.squashfs', xx+'local_photos.png')
+        assert photos == read('stock.squashfs', xx+'pset_covermode.png') and struct.unpack('>II', photos[16:24]) == (40, 40)
     # The crash watchdog only sleeps longer.
     old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
     assert new == old.replace(*WATCHDOG_SLEEP) and new != old

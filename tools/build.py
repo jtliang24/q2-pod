@@ -1333,7 +1333,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
     if m1plus:
         mapping = dict(
             shuffle='pset_playmode.png', scrobble='drop_wifi.png', podcasts='dlna.png',
-            audiobooks='playset_foldercover.png', photos='scover_wait0.png', books='system_language.png',
+            audiobooks='playset_foldercover.png', photos='pset_covermode.png', books='system_language.png',
             videos='sset_display.png', longsongs='system_time.png')
     else:
         mapping = dict(
