@@ -79,11 +79,9 @@ from the Q2 Pod page, a back button, and the touch long-press where the Q2 has a
 - **Long presses.** Most Played, the Ratings lists and Long Songs (the song menu), a station (in or
   out of favourites), a Spotify track (Spotify's queue) and Coverflow's centre cover (the album menu).
 
-Internet Radio plays through q2video on the ES9069Q (dev 16, [m1plus-progress.md](m1plus-progress.md)
-section 23). Left for the device, which the emulator can't show:
-- a video playing through q2video: V2.1's `hciplayer` issues the same DAC ioctls (`0x4d1b` PCM mode,
-  `0x4d1f` mute), and the framebuffer is the 320x960 two-page buffer q2video expects (checked over
-  q2remote on dev 14); the back chevron and the knob's volume;
+Internet Radio and a video play through q2video on the ES9069Q, the video's chevron quits and the knob
+is its volume (dev 16, with the video fix checked by hand, [m1plus-progress.md](m1plus-progress.md)
+section 23). Left for the device:
 - Spotify, with q2-librespot on the card: its `aplay` on `plughw:0,0`, and whether the Q2's static
   MIPS build runs on the M1's kernel.
 
@@ -153,6 +151,11 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
     holds; when that is 0, every length reads as 0 and is cached as measured;
   - AWTK's hit test doesn't skip hidden views, so the hidden book reader and photo viewer take taps
     meant for the list under them. The wheel hides this on the Q2; `view_show` is the M1's fix.
+- **Videos whose sound starts late in the file.** q2video's one ffmpeg writes the picture and the
+  sound, and q2video paces the picture by the sound played. A file that keeps more video ahead of its
+  first sound than the picture's 4 MB pipe holds (8 Q2 frames; an mp4 interleaved by the second has
+  25) stops on its first frame. The M1 runs the sound through a second ffmpeg (dev 16); the Q2 could
+  do the same.
 - **Radio stations whose URL is a playlist.** radio-browser's `/m3u/` lists can give a station's
   `.pls` (or `.m3u`) URL rather than its stream, which ffmpeg reads as text: the station shows "Can't
   play this station". Seen with Los 40 Principales México on dev 16. The Q2 has the same code, so this

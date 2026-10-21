@@ -903,6 +903,22 @@ card, a favourite that would not play (a radio-browser `.pls` URL, which ffmpeg 
 "Can't play this station" and demo kept running. That station is the Q2's issue too (roadmap
 section 6).
 
+**A video stopped on its first frame (dev 16).** The user's test file (640x360 H.264 with AAC) showed
+its first frame and nothing more. Over q2remote, the PCM was prepared but never started:
+- ffmpeg, which wrote both the picture and the sound, was blocked writing the picture's pipe;
+- q2video's sound thread was waiting on an empty sound pipe;
+- q2video paces frames by the sound it has played, so it took no frame past the first.
+
+The file keeps a second of video (30 frames) ahead of its first sound chunk. ffmpeg had to write 25
+frames of 614 KB, about 15 MB, before it read any sound, against the video pipe's 4 MB. Raising the
+kernel's `pipe-max-size` didn't help. On M1, q2video now runs the sound through an ffmpeg of its own
+(`-vn`), so neither stream waits on the other; a file without sound ends that one at once, and the
+picture goes by the wall clock, as before. The new q2video was checked on the device before
+flashing, bind-mounted over `/usr/bin/q2video` and played from the Videos row: the sound ran at
+48,000 frames a second, the picture moved, the knob stepped the volume, and a tap on the chevron
+quit to the list. The Q2's q2video is unchanged, though its one-ffmpeg design has the same latent
+bug (roadmap section 6).
+
 ## How to check a build now
 
 ```sh
