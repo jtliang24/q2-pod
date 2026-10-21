@@ -5767,7 +5767,12 @@ if is_m1plus:
     finger(m,view,[(150,100),(130,100),(130,100)],ms=100); m.advance(200); assert m.get(s+O['SLIDE_INDEX'])==0
     m.word(s+O['SLIDE_INDEX'],1); m.query=None
     finger(m,view,[(O['CF_CX'],100),(O['CF_CX']+7,100),(O['CF_CX']+7,100)],ms=100); m.advance(0)
-    assert m.query[:2]==('getMusicByAlbum','Album 1') and not m.slides; passed()
+    assert m.query[:2]==('getMusicByAlbum','Album 1') and not m.slides
+    # The tracks take the touch: the covers' view, hidden over them, is insensitive (AWTK's hit test
+    # skips insensitive views, not hidden ones), and back on the covers it takes it again.
+    body=next(c for c in m.nodes[page]['children'] if c!=view)
+    assert m.nodes[view].get('sensitive')==0 and m.nodes[body].get('sensitive')==1 and m.nodes[body]['visible']
+    m.key(); assert m.nodes[view].get('sensitive')==1 and m.nodes[body].get('sensitive')==0; passed()
     # A tap on a side cover brings it to the centre: the first right, the second left.
     m=DepthMachine(); m.open(); s=m.slide; view=m.get(s+O['W_PARENT']); m.query=None
     finger(m,view,[(O['CF_CX']+O['CF_X1'],100),(O['CF_CX']+O['CF_X1'],100)]); m.advance(200)

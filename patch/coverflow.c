@@ -984,7 +984,7 @@ void *page_list(void *page, void *body, void **title, const char *caption, int n
     int h = widget_get_prop_int(page, "h", BOTTOM), rows = (h - 48) / item_h * item_h;
     if (n * item_h < rows) rows = n * item_h;
     widget_destroy_children(body);
-    widget_set_visible(body, 1, 0);
+    view_show(body, 1);
     void *t = page_title(body, caption);
     if (title) *title = t;
     void *lv = list_view_create(body, 0, 48, UI_W, rows);
@@ -1483,7 +1483,7 @@ static void covers(void) {
             page_row_into(view, (int)i, P(deque_at(cf.albums, i), REC_ALBUM), pick);
         return;
     }
-    widget_set_visible(cf.body, 0, 0);
+    view_show(cf.body, 0);
     if (!cf.covers) {
         void *f = widget_factory();
         int depth = fx_open();
@@ -1517,7 +1517,7 @@ static void covers(void) {
         widget_on(cf.slide, EVT_VALUE_CHANGED, changed, 0);
         changed(0, 0);
     }
-    widget_set_visible(cf.covers, 1, 0);
+    view_show(cf.covers, 1);
     widget_invalidate_force(cf.page, 0);
 }
 
@@ -1717,7 +1717,7 @@ static int to_tracks(const void *unused) {
     cf.tracks = coverflow_album_tracks(r);
     n = (int)deque_size(cf.tracks);
     cf.screen = TRACKS;
-    if (cf.covers) widget_set_visible(cf.covers, 0, 0); /* none in the text list */
+    if (cf.covers) view_show(cf.covers, 0); /* none in the text list; hidden, it would take its touches */
     void *view = list(P(r, REC_ALBUM), n);
     for (int i = 0; i < n; ++i)
         page_row_detail(view, i, track_name(name, sizeof name, deque_at(cf.tracks, (unsigned)i)), 0,
