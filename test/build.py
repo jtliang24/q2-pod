@@ -415,6 +415,11 @@ def m1plus_checks(directory, manifest, stock, demo, read):
                     path = os.path.join(root, name)
                     files[os.path.relpath(path, f'{tmp}/{image}')] = path
         old, new = trees['stock.squashfs'], trees['rootfs.squashfs']
+        # No V2.1 page holds a slide_menu (V1.32's Home and settings menus did): the payload's
+        # Coverflow and photo viewer are the M1's only ones, so the Q2's next and previous on other
+        # slide menus have nothing to act on (test/patch.py, Q2 only).
+        pages = [p for p in old if '/raw/ui/' in p and p.endswith('.bin')]
+        assert len(pages) > 100 and not [p for p in pages if b'slide_menu' in pathlib.Path(old[p]).read_bytes()]
         removed = {p for p in STOCK_EQ + OBSOLETE if p in old}
         assert set(new) == (set(old) - removed) | added, (set(new) ^ ((set(old) - removed) | added))
         differ = {p for p in set(old) & set(new) if os.path.isfile(old[p]) and not os.path.islink(old[p])

@@ -1975,12 +1975,11 @@ m.release(0); m.advance(75); m.advance(O['DOUBLE_CLICK_MS']-75)
 assert m.clicks==[m.nodes[w]['children'][5]] and not m.slides, (m.clicks,m.get(w+O['SLIDE_INDEX']),m.timers,m.slides); passed()
 m=Machine(); w=m.page('home_page','slide_menu'); m.release(0); m.call(gap=20)
 m.advance(300); assert not m.clicks; passed()
+# Q2 only: other slide menus retain stock next/previous handling. V2.1's pages have none
+# (test/build.py): the payload's carousels are the M1's only slide menus.
 if not is_m1plus:
-    # Other slide menus retain stock next/previous handling.
     m=Machine(); m.page('sysset_page','slide_menu')
     assert m.call(gap=0)==11 and m.call(gap=1)==11 and m.moved(); passed()
-else:
-    not_ported("test: other slide menus' stock next/previous use V1.32's handlers")
 # Even if the UI services a release before an overdue timer, both singles confirm once.
 m=Machine(); w,es=m.page_list(3); m.release(); m.now+=O['DOUBLE_CLICK_MS']+1
 assert m.release()==11 and m.clicks==[es[0]] and len(m.timers)==1
@@ -4532,6 +4531,7 @@ class CoverflowMachine(QueueMachine):
     def key(self,k=O['KEY_RETURN']):
         f,ctx=self.handler(self.page,O['EVT_KEY_UP']); ev=self.alloc(0x40); self.word(ev,O['EVT_KEY_UP']); self.word(ev+O['EVENT_KEY'],k)
         ret=self.call(address=f,args=(ctx,ev,0,0),gap=0); self.advance(0); return ret
+
 def finger(m,view,points,ms=400,kinds=None):
     """M1 Plus touch on a view's own handlers: a press at points[0], moves to the rest, then the
     release (or kinds' events), ms apart in all."""
@@ -4540,7 +4540,6 @@ def finger(m,view,points,ms=400,kinds=None):
         if i: m.now+=ms//(len(points)-1)
         m.word(ev,k); m.word(ev+O['EVENT_X'],x); m.word(ev+O['EVENT_Y'],y)
         f,ctx=m.handler(view,k); assert m.call(address=f,args=(ctx,ev,0,0),gap=0,clear=False)==0
-
 
 if variant=='ipod':
     # Both themes: the art itself follows the playing track, when Home or the status bar paints, in
@@ -5276,6 +5275,7 @@ assert m.call(O['KEY_PREV'],gap=500)==11; _,kick,goal,_=slide(m,w); assert kick>
 m.advance(300); assert index()==0 and not m.slides
 m.call(O['KEY_NEXT'],gap=500); m.advance(300); assert index()==1
 m.call(O['KEY_NEXT'],gap=500); assert slide(m,w)[1:3]==(-kick,0)
+m.advance(300); assert index()==1 and not m.slides and m.get(w+O['SLIDE_OFFSET'])==0; passed()
 if is_m1plus:
     # By touch too: a drag past either end gives at most the knob's bounce and springs back.
     view=m.get(w+O['W_PARENT']); step=m.get(w+O['W_H'])
@@ -5285,7 +5285,6 @@ if is_m1plus:
         finger(m,view,[(x1,100),(x1,100)],kinds=[0x101,0x103]); m.advance(300)
         assert index()==i and m.get(w+O['SLIDE_OFFSET'])==0
     passed()
-m.advance(300); assert index()==1 and not m.slides and m.get(w+O['SLIDE_OFFSET'])==0; passed()
 # The covers' Return closes the unseen artist page under them first, so the Artists list is next.
 artist=m.stack[0]; m.stack.insert(0,m.node('window','localclass_page')); m.nodes[m.wm]={'children':m.stack}; m.mock('navigator_back','window_manager_close_window_force')
 f,ctx=m.handler(m.page,O['EVT_KEY_UP'])
@@ -5382,12 +5381,11 @@ assert [c[1:3] for c in m.calls if c[0]=='batch_add_file']==[(0xf001,0xf00a)] an
 assert [c[3] for c in m.calls if c[0]=='batch_add_file'][0]!=m.get(syms['p_deque_showlist']); passed()
 m=CoverflowMachine(queue=0,cls=O['CLASS_ALBUMS']); m.open(); m.tracks()
 assert m.run(1)=='Added to Queue' and m.names()==['T1'] and m.mcl('MCL_TYPE')==0xff10 and not m.playback(); passed()
-if not is_m1plus:
-    m=CoverflowMachine(mode=2); m.open(); m.tracks(); m.run(0)
-    m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
-    assert m.names()==['A','T1','B','C'] and m.mcl('MCL_POS')==1; passed()
-else:
-    not_ported("test: Coverflow's track queue through stock mclNextSong (V1.32 flow)")
+# Play next from Coverflow's tracks, then stock mclNextSong plays it. On M1 Plus in order (mode 0):
+# Shuffle's pick of it waits for SHUFFLE_CALL, which is NOT PORTED above.
+m=CoverflowMachine(mode=0 if is_m1plus else 2); m.open(); m.tracks(); m.run(0)
+m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
+assert m.names()==['A','T1','B','C'] and m.mcl('MCL_POS')==1; passed()
 # Return cancels without losing the highlighted song. Changed or closed sources refuse.
 m=CoverflowMachine(); m.open(); view=m.tracks(); m.call(); m.press(100); m.hold(); m.release()
 f,ctx=m.handler(m.top,O['EVT_KEY_UP']); ev=m.alloc(0x40); m.word(ev,O['EVT_KEY_UP']); m.word(ev+O['EVENT_KEY'],O['KEY_RETURN'])
@@ -5721,6 +5719,8 @@ class Starved(DepthMachine):
             u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
         return super().hook(u,address,size,unused)
 m=Starved(); m.open(); s=m.slide
+assert cf_geometry(m,s)==(0,24,O['UI_W'],160) and all(m.nodes[c].get('image') for c in m.nodes[s]['children'])
+paint(m); assert not m.draws; passed()
 if is_m1plus:
     # M1 Plus: the covers' view takes the touch (coverflow.c touched, navigation.c slide_swipe), the
     # slide_menu none. A finger moves the covers a cover per CF_STRIDE px, as the frame draws them,
@@ -5763,8 +5763,6 @@ if is_m1plus:
         finger(m,view,points,kinds=kinds); m.advance(200)
         assert m.get(s+O['SLIDE_INDEX'])==0 and m.get(s+O['SLIDE_OFFSET'])==0 and m.query is None and not m.timers
     passed()
-assert cf_geometry(m,s)==(0,24,O['UI_W'],160) and all(m.nodes[c].get('image') for c in m.nodes[s]['children'])
-paint(m); assert not m.draws; passed()
 print(f'Coverflow depth on MIPS: {rest_cost} instructions for the first paint (decoding the covers in reach, then the frame), {turn_cost} for a frame a quarter turn on (payload only; stock drawing mocked)')
 
 if variant=='ipod':
@@ -7427,6 +7425,8 @@ m.draws=[]; m.word(s+O['SLIDE_OFFSET'],stride//4); paint(m)
 (_,a),(_,b)=m.draws
 rest_x = (320-281)//2 if is_m1plus else (375-217)//2
 want_b = (84,320,281) if is_m1plus else (4,375,281)
+assert len(m.draws)==2 and a[0]-rest_x==b[0]+O['UI_W'] and a[0]-rest_x==O['UI_W']//4 and b[1:]==want_b
+m.word(s+O['SLIDE_OFFSET'],0); passed()
 if is_m1plus:
     # The viewer takes the touch (photos.c swiped), the slide_menu none: a finger moves the photo
     # with it, a screen per photo; past half a screen the next photo settles in, and a flick moves
@@ -7444,8 +7444,6 @@ if is_m1plus:
     finger(m,viewer,[(160,200)]*2); assert shown()==before
     finger(m,viewer,[(10,10)]*2); finger(m,viewer,[(10,10),(300,10),(300,10)]); m.advance(200)
     assert shown()==before and m.get(s+O['SLIDE_INDEX'])==1; passed()
-assert len(m.draws)==2 and a[0]-rest_x==b[0]+O['UI_W'] and a[0]-rest_x==O['UI_W']//4 and b[1:]==want_b
-m.word(s+O['SLIDE_OFFSET'],0); passed()
 # Centre shows "2 of 4" and the name; a bad photo says so whatever.
 info=[x for x in m.nodes[viewer]['children'] if m.nodes[x]['type']=='hscroll_label'][0]
 # M1 Plus: the viewer's back button, over the photo (Return goes back to the grid).
