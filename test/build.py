@@ -302,6 +302,13 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert words(0x6123a0, 4) == (0x8c620088, 0x44820000, 0x8e02000c, 0x44820800)
     assert words(0x6125c8, 1) == (0xae020084,) and words(0x612970, 1) == (0x2842000a,)
     assert words(0x6128f0, 3) == (0x8e030084, 0x8e220018, 0x00431023) and words(0x612914, 1) == (0xae020088,)
+    # The payload readies the headphone DAC (books.c dac_take) through set_outputchannel, whose third
+    # argument V1.32's lacks: on the output path it calls mclSetDacPwr(a2 ? 100 : 1) (0x4d6fd4), and
+    # only 1 powers the DAC on in full, its FPGA loaded (0x4d1a 1, toolsDownFpgafirmware, 0x4d1a 2).
+    # start_player passes 0 (0x4e4688).
+    assert words(0x4d6fd4, 3) == (0x24040064, 0x16000002, 0x8fbc0010) and words(0x4d6fe0, 1) == (0x24040001,)
+    assert got(0x4d6fe4) == stock_syms['mclSetDacPwr'] and words(0x4e4688, 1) == (0x00003025,)
+    assert words(0x5d5c74, 3) == (0x24030001, 0x24a54d1a, 0x14430034) and got(0x5d5cb0) == stock_syms['toolsDownFpgafirmware']
     # Bluetooth absolute volume hooks mclSetVol (navigation.c ringnav_btvol): V2.1 has no
     # mclSetLocalVol or mclSetBtVol, and its mclSetVol issues the DAC's volume ioctl (0xc0044d00)
     # and sends hciplayer {mcl-setvol%d}. set_devicevolume calls it with 0-100 (its clamps); the

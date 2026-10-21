@@ -7680,6 +7680,10 @@ m.word(syms['g_dacoff_time'],0xffffffff); m.byte(syms['g_headset_output'],1); na
 take=[n for n in names if n in ('player_stop','config_outputchannel','mclSetPcmMode','mclSetMute','device_set_volume','fork')]
 assert take==['player_stop','config_outputchannel','mclSetPcmMode','mclSetMute','device_set_volume','fork'] and m.execs[-1][2:5]==('plughw:0,0',R+'/b.MKV',0)
 assert ('config_outputchannel',1,2) in [c[:3] for c in m.calls]
+# M1 Plus: V2.1's set_outputchannel's third argument, 0 as its start_player passes, powers the DAC on
+# in full (mclSetDacPwr(1), the FPGA loaded; test/build.py); a DAC off since boot otherwise never
+# clocks the PCM, and the video stopped on its first frame (dev 17).
+if is_m1plus: assert [c[3] for c in m.calls if c[0]=='config_outputchannel']==[0]
 m.word(syms['g_dacoff_time'],5); m.byte(syms['g_volume'],42)
 m.way=1; names=play(0); assert 'mclSetDacPwr' not in names and 'config_outputchannel' not in names and m.execs[-1][2:]==('plug:bluealsa',R+'/Trip/c.avi',('42',0))
 m.way=2; m.byte(syms['g_usbvol_mode'],0); m.word(O['USB_MIXER'],0xfffffffe)

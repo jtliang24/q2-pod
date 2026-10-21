@@ -760,8 +760,16 @@ const char *output_device(char *vol) {
 /* The headphone output readied as stock's player_start readies it before each track (headset mode,
  * DAC powered, PCM mode, unmuted, the volume); Bluetooth's way left alone. Shared with spotify.c. */
 void dac_take(void) {
+#if M1PLUS
+    /* V2.1's set_outputchannel takes a third argument: 0, as its start_player passes, powers the
+     * DAC on in full (mclSetDacPwr(1), its FPGA loaded); anything else only marks it on
+     * (mclSetDacPwr(100)), and a DAC off since boot or idle then never clocks the PCM. */
+    if (g_headset_output < 2)
+        ((int (*)(int, int, int))(void *)config_outputchannel)(g_headset_output, 2, 0);
+#else
     if (g_headset_output < 2)
         config_outputchannel(g_headset_output, 2);
+#endif
     else if (I(g_dacoff_time, 0) < 0)
         mclSetDacPwr(1);
     mclSetPcmMode();
