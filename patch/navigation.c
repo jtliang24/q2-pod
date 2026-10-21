@@ -4304,7 +4304,13 @@ static int shuffle_menu(void *ctx, void *event) {
     page_row_detail(view, 0, "Shuffle Songs", 0, sp_pick);
     page_row_detail(view, 1, "Shuffle Albums", 0, sp_pick);
     page_row_detail(view, 2, "Shuffle Folders", 0, sp_pick);
+#if M1PLUS /* the Q2's 335 px ran past the 320 px screen: two centred lines in the screen's width */
+    void *note = label_create(st.sp_page, 20, 200, UI_W - 40, 44);
+    widget_use_style(note, STYLE_LABEL_WHITE18C);
+    label_set_line_wrap(note, 1);
+#else
     void *note = text(st.sp_page, 20, 200, 335, 24);
+#endif
     widget_set_prop_int(note, "style:normal:text_color", (int)0xffaaaaaau);
     widget_set_prop_int(note, "style:normal:font_size", 16);
     widget_set_text_utf8(note, "Albums and folders take a moment to shuffle");

@@ -6670,6 +6670,7 @@ else:
 assert m.nodes[icon]['image']=='local_shuffle' and m.nodes[label]['text']=='Shuffle' and not m.nodes[button].get('name')
 f,ctx=m.handler(button,O['EVT_CLICK'])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+opened=[c[:3] for c in m.calls]  # the second press below clears m.calls
 # It opens the menu: a black shuffle_page holding the three 48px rows and the grey note under them.
 # The note is no tap target, so the wheel never lands on it. A second press opens nothing new.
 page=m.top; assert m.nodes[page]['name']=='shuffle_page' and m.nodes[page]['style:normal:bg_color']==-0x1000000
@@ -6677,9 +6678,16 @@ assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.top==page
 m.page=page; menu=m.find('scroll_view'); rows=m.nodes[menu]['children']
 def caption(r): return m.nodes[m.nodes[r]['children'][0]]['text']
 assert [m.get(r+O['W_H']) for r in rows]==[48]*3 and [caption(r) for r in rows]==['Shuffle Songs','Shuffle Albums','Shuffle Folders']
-assert m.texts()==['Shuffle']+[caption(r) for r in rows]+['Albums and folders take a moment to shuffle']
 note=m.nodes[page]['children'][-1]
-assert m.nodes[note]['type']=='hscroll_label' and m.nodes[note]['style:normal:text_color']==-0x555556 and m.nodes[note]['style:normal:font_size']==16 and not m.nodes[note].get('handlers')
+assert m.texts()==['Shuffle']+[caption(r) for r in rows]+([] if is_m1plus else [m.nodes[note]['text']])
+assert m.nodes[note]['text']=='Albums and folders take a moment to shuffle' and m.nodes[note]['style:normal:text_color']==-0x555556 and m.nodes[note]['style:normal:font_size']==16 and not m.nodes[note].get('handlers')
+if is_m1plus:
+    # The Q2's 335 px note ran past the M1's 320 px screen ("…to shuf" on dev 10 and dev 11): on M1
+    # it is a centred label the screen's width less 20 px each side, wrapped onto two lines.
+    assert m.nodes[note]['type']=='label' and m.nodes[note]['style']==NAMES['STYLE_LABEL_WHITE18C']
+    assert (m.get(note+O['W_X']),m.get(note+O['W_W']))==(20,O['UI_W']-40) and ('label_set_line_wrap',note,1) in opened
+else:
+    assert m.nodes[note]['type']=='hscroll_label' and m.get(note+O['W_W'])==335
 # Shuffle Songs from the menu: the stock play-mode save, a random start, the staging deque kept.
 def called(n): return [c[1:3] for c in m.calls if c[0]==n]
 f0,ctx0=m.handler(rows[0],O['EVT_CLICK'])
