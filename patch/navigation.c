@@ -4308,6 +4308,7 @@ static int shuffle_menu(void *ctx, void *event) {
     void *note = label_create(st.sp_page, 20, 200, UI_W - 40, 44);
     widget_use_style(note, STYLE_LABEL_WHITE18C);
     label_set_line_wrap(note, 1);
+    widget_set_prop_int(note, "word_wrap", 1); /* between words: line_wrap alone split "shu/ffle" */
 #else
     void *note = text(st.sp_page, 20, 200, 335, 24);
 #endif

@@ -6686,6 +6686,7 @@ if is_m1plus:
     # it is a centred label the screen's width less 20 px each side, wrapped onto two lines.
     assert m.nodes[note]['type']=='label' and m.nodes[note]['style']==NAMES['STYLE_LABEL_WHITE18C']
     assert (m.get(note+O['W_X']),m.get(note+O['W_W']))==(20,O['UI_W']-40) and ('label_set_line_wrap',note,1) in opened
+    assert m.nodes[note].get('word_wrap')==1  # between words: line_wrap alone split "shu/ffle" on dev 13
 else:
     assert m.nodes[note]['type']=='hscroll_label' and m.get(note+O['W_W'])==335
 # Shuffle Songs from the menu: the stock play-mode save, a random start, the staging deque kept.
