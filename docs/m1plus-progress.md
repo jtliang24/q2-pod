@@ -747,6 +747,64 @@ Two of the roadmap's small fixes, both M1 only:
 folders take a moment to / shuffle", centred, and the Photos row shows the blue badge at the other
 rows' size (dev 13 already had the badge). The user checked both.
 
+## 21. Coverflow and Photos by touch (Oct 20)
+
+The roadmap's section 2: the scroll distance, which was two `KNOWN GAP`s, and Coverflow's covers by
+touch.
+
+**The problem, read from V2.1's code.** V2.1's `slide_menu` has no spacer. Its scroll-done
+(`0x6123f4`, through `0x612360`) commits `round(xoffset / h)`, and its drag sets `xoffset` to the
+finger's travel one for one (`x - xdown`, `0x6128f0`), once the finger has moved 10 px. So it steps by
+its own height: 260 px on Coverflow's covers, 450 px on the photo viewer. The payload draws a cover
+every `CF_STRIDE` (100 px) and a photo every screen width (320 px). On the viewer, which took V2.1's own
+drag, the next photo was drawn 450 px on, which left a 130 px black gap mid-swipe, and a swipe had to
+travel 225 px to turn. Coverflow's covers took no touch at all: as on the Q2, the `slide_menu` is
+insensitive and only the wheel (on M1, the knob in Navigation) turns them.
+
+**What was ruled out.** A handler on the `slide_menu` can't rescale its drag: V2.1's `widget_dispatch`
+(`0x66cec8`) runs the widget's own `on_event` before its emitter, and the `slide_menu` stops a drag's
+moves there. Sizing the `slide_menu` to one item would leave the frame painted past its bounds and
+outside its dirty rect.
+
+**The fix.** On M1 both carousels' `slide_menu` is insensitive, and the view under it takes the
+touch:
+- `slide_swipe` (`patch/navigation.c`) moves the offset by `stride / px` per pixel, so the finger
+  moves one item as painted: `CF_STRIDE` on the covers (the flat fallback's own stride), a screen
+  width on the viewer. The release settles on the nearest item, or the next one for a flick (released
+  within 300 ms). It uses the knob's animator, so `home_done` commits the index as the knob's steps do.
+  A press on moving covers catches them, and the back button's press is its own.
+- Coverflow (`touched`): a tap on the centre cover opens it through `pick`, as Centre does. A tap on
+  a side cover brings it to the centre, by the renderer's geometry (`CF_X1`, `CF_XS`). An artist's
+  albums still stop at both ends, with the knob's bounce.
+- Photos (`swiped`): a tap shows or hides the caption, as the photo's own click did. The paint spaces
+  the photos a screen apart, not by the `slide_menu`'s stride.
+
+The Q2's `update.tar` (Legacy and iPod) is byte-identical: all of it is M1 only.
+
+**Section 1's two `test:` lines that waited for this.**
+- Coverflow's track queue through `mclNextSong` now runs on M1, in order (mode 0). Shuffle's pick of
+  the Play next track waits for `SHUFFLE_CALL` (roadmap section 4).
+- Other slide menus' next and previous is Q2 only: no V2.1 page has a `slide_menu`, so the payload's
+  two carousels are the M1's only ones. `test/build.py` checks every V2.1 UI page for one.
+
+**Tests.**
+- `test/patch.py`: both `KNOWN GAP`s are now checks.
+  - On Coverflow's covers: a slow drag of one cover's width moves the offset a whole step, and its
+    release commits the next album. Less than half a cover goes back, and 2.4 covers moves two. A flick
+    moves one, and a 7 px tremor is a tap that opens the centre album. Taps on side covers bring them
+    to the centre. A press on moving covers lets them finish without opening anything. The back
+    button's press, a tap under the frame and an aborted press do nothing. On an artist's albums a
+    drag past either end stops at the bounce and springs back.
+  - On the viewer: the photo follows the finger with the next one a screen behind it and no gap.
+    Past half a screen the next photo settles in, short of it the photo returns, a flick moves one, a
+    tap toggles the caption, and the back button's press moves nothing.
+- `test/build.py` pins V2.1's scroll-done division by the height, the drag's `x - xdown`, its 10 px
+  threshold, and that no V2.1 page holds a `slide_menu`.
+- `test/boot.py --media`, on V2.1's real dispatch: a swipe of one cover turns Coverflow to the Sort
+  card, a swipe back returns to the album, and a tap on the centre cover opens its tracks. The card
+  now holds two photos, and swipes move the viewer to the second photo and back. qemu decodes neither
+  photo, so this shows in the trace (`moved`), not on screen.
+
 ## How to check a build now
 
 ```sh
@@ -754,7 +812,7 @@ python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses un
 python3 test/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
 python3 test/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
 python3 test/boot.py build-m1 --home-menu  # the same with six Home cards: the Q2 Pod card on a page of its own
-python3 test/boot.py build-m1 --media    # a card with long songs, a book and a photo: Long Songs, Books, Photos, Shuffle Songs
+python3 test/boot.py build-m1 --media    # a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Shuffle Songs
 python3 test/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/playback.py build-m1        # and m4b, id3, ldac, headset_io, bluealsa
 ```

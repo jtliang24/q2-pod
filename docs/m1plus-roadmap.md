@@ -15,8 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** Coverflow and Photos' scroll distance (section 2). Functionality comes first: items that
-only change how something looks wait for the final pass (section 7).
+**Next:** the entry points for Q2 Pod's pages (section 3). Functionality comes first: items that only
+change how something looks wait for the final pass (section 7).
 
 ## Ground rules
 
@@ -51,33 +51,20 @@ Done: Crossfade's page on V2.1, the Playback rows that V2.1's list rebuild dropp
 lines that could be ported (see [m1plus-progress.md](m1plus-progress.md), section 14). What is left
 here goes with other sections' features:
 
-- **The `test:` lines whose features M1 can't reach yet.** Four lines, each going with its feature:
-  - Coverflow's track queue through `mclNextSong`, and other slide menus' next and previous: with
-    Coverflow's scroll distance (section 2). Coverflow now opens from the Q2 Pod page. Home's
-    Coverflow card layout is Q2 only: V2.1's Home has no Coverflow card;
+- **The `test:` lines whose features M1 can't reach yet.** Two lines, each going with its feature:
   - the stock key-down helper with STOP (`0x65f688`): with V2.1's copy of that private AWTK
     helper, still to be found (V2.1 binds no key-down handler for the payload to hook);
   - folder rollover and the UI scheduler delay: with the player call sites (section 4).
 
 Done since: the Shuffle page's note and the Photos row's icon ([m1plus-progress.md](m1plus-progress.md)
-section 20).
+section 20); Coverflow's track queue through `mclNextSong`, now on M1, and other slide menus' next and
+previous, Q2 only since V2.1 has none (section 21).
 
 ## 2. Hardware-specific behaviour (M)
 
-- **Coverflow and Photos scroll distance.** `KNOWN GAP`s.
-  - **The problem:** V2.1's `slide_menu` steps by its own height (260 and 450 px), not by
-    `slide_menu_item_width` plus a spacer as V1.32's does. Photos leave a black gap mid-swipe, and a
-    swipe must travel 450 px.
-  - **The fix:** size the slide_menu to one item and draw the neighbours as V1.32 did, or animate the
-    payload's own offset instead of the slide_menu's.
-  - Both views now open from the Q2 Pod page (section 3, [m1plus-progress.md](m1plus-progress.md)
-    section 17), so this is next.
-- **Coverflow's covers by touch.** On the Q2, touch neither drags nor taps the covers: the covers'
-  slide_menu is insensitive (`covers()`, `widget_set_sensitive(cf.slide, 0)`), and the wheel turns
-  them. The M1 has no wheel, so a cover opens only with Knob: Navigation and Centre. That was confirmed
-  on the device with dev 10. It needs a touch design with the scroll distance fix above: a swipe that
-  turns the covers, and a tap on the centre cover that opens it. The tap should go through
-  Coverflow's `pick` (`patch/coverflow.c`), as a click on the cover does.
+Done: Coverflow and Photos' scroll distance, and Coverflow's covers by touch: a swipe turns them a
+cover per 100 px, and a tap opens the centre cover or brings a side one to the centre
+([m1plus-progress.md](m1plus-progress.md) section 21).
 
 ## 3. Entry points for Q2 Pod's pages (L)
 
