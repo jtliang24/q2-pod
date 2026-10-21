@@ -5906,14 +5906,14 @@ if variant=='ipod':
         return [(raw[4*i+at[0]]<<16|raw[4*i+at[1]]<<8|raw[4*i+at[2]],raw[4*i+at[3]]) for i in range(len(pixels_))]
     def pixels(config,name,colors):
         return [c for c,_ in rgba(config,name,[(c,255) for c in colors])]
-    S=O['CONFIRM_SURFACE']
+    confirm_surface=O['CONFIRM_SURFACE']  # not S, which the style checks below call
     for preset in range(len(ACCENTS)):
         config={'ACCENT':str(preset),'THEME':'1'}
         disc,glyph=pixels(config,'confirm_ok',[0xff1448,0xffffff])
-        assert disc==S and glyph==0xffffff and ratio(glyph,disc)>=4.5,(preset,hex(disc))
+        assert disc==confirm_surface and glyph==0xffffff and ratio(glyph,disc)>=4.5,(preset,hex(disc))
         disc,glyph=pixels(config,'confirm_cancel',[0xff4871,0xffe4ea])
         assert ratio(glyph,disc)>=4.5 and ratio(disc,0)<ratio(glyph,0),(preset,hex(disc),hex(glyph))
-        assert pixels(config,'confirm_okdown',[0x7f0a24])[0]<S  # pressed: darker than the disc
+        assert pixels(config,'confirm_okdown',[0x7f0a24])[0]<confirm_surface  # pressed: darker than the disc
         assert pixels(config,'switch_on',[0xff1448])==[0xff1448 if preset==O['CRIMSON'] else ACCENTS[preset][3]]
         passed()
 
@@ -5933,7 +5933,7 @@ if variant=='ipod':
         light=preset!=O['CRIMSON'] and perceived(tone)>O['GLYPH_LIGHT_MAX']
         for name in ACTIVE:
             (d,da),(g,ga),(e,ea),*clear=rgba(config,name,disc)
-            assert d==tone and da==255 and g==(S if light else 0xffffff),(preset,name,hex(d),hex(g))
+            assert d==tone and da==255 and g==(confirm_surface if light else 0xffffff),(preset,name,hex(d),hex(g))
             assert ratio(g,d)>=3 and ratio(e,d)>=2,(preset,name,hex(d),hex(e))
             assert max(ratio(d,0x444444),ratio(0x444444,d))>=1.5,(preset,name,hex(d))  # reads apart from inactive
             assert [a for _,a in clear]==[0,0],(preset,name)  # transparency kept
@@ -6007,7 +6007,7 @@ if variant=='ipod':
         assert rgba({},'stream_spotify',px,fmt)==rgba({},'stream_spotify',px)
     for name in ACTIVE:
         active=rgba({},name,disc[:2]); inactive=rgba({},INACTIVE[0],[(0x444444,255),(0xffffff,255)])
-        assert active==[(0xd8d8d8,255),(S,255)] and inactive==[(0x444444,255),(0xffffff,255)]
+        assert active==[(0xd8d8d8,255),(confirm_surface,255)] and inactive==[(0x444444,255),(0xffffff,255)]
         assert ratio(active[0][0],active[1][0])>=3
     passed()
     import subprocess
