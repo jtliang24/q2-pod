@@ -15,8 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** the touch long-press regression (section 3), with q2remote's `peek` (section 6) to see
-which of `qm_hold`'s checks refuses.
+**Next:** the touch long-press fix on the device (dev 12, section 3). Then section 1's small fixes:
+the Shuffle page's note and the Photos row's icon.
 
 ## Ground rules
 
@@ -106,12 +106,8 @@ a highlighted row:
 - Spotify's tracks: add to Spotify's queue (`spot_hold`);
 - Coverflow's centre cover: the album menu.
 
-**The touch long-press stops working.** On dev 11 a hold on an album in Album opened the hold menu once.
-Later in the same session, a real finger's hold on Album opened the album instead, and so did q2remote's
-held taps, which send the same frames. `st`'s long-press and menu fields read clean then (no
-pending timer, dialog or playlist). So one of `qm_hold`'s other checks refuses: `usable()`'s globals,
-the list's size against the rows the payload counts, or the list's class. Find which with `peek`
-during a failing hold, then make `test/boot.py --media` hold an album twice.
+**The touch long-press's row.** Fixed ([m1plus-progress.md](m1plus-progress.md) section 19): a hold on a
+scrolled list took a row below the finger, and scrolled further, none. Left: the dev 12 device check.
 
 `radio_hold` and `spot_hold` read the row from the list's `_ringnav_index`, so a long press sets that
 first. Now Playing needs none: its hold menu acts on the playing track. On the device (dev 10 and

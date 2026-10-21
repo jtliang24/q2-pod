@@ -697,6 +697,34 @@ Over q2remote, `/mnt/data/ringnav-lengths` holds 417 lengths and no zeros, four 
 opened. Left for later (roadmap): the Shuffle page's clipped note, Coverflow's covers by touch, long
 press on these lists, a q2remote swipe, and the two latent Q2 bugs.
 
+## 19. The touch long-press's row (Oct 20)
+
+**The problem.** On dev 11, a touch hold on Album opened the hold menu once, then opened the album
+instead. Play/Pause held on a highlighted row always worked. The menu that did open was often for a
+different album from the one held: a hold on "All I Need" opened "Clair Obscur", the next row down.
+
+**Finding it.** q2remote's new `peek` ([remote.md](remote.md#reading-variables)) read the state
+around q2remote's held taps, which failed as a finger did:
+- 0.6 s into a hold, `st.lp_x`/`lp_y` held the press point, and the long-press timer had fired;
+- everything `usable()` reads was clear, with no pending timer, dialog or playlist, and AirPlay's
+  flag was 1;
+- the showlist (a libcstl deque, read on the device) had 24 rows, as `g_menu.rows` did, and
+  `g_class_type` was all albums.
+
+That left `lp_entry`, the row under the finger. V2.1's `widget_to_local` (`0x669b88`) adds each
+widget's own `get_offset` (vtable +0x34), the list's own included: a `scroll_view`'s
+(`SCROLL_X`, `SCROLL_Y`), a `table_client`'s (0, `TABLE_TOP`). So the point came out in the list's
+content, while `bounds()` measures rows on screen. On a scrolled list the point fell a row or more
+below the finger. Scrolled further, it fell past the list's height and `lp_entry` returned -1. The
+first hold after opening a page worked only while the list was near the top. Play/Pause takes the
+highlighted row and never maps a point.
+
+**The fix.** `lp_entry` takes the list's own offset off the point again, as `bounds()` does.
+`test/patch.py`'s stand-in `widget_to_local` now adds the offsets as V2.1's does (M1 only, pinned
+against V2.1's code). Holds on a table scrolled two rows and eight rows take the row under the
+finger, and both failed before the fix. The Q2's `update.tar` (Legacy and iPod) is byte-identical:
+`lp_entry` is M1 only.
+
 ## How to check a build now
 
 ```sh
