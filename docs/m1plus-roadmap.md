@@ -15,7 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** the device checks left in section 3, then section 4's call sites. Functionality comes first:
+**Next:** section 4's call sites; a video and Spotify on the device (section 3) when there is one on
+the card. Functionality comes first:
 items that only change how something looks wait for the final pass (section 7).
 
 ## Ground rules
@@ -78,10 +79,11 @@ from the Q2 Pod page, a back button, and the touch long-press where the Q2 has a
 - **Long presses.** Most Played, the Ratings lists and Long Songs (the song menu), a station (in or
   out of favourites), a Spotify track (Spotify's queue) and Coverflow's centre cover (the album menu).
 
-Left for the device, which the emulator can't show:
-- Internet Radio and a video playing through q2video on the ES9069Q: V2.1's `hciplayer` issues the
-  same DAC ioctls (`0x4d1b` PCM mode, `0x4d1f` mute), the M1 has ALSA card 0 (`plughw:0,0`), and its
-  framebuffer is the 320x960 two-page buffer q2video expects (checked over q2remote on dev 14);
+Internet Radio plays through q2video on the ES9069Q (dev 16, [m1plus-progress.md](m1plus-progress.md)
+section 23). Left for the device, which the emulator can't show:
+- a video playing through q2video: V2.1's `hciplayer` issues the same DAC ioctls (`0x4d1b` PCM mode,
+  `0x4d1f` mute), and the framebuffer is the 320x960 two-page buffer q2video expects (checked over
+  q2remote on dev 14); the back chevron and the knob's volume;
 - Spotify, with q2-librespot on the card: its `aplay` on `plughw:0,0`, and whether the Q2's static
   MIPS build runs on the M1's kernel.
 
@@ -151,6 +153,11 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
     holds; when that is 0, every length reads as 0 and is cached as measured;
   - AWTK's hit test doesn't skip hidden views, so the hidden book reader and photo viewer take taps
     meant for the list under them. The wheel hides this on the Q2; `view_show` is the M1's fix.
+- **Radio stations whose URL is a playlist.** radio-browser's `/m3u/` lists can give a station's
+  `.pls` (or `.m3u`) URL rather than its stream, which ffmpeg reads as text: the station shows "Can't
+  play this station". Seen with Los 40 Principales México on dev 16. The Q2 has the same code, so this
+  is a Q2 Pod change: resolve a remote playlist to its first stream, or ask radio-browser for
+  `url_resolved`.
 - **A card library in the emulator.** `test/boot.py --media` mounts a small card on a tmpfs: two long
   songs (header-only FLAC and MP3), a book and a photo, with V2.1's `songtable` seeded. Tags (album,
   artist) in the files and a scan would let the walk open Album, Artist and Now Playing. Playback itself

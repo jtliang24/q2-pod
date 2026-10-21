@@ -897,6 +897,12 @@ Playing page, where Previous stays the media key (section 16).
 
 Both fixes are M1 only, so the Q2's `update.tar` is byte-identical.
 
+**On the device (dev 16, `V00Gs`, commit `4a343b2`).** The user played Kiss 95 through q2video on the
+ES9069Q, and an album's track list scrolls in Coverflow. Over q2remote, with the kernel log on the
+card, a favourite that would not play (a radio-browser `.pls` URL, which ffmpeg reads as text) showed
+"Can't play this station" and demo kept running. That station is the Q2's issue too (roadmap
+section 6).
+
 ## How to check a build now
 
 ```sh
