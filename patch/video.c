@@ -115,6 +115,20 @@ void overlay(unsigned char *f, unsigned line, int n, int total) {
     }
 }
 
+#if M1PLUS || defined(PEQ_HOST)
+/* M1 Plus has no Return key: on its upright panel every frame shows a back chevron at the top left,
+ * as V2.1's title bar's, and a tap in the BACK_PX square there quits (books.c video_touch). The
+ * chevron's two strokes are 3 px wide and white, its point at (18, 24). */
+#define BACK_PX 64
+void back_glyph(unsigned char *f, unsigned line) {
+    for (int t = 0; t <= 12; ++t)
+        for (int x = 28 - t * 10 / 12, w = 0; w < 3; ++w) {
+            memset(f + (12 + t) * line + (x + w) * 4, 0xff, 4);
+            memset(f + (36 - t) * line + (x + w) * 4, 0xff, 4);
+        }
+}
+#endif
+
 /* Frame n's fate at clock ms: 0 wait, 1 show, 2 drop (a whole frame late). */
 int frame_due(int n, long long clock) {
     long long due = (long long)n * 1000 / FPS;
@@ -496,6 +510,9 @@ int main(int argc, char **argv) {
                 if (until)
                     overlay(mem + back * line, line, pos_bar ? at + seek + n / FPS : vol,
                             pos_bar ? len : 100);
+#if M1PLUS
+                back_glyph(mem + back * line, line);
+#endif
                 var[5] = back; /* draw the hidden page and pan, as demo does */
                 ioctl(fb, FBIOPAN_DISPLAY, var);
                 back = back ? 0 : fb_h;

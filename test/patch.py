@@ -40,13 +40,9 @@ if is_m1plus:
     # Every hook a test enters is one V2.1 really jumps from (the renames above are the same entries).
     assert set(HOOKS.values()) <= set(M1PLUS_HOOKS.values())
     WM_PAINT_LEAF = WM_PAINT_LEAF_M1PLUS
-    # V2.1 has no stream_page_init to hook: the Streaming page's tests enter the payload's own
-    # ringnav_stream, so they cover its pages, never the device path (NOT PORTED below).
-    STREAM_ENTRY = payload_syms['ringnav_stream']
     FREE_GOT = 0xa032f4
 else:
     FREE_GOT = 0xa2638c
-    STREAM_ENTRY = HOOKS['stream_page_init'][0]
 # The Library's rows: Q2's Local Music hook. V2.1 has no Local Music menu, so M1 Plus binds nothing
 # there and its rows are on the Q2 Pod page (library_open, checked on its own); the tests that click
 # the rows reach their handlers, the ones that page uses, through Q2's builder, entered directly.
@@ -6815,9 +6811,8 @@ def q2pod_page():
     # A grid not as V2.1 builds it (a page short) gets no card.
     m,slides,dots=v21_home(17,pages=2); assert not card(m,slides); passed()
     # The card opens the Q2 Pod page: a title bar with the back button over V2.1's 64 px rows (list_row),
-    # in the Library's order. Podcasts, Audiobooks, Photos and Books only with their folders; never
-    # Videos (q2video on the M1's DAC waits); Upload Scrobbles only with an account. A second press
-    # opens nothing new.
+    # in the Library's order, then Streaming's. Podcasts, Audiobooks, Photos, Books and Videos only with
+    # their folders; Upload Scrobbles only with an account. A second press opens nothing new.
     m,slides,dots=v21_home(17); m.card=[('Podcasts',4),('Photos',4),('Videos',4)]
     f,ctx=m.handler(m.nodes[card(m,slides)]['children'][0],O['EVT_CLICK'])
     assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; page=m.top
@@ -6828,16 +6823,18 @@ def q2pod_page():
     assert 'Q2 Pod' in m.texts()
     labels=[m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]
     icons=[m.nodes[m.nodes[r]['children'][0]]['image'] for r in rows]
-    assert labels==['Shuffle','Ratings','Most Played','Long Songs','Podcasts','Photos','Coverflow'],labels
-    assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_podcasts','local_photos','local_coverflow']
-    assert [len(m.nodes[r]['children']) for r in rows]==[3,3,2,2,2,2,2]  # Shuffle and Ratings open lists: the chevron
+    STREAMS=['Spotify','Internet Radio','AirPlay']  # Streaming's rows: V2.1 has no Streaming page
+    assert labels==['Shuffle','Ratings','Most Played','Long Songs','Podcasts','Photos','Videos','Coverflow',*STREAMS],labels
+    assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_podcasts','local_photos','local_videos',
+                   'local_coverflow','stream_spotify','stream_radio','stream_airplay']
+    assert [len(m.nodes[r]['children']) for r in rows]==[3,3,2,2,2,2,2,2,3,3,3]  # rows opening lists (as the Q2's): the chevron
     # Each row's click is the Library's handler; Shuffle's opens its menu, Coverflow's the carousel.
     f,ctx=m.handler(rows[0],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='shuffle_page'
-    m.top=page; f,ctx=m.handler(rows[6],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
+    m.top=page; f,ctx=m.handler(rows[7],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
     m,slides,dots=v21_home(17); m.config['TOKEN']='tok'; m.card=[('Audiobooks',4),('Books',4)]
     f,ctx=m.handler(m.nodes[card(m,slides)]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     m.page=m.top; rows=m.nodes[m.find('scroll_view')]['children']
-    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==['Shuffle','Ratings','Most Played','Long Songs','Audiobooks','Books','Coverflow','Upload Scrobbles']; passed()
+    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==['Shuffle','Ratings','Most Played','Long Songs','Audiobooks','Books','Coverflow',*STREAMS,'Upload Scrobbles']; passed()
 if is_m1plus: q2pod_page()  # its own names: the Library's machine (m, top) is used again below
 def q2pod_real_grid():
     # The same card on V2.1's own grid: its real home_page asset, and its real builder (0x534064, with
@@ -7675,6 +7672,21 @@ m.byte(syms['g_volume'],50); m.byte(syms['g_maxvolume'],52)
 assert [key(O['KEY_NEXT']) for _ in range(3)]==[('v\x33',51),('v\x34',52),('v\x34',[])] and m.u.mem_read(syms['g_volume'],1)[0]==52
 m.byte(syms['g_maxvolume'],100); m.byte(syms['g_volume'],100); assert key(O['KEY_NEXT'])==('v\x64',[])
 m.byte(syms['g_volume'],1); assert [key(O['KEY_PREV']) for _ in range(2)]==[('v\0',0),('v\0',[])]; passed()
+if is_m1plus:
+    # M1 Plus: the knob is the wheel (its KEY_VOLUMEUP and KEY_VOLUMEDOWN), and there is no Return
+    # key: a tap pressed and lifted in q2video's back chevron, the 64 px square at the top left
+    # (video.c back_glyph), quits. A tap elsewhere, or a press that leaves the square or starts
+    # outside it, sends nothing; no touch reaches the UI.
+    m.byte(syms['g_volume'],50); assert key(O['KEY_VOLUMEUP'])==('v\x33',51) and key(O['KEY_VOLUMEDOWN'])==('v\x32',50)
+    def touch(*points):
+        sent=[]
+        for i,(x,y) in enumerate(points):
+            kind=0xff if i==0 else O['EVT_POINTER_UP'] if i==len(points)-1 else 0x101
+            m.word(m.event+O['EVENT_Y'],y); assert 'stock_input' not in event(kind,x); sent+=[s[1] for s in m.sent]
+        return sent
+    assert touch((20,20),(63,63))==['q']
+    assert touch((100,200),(100,200))==[] and touch((20,20),(100,20),(20,20))==[] and touch((100,20),(20,20))==[] and touch((20,20),(64,20))==[]
+    passed()
 # Centre toggles the wheel to seeking (s, then f and b, no volume) and back (v); seeking also ends
 # SCRUB_MS after the last tick, on the UI loop's poll.
 m.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
@@ -7744,18 +7756,36 @@ class SpotMachine(BooksMachine):
         return [c[0] for c in self.calls]
     def key(self,k):
         self.sent=[]; self.calls=[]; return self.call(k,gap=0,clear=False)
-if is_m1plus: not_ported("Streaming's Spotify, Internet Radio and AirPlay rows (no stream_page_init hook in V2.1)")
+def streaming(m):
+    """Streaming's rows, label to tap target: stock Streaming's one Tidal row, then the hook's
+    Spotify, Internet Radio and AirPlay rows. V2.1 has no Streaming page (its Tidal is a Home card):
+    on M1 Plus the three follow Coverflow on the Q2 Pod page (library_open)."""
+    if is_m1plus and getattr(m,'streams',None):  # the page stays open (library_open opens one)
+        m.top=m.lib_page; return m.streams
+    if is_m1plus:
+        m.top=m.node('window','home_page'); m.stack=[m.top]
+        assert m.call(address=payload_syms['library_open'],args=(0,m.event,0,0),gap=0,count=5_000_000)==0
+        assert m.nodes[m.top]['name']=='library_page'
+        page=m.top; view=next(w for w in m.nodes if m.nodes[w]['type']=='scroll_view' and m.get(m.get(w+O['W_PARENT'])+O['W_PARENT'])==page)
+        rows=m.nodes[view]['children']; names=[m.nodes[m.nodes[row_button(m,r)]['children'][1]].get('text') for r in rows]
+        assert names[names.index('Coverflow')+1:][:3]==['Spotify','Internet Radio','AirPlay'],names
+        m.lib_page=page; m.streams={n:row_button(m,r) for n,r in zip(names,rows) if n}
+        return m.streams
+    else:
+        view=m.node('scroll_view','scroll_view_streamsset',[m.node('list_item')]); m.top=m.node('window','stream_page',[view])
+        assert m.call(address=HOOKS['stream_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0 and m.calls[0][0]=='stock_stream'
+        rows=m.nodes[view]['children']; assert len(rows)==4
+        names=[None,'Spotify','Internet Radio','AirPlay']
+    return {n:row_button(m,r) for n,r in zip(names,rows) if n}
 def stream_page(m):
-    """Stock Streaming's one Tidal row, then the hook's Spotify, Internet Radio and AirPlay rows; returns Spotify's button."""
-    view=m.node('scroll_view','scroll_view_streamsset',[m.node('list_item')]); m.top=m.node('window','stream_page',[view])
-    assert m.call(address=STREAM_ENTRY,args=(m.top,5,0,0),gap=0,count=5_000_000)==0 and m.calls[0][0]=='stock_stream'
-    assert len(m.nodes[view]['children'])==4
+    """Streaming's rows; returns Spotify's button."""
+    rows=streaming(m)
     # AirPlay, last: stock's own receiver, its switch on System settings' Network service page, one press away.
-    airplay=row_button(m,m.nodes[view]['children'][3]); icon,label=m.nodes[airplay]['children'][:2]
+    airplay=rows['AirPlay']; icon,label=m.nodes[airplay]['children'][:2]
     assert m.nodes[icon]['image']=='stream_airplay' and m.nodes[label]['text']=='AirPlay'
     top=m.top; f,ctx=m.handler(airplay,O['EVT_CLICK']); m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
     assert [m.text(c[1]) for c in m.calls if c[0]=='navigator_to']==['systemset/netservice_page']; m.top=top
-    return row_button(m,m.nodes[view]['children'][1])
+    return rows['Spotify']
 def spot_open(m,button):
     """The row, then (librespot on the card: the browser) its Now Playing page."""
     f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
@@ -7764,18 +7794,23 @@ def spot_open(m,button):
         assert m.call(address=payload_syms['spot_np'],args=(0,0,0,0),gap=0,count=5_000_000)==0
     m.page=m.top; assert m.nodes[m.page]['name']=='spotify_page'; return m.page
 def texts(w): return [t for t in labels(w) if t is not None]
+def np_views(m,page):
+    """Spotify's Now Playing page's two views; on M1 Plus the back button over them, its last child."""
+    info,msg,*rest=m.nodes[page]['children']
+    assert [m.nodes[b].get('style') for b in rest]==(['navbar_btnreturn_style'] if is_m1plus else [])
+    return info,msg
 BIN='/mnt/mmc/.spotify/librespot'
 # The row follows stock's, with its icon. Without librespot on the card the page says so and
 # nothing starts.
 m=SpotMachine({}); button=stream_page(m)
 icon,label=m.nodes[button]['children'][:2]
 assert m.nodes[icon]['image']=='stream_spotify' and m.nodes[label]['text']=='Spotify' and not m.nodes[button].get('name')
-page=spot_open(m,button); info,msg=m.nodes[page]['children']
+page=spot_open(m,button); info,msg=np_views(m,page)
 assert not m.nodes[info]['visible'] and m.nodes[msg]['visible'] and texts(msg)==["Spotify isn't on the card",'See the Q2 Pod guide to add it']
 m.poll(); assert not m.systems; m.close(); passed()
 # With it, the first open starts it once (its launcher backgrounds itself); with no state yet, or no
 # Connect session, the page asks for the phone.
-m=SpotMachine({BIN:bytearray()}); button=stream_page(m); page=spot_open(m,button); info,msg=m.nodes[page]['children']
+m=SpotMachine({BIN:bytearray()}); button=stream_page(m); page=spot_open(m,button); info,msg=np_views(m,page)
 assert m.systems==['/bin/sh /mnt/mmc/.spotify/run'] and texts(msg)==['Open Spotify on your phone','and choose Q2']
 m.state('none',track=''); m.poll(); m.advance(250); assert m.nodes[msg]['visible'] and not m.nodes[info]['visible']
 m.close(); spot_open(m,button); assert len(m.systems)==1; m.close(); passed()
@@ -7787,7 +7822,7 @@ for _ in range(3): assert m.poll()==bare.poll()  # the same calls as a card with
 assert not m.systems; passed()
 # Playing: local music stops and the headphone output is set up as stock's AirPlay page does it,
 # once; meanwhile standby and auto power-off (not the screen's timer) are held and the DAC kept on.
-m=SpotMachine({BIN:bytearray()}); button=stream_page(m); page=spot_open(m,button); info,msg=m.nodes[page]['children']
+m=SpotMachine({BIN:bytearray()}); button=stream_page(m); page=spot_open(m,button); info,msg=np_views(m,page)
 m.byte(syms['g_headset_output'],1); m.byte(syms['g_volume'],37); m.play=3; m.word(syms['g_dacoff_time'],5)
 m.state('playing',position=10000); names=m.poll()
 take=[(c[0],*c[1:3]) for c in m.calls if c[0] in ('player_stop','config_outputchannel','mclSetPcmMode','mclSetMute','device_set_volume','mclSetDacPwr')]
@@ -7818,6 +7853,11 @@ m.advance(2500); assert texts(info)[4:]==[mmss('0:12'),mmss('-3:08')] and len(m.
 for w in [x for x in m.nodes if m.nodes[x]['type'] in ('hscroll_label','image','view') and under(x,info) and x!=info]:
     x,y,bw,bh=cf_geometry(m,w); inset=0 if is_m1plus else max(corner_inset(30+y),corner_inset(30+y+bh))  # the window starts at y 30
     assert inset<=x and x+bw<=O['UI_W']-inset,(m.nodes[w].get('text'),x,y,bw,bh)
+if is_m1plus:  # portrait: the text under the art, none of it under the back button
+    art=(O['SPOT_ART_X'],O['SPOT_ART_Y'],O['SPOT_ART_PX'],O['SPOT_ART_PX'])
+    meet=lambda a,b: a[0]<b[0]+b[2] and b[0]<a[0]+a[2] and a[1]<b[1]+b[3] and b[1]<a[1]+a[3]
+    boxes=[cf_geometry(m,w) for w in m.nodes if m.nodes[w]['type'] in ('hscroll_label','view') and under(w,info) and w!=info]
+    assert boxes and not [b for b in boxes if meet(b,art) or meet(b,(0,0,O['BACK_W'],48))],boxes
 # The bar: a TRACK_COLOR capsule and the elapsed share in the accent (iPod) or stock red (Stock).
 bar_height=4 if variant=='ipod' else 8  # iPod Minimal's line, at the top of the 8px view
 bar=[w for w in m.nodes if m.nodes[w]['type']=='view' and cf_geometry(m,w)==(O['SPOT_BAR_X'],O['SPOT_BAR_Y'],O['SPOT_BAR_W'],O['SPOT_BAR_H'])][0]
@@ -7907,10 +7947,7 @@ class RadioMachine(SpotMachine):
         self.calls.append((name,a,b,c))
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-    def stream(self):
-        view=self.node('scroll_view','scroll_view_streamsset',[self.node('list_item')]); self.top=self.node('window','stream_page',[view])
-        assert self.call(address=STREAM_ENTRY,args=(self.top,5,0,0),gap=0,count=5_000_000)==0
-        return row_button(self,self.nodes[view]['children'][2])
+    def stream(self): return streaming(self)['Internet Radio']
     def click(self,w):
         f,ctx=self.handler(w,O['EVT_CLICK']); assert self.call(address=f,args=(ctx,self.event,0,0),gap=0,count=5_000_000)==0
         self.advance(0,clear=False)
@@ -7979,8 +8016,10 @@ m.forked=4343; m.row(2); np=m.top; assert m.nodes[np]['name']=='radionp_page' an
 m.advance(500); assert m.labels(np)==['Internet Radio','Three','','','Connecting…','']
 # The heart, at local Now Playing's place: Three is no favourite.
 heart=next(w for w in m.nodes[np]['children'] if m.nodes[w].get('image') in ('play_fav','play_unfav'))
-heart_x = O['UI_W'] - (72 if variant=='ipod' else 55)
-assert m.nodes[heart]['image']=='play_unfav' and [m.get(heart+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[heart_x,176,50,50]; passed()
+# M1 Plus: at the top right, the art filling the width under it, and the back button at the top left.
+heart_x,heart_y = (O['UI_W']-54,0) if is_m1plus else (O['UI_W'] - (72 if variant=='ipod' else 55),176)
+assert m.nodes[heart]['image']=='play_unfav' and [m.get(heart+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[heart_x,heart_y,50,50]
+assert [m.nodes[b].get('style') for b in m.nodes[np]['children'] if m.nodes[b]['type']=='button']==(['navbar_btnreturn_style'] if is_m1plus else []); passed()
 # Playing: its tags (the StreamTitle as artist - title), the stream and the time since the sound
 # started; standby and auto power-off held (not the screen's timer) and the DAC kept on.
 m.word(syms['g_dacoff_time'],5)
@@ -8117,10 +8156,7 @@ class BrowseMachine(RadioMachine):
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
     def open(self):
-        if not getattr(self,'button',0):  # Streaming, as RadioMachine.stream: Spotify's row
-            view=self.node('scroll_view','scroll_view_streamsset',[self.node('list_item')]); self.top=self.node('window','stream_page',[view])
-            assert self.call(address=STREAM_ENTRY,args=(self.top,5,0,0),gap=0,count=5_000_000)==0
-            self.button=row_button(self,self.nodes[view]['children'][1])
+        if not getattr(self,'button',0): self.button=streaming(self)['Spotify']  # as RadioMachine.stream
         self.click(self.button); self.page=self.top; assert self.nodes[self.page]['name']=='spotbrowse_page'
     def asked(self):
         """The request the worker is about to send (spotify.c's wk: buf at 32, len at 28), split."""

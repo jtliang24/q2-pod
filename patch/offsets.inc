@@ -396,19 +396,27 @@ static inline int arc_out(int r, int y) {
 #define NP_META_PX 18
 #define NP_ALBUM_RGB 0xbbbbbb
 /* Spotify's and Internet Radio's Now Playing layout (tools/ipod.py NP_*, which checks they match):
- * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners. */
+ * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners.
+ * The title, artist and album beside the art on the Q2; on the M1's portrait screen, under it, with
+ * the page's tag after the back button and Radio's heart at the top right. */
 #if M1PLUS
-#define SPOT_ART_X 33
+#define SPOT_ART_X 50
 #define SPOT_ART_Y 50
-#define SPOT_ART_PX 254
+#define SPOT_ART_PX 220
 #define SPOT_TEXT_X 16
 #define SPOT_TEXT_W 288
+#define SPOT_TITLE_Y 280
+#define SPOT_ARTIST_Y 312
+#define SPOT_ALBUM_Y 338
 #define SPOT_BAR_X 12
-#define SPOT_BAR_Y 342
+#define SPOT_BAR_Y 374
 #define SPOT_BAR_W 296
 #define SPOT_BAR_H 8
-#define SPOT_TIMES_Y 376
+#define SPOT_TIMES_Y 392
 #define SPOT_TIME_X 12
+#define SPOT_TAG_X BACK_W
+#define SPOT_HEART_X (UI_W - 54)
+#define SPOT_HEART_Y 0
 #else
 #define SPOT_ART_X 16
 #define SPOT_ART_Y 50
@@ -421,6 +429,12 @@ static inline int arc_out(int r, int y) {
 #define SPOT_BAR_H 8 /* the bar's view; iPod's Minimal paints its 4px line at the top (np_bar_h) */
 #define SPOT_TIMES_Y 265
 #define SPOT_TIME_X 46
+#define SPOT_TITLE_Y (SPOT_ART_Y + 41)
+#define SPOT_ARTIST_Y (SPOT_ART_Y + 75)
+#define SPOT_ALBUM_Y (SPOT_ART_Y + 103)
+#define SPOT_TAG_X 16
+#define SPOT_HEART_X (UI_W - (IPOD ? 72 : 55)) /* local Now Playing's heart (tools/ipod.py img_fav) */
+#define SPOT_HEART_Y 176
 #endif
 /* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic flush, and
  * holds SET_ROWS complete SET_ROW rows. Stock builds each row as a list_item holding a

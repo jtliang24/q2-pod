@@ -466,19 +466,19 @@ static void spot_np(void) {
     int h = widget_get_prop_int(page, "h", BOTTOM);
     ui.info = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     ui.msg = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
-    widget_set_text_utf8(label(ui.info, 16, 12, 200, 16, STYLE_SCRLABEL_WHITE20L, 16, SPOT_GREY),
+    widget_set_text_utf8(label(ui.info, SPOT_TAG_X, 12, 200, 16, STYLE_SCRLABEL_WHITE20L, 16, SPOT_GREY),
                          "Spotify");
     ui.glyph = widget_factory_create_widget(f, "view", ui.info, UI_W - 38, 13, 14, 14); /* NP's top row */
     ui.art = image_create(ui.info, SPOT_ART_X, SPOT_ART_Y, SPOT_ART_PX, SPOT_ART_PX);
     image_set_draw_type(ui.art, 4); /* as Coverflow's covers */
     image_base_set_image(ui.art, PLACEHOLDER);
     ui.title =
-        label(ui.info, SPOT_TEXT_X, SPOT_ART_Y + 41, SPOT_TEXT_W, 28, STYLE_SCRLABEL_WHITE20L, NP_TITLE_PX, 0xffffffffu);
+        label(ui.info, SPOT_TEXT_X, SPOT_TITLE_Y, SPOT_TEXT_W, 28, STYLE_SCRLABEL_WHITE20L, NP_TITLE_PX, 0xffffffffu);
     ui.artist =
-        label(ui.info, SPOT_TEXT_X, SPOT_ART_Y + 75, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
+        label(ui.info, SPOT_TEXT_X, SPOT_ARTIST_Y, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
               IPOD ? (0xff000000u | NP_ARTIST_RGB) : SPOT_GREY);
     ui.album =
-        label(ui.info, SPOT_TEXT_X, SPOT_ART_Y + 103, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
+        label(ui.info, SPOT_TEXT_X, SPOT_ALBUM_Y, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
               IPOD ? (0xff000000u | NP_ALBUM_RGB) : SPOT_GREY);
     ui.bar = widget_factory_create_widget(f, "view", ui.info, SPOT_BAR_X, SPOT_BAR_Y, SPOT_BAR_W,
                                           SPOT_BAR_H);
@@ -490,6 +490,9 @@ static void spot_np(void) {
         label(ui.msg, CF_EDGE, 100, UI_W - 2 * CF_EDGE, 30, STYLE_SCRLABEL_WHITE20C, 20, 0xffffffffu);
     ui.sub =
         label(ui.msg, CF_EDGE, 134, UI_W - 2 * CF_EDGE, 24, STYLE_SCRLABEL_WHITE20C, 16, SPOT_GREY);
+#if M1PLUS
+    back_button(page); /* over both views; Return closes the page */
+#endif
     ui.timer = timer_add(tick, 0, 250);
     spot_refresh();
 }

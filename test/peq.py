@@ -1632,6 +1632,14 @@ def video_check(tmp):
     assert all(f[y * 1300 + c] == 0x55 for y in range(375) for c in range(1280, 1300))
     assert [r[88] for r in bar(7, 5)[0][40:335]] == [0xff] * 295  # clamped to all
     assert [r[88] for r in bar(-3, 5)[0][40:335]] == [0] * 295 and bar(1, 0)[0][100][88] == 0x55
+    # M1 Plus's back chevron (it has no Return key): two 3 px white strokes meeting at (18, 24), a
+    # "<" inside the 64 px square where a tap quits (books.c video_touch); nothing else changes.
+    f = (C.c_ubyte * (1300 * 64))(*([0x55] * (1300 * 64)))
+    lib.back_glyph(f, 1300)
+    want = {(28 - t * 10 // 12 + w, y) for t in range(13) for w in range(3) for y in (12 + t, 36 - t)}
+    lit = {(i % 1300 // 4, i // 1300) for i in range(0, len(f), 4) if f[i:i + 4] == [0xff] * 4}
+    assert lit == want and (18, 24) in lit and max(x for x, _ in lit) < 32 and max(y for _, y in lit) < 40
+    assert all(f[i] in (0x55, 0xff) for i in range(len(f))) and sum(f[i] == 0xff for i in range(len(f))) == 4 * len(want)
     # Internet Radio (-r): the ICY tags in stock ffmpeg 4.2's report, in its input dump or as updates.
     out = C.create_string_buffer(16)
     def meta(line, key, n=16):
@@ -1641,7 +1649,7 @@ def video_check(tmp):
     assert meta(b'    StreamTitle     : ', b'StreamTitle') == '' and meta(b'StreamTitle=x', b'StreamTitle') == 0
     assert meta(b'  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz', b'Audio') == 'mp3 (mp3float),'
     assert meta(b'StreamTitle: a long title past the buffer', b'StreamTitle', 8) == 'a long '
-    print('Videos: ffmpeg argv, frame pacing, Bluetooth volume, length and bar passed; radio tags passed.')
+    print('Videos: ffmpeg argv, frame pacing, Bluetooth volume, length, bar and back chevron passed; radio tags passed.')
 
 
 def audio_writer_check(tmp):

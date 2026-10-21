@@ -52,6 +52,9 @@ extern void coverflow_paint(void *w, void *canvas), photos_paint(void *w, void *
     photos_open(const char *root), books_paint(void *w, void *canvas),
     books_open(const char *root, int videos), video_poll(void), video_key(unsigned key);
 extern int books_key(void *top, unsigned key), video_on(void);
+#if M1PLUS
+extern void video_touch(void *e);
+#endif
 extern void spot_poll(void), spot_yield(void), spot_paint(void *w, void *canvas), *spot_art(void);
 extern int spot_media(unsigned key), spot_key(void *top, unsigned key),
     spot_open(void *ctx, void *event), spot_hold(void *top);
@@ -5315,34 +5318,39 @@ int ringnav_localmusic(void *win, void *ctx) {
 
 #if M1PLUS
 extern int coverflow_row(void *ctx, void *event); /* coverflow.c */
+static int airplay_open(void *ctx, void *event);
 /* The Q2 Pod Home card's page (coverflow.c home_card): the Library's added rows, which V2.1 has no
  * menu for (its Home is the library, and its categories stay there), in V2.1's rows and the Library's
- * order, with Coverflow, Q2's own Home card, after the media. Videos waits for q2video on the M1's DAC
- * (docs/m1plus-roadmap.md). */
+ * order, with Coverflow, Q2's own Home card, after the media. Then Streaming's rows: V2.1 has no
+ * Streaming page (its Tidal is a Home card), so Spotify, Internet Radio and AirPlay are here. */
 int library_open(void *ctx, void *event) {
     (void)ctx;
     (void)event;
     if (st.lib_page || !(st.lib_page = page_open("library_page", page_closed, page_keyup))) return 0;
     static const char *const icons[] = { "local_podcasts", "local_audiobooks", "local_photos",
-                                         "local_books" };
+                                         "local_books", "local_videos" };
     char path[sizeof st.media_root];
-    int media[BOOKS], scrobbles = scrobble_ready(), n = 5 + scrobbles;
-    for (int k = 0; k < BOOKS; k++) n += media[k] = media_find(k + 1, path);
+    int media[VIDEOS], scrobbles = scrobble_ready(), n = 8 + scrobbles;
+    for (int k = 0; k < VIDEOS; k++) n += media[k] = media_find(k + 1, path);
     void *view = page_list(st.lib_page, st.lib_page, 0, "Q2 Pod", n, 64);
     library_into(view, "local_shuffle", shuffle_menu, 0, "Shuffle");
     library_into(view, "local_fav", ratings_menu, 0, "Ratings");
     library_row(view, "local_frequentplay", most_played, 0, "Most Played");
     library_row(view, "local_longsongs", long_songs, 0, "Long Songs");
-    for (int k = 0; k < BOOKS; k++)
+    for (int k = 0; k < VIDEOS; k++)
         if (media[k]) library_row(view, icons[k], media_click, (void *)(long)(k + 1), MEDIA[k]);
     library_row(view, "local_coverflow", coverflow_row, 0, "Coverflow");
+    library_into(view, "stream_spotify", spot_open, 0, "Spotify");
+    library_into(view, "stream_radio", radio_open, 0, "Internet Radio");
+    library_into(view, "stream_airplay", airplay_open, 0, "AirPlay");
     if (scrobbles) library_row(view, "local_scrobble", upload_scrobbles, 0, "Upload Scrobbles");
     return 0;
 }
 #endif
 
-/* Streaming's AirPlay row: stock's own receiver (Shairport 1.1.1, AirPlay 1), whose switch is on
- * System settings' Network service page; that page, one press from Streaming. */
+/* Streaming's AirPlay row (M1 Plus: the Q2 Pod page's): stock's own receiver (Shairport 1.1.1,
+ * AirPlay 1), whose switch is on System settings' Network service page; that page, one press away.
+ * V2.1 keeps the switch there too (netservice_airplay). */
 static int airplay_open(void *ctx, void *event) {
     (void)ctx;
     (void)event;
@@ -5350,6 +5358,7 @@ static int airplay_open(void *ctx, void *event) {
     return 0;
 }
 
+#if !M1PLUS /* V2.1 has no Streaming page: the rows are on the Q2 Pod page (library_open) */
 /* stream_page_init: stock's rows, then Spotify (spotify.c), which opens its Now Playing page,
  * Internet Radio (radio.c) and AirPlay. Their buttons have no name, so stock's row click never
  * sees them. */
@@ -5363,6 +5372,7 @@ int ringnav_stream(void *win, void *ctx) {
     }
     return result;
 }
+#endif
 
 /* mclStartPlayer, every local track's start: a playing librespot or radio station lets the DAC's
  * PCM go first. */
@@ -6589,6 +6599,7 @@ int ringnav_input(void *wm, void *e) {
     st.last_input = time_now_ms();
 #if M1PLUS
     lp_input(e);
+    if (e && video_on()) video_touch(e);
     if (!video_on()) {
         int result = stock_input_trampoline(wm, e);
         if (e && I(e, EVENT_TYPE) == EVT_POINTER_UP) st.lp_swallow = 0; /* its click is past */

@@ -282,7 +282,7 @@ MENU_WALK = [('menu_page2', NEXT_PAGE, 4, ('not', 'home')),
 # ext4, a 32-bit guest's readdir under qemu-user fails on 64-bit directory offsets (EOVERFLOW), so
 # the payload would find it empty. The walk, patched only: Long Songs measures and lists both songs;
 # a tap opens the book and the photo (a hidden reader or viewer must not take it); a swipe moves to
-# the next photo and back; Coverflow's covers (one album, then the Sort
+# the next photo and back; Spotify and Internet Radio open from their rows; Coverflow's covers (one album, then the Sort
 # and Refresh cards) turn by swipe and open by a tap on the centre cover; Shuffle Songs saves stock's
 # Shuffle play mode.
 LONG_S = 660
@@ -320,9 +320,10 @@ def media_db(path):
     db.close()
 
 # The Q2 Pod page's rows, 64 px under the 48 px title: Shuffle, Ratings, Most Played, Long Songs,
-# Photos, Books (with their folders), Coverflow, the last row under the screen's end until scrolled.
+# Photos, Books (with their folders), Coverflow, Spotify, Internet Radio, AirPlay; six show. Scrolled
+# to its end (four rows on), Coverflow is the third showing.
 def q2pod_row(i): return tap(160, 80 + 64 * i)
-COVERFLOW_ROW = tap(160, 430)  # the list scrolled to its end
+def q2pod_end_row(i): return tap(160, 80 + 64 * (i - 4))
 MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
               ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
               ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
@@ -339,12 +340,18 @@ MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 
               ('photo_back', BACK, 4, ('not', 'photo')),
               ('photos_back', BACK, 4, ('as', 'media_q2pod')),
               ('q2pod_end', DOWN_LIST, 4, ('not', 'media_q2pod')),
-              ('coverflow', COVERFLOW_ROW, 10, ('not', 'q2pod_end')),
+              ('coverflow', q2pod_end_row(6), 10, ('not', 'q2pod_end')),
               ('cover_next', swipe(220, 150, 120, 150), 4, ('not', 'coverflow')),  # one cover: the Sort card
               ('cover_prev', swipe(120, 150, 220, 150), 4, ('as', 'coverflow')),
               ('cover_open', tap(160, 120), 5, ('not', 'coverflow')),               # the centre cover's tracks
               ('cover_back', BACK, 4, ('as', 'coverflow')),
               ('coverflow_back', BACK, 4, ('as', 'q2pod_end')),
+              # Streaming's rows (V2.1 has no Streaming page): Spotify, not on the card, says so on its
+              # Now Playing page; Internet Radio opens its menu. Each closes with its back button.
+              ('spotify', q2pod_end_row(7), 4, ('not', 'q2pod_end')),
+              ('spotify_back', BACK, 4, ('as', 'q2pod_end')),
+              ('radio', q2pod_end_row(8), 5, ('not', 'q2pod_end')),
+              ('radio_back', BACK, 4, ('as', 'q2pod_end')),
               ('q2pod_top', UP_LIST, 4, ('as', 'media_q2pod')),
               ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
               ('shuffle_songs', tap(160, 101), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
@@ -501,6 +508,7 @@ if __name__ == '__main__':
             assert hits['swiped'] and hits['moved'], 'photo_swipes: the swipes never moved the viewer to another photo'
             assert hits['touched'], 'cover_next: no touch reached the covers'
             assert hits['to_tracks'], 'cover_open: the tap on the centre cover never opened its tracks'
+            assert hits['spot_np'] and hits['radio_open'], 'spotify, radio: the rows never opened their pages'
             config = (data/'config.ini').read_text(errors='replace')
             assert re.search(r'^PLAYMODE=2$', config, re.M), 'shuffle_songs: Shuffle (2) not saved as the play mode'
     print(f'M1 Plus under qemu: both demos up, the same Home below the status bar{" but for the dots" if args.home_menu else ""}; the walk ({", ".join(n for n, *_ in walk)}) '
