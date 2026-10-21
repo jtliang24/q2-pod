@@ -736,11 +736,16 @@ after another with OK between. Holds on All Songs scrolled (a table) opened "Ama
 Two of the roadmap's small fixes, both M1 only:
 - **The Shuffle page's note** was the Q2's 335 px scrolling label at x 20, past the M1's 320 px
   screen ("…to shuf"). The whole sentence is about 290 px at 16 px, wider than the screen less its
-  margins, so on M1 it is a centred label `UI_W - 40` wide that wraps onto two lines.
-  `test/patch.py` checks the label, its width and the wrap.
+  margins, so on M1 it is a centred label `UI_W - 40` wide that wraps onto two lines, between
+  words: on dev 13, `line_wrap` alone split "shu/ffle", so dev 14 also sets `word_wrap`.
+  `test/patch.py` checks the label, its width and both wraps.
 - **The Photos row's icon** was a copy of V2.1's `scover_wait0.png`, a frame of the 54 px loading
   spinner. V2.1 has no photo art, so it is now `pset_covermode.png`, V2.1's 40 px cover-mode badge,
   as the Q2 uses V1.32's `playset_covermode`. `test/build.py --build` checks the copy and its size.
+
+**On the device (dev 14, `V00Es`, commit `79bc00d`).** Over q2remote, the note reads "Albums and
+folders take a moment to / shuffle", centred, and the Photos row shows the blue badge at the other
+rows' size (dev 13 already had the badge). The user checked both.
 
 ## How to check a build now
 
