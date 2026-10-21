@@ -15,8 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** q2remote's tooling (section 6), because every fix after it can be checked on the device
-without a manual pass. Then the touch long-press regression (section 3), which `peek` is for.
+**Next:** the touch long-press regression (section 3), with q2remote's `peek` (section 6) to see
+which of `qm_hold`'s checks refuses.
 
 ## Ground rules
 
@@ -185,14 +185,14 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
 - **q2remote on M1 (first: it makes the rest faster).** Done ([remote.md](remote.md#m1-plus)):
   - upright screenshots, keys, knob turns and taps;
   - `swipe X0 Y0 X1 Y1 [MS]`, from Goodix-CTP's move frames recorded on the device;
-  - `tap X Y MS`, a held tap for the long press.
+  - `tap X Y MS`, a held tap for the long press;
+  - `peek NAME...`, payload and demo variables by name, field by field, from the running `demo`
+    ([remote.md](remote.md#reading-variables)).
 
   A remote session now reaches the Q2 Pod page by itself. Next:
-  - **`peek NAME`:** read a payload or demo variable by name from the running `demo`
-    (`/proc/<pid>/mem`, with the address from the build's `patch.elf` or `peq_platform.h` and the
-    field offset from clang's record layout). Reading `st`'s long-press fields that way took a dozen
-    manual steps.
-  - **An on-device log:** a small ring buffer the payload writes, which q2remote reads.
+  - **An on-device log:** a small ring buffer the payload writes, which q2remote reads. `peek` shows
+    state at one moment; a log would show the order of events, such as which of `qm_hold`'s checks
+    refused during a hold.
 - **Latent Q2 bugs found through M1.** Both were fixed only behind `M1PLUS`, to keep the Q2 build
   byte-identical (ground rules). Fixing them on the Q2 is a deliberate Q2 change, best made
   upstream, with a Q2 device check:
