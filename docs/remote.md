@@ -37,6 +37,7 @@ Each connection rereads `/mnt/mmc/q2remote.key` while the card is mounted, so re
 | `key NAME [MS]` | Presses a button for `MS` ms (default 80).                                                                                                 |
 | `wheel N`       | Turns the wheel `N` ticks: positive is down/next, negative up/back.                                                                        |
 | `tap X Y [MS]`  | Taps the screen at upright screenshot coordinates (0-374, 0-319), holding `MS` ms (default 20).                                             |
+| `peek NAME...`  | Prints payload or `demo` variables by name from the running `demo`, field by field ([below](#reading-variables)). Needs `Q2_BUILD`.        |
 | `events N [S]`  | Prints raw events from `/dev/input/eventN` for `S` seconds (default 5).                                                                    |
 | `devices`       | Lists the input devices and their key and axis codes.                                                                                      |
 | `reboot`        | Syncs and reboots into the saved boot target; q2remote answers again once the Q2 rejoins Wi-Fi, which can take a few minutes.              |
@@ -70,6 +71,37 @@ framebuffer's size:
 
 `wheel` is the Q2's only; `knob` and `swipe` are the M1's. Each command says so if it's used on the other model. The M1's input commands open the device once and write every frame to it: opening `Goodix-CTP` costs about 45 ms, which would stretch a 12 ms frame to 60. With
 **Knob: Navigation** on, `key prev` is Back.
+
+## Reading variables
+
+`peek` reads the running `demo`'s memory and prints what the payload's variables hold, so a check
+like "is a long-press timer pending?" needs no extra logging. Set `Q2_BUILD` to the `--out` directory of
+the build on the device, and run it inside `nix develop`: it needs clang.
+
+```sh
+export Q2_BUILD=build-m1-dev
+python3 tools/q2remote.py peek st.qm_timer st.qm_dialog g_menu.n g_backlight_status
+python3 tools/q2remote.py peek st              # every field, nested records indented
+python3 tools/q2remote.py peek 'ls.tab->sec'   # through a pointer; quote ->, or the shell redirects it
+python3 tools/q2remote.py peek coverflow.c:fx  # a static named in two files: say which
+```
+
+A name is a payload variable (from the build's `patch.elf`) or a `demo` global (`peq_platform.h`'s
+`#define`s, such as `g_backlight_status`), followed by `.FIELD`, `[N]` and `->FIELD`. `->` reads the
+pointer and goes on from what it points to; an index into a pointer (`p[3]`) isn't supported.
+
+To find each name's address, offset and type, `peek` compiles a probe with the build's flags that
+includes the source file that defines it. Numbers print in decimal and hex, pointers in hex, `char`
+arrays as strings, and arrays as their first 16 elements. An array of records prints as hex with its
+type: peek one element (`st.pos[0]`) to see its fields. Each call checks two things before it prints:
+
+- the payload `demo` holds matches the build manifest's `patch_sha256`, or it refuses: the addresses
+  would be another build's;
+- each variable's size from the source matches its size in `patch.elf`, which tells if the source has
+  changed since that build.
+
+A `NULL` or unmapped pointer is reported for its name alone, and the exit status is 1. Checked on an M1
+Plus (dev 11). The Q2's payload is built and linked the same way, but `peek` hasn't been run on one.
 
 ## Working with it
 

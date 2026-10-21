@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Drive a --dev Q2 over Wi-Fi (Q2_HOST and Q2_KEY required; see docs/remote.md).
 
-usage: q2remote.py {sh COMMAND|shot OUT.png|devices|key NAME [MS]|wheel N|knob N|tap X Y [MS]|swipe X0 Y0 X1 Y1 [MS]|events EVENT [S]|reboot}"""
+usage: q2remote.py {sh COMMAND|shot OUT.png|devices|key NAME [MS]|wheel N|knob N|tap X Y [MS]|swipe X0 Y0 X1 Y1 [MS]|peek NAME...|events EVENT [S]|reboot}"""
+import json
 import os
+import pathlib
 import re
 import shlex
 import socket
 import struct
+import subprocess
 import sys
+import tempfile
 import zlib
 
 PORT = 2302
@@ -260,6 +264,323 @@ def input_action(kind, args):
         shell("sh", event_writer(path, batches).encode())  # stdin: a long turn outgrows the 4 KB command line
 
 
+# peek: read payload and demo variables by name from the running demo. The build's patch.elf gives a
+# payload variable's address and its source file; a demo global's address is its #define in the
+# build's headers. clang compiles a probe that includes that file with the build's flags, for the
+# offsets and sizes, and dumps the value's record layout, which names and types each field.
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+PEEK_NAME = re.compile(r"(?:([\w-]+\.c):)?([A-Za-z_]\w*)((?:\.[A-Za-z_]\w*|\[\d+\]|->[A-Za-z_]\w*)*)")
+PEEK_LAYOUT = re.compile(r"\s*(\d+)(?::(\d+)-(\d+))? \|( +)(.*)")
+PEEK_SOURCE = "navigation.c"  # declares the payload's shared globals and includes the demo globals' header
+PEEK_SHOWN, PEEK_HEX = 16, 32  # array elements, and bytes of a hex dump, printed in full
+SCALARS = {"char": "b", "signed char": "b", "unsigned char": "B", "_Bool": "B", "short": "h",
+           "unsigned short": "H", "int": "i", "unsigned int": "I", "long": "i", "unsigned long": "I",
+           "long long": "q", "unsigned long long": "Q", "float": "f", "double": "d", "long double": "d"}
+
+
+def elf_sections(data):
+    """A 32-bit little-endian ELF's sections, in order: (name, type, flags, addr, offset, size, link)."""
+    if data[:6] != b"\x7fELF\x01\x01":
+        raise ValueError("not a 32-bit little-endian ELF")
+    shoff = struct.unpack_from("<I", data, 32)[0]
+    size, num, names = struct.unpack_from("<HHH", data, 46)
+    rows = [struct.unpack_from("<7I", data, shoff + i * size) for i in range(num)]
+    strings = rows[names][4]
+    return [(data[strings + r[0]:data.index(b"\0", strings + r[0])].decode(),) + r[1:] for r in rows]
+
+
+def elf_symbols(data):
+    """{name: [(source file, address, size)]} for the defined objects, functions and labels (the M1's
+    stubbed globals are untyped). A local follows its file's STT_FILE symbol; a global's file isn't
+    recorded (None)."""
+    sections = elf_sections(data)
+    symtab = next(s for s in sections if s[1] == 2)
+    strings = sections[symtab[6]][4]
+    out, file = {}, None
+    for at in range(symtab[4], symtab[4] + symtab[5], 16):
+        name_at, address, size, info, _, index = struct.unpack_from("<IIIBBH", data, at)
+        name = data[strings + name_at:data.index(b"\0", strings + name_at)].decode()
+        if info & 15 == 4:
+            file = name
+        elif info & 15 in (0, 1, 2) and index and name:
+            out.setdefault(name, []).append((file if info >> 4 == 0 else None, address, size))
+    return out
+
+
+def peek_parse(name):
+    """FILE.c:NAME.FIELD[N]->FIELD as (file or None, NAME, the path before any ->, the paths after each)."""
+    m = PEEK_NAME.fullmatch(name)
+    if not m:
+        raise ValueError(f"{name!r}: expected NAME, NAME.FIELD, NAME[N] or NAME->FIELD, optionally FILE.c:NAME")
+    file, base, path = m.groups()
+    first, *rest = path.split("->")
+    return file, base, first, rest
+
+
+def peek_probe(source, entries):
+    """C that includes source, for entries [(i, NAME, first, rest)]: struct peek_v<i>, whose layout
+    is the value's, and in .peek per entry sizeof(NAME), the value's size, its offset in NAME, and
+    each -> field's offset in what the pointer before it points to."""
+    lines, words = [f'#include "{source}"'], []
+    offset = lambda t, path: f"(unsigned)(unsigned long)&(*(__typeof__({t}) *)0){path}" if path else "0u"
+    for i, base, first, rest in entries:
+        expr = base + first + "".join("->" + r for r in rest)
+        lines.append(f"struct peek_v{i} {{ __typeof__({expr}) v; }};")
+        words += [f"sizeof({base})", f"sizeof(struct peek_v{i})", offset(base, first)]
+        prefix = base + first
+        for r in rest:
+            words.append(offset(f"*({prefix})", "." + r))
+            prefix += "->" + r
+    lines.append('__attribute__((used, section(".peek"))) static const unsigned peek_probe[] = {' + ", ".join(words) + "};")
+    return "\n".join(lines) + "\n"
+
+
+def peek_layouts(dump):
+    """{i: struct peek_v<i>'s v} from clang's -fdump-record-layouts, as nodes {type, name, offset,
+    bits, children}. Offsets are from the value's start; name is None for an anonymous member."""
+    out, lines = {}, dump.splitlines()
+    for at, line in enumerate(lines):
+        m = re.fullmatch(r"\s*0 \| struct peek_v(\d+)", line)
+        if not m:
+            continue
+        root = {"children": []}
+        stack = [(0, root)]
+        for line in lines[at + 1:]:
+            f = PEEK_LAYOUT.fullmatch(line)
+            if not f:
+                break  # [sizeof=…]
+            offset, lo, hi, indent, text = f.groups()
+            depth = (len(indent) - 1) // 2
+            # an anonymous member's type ends its line: "union (anonymous at …) "
+            typ, name = (text.strip(), None) if text.endswith((")", " ")) else text.rsplit(" ", 1)
+            if name:  # peq_platform.h's #define read peq_lib_read renames a field called read
+                name = re.sub(r"^peq_lib_", "", name)
+            node = {"type": typ, "name": name, "offset": int(offset),
+                    "bits": (int(lo), int(hi)) if lo else None, "children": []}
+            while stack[-1][0] >= depth:
+                stack.pop()
+            stack[-1][1]["children"].append(node)
+            stack.append((depth, node))
+        out[int(m.group(1))] = root["children"][0]
+    return out
+
+
+def plain(t):
+    return re.sub(r"\b(?:const|volatile|restrict)\b ?", "", t).strip()
+
+
+def short_type(t):
+    """t with clang's "(unnamed at /path/file.c:L:C)" shortened to "(unnamed at file.c:L)"."""
+    return re.sub(r"\((unnamed|anonymous)( struct| union)? at (?:[^():]*/)?([^/():]+):(\d+):\d+\)", r"(\1 at \3:\4)", t)
+
+
+def type_size(t):
+    """A scalar's or a scalar array's size, else None (a record)."""
+    t = plain(t)
+    if "(*)" in t or t.endswith("*"):
+        return 4
+    m = re.fullmatch(r"(.*?)\[(\d+)\](.*)", t)
+    if m:
+        size = type_size(m.group(1) + m.group(3))
+        return size and size * int(m.group(2))
+    code = "i" if t.startswith("enum ") else SCALARS.get(t)
+    return struct.calcsize("<" + code) if code else None
+
+
+def number(v):
+    return f"{v} (0x{v:x})" if v >= 10 else str(v)
+
+
+def hexdump(raw):
+    return raw[:PEEK_HEX].hex(" ") + (f" … ({len(raw)} bytes)" if len(raw) > PEEK_HEX else "") if raw else "(0 bytes)"
+
+
+def peek_value(t, raw, bits=None):
+    """raw shown as type t: a number, a pointer, a string, a list, or else hex."""
+    t = plain(t)
+    if "(*)" in t or t.endswith("*"):
+        return f"0x{struct.unpack_from('<I', raw)[0]:08x}"
+    code = "i" if t.startswith("enum ") else SCALARS.get(t)
+    if code and bits:
+        lo, hi = bits
+        width = hi - lo + 1
+        v = int.from_bytes(raw[:hi // 8 + 1], "little") >> lo & (1 << width) - 1
+        return number(v - (1 << width) if code.islower() and v >> width - 1 else v)
+    if code:
+        v = struct.unpack_from("<" + code, raw)[0]
+        return repr(v) if code in "fd" else number(v)
+    m = re.fullmatch(r"(.*?)\[(\d+)\](.*)", t)
+    if m:
+        elem, n = (m.group(1) + m.group(3)).strip(), int(m.group(2))
+        size = type_size(elem)
+        if size == 1 and SCALARS.get(elem) in ("b", "B") and elem != "_Bool":
+            return '"' + raw[:n].split(b"\0", 1)[0].decode("utf-8", "backslashreplace").replace('"', '\\"') + '"'
+        if size and len(raw) >= n * size:
+            items = [peek_value(elem, raw[k * size:(k + 1) * size]) for k in range(min(n, PEEK_SHOWN))]
+            if n > PEEK_SHOWN:
+                items.append(f"… {n - PEEK_SHOWN} more" + (", all 0" if not any(raw[PEEK_SHOWN * size:n * size]) else ""))
+            return "[" + ", ".join(items) + "]"
+    return hexdump(raw)
+
+
+def peek_lines(label, address, node, raw):
+    """A scalar as one line; a record as a header and a line per field, nested records indented and
+    an anonymous member's fields shown as its parent's, as C names them."""
+    if not node["children"]:
+        return [f"{label} = {peek_value(node['type'], raw)}  ({short_type(node['type'])} @ 0x{address:08x})"]
+    lines = [f"{label} @ 0x{address:08x}  ({short_type(node['type'])}, {len(raw)} bytes)"]
+    def walk(children, end, indent):
+        for k, c in enumerate(children):
+            # a field runs to the next one after it (union members share an offset), or its parent's end
+            stop = min((d["offset"] for d in children[k + 1:] if d["offset"] > c["offset"]), default=end)
+            if c["children"] and c["name"]:
+                lines.append(f"{indent}{c['name']}:")
+                walk(c["children"], stop, indent + "  ")
+            elif c["children"]:
+                walk(c["children"], stop, indent)
+            else:
+                shown = peek_value(c["type"], raw[c["offset"]:stop], c["bits"])
+                # a hex dump names its type: an array of records, which st.pos[0] would show field by field
+                lines.append(f"{indent}{c['name']} = {shown}" + (f"  ({short_type(c['type'])})" if type_size(c["type"]) is None else ""))
+    walk(node["children"], len(raw), "  ")
+    return lines
+
+
+def peek_source(file, base, symbols):
+    """The patch/ file that defines base: the one named, a local's own, else PEEK_SOURCE."""
+    if file:
+        return file
+    files = sorted({f for f, _, _ in symbols.get(base, []) if f})
+    if len(files) > 1:
+        raise ValueError(f"{base} is defined in {', '.join(files)}: name one, as {files[0]}:{base}")
+    return files[0] if files and files[0].endswith(".c") else PEEK_SOURCE
+
+
+def peek_address(base, source, symbols, macros, size, out):
+    """base's address: its symbol in patch.elf (checked against the probe's size, which tells a
+    source changed since the build), or a demo global's #define (*(T *)0x…u), followed through
+    defines that rename it."""
+    name, seen = base, set()
+    while name not in seen:
+        seen.add(name)
+        found = [s for s in symbols.get(name, []) if s[0] in (source, None)]
+        if found:
+            _, address, elf_size = found[0]
+            if elf_size and elf_size != size:
+                raise ValueError(f"{name} is {size} bytes in patch/{source} but {elf_size} in {out}/patch.elf: "
+                                 "the source has changed since that build")
+            return address
+        body = macros.get(name, "")
+        m = re.fullmatch(r"\(\*\((?:volatile |const )*[\w ]+\*\)(0x[0-9a-fA-F]+)u?\)", body)
+        if m:
+            return int(m.group(1), 16)
+        if not re.fullmatch(r"[A-Za-z_]\w*", body):
+            break
+        name = body
+    raise ValueError(f"{base} is neither a payload symbol in {out}/patch.elf nor a demo global")
+
+
+def peek_compile(source, entries, flags, defines=False):
+    """Run the probe: (the .peek words, the layouts, and with defines source's #defines)."""
+    with tempfile.TemporaryDirectory(prefix="q2-peek-") as td:
+        probe, obj = pathlib.Path(td) / "probe.c", pathlib.Path(td) / "probe.o"
+        probe.write_text(peek_probe(ROOT / "patch" / source, entries))
+        try:
+            run = subprocess.run(["clang", *flags, "-c", probe, "-o", obj, "-Xclang", "-fdump-record-layouts-canonical",
+                                  "-Xclang", "-fdump-record-layouts-complete"], capture_output=True, text=True)
+            text = subprocess.run(["clang", *flags, "-E", "-dM", ROOT / "patch" / source],
+                                  capture_output=True, text=True).stdout if defines else ""
+        except FileNotFoundError:
+            raise ValueError("peek needs clang: run it inside nix develop")
+        if run.returncode:
+            errors = dict.fromkeys(line.split("error: ", 1)[1] for line in run.stderr.splitlines() if "error: " in line)
+            raise ValueError(f"probing patch/{source}: " + ("; ".join(list(errors)[:3]) or run.stderr.strip()))
+        data = obj.read_bytes()
+    section = next(s for s in elf_sections(data) if s[0] == ".peek")
+    words = list(struct.unpack_from(f"<{section[5] // 4}I", data, section[4]))
+    macros = dict(re.findall(r"^#define (\w+) (.*)$", text, re.M))
+    return words, peek_layouts(run.stdout), macros
+
+
+def peek_device(reads, payload=None):
+    """The bytes at each (address, size) of demo's memory, short where it isn't mapped; and the
+    sha256 of the payload's (address, size) as demo holds it, when asked."""
+    script = ["p=$(pidof demo)", '[ -n "$p" ] || { echo none; exit; }', "m=/proc/$p/mem"]
+    if payload:
+        skip, lead = divmod(payload[0], 4096)
+        script.append(f"dd if=$m bs=4096 skip={skip} count={-(-(lead + payload[1]) // 4096)} 2>/dev/null | "
+                      f"tail -c +{lead + 1} | head -c {payload[1]} | sha256sum")
+    script += [f"dd if=$m bs=1 skip={at} count={n} 2>/dev/null | xxd -p | tr -d '\\n'; echo" for at, n in reads]
+    out = shell("sh", ("\n".join(script) + "\n").encode()).decode().splitlines()  # stdin: many reads outgrow 4 KB
+    if out[:1] == ["none"]:
+        raise ValueError("demo isn't running")
+    digest = out.pop(0).split()[0] if payload else None
+    if len(out) != len(reads):
+        raise ValueError("unexpected reply reading demo's memory")
+    return digest, [bytes.fromhex(line) for line in out]
+
+
+def peek(names, out=None, device=peek_device):
+    """Each name's lines, or its error as "name: why", read from demo with out (Q2_BUILD) the build it runs."""
+    out = out or os.environ.get("Q2_BUILD")
+    if not out:
+        raise ValueError("set Q2_BUILD to the --out directory of the build the device runs")
+    out = pathlib.Path(out)
+    try:
+        manifest = json.loads((out / "manifest.json").read_text())
+        elf = (out / "patch.elf").read_bytes()
+    except (OSError, ValueError) as e:
+        raise ValueError(f"{out} isn't a build directory: {e}")
+    from build import FLAGS
+    flags = [f for f in FLAGS if f not in ("-Oz", "-Wall", "-Wextra", "-Werror")] + [
+        "-O0", "-w", f"-DIPOD={int(manifest.get('variant') == 'ipod')}", "-I", str(out)]
+    if manifest.get("model") == "Shanling M1 Plus":
+        flags.append("-DM1PLUS=1")
+    symbols = elf_symbols(elf)
+    groups = {}
+    for i, name in enumerate(names):
+        file, base, first, rest = peek_parse(name)
+        groups.setdefault(peek_source(file, base, symbols), []).append((i, base, first, rest))
+    plan = {}  # i: [address, -> offsets, size, layout]
+    for source, entries in groups.items():
+        if not (ROOT / "patch" / source).is_file():
+            raise ValueError(f"no patch/{source}")
+        words, layouts, macros = peek_compile(source, entries, flags, any(b not in symbols for _, b, _, _ in entries))
+        for i, base, first, rest in entries:
+            base_size, size, offset, *chain = words[:3 + len(rest)]
+            del words[:3 + len(rest)]
+            plan[i] = [peek_address(base, source, symbols, macros, base_size, out) + offset, chain, size, layouts[i]]
+    loaded = [s for s in elf_sections(elf) if s[1] == 1 and s[2] & 2 and s[5]]  # PROGBITS, SHF_ALLOC
+    payload = [min(s[3] for s in loaded), manifest["patch_bytes"]]
+    errors = {}
+    def fetch(reads):
+        digest, data = device(reads, payload)
+        if payload:
+            if digest != manifest["patch_sha256"]:
+                raise ValueError(f"the device doesn't run {out}: its payload differs from that build's")
+            payload.clear()
+        return data
+    level = 0
+    while chase := [i for i in plan if i not in errors and len(plan[i][1]) > level]:
+        for i, raw in zip(chase, fetch([(plan[i][0], 4) for i in chase])):
+            pointer = struct.unpack("<I", raw)[0] if len(raw) == 4 else 0
+            if not pointer:
+                errors[i] = f"{'NULL' if len(raw) == 4 else 'unreadable'} pointer at 0x{plan[i][0]:08x}"
+            plan[i][0] = pointer + plan[i][1][level]
+        level += 1
+    good = [i for i in sorted(plan) if i not in errors]
+    lines = []
+    for i, raw in zip(good, fetch([(plan[i][0], plan[i][2]) for i in good]) if good else []):
+        address, _, size, node = plan[i]
+        if len(raw) < size:
+            errors[i] = f"can't read {size} bytes at 0x{address:08x}"
+        else:
+            plan[i].append(raw)
+    for i, name in enumerate(names):
+        lines += [f"{name}: {errors[i]}"] if i in errors else peek_lines(name, plan[i][0], plan[i][3], plan[i][4])
+    return lines, len(errors)
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__)
@@ -278,6 +599,10 @@ def main(argv):
         if len(a) not in {"key": (1, 2), "wheel": (1,), "knob": (1,), "tap": (2, 3), "swipe": (4, 5)}[cmd]:
             raise ValueError(f"invalid arguments for {cmd}")
         input_action(cmd, a); return 0
+    if cmd == "peek" and a:
+        lines, failed = peek(a)
+        print("\n".join(lines))
+        return 1 if failed else 0
     if cmd == "reboot" and not a:
         # Detached so the reply arrives before the network drops; the PMIC's 10-15 s Centre reset can't be injected.
         shell("(sleep 1; sync; reboot) </dev/null >/dev/null 2>&1 &"); return 0

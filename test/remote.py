@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Host transport and pure q2remote protocol checks."""
+import json
 import os
 import pathlib
+import re
 import socket
 import struct
 import subprocess
@@ -132,6 +134,100 @@ for bad in (frame[:20], frame[:-1], frame[:5] + struct.pack("<IIII", w + 1, h, s
     except ValueError: pass
     else: raise AssertionError("bad framebuffer accepted")
 
+# peek: names parse into the base, the path before ->, and each path after one.
+assert q.peek_parse("st.qm_timer") == (None, "st", ".qm_timer", [])
+assert q.peek_parse("coverflow.c:cf.jobs->key") == ("coverflow.c", "cf", ".jobs", ["key"])
+assert q.peek_parse("g_menu.at[3]->a.b[2]->c") == (None, "g_menu", ".at[3]", ["a.b[2]", "c"])
+for bad in ("st.", "st->", "1st", "st.a-b", "st[x]", "st;rm"):
+    try: q.peek_parse(bad)
+    except ValueError: pass
+    else: raise AssertionError(f"peek accepted {bad!r}")
+assert q.short_type("struct (unnamed at /a/b/navigation.c:4799:8)") == "struct (unnamed at navigation.c:4799)"
+assert q.peek_value("unsigned char", b"\xff") == "255 (0xff)" and q.peek_value("char", b"\xff") == "-1"
+assert q.peek_value("unsigned int", b"\x07\0\0\0") == "7" and q.peek_value("struct x *", b"\x10\0\xb5\0") == "0x00b50010"
+assert q.peek_value("int[20]", bytes(80)) == "[" + ", ".join(["0"] * 16) + ", … 4 more, all 0]"
+
+# A payload of two files, linked where the M1's is: peek reads it as patch.elf and patch.bin, and a
+# stand-in device serves patch.bin's bytes as demo's memory.
+with tempfile.TemporaryDirectory(prefix="q2-peek-") as td:
+    root = pathlib.Path(td); (root / "patch").mkdir(); out = root / "build"; out.mkdir()
+    (root / "patch/main.c").write_text('''#define g_flag (*(volatile unsigned char *)0x97cae4u)
+#define g_stub m1stub_g_stub
+#define read peq_lib_read
+extern volatile unsigned char m1stub_g_stub;
+typedef struct node { struct node *next; int v; } node_t;
+typedef struct { int ctx, id; } pos_t;
+static node_t tail = { 0, 7 }, head = { &tail, 5 };
+static int fx = 1;
+static struct {
+    unsigned char flag; unsigned hi : 3, lo : 5; signed s : 4;
+    union { int i; float f; };
+    struct { short x, y; } pt;
+    pos_t at[3]; char name[8]; double d; long long q; _Bool b; unsigned read; node_t *list, *none;
+} st = { 200, 5, 17, -3, { 12 }, { -2, 9 }, { { 1, 2 } }, "hello", 1.5, -40, 1, 3, &head, 0 };
+int main_use(void) { return st.flag + fx + g_flag + g_stub; }
+''')
+    (root / "patch/other.c").write_text("static int fx = 2;\nint other_use(void) { return fx; }\n")
+    (root / "stub.S").write_text(".data\n.globl m1stub_g_stub\nm1stub_g_stub:\n.byte 9\n")
+    flags = ["--target=mipsel-linux-gnu", "-mabi=32", "-mno-abicalls", "-fno-pic", "-G0", "-O0", "-w", "-c"]
+    for src in ("patch/main.c", "patch/other.c", "stub.S"):
+        subprocess.run(["clang", *flags, str(root / src), "-o", str(root / (pathlib.Path(src).stem + ".o"))], check=True)
+    subprocess.run(["ld.lld", "-m", "elf32ltsmip", "-e", "0", "-Ttext=0xb00000", *(str(root / f"{n}.o") for n in ("main", "other", "stub")),
+                    "-o", str(out / "patch.elf")], check=True)
+    subprocess.run(["llvm-objcopy", "-O", "binary", str(out / "patch.elf"), str(root / "patch.bin")], check=True)
+    image = (root / "patch.bin").read_bytes()
+    base = min(s[3] for s in q.elf_sections((out / "patch.elf").read_bytes()) if s[1] == 1 and s[2] & 2 and s[5])
+    import hashlib
+    manifest = {"model": "Shanling M1 Plus", "variant": "stock", "patch_bytes": len(image), "patch_sha256": hashlib.sha256(image).hexdigest()}
+    (out / "manifest.json").write_text(json.dumps(manifest))
+    memory = {base + i: b for i, b in enumerate(image)} | {0x97cae4: 4}
+    calls = []
+    def device(reads, payload=None):
+        calls.append((list(reads), payload and list(payload)))
+        digest = hashlib.sha256(bytes(memory[a] for a in range(payload[0], payload[0] + payload[1]))).hexdigest() if payload else None
+        return digest, [bytes(memory[a] for a in range(at, at + n) if a in memory) for at, n in reads]
+    q.ROOT, q.PEEK_SOURCE = root, "main.c"
+    symbols = q.elf_symbols((out / "patch.elf").read_bytes())
+    assert [f for f, _, _ in symbols["fx"]] == ["main.c", "other.c"] and symbols["m1stub_g_stub"][0][0] is None
+    lines, failed = q.peek(["st", "st.name", "st.at[1].id", "st.list->v", "st.list->next->v", "st.list->next->next->v",
+                            "g_flag", "g_stub", "other.c:fx", "main.c:fx"], out, device)
+    assert failed == 1, lines
+    text = "\n".join(lines)
+    st_line = next(l for l in lines if l.startswith("st @ "))
+    assert re.fullmatch(r"st @ 0x00b[0-9a-f]{5}  \(struct \(unnamed at main\.c:9\), \d+ bytes\)", st_line), st_line
+    for want in ("  flag = 200 (0xc8)", "  hi = 5", "  lo = 17 (0x11)", "  s = -3", "  i = 12 (0xc)", "  f = 1.6815581571897805e-44",
+                 "  pt:\n    x = -2\n    y = 9", '  name = "hello"', "  d = 1.5", "  q = -40", "  b = 1", "  read = 3",
+                 "  none = 0x00000000"):
+        assert want in text, want
+    assert "\n  at = 01 00 00 00 02 00 00 00" + " 00" * 16 + "  (pos_t[3])\n" in text, text  # records: hex and the type
+    assert re.search(r'^st\.name = "hello"  \(char\[8\] @ 0x00b', text, re.M)
+    assert re.search(r"^st\.at\[1\]\.id = 0  \(int @ ", text, re.M)
+    assert re.search(r"^st\.list->v = 5  \(int @ ", text, re.M) and re.search(r"^st\.list->next->v = 7  \(int @ ", text, re.M)
+    assert re.search(r"^st\.list->next->next->v: NULL pointer at 0x00b", text, re.M)
+    assert "g_flag = 4  (volatile unsigned char @ 0x0097cae4)" in text
+    assert re.search(r"^g_stub = 9  \(volatile unsigned char @ 0x00b", text, re.M)
+    assert re.search(r"^other\.c:fx = 2  ", text, re.M) and re.search(r"^main\.c:fx = 1  ", text, re.M)
+    # One round per -> level; the first also checks the payload, and only the first.
+    assert [len(r) for r, _ in calls] == [3, 2, 1, 9] and calls[0][1] == [base, len(image)] and not any(p for _, p in calls[1:])
+    def refuses(names, why, build=out, dev=device):
+        try: q.peek(names, build, dev)
+        except ValueError as e: assert why in str(e), e
+        else: raise AssertionError(f"peek {names} accepted")
+    refuses(["fx"], "fx is defined in main.c, other.c: name one, as main.c:fx")
+    refuses(["st.nope"], "probing patch/main.c: no member named 'nope'")
+    refuses(["nothing"], "probing patch/main.c: use of undeclared identifier 'nothing'")
+    refuses(["main_use"], "field 'v' declared as a function")
+    refuses(["st"], "the device doesn't run", dev=lambda reads, payload=None: ("0" * 64, [b""] * len(reads)))
+    memory.pop(0x97cae4)
+    assert q.peek(["g_flag"], out, device)[0] == ["g_flag: can't read 1 bytes at 0x0097cae4"]
+    # The source changed since the build: st's size in the probe no longer matches patch.elf's.
+    (root / "patch/main.c").write_text((root / "patch/main.c").read_text().replace("*none;", "*none; int added;"))
+    refuses(["st.flag"], "st is ")
+    saved_build = os.environ.pop("Q2_BUILD", None)
+    refuses(["st"], "set Q2_BUILD", build=None)
+    if saved_build is not None: os.environ["Q2_BUILD"] = saved_build
+    q.ROOT, q.PEEK_SOURCE = pathlib.Path(__file__).resolve().parents[1], "navigation.c"
+
 with tempfile.TemporaryDirectory(prefix="q2-remote-") as td:
     root = pathlib.Path(td); keyfile = root / "key"; keyfile.write_text("0123456789abcdef\n")
     mounts, cache = root / "mounts", root / "cache"
@@ -200,4 +296,4 @@ with tempfile.TemporaryDirectory(prefix="q2-remote-") as td:
             assert s.recv(16) == b""  # 10-second handshake timeout
     finally:
         proc.terminate(); proc.wait(timeout=2)
-print("Remote auth, rotation/removal, USB-storage key cache, fragmented requests, binary stdin/output, timeout, devices and framebuffer checks passed.")
+print("Remote auth, rotation/removal, USB-storage key cache, fragmented requests, binary stdin/output, timeout, devices, framebuffer and peek checks passed.")
