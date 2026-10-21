@@ -944,6 +944,42 @@ before playing (`on[1]`, an FPGA load, `on[2]` in the kernel's log); a cold q2vi
 user played the video and an Internet Radio station. Over q2remote, the kernel's log showed the DAC's
 full power-on (the FPGA load, `on[2]`) at 19 s, with no segfault, and no q2video left running.
 
+## 24. Roadmap section 4 checked against V2.1 (Oct 21)
+
+Before porting any of section 4's call sites, each one was looked up in V2.1's `demo`, and each
+behaviour was checked against what V2.1 already does. V2.1 is newer than V1.32, so some rows might
+be native there. The method:
+- Find the same-named or same-role function, from its symbol, its strings or its callees.
+- Compare it with V1.32's after normalising addresses and immediates.
+- Where the code had changed, look at the page on the device over q2remote.
+
+The results are in the roadmap's section 4. In summary:
+- **Unchanged code.** Most of V2.1's player and library code is V1.32's, moved: `mclNextSong`, the
+  shuffle pick, `switchBtPriority`, `check_cpumem` (V1.32's `check_mem_thd`), `into_standby`
+  (`device_standby`), `toolsLoadAllFile`, `toolsLoadDirectory`, the folder lister and both name
+  comparators. So Shuffle's Play next and history, LDAC HQ, the page cache, Standby, the scan limit,
+  M4B and the article-free sort keep their V1.32 behaviour, and each port is a site and a word.
+- **Native in V2.1.** An artist's page lists the artist's albums. Buttons lock has its own Volume, Keys
+  and All modes. The Artists page has its own Artist/Album Artist switch (`btn_artistswitch`), which
+  `config_init` reads at boot. Its Artists rows draw V2.1's own icon. Those rows are dropped from
+  section 4.
+- **Changed pages.** The Bluetooth list builder (`0x4a3734`), the Lock screen page (a picture grid),
+  Now Playing's heart (`btn_fav`) and the cover cache (`/tmp/abp`, still keyed by the album's name
+  alone) need new sites, not moved ones.
+
+Three things turned up that the roadmap didn't list:
+- **A reboot lost the advanced queue.** V2.1's `config_init` applies the saved play mode by calling
+  `mclSetPlayMode` itself (`jalr` at `0x4e596c`). V1.32's called `config_playmode`, which Q2 Pod
+  replaces with `ringnav_bootmode`. On M1 that call reached `ringnav_mode` as a user's choice, so
+  `playback_clear` deleted `/mnt/data/ringnav-queue` before the Home page's memory play could read
+  it. On dev 18, over q2remote, the queue file was there before a reboot and gone after it. The
+  file was put back from a copy on the card.
+- **No gapless in advanced play.** `mcl_preload` isn't hooked on M1, so stock preloads its own next
+  track, and `ringnav_next` drops it and starts the right one without the gapless handoff. V2.1's
+  `mcl_preload` (`0x5d0ea4`) is V1.32's.
+- **The cover worker's Q2 fixes.** `COVER_PAUSE` and the stale-completion check
+  (`ringnav_cover_done`) are Q2 only. Whether V2.1's album lists have the same bugs isn't known yet.
+
 ## How to check a build now
 
 ```sh

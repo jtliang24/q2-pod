@@ -15,8 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** section 4's call sites; a video and Spotify on the device (section 3) when there is one on
-the card. Functionality comes first:
+**Next:** section 4, from the top of its table (the boot queue bug first); Spotify on the device
+(section 3) when there is an account. Functionality comes first:
 items that only change how something looks wait for the final pass (section 7).
 
 ## Ground rules
@@ -86,33 +86,44 @@ A video and Internet Radio play through q2video on the ES9069Q, straight after a
 
 ## 4. Re-pointing V1.32 call-site patches (M each, many)
 
-Each `NOT PORTED` line below names a patch or hook made at a V1.32 address. Porting one means finding the
-same call in V2.1 (by the function it sits in and the call it replaces), adding an M1 table entry
-beside the Q2 one in `tools/build.py`, and moving the test's address to a per-model table.
+Each `NOT PORTED` line below names a patch or hook made at a V1.32 address. Porting one means:
+- add an M1 entry beside the Q2 one in `tools/build.py`'s per-model tables;
+- move the test's address to the same table.
 
-| Feature | V1.32 site | Notes |
-|---|---|---|
-| Shuffle honours Play next | `SHUFFLE_CALL` | mclNextSong's shuffle pick |
-| Shuffle's Previous/Next history | V1.32 call-site patches | |
-| Playlist rows and click guards | V1.32 playlist builders | |
-| LDAC HQ sends 990 kbps | `LDAC_HQ` | switchBtPriority |
-| Resume on connect | `BT_CONNECT_START`, `btmenu_rows` | plus the Bluetooth page's row |
-| Standby resume stays dark | `STANDBY_WAKE` | device_standby's `awake_screen` |
-| Now Playing's info lines | `NP_INFO_CALL` | |
-| M4B in folder scans | `AUDIO_EXTENSION_CALLS` | the `strstr` extension checks |
-| 65,000-song scan, article-free sort, Artists rows | `SCAN_LIMIT`, `SORT_TRIMS`, `CLASS_ICON` | |
-| Same-named albums' art, artist covers | `ALBUM_ART`, `ALBUM_ART_ROW`, `ARTIST_COVER_ROW` | |
-| An artist's albums' art keys | V2.1's artist page renderer | the order is ported (`ringnav_localclass`, `0xff01`) |
-| Artist pages open on Albums | `ARTIST_ALBUMS` | |
-| Artists defaults to Album Artist, read at boot | `read_artistype_value`, `ringnav_bootmode` call | |
-| Lock screen Clock row, thumbnails, cover repaint | `screensaver_rows`, `saver_cover` | |
-| Key lock and quick lock rows | `keylock_rows`, `quick_lock` | V2.1 may already offer equivalents |
-| Ratings' Now Playing heart | `img_fav` binding | |
-| Gapless preload across speed changes | `mcl_open_preload` | |
-| Keep the page cache | `DROP_CACHES` | `check_mem_thd`'s write |
+Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
+section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
+value and effort:
 
-Check whether V2.1 already has the behaviour before porting it. V2.1 is newer than V1.32, and some of
-these may be fixed or offered natively.
+| Feature | V2.1 site | Notes | Size |
+|---|---|---|---|
+| **Boot keeps the advanced queue** (a bug) | `config_init`'s `mclSetPlayMode` call returns to `0x4e5974` | V2.1 calls the hooked `mclSetPlayMode` itself, so `ringnav_mode` deletes the saved queue. Seen on dev 18. Treat that return as `INITCONFIG_MODE_RET` is treated | S |
+| Shuffle honours Play next, and its Previous/Next history | `SHUFFLE_CALL`: `bal` at `0x5d5a28` (`0x0411ea61`), the pick at `0x5d03b0` | same code. One site does both (`ringnav_shuffle`) | S |
+| Keep the page cache | `DROP_CACHES`: `0x50b868`'s `beq` (`0x12220006`) | same code, in `check_cpumem` | S |
+| 65,000-song scan | `SCAN_LIMIT`: `0x5efeb4` (`lw` `0x8fc2b084`, `slti` `0x28424e20`, count `0x8fc4b084`) | same code | S |
+| Article-free sort | `SORT_TRIMS`: `0x5e0ea4`, `0x5e0f10`, `0x5e17bc`, `0x5e1828` | same code (comparators `0x5e0dac`, `0x5e16c4`) | S |
+| M4B in folder scans | `AUDIO_EXTENSION_CALLS`: `0x5e8af0`, `0x5ea840` | same list, without `.m4b`. The `strstr` load before each is `0x8f99f694` | S |
+| LDAC HQ sends 990 kbps | `LDAC_HQ`: `0x4d304c`–`0x4d3070` | same code, so the same words except the jump table's `lw` (`0x8c42a4b0`). Check the quality page's row order | S |
+| Gapless in advanced play, and across speed changes | hooks: `mcl_preload` `0x5d0ea4`, `mcl_open_preload` `0x5d0bd8` | same code. Without `mcl_preload` (not hooked on M1), Shuffle Albums/Folders lose gapless | S |
+| Standby resume stays dark | `STANDBY_WAKE`: `into_standby`'s `bal awake_screen` at `0x4e77c0` (`0x0411fe96`) | same code. V2.1 also has Double wake: check this is still wanted | S |
+| Resume on connect | `BT_CONNECT_START`: `bal save_start_player` at `0x4d6320` (`0x04113031`). Rows: the list builder at `0x4a3734` | still restarts the queue unpaused. The builder is new (five callers, V2.1's rows) | M |
+| Ratings' Now Playing heart | V2.1's heart is `btn_fav` (`show_player_face`, `btn_imgfav_style`) | no `img_fav`. Bind the rating hold to `btn_fav` | S–M |
+| Lock screen Clock row and thumbnails | the Lock screen page, `systemset_screensaver_page_init` (`0x4abe04`) | a picture grid now. On the device the five built-ins the payload adds show as empty circles, and there is no Clock row | M |
+| Lock screen cover repaint | the lock window (`screensaver_page_init`) reads `/tmp/abp` | V2.1's lock window differs. Check on the device whether it repaints on a track change | S |
+| Same-named albums' art, an artist's albums' art keys | V2.1's album list and artist page renderers, still to find | V2.1's cover worker is V1.32's (`md5` of the album name), caching in `/tmp/abp`. Split rows share one cover. The order is ported (`ringnav_localclass`, `0xff01`) | M |
+| Cover worker pause and stale completion | not checked | `COVER_PAUSE` and `ringnav_cover_done` are Q2 only. Check with the art rows | S |
+| Now Playing hold's Add to Playlist when the queue changed | V2.1's playlist pick handler, still to find | M1 already selects the row (`qm_select`). Only the stale-queue guard is missing. `playlist_rebuild` is iPod only | S |
+
+Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
+- **Artist pages open on Albums** (`ARTIST_ALBUMS`): V2.1's artist page lists the artist's albums.
+- **Key lock and quick lock rows** (`keylock_rows`, `quick_lock`): V2.1's Buttons lock has a switch and
+  Volume, Keys and All modes.
+- **Artists defaults to Album Artist, read at boot** (`read_artistype_value`, `ringnav_bootmode`):
+  V2.1's Artists page has its own Artist/Album Artist switch, saved as `ARTISTTYPE` and read in
+  `config_init`. A fresh config still starts on Artist.
+- **Artists rows without the head picture** (`CLASS_ICON`): V2.1 draws its own artist icon.
+
+Now Playing's info lines (`NP_INFO_CALL`) only change how the lines read, so they are in section 7.
+Their V2.1 site is the fill's one call, `0x53bebc` (`0x0411f760`, the fill at `0x539c40`).
 
 ## 5. The iPod UI on M1 (L, after sections 1–4)
 
@@ -182,6 +193,9 @@ Items that only change how something looks, gathered once all the functionality 
   Check the other `page_list` pages too: Internet Radio's menu shows the same in the emulator.
 - **The Streaming rows' icons.** On the Q2 Pod page, Spotify's and Internet Radio's icons are wider
   than V2.1's 40 px row icons and reach the row's left edge (`stream_spotify`, `stream_radio`).
+- **Now Playing's info lines** (`NP_INFO_CALL`). V2.1's info page writes `Label:value` lines (album,
+  genre, year, size) and the folder alone. `ringnav_np_info` spaces them and labels the folder. V2.1's
+  site is in section 4's notes.
 - **Coverflow's covers by touch.** A tap on a side cover moves it to the centre, sized by the
   renderer's geometry; whether a swipe's feel (100 px a cover, a flick within 300 ms) suits the
   device's panel.
