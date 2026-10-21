@@ -167,7 +167,7 @@ class Machine:
         self.clock=(18,14)  # local (hour, minute) for time/localtime, or the one of them that fails
         self.rockbox_mode=0o100755
         for glibc_sym, handler in (('__xstat@GLIBC_2.0', 'rockbox_stat'),
-                                   ('strcmp@GLIBC_2.0', 'tk_strcmp'),
+                                   ('strcmp@GLIBC_2.0', 'strcmp'),
                                    ('memcpy@GLIBC_2.0', 'memcpy'),
                                    ('memset@GLIBC_2.0', 'memset')):
             if glibc_sym in syms: self.handlers[syms[glibc_sym]] = handler
@@ -436,7 +436,11 @@ class Machine:
             self.screens.append(a)
             ret=1
         elif name=='player_start': self.started.append((a,b,c,d)); ret=1
-        elif name in ('tk_strcmp','strcmp@GLIBC_2.0'): x,y=self.text(a),self.text(b); ret=0 if a and b and x==y else -1 if x<=y else 1
+        elif name in ('tk_strcmp','strcmp'):
+            # AWTK's tk_strcmp takes NULL; glibc's strcmp faults on it, as demo did on the device
+            # (V2.1 has no tk_strcmp, so the M1's is glibc's unless peq.h wraps it).
+            assert name=='tk_strcmp' or (a and b), f'NULL passed to glibc strcmp ({a:#x}, {b:#x})'
+            x,y=self.text(a),self.text(b); ret=0 if a and b and x==y else -1 if x<=y else 1
         elif name=='stock_dispatch':
             if self.get(b)==O['EVT_CLICK']:
                 self.clicks.append(a)
@@ -1441,7 +1445,7 @@ for n,steps,before,after,want in (
 # U+0100 and U+0200 share a low zero byte; titles/subtitles must use complete code points.
 m=Machine(); w,es=m.page_list(4,extent=1000)
 del m.handlers[syms['widget_get_text']]
-m.handlers[syms['strcmp@GLIBC_2.0']]='tk_strcmp'
+m.handlers[syms['strcmp@GLIBC_2.0']]='strcmp'
 def stock_text(e,text):
     m.word(e+O['W_VT'],syms['g_label_vtable'])
     m.word(e+0x38,len(text)); m.word(e+0x40,m.wide_string(text))
@@ -2702,7 +2706,7 @@ class NavigationMachine(Machine):
                   'remove@GLIBC_2.0','idle_add','netdisk_folder_clear','awake_screen',prefix='nav:')
         self.rockbox_mode=0o100755
         self.handlers[syms['__xstat@GLIBC_2.0']]='rockbox_stat'
-        self.handlers[syms['strcmp@GLIBC_2.0']]='tk_strcmp'
+        self.handlers[syms['strcmp@GLIBC_2.0']]='strcmp'
         for address in (0x52b6f4,0x68541c,0x6885c0,0x6861d4): self.handlers[address]='nav:'+hex(address)
     def sync_order(self):
         self.top=self.order[-1] if self.order else 0
@@ -2980,7 +2984,7 @@ class QueueMachine(Machine):
         self.favs=set(); self.open_pages=set(); self.opened=[]
         if 'mclLoadPlayList' in syms: self.handlers.pop(syms['mclLoadPlayList'], None)
         self.mock('strlen@GLIBC_2.0','snprintf@GLIBC_2.0')
-        if 'strcmp@GLIBC_2.0' in syms: self.handlers[syms['strcmp@GLIBC_2.0']]='tk_strcmp'
+        if 'strcmp@GLIBC_2.0' in syms: self.handlers[syms['strcmp@GLIBC_2.0']]='strcmp'
         self.mock('mclStartPlayer','mclStop','mclSetPause','mclSetResume','mclSetSeek')
         self.status=(self.wm+0xf8) if is_m1plus else self.alloc(0x200); self.word(syms['g_class_type'],cls)
         self.surface,_,_=self.table_page(4,page,rebind=True); self.word(self.surface+O['TABLE_ROWS'],rows)
