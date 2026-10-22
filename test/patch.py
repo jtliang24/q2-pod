@@ -678,6 +678,12 @@ class Machine:
     def moved(self): return [x for x in self.calls if x[0] in ('scroll_view_set_offset','table_client_set_yoffset','scroll_view_scroll_delta_to','table_client_scroll_to','slide_menu_scroll_to_next','slide_menu_scroll_to_prev','widget_animator_scroll_set_params')]
     def dispatched(self): return [x for x in self.calls if x[0]=='stock_dispatch']
 
+# Here, above the pass counter, so test/playback.py's fixture slice has it too (QueueMachine's V2.1 dialogs use it).
+def named(m,w,name):
+    """The widget under w (or w) named name, else 0."""
+    if m.nodes[w]['name']==name: return w
+    return next((f for c in m.nodes[w]['children'] if (f:=named(m,c,name))),0)
+
 checks=0
 def passed():
     global checks
@@ -694,9 +700,6 @@ def known_gap(name, check):
     except AssertionError as e:  # the failing line is shown, so a harness assert can't pass for the gap
         GAPS.append(name); print(f'KNOWN GAP: {name}\n    {traceback.extract_tb(e.__traceback__)[-1].line} {e}'.rstrip()); return
     raise AssertionError(f'Gap fixed, remove its known_gap marker: {name}')
-def named(m,w,name):
-    if m.nodes[w]['name']==name: return w
-    return next((f for c in m.nodes[w]['children'] if (f:=named(m,c,name))),0)
 def row_button(m,row):
     """A list_row's tap target, which holds its icon and label: the list_item on V2.1, its button on V1.32."""
     return row if is_m1plus else m.nodes[row]['children'][0]

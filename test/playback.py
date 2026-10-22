@@ -620,7 +620,7 @@ m.press(100); assert m.hold()==11
 assert m.labels()[-3:]==['Shuffle','Repeat','Group by: Album']
 m.pick(m.labels().index('Shuffle')); m.advance(0,clear=False)
 assert m.labels()==['Off','All Songs','Songs in Album','Albums','Albums and Songs']
-assert any(n.get('image')=='select' for n in m.nodes.values())
+assert any(n.get('image')==NAMES['ICON_SORTSELECT_CHECK'] for n in m.nodes.values())
 m.pick(3); m.advance(0,clear=False); assert m.fn('playback_option',0)==3
 # Grouped by folder, the choices name folders.
 m=PlaybackMachine(); m.options(3,2,1); m.top=m.node('window','playing_page'); m.stack=[m.top]; m.word(m.top+O['W_PARENT'],m.wm)
