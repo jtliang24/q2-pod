@@ -832,6 +832,8 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     # The Lock screen page's pick (systemset_screensaver_page_init's visit binds the first six
     # pictures' clicks to it): the picture's index into pdeq_screensaverlist, saved and checked
     'saver_pick': 0x4ab52c,
+    'mcl_preload': 0x5d0ea4,  # the gapless pick and its open, hooked (M1PLUS_HOOKS) as on the Q2
+    'mcl_open_preload': 0x5d0bd8,
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
 }
 M1PLUS_FUNCTION_ALIASES = {
@@ -876,6 +878,9 @@ M1PLUS_HOOKS = {
     'mclPrevSong': (0x5d56dc, 'ringnav_prev', 'prev'),
     'mclSetPlayMode': (0x5d278c, 'ringnav_mode', 'mode'),
     'mclSetPlaySpeed': (0x5d281c, 'ringnav_speed', 'speed'),
+    # Gapless: the next track's pick and its decoder's open, V1.32's moved
+    'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
+    'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),
     'memeory_startplayer': (0x4e34dc, 'ringnav_memory', 'memory'),
     'systemset_powermanager_page_init': (0x4a9d18, 'ringnav_powermanager', 'power'),
     'playset_playset_page_init': (0x4a0c88, 'ringnav_audioset', 'audioset'),

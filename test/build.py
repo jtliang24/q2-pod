@@ -243,7 +243,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     import filecmp, os, pathlib, re, struct, subprocess, tarfile, tempfile
     from build import (sha, run, fileoff, segments, symbols, pic_gp, BASE, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS,
                        PDR_M1PLUS, RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ, OBSOLETE, HELPER,
-                       BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, WATCHDOG, S90PLAY, S11LOGO, call_site_words)
+                       BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, WATCHDOG, S90PLAY, S11LOGO, call_site_words,
+                       M1PLUS_PRIVATE_FUNCTIONS)
     ps = symbols(directory/'patch.elf')
     payload = (directory/'patch.bin').read_bytes()
     assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
@@ -256,10 +257,11 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         off = fileoff(stock, address)
         assert demo[off:off+8] == struct.pack('<II', 0x08000000 | ps[name] >> 2, 0), f'{name}: no jump at {address:#x}'
         allowed.update(range(off, off+8))
-    # Each hook: V2.1's own symbol, a PIC entry resolving V2.1's GOT base (the trampoline restores
-    # it), now a jump to its payload replacement.
+    # Each hook: V2.1's own symbol, or a private routine M1PLUS_PRIVATE_FUNCTIONS names (the gapless
+    # pick and open), a PIC entry resolving V2.1's GOT base (the trampoline restores it), now a jump
+    # to its payload replacement.
     for name, (address, replacement, _) in M1PLUS_HOOKS.items():
-        assert stock_syms[name] == address and pic_gp(stock, address) == M1PLUS_GP, name
+        assert stock_syms.get(name, M1PLUS_PRIVATE_FUNCTIONS.get(name)) == address and pic_gp(stock, address) == M1PLUS_GP, name
         jumped(address, replacement)
     # The call sites in V2.1's own code (CALL_SITES['m1plus']); shared_checks checks their words.
     for _, address, _, _ in call_site_words(True, ps):

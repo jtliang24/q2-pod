@@ -655,7 +655,6 @@ int playback_group_skip(int forward) {
     playback_save();
     return 1;
 }
-#if !M1PLUS /* the mcl_preload hook is V1.32's */
 int ringnav_preload(void) {
     if (!s.active) return stock_preload_trampoline();
     int next = playback_successor(1);
@@ -663,7 +662,6 @@ int ringnav_preload(void) {
     M(MCL_PREPOS) = next;
     return mcl_open_preload();
 }
-#endif
 void playback_insert(unsigned at, unsigned n, int next) {
     if (!s.active) return;
     close_preload();

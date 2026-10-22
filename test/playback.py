@@ -113,15 +113,6 @@ class PlaybackMachine(QueueMachine):
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
     def fn(self,name,*args):
-        if name in ('ringnav_preload', 'ringnav_open_preload') and name not in ps:
-            if name == 'ringnav_preload':
-                nxt = self.fn('playback_successor', 1)
-                if nxt >= 0:
-                    self.word(O['MCL_PREPOS'], nxt)
-                    self.word(O['MCL_PRELOAD'], 1)
-                return 1
-            if name == 'ringnav_open_preload':
-                return 1
         return signed(self.call(address=ps[name],args=tuple(args)+(0,)*(4-len(args)),gap=0))
     def options(self,shuffle,repeat,folder):
         for kind,value in ((2,folder),(0,shuffle),(1,repeat)): assert self.fn('playback_set',kind,value)==1
@@ -790,12 +781,9 @@ before=dict(m.files)
 m.call(address=pc,args=(3,0,0,0),gap=0)
 assert m.sent_speed==2 and m.files==before
 # Speed boundaries cannot inherit the old gapless decoder; equal speeds still preload.
-if not is_m1plus:
-    for next_at,want in ((1,0),(2,1)):
-        m.word(O['MCL_PREPOS'],next_at); m.word(O['MCL_PRELOAD'],0)
-        m.fn('ringnav_open_preload'); assert m.mcl('MCL_PRELOAD')==want
-else:
-    print('NOT PORTED: speed changes close the gapless preload (mcl_open_preload not hooked in V2.1)')
+for next_at,want in ((1,0),(2,1)):
+    m.word(O['MCL_PREPOS'],next_at); m.word(O['MCL_PRELOAD'],0)
+    m.fn('ringnav_open_preload'); assert m.mcl('MCL_PRELOAD')==want
 # Changing speed closes an existing preload.
 m.word(O['MCL_PRELOAD'],1); m.word(O['MCL_FD'],-1)
 m.fn('ringnav_speed',1); assert m.mcl('MCL_PRELOAD')==0
