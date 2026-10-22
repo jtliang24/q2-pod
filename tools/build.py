@@ -296,6 +296,9 @@ CALL_SITES = {
         # toolsLoadDirectory's and the recursive scan's (0x5ea364) extension checks.
         'AUDIO_EXTENSION_CALLS': ((0x5e8ae8, 0x8f99f694, None), (0x5e8af0, 0x0320f809, 'ringnav_audio_extension'),
                                   (0x5ea838, 0x8f99f694, None), (0x5ea840, 0x0320f809, 'ringnav_audio_extension')),
+        # The two name comparators, 0x5e0dac and 0x5e16c4.
+        'SORT_TRIMS': ((0x5e0ea4, 0x0411ff86, 'ringnav_sort_key'), (0x5e0f10, 0x0411ff6b, 'ringnav_sort_key'),
+                       (0x5e17bc, 0x0411fd40, 'ringnav_sort_key'), (0x5e1828, 0x0411fd25, 'ringnav_sort_key')),
     },
 }
 CALL_SITE_PURPOSES = {

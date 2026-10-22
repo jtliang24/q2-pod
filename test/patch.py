@@ -3840,7 +3840,7 @@ if 'SORT_TRIMS' in SITES:
         rs={sort_rec(n):n for n in names}
         return [rs[r] for r in sorted(rs,key=cmp_to_key(lambda x,y: -1 if less(x,y) else 1 if less(y,x) else 0))]
     names=['Daft Punk','The Cure','Coldplay','Them Crooked Vultures','A Tribe Called Quest','Anthrax','The','an Orchestra','Toto']
-    for cmp in (0x5ba658,0x5b9d40):
+    for cmp in ((0x5e16c4,0x5e0dac) if is_m1plus else (0x5ba658,0x5b9d40)):
         assert ordered(names,cmp)==['Anthrax','Coldplay','The Cure','Daft Punk','an Orchestra','The','Them Crooked Vultures','Toto','A Tribe Called Quest'],ordered(names,cmp)
         passed()
     key=lambda t: (m.u.mem_write(0x1100000,t.encode()+b'\0'), m.call(address=symbols(B/'patch.elf')['ringnav_sort_key'],args=(0x1100000,0,0,0),gap=0), m.text(0x1100000))[2]
