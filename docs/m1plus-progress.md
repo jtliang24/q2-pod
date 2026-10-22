@@ -1000,6 +1000,15 @@ Section 24 found that a reboot lost a Shuffle Albums or Shuffle Folders queue on
 above the slice's end, and the hold menu's choice marker is the model's `ICON_SORTSELECT_CHECK`
 (V2.1's `mulselected`). Its 258 checks pass on M1.
 
+**On the device (dev 19, `V00Js`, commit `92b3fe2`).** The device held a saved album shuffle of 417
+tracks. Over q2remote:
+- the queue file survived the flash's own reboot, rewritten once as the resume saved its place;
+- it survived a second, plain reboot byte for byte;
+- after each boot, `peek` showed the payload had restored it (`s.active` 1, `s.n` 417, `s.shuffle` 3).
+
+The user then played on from it: Play resumed the track, and Next and Previous stayed in the album
+shuffle.
+
 ## How to check a build now
 
 ```sh
