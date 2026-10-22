@@ -1053,13 +1053,15 @@ def compile_payload(out, ipod=False, m1plus=False):
     asm = ['.set noreorder', '.text']
     active_hooks = M1PLUS_HOOKS if m1plus else hooks(ipod)
     gp = M1PLUS_GP if m1plus else GP
-    resume = {x: address for address, _, x in active_hooks.values() if x}
+    # Q2 resumes every hook's stock code, as upstream does: Legacy links the iPod trampolines too.
+    resume = {x: address for address, _, x in (M1PLUS_HOOKS if m1plus else HOOKS | IPOD_HOOKS).values() if x}
     for x, address in resume.items():
         asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', f'lui $gp, {gp >> 16}',
                 f'ori $gp, $gp, {gp & 65535}', f'j 0x{address + 12:x}', 'nop']
-    for x in ALL_TRAMPOLINES:
-        if x not in resume:
-            asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', 'jr $ra', 'move $v0, $zero']
+    if m1plus:  # a hook V2.1 lacks has no stock code to resume, so its trampoline returns 0
+        for x in ALL_TRAMPOLINES:
+            if x not in resume:
+                asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', 'jr $ra', 'move $v0, $zero']
     (out/'trampoline.S').write_text('\n'.join(asm)+'\n')
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     leaf_paint = WM_PAINT_LEAF_M1PLUS if m1plus else WM_PAINT_LEAF
