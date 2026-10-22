@@ -24,6 +24,14 @@ v = VERSIONS.get(variant, '')
 assert v and manifest['version'] == (dev_tag(manifest['dev'], v[-1]) if manifest.get('dev') else v), 'Wrong variant/version'
 assert (manifest.get('compact_code') != []) == (variant == 'ipod')
 is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
+from build import call_sites, call_site_words
+SITES = call_sites(is_m1plus)  # this model's call-site patches (build.py CALL_SITES); a missing one is NOT PORTED
+def site_patched(name):
+    """Each of name's words in the built demo is its replacement (test/build.py checks every site too)."""
+    from build import fileoff
+    words, d = [w for w in call_site_words(is_m1plus, payload_syms) if w[0] == name], (B/'demo').read_bytes()
+    assert words, name
+    for _, address, _, new in words: assert struct.unpack_from('<I', d, fileoff(d, address))[0] == new, (name, hex(address))
 from ipod import INC, O  # patch/offsets.inc and its integer #defines
 if is_m1plus:
     from build import run, M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
@@ -2946,7 +2954,7 @@ if variant=='ipod':
 
 # Artist detail opens on Albums: the real init reaches the stock Albums tab handler, which
 # selects tab 1 and queries albums before building; stock builds Songs instead.
-if not is_m1plus:
+if 'ARTIST_ALBUMS' in SITES:
     for patched in (True, False):
         m=Machine(patched)
         for address,name in ((0x4adcbc,'songs_view'),(0x4ac084,'albums_view'),(0x4ad4c8,'timer_idex'),(0x4ed0c4,'query_run')):
@@ -2966,7 +2974,7 @@ else:
 
 # Play/Pause hold queue menu. libcstl deques are Python lists of element addresses; the stock
 # mclLoadPlayList, mclNextSong and key filters run for real.
-from build import SHUFFLE_CALL, fileoff
+from build import fileoff
 class QueueMachine(Machine):
     def __init__(self,page='allmusic_page',rows=20,queue=3,pos=0,mode=0,cls=0xf001):
         super().__init__()
@@ -3608,10 +3616,13 @@ for row,pos,closed in ((0,0,True),(1,0,False),(1,2,True)):
     assert (m.sent==[(9,b'{mcl-closegapless\\null}',23,0)] and m.mcl('MCL_PRELOAD')==-1) if closed else (not m.sent and m.mcl('MCL_PRELOAD')==1)
     passed()
 demo=(B/'demo').read_bytes()
-if not is_m1plus:
+if 'SHUFFLE_CALL' in SITES:
     # Shuffle: the patched mclNextSong call runs the stock pick, then plays the Play next track once.
-    assert struct.unpack_from('<I',demo,fileoff(demo,SHUFFLE_CALL[0]))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_shuffle']>>2
+    site_patched('SHUFFLE_CALL')
     m=QueueMachine(mode=2); m.run(0,steps=5); assert m.names()==['A','Row 5','B','C']
+else:
+    not_ported('Shuffle honours Play next (SHUFFLE_CALL not patched in V2.1)')
+if 'LDAC_HQ' in SITES:
     # LDAC: stock switchBtPriority sends quality 0x16 for both HQ and Standard; patched HQ sends 0x15.
     for patched,want in ((True,(0x15,0x16,0x18)),(False,(0x16,0x16,0x18))):
         bt=Machine(patched); bt.mock('btctl_set_codec_priority','btctl_set_ldac_quality','btctl_set_sbc_quality')
@@ -3620,7 +3631,7 @@ if not is_m1plus:
             assert [c[1] for c in bt.calls if c[0]=='btctl_set_ldac_quality']==[quality], (patched,row)
         passed()
 else:
-    not_ported('Shuffle honours Play next and LDAC HQ (SHUFFLE_CALL, LDAC_HQ not patched in V2.1)')
+    not_ported('LDAC HQ sends 990 kbps (LDAC_HQ not patched in V2.1)')
 # Bluetooth volume runs through the shared hook in both variants and on M1 Plus, where V2.1's
 # mclSetVol sets the DAC and Bluetooth's gain in one (HOOKS['mclSetBtVol'] is that entry). Mock only
 # headset I/O and stock gain; device_set_volume itself executes its native output routing.
@@ -3721,7 +3732,7 @@ for light,want in ((1,[]),(0,[O['SCREEN_OFF_SLEEP_MS']])):
         s.call(address=sleep_hook,args=(0x1234,0,0,0),gap=0)
         assert [c[1] for c in s.calls if c[0]=='widget_invalidate_force']==([s.wm] if wake else [])
     passed()
-if not is_m1plus:
+if 'SHUFFLE_CALL' in SITES:
     for want in (1,3):
         m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
         assert m.picks[-1]==1 and m.mcl('MCL_POS')==want and any(c[0]=='mclStartPlayer' for c in m.calls)
@@ -3733,10 +3744,12 @@ if not is_m1plus:
     for want in (1,2):
         m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0); assert m.mcl('MCL_POS')==want
     passed()
+else:
+    not_ported('Shuffle Previous/Next history (SHUFFLE_CALL not patched in V2.1)')
+if 'SCAN_LIMIT' in SITES:
     # Update Local Music: the stock scanner, nested folders and all, checks ringnav_scan_room (65,000
     # songs; stock 20,000) before each entry. Only the folder listing, paths and database insert are mocked.
-    from build import SCAN_LIMIT
-    assert struct.unpack_from('<2I',demo,fileoff(demo,SCAN_LIMIT[0]))==(0x0c000000|payload_syms['ringnav_scan_room']>>2,SCAN_LIMIT[3])
+    site_patched('SCAN_LIMIT')
     SONGS,STOP,LISTING=0xa3c354,0xa3c358,0xa3bf48  # toolsGetMusicNum's count, toolsStopUpdateMusic's flag, the listing deque
     class ScanMachine(Machine):
         def __init__(self,tree,songs,patched=True,stop_at=None):
@@ -3774,20 +3787,24 @@ if not is_m1plus:
     assert scan(64998,nested)==(0,['/m/a','/m/sub/c'],1,65000); passed()  # the limit inside a subfolder ends the scan
     assert scan(0,nested,stop_at=2)==(0,['/m/a','/m/sub/c'],1,2); passed()  # the bnez delay slot's stop flag
     assert scan(0,{'/m':['a','b','c']},stop_at=1)==(0,['/m/a'],1,1); passed()
+else:
+    not_ported('65,000-song scan (SCAN_LIMIT not patched in V2.1)')
+if 'CLASS_ICON' in SITES:
     # Library Artists rows hide the head picture (CLASS_ICON); Composers and Genres, sharing the rebound
     # rows, show theirs again through stock's setter.
-    from build import CLASS_ICON
-    assert struct.unpack_from('<I',demo,fileoff(demo,CLASS_ICON))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_class_icon']>>2
+    site_patched('CLASS_ICON')
     m=Machine(); m.mock('class_icon'); icon=m.node('image','img_icon'); row=m.node('view','',[icon])
     for cls,shown in ((0xf004,0),(0xf006,1),(0xf005,1),(0xf004,0)):
         m.word(syms['g_class_type'],cls); m.calls=[]
         m.call(address=symbols(B/'patch.elf')['ringnav_class_icon'],args=(row,3,0,0),gap=0)
         assert m.nodes[icon]['visible']==shown and [c[1:3] for c in m.calls if c[0]=='class_icon']==([(row,3)] if shown else [])
     passed()
+else:
+    not_ported('Artists rows without the head picture (CLASS_ICON not patched in V2.1)')
+if 'SORT_TRIMS' in SITES:
     # Library sorts: both stock name comparators, on the patched trim calls, skip a leading article.
-    from build import SORT_TRIMS
+    site_patched('SORT_TRIMS')
     from functools import cmp_to_key
-    for a in SORT_TRIMS: assert struct.unpack_from('<I',demo,fileoff(demo,a))[0]==0x0c000000|symbols(B/'patch.elf')['ringnav_sort_key']>>2
     class SortMachine(Machine):
         def __init__(self):
             super().__init__(); self.handlers.pop(syms['toolsTrimLeft']); self.mock('strlen@GLIBC_2.0','snprintf@GLIBC_2.0')
@@ -3824,7 +3841,7 @@ if not is_m1plus:
     key=lambda t: (m.u.mem_write(0x1100000,t.encode()+b'\0'), m.call(address=symbols(B/'patch.elf')['ringnav_sort_key'],args=(0x1100000,0,0,0),gap=0), m.text(0x1100000))[2]
     assert [key(t) for t in ('  The Cure','THE CURE','The ','The  Cure','A','An ','Ant','周杰伦','The 周杰伦')]==['Cure','CURE','The ','The  Cure','A','An ','Ant','周杰伦','周杰伦']; passed()
 else:
-    not_ported('Shuffle Previous/Next history, 65,000-song scan, article-free sort, Artists rows (V1.32 call-site patches)')
+    not_ported('Article-free sort (SORT_TRIMS not patched in V2.1)')
 # iPod boots to Home: home_page_init's memory-play resume, run from its stock context build, starts
 # the restored queue paused (mode 3) through player_start as playing_page_init would, and opens no
 # page; a 0xff class starts nothing, as the page's init. Car mode (mode 2) opens Now Playing as stock.
@@ -3950,7 +3967,7 @@ lm.word(payload_syms['library_music'],1); lm.sql=None
 assert lm.call(address=HOOKS['toolsQueryDbTable'][0],args=(lm.string('/mnt/data/database.db'),lm.string('select * from songtable'+' '*2048),123,1),gap=0)==-1
 assert lm.sql is None
 lm.db.close(); passed()
-if not is_m1plus:
+if 'ALBUM_ART' in SITES:  # with COVER_DONE, COVER_PAUSE and ARTIST_COVER_ROW, and the artist page's covers
     # Their stock art cache names (/mnt/mmc/.sldp/<md5>0.jpg): a shared name adds the album artist,
     # a name alone stays; the album page's big cover follows its row's cover task name.
     for e in m.items(m.get(syms['p_deque_showlist']))[:2]: m.word(e+O['REC_ALBUM_ARTIST'],m.get(e+O['REC_NAME']))
@@ -8665,9 +8682,8 @@ assert wake(DOWN,O['KEY_PLAY'],gap=1000) and wake(UP,O['KEY_PLAY']) and wake(UP,
 m.byte(syms['g_backlight_status'],1); assert wake(DOWN,gap=1000) and wake(UP) and all(wake(t,RET,gap=1000) for t in (DOWN,LONG,UP)); passed()
 # Standby's resume (STANDBY_WAKE, device_standby's awake_screen) stays dark in both modes, so the
 # resuming key acts as dark (#27); a wake press clears stock's resume guard, which would drop its release.
-if not is_m1plus:
-    from build import STANDBY_WAKE
-    assert struct.unpack_from('<I',demo,fileoff(demo,STANDBY_WAKE[0]))[0]==STANDBY_WAKE[2]
+if 'STANDBY_WAKE' in SITES:
+    site_patched('STANDBY_WAKE')
 else:
     not_ported('Standby resume stays dark (STANDBY_WAKE not patched in V2.1)')
 if not is_m1plus:
@@ -8695,7 +8711,7 @@ if not is_m1plus:
 else:
     not_ported('Artists defaults to Album Artist (read_artistype_value not hooked in V2.1)')
 # Boot reads it too (ringnav_bootmode), so Audio settings shows it before any Library page has opened.
-if not is_m1plus:
+if 'BOOT_MODE_CALL' in SITES:
     for config,text in (({},'Artists: Album Artist'),({'ARTISTTYPE':'0'},'Artists: Artist')):
         shown=settings_page('audioset',NAMES['VIEW_PLAYSET'],config,stock_rows=15,boot=True)[2]
         assert shown()[1]==text,config
@@ -9184,9 +9200,9 @@ if not is_m1plus:
     assert m.confirm()==11 and m.dispatched()[0][1]==button; passed()
 print('Boot settings: conditional row/order, restart, card removal and failed atomic writes passed.')
 
-if not is_m1plus:
-    from build import AUDIO_EXTENSION_CALLS
-    for site in AUDIO_EXTENSION_CALLS:
+if 'AUDIO_EXTENSION_CALLS' in SITES:
+    site_patched('AUDIO_EXTENSION_CALLS')
+    for site in [address for address, _, new in SITES['AUDIO_EXTENSION_CALLS'] if new]:
         for ext, accepted in (('.m4b',1),('.M4B',1),('.m4B',1),('.M4b',1),('.m4a',1),('.M4A',1),('.flac',1),('.mp3',1),('.m4b.tmp',0),('.pdf',0)):
             m=Machine(); m.mock('strstr@GLIBC_2.0')
             formats=m.string('.mp3 .flac .m4a .M4A'); suffix=m.string(ext)
@@ -9357,9 +9373,8 @@ for owner in (1,2):
         m.command(200,gap=5000); assert m.playing and m.actions==[(owner,'play')]; passed()
 # Stock's restart once A2DP comes up (BT_CONNECT_START): on, player_save_start(0) as stock. Off (default): a
 # playing queue goes on, a paused one comes back paused, a stopped one or a stream's turn starts nothing.
-if not is_m1plus:
-    from build import BT_CONNECT_START
-    assert struct.unpack_from('<I',demo,fileoff(demo,BT_CONNECT_START[0]))[0]==0x0c000000|payload_syms['ringnav_bt_connect_start']>>2
+if 'BT_CONNECT_START' in SITES:
+    site_patched('BT_CONNECT_START')
 else:
     not_ported('Bluetooth Resume on connect start (BT_CONNECT_START not patched in V2.1)')
 for off,owner,saved,want in ((0,1,3,[0]),(0,2,0,[0]),(1,1,2,[0]),(1,1,3,[1]),(1,1,0,[]),(1,2,3,[])):
@@ -9372,9 +9387,8 @@ print('Real Spotify/radio/video play-state APIs, helper gain updates and stock T
 # Now Playing's info page: its one fill (NP_INFO_CALL) goes through ringnav_np_info after stock's, which
 # writes "Label:value" and the bare folder: ": " after each label, units spaced, the folder labelled
 # from player_location, en_US's first unknown ("Unknown Artist") plain "Unknown"; a second pass changes nothing.
-if not is_m1plus:
-    from build import NP_INFO_CALL
-    assert struct.unpack_from('<I',demo,fileoff(demo,NP_INFO_CALL))[0]==0x0c000000|payload_syms['ringnav_np_info']>>2
+if 'NP_INFO_CALL' in SITES:
+    site_patched('NP_INFO_CALL')
     class InfoMachine(Machine):
         def hook(self,u,address,size,unused):
             if self.handlers.get(address)=='i:format':

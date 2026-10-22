@@ -125,6 +125,16 @@ def shared_checks(directory, manifest, stock, demo, read):
     from peq import PLAYER_PROFILES
     m1plus = manifest['model'] == 'Shanling M1 Plus'
     assert manifest['version'].encode()+b'\0' in demo
+    # Each of the model's call sites (build.py CALL_SITES) holds stock's word, now its replacement; the
+    # manifest lists the M4B extension checks among them.
+    from build import call_site_words
+    words = call_site_words(m1plus, symbols(directory/'patch.elf'))
+    for name, address, old, new in words:
+        off = fileoff(stock, address)
+        assert struct.unpack_from('<I', stock, off)[0] == old, f'{name}: {address:#x} is not stock\'s'
+        assert struct.unpack_from('<I', demo, off)[0] == new, f'{name}: {address:#x} not patched'
+    assert manifest['audio_extension_calls'] == [dict(address=hex(a), original=f'{o:#010x}', replacement=hex(n))
+                                                 for name, a, o, n in words if name == 'AUDIO_EXTENSION_CALLS' and n != o]
     # The RTC is written in UTC: the one hwclock -w literal gains -u in its own padding.
     assert demo.index(RTC_WRITE[1]) == stock.index(RTC_WRITE[0])
     # The lock window's 12-hour clock reads hour:minutes (H:mm), in stock HH:TT's slot after its 24-hour hh:mm.
@@ -233,12 +243,12 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     import filecmp, os, pathlib, re, struct, subprocess, tarfile, tempfile
     from build import (sha, run, fileoff, segments, symbols, pic_gp, BASE, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS,
                        PDR_M1PLUS, RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ, OBSOLETE, HELPER,
-                       BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, WATCHDOG, S90PLAY, S11LOGO)
+                       BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, WATCHDOG, S90PLAY, S11LOGO, call_site_words)
     ps = symbols(directory/'patch.elf')
     payload = (directory/'patch.bin').read_bytes()
     assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
-    # Only the Stock UI exists for M1 Plus so far, and none of Q2's call-site patches apply to V2.1.
-    assert manifest['variant'] == 'stock' and manifest['compact_code'] == [] and manifest['audio_extension_calls'] == []
+    # Only the Stock UI exists for M1 Plus so far.
+    assert manifest['variant'] == 'stock' and manifest['compact_code'] == []
     assert set(manifest['changed_assets']) == {TAG_C}
     stock_syms = symbols(directory/'stock-demo')
     allowed = set()  # demo file offsets the build may change
@@ -251,6 +261,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     for name, (address, replacement, _) in M1PLUS_HOOKS.items():
         assert stock_syms[name] == address and pic_gp(stock, address) == M1PLUS_GP, name
         jumped(address, replacement)
+    # The call sites in V2.1's own code (CALL_SITES['m1plus']); shared_checks checks their words.
+    for _, address, _, _ in call_site_words(True, ps):
+        off = fileoff(stock, address)
+        allowed.update(range(off, off+4))
     name, address, replacement, words = WM_PAINT_LEAF_M1PLUS
     assert stock_syms[name] == address and struct.unpack_from('<III', stock, fileoff(stock, address)) == words
     jumped(address, replacement)
@@ -445,7 +459,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
 
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
-    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, WHEEL_TS_READ, PDR
+    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, PDR
     from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CHEVRON_W, CONFIRM, VOLUME, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
@@ -491,13 +505,6 @@ def validate_assets(directory):
     # Both jump from window_manager_paint (Videos).
     off = fileoff(stock, WM_PAINT_LEAF[1])
     assert demo[off:off+8] == (0x08000000 | symbols(directory/'patch.elf')[WM_PAINT_LEAF[2]] >> 2).to_bytes(4, 'little') + bytes(4)
-    from build import AUDIO_EXTENSION_CALLS
-    for entry, address in zip(manifest['audio_extension_calls'], AUDIO_EXTENSION_CALLS, strict=True):
-        off = fileoff(stock, address)
-        assert entry['address'] == hex(address)
-        assert struct.unpack_from('<I', stock, off)[0] == int(entry['original'], 16)
-        assert struct.unpack_from('<I', demo, off)[0] == int(entry['replacement'], 16)
-        assert stock[off-8:off-4] == struct.pack('<I', 0x8f99f950)
     changed = manifest['changed_assets']
     xx = 'release/assets/default/raw/images/xx/'
     assert set(changed) == {'release/assets/default/raw/ui/'+p for p in (UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])} | {
@@ -569,13 +576,6 @@ def validate_assets(directory):
     assert abs(g[empty].xMin - g[full].xMin) <= 1 and abs(g[empty].xMax - g[full].xMax) <= 1
     assert abs(g[empty].yMin - g[full].yMin) <= 1 and abs(g[empty].yMax - g[full].yMax) <= 1
     assert all(new.reader[t] == old.reader[t] for t in old.reader.keys() if t not in ('cmap', 'head', 'glyf', 'loca', 'hmtx'))
-    # check_mem_thd's drop_caches write is branched over.
-    off = fileoff(stock, DROP_CACHES[0])
-    assert struct.unpack_from('<I', stock, off)[0] == DROP_CACHES[1] and struct.unpack_from('<I', demo, off)[0] == DROP_CACHES[2]
-    # The encoder thread's ts_read call goes through ringnav_ts_read (playback.c wheel_sample).
-    off = fileoff(stock, WHEEL_TS_READ[0])
-    assert struct.unpack_from('<I', stock, off)[0] == WHEEL_TS_READ[1]
-    assert struct.unpack_from('<I', demo, off)[0] == 0x0c000000 | symbols(directory/'patch.elf')['ringnav_ts_read'] >> 2
     # Include every excluded UI screen and saved-preference defaults in byte parity checks.
     paths = [l.removeprefix('squashfs-root/') for l in run('unsquashfs', '-l', directory/'stock.squashfs').splitlines()
              if ('/raw/ui/' in l or '/raw/styles/' in l) and l.endswith('.bin') or l.endswith('/config.ini')]

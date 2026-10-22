@@ -161,12 +161,10 @@ def encode(root):
 
 
 # Both variants. Stock artist detail tabs carry literal Chinese `text` in every language; the
-# stock string table already has these keys. The Albums tab and page start active (see ARTIST_ALBUMS).
+# stock string table already has these keys. The Albums tab and page start active (see ARTIST_ALBUMS in
+# build.py's CALL_SITES); Songs stays a tap away.
 ARTIST_PAGE = 'localmusic/artistinfo_page.bin'
 ARTIST_TABS = {'btn_track': ('单曲', 'local_allsongs'), 'btn_album': ('专辑', 'album')}
-# Stock init builds the Songs view (0x4adcbc); call the stock Albums tab click handler (0x4ac7ec)
-# instead, which sets the tab state, queries the artist's albums and builds them. Songs stays a tap away.
-ARTIST_ALBUMS = [(0x4aebd0, 0x2739dcbc, 0x2739c7ec), (0x4aebd4, 0x0411fc39, 0x0411f705)]
 
 
 def artist_tabs(root):

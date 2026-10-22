@@ -202,59 +202,117 @@ RTC_READ_M1PLUS = (b'hwclock -s\0\0', b'hwclock -su\0')
 # The lock window's 12-hour clock format (after its 24-hour hh:mm, by clock_time): stock's HH:TT shows
 # "05:PM"; H:mm is the hour 1-12 unpadded and the minutes (tk_date_time_format_impl), "5:07".
 LOCK_CLOCK_12H = (b'hh:mm\0\0\0HH:TT\0', b'hh:mm\0\0\0H:mm\0\0')
-# Now Playing's info page: its one fill (0x52a508), a bal, becomes jal ringnav_np_info, which tidies the lines.
-NP_INFO_CALL = 0x52baf4
-# mclNextSong's shuffle pick; the payload calls the stock pick, then applies a pending Play next.
-SHUFFLE_CALL = (0x5addf0, 0x0411e8cb)  # bal mcl_shuffle_pick; its delay slot (a0=1) stays
-# Hold Return: only on_wm_keylong_fun's final Home call (bal) changes; all stock gates and its release
-# guard precede it. It becomes jal compact_now_playing (docs/ipod.md#hold-return).
-HOLD_RETURN = (0x4e8924, 0x04110fdf)
-# device_standby's bal awake_screen after the resume from Standby becomes li $v0, 1: the screen stays dark,
-# so the resuming key acts as it does dark (Play plays, centre wakes).
-STANDBY_WAKE = (0x4f7d24, 0x0411ff26, 0x24020001)
-# checkBluetoothStatus' jalr player_save_start once a headset's A2DP comes up (a0 0: the queue restarts
-# unpaused, whatever it was doing). It becomes jal ringnav_bt_connect_start (docs/internals.md#resume-on-connect).
-BT_CONNECT_START = (0x4f358c, 0x0320f809)
-# The bal toolsTrimLeft on each name copy in the two library name comparators (0x5b9d40, 0x5ba658, the
-# Chinese and other-language sorts); they become jal ringnav_sort_key, which also drops a leading article.
-AUDIO_EXTENSION_CALLS = (0x5c2054, 0x5c3da4)  # toolsLoadDirectory and recursive scan
-SORT_TRIMS = (0x5b9e38, 0x5b9ea4, 0x5ba750, 0x5ba7bc)
-# toolsLoadAllFile stops a scan at 20,000 songs: lw $2,count; slti $2,$2,0x4e20 before each entry. 65,000
-# overflows slti's signed immediate, so the lw becomes jal ringnav_scan_room and the slti loads the count
-# into a0 in its delay slot; the bnez after it, and its delay slot's stop-flag load, stay.
-SCAN_LIMIT = (0x5c977c, 0x8fc2c354, 0x28424e20, 0x8fc4c354)  # lw $2/$4, -0x3cac($fp)
-# Library Albums' cover cache names (navigation.c art_key): the row renderer's snprintf of the name,
-# with a2 the row (addiu a2,"%s" becomes move a2,s3), the Albums page's albumcoverinfo_init calls
-# and the album page's big cover snprintf become jal to the payload; so do an artist page's albums
-# renderer (its row in s2) and albumcoverinfo_init calls on tab entry, return and init.
-ALBUM_ART = ((0x4a388c, 'ringnav_art_name'), (0x4a421c, 'ringnav_albumcovers'), (0x4a42c0, 'ringnav_albumcovers'),
-             (0x4a5718, 'ringnav_albumcovers'), (0x4a72a4, 'ringnav_art_header'),
-             (0x4ab804, 'ringnav_artist_art_name'), (0x4ac840, 'ringnav_artist_covers'),
-             (0x4ae860, 'ringnav_artist_covers'), (0x4ae968, 'ringnav_artist_covers'),
-             (0x4aebc0, 'ringnav_artist_covers'))
-ALBUM_ART_ROW = ((0x4a3890, 0x24c66c04, 0x02603025), (0x4ab808, 0x24c66c04, 0x02403025))
-# Library Artists rows: the row bind's bal to class_icon becomes jal ringnav_class_icon, which hides the head.
-CLASS_ICON = 0x4b0cec
-# Album grids' and Songs' scroll start no longer pauses the cover worker (sw $3,0($2) -> nop); see docs/internals.md.
-COVER_PAUSE = ((0x4aab60, 0xac430000, 0), (0x4a22d0, 0xac430000, 0), (0x4a7bb0, 0xac430000, 0))
-# An artist's albums scroll end divides yoffset by its 160 px rows, not 256; see docs/internals.md.
-ARTIST_COVER_ROW = ((0x4ad878, 0x244400ff, 0x240400a0),   # addiu $4,$2,0xff -> li $4,160
-                    (0x4ad880, 0x28430000, 0x0044001a),   # slti $3,$2,0 -> div $zero,$2,$4
-                    (0x4ad884, 0x0043200a, 0),            # movz $4,$2,$3 -> nop
-                    (0x4ad88c, 0x00042203, 0x00002012))   # sra $4,$4,8 -> mflo $4
-# switchBtPriority sends LDAC quality 0x16 (SQ, 660 kbps) for both HQ (row 0) and Standard (row 1).
-# The dispatch keeps 0x15 + row in its free 0x14($sp) slot, so HQ sends 0x15 (990 kbps); see docs/internals.md.
-LDAC_HQ = ((0x4f033c, 0x00042080, 0x00041880),   # sll $3,$4,2
-           (0x4f0340, 0x2442f030, 0x00431021),   # addu $2,$2,$3
-           (0x4f0344, 0x00442021, 0x8c42f030),   # lw $2,-0xfd0($2)
-           (0x4f0348, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
-           (0x4f0354, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
-           (0x4f0360, 0x24040016, 0x8fa40014))   # lw $4,0x14($sp), was li $4,0x16
-# check_mem_thd's "open failed, skip the write" beq becomes b: it never writes 3 to drop_caches.
-DROP_CACHES = (0x5120a8, 0x12220006, 0x10000006)
-# The encoder thread's ts_read call (jalr $t9) becomes jal ringnav_ts_read, which makes the wheel's
-# ticks from the samples (playback.c wheel_sample).
-WHEEL_TS_READ = (0x625b6c, 0x0320f809)
+# Call-site patches: stock calls and words the payload replaces, per model, each found in that model's
+# own demo (docs/m1plus-roadmap.md section 4). Each entry is (address, original word, replacement): a str
+# replacement is a jal to that payload symbol, None pins the word unchanged. A model without an entry
+# leaves that behaviour stock; test/build.py and test/patch.py read the same table.
+CALL_SITES = {
+    'q2': {
+        # config_init's bal config_playmode becomes jal ringnav_bootmode, which keeps the saved queue
+        # while it applies the boot play mode, and reads Artists.
+        'BOOT_MODE_CALL': ((0x4f999c, 0x0411e992, 'ringnav_bootmode'),),
+        # Stock init builds the Songs view (0x4adcbc); it calls the stock Albums tab click handler
+        # (0x4ac7ec) instead, which sets the tab state, queries the artist's albums and builds them.
+        'ARTIST_ALBUMS': ((0x4aebd0, 0x2739dcbc, 0x2739c7ec), (0x4aebd4, 0x0411fc39, 0x0411f705)),
+        # mclNextSong's bal mcl_shuffle_pick; the payload calls the stock pick, then applies a pending
+        # Play next. Its delay slot (a0=1) stays.
+        'SHUFFLE_CALL': ((0x5addf0, 0x0411e8cb, 'ringnav_shuffle'),),
+        # Hold Return: only on_wm_keylong_fun's final Home call (bal) changes; all stock gates and its
+        # release guard precede it (docs/ipod.md#hold-return).
+        'HOLD_RETURN': ((0x4e8924, 0x04110fdf, 'compact_now_playing'),),
+        # device_standby's bal awake_screen after the resume from Standby becomes li $v0, 1: the screen
+        # stays dark, so the resuming key acts as it does dark (Play plays, centre wakes).
+        'STANDBY_WAKE': ((0x4f7d24, 0x0411ff26, 0x24020001),),
+        # checkBluetoothStatus' jalr player_save_start once a headset's A2DP comes up (a0 0: the queue
+        # restarts unpaused, whatever it was doing) (docs/internals.md#resume-on-connect).
+        'BT_CONNECT_START': ((0x4f358c, 0x0320f809, 'ringnav_bt_connect_start'),),
+        # toolsLoadAllFile stops a scan at 20,000 songs: lw $2,count; slti $2,$2,0x4e20 before each
+        # entry. 65,000 overflows slti's signed immediate, so the lw becomes jal ringnav_scan_room and the
+        # slti loads the count into a0 in its delay slot (lw $2/$4, -0x3cac($fp)); the bnez after it, and
+        # its delay slot's stop-flag load, stay.
+        'SCAN_LIMIT': ((0x5c977c, 0x8fc2c354, 'ringnav_scan_room'), (0x5c9780, 0x28424e20, 0x8fc4c354)),
+        # check_mem_thd's "open failed, skip the write" beq becomes b: it never writes 3 to drop_caches.
+        'DROP_CACHES': ((0x5120a8, 0x12220006, 0x10000006),),
+        # Now Playing's info page: its one fill (bal 0x52a508) goes through ringnav_np_info, which tidies
+        # the lines.
+        'NP_INFO_CALL': ((0x52baf4, 0x0411fa84, 'ringnav_np_info'),),
+        # switchBtPriority sends LDAC quality 0x16 (SQ, 660 kbps) for both HQ (row 0) and Standard (row
+        # 1). The dispatch keeps 0x15 + row in its free 0x14($sp) slot, so HQ sends 0x15 (990 kbps); see
+        # docs/internals.md.
+        'LDAC_HQ': ((0x4f033c, 0x00042080, 0x00041880),   # sll $3,$4,2
+                    (0x4f0340, 0x2442f030, 0x00431021),   # addu $2,$2,$3
+                    (0x4f0344, 0x00442021, 0x8c42f030),   # lw $2,-0xfd0($2)
+                    (0x4f0348, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
+                    (0x4f0354, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
+                    (0x4f0360, 0x24040016, 0x8fa40014)),  # lw $4,0x14($sp), was li $4,0x16
+        # The encoder thread's ts_read call (jalr $t9) becomes jal ringnav_ts_read, which makes the
+        # wheel's ticks from the samples (playback.c wheel_sample).
+        'WHEEL_TS_READ': ((0x625b6c, 0x0320f809, 'ringnav_ts_read'),),
+        # The extension checks' jalr strstr (its lw $t9 two words before) in toolsLoadDirectory and the
+        # recursive scan also accept M4B (manifest audio_extension_calls).
+        'AUDIO_EXTENSION_CALLS': ((0x5c204c, 0x8f99f950, None), (0x5c2054, 0x0320f809, 'ringnav_audio_extension'),
+                                  (0x5c3d9c, 0x8f99f950, None), (0x5c3da4, 0x0320f809, 'ringnav_audio_extension')),
+        # The bal toolsTrimLeft on each name copy in the two library name comparators (0x5b9d40, 0x5ba658,
+        # the Chinese and other-language sorts) becomes jal ringnav_sort_key, which also drops a leading
+        # article.
+        'SORT_TRIMS': ((0x5b9e38, 0x0411ff86, 'ringnav_sort_key'), (0x5b9ea4, 0x0411ff6b, 'ringnav_sort_key'),
+                       (0x5ba750, 0x0411fd40, 'ringnav_sort_key'), (0x5ba7bc, 0x0411fd25, 'ringnav_sort_key')),
+        # Library Albums' cover cache names (navigation.c art_key): the row renderer's snprintf of the
+        # name, with a2 the row (addiu a2,"%s" becomes move a2,s3), the Albums page's
+        # albumcoverinfo_init calls and the album page's big cover snprintf become jal to the payload;
+        # so do an artist page's albums renderer (its row in s2) and albumcoverinfo_init calls on tab
+        # entry, return and init.
+        'ALBUM_ART': ((0x4a388c, 0x0320f809, 'ringnav_art_name'), (0x4a3890, 0x24c66c04, 0x02603025),
+                      (0x4a421c, 0x0320f809, 'ringnav_albumcovers'), (0x4a42c0, 0x0320f809, 'ringnav_albumcovers'),
+                      (0x4a5718, 0x0320f809, 'ringnav_albumcovers'), (0x4a72a4, 0x0320f809, 'ringnav_art_header'),
+                      (0x4ab804, 0x0320f809, 'ringnav_artist_art_name'), (0x4ab808, 0x24c66c04, 0x02403025),
+                      (0x4ac840, 0x0320f809, 'ringnav_artist_covers'), (0x4ae860, 0x0320f809, 'ringnav_artist_covers'),
+                      (0x4ae968, 0x0320f809, 'ringnav_artist_covers'), (0x4aebc0, 0x0320f809, 'ringnav_artist_covers')),
+        # Library Artists rows: the row bind's bal to class_icon becomes jal ringnav_class_icon, which
+        # hides the head.
+        'CLASS_ICON': ((0x4b0cec, 0x0411fbc9, 'ringnav_class_icon'),),
+        # Album grids' and Songs' scroll start no longer pauses the cover worker (sw $3,0($2) -> nop); see
+        # docs/internals.md.
+        'COVER_PAUSE': ((0x4aab60, 0xac430000, 0), (0x4a22d0, 0xac430000, 0), (0x4a7bb0, 0xac430000, 0)),
+        # An artist's albums scroll end divides yoffset by its 160 px rows, not 256; see docs/internals.md.
+        'ARTIST_COVER_ROW': ((0x4ad878, 0x244400ff, 0x240400a0),   # addiu $4,$2,0xff -> li $4,160
+                             (0x4ad880, 0x28430000, 0x0044001a),   # slti $3,$2,0 -> div $zero,$2,$4
+                             (0x4ad884, 0x0043200a, 0),            # movz $4,$2,$3 -> nop
+                             (0x4ad88c, 0x00042203, 0x00002012)),  # sra $4,$4,8 -> mflo $4
+        # Local art completion passes the worker's copied key (sp + 0x1688) and the payload validates the
+        # row under aclist_mutex; the folder-cover path, which branched past the key (b 0x4edda0), enters
+        # at the key as the others do.
+        'COVER_DONE': ((0x4edd9c, 0x8f99b6d4, 0x27a61688), (0x4edda0, 0x0411ff44, 'ringnav_cover_done'),
+                       (0x4eeddc, 0x1000fbf0, 0x1000fbef)),
+    },
+    'm1plus': {},
+}
+CALL_SITE_PURPOSES = {
+    'BOOT_MODE_CALL': 'config_init preserves the saved queue when applying the boot play mode',
+    'ARTIST_ALBUMS': 'artist detail opens on Albums',
+    'SHUFFLE_CALL': 'shuffle honours Play next',
+    'HOLD_RETURN': 'long Return destination after stock input gates',
+    'STANDBY_WAKE': 'Standby resume stays dark',
+    'BT_CONNECT_START': 'Bluetooth: Resume on connect',
+    'SCAN_LIMIT': 'scan up to 65,000 songs',
+    'DROP_CACHES': 'keep the page cache',
+    'NP_INFO_CALL': "Now Playing's info lines",
+    'LDAC_HQ': 'LDAC HQ sends 990 kbps',
+    'WHEEL_TS_READ': 'wheel ticks',
+    'AUDIO_EXTENSION_CALLS': 'recognize M4B alongside existing audio extensions',
+    'SORT_TRIMS': 'sort without a leading article',
+    'ALBUM_ART': 'same-named albums apart in art',
+    'CLASS_ICON': 'Artists rows without the head picture',
+    'COVER_PAUSE': 'album grids never pause the cover worker',
+    'ARTIST_COVER_ROW': "an artist's albums request the covers in view",
+    'COVER_DONE': 'discard stale cover completion',
+}
+def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
+def call_site_words(m1plus, ps):
+    """Each of the model's call-site words as (name, address, original, replacement), the
+    replacement resolved against the payload's symbols ps (a pin's is its original)."""
+    return [(name, address, old, old if new is None else 0x0c000000 | ps[new] >> 2 if isinstance(new, str) else new)
+            for name, words in call_sites(m1plus).items() for address, old, new in words]
 # English labels renamed, as an iPod words them: Now Playing More's queue, which stock calls "Playlists"
 # (player_playlist, used nowhere else); the Library's plural categories; settings rows in title case
 # and plain words; the Lock screen help; and Baidu without its (BETA).
@@ -1107,7 +1165,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
     # Every allowlisted context must be a window name. The runtime name is the root "name"
     # property of the UI asset, not the asset path, so check the stock rootfs assets directly:
     # a prefix-trimmed typo cannot silently disable a screen this way.
-    from ipod import (AUDIT, ARTIST_ALBUMS, ARTIST_PAGE, HOME_PAGE, SETTINGS_ICONS, inc, UI_ASSETS, patch_asset,
+    from ipod import (AUDIT, ARTIST_PAGE, HOME_PAGE, SETTINGS_ICONS, inc, UI_ASSETS, patch_asset,
                       QUIET_ICONS, quiet_icon, imagemagick, patch_code, patch_style, patch_word, jal, branch, settings_icon,
                       STATUS_ICONS, status_icon, row_icon, ART_PLACEHOLDERS, sized_art)
     if not m1plus:
@@ -1198,6 +1256,8 @@ def build(target_path, out, logo, ipod=False, dev=False):
     (out/'bluealsa').write_bytes(bluealsa)
     (out/'watchdog').write_bytes(cat(WATCHDOG).replace(*WATCHDOG_SLEEP))
     code_changes = []
+    for name, address, old, new in call_site_words(m1plus, ps):
+        patch_word(patched, address, old, new, CALL_SITE_PURPOSES[name])
     if not m1plus:
         if ipod:
             # style_get_color's own bal style_get_gradient, returning to STYLE_COLOR_GRADIENT_RET, stays unmapped.
@@ -1213,50 +1273,6 @@ def build(target_path, out, logo, ipod=False, dev=False):
         ret = inc('INITCONFIG_MODE_RET')
         check(struct.unpack_from('<II', patched, fileoff(patched, ret - 12)) == (0x8f99b77c, 0x0320f809),
               'player_initconfig: unexpected mclSetPlayMode call')
-        patch_word(patched, 0x4f999c, 0x0411e992, jal(ps['ringnav_bootmode']),
-                   'config_init preserves the saved queue when applying the boot play mode')
-        for address, old, new in ARTIST_ALBUMS:
-            patch_word(patched, address, old, new, 'artist detail opens on Albums')
-        patch_word(patched, *SHUFFLE_CALL, jal(ps['ringnav_shuffle']),
-                   'shuffle honours Play next')
-        patch_word(patched, *HOLD_RETURN, jal(ps['compact_now_playing']),
-                   'long Return destination after stock input gates')
-        patch_word(patched, *STANDBY_WAKE, 'Standby resume stays dark')
-        patch_word(patched, *BT_CONNECT_START, jal(ps['ringnav_bt_connect_start']),
-                   'Bluetooth: Resume on connect')
-        scan, load, limit, count = SCAN_LIMIT
-        patch_word(patched, scan, load, jal(ps['ringnav_scan_room']), 'scan up to 65,000 songs')
-        patch_word(patched, scan + 4, limit, count, 'scan up to 65,000 songs')
-        patch_word(patched, *DROP_CACHES, 'keep the page cache')
-        patch_word(patched, NP_INFO_CALL, branch(0x04110000, NP_INFO_CALL, PRIVATE_FUNCTIONS['np_info']),
-                   jal(ps['ringnav_np_info']), "Now Playing's info lines")
-        for address, old, new in LDAC_HQ:
-            patch_word(patched, address, old, new, 'LDAC HQ sends 990 kbps')
-        patch_word(patched, WHEEL_TS_READ[0], WHEEL_TS_READ[1], jal(ps['ringnav_ts_read']), 'wheel ticks')
-        for address in AUDIO_EXTENSION_CALLS:
-            check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, address-8))[0] == 0x8f99f950,
-                  'audio extension: expected strstr import')
-            patch_word(patched, address, 0x0320f809, jal(ps['ringnav_audio_extension']),
-                       'recognize M4B alongside existing audio extensions')
-        for address in SORT_TRIMS:
-            patch_word(patched, address, branch(0x04110000, address, syms['toolsTrimLeft']),
-                       jal(ps['ringnav_sort_key']), 'sort without a leading article')
-        for address, name in ALBUM_ART:
-            patch_word(patched, address, 0x0320f809, jal(ps[name]), 'same-named albums apart in art')
-        for row in ALBUM_ART_ROW:
-            patch_word(patched, *row, 'same-named albums apart in art')
-        patch_word(patched, CLASS_ICON, branch(0x04110000, CLASS_ICON, syms['class_icon']),
-                   jal(ps['ringnav_class_icon']), 'Artists rows without the head picture')
-        for word in COVER_PAUSE:
-            patch_word(patched, *word, 'album grids never pause the cover worker')
-        for word in ARTIST_COVER_ROW:
-            patch_word(patched, *word, "an artist's albums request the covers in view")
-        # Local art completion: pass the worker's copied key, then validate the row under aclist_mutex.
-        patch_word(patched, 0x4edd9c, 0x8f99b6d4, 0x27a61688, 'cover completion key')
-        patch_word(patched, 0x4edda0, 0x0411ff44, jal(ps['ringnav_cover_done']),
-                   'discard stale cover completion')
-        # The folder-cover path branched past the key (b 0x4edda0); it enters at the key as the others do.
-        patch_word(patched, 0x4eeddc, 0x1000fbf0, 0x1000fbef, 'folder cover completion key')
         # Pin added private entry points as well as every replaced instruction, and the stock bitmap,
         # canvas and slide_menu entries Coverflow's depth renderer calls (docs/internals.md#coverflow-depth).
         for name, original in AUDIT['private_prologues'].items():
@@ -1453,7 +1469,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
         source_sha256=source, demo_sha256=sha(patched), patch_sha256=sha(payload),
         update_sha256=sha(out_archive.read_bytes()), rootfs_sha256=sha(newsq.read_bytes()),
         kernel_sha256=sha(blobs['recovery-update/xImage']), patch_bytes=len(payload), ring_step_pixels=RING_STEP,
-        audio_extension_calls=[dict(address=hex(a), original='0x0320f809', replacement=hex(jal(ps['ringnav_audio_extension']))) for a in AUDIO_EXTENSION_CALLS] if not m1plus else [],
+        audio_extension_calls=[dict(address=hex(a), original=f'{o:#010x}', replacement=hex(n)) for name, a, o, n in call_site_words(m1plus, ps) if name == 'AUDIO_EXTENSION_CALLS' and n != o],
         version=version, variant=variant, dev=dev, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=code_changes, changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
         patch_symbols={n:hex(v) for n,v in ps.items() if n.startswith('stock_')},
         tools={t:run(t,'--version').splitlines()[0] for t in ['clang','ld.lld','llvm-objcopy']} |
