@@ -103,7 +103,8 @@ Clock row and built-in thumbnails, and the Large clock on V2.1's lock window (se
 worker's pause and stale completion (section 30). The hold menu's row selection, and the Now Playing hold's
 Add to Playlist guard (section 31). LDAC HQ (section 32), still to hear on the device. Gapless in
 advanced play and across speed changes (section 33), still to hear with Gapless on. Resume on connect
-(section 34), still to try with a Bluetooth headphone.
+(section 34), still to try with a Bluetooth headphone. Same-named albums' art, on Library Albums and an
+artist's albums (section 35), still to see with two such albums on the card.
 
 Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
@@ -116,7 +117,6 @@ These need hardware, a setting or a library to check on the device, so they come
 
 | Feature | V2.1 site | Notes | Size |
 |---|---|---|---|
-| Same-named albums' art, an artist's albums' art keys | V2.1's album list and artist page renderers, still to find | Two albums of the same name by different artists on the card. V2.1's cover worker is V1.32's (`md5` of the album name), caching in `/tmp/abp`. Split rows share one cover. The order is ported (`ringnav_localclass`, `0xff01`) | M |
 
 Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 - **Artist pages open on Albums** (`ARTIST_ALBUMS`): V2.1's artist page lists the artist's albums.

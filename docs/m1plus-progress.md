@@ -1196,6 +1196,32 @@ headphone connects, where stock restarts it unpaused. On M1 neither part was por
 byte-identical. To try on the device: with a Bluetooth headphone, pause, disconnect and reconnect it,
 and the queue stays paused with the row off and plays with it on.
 
+## 35. Same-named albums' art (Oct 22)
+
+V2.1's cover worker names a cover by the `md5` of the album's name alone, as V1.32's does, so the
+split rows of a shared name (two artists' "Greatest Hits") shared one cover. On the Q2, `ALBUM_ART`
+gives such rows a key with the album artist or the folder (`art_key`), at the renderer, the cover tasks
+and the album page's big cover. V2.1 differs in where those are:
+- **One page for both lists.** V2.1 lists the library's albums and an artist's on the same
+  `album_page`: `loadAlbumList` loads `0xf003` or `0xff01`, and `ringnav_localclass` already splits
+  the first and gives the second `artist_tab`'s keys (section 21's order). So the sites serve both:
+  the row renderer's `snprintf(buf, 0x100, "%s", album)` (`0x523a34`, the row in `$s2`) and the page's
+  three `albumcoverinfo_init` calls (`0x524720`, `0x524760`, `0x5248d0`). On M1,
+  `ringnav_art_name` and `ringnav_albumcovers` take a row's artist key when the list is the artist's,
+  else `art_key`. Loading the library's Albums drops the artist's keys.
+- **The album page's big cover** (`img_albumcover_m`) formats `classinfo_save + 0xd` at `0x525b84`.
+  `albuminfo_page_init` (`0x526828`) keeps the row it opened, its context's high half, at `0xa06680`,
+  which is V2.1's `ALBUMINFO_ROW`. So `ringnav_art_header` is the Q2's.
+- **Not patched:** search results (`pdeq_searchshowlist`, `0x54149c`, `0x542a28`), which the Q2 doesn't
+  patch either.
+
+On M1 the checks run V2.1's own renderer, cover-task and header code on an artist's albums whose
+"Mid" shares its name with another artist's album: the renderer and tasks give it the folder key and
+leave the others, and the header follows its row's task. With V2.1's renderer words put back, it gets
+the bare name. The key and header helpers' Q2 checks run on M1 too. The V1.32 artist-page checks stay
+Q2 only. `test/patch.py` on M1 passes 1004 scenarios, with 8 `NOT PORTED` lines; Q2's runs are
+unchanged and its `update.tar` files byte-identical.
+
 ## How to check a build now
 
 ```sh
