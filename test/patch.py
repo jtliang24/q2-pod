@@ -3753,12 +3753,14 @@ if 'SCAN_LIMIT' in SITES:
     # Update Local Music: the stock scanner, nested folders and all, checks ringnav_scan_room (65,000
     # songs; stock 20,000) before each entry. Only the folder listing, paths and database insert are mocked.
     site_patched('SCAN_LIMIT')
-    SONGS,STOP,LISTING=0xa3c354,0xa3c358,0xa3bf48  # toolsGetMusicNum's count, toolsStopUpdateMusic's flag, the listing deque
+    # toolsGetMusicNum's count, toolsStopUpdateMusic's flag, the listing deque; the private routines that list a
+    # folder and add a song (V2.1's from toolsLoadAllFile's calls and its GOT page 0xa10000)
+    SONGS,STOP,LISTING,LIST,INSERT=(0xa0b084,0xa0b088,0xa0ac78,0x5ea364,0x5edb18) if is_m1plus else (0xa3c354,0xa3c358,0xa3bf48,0x5c38c8,0x5c73e4)
     class ScanMachine(Machine):
         def __init__(self,tree,songs,patched=True,stop_at=None):
             super().__init__(patched); self.tree=tree; self.added=[]; self.stop_at=stop_at
             for n in ('toolsSetScanFolderPath','toolsCheckItemExist','deque_size','deque_at','sprintf@GLIBC_2.0'): self.handlers[syms[n]]='scan:'+n
-            self.handlers[0x5c38c8]='scan:list'; self.handlers[0x5c73e4]='scan:insert'  # private: lists a folder, adds a song
+            self.handlers[LIST]='scan:list'; self.handlers[INSERT]='scan:insert'
             self.word(SONGS,songs); self.word(LISTING,self.alloc(0x20))
         def hook(self,u,address,size,unused):
             name=self.handlers.get(address,'')

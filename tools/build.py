@@ -291,6 +291,8 @@ CALL_SITES = {
         'SHUFFLE_CALL': ((0x5d5a28, 0x0411ea61, 'ringnav_shuffle'),),
         # check_cpumem's "open failed, skip the write" beq.
         'DROP_CACHES': ((0x50b868, 0x12220006, 0x10000006),),
+        # toolsLoadAllFile's count check, the count at -0x4f7c($fp).
+        'SCAN_LIMIT': ((0x5efeb4, 0x8fc2b084, 'ringnav_scan_room'), (0x5efeb8, 0x28424e20, 0x8fc4b084)),
     },
 }
 CALL_SITE_PURPOSES = {
