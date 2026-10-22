@@ -1249,8 +1249,9 @@ page and Large clock, the lock window's cover, and the library items. Over q2rem
 - **Gapless:** with Gapless on, Shuffle Albums started on Foxes' "Rise Up (Intro)", queue position
   291. Reading `MCL_PREPOS` and `MCL_PRELOAD` from `demo`'s memory: about 10 s before its end the
   preload opened position 38, "Better Love", the album's next track (stock would have opened 292).
-  At the change `MCL_POS` became 38 and the preload was used. Gapless was set back off. Whether the
-  change is audibly gapless is still to hear.
+  At the change `MCL_POS` became 38 and the preload was used. Gapless was set back off. By ear the
+  change sounded quick, but the card has no gapless album (Paramore's live tracks fade out), so the
+  listening check is kept as a later validation in the roadmap's section 4.
 - **Bluetooth:** with Bluetooth off, the page shows only its switch, so no Resume on Connect row, as
   intended. Turning Bluetooth on asks to turn Wi-Fi off first, which ends q2remote.
 - **LDAC HQ:** measured on the WH-1000XM6. No screen shows the bitrate, so a logger started over

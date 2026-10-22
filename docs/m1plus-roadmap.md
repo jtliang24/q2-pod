@@ -108,9 +108,8 @@ artist's albums (section 35), still to see with two such albums on the card.
 
 Every row had been checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). All are now ported or found native in V2.1, and dev 20's device pass confirmed them
-([m1plus-progress.md](m1plus-progress.md) section 36), LDAC HQ by its measured bitrate, except
-same-named albums' art. Gapless's preload was checked over q2remote; whether it sounds gapless is still
-to hear.
+([m1plus-progress.md](m1plus-progress.md) section 36), LDAC HQ by its measured bitrate, except two
+that wait for the right library: same-named albums' art and gapless by ear.
 
 **Later validation: same-named albums' art** ([m1plus-progress.md](m1plus-progress.md) section 35). The
 test card has no two albums of one name, so this waits until one does. To check:
@@ -124,6 +123,22 @@ test card has no two albums of one name, so this waits until one does. To check:
 
 If they share a cover, the build's `ALBUM_ART` sites (`tools/build.py`, `CALL_SITES['m1plus']`) and
 `artist_tab`'s keys are where to look.
+
+**Later validation: gapless by ear** ([m1plus-progress.md](m1plus-progress.md) section 33). On dev 20,
+q2remote showed Shuffle Albums preloading the album's next track and the change using it, and the
+change sounded quick, but the test card has no gapless album: the tracks tried (Paramore's self-titled
+album's live tracks) fade out. To check:
+1. Put a truly gapless album on the card, one whose tracks run into each other (a live album without
+   fades, a DJ mix, a concept album), and turn Playback Setting → Gapless on.
+2. Play it in Shuffle Albums (Q2 Pod → Shuffle): each change within the album plays without a gap or
+   click.
+3. For comparison, the same change in plain playback (no advanced play) is stock's own gapless.
+4. Optionally, over q2remote, read `MCL_PREPOS` and `MCL_PRELOAD` from `demo`'s memory near a track's end
+   (section 36 says how): the preload is the album's next track, and `MCL_POS` becomes it.
+
+A gap only in Shuffle Albums or Folders points at `ringnav_preload` and `ringnav_next`'s handoff
+(`patch/playback.c`); a gap after a speed change is `ringnav_open_preload` refusing to open across it,
+as intended.
 
 Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 - **Artist pages open on Albums** (`ARTIST_ALBUMS`): V2.1's artist page lists the artist's albums.
