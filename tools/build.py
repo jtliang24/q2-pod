@@ -289,6 +289,8 @@ CALL_SITES = {
     'm1plus': {
         # mclNextSong's bal to the shuffle pick (0x5d03b0).
         'SHUFFLE_CALL': ((0x5d5a28, 0x0411ea61, 'ringnav_shuffle'),),
+        # check_cpumem's "open failed, skip the write" beq.
+        'DROP_CACHES': ((0x50b868, 0x12220006, 0x10000006),),
     },
 }
 CALL_SITE_PURPOSES = {
