@@ -1,10 +1,12 @@
 # M1 Plus port: planned work
 
-What is left before the M1 Plus build has Q2 Pod's features, ordered by value and effort. What has been
-done, and why, is in [m1plus-progress.md](m1plus-progress.md).
+The goal is upstream Q2 Pod's current release (DiamondBond/q2-pod) on the M1 Plus, kept in step by merging
+each upstream release. This is what is left, ordered by value and effort. What has been done, and why, is
+in [m1plus-progress.md](m1plus-progress.md). How one sync runs is in [m1plus-sync.md](m1plus-sync.md).
 
 Every item ends in the same loop. First the Q2 checks must pass:
-- Q2 Legacy and iPod still build byte-identical to the last verified Q2 build;
+- Q2 Legacy and iPod still build byte-identical to the upstream base's build (`UPSTREAM_BASE`,
+  section U). Until U2 records one, the base is `main`, which is upstream 1.2.2;
 - the Q2 suites pass on both.
 
 See [m1plus-integration.md](m1plus-integration.md#checklist). Then the build's name check,
@@ -15,19 +17,28 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** Spotify on the device (section 3) when there is an account. Section 4 is done; one device
-check waits for a library that needs it (section 4, "Later validation"). Functionality comes first: items that only change how something looks wait for the final
-pass (section 7).
+**Next:** section U, in order: U0, then the restructure (U1) and the sync tooling (U2) against 1.2.2,
+then the first sync to upstream 1.3.9 (U3). The M1 feature work waits until U3 lands: Spotify on the
+device (section 3), the iPod UI (section 5) and the final pass (section 7). Section 4 is done for 1.2.2;
+one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes
+first: items that only change how something looks wait for the final pass (section 7).
 
 ## Ground rules
 
-- **Don't break Q2.** No change for M1 may change the Q2 firmware or its tests:
-  - Q2 Legacy and iPod `update.tar` stay byte-identical to the last verified Q2 build, and every Q2 suite
-    and case keeps running and passing.
+- **Q2 output is upstream's.** No change for M1 may change the Q2 firmware or its tests:
+  - Q2 Legacy and iPod `update.tar` stay byte-identical to the `UPSTREAM_BASE` tag's build with the same
+    toolchain (`test/q2compare.py`, U2), and every Q2 suite and case of that tag keeps running and passing.
   - M1 code goes behind `#if M1PLUS` / `if m1plus` or into a per-model table. That includes defensive checks
     only V2.1 needs.
   - A deliberate Q2 change says so in its commit, with its reason and its test.
   - The full rule is in [m1plus-integration.md](m1plus-integration.md#rule-for-future-work-dont-break-q2).
+- **M1 code sits beside upstream's, not inside it** (from U1 on). It lives in `tools/m1plus.py`,
+  `patch/m1plus/` and `test/m1plus/`. An upstream file changes only by a seam: a hook call or
+  `M1_HOOK(...)`, a target lookup, or an `#if !M1PLUS` wrapper. Each seam line is a conflict in every
+  later sync, so keep them few.
+- **Fix Q2 bugs upstream.** Never change upstream's Q2 code in the fork to fix a Q2 bug. Send the fix to
+  DiamondBond/q2-pod (section 6, "Upstream contributions"), and keep any M1 copy of it behind `M1PLUS`
+  until a sync brings the fix in.
 - **Find each V2.1 address in V2.1's code, then pin it in a test.** Read the same-named or same-role
   function in V2.1's demo, and pin the instruction or string the change relies on, as
   `test/build.py`'s updater check and `test/patch.py`'s `tslib_run` check do. Never reuse a V1.32
@@ -45,6 +56,99 @@ pass (section 7).
   stock, except that in Knob: Navigation Previous also presses the page's back button. So no
   gesture, hidden tap or key may be a page's only way out. Each new page's `test/boot.py` step
   closes it with the button (`BACK`).
+
+## U. Tracking upstream
+
+The branch forked from upstream 1.2.2 (`c0a2d6b`). By Oct 22, upstream was at **1.3.9**: 226 commits and
++9.7k/−1.9k lines over 71 files in six days, about 40 commits a day. A trial merge of 1.3.9 into this
+branch conflicts in 22 files, about 150 hunks:
+
+| File | Hunks | M1 footprint today |
+|---|---|---|
+| `test/patch.py` | 50 | +2,357/−1,159, 161 `m1plus` branches |
+| `patch/navigation.c` | 25 | +724/−92, 64 `M1PLUS` sites (the largest 97 lines) |
+| `tools/build.py` | 18 | +687/−250, 61 `m1plus` branches |
+| `test/build.py` | 9 | +401/−98 |
+| `test/playback.py` | 6 | +149/−114 |
+| `patch/offsets.inc`, `docs/internals.md` | 5 each | `offsets.inc` +473/−33 |
+| 15 more files | 1–4 each | |
+
+The conflicts come from M1 code woven into upstream's files, so the plan is to move it out first (U1),
+while the base is still 1.2.2 and the Q2 byte check can prove each move. Then merge (U3).
+
+Each upstream release also adds V1.32-only work: hooks and call sites at V1.32 addresses, and new pages.
+They stay off on M1 until ported (U4), so a sync never waits for them.
+
+- **U0. Re-establish R1 against `main` (M).** Close the open items of
+  [m1plus-integration.md](m1plus-integration.md#work-items): 1 (`release.py` reads `input_sha256`) and 3–9
+  (the trampolines, `dispatch_key_return`, `boot_guard`, the V2.1 defences, `scratch_t`, the helpers,
+  `ringnav_artist_list`). Item 2 is done. Item 9 must be fixed, not accepted: a sync's check is exact
+  equality, and a known difference would ride along in every later compare. Done when `cmp` passes for
+  Legacy and iPod `update.tar` against `main`'s build.
+- **U1. Move the M1 beside upstream (L).** Each step keeps Q2 `update.tar` byte-identical to `main`'s.
+  - **a. A `Target` record** ([integration item 11](m1plus-integration.md#work-items), now required).
+    - `tools/build.py` keeps upstream's Q2 constants and code. A new `tools/m1plus.py` gets the M1's:
+      `M1PLUS_HOOKS`, `CALL_SITES['m1plus']`, `M1PLUS_GP`, `m1plus_symbols`, `m1plus_names`, `m1plus_inc`,
+      the paint leaf, `RTC_READ_M1PLUS`, the icons and assets, and the `update.bin` packing.
+    - `build()` reads one target instead of branching on `m1plus` 61 times.
+    - A patch upstream applies inline in `build()` becomes a Q2 table entry, or stays inline under
+      `if target.q2`. `patch_word`'s original-word check makes a missed one fail the M1 build, not
+      corrupt it.
+  - **b. Split `offsets.inc`.**
+    - Upstream's body stays as upstream wrote it, inside `#if !M1PLUS … #endif`, and
+      `patch/m1plus/offsets.inc` holds the V2.1 values.
+    - A new upstream name then fails the M1 compile, which forces a choice: a V2.1 value, or
+      `M1_UNPORTED`, which compiles its feature out on M1.
+    - A geometry or style macro is shared only where its Q2 value is upstream's literal.
+  - **c. Move the M1 blocks out of the shared `.c` files.**
+    - Each `#if M1PLUS` block of more than about 10 lines moves to `patch/m1plus/*.c`. In `navigation.c`
+      that starts with the blocks at 643, 6572, 5428, 3328, 1989, 6675, 5344 and 6269. The shared file
+      keeps one call or `M1_HOOK(...)` line, empty on Q2.
+    - Small inline differences stay inline, through named macros.
+    - Aim for under about 150 changed lines across upstream's `patch/*.c`, from about 1,400 now.
+  - **d. Move the M1 tests out.**
+    - `test/patch.py`'s and `test/build.py`'s M1 paths move to `test/m1plus/`. That covers the V2.1 harness
+      addresses, the `KNOWN GAP` and `NOT PORTED` lists and the M1 scenarios, which import the shared
+      helpers.
+    - Upstream's Q2 sections go back to upstream's text wherever the branch only added an M1 branch.
+    - `test/boot.py` is M1-only already.
+  - **e. Measure the footprint.** `git diff --stat <upstream base> -- <upstream's files>`, recorded in
+    [m1plus-sync.md](m1plus-sync.md#footprint) after U1 and after each sync, so that growth shows.
+- **U2. Sync tooling (M).**
+  - **`test/q2compare.py`** ([integration item 12](m1plus-integration.md#work-items), now required). It
+    builds `UPSTREAM_BASE` from `git archive` and this tree, for Legacy and iPod, and compares their
+    `update.tar`. On a difference, it diffs the `manifest.json` component hashes. It replaces the
+    hand-run compare in the checklist.
+  - **`UPSTREAM_BASE`,** a file holding the upstream tag and commit the branch is level with. This is
+    the Q2 baseline that `q2compare.py` and these docs refer to.
+  - **A port report.** It lists every Q2 hook, call site and `offsets.inc` name, and classifies each for
+    M1 as ported, native in V2.1 (section 4's "Not ported, because V2.1 has them"), Q2 only by design, or
+    `NOT PORTED`. It goes in `test/m1plus/`, or is a mode of `test/build.py`. A sync's new `NOT PORTED`
+    rows go into U4.
+  - **The `upstream` remote** (`https://github.com/DiamondBond/q2-pod.git`) and the merge recipe in
+    [m1plus-sync.md](m1plus-sync.md).
+- **U3. First sync: upstream 1.3.9 (L).**
+  - Merge the tag, by the [sync runbook](m1plus-sync.md). Don't rebase: `m1plus-progress.md` cites the
+    branch's commit hashes.
+  - Done when:
+    - `q2compare.py` against 1.3.9 is exact, and 1.3.9's suites pass on the Q2 builds;
+    - the M1 gates pass, and the port report fills U4;
+    - a device pass on the M1 has run.
+- **U4. Upstream features to port (M each, many).** This is the porting queue from now on; section 4 is
+  the record for 1.2.2. One row per feature from the port report: its hooks and sites, and what V2.1
+  has. Porting follows the ground rules: find it in V2.1's code, then pin it in a test.
+  - **Seeded by 1.3.9** (to confirm against the report):
+    - **New pages:** games (`games.c`), chapters (`chapters.c`), Up Next (`upnext.c`), network update
+      (`netupdate.c`, `systemset_fwupdate_page_init`), online match (`onlinematch.c`), Qobuz.
+    - **Hooks:** lyric search and cover search (`kugou_obtainlyric`, `kugou_obtaincover`),
+      `mclLoadExLyric`, the timezone page, `localmusic_playlistsmore_page_init`,
+      `toolsQueryDbTableAndSort` and `toolsQueryContentDbTable`, `mclSetOutputWay`, `write_int_config`,
+      `toolsGetMusicInfo`, `toolsIntoStandby`, `player_start_queue`, `networkGetWifiSignal`.
+    - **Call sites:** `FOLDER_NAME`, `BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`, `PLAYER_COVER`,
+      `ID3_PATH`, `LYRIC_FOLLOW`, `GRID_COVER`, `SCAN_REFRESH`, `DROP_CACHES`, and the lock screen's
+      `lockscreen_access` sites.
+- **U5. Each later release (S–M each).** Sync each upstream release tag soon after it ships, by the same
+  runbook as U3. Its new features go into U4.
 
 ## 1. Small fixes (S)
 
@@ -85,6 +189,8 @@ A video and Internet Radio play through q2video on the ES9069Q, straight after a
   MIPS build runs on the M1's kernel.
 
 ## 4. Re-pointing V1.32 call-site patches (M each, many)
+
+This section is complete for upstream 1.2.2's call sites. Call sites that later releases add go into U4.
 
 Each `NOT PORTED` line below names a patch or hook made at a V1.32 address. A call site is ported by
 adding its V2.1 words under its name in `CALL_SITES['m1plus']` (`tools/build.py`):
@@ -155,7 +261,7 @@ Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 Now Playing's info lines (`NP_INFO_CALL`) only change how the lines read, so they are in section 7.
 Their V2.1 site is the fill's one call, `0x53bebc` (`0x0411f760`, the fill at `0x539c40`).
 
-## 5. The iPod UI on M1 (L, after sections 1–4)
+## 5. The iPod UI on M1 (L, after U3 and sections 1–4)
 
 `--ipod` is refused for M1 Plus. The iPod UI patches V1.32's UI assets, styles and code layout, and
 assumes the Q2's 375x320 landscape screen and touch wheel. An M1 version would be a redesign for a
@@ -165,13 +271,16 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
 
 ## 6. Tooling and release
 
-- **Q2 from the same tree.** Building the fork point's Q2 firmware beside M1's is tracked in
-  [m1plus-integration.md](m1plus-integration.md): the measured differences, and items 1–9 to close them.
-  The Q2 release (`tools/release.py`) is broken on this branch until its item 1 lands.
+- **Q2 from the same tree.** Section U0 closes the measured differences
+  ([m1plus-integration.md](m1plus-integration.md)), and U2 turns the compare into `test/q2compare.py`
+  against `UPSTREAM_BASE`. The Q2 release (`tools/release.py`) is broken on this branch until
+  integration item 1 lands.
 - **Release packaging for M1.** The README tells M1 users to download `update.bin` from a release, but
   `tools/release.py` packages only the Q2 (upstream owns that). An M1 path needs:
   - a reproducible `update.bin`;
   - a manifest check (`model`, `input_sha256`, `logo_source`);
+  - a version from upstream's `VERSION` plus an M1 suffix (for example `1.3.9-m1.1`), so a release
+    says which upstream release it carries;
   - a release note with the reflash-to-stock instructions.
 - **q2remote on M1 (first: it makes the rest faster).** Done ([remote.md](remote.md#m1-plus)):
   - upright screenshots, keys, knob turns and taps;
@@ -184,6 +293,16 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   - **An on-device log:** a small ring buffer the payload writes, which q2remote reads. `peek` shows
     state at one moment; a log would show the order of events, such as which of `qm_hold`'s checks
     refused during a hold.
+- **Upstream contributions.** Q2 changes found through the M1, sent as pull requests to
+  DiamondBond/q2-pod rather than made in the fork (ground rules). Once one lands upstream, the next sync
+  brings it in, and the fork's `M1PLUS`-only copy can go. The three items after this one (the latent
+  bugs, late-sound videos and playlist stations) are the first candidates. Two more go here:
+  - **The seams.** Once U1's footprint is small, offer the `Target` record, the `offsets.inc` split and
+    `M1_HOOK` on their own. They change no Q2 bytes, and with them upstream the fork's seam lines stop
+    conflicting.
+  - **The M1 target itself (later).** Once a few syncs have gone cleanly, offer the M1 target upstream.
+    The squash-and-split note in [m1plus-integration.md](m1plus-integration.md#decision-finish-on-this-tree)
+    covers its history.
 - **Latent Q2 bugs found through M1.** Both were fixed only behind `M1PLUS`, to keep the Q2 build
   byte-identical (ground rules). Fixing them on the Q2 is a deliberate Q2 change, best made
   upstream, with a Q2 device check:
@@ -213,7 +332,7 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   partition. Finding how to start it without demo would give a way back to stock even if demo can't
   start, which would make riskier experiments safe.
 
-## 7. Final pass: look and feel (after sections 1–4)
+## 7. Final pass: look and feel (after U3 and sections 1–4)
 
 Items that only change how something looks, gathered once all the functionality is ported:
 
