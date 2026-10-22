@@ -1239,9 +1239,11 @@ def build(target_path, out, logo, ipod=False, dev=False):
     if m1plus:
         for name, address in M1PLUS_PRIVATE_FUNCTIONS.items():
             check(pic_gp(raw_demo, address) == M1PLUS_GP, f'{name}: not a V2.1 PIC entry')
-        # ringnav_speed and ringnav_mode tell config_mplayer's re-applying calls from a choice by
-        # their return addresses: each a jalr $t9 after lw $t9, <callee's GOT slot>($gp).
-        for ret, callee in (('INITCONFIG_SPEED_RET', 'mclSetPlaySpeed'), ('INITCONFIG_MODE_RET', 'mclSetPlayMode')):
+        # ringnav_speed and ringnav_mode tell config_mplayer's re-applying calls, and config_init's
+        # boot one, from a choice by their return addresses: each a jalr $t9 after lw $t9, <callee's
+        # GOT slot>($gp).
+        for ret, callee in (('INITCONFIG_SPEED_RET', 'mclSetPlaySpeed'), ('INITCONFIG_MODE_RET', 'mclSetPlayMode'),
+                            ('BOOT_MODE_RET', 'mclSetPlayMode')):
             ret = m1plus_inc(ret)
             words = struct.unpack_from('<5I', raw_demo, fileoff(raw_demo, ret - 24))
             load = next((w for w in reversed(words[:4]) if w >> 16 == 0x8f99), 0)

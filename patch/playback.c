@@ -516,8 +516,13 @@ void playback_clear(void) {
 }
 int ringnav_mode(int mode) {
     /* player_initconfig re-applies the saved mode each time hciplayer connects, after a boot
-     * resume too: not a choice, so advanced play stays. */
-    if (s.restoring || __builtin_return_address(0) == (void *)INITCONFIG_MODE_RET)
+     * resume too: not a choice, so advanced play stays. V2.1's config_init applies it at boot
+     * itself, before memory play reads the queue (V1.32's goes through ringnav_bootmode). */
+    if (s.restoring || __builtin_return_address(0) == (void *)INITCONFIG_MODE_RET
+#if M1PLUS
+        || __builtin_return_address(0) == (void *)BOOT_MODE_RET
+#endif
+    )
         return stock_mode_trampoline(mode);
     /* Stock Shuffle (2) on Shuffle Albums/Folders keeps the groups; any other mode ends them. */
     if (!(s.active && s.shuffle >= 3 && mode == 2)) playback_clear();

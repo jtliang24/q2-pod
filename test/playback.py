@@ -470,12 +470,20 @@ for cls in (0xf001,0xff10,1):
 # Boot applies the saved stock mode before restoring the queue, then again when hciplayer
 # connects. Execute config_init's actual call site: neither startup call is a mode choice.
 if is_m1plus:
+    from build import M1PLUS_GP
     for folder in (0,1):
         for mode in range(4):
             m=PlaybackMachine()
             assert m.fn('playback_groups',m.deque(list(m.items(m.get(syms['mcl_pdeqplaylist'])))),folder)==1
             m.advance_song(); m.fn('ringnav_savequeue'); want=m.sequence()
             r=PlaybackMachine(m.files); r.byte(syms['g_memory_play'],2); out=r.deque([])
+            # V2.1's config_init applies the saved mode itself: its lw $t9 and jalr mclSetPlayMode.
+            r.u.reg_write(UC_MIPS_REG_GP,M1PLUS_GP)
+            r.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
+            r.u.reg_write(UC_MIPS_REG_V0,mode)
+            r.u.emu_start(O['BOOT_MODE_RET']-12,O['BOOT_MODE_RET'],count=r.budget)
+            assert r.u.reg_read(UC_MIPS_REG_PC)==O['BOOT_MODE_RET']
+            assert r.mcl('MCL_MODE')==mode
             assert r.files['/mnt/data/ringnav-queue']==m.files['/mnt/data/ringnav-queue']
             at=r.fn('ringnav_memory',out); assert at==want[0] and r.seek==37
             r.fn('ringnav_load',out,at,0xf001)

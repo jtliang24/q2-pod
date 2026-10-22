@@ -667,6 +667,9 @@ static inline int arc_out(int r, int y) {
 #define MCL_FD 0xa0abec
 #define INITCONFIG_SPEED_RET 0x4d86c4
 #define INITCONFIG_MODE_RET 0x4d8738
+/* config_init applies the saved play mode itself at boot, before memory play reads the queue: its
+ * mclSetPlayMode call (jalr 0x4e596c) returns here. V1.32's goes through ringnav_bootmode. */
+#define BOOT_MODE_RET 0x4e5974
 #else
 #define MCL_POOL 0xa3bdb0       /* deque_t * of int: unplayed shuffle indices */
 #define MCL_LASTPOS 0xa3be90    /* shuffle "previous" index, -1 none */
