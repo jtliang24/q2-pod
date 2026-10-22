@@ -1009,6 +1009,31 @@ tracks. Over q2remote:
 The user then played on from it: Play resumed the track, and Next and Previous stayed in the album
 shuffle.
 
+## 26. The call sites whose code is V1.32's (Oct 21)
+
+Five of section 4's rows had V2.1 code that is V1.32's, moved (section 24). Each is now a
+`CALL_SITES['m1plus']` entry, with the same words as the Q2's except for addresses and offsets:
+- **Shuffle's Play next and history** (`SHUFFLE_CALL`): `mclNextSong`'s `bal` to the shuffle pick at
+  `0x5d5a28`. The pick (`0x5d03b0`, a PIC entry with V2.1's GOT base) is a private routine, now in
+  `M1PLUS_PRIVATE_FUNCTIONS`, so `ringnav_shuffle` is built for M1 too.
+- **The page cache** (`DROP_CACHES`): `check_cpumem`'s `beq` at `0x50b868` becomes `b`.
+- **The 65,000-song scan** (`SCAN_LIMIT`): `toolsLoadAllFile`'s count load and `slti` at `0x5efeb4`. The
+  count is `-0x4f7c($fp)`, where V1.32's is `-0x3cac($fp)`.
+- **M4B in folder scans** (`AUDIO_EXTENSION_CALLS`): `toolsLoadDirectory`'s and the recursive scan's
+  `strstr` calls, at `0x5e8af0` and `0x5ea840`, with their GOT loads pinned.
+- **The article-free sort** (`SORT_TRIMS`): the four `toolsTrimLeft` calls in the name comparators
+  `0x5e0dac` and `0x5e16c4`.
+
+Their `test/patch.py` tests now run on M1 against V2.1's code:
+- the scan test's count, stop flag, listing deque and its two private routines are V2.1's, read from
+  `toolsLoadAllFile`;
+- the sort test runs V2.1's two comparators;
+- the M4B test takes each site's stack slot from the table's order, since V2.1's slots are V1.32's.
+
+Coverflow's Play next test now runs in Shuffle on M1 too. `test/patch.py` on M1 has 17 `NOT PORTED`
+lines, down from 22, and passes 979 scenarios. Q2 Legacy and iPod `update.tar` are byte-identical to
+the previous build, and their runs still pass (1017 and 1398).
+
 ## How to check a build now
 
 ```sh

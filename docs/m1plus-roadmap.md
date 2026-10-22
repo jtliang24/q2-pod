@@ -96,7 +96,9 @@ adding its V2.1 words under its name in `CALL_SITES['m1plus']` (`tools/build.py`
 A hook goes in `M1PLUS_HOOKS` instead.
 
 Done: the boot queue bug the check found. A reboot no longer deletes the saved advanced queue
-([m1plus-progress.md](m1plus-progress.md) section 25).
+([m1plus-progress.md](m1plus-progress.md) section 25). The five sites whose V2.1 code is V1.32's:
+Shuffle's Play next and history, the page cache, the 65,000-song scan, the article-free sort and M4B in
+folder scans (section 26).
 
 Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
@@ -104,11 +106,6 @@ value and effort:
 
 | Feature | V2.1 site | Notes | Size |
 |---|---|---|---|
-| Shuffle honours Play next, and its Previous/Next history | `SHUFFLE_CALL`: `bal` at `0x5d5a28` (`0x0411ea61`), the pick at `0x5d03b0` | same code. One site does both (`ringnav_shuffle`) | S |
-| Keep the page cache | `DROP_CACHES`: `0x50b868`'s `beq` (`0x12220006`) | same code, in `check_cpumem` | S |
-| 65,000-song scan | `SCAN_LIMIT`: `0x5efeb4` (`lw` `0x8fc2b084`, `slti` `0x28424e20`, count `0x8fc4b084`) | same code | S |
-| Article-free sort | `SORT_TRIMS`: `0x5e0ea4`, `0x5e0f10`, `0x5e17bc`, `0x5e1828` | same code (comparators `0x5e0dac`, `0x5e16c4`) | S |
-| M4B in folder scans | `AUDIO_EXTENSION_CALLS`: `0x5e8af0`, `0x5ea840` | same list, without `.m4b`. The `strstr` load before each is `0x8f99f694` | S |
 | Ratings' Now Playing heart | V2.1's heart is `btn_fav` (`show_player_face`, `btn_imgfav_style`) | no `img_fav`. Bind the rating hold to `btn_fav` | S–M |
 | Lock screen Clock row and thumbnails | the Lock screen page, `systemset_screensaver_page_init` (`0x4abe04`) | a picture grid now. On the device the five built-ins the payload adds show as empty circles, and there is no Clock row | M |
 | Lock screen cover repaint | the lock window (`screensaver_page_init`) reads `/tmp/abp` | V2.1's lock window differs. Check on the device whether it repaints on a track change | S |
