@@ -5487,8 +5487,7 @@ static void qm_select(void) {
 }
 
 /* Stock playlist rows use the queue in add mode 2. Guard their final dispatch as well. */
-#if !M1PLUS /* V1.32's; V2.1's rows keep their stock click */
-#define PLAYLIST_PICK ((int (*)(void *, void *))0x4b1d24)
+#define PLAYLIST_PICK ((int (*)(void *, void *))PLAYLIST_PICK_ADDR)
 static int qm_playlist_pick(void *ctx, void *event) {
     if (!qm_record()) {
         toast("Queue unchanged");
@@ -5497,7 +5496,6 @@ static int qm_playlist_pick(void *ctx, void *event) {
     qm_select();
     return PLAYLIST_PICK(ctx, event);
 }
-#endif
 
 static int qm_playlist_gone(void *ctx, void *event) {
     (void)ctx;
@@ -5507,10 +5505,6 @@ static int qm_playlist_gone(void *ctx, void *event) {
 }
 
 static void qm_playlist_bind(void *w, int depth) {
-#if M1PLUS
-    (void)w;
-    (void)depth;
-#else
     if (!w || depth == 16) return;
     void *emitter = P(w, W_EMITTER);
     for (void *item = emitter ? P(emitter, 0) : 0; item; item = P(item, EMIT_NEXT))
@@ -5523,7 +5517,6 @@ static void qm_playlist_bind(void *w, int depth) {
         }
     for (unsigned i = 0, n = widget_count_children(w); i < n; ++i)
         qm_playlist_bind(widget_get_child(w, i), depth + 1);
-#endif
 }
 
 /* Rebind the guarded Now Playing picker after stock rebuilds its rows. */

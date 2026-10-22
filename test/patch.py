@@ -3312,41 +3312,44 @@ for kw in ({'queue':0},{'queue':1},{'queue':3}):
     m.press(100); assert m.hold()==0 and m.nodes[m.top]['name']=='playing_page'; passed()
 m=playing_menu(); m.airplay=2; m.press(100); assert m.hold()==0; passed()
 
-if not is_m1plus:
-    # The existing non-pooled playlist rows are guarded at their final click dispatch.
-    class PlayingPlaylistMachine(QueueMachine):
-        STOCK_PICK=0x4b1d24
-        def __init__(self):
-            super().__init__(page='playing_page',pos=1)
-            self.added=[]
-            self.handlers[self.STOCK_PICK]='playlist_pick'
-        def hook(self,u,address,size,unused):
-            if address==self.STOCK_PICK:
-                self.added.append(self.names()[1])
-                u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
-            opening=self.handlers.get(address)=='q:navigator_to_with_context' and self.text(u.reg_read(UC_MIPS_REG_A0))=='localmusic/playlist_page'
-            super().hook(u,address,size,unused)
-            if opening:
-                self.playlist_rows=[self.node('button',f'playlist_{i}') for i in range(3)]
-                view=self.node('scroll_view',children=self.playlist_rows)
-                page=self.node('window','playlist_page',[view]); self.top=page; self.stack.append(page)
-                for row in self.playlist_rows:
-                    em,it=self.alloc(4),self.alloc(0x28)
-                    self.word(row+O['W_EMITTER'],em); self.word(em,it)
-                    self.word(it,row); self.word(it+O['EMIT_TYPE'],O['EVT_CLICK']); self.word(it+12,self.STOCK_PICK)
-    for stale in (False,True):
-        m=PlayingPlaylistMachine(); m.run(4)
-        assert m.nodes[m.top]['name']=='playlist_page'
-        for row in m.playlist_rows:
-            f,ctx=m.handler(row,O['EVT_CLICK']); assert f!=m.STOCK_PICK and ctx==row
-        if stale: m.word(O['MCL_POS'],2)
-        f,ctx=m.handler(m.playlist_rows[2],O['EVT_CLICK'])
-        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==(11 if stale else 0)
-        assert m.added==([] if stale else ['B'])
-        if not stale: assert sel(m)==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]
-        f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-        m.top=m.stack[0]; m.press(200); assert m.hold()==11; passed()
+# The existing non-pooled playlist rows are guarded at their final click dispatch: V1.32's row click
+# (0x4b1d24), or V2.1's (0x53d300, which its row builder binds with the row).
+class PlayingPlaylistMachine(QueueMachine):
+    STOCK_PICK=O['PLAYLIST_PICK_ADDR']
+    def __init__(self):
+        super().__init__(page='playing_page',pos=1)
+        self.added=[]
+        self.handlers[self.STOCK_PICK]='playlist_pick'
+    def hook(self,u,address,size,unused):
+        if address==self.STOCK_PICK:
+            self.added.append(self.names()[1])
+            u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
+        opening=self.handlers.get(address)=='q:navigator_to_with_context' and self.text(u.reg_read(UC_MIPS_REG_A0))=='localmusic/playlist_page'
+        super().hook(u,address,size,unused)
+        if opening:
+            self.playlist_rows=[self.node('button',f'playlist_{i}') for i in range(3)]
+            view=self.node('scroll_view',children=self.playlist_rows)
+            page=self.node('window','playlist_page',[view]); self.top=page; self.stack.append(page)
+            for row in self.playlist_rows:
+                em,it=self.alloc(4),self.alloc(0x28)
+                self.word(row+O['W_EMITTER'],em); self.word(em,it)
+                self.word(it,row); self.word(it+O['EMIT_TYPE'],O['EVT_CLICK']); self.word(it+12,self.STOCK_PICK)
+for stale in (False,True):
+    m=PlayingPlaylistMachine(); m.run(4)
+    assert m.nodes[m.top]['name']=='playlist_page'
+    for row in m.playlist_rows:
+        f,ctx=m.handler(row,O['EVT_CLICK']); assert f!=m.STOCK_PICK and ctx==row
+    if stale: m.word(O['MCL_POS'],2)
+    f,ctx=m.handler(m.playlist_rows[2],O['EVT_CLICK'])
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==(11 if stale else 0)
+    assert m.added==([] if stale else ['B'])
+    if not stale: assert sel(m)==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]
+    f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    m.top=m.stack[0]; m.press(200); assert m.hold()==11; passed()
 
+# V1.32's rows builder (0x4b2dac), which iPod's playlist_rebuild hook rebinds after; V2.1 builds its
+# rows itself (0x53e74c), unhooked, as Legacy's are.
+if not is_m1plus:
     # Execute stock's rebuild and naming callback; only UI/dialog and database services are mocked.
     class PlaylistMachine(PlayingPlaylistMachine):
         def __init__(self, count=0, mode=1):
@@ -3422,8 +3425,6 @@ if not is_m1plus:
             if stale: m.word(O['MCL_POS'],2)
             assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==(11 if stale else 0)
             assert m.added==([] if stale else ['B']); passed()
-else:
-    not_ported('Playlist rows and click guards (V1.32 playlist builders)')
 
 # Short press toggles once; a hold opens one menu titled by its row, its release is swallowed and
 # the next short press toggles again. A repeated long event of the same press opens nothing.

@@ -531,6 +531,13 @@ static inline int arc_out(int r, int y) {
 #define ICON_FAV "play_fav"
 #define ICON_UNFAV "play_unfav"
 #endif
+/* The playlist page's row click, which in add mode 2 (Now Playing's hold) adds the queue's selected
+ * record, with the row as context. */
+#if M1PLUS /* bound by its row builder (0x53e74c) */
+#define PLAYLIST_PICK_ADDR 0x53d300
+#else
+#define PLAYLIST_PICK_ADDR 0x4b1d24
+#endif
 /* Lock screen (lockscreen.c): the lock window's clock and battery, which Large lays out again. */
 #if M1PLUS /* the battery is an icon with a level bar (pgbar_battery), and the window is portrait */
 #define VIEW_LOCK_TIME "dclock_time"
