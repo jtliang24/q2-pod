@@ -1034,6 +1034,30 @@ Coverflow's Play next test now runs in Shuffle on M1 too. `test/patch.py` on M1 
 lines, down from 22, and passes 979 scenarios. Q2 Legacy and iPod `update.tar` are byte-identical to
 the previous build, and their runs still pass (1017 and 1398).
 
+## 27. The Ratings hold on Now Playing's heart (Oct 21)
+
+V1.32's heart is the image `img_fav`, whose click (`0x52b154`) `rate_bind` swaps for one that tells a
+tap from a hold. V2.1's is a button, `btn_fav`, and nothing is bound to an `img_fav`, so on M1 the heart
+had only V2.1's tap.
+- **V2.1's click.** `playing_page_init` runs a `widget_foreach` visit (`0x53b190`) that binds each
+  button by its name; `btn_fav`'s click is `0x53b480`, with the window as context. It toggles My Fav
+  for the playing track (`manage_myfav`), and shows the result by the button's style
+  (`btn_imgfav_style` or `btn_imgunfav_style`, from `styles/playing_page.bin`). It takes the button
+  from the event's target (`0x10`), not from its context.
+- **The port.** `offsets.inc` names the heart per model: `VIEW_FAV`, `FAV_CLICK_ADDR`, `STYLE_FAV`, and
+  the picker's images `ICON_FAV` and `ICON_UNFAV` (V2.1's `p_fav`, `p_unfav`). `rate_bind` finds the
+  binding in the heart's emitter as on the Q2. The badge reads the button's style. When a save changes
+  My Fav, `rate_close` calls V2.1's click with an event made for the button, since V2.1's click reads
+  its target. The build's V2.1 name check now reads `playing_page`'s styles too.
+- **The test.** On M1, `RateMachine` builds V2.1's `playing_page` from its asset, runs V2.1's visit on
+  `btn_fav` (checking it binds `0x53b480` with the window), then runs V2.1's click for real, with only
+  `manage_myfav` and `notifyFavor` mocked. The harness's click now carries its target, as AWTK's does.
+  The checks are the Q2's. With the made event's target set to the window instead, the save check
+  fails.
+
+`test/patch.py` on M1 passes 988 scenarios, with 16 `NOT PORTED` lines. Under QEMU, the `--media` walk
+opens V2.1's Now Playing through the hook. Q2's `update.tar` files are byte-identical.
+
 ## How to check a build now
 
 ```sh
