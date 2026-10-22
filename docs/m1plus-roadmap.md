@@ -275,13 +275,17 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   ([m1plus-integration.md](m1plus-integration.md)), and U2 turns the compare into `test/q2compare.py`
   against `UPSTREAM_BASE`. The Q2 release (`tools/release.py`) is broken on this branch until
   integration item 1 lands.
-- **Release packaging for M1.** The README tells M1 users to download `update.bin` from a release, but
-  `tools/release.py` packages only the Q2 (upstream owns that). An M1 path needs:
-  - a reproducible `update.bin`;
+- **Release packaging for M1 (M, after U0).** The README tells M1 users to download `update.bin` from a
+  release, but `tools/release.py` packages only the Q2, and upstream owns it. The M1's goes beside it
+  as `tools/release_m1.py`, which takes stock's V2.1 `update.bin` (or its vendor ZIP) and needs:
+  - a reproducible `update.bin`: two builds, compared byte for byte;
   - a manifest check (`model`, `input_sha256`, `logo_source`);
+  - the M1 gates on the first build: the V2.1 name check, `test/build.py --build`, `test/patch.py` and
+    `test/boot.py`;
   - a version from upstream's `VERSION` plus an M1 suffix (for example `1.3.9-m1.1`), so a release
     says which upstream release it carries;
-  - a release note with the reflash-to-stock instructions.
+  - a release note with the reflash-to-stock instructions;
+  - a `test/release_m1.py` for its failure paths, as `test/release.py` has for the Q2's.
 - **q2remote on M1 (first: it makes the rest faster).** Done ([remote.md](remote.md#m1-plus)):
   - upright screenshots, keys, knob turns and taps;
   - `swipe X0 Y0 X1 Y1 [MS]`, from Goodix-CTP's move frames recorded on the device;
