@@ -1089,6 +1089,21 @@ V2.1's is different:
 `test/patch.py` on M1 passes 991 scenarios, with 15 `NOT PORTED` lines. Q2's `update.tar` files are
 byte-identical.
 
+## 29. The lock window's cover is native in V2.1 (Oct 21)
+
+On the Q2, the lock window kept the old cover after a track change. Its timer sets `img_playcover` to
+the same `file:///tmp/coverpic.jpg` for every track, and V1.32's `image_base_set_image` compares the
+new name with the old and skips its `widget_invalidate` when they match. `lockscreen_cover` (on the
+private `saver_cover`) invalidates it after stock.
+
+V2.1's lock window does the same (`0x53f9b4`, on `view_img_icon`, then `widget_unload_image` so the
+next paint decodes the new file), but V2.1's `image_base_set_image` (`0x654910`) has no compare: it
+copies the name and always invalidates. So the cover repaints on M1 without a hook, and the row moves
+to the roadmap's "V2.1 has them" list. On M1, `test/patch.py` runs V2.1's own `image_base_set_image`
+twice with the same name and checks both calls invalidate. 14 `NOT PORTED` lines are left; it passes
+992 scenarios. To check on the device: with the lock screen on, Next on the lock window shows the new
+track's cover.
+
 ## How to check a build now
 
 ```sh

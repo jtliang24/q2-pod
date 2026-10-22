@@ -107,7 +107,6 @@ value and effort:
 
 | Feature | V2.1 site | Notes | Size |
 |---|---|---|---|
-| Lock screen cover repaint | the lock window (`screensaver_page_init`) reads `/tmp/abp` | V2.1's lock window differs. Check on the device whether it repaints on a track change | S |
 | Cover worker pause and stale completion | not checked | `COVER_PAUSE` and `ringnav_cover_done` are Q2 only. Check with the art rows | S |
 | Now Playing hold's Add to Playlist when the queue changed | V2.1's playlist pick handler, still to find | M1 already selects the row (`qm_select`). Only the stale-queue guard is missing. `playlist_rebuild` is iPod only | S |
 
@@ -128,6 +127,9 @@ Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
   V2.1's Artists page has its own Artist/Album Artist switch, saved as `ARTISTTYPE` and read in
   `config_init`. A fresh config still starts on Artist.
 - **Artists rows without the head picture** (`CLASS_ICON`): V2.1 draws its own artist icon.
+- **The lock window's cover repaint** (`saver_cover`): V2.1's `image_base_set_image` always
+  invalidates, where V1.32's skips an unchanged name, so its lock window repaints a new track's cover
+  ([m1plus-progress.md](m1plus-progress.md) section 29).
 
 Now Playing's info lines (`NP_INFO_CALL`) only change how the lines read, so they are in section 7.
 Their V2.1 site is the fill's one call, `0x53bebc` (`0x0411f760`, the fill at `0x539c40`).
