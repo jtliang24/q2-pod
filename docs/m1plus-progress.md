@@ -1259,8 +1259,9 @@ page and Large clock, the lock window's cover, and the library items. Over q2rem
   (1064 kbps on air), Standard about 89 KB/s (711 kbps), a ratio of 1.50, which is 990/660 with about
   7.5% of Bluetooth packet overhead on both. Stock sends Standard's rate for HQ too (ratio 1).
   The Auto segment was too short to read.
+- **Resume on Connect:** the user confirmed it with the WH-1000XM6.
 - **Same-named albums:** the card's 24 albums share no name, across artists or folders, so that check
-  needs two such albums on the card.
+  needs two such albums on the card. It is kept as a later validation in the roadmap's section 4.
 
 ## How to check a build now
 

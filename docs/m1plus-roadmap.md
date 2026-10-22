@@ -15,9 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** section 4's last device checks, with a Bluetooth headphone (Resume on connect) and two
-same-named albums on the card ([m1plus-progress.md](m1plus-progress.md) section 36); Spotify on
-the device (section 3) when there is an account. Functionality comes first: items that only change how something looks wait for the final
+**Next:** Spotify on the device (section 3) when there is an account. Section 4 is done; one device
+check waits for a library that needs it (section 4, "Later validation"). Functionality comes first: items that only change how something looks wait for the final
 pass (section 7).
 
 ## Ground rules
@@ -108,10 +107,23 @@ advanced play and across speed changes (section 33), still to hear with Gapless 
 artist's albums (section 35), still to see with two such albums on the card.
 
 Every row had been checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
-section 24). All are now ported or found native in V2.1, and dev 20's device pass confirmed them,
-LDAC HQ by its measured bitrate, except two: Resume on connect (a Bluetooth headphone) and same-named
-albums' art (two such albums on the card). Gapless's preload was checked over q2remote; whether it
-sounds gapless is still to hear.
+section 24). All are now ported or found native in V2.1, and dev 20's device pass confirmed them
+([m1plus-progress.md](m1plus-progress.md) section 36), LDAC HQ by its measured bitrate, except
+same-named albums' art. Gapless's preload was checked over q2remote; whether it sounds gapless is still
+to hear.
+
+**Later validation: same-named albums' art** ([m1plus-progress.md](m1plus-progress.md) section 35). The
+test card has no two albums of one name, so this waits until one does. To check:
+1. Put two albums with the same name by different album artists on the card (for example two
+   "Greatest Hits"), each in its own folder with its own cover, and run Update Local Music. A name in
+   two folders without album artist tags splits the same way, by folder.
+2. Library Albums shows the name twice, each row with its own cover, not one cover on both.
+3. Each row's album page shows that album's big cover.
+4. Each artist's page (Artists → the artist) shows its album with its own cover.
+5. Over q2remote, `ls /tmp/abp` holds two different `<md5>0.jpg` files for the name, one per album.
+
+If they share a cover, the build's `ALBUM_ART` sites (`tools/build.py`, `CALL_SITES['m1plus']`) and
+`artist_tab`'s keys are where to look.
 
 Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 - **Artist pages open on Albums** (`ARTIST_ALBUMS`): V2.1's artist page lists the artist's albums.
