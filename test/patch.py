@@ -3108,6 +3108,10 @@ class QueueMachine(Machine):
         return page
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')
+        if name=='widget_get_window':  # up the parents to the window
+            w=u.reg_read(REGS[0]); self.calls.append(('widget_get_window',w,0,0))
+            while w and self.nodes.get(w,{}).get('type')!='window': w=self.get(w+O['W_PARENT'])
+            u.reg_write(UC_MIPS_REG_V0,w); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
         if name=='widget_off_by_func' and u.reg_read(REGS[0]) in self.nodes:  # AWTK removes the matching handler
             a,b,c,d=[u.reg_read(r) for r in REGS]
             self.nodes[a]['handlers']=[h for h in self.nodes[a].get('handlers',[]) if h!=(b,c,d)]
@@ -8712,7 +8716,7 @@ else:
 # Settings rows (docs/internals.md#charge-limit, #low-power, #album-artists): Power management gains
 # Charge limit and Low power, Audio settings gains Artists, after the stock rows in the same widgets
 # and styles; Centre or tap toggles and saves each. Artists is stock's own PLAYSET ARTISTTYPE.
-def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False):
+def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False,via_row=False):
     m=QueueMachine(); m.config.update(config); m.restack=True
     if boot: m.call(address=payload_syms['ringnav_bootmode'],args=(3,0,0,0),gap=0)  # config_init's play mode
     if hook=='btrows': m.byte(syms['g_bluetoothflag'],bt)
@@ -8720,9 +8724,11 @@ def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False):
     entries=[m.entry(0) for _ in range(stock_rows)]
     view=m.node('scroll_view',view_name,list(entries))
     for e in m.nodes[view]['children']: m.word(e+O['W_PARENT'],view)
-    m.top=m.node('window','page',[m.node('list_view','list_view',[view])])
+    lv=m.node('list_view','list_view',[view]); m.top=m.node('window','page',[lv])
+    m.word(view+O['W_PARENT'],lv); m.word(lv+O['W_PARENT'],m.top)
     target={'power':'systemset_powermanager_page_init','audioset':'playset_playset_page_init','btrows':'btmenu_rows','display':'systemset_display_page_init'}[hook]
-    assert m.call(address=HOOKS[target][0],args=(m.top,5,0,0),gap=0)==0 and [c[:3] for c in m.calls if c[0]==f'stock_{hook}']==[('stock_'+hook,m.top,5)]
+    arg=entries[0] if via_row else m.top  # V2.1's Bluetooth builder is also called with a row
+    assert m.call(address=HOOKS[target][0],args=(arg,5,0,0),gap=0)==0 and [c[:3] for c in m.calls if c[0]==f'stock_{hook}']==[('stock_'+hook,arg,5)]
     m.init_calls=list(m.calls)
     rows=sorted(set(m.nodes[view]['children'])-set(entries))  # ours, as made (the page may restack)
     buttons=[row_button(m,r) for r in rows]; labels=[m.nodes[b]['children'][-1] for b in buttons]
@@ -8916,22 +8922,23 @@ else:  # M1 Plus: Wheel Sensitivity is Q2 only; Crossfade's row opens the same p
     m.stack.remove(page); m.top=audio; page=m.prepare_bootvol()
     assert click(3)==[] and m.top==page and m.nodes[m.vol]['text']=='10 s' and m.nodes[m.slider]['value']==10; passed()
 # Bluetooth's list (btmenu_rows, rebuilt on every search) gains Resume on connect with Bluetooth on,
-# right after its fourth row, Bluetooth Headset Volume Control, as stock's rows: no icon, 78 high.
-# Off unless Q2POD RESUME is 1 (docs/internals.md#resume-on-connect).
-if not is_m1plus:
-    m,rows,texts,icons,click=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],stock_rows=7)  # 5 rows, 2 devices
-    assert len(rows)==1 and icons==[None] and texts()==['Resume on Connect: Off']
-    kids=m.nodes[row_button(m,rows[0])]['children']  # the label alone
-    assert len(kids)==1 and m.get(kids[0]+O['W_X'])==10 and m.get(rows[0]+O['W_H'])==78
-    assert m.nodes[named(m,m.top,'scroll_view_bluetooth')]['children'].index(rows[0])==4
-    assert click(0)==[(1,'Q2POD','RESUME')] and texts()==['Resume on Connect: On']
-    assert click(0)==[(0,'Q2POD','RESUME')] and texts()==['Resume on Connect: Off']; passed()
-    m,rows,texts,*_=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],{'RESUME':'1'},stock_rows=7)
-    assert texts()==['Resume on Connect: On']; passed()
-    m,rows,*_=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],stock_rows=1,bt=0)  # just the switch
-    assert rows==[]; passed()
-else:
-    not_ported('Bluetooth Resume on connect row (btmenu_rows not hooked in V2.1)')
+# right after its fourth row, Bluetooth Headset Volume Control, as stock's rows: no icon, 78 high (V2.1's
+# 64, its label at 12 as V2.1's rows place it). Off unless Q2POD RESUME is 1
+# (docs/internals.md#resume-on-connect). V2.1's builder takes any widget of the page, the window here.
+m,rows,texts,icons,click=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],stock_rows=7)  # 5 rows, 2 devices
+assert len(rows)==1 and icons==[None] and texts()==['Resume on Connect: Off']
+kids=m.nodes[row_button(m,rows[0])]['children']  # the label alone
+assert len(kids)==1 and m.get(kids[0]+O['W_X'])==(12 if is_m1plus else 10) and m.get(rows[0]+O['W_H'])==O['BT_ROW_H']
+assert m.nodes[named(m,m.top,NAMES['VIEW_BLUETOOTH'])]['children'].index(rows[0])==4
+assert click(0)==[(1,'Q2POD','RESUME')] and texts()==['Resume on Connect: On']
+assert click(0)==[(0,'Q2POD','RESUME')] and texts()==['Resume on Connect: Off']; passed()
+m,rows,texts,*_=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],{'RESUME':'1'},stock_rows=7)
+assert texts()==['Resume on Connect: On']; passed()
+m,rows,*_=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],stock_rows=1,bt=0)  # just the switch
+assert rows==[]; passed()
+if is_m1plus:  # from a row's click (the switch's, the search's), as V2.1 rebuilds the list
+    m,rows,texts,*_=settings_page('btrows',NAMES['VIEW_BLUETOOTH'],stock_rows=7,via_row=True)
+    assert texts()==['Resume on Connect: Off'] and m.nodes[named(m,m.top,NAMES['VIEW_BLUETOOTH'])]['children'].index(rows[0])==4; passed()
 
 # Lock screen (docs/internals.md#lock-screen). The picture list gains the six built-ins between
 # stock's default and the card images, once however often it is rebuilt, and a picked built-in
@@ -8944,10 +8951,6 @@ class LockMachine(QueueMachine):
             self.u.mem_write(syms['g_screensaver_picture'],b'screensaver_default\0')
         if self.handlers.get(address)=='q:image_base_cast':  # the widget itself, an image
             u.reg_write(UC_MIPS_REG_V0,u.reg_read(REGS[0])); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
-        if self.handlers.get(address)=='widget_get_window':  # up the parents to the window
-            w=u.reg_read(REGS[0]); self.calls.append(('widget_get_window',w,0,0))
-            while w and self.nodes.get(w,{}).get('type')!='window': w=self.get(w+O['W_PARENT'])
-            u.reg_write(UC_MIPS_REG_V0,w); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
         return super().hook(u,address,size,unused)
 def lock_machine(picture='screensaver_default',config={}):
     m=LockMachine(); m.config.update(config); m.restack=True

@@ -101,6 +101,7 @@
 #define VIEW_DISPLAY "display_scrollview"
 #define VIEW_PLAYSET "playset_scrollview"
 #define VIEW_BLUETOOTH "bluetooth_scrollview"
+#define BT_ROW_H 64 /* its rows' height (the list builder's list_item_create) */
 #define ICON_CHARGE "usb_chargeswitch"
 #define ICON_POWER "sset_powermanager"
 #define ICON_KEYLOCK "sset_keylock"
@@ -115,6 +116,7 @@
 #define VIEW_DISPLAY "scroll_view_display"
 #define VIEW_PLAYSET "scroll_view_playset"
 #define VIEW_BLUETOOTH "scroll_view_bluetooth"
+#define BT_ROW_H 78
 #define ICON_CHARGE "usb_chargeswitch"
 #define ICON_POWER "system_powermanager"
 #define ICON_KEYLOCK "system_keylock"

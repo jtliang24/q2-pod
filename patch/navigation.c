@@ -2235,17 +2235,20 @@ int ringnav_powermanager(void *win, void *ctx) {
 /* The Bluetooth page's list (stock's local builder, btmenu_rows), rebuilt whole on every search and
  * link change: its rows, five with Bluetooth on (one, the switch, off), then the device lists.
  * With Bluetooth on, Resume on connect follows the fourth, Bluetooth Headset Volume Control
- * (bt_adjvol), each time, iconless and 78 high as stock's rows. */
+ * (bt_adjvol), each time, iconless and BT_ROW_H high as stock's rows. */
 int ringnav_btrows(void *win, void *ctx) {
     static const char *const icons[] = { 0 };
     int result = stock_btrows_trampoline(win, ctx);
     if (!g_bluetoothflag) return result;
+#if M1PLUS /* V2.1's (0x4a3734) takes any widget of the page, as its clicks pass their rows */
+    win = win ? widget_get_window(win) : (void *)0;
+#endif
     pod_rows(win, VIEW_BLUETOOTH, POD_RESUME, 1, icons);
     void *view = win ? widget_lookup(win, VIEW_BLUETOOTH, 1) : (void *)0;
     unsigned n = view ? widget_count_children(view) : 0;
     if (!n) return result;
     void *row = widget_get_child(view, n - 1);
-    widget_resize(row, I(row, W_W), 78);
+    widget_resize(row, I(row, W_W), BT_ROW_H);
     widget_restack(row, 4);
     return result;
 }

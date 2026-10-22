@@ -304,6 +304,8 @@ CALL_SITES = {
         # parse_albumcovertask_thd's local completion and its folder path's branch to it (0x4de660).
         'COVER_DONE': ((0x4dd630, 0x8f99b86c, 0x27a61688), (0x4dd634, 0x0411fde3, 'ringnav_cover_done'),
                        (0x4de660, 0x1000fbf4, 0x1000fbf3)),
+        # checkBluetoothStatus' bal save_start_player once a headset's A2DP comes up (a0 0).
+        'BT_CONNECT_START': ((0x4d6320, 0x04113031, 'ringnav_bt_connect_start'),),
         # switchBtPriority's dispatch, its jump table at -0x5b50 from its GOT page: HQ and Standard (rows 0
         # and 1, btquality_page's btcode_ldachq and btcode_ldacst) share the li $4,0x16.
         'LDAC_HQ': ((0x4d304c, 0x00042080, 0x00041880),   # sll $3,$4,2
@@ -834,6 +836,7 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'saver_pick': 0x4ab52c,
     'mcl_preload': 0x5d0ea4,  # the gapless pick and its open, hooked (M1PLUS_HOOKS) as on the Q2
     'mcl_open_preload': 0x5d0bd8,
+    'btmenu_rows': 0x4a3734,  # the Bluetooth page's list: switch, name, quality, volume, search, devices
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
 }
 M1PLUS_FUNCTION_ALIASES = {
@@ -881,6 +884,8 @@ M1PLUS_HOOKS = {
     # Gapless: the next track's pick and its decoder's open, V1.32's moved
     'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
     'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),
+    # The Bluetooth page's list builder, rebuilt whole on every search and switch: Resume on Connect
+    'btmenu_rows': (0x4a3734, 'ringnav_btrows', 'btrows'),
     'memeory_startplayer': (0x4e34dc, 'ringnav_memory', 'memory'),
     'systemset_powermanager_page_init': (0x4a9d18, 'ringnav_powermanager', 'power'),
     'playset_playset_page_init': (0x4a0c88, 'ringnav_audioset', 'audioset'),
