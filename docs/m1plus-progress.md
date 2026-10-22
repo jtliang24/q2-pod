@@ -1147,6 +1147,18 @@ The roadmap said M1 already selected the held row for Add to Playlist (`qm_selec
 `test/patch.py` on M1 passes 996 scenarios, with 13 `NOT PORTED` lines. Q2's `update.tar` files are
 byte-identical.
 
+## 32. LDAC HQ sends 990 kbps (Oct 22)
+
+V2.1's `switchBtPriority` (`0x4d3024`) is V1.32's moved: the same dispatch, with its jump table at
+`-0x5b50` from its GOT page, where V1.32's is at `-0xfd0`. The table sends rows 0 and 1 to the same
+`li $4, 0x16`, as V1.32's does. Those rows are LDAC HQ and LDAC Standard: V2.1's Quality page
+(`systemset/btquality_page`) builds its rows from a label table (`0x97ca08`) that starts
+`btcode_ldachq`, `btcode_ldacst`, `btcode_ldacauto`, and its click passes the row's index. So
+`LDAC_HQ` is the Q2's six words at `0x4d304c`, with V2.1's table offset in the `lw`.
+`test/patch.py`'s check runs V2.1's `switchBtPriority` patched and stock: HQ sends 0x15, Standard
+0x16 and Auto 0x18 patched, and stock sends 0x16 for HQ. On M1 it passes 998 scenarios, with 12
+`NOT PORTED` lines. To hear on the device: a WH-1000XM6 with its multipoint off reports 990 kbps on HQ.
+
 ## How to check a build now
 
 ```sh

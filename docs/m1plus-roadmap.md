@@ -101,7 +101,7 @@ Shuffle's Play next and history, the page cache, the 65,000-song scan, the artic
 folder scans (section 26). The Ratings hold on Now Playing's heart (section 27). The Lock screen page's
 Clock row and built-in thumbnails, and the Large clock on V2.1's lock window (section 28). The cover
 worker's pause and stale completion (section 30). The hold menu's row selection, and the Now Playing hold's
-Add to Playlist guard (section 31).
+Add to Playlist guard (section 31). LDAC HQ (section 32), still to hear on the device.
 
 Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
@@ -114,7 +114,6 @@ These need hardware, a setting or a library to check on the device, so they come
 
 | Feature | V2.1 site | Notes | Size |
 |---|---|---|---|
-| LDAC HQ sends 990 kbps | `LDAC_HQ`: `0x4d304c`–`0x4d3070` | An LDAC headphone (the WH-1000XM6), with its multipoint off. same code, so the same words except the jump table's `lw` (`0x8c42a4b0`). Check the quality page's row order | S |
 | Gapless in advanced play, and across speed changes | hooks: `mcl_preload` `0x5d0ea4`, `mcl_open_preload` `0x5d0bd8` | Gapless on (off on the device now). same code. Without `mcl_preload` (not hooked on M1), Shuffle Albums/Folders lose gapless | S |
 | Resume on connect | `BT_CONNECT_START`: `bal save_start_player` at `0x4d6320` (`0x04113031`). Rows: the list builder at `0x4a3734` | A Bluetooth headphone. still restarts the queue unpaused. The builder is new (five callers, V2.1's rows) | M |
 | Same-named albums' art, an artist's albums' art keys | V2.1's album list and artist page renderers, still to find | Two albums of the same name by different artists on the card. V2.1's cover worker is V1.32's (`md5` of the album name), caching in `/tmp/abp`. Split rows share one cover. The order is ported (`ringnav_localclass`, `0xff01`) | M |
