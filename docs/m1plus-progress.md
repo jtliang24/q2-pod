@@ -980,6 +980,26 @@ Three things turned up that the roadmap didn't list:
 - **The cover worker's Q2 fixes.** `COVER_PAUSE` and the stale-completion check
   (`ringnav_cover_done`) are Q2 only. Whether V2.1's album lists have the same bugs isn't known yet.
 
+## 25. A reboot keeps the advanced queue (Oct 22)
+
+Section 24 found that a reboot lost a Shuffle Albums or Shuffle Folders queue on M1.
+- **The cause.** V2.1's `config_init` applies the saved play mode itself, with a `jalr mclSetPlayMode`
+  at `0x4e596c`. V1.32's goes through `config_playmode`, which Q2 Pod replaces with `ringnav_bootmode`.
+  `mclSetPlayMode` is hooked on M1 too (`ringnav_mode`), so the boot call counted as a choice:
+  `playback_clear` deleted `/mnt/data/ringnav-queue` before memory play could read it.
+- **The fix.** `ringnav_mode` leaves advanced play alone when it returns to `BOOT_MODE_RET`
+  (`0x4e5974`), as it already does for `player_initconfig`'s call (`INITCONFIG_MODE_RET`). That
+  check is M1 only, so the Q2's `update.tar` is byte-identical. `tools/build.py` pins the call as it
+  pins the other two: a `jalr` after a `lw $t9` of `mclSetPlayMode`'s GOT slot.
+- **The test.** `test/playback.py` now runs V2.1's own call site for each mode before memory play
+  reads the queue. Its M1 test had run only the later `config_mplayer` call, and after the read. It
+  failed on the unfixed build, as the device did.
+
+`test/playback.py` hadn't run on M1 at all before this. It loads only parts of `test/patch.py`, and
+`named`, which `QueueMachine`'s V2.1 sortselect dialog calls, was outside them. `named` now sits
+above the slice's end, and the hold menu's choice marker is the model's `ICON_SORTSELECT_CHECK`
+(V2.1's `mulselected`). Its 258 checks pass on M1.
+
 ## How to check a build now
 
 ```sh

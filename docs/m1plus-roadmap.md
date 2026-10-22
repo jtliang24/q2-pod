@@ -15,7 +15,7 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** section 4, from the top of its table (the boot queue bug first); Spotify on the device
+**Next:** section 4, from the top of its table; Spotify on the device
 (section 3) when there is an account. Functionality comes first:
 items that only change how something looks wait for the final pass (section 7).
 
@@ -95,13 +95,15 @@ adding its V2.1 words under its name in `CALL_SITES['m1plus']` (`tools/build.py`
 
 A hook goes in `M1PLUS_HOOKS` instead.
 
+Done: the boot queue bug the check found. A reboot no longer deletes the saved advanced queue
+([m1plus-progress.md](m1plus-progress.md) section 25).
+
 Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
 value and effort:
 
 | Feature | V2.1 site | Notes | Size |
 |---|---|---|---|
-| **Boot keeps the advanced queue** (a bug) | `config_init`'s `mclSetPlayMode` call returns to `0x4e5974` | V2.1 calls the hooked `mclSetPlayMode` itself, so `ringnav_mode` deletes the saved queue. Seen on dev 18. Treat that return as `INITCONFIG_MODE_RET` is treated | S |
 | Shuffle honours Play next, and its Previous/Next history | `SHUFFLE_CALL`: `bal` at `0x5d5a28` (`0x0411ea61`), the pick at `0x5d03b0` | same code. One site does both (`ringnav_shuffle`) | S |
 | Keep the page cache | `DROP_CACHES`: `0x50b868`'s `beq` (`0x12220006`) | same code, in `check_cpumem` | S |
 | 65,000-song scan | `SCAN_LIMIT`: `0x5efeb4` (`lw` `0x8fc2b084`, `slti` `0x28424e20`, count `0x8fc4b084`) | same code | S |
