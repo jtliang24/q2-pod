@@ -8925,28 +8925,38 @@ else:
     not_ported('Lock screen Clock row and built-in thumbnails (screensaver_rows not hooked in V2.1)')
 # The lock window: a built-in drops stock's picture name (the wallpaper paints over it); Large lays
 # the date, battery and time out across the top; Standard and card pictures stay stock's.
+# V2.1's window (its asset) has a digit clock and date, and a battery icon with a level bar; the
+# now-playing card is below them (V2.1's view_bottomview, 362; the Q2's 190).
+TIME,DATE,LEVEL=('dclock_time','dclock_date','pgbar_battery') if is_m1plus else ('clock_time','clock_date','label_battery')
 def lock_window(picture,config={}):
     m=lock_machine(picture,config)
-    w={n:m.node(k,n) for k,n in (('image','img_screensaver'),('digit_clock','clock_time'),('digit_clock','clock_date'),
-                                   ('label','label_battery'),('image','img_battery'))}
+    if is_m1plus:
+        m.top=m.v21_page('screensaver_page'); m.nodes[m.wm]={'children':[m.top]}
+        w={n:named(m,m.top,n) for n in ('img_screensaver',TIME,DATE,LEVEL,'img_battery')}; info=named(m,m.top,'view_timeinfo')
+    else:
+        w={n:m.node(k,n) for k,n in (('image','img_screensaver'),('digit_clock',TIME),('digit_clock',DATE),
+                                       ('label',LEVEL),('image','img_battery'))}
+        info=m.node('view','view_timeinfo',[w[n] for n in (TIME,LEVEL,'img_battery',DATE)])
+        m.top=m.node('window','saverscreen_page',[m.node('gesture','app_gesture',[w['img_screensaver'],info])])
     m.nodes[w['img_screensaver']]['image']=picture
-    info=m.node('view','view_timeinfo',[w[n] for n in ('clock_time','label_battery','img_battery','clock_date')])
-    m.top=m.node('window','saverscreen_page',[m.node('gesture','app_gesture',[w['img_screensaver'],info])])
     assert m.call(address=HOOKS['saverscreen_page_init'][0],args=(m.top,0,0,0),gap=0)==0
     box=lambda n:tuple(signed(m.get(w[n]+O[k])) for k in ('W_X','W_Y','W_W','W_H'))
     return m,w,info,box
 m,w,info,box=lock_window('q2pod:aurora',{'LOCKCLOCK':'1'})
-assert m.nodes[w['img_screensaver']]['image']=='' and box('clock_time')[::2]==(0,O['UI_W']) and box('clock_date')[:3]==(0,0,O['UI_W'])
-assert m.nodes[w['clock_time']]['style:normal:text_align_h']=='center' and m.nodes[w['clock_time']]['style:normal:font_size']>70
-assert signed(m.get(info+O['W_Y']))+box('clock_time')[1]+box('clock_time')[3]<=190 and not m.nodes[w['img_battery']]['visible']
-assert box('label_battery')[2]>=60 and box('label_battery')[0]+box('label_battery')[2]<=O['UI_W']; passed()
+assert m.nodes[w['img_screensaver']]['image']=='' and box(TIME)[::2]==(0,O['UI_W']) and box(DATE)[:3]==(0,0,O['UI_W'])
+assert m.nodes[w[TIME]]['style:normal:text_align_h']=='center' and m.nodes[w[TIME]]['style:normal:font_size']>70
+assert signed(m.get(info+O['W_Y']))+box(TIME)[1]+box(TIME)[3]<=(362 if is_m1plus else 190)
+if is_m1plus:  # the icon and its bar at the top line's right end, as V2.1 places them together
+    assert box('img_battery')==(266,4,40,23) and box(LEVEL)==(268,5,33,20) and m.nodes[w['img_battery']]['visible']
+else: assert box(LEVEL)[2]>=60 and box(LEVEL)[0]+box(LEVEL)[2]<=O['UI_W'] and not m.nodes[w['img_battery']]['visible']
+passed()
 # Battery: Icon keeps the percentage off the Large clock; every percentage mode shows it (iPod only).
 for mode in range(4 if variant=='ipod' else 0):
     CONFIG.update(BATTERY=str(mode)); m,w,_,_=lock_window('q2pod:aurora',{'LOCKCLOCK':'1'}); CONFIG.clear()
-    assert m.nodes[w['label_battery']]['visible']==(mode!=0) and not m.nodes[w['img_battery']]['visible']
+    assert m.nodes[w[LEVEL]]['visible']==(mode!=0) and not m.nodes[w['img_battery']]['visible']
 passed()
 m,w,info,box=lock_window(cards[0])
-assert m.nodes[w['img_screensaver']]['image']==cards[0] and 'style:normal:font_size' not in m.nodes[w['clock_time']]; passed()
+assert m.nodes[w['img_screensaver']]['image']==cards[0] and 'style:normal:font_size' not in m.nodes[w[TIME]]; passed()
 if not is_m1plus:
     # A new cover: stock sets img_playcover by the same name and never invalidates it; the hook does.
     m=lock_machine(); cover=m.node('image','img_playcover'); m.top=m.node('window','saverscreen_page',[m.node('view','view_playinfo',[cover])])

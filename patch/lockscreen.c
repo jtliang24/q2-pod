@@ -212,20 +212,25 @@ int lockscreen_images(void) {
     return result;
 }
 
-/* The Large clock: the date (22 px) centred on a top line at y 14 with the battery percent at its
- * right end, wide enough for "100%", when the Battery setting shows a percentage (the icon hides;
- * stock never sets their visibility), the time (116 px)
- * across the screen under it, all above the now-playing card (y 190). */
+/* The Large clock: the date (22 px) centred on a top line at LOCK_CLOCK_Y, the time (116 px) across
+ * the screen under it, all above the now-playing card. At the top line's right end: on the Q2 the
+ * battery percent, wide enough for "100%", when the Battery setting shows a percentage (the icon
+ * hides; stock never sets their visibility); on M1 Plus V2.1's battery icon with its level bar. */
 static void big_clock(void *win) {
-    void *info = widget_lookup(win, "view_timeinfo", 1), *time = widget_lookup(win, "clock_time", 1),
-         *date = widget_lookup(win, "clock_date", 1), *pct = widget_lookup(win, "label_battery", 1),
-         *batt = widget_lookup(win, "img_battery", 1);
+    void *info = widget_lookup(win, "view_timeinfo", 1), *time = widget_lookup(win, VIEW_LOCK_TIME, 1),
+         *date = widget_lookup(win, VIEW_LOCK_DATE, 1), *pct = widget_lookup(win, VIEW_LOCK_LEVEL, 1),
+         *batt = widget_lookup(win, VIEW_LOCK_BATTERY, 1);
     if (!info || !time || !date || !pct || !batt) return;
-    widget_move_resize(info, 0, 14, UI_W, 150);
+    widget_move_resize(info, 0, LOCK_CLOCK_Y, UI_W, 150);
     widget_move_resize(date, 0, 0, UI_W, 30);
     widget_move_resize(time, 0, 26, UI_W, 124);
+#if M1PLUS /* the bar sits in the icon as V2.1 places them (2, 1 in) */
+    widget_move_resize(batt, UI_W - 54, 4, I(batt, W_W), I(batt, W_H));
+    widget_move_resize(pct, UI_W - 52, 5, I(pct, W_W), I(pct, W_H));
+#else
     widget_move_resize(pct, UI_W - 79, 3, 64, 24);
     widget_set_visible(batt, 0, 0);
+#endif
 #if IPOD /* Legacy has no Battery setting: stock's percent stays */
     extern int ipod_battery(void); /* navigation.c: IPOD BATTERY, 0 Icon, else a percentage */
     widget_set_visible(pct, ipod_battery() != 0, 0);

@@ -531,6 +531,19 @@ static inline int arc_out(int r, int y) {
 #define ICON_FAV "play_fav"
 #define ICON_UNFAV "play_unfav"
 #endif
+/* Lock screen (lockscreen.c): the lock window's clock and battery, which Large lays out again. */
+#if M1PLUS /* the battery is an icon with a level bar (pgbar_battery), and the window is portrait */
+#define VIEW_LOCK_TIME "dclock_time"
+#define VIEW_LOCK_DATE "dclock_date"
+#define VIEW_LOCK_LEVEL "pgbar_battery"
+#define LOCK_CLOCK_Y 60 /* Large's top line: all above the now-playing card at 362 */
+#else
+#define VIEW_LOCK_TIME "clock_time"
+#define VIEW_LOCK_DATE "clock_date"
+#define VIEW_LOCK_LEVEL "label_battery"
+#define LOCK_CLOCK_Y 14
+#endif
+#define VIEW_LOCK_BATTERY "img_battery"
 /* M1 Plus: a press held still this long on a library row opens its hold menu (ringnav_input). */
 #define LONG_PRESS_MS 500
 /* Long Songs (docs/internals.md#long-songs): songs longer than this. */
