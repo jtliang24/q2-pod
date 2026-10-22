@@ -3279,12 +3279,12 @@ for action,expected,said in ((0,['A','B','B','C'],'Playing Next'),(1,['A','B','C
     m=playing_menu(); assert m.run(action)==said and m.names()==expected and not m.playback(); passed()
 m=playing_menu(); assert m.run(3)=='Added to Favourites'
 assert [c[2:] for c in m.calls if c[0]=='batch_add_file']==[(0xf00a,m.get(syms['mcl_pdeqplaylist']))]
-assert sel(m)[:2]==([('batch_add_file',0xf001)] if is_m1plus else [('batch_init_selectrecord',3),('batch_set_selectitem',1)]); passed()
+assert sel(m)[:2]==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]; passed()
 m=playing_menu(); m.favs.add('B'); assert m.run(3)=='Removed from Favourites'
 assert [c[1] for c in m.calls if c[0]=='deleteMusicFromFav']==[m.items(m.get(syms['mcl_pdeqplaylist']))[1]]; passed()
 m=playing_menu(); m.run(4)
 assert m.opened[-1]==('localmusic/playlist_page',0x2f001)
-assert sel(m)==([] if is_m1plus else [('batch_init_selectrecord',3),('batch_set_selectitem',1)]); passed()
+assert sel(m)==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]; passed()
 for action,page in ((5,'playerjumpinfo_page'),(6,'localmusic/artistinfo_page')):
     m=playing_menu(); m.run(action); assert m.opened[-1][0]==page
     if action==6: assert m.opened[-1][2]==m.items(m.get(syms['mcl_pdeqplaylist']))[1]
@@ -3589,7 +3589,7 @@ if is_m1plus:
 # Favourites: Add runs batch-select's Add to My Fav for the row alone, which tags a folder file;
 # Remove deletes it, and on My Fav itself flags the list to reload as Now Playing's heart does.
 m=QueueMachine(); assert m.run(2,steps=3)=='Added to Favourites' and m.names()==['A','B','C']
-assert sel(m)==([('batch_add_file',0xf001)] if is_m1plus else [('batch_init_selectrecord',20),('batch_set_selectitem',3),('batch_add_file',0xf001)])
+assert sel(m)==[('batch_init_selectrecord',20),('batch_set_selectitem',3),('batch_add_file',0xf001)]
 assert [c[2:] for c in m.calls if c[0]=='batch_add_file']==[(0xf00a,m.get(syms['p_deque_showlist']))]; passed()
 for cls,flag in ((0xf001,0),(0xf00a,1)):
     m=QueueMachine(cls=cls); m.favs.add('Row 0'); assert m.run(2)=='Removed from Favourites'
@@ -3600,7 +3600,7 @@ for cls,flag in ((0xf001,0),(0xf00a,1)):
 for kw,row in (({},3),({'cls':0xf003,'page':'album_page'},5)):
     m=QueueMachine(**kw); assert m.run(row,steps=1) is None
     assert m.opened[-1]==('localmusic/playlist_page',0x10000|m.get(syms['g_class_type']))
-    assert sel(m)==([] if is_m1plus else [('batch_init_selectrecord',20),('batch_set_selectitem',1)]) and m.names()==['A','B','C']; passed()
+    assert sel(m)==[('batch_init_selectrecord',20),('batch_set_selectitem',1)] and m.names()==['A','B','C']; passed()
 # Shuffle plays the collection's songs from a random one with shuffle saved, as Shuffle Songs.
 m=QueueMachine(cls=0xf004,page='localclass_page'); assert m.run(2) is None
 assert m.opened[-1][:2]==('playing_page',['T1','T2']) and m.opened[-1][2] in (0,1) and m.opened[-1][3:]==(0xf001,2) and [c[1:3] for c in m.calls if c[0]=='config_playmode']==([] if is_m1plus else [(2,1)]); passed()
@@ -5488,7 +5488,7 @@ for action,want in ((0,['A','T2','B','C']),(1,['A','B','C','T2'])):
     m.press(200); assert m.release()==1; passed()
 # Its favourite is batch-select's over Coverflow's own deque, its songs taken as All Songs rows.
 m=CoverflowMachine(cls=O['CLASS_ALBUMS']); m.open(); view=m.tracks(); assert m.run(2)=='Added to Favourites'
-assert [c[1:3] for c in m.calls if c[0]=='batch_add_file']==[(0xf001,0xf00a)] and [c[1] for c in m.calls if c[0]=='batch_init_selectrecord']==([] if is_m1plus else [2])
+assert [c[1:3] for c in m.calls if c[0]=='batch_add_file']==[(0xf001,0xf00a)] and [c[1] for c in m.calls if c[0]=='batch_init_selectrecord']==[2]
 assert [c[3] for c in m.calls if c[0]=='batch_add_file'][0]!=m.get(syms['p_deque_showlist']); passed()
 m=CoverflowMachine(queue=0,cls=O['CLASS_ALBUMS']); m.open(); m.tracks()
 assert m.run(1)=='Added to Queue' and m.names()==['T1'] and m.mcl('MCL_TYPE')==0xff10 and not m.playback(); passed()

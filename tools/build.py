@@ -839,6 +839,9 @@ M1PLUS_FUNCTION_ALIASES = {
     'player_seek_time': 'seek_time',
     'switch_charge_enable': 'toolsSetChargeSwitch',
     'taglib_file_open': 'taglib_file_new',
+    # The batch record (pvec_selectrecord): n rows unselected, then one row's selection toggled
+    'batch_init_selectrecord': 'select_recordinit',
+    'batch_set_selectitem': 'set_selectindex',
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
