@@ -4189,6 +4189,66 @@ if 'ALBUM_ART' in SITES:  # with COVER_DONE, COVER_PAUSE and ARTIST_COVER_ROW, a
     passed()
 else:
     not_ported("Same-named albums apart in art and artist pages' covers (ALBUM_ART patches not applied to V2.1)")
+if is_m1plus and 'COVER_DONE' in SITES:
+    # V2.1's cover worker (parse_albumcovertask_thd) is V1.32's, the same checks as above on V2.1's own
+    # code: its local completion (0x4dd62c) and folder path (0x4de658) as COVER_DONE patches them, then
+    # stock's readiness check and request queue (small covers: V2.1 has no big local task).
+    site_patched('COVER_DONE')
+    class CoverQueueMachine(QueueMachine):
+        def __init__(self):
+            super().__init__(); self.pending=[]
+            self.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
+        def hook(self,u,address,size,unused):
+            if address not in (syms['list_clear'],syms['_list_push_back']): return super().hook(u,address,size,unused)
+            if address==syms['list_clear']: self.pending.clear()
+            else: p=u.reg_read(REGS[1]); self.pending.append(tuple(self.get(p+i) for i in (0,4,8)))
+            u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    m=CoverQueueMachine(); GP21=0xa03ed0
+    def cover_requests(start):
+        m.call(address=syms['local_albumsmallcover_task'],args=(start,9,0,0),gap=0)
+        return [row for row,kind,size in m.pending if kind==0 and size==0]
+    def cover_ready(row,big): return m.call(address=syms['check_albumcover_flag'],args=(row,big,0,0),gap=0)
+    def cover_done(row,big,key):
+        sp=0x7000d000
+        m.u.mem_write(sp+0x1688,key.encode()+b'\0'); m.word(sp+0x1828,row); m.word(sp+0x1830,big); m.word(sp+0x18,GP21)
+        m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,GP21)
+        m.u.emu_start(0x4dd62c,0x4dd63c,count=m.budget); assert m.u.reg_read(UC_MIPS_REG_PC)==0x4dd63c
+    for visit in range(3):
+        keys=[f'Artist {visit} album {i}' for i in range(12)]; covers=[]
+        for key in keys: c=m.alloc(0x60); m.word(c+4,m.string(key)); covers.append(c)
+        m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
+        if visit==0:  # V2.1's own words: the stale job marks the new row ready, and its art is never asked for
+            fixed=bytes(m.u.mem_read(0x4dd630,8)); m.u.mem_write(0x4dd630,struct.pack('<II',0x8f99b86c,0x0411fde3))
+            m.u.ctl_remove_cache(0x4dd62c,0x4dd63c)
+            cover_done(11,0,'previous artist'); assert cover_ready(11,0)==1 and cover_requests(9)==[9,10]
+            m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[11],0)
+            m.u.mem_write(0x4dd630,fixed); m.u.ctl_remove_cache(0x4dd62c,0x4dd63c)
+        for row in (0,8,9,11):
+            for big in (0,1):
+                cover_done(row,big,f'Artist {visit-1} album {row}'); assert cover_ready(row,big)==0, (visit,row,big)
+                if not big: assert row in cover_requests(row//9*9), (visit,row)
+                cover_done(row,big,keys[row]); assert cover_ready(row,big)==1, (visit,row,big)
+                if not big: assert row not in cover_requests(row//9*9), (visit,row)
+        for row in (-1,12): cover_done(row,1,'gone')
+    def folder_done(row,key,a2):
+        sp=0x7000d000
+        m.u.mem_write(sp+0x1688,key.encode()+b'\0'); m.word(sp+0x1828,row); m.word(sp+0x18,GP21)
+        m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,GP21)
+        m.u.reg_write(UC_MIPS_REG_S5,1); m.u.reg_write(UC_MIPS_REG_A2,m.string(a2))
+        m.u.emu_start(0x4de658,0x4dd63c,count=m.budget); assert m.u.reg_read(UC_MIPS_REG_PC)==0x4dd63c
+    for key,a2,ready in ((keys[3],'left over',1),('previous folder',keys[3],0)):
+        m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[3],0)
+        folder_done(3,key,a2); assert cover_ready(3,0)==ready, (key,a2)
+    passed()
+if is_m1plus and 'COVER_PAUSE' in SITES:
+    # V2.1's Albums list (album_page) pauses the worker at scroll start (0x522870) and resumes it at
+    # scroll end (0x524134) only on a new first row (yoffset / 60); the start leaves it running.
+    site_patched('COVER_PAUSE')
+    m=CoverQueueMachine(); fixed=bytes(m.u.mem_read(0x522890,4))
+    for word,want in ((struct.pack('<I',0xac430000),2),(fixed,1)):  # V2.1's own store pauses it
+        m.u.mem_write(0x522890,word); m.u.ctl_remove_cache(0x522870,0x52289c); m.word(syms['albumcover_taskstate'],1)
+        m.call(address=0x522870,args=(0,0,0,0),gap=0); assert m.get(syms['albumcover_taskstate'])==want
+    passed()
 # A row opens its name's songs (0xff10, getMusicByAlbum): only its own album's stay.
 m=ClassMachine(page='album_page',cls=0xf003,rows=2); m.word(m.row(1)+O['REC_PATH'],m.string('/q/Row 1'))
 assert m.call(address=HOOKS['load_album_detaillist'][0],args=(0xf003,m.song('Album'),0,0),gap=0)==1

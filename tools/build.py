@@ -299,6 +299,11 @@ CALL_SITES = {
         # The two name comparators, 0x5e0dac and 0x5e16c4.
         'SORT_TRIMS': ((0x5e0ea4, 0x0411ff86, 'ringnav_sort_key'), (0x5e0f10, 0x0411ff6b, 'ringnav_sort_key'),
                        (0x5e17bc, 0x0411fd40, 'ringnav_sort_key'), (0x5e1828, 0x0411fd25, 'ringnav_sort_key')),
+        # The Albums list's (album_page) scroll start (0x522870); V2.1's Songs and artist page don't pause.
+        'COVER_PAUSE': ((0x522890, 0xac430000, 0),),
+        # parse_albumcovertask_thd's local completion and its folder path's branch to it (0x4de660).
+        'COVER_DONE': ((0x4dd630, 0x8f99b86c, 0x27a61688), (0x4dd634, 0x0411fde3, 'ringnav_cover_done'),
+                       (0x4de660, 0x1000fbf4, 0x1000fbf3)),
     },
 }
 CALL_SITE_PURPOSES = {
