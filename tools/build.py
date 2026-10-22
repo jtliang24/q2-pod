@@ -304,6 +304,14 @@ CALL_SITES = {
         # parse_albumcovertask_thd's local completion and its folder path's branch to it (0x4de660).
         'COVER_DONE': ((0x4dd630, 0x8f99b86c, 0x27a61688), (0x4dd634, 0x0411fde3, 'ringnav_cover_done'),
                        (0x4de660, 0x1000fbf4, 0x1000fbf3)),
+        # switchBtPriority's dispatch, its jump table at -0x5b50 from its GOT page: HQ and Standard (rows 0
+        # and 1, btquality_page's btcode_ldachq and btcode_ldacst) share the li $4,0x16.
+        'LDAC_HQ': ((0x4d304c, 0x00042080, 0x00041880),   # sll $3,$4,2
+                    (0x4d3050, 0x2442a4b0, 0x00431021),   # addu $2,$2,$3
+                    (0x4d3054, 0x00442021, 0x8c42a4b0),   # lw $2,-0x5b50($2)
+                    (0x4d3058, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
+                    (0x4d3064, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
+                    (0x4d3070, 0x24040016, 0x8fa40014)),  # lw $4,0x14($sp), was li $4,0x16
     },
 }
 CALL_SITE_PURPOSES = {
