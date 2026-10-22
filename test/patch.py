@@ -9206,11 +9206,12 @@ print('Boot settings: conditional row/order, restart, card removal and failed at
 
 if 'AUDIO_EXTENSION_CALLS' in SITES:
     site_patched('AUDIO_EXTENSION_CALLS')
-    for site in [address for address, _, new in SITES['AUDIO_EXTENSION_CALLS'] if new]:
+    # The suffix list's stack slot, loaded in each jalr's delay slot (V2.1's are V1.32's)
+    for site,slot in zip([address for address, _, new in SITES['AUDIO_EXTENSION_CALLS'] if new],(0xdd4,0xd64)):
         for ext, accepted in (('.m4b',1),('.M4B',1),('.m4B',1),('.M4b',1),('.m4a',1),('.M4A',1),('.flac',1),('.mp3',1),('.m4b.tmp',0),('.pdf',0)):
             m=Machine(); m.mock('strstr@GLIBC_2.0')
             formats=m.string('.mp3 .flac .m4a .M4A'); suffix=m.string(ext)
-            m.word(0x7000f000+(0xdd4 if site==0x5c2054 else 0xd64),formats)
+            m.word(0x7000f000+slot,formats)
             def extension_return(u,address,size,unused):
                 u.reg_write(UC_MIPS_REG_PC,0x1000000)
             m.u.hook_add(UC_HOOK_CODE,extension_return,begin=site+8,end=site+8)
