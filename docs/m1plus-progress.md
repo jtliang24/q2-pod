@@ -1252,8 +1252,13 @@ page and Large clock, the lock window's cover, and the library items. Over q2rem
   At the change `MCL_POS` became 38 and the preload was used. Gapless was set back off. Whether the
   change is audibly gapless is still to hear.
 - **Bluetooth:** with Bluetooth off, the page shows only its switch, so no Resume on Connect row, as
-  intended. Turning Bluetooth on asks to turn Wi-Fi off first, which ends q2remote, so LDAC HQ, the
-  row with Bluetooth on, and Resume on Connect are left for a pass with a headphone.
+  intended. Turning Bluetooth on asks to turn Wi-Fi off first, which ends q2remote.
+- **LDAC HQ:** measured on the WH-1000XM6. No screen shows the bitrate, so a logger started over
+  q2remote (`setsid nohup`, it outlives Wi-Fi) sampled `hciconfig`'s TX byte counter every 5 s to the
+  card while the user played on Auto, then HQ, then Standard. Steady samples: HQ about 133 KB/s
+  (1064 kbps on air), Standard about 89 KB/s (711 kbps), a ratio of 1.50, which is 990/660 with about
+  7.5% of Bluetooth packet overhead on both. Stock sends Standard's rate for HQ too (ratio 1).
+  The Auto segment was too short to read.
 - **Same-named albums:** the card's 24 albums share no name, across artists or folders, so that check
   needs two such albums on the card.
 

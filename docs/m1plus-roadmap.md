@@ -15,8 +15,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** section 4's last device checks, with a Bluetooth headphone (LDAC HQ, Resume on connect) and
-two same-named albums on the card ([m1plus-progress.md](m1plus-progress.md) section 36); Spotify on
+**Next:** section 4's last device checks, with a Bluetooth headphone (Resume on connect) and two
+same-named albums on the card ([m1plus-progress.md](m1plus-progress.md) section 36); Spotify on
 the device (section 3) when there is an account. Functionality comes first: items that only change how something looks wait for the final
 pass (section 7).
 
@@ -108,9 +108,10 @@ advanced play and across speed changes (section 33), still to hear with Gapless 
 artist's albums (section 35), still to see with two such albums on the card.
 
 Every row had been checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
-section 24). All are now ported or found native in V2.1, and dev 20's device pass confirmed them except
-three that need a Bluetooth headphone or a library change: LDAC HQ, Resume on connect and same-named
-albums' art. Gapless's preload was checked over q2remote; whether it sounds gapless is still to hear.
+section 24). All are now ported or found native in V2.1, and dev 20's device pass confirmed them,
+LDAC HQ by its measured bitrate, except two: Resume on connect (a Bluetooth headphone) and same-named
+albums' art (two such albums on the card). Gapless's preload was checked over q2remote; whether it
+sounds gapless is still to hear.
 
 Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 - **Artist pages open on Albums** (`ARTIST_ALBUMS`): V2.1's artist page lists the artist's albums.
