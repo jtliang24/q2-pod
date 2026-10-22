@@ -6,7 +6,10 @@ the port has done is in [m1plus-progress.md](m1plus-progress.md), and what it st
 [m1plus-roadmap.md](m1plus-roadmap.md).
 
 The fork point is `main` at `b229c24`: upstream `c0a2d6b` (Q2 Pod 1.2.2) plus three M1 doc commits, so its
-Q2 code is 1.2.2's. Upstream's later releases are out of scope here.
+Q2 code is 1.2.2's. The branch then follows upstream release by release
+([m1plus-roadmap.md](m1plus-roadmap.md#u-tracking-upstream), [m1plus-sync.md](m1plus-sync.md)). Once
+`UPSTREAM_BASE` exists (roadmap U2), the Q2 baseline below is that tag's build, not `main`'s, and each sync
+moves it forward. Until then it is `main`'s.
 
 Sizes are rough: **S** is a day or less, **M** a few days.
 
@@ -22,10 +25,10 @@ where it isn't.
 
 ## Requirements
 
-- **R1. Q2 output is the fork point's.** For Legacy and iPod, `update.tar` is byte-identical to `main`'s
-  build with the same toolchain.
-- **R2. Q2 tests are the fork point's.**
-  - Every Q2 suite and case that `main` has runs and passes on the branch's Q2 builds.
+- **R1. Q2 output is upstream's.** For Legacy and iPod, `update.tar` is byte-identical to the baseline's
+  build with the same toolchain: `main`'s now, the `UPSTREAM_BASE` tag's once U2 lands.
+- **R2. Q2 tests are upstream's.**
+  - Every Q2 suite and case that the baseline has runs and passes on the branch's Q2 builds.
   - None is dropped, skipped or turned into an M1-only check. New Q2 cases are welcome.
 - **R3. The Q2 release works.** `tools/release.py package` and `upload`, and `test/release.py`, work as on
   `main`: two builds per variant, byte comparison, the suites on each.
@@ -158,24 +161,26 @@ suites (see [Checklist](#checklist)). Then run the M1 gates for R4.
 | 6 | V2.1 defences that run on Q2 | Put `qm_open`'s missing-widget close, `xfade_open`'s extra checks and `widget_set_enable`, and `arc_out`'s zero radius under `#if M1PLUS`. That also puts back `main`'s `!r` path | S | R1 |
 | 7 | `scratch_t` | Put `knob_mode` under `#if M1PLUS`, and size `setting_label` per model, with 5 on Q2 | S | R1 |
 | 8 | Helpers | `compile_helper` already passes `-DM1PLUS=1` for M1. Choose `KEY_PLAYPAUSE` and `video.c`'s 480-line path by `#if M1PLUS`, not at run time | S | R1 |
-| 9 | `ringnav_artist_list` | Either restore `main`'s body under `#if !M1PLUS`, or accept the byte difference. It is behaviour-neutral, and Q2's artist-album checks cover it | S | R1 |
+| 9 | `ringnav_artist_list` | Restore `main`'s body under `#if !M1PLUS`. The difference is behaviour-neutral, but syncing needs exact equality: an accepted difference would show in every later compare | S | R1 |
 | 10 | Docs | `building.md` gives both targets' commands and gates. The README stops pointing M1 users to a release `update.bin` until releases carry one | S | R5 |
-| 11 | Optional: per-target profile | Replace the `m1plus` bool and the repeated `ipod and not m1plus` in `build.py` with one `Target` record. It would hold the model, version literal, archive, GP, hooks, paint leaf, `.pdr`, logo size, TagLib, icons, RTC patches and asset policy, after `PLAYER_PROFILES` in `tools/peq.py`. This makes R1 easier to see in review | M | R1 |
-| 12 | Optional: the compare as a script | A `test/q2compare.py` that builds `main` and the working tree and reports differing components. This turns the checklist into one command | S | R1 |
+| 11 | Per-target profile (roadmap U1a) | Replace the `m1plus` bool and the repeated `ipod and not m1plus` in `build.py` with one `Target` record. It would hold the model, version literal, archive, GP, hooks, paint leaf, `.pdr`, logo size, TagLib, icons, RTC patches and asset policy, after `PLAYER_PROFILES` in `tools/peq.py`. The M1's half moves to `tools/m1plus.py`, so upstream's `build.py` changes merge with few conflicts | M | R1 |
+| 12 | The compare as a script (roadmap U2) | A `test/q2compare.py` that builds the baseline (`main`, then `UPSTREAM_BASE`) from `git archive` and the working tree, and reports differing components. This turns the checklist into one command, and every sync runs it | S | R1 |
 
-Once items 1–9 are done, R1–R3 should hold. If item 9 is accepted rather than fixed, R1 holds with that one
-recorded exception. An M1 release path is not in scope here: see the roadmap's "Release packaging for M1".
+Items 1 and 3–9 are open (checked 2026-10-22), and item 2 is done. They make up roadmap U0. Once they
+land, R1–R3 should hold. Items 11 and 12 are required for syncing (roadmap U1 and U2). An M1 release path
+is not in scope here: see the roadmap's "Release packaging for M1".
 
 ## Rule for future work: don't break Q2
 
 From now on, no change on this branch may break Q2 support. That holds for M1 features, refactors, tooling
 and tests alike.
 
-- **Q2 output stays the same.** Q2 Legacy and iPod `update.tar` stay byte-identical to the last verified Q2
-  build. Until items 1–9 land, that build is `main`'s.
+- **Q2 output stays upstream's.** Q2 Legacy and iPod `update.tar` stay byte-identical to the baseline's
+  build: `main`'s until `UPSTREAM_BASE` exists, then that tag's.
   - A change that alters Q2 bytes on purpose says so in its commit message, with the reason and the Q2 test
     that covers it.
-  - After such a change, the new hashes become the baseline.
+  - Such a change belongs upstream: send it there, and let a sync bring it in. A Q2 change made only in
+    the fork would differ from every later upstream build.
 - **Q2 tests stay.**
   - Every Q2 suite and case keeps running and passing on Q2 builds.
   - An M1 port of a test adds an M1 path beside the Q2 one. It never replaces the Q2 one.
@@ -191,7 +196,8 @@ and tests alike.
 ## Checklist
 
 Run these in `nix develop`. `<scratch>` is any fresh directory, and the build commands refuse an existing
-output directory.
+output directory. Once `test/q2compare.py` exists (item 12), it replaces the fork-point builds and the
+R1 `cmp`s below, and builds `UPSTREAM_BASE` instead of `main`.
 
 ```sh
 # The fork point. main takes only the vendor ZIP, and needs SOURCE_DATE_EPOCH unset in the devShell
