@@ -1058,6 +1058,37 @@ had only V2.1's tap.
 `test/patch.py` on M1 passes 988 scenarios, with 16 `NOT PORTED` lines. Under QEMU, the `--media` walk
 opens V2.1's Now Playing through the hook. Q2's `update.tar` files are byte-identical.
 
+## 28. The Lock screen page and the Large clock (Oct 21)
+
+On the device (dev 19), the Lock screen page showed the default picture and five of the six
+built-ins as empty frames with check circles, the sixth and any card picture behind the Time show
+and About rows, and no Clock row. V1.32's page is a list its rows builder makes, which Q2 Pod hooks;
+V2.1's is different:
+- **V2.1's page.** `systemset_screensaver_page_init` (`0x4abe04`) places one 90x135 `imgcover%d`
+  per picture in `view_covers`, a plain 400 px view that also holds the asset's Time show and About
+  rows. It lays out two rows of three: a seventh picture lands off the screen to the right. Its visit
+  binds only `imgcover0` to `imgcover5`, each to V2.1's pick (`0x4ab52c`) with its index.
+- **The port.** A new hook, `lockscreen_page`, runs after V2.1's init. It moves `view_covers`'
+  children into a scroll view over it, keeps V2.1's grid for every picture, and puts Time show, a
+  Clock row (`pod_rows`, with Time show's icon) and About under it. Pictures past the sixth get a
+  click that calls V2.1's pick, now a checked private routine (`saver_pick`). The built-ins'
+  thumbnails lose V2.1's `file://` name and are drawn by `lockscreen_paint`, as on the Q2.
+- **The Large clock.** V2.1's lock window names its clock `dclock_time` and `dclock_date`, and its
+  battery is an icon with a level bar. Large found none of V1.32's names, so it did nothing on M1.
+  `offsets.inc` now names them per model, and on M1 the icon and bar sit at the top line's right end.
+- **The tests.** On M1 the page test builds V2.1's `systemset/screensaver_page` from its asset and
+  runs V2.1's own init and visit through the hook. It checks the layout, the Clock row, and a pick of
+  pictures 9, 4, 8 and 1 through V2.1's pick, with its check marks and saved path. The lock window
+  test uses V2.1's `screensaver_page` asset. It had run on M1 with V1.32's widget names, so it passed
+  without testing V2.1's window. The harness gained `widget_add_child`, `widget_remove_child`,
+  `scroll_view_create` and `strcpy` mocks, and its `widget_set_name` writes the name where V2.1's
+  visits read it.
+- **Under QEMU.** `test/boot.py`'s walk opens the page, switches it on (V2.1's grid with the
+  built-ins drawn), scrolls to the Clock row, switches it off and goes back.
+
+`test/patch.py` on M1 passes 991 scenarios, with 15 `NOT PORTED` lines. Q2's `update.tar` files are
+byte-identical.
+
 ## How to check a build now
 
 ```sh
