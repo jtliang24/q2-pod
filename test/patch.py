@@ -8881,6 +8881,8 @@ class LockMachine(QueueMachine):
     def hook(self,u,address,size,unused):
         if self.handlers.get(address)=='stock_saverlist' and self.reset:
             self.u.mem_write(syms['g_screensaver_picture'],b'screensaver_default\0')
+        if self.handlers.get(address)=='q:image_base_cast':  # the widget itself, an image
+            u.reg_write(UC_MIPS_REG_V0,u.reg_read(REGS[0])); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
         if self.handlers.get(address)=='widget_get_window':  # up the parents to the window
             w=u.reg_read(REGS[0]); self.calls.append(('widget_get_window',w,0,0))
             while w and self.nodes.get(w,{}).get('type')!='window': w=self.get(w+O['W_PARENT'])
@@ -9011,7 +9013,16 @@ if not is_m1plus:
     assert m.call(address=HOOKS['saver_cover'][0],args=(m.top,0,0,0),gap=0)==0
     assert [c[:2] for c in m.calls if c[0] in ('stock_savercover','widget_invalidate_force')]==[('stock_savercover',m.top),('widget_invalidate_force',cover)]; passed()
 else:
-    not_ported('Lock screen cover repaint (saver_cover not hooked in V2.1)')
+    # V2.1 repaints it itself: its lock window (0x53f9b4) sets view_img_icon by the same file:// name for
+    # each track too, but V2.1's image_base_set_image invalidates whatever the name, where V1.32's skips
+    # an unchanged one; the window then unloads the image, so the next paint decodes the new file.
+    m=lock_machine(); cover=m.node('image','view_img_icon'); name=m.string('file:///tmp/coverpic.jpg')
+    m.handlers.pop(syms['image_base_set_image']); m.mock('image_base_cast','tk_str_copy','widget_invalidate')
+    m.handlers[syms['image_base_cast']]='q:image_base_cast'
+    for _ in range(2):
+        m.call(address=syms['image_base_set_image'],args=(cover,name,0,0),gap=0)
+        assert [c[1] for c in m.calls if c[0]=='widget_invalidate']==[cover]
+    passed()
 
 # The power poll, on the UI loop. Charge limit: the charger stops (switch_charge_enable(0), the
 # active-low charge enable) at CHARGE_STOP, again whenever it charges meanwhile, and is handed
