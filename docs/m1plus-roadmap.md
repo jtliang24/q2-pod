@@ -86,9 +86,14 @@ A video and Internet Radio play through q2video on the ES9069Q, straight after a
 
 ## 4. Re-pointing V1.32 call-site patches (M each, many)
 
-Each `NOT PORTED` line below names a patch or hook made at a V1.32 address. Porting one means:
-- add an M1 entry beside the Q2 one in `tools/build.py`'s per-model tables;
-- move the test's address to the same table.
+Each `NOT PORTED` line below names a patch or hook made at a V1.32 address. A call site is ported by
+adding its V2.1 words under its name in `CALL_SITES['m1plus']` (`tools/build.py`):
+- the build applies them, as it applies Q2's;
+- `test/build.py` checks each word, and allows it in M1's demo diff;
+- `test/patch.py`'s test for that name runs once the name is in the table (`'NAME' in SITES`). Its
+  harness addresses are V1.32's until the test is ported too.
+
+A hook goes in `M1PLUS_HOOKS` instead.
 
 Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
