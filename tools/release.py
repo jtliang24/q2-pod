@@ -13,7 +13,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
-from build import ROOT, VERSION, VERSIONS, ZIP_SHA, DEMO_SHA, build, check, run, sha, source_sha256
+from build import ROOT, VERSION, VERSIONS, ZIP_SHA, Q2_TAR_SHA, DEMO_SHA, build, check, run, sha, source_sha256
 
 REPO = 'DiamondBond/q2-pod'
 # iPod is the main build; Legacy keeps the stock UI.
@@ -48,7 +48,8 @@ def release_body(out, record):
 def validate(directory, variant):
     m = json.loads((directory/'manifest.json').read_text())
     check(m['variant'] == variant and m['version'] == VERSIONS[variant], 'Wrong variant identity')
-    check(m['input_zip_sha256'] == ZIP_SHA and m['stock_demo_sha256'] == DEMO_SHA, 'Wrong stock identity')
+    # build.py takes the vendor ZIP or the update.tar in it, and records whichever it read.
+    check(m.get('input_sha256') in (ZIP_SHA, Q2_TAR_SHA) and m['stock_demo_sha256'] == DEMO_SHA, 'Wrong stock identity')
     # test/patch.py (below) checks the sources and the demo, stock-demo and patch.bin hashes.
     for name, key in [('rootfs.squashfs', 'rootfs_sha256'), ('update.tar', 'update_sha256')]:
         check(sha((directory/name).read_bytes()) == m[key], f'{directory/name}: hash mismatch')
