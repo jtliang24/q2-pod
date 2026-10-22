@@ -109,16 +109,20 @@ value and effort:
 | 65,000-song scan | `SCAN_LIMIT`: `0x5efeb4` (`lw` `0x8fc2b084`, `slti` `0x28424e20`, count `0x8fc4b084`) | same code | S |
 | Article-free sort | `SORT_TRIMS`: `0x5e0ea4`, `0x5e0f10`, `0x5e17bc`, `0x5e1828` | same code (comparators `0x5e0dac`, `0x5e16c4`) | S |
 | M4B in folder scans | `AUDIO_EXTENSION_CALLS`: `0x5e8af0`, `0x5ea840` | same list, without `.m4b`. The `strstr` load before each is `0x8f99f694` | S |
-| LDAC HQ sends 990 kbps | `LDAC_HQ`: `0x4d304c`–`0x4d3070` | same code, so the same words except the jump table's `lw` (`0x8c42a4b0`). Check the quality page's row order | S |
-| Gapless in advanced play, and across speed changes | hooks: `mcl_preload` `0x5d0ea4`, `mcl_open_preload` `0x5d0bd8` | same code. Without `mcl_preload` (not hooked on M1), Shuffle Albums/Folders lose gapless | S |
-| Standby resume stays dark | `STANDBY_WAKE`: `into_standby`'s `bal awake_screen` at `0x4e77c0` (`0x0411fe96`) | same code. V2.1 also has Double wake: check this is still wanted | S |
-| Resume on connect | `BT_CONNECT_START`: `bal save_start_player` at `0x4d6320` (`0x04113031`). Rows: the list builder at `0x4a3734` | still restarts the queue unpaused. The builder is new (five callers, V2.1's rows) | M |
 | Ratings' Now Playing heart | V2.1's heart is `btn_fav` (`show_player_face`, `btn_imgfav_style`) | no `img_fav`. Bind the rating hold to `btn_fav` | S–M |
 | Lock screen Clock row and thumbnails | the Lock screen page, `systemset_screensaver_page_init` (`0x4abe04`) | a picture grid now. On the device the five built-ins the payload adds show as empty circles, and there is no Clock row | M |
 | Lock screen cover repaint | the lock window (`screensaver_page_init`) reads `/tmp/abp` | V2.1's lock window differs. Check on the device whether it repaints on a track change | S |
-| Same-named albums' art, an artist's albums' art keys | V2.1's album list and artist page renderers, still to find | V2.1's cover worker is V1.32's (`md5` of the album name), caching in `/tmp/abp`. Split rows share one cover. The order is ported (`ringnav_localclass`, `0xff01`) | M |
 | Cover worker pause and stale completion | not checked | `COVER_PAUSE` and `ringnav_cover_done` are Q2 only. Check with the art rows | S |
 | Now Playing hold's Add to Playlist when the queue changed | V2.1's playlist pick handler, still to find | M1 already selects the row (`qm_select`). Only the stale-queue guard is missing. `playlist_rebuild` is iPod only | S |
+
+These need hardware, a setting or a library to check on the device, so they come last:
+
+| Feature | V2.1 site | Notes | Size |
+|---|---|---|---|
+| LDAC HQ sends 990 kbps | `LDAC_HQ`: `0x4d304c`–`0x4d3070` | An LDAC headphone (the WH-1000XM6), with its multipoint off. same code, so the same words except the jump table's `lw` (`0x8c42a4b0`). Check the quality page's row order | S |
+| Gapless in advanced play, and across speed changes | hooks: `mcl_preload` `0x5d0ea4`, `mcl_open_preload` `0x5d0bd8` | Gapless on (off on the device now). same code. Without `mcl_preload` (not hooked on M1), Shuffle Albums/Folders lose gapless | S |
+| Resume on connect | `BT_CONNECT_START`: `bal save_start_player` at `0x4d6320` (`0x04113031`). Rows: the list builder at `0x4a3734` | A Bluetooth headphone. still restarts the queue unpaused. The builder is new (five callers, V2.1's rows) | M |
+| Same-named albums' art, an artist's albums' art keys | V2.1's album list and artist page renderers, still to find | Two albums of the same name by different artists on the card. V2.1's cover worker is V1.32's (`md5` of the album name), caching in `/tmp/abp`. Split rows share one cover. The order is ported (`ringnav_localclass`, `0xff01`) | M |
 
 Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 - **Artist pages open on Albums** (`ARTIST_ALBUMS`): V2.1's artist page lists the artist's albums.
@@ -215,6 +219,9 @@ These are skipped on M1 on purpose (marked `Q2 only` in the tests), not gaps:
 - long Return;
 - the sideways splash rotation;
 - the Q2's Centre-key Wake setting (V2.1 has its own Double wake);
+- Standby resume staying dark (`STANDBY_WAKE`): it goes with that Wake setting. V2.1's Standby also
+  closes Bluetooth and unmounts the card, and a screen tap can wake it, which a dark resume would
+  leave unlit;
 - Home's Coverflow card: V2.1's Home is a grid of its own cards, and Coverflow opens from the Q2 Pod
   page;
 - Key Tone: V2.1 has no buzzer command, and binds no key-down handler to hook.
