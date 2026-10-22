@@ -1243,6 +1243,20 @@ Update → TF card update. What to check on it:
   Albums with Gapless on; Resume on Connect off keeps a paused queue paused on reconnect; two
   same-named albums by different artists show their own covers.
 
+**On the device (dev 20, flashed Oct 22).** The user checked the first five items: Shuffle's Play next
+and history, the Ratings hold and badge, the hold menu's adds and the playlist guard, the Lock Screen
+page and Large clock, the lock window's cover, and the library items. Over q2remote:
+- **Gapless:** with Gapless on, Shuffle Albums started on Foxes' "Rise Up (Intro)", queue position
+  291. Reading `MCL_PREPOS` and `MCL_PRELOAD` from `demo`'s memory: about 10 s before its end the
+  preload opened position 38, "Better Love", the album's next track (stock would have opened 292).
+  At the change `MCL_POS` became 38 and the preload was used. Gapless was set back off. Whether the
+  change is audibly gapless is still to hear.
+- **Bluetooth:** with Bluetooth off, the page shows only its switch, so no Resume on Connect row, as
+  intended. Turning Bluetooth on asks to turn Wi-Fi off first, which ends q2remote, so LDAC HQ, the
+  row with Bluetooth on, and Resume on Connect are left for a pass with a headphone.
+- **Same-named albums:** the card's 24 albums share no name, across artists or folders, so that check
+  needs two such albums on the card.
+
 ## How to check a build now
 
 ```sh
