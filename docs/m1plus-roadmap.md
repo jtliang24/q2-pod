@@ -99,7 +99,8 @@ Done: the boot queue bug the check found. A reboot no longer deletes the saved a
 ([m1plus-progress.md](m1plus-progress.md) section 25). The five sites whose V2.1 code is V1.32's:
 Shuffle's Play next and history, the page cache, the 65,000-song scan, the article-free sort and M4B in
 folder scans (section 26). The Ratings hold on Now Playing's heart (section 27). The Lock screen page's
-Clock row and built-in thumbnails, and the Large clock on V2.1's lock window (section 28).
+Clock row and built-in thumbnails, and the Large clock on V2.1's lock window (section 28). The cover
+worker's pause and stale completion (section 30).
 
 Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
@@ -107,7 +108,6 @@ value and effort:
 
 | Feature | V2.1 site | Notes | Size |
 |---|---|---|---|
-| Cover worker pause and stale completion | not checked | `COVER_PAUSE` and `ringnav_cover_done` are Q2 only. Check with the art rows | S |
 | Now Playing hold's Add to Playlist when the queue changed | V2.1's playlist pick handler, still to find | M1 already selects the row (`qm_select`). Only the stale-queue guard is missing. `playlist_rebuild` is iPod only | S |
 
 These need hardware, a setting or a library to check on the device, so they come last:

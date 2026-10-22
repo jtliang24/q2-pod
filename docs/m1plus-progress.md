@@ -1104,6 +1104,26 @@ twice with the same name and checks both calls invalidate. 14 `NOT PORTED` lines
 992 scenarios. To check on the device: with the lock screen on, Next on the lock window shows the new
 track's cover.
 
+## 30. The cover worker's pause and stale completion (Oct 22)
+
+Two Q2 fixes to the album-art worker were Q2 only (`COVER_PAUSE`, `COVER_DONE`). V2.1 has both bugs:
+- **The stale completion.** V2.1's `parse_albumcovertask_thd` and `set_albumcover_flag` are V1.32's. A
+  job marks its row ready by index alone, so a job that finishes after the list was rebuilt marks
+  another album, whose art is then never requested. `COVER_DONE` patches V2.1's local completion
+  (`0x4dd630`: the key at the same `sp + 0x1688` into `a2`, then `jal ringnav_cover_done`) and the
+  folder path's branch to it (`0x4de660`, one word earlier). V2.1's Tidal completion (`0x4dd8b4`) is
+  new and keeps stock's.
+- **The pause.** V2.1 pauses the worker at scroll start on one local list, Library Albums
+  (`album_page`, `0x522870`). Its scroll end (`0x524134`) resumes it only when the first row in view
+  (`yoffset / 60`) changed. So a scroll within a row, or a scroll start sent alone, left the worker
+  paused. `COVER_PAUSE` makes that store a `nop`. V2.1's Songs and its artist page don't pause. The
+  other pausing pages are Tidal's, search and the lock window.
+
+On M1 the checks run V2.1's own worker code: the completion and folder paths with stale and current
+keys, then V2.1's readiness check and small-cover request queue. With V2.1's words put back, the stale
+job marks the new row ready, and the scroll start pauses the worker. `test/patch.py` on M1 passes 994
+scenarios. Q2's `update.tar` files are byte-identical.
+
 ## How to check a build now
 
 ```sh
