@@ -694,8 +694,11 @@ static inline int arc_out(int r, int y) {
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
-#if !M1PLUS /* V1.32 addresses, unaudited in V2.1 */
-#define ALBUMINFO_ROW 0xa27200  /* the albums row localmusic_albuminfo_page_init opened (0x4a7ab4) */
+/* The albums row the album page opened: its init's context >> 16, which it keeps */
+#if M1PLUS
+#define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
+#else
+#define ALBUMINFO_ROW 0xa27200  /* localmusic_albuminfo_page_init (0x4a7ab4) */
 #endif
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
 #if M1PLUS

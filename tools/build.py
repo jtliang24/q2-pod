@@ -299,6 +299,11 @@ CALL_SITES = {
         # The two name comparators, 0x5e0dac and 0x5e16c4.
         'SORT_TRIMS': ((0x5e0ea4, 0x0411ff86, 'ringnav_sort_key'), (0x5e0f10, 0x0411ff6b, 'ringnav_sort_key'),
                        (0x5e17bc, 0x0411fd40, 'ringnav_sort_key'), (0x5e1828, 0x0411fd25, 'ringnav_sort_key')),
+        # album_page, which lists the library's albums and an artist's: its row renderer's snprintf of the
+        # name (the row in s2), its three albumcoverinfo_init calls, and the album page's big cover's.
+        'ALBUM_ART': ((0x523a34, 0x0320f809, 'ringnav_art_name'), (0x523a38, 0x24c61158, 0x02403025),
+                      (0x524720, 0x0320f809, 'ringnav_albumcovers'), (0x524760, 0x0320f809, 'ringnav_albumcovers'),
+                      (0x5248d0, 0x0320f809, 'ringnav_albumcovers'), (0x525b84, 0x0320f809, 'ringnav_art_header')),
         # The Albums list's (album_page) scroll start (0x522870); V2.1's Songs and artist page don't pause.
         'COVER_PAUSE': ((0x522890, 0xac430000, 0),),
         # parse_albumcovertask_thd's local completion and its folder path's branch to it (0x4de660).

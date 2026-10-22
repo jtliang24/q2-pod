@@ -3998,202 +3998,203 @@ if 'ALBUM_ART' in SITES:  # with COVER_DONE, COVER_PAUSE and ARTIST_COVER_ROW, a
         m.word(O['ALBUMINFO_ROW'],row); m.call(address=art['ringnav_art_header'],args=(buf,0x100,m.string('%s'),m.string('Album')),gap=0)
         assert m.text(buf)==want, row
     passed()
-    # An artist's albums tab has one row of a shared name: it takes its album's key in the split
-    # order, by folder, else by album artist; a name alone, and the songs tab, stay stock's.
-    class ArtistMachine(ClassMachine):
-        tramp=int(manifest['patch_symbols']['stock_artist_trampoline'],16)
-        def hook(self,u,address,size,unused):
-            if address==syms['albumcoverinfo_init']:
-                covers=[]
-                for r in self.items(u.reg_read(REGS[0])):
-                    c=self.alloc(0x60)
-                    self.word(c,getattr(self,'cover_flags',0))
-                    self.word(c+4,self.string(self.text(self.get(r+O['REC_ALBUM']))))
-                    self.word(c+8,self.get(r+O['REC_PATH'])); covers.append(c)
-                self.word(syms['pdeq_albumcoverlist'],self.deque(covers))
-                u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
-            a,b=u.reg_read(REGS[0]),u.reg_read(REGS[1]); libc={syms[n+'@GLIBC_2.0']:n for n in ('calloc','strdup')}|{0x1000010:'free'}
-            if address not in libc: return super().hook(u,address,size,unused)
-            u.reg_write(UC_MIPS_REG_V0,{'calloc':lambda:self.alloc((a*b+7)&~3),'strdup':lambda:self.string(self.text(a)),'free':lambda:0}[libc[address]]())
-            u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-    for path,artist,want in (('/p/x','Artist','Album\x1fBaroness'),('/z/x','STP','Album\x1fSTP'),('/z/x','Artist','Album')):
-        m=ArtistMachine(page='localclass_page',cls=0xff01,rows=2); m.word(m.row(1)+O['REC_ALBUM'],m.string('Other'))
-        m.word(m.row(0)+O['REC_PATH'],m.string(path)); m.word(m.row(0)+O['REC_ARTIST'],m.string(artist))
-        m.split=[m.song('Baroness'),m.song('STP')]; m.word(m.split[1]+O['REC_PATH'],m.string('/q/STP'))
-        for e in m.split: m.word(e+O['REC_ALBUM_ARTIST'],m.get(e+O['REC_NAME']))
-        assert m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)==2
-        # Run the stock Album-tab and page-return call sites, not just the key helper: 9.8
-        # left these unhooked, so the worker wrote the old cache name the renderer never read.
-        m.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
-        m.cover_flags=0x101  # an old job completes between stock init and key renaming
-        for site in (0x4ac840,0x4ae860,0x4ae968,0x4aebc0):
-            m.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
-            m.u.reg_write(UC_MIPS_REG_V0,syms['p_deque_showlist'])
-            m.u.reg_write(UC_MIPS_REG_T9,syms['albumcoverinfo_init'])
-            m.u.emu_start(site,site+8,count=m.budget)
-            assert m.u.reg_read(UC_MIPS_REG_PC)==site+8
-            covers=m.items(m.get(syms['pdeq_albumcoverlist']))
-            assert [m.text(m.get(c+4)) for c in covers]==[want,'Other'], hex(site)
-            assert [m.get(c)&0xffff for c in covers]==[0 if want!='Album' else 0x101,0x101]
-            assert [m.text(m.get(c+8)) for c in covers]==[path,'/p/Row 1']
-        for i,k in enumerate((want,'Other')):
-            m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-            m.u.reg_write(UC_MIPS_REG_S1,buf); m.u.reg_write(UC_MIPS_REG_S2,i)
-            m.u.reg_write(UC_MIPS_REG_V0,m.row(i)); m.u.reg_write(UC_MIPS_REG_A1,0x100)
-            m.u.emu_start(0x4ab7f4,0x4ab80c,count=m.budget)
-            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4ab80c
-            assert m.text(buf)==k, (path,artist,i,m.text(buf))
-        m.call(address=HOOKS['load_localartist_list'][0],args=(0,0,0,0),gap=0)
-        m.call(address=art['ringnav_artist_art_name'],args=(buf,0x100,0,m.string('Album')),gap=0); assert m.text(buf)=='Album'
-    passed()
-    # Artist albums: Coverflow (Display settings): the albums tab's split albums go to Coverflow once the artist page is
-    # up, once per page, so coming back from it shows the grid; Grid, the songs tab or another page leave it stock. Until
-    # then the artist page is unseen (opacity 0) and has no slide, so the Artists list cuts straight to the covers; once
-    # they are up it is shown under them with its slide back.
-    SLIDE_HINT='htranslate(duration=200)'
-    class ArtistCoverflow(ArtistMachine):
-        def __init__(self,*a,**k):
-            super().__init__(*a,**k); self.handlers[syms['widget_set_prop_str']]='widget_set_prop_str'
-        def artist_page(self,name):
-            self.top=self.node('window',name); self.nodes[self.top]['anim_hint']=SLIDE_HINT; self.byte(self.top+0x34,0xff)
-        def veiled(self): return self.u.mem_read(self.top+0x34,1)[0]==0 and self.nodes[self.top]['anim_hint']==''
-        def shown(self): return self.u.mem_read(self.top+0x34,1)[0]==0xff and self.nodes[self.top]['anim_hint']==SLIDE_HINT
-        def hook(self,u,address,size,unused):
-            if address!=payload_syms['coverflow_artist']: return super().hook(u,address,size,unused)
-            self.handed.append(len(self.items(u.reg_read(REGS[0])))); self.covers=self.names(u.reg_read(REGS[0])); u.reg_write(UC_MIPS_REG_V0,1); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-    for on,tab,page,want in ((1,1,'artistinfo_page',[1]),(2,1,'artistinfo_page',[1]),(0,1,'artistinfo_page',[]),(1,0,'artistinfo_page',[]),(1,1,'localclass_page',[])):
-        m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=2); m.handed=[]
-        m.word(m.row(1)+O['REC_ALBUM'],m.string('Other album'))
-        m.config['ARTISTCF']=str(on)
-        m.split=[m.song('Baroness'),m.song('STP')]
-        for r in m.split: m.word(r+O['REC_ALBUM_ARTIST'],m.get(r+O['REC_NAME']))
-        m.found=[m.split[0]]; m.artist_page(page)
-        m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0)
-        assert m.veiled()==bool(want); m.advance(0)
-        assert m.handed==want and m.shown(),(on,tab,page,m.handed)
-        if want:  # back from Coverflow, the tab loads again on the same page: the grid stays, seen
-            m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); assert m.shown(); m.advance(0); assert len(m.handed)==1
-            # The page gone, another at the same address gets Coverflow again.
-            f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-            m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); m.advance(0); assert len(m.handed)==2
+    # V1.32's artist page (load_localartist_list), its renderer and grids; V2.1's are checked with its
+    # artist albums below (artist_years).
+    if not is_m1plus:
+        # An artist's albums tab has one row of a shared name: it takes its album's key in the split
+        # order, by folder, else by album artist; a name alone, and the songs tab, stay stock's.
+        class ArtistMachine(ClassMachine):
+            tramp=int(manifest['patch_symbols']['stock_artist_trampoline'],16)
+            def hook(self,u,address,size,unused):
+                if address==syms['albumcoverinfo_init']:
+                    covers=[]
+                    for r in self.items(u.reg_read(REGS[0])):
+                        c=self.alloc(0x60)
+                        self.word(c,getattr(self,'cover_flags',0))
+                        self.word(c+4,self.string(self.text(self.get(r+O['REC_ALBUM']))))
+                        self.word(c+8,self.get(r+O['REC_PATH'])); covers.append(c)
+                    self.word(syms['pdeq_albumcoverlist'],self.deque(covers))
+                    u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
+                a,b=u.reg_read(REGS[0]),u.reg_read(REGS[1]); libc={syms[n+'@GLIBC_2.0']:n for n in ('calloc','strdup')}|{0x1000010:'free'}
+                if address not in libc: return super().hook(u,address,size,unused)
+                u.reg_write(UC_MIPS_REG_V0,{'calloc':lambda:self.alloc((a*b+7)&~3),'strdup':lambda:self.string(self.text(a)),'free':lambda:0}[libc[address]]())
+                u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+        for path,artist,want in (('/p/x','Artist','Album\x1fBaroness'),('/z/x','STP','Album\x1fSTP'),('/z/x','Artist','Album')):
+            m=ArtistMachine(page='localclass_page',cls=0xff01,rows=2); m.word(m.row(1)+O['REC_ALBUM'],m.string('Other'))
+            m.word(m.row(0)+O['REC_PATH'],m.string(path)); m.word(m.row(0)+O['REC_ARTIST'],m.string(artist))
+            m.split=[m.song('Baroness'),m.song('STP')]; m.word(m.split[1]+O['REC_PATH'],m.string('/q/STP'))
+            for e in m.split: m.word(e+O['REC_ALBUM_ARTIST'],m.get(e+O['REC_NAME']))
+            assert m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)==2
+            # Run the stock Album-tab and page-return call sites, not just the key helper: 9.8
+            # left these unhooked, so the worker wrote the old cache name the renderer never read.
+            m.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
+            m.cover_flags=0x101  # an old job completes between stock init and key renaming
+            for site in (0x4ac840,0x4ae860,0x4ae968,0x4aebc0):
+                m.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
+                m.u.reg_write(UC_MIPS_REG_V0,syms['p_deque_showlist'])
+                m.u.reg_write(UC_MIPS_REG_T9,syms['albumcoverinfo_init'])
+                m.u.emu_start(site,site+8,count=m.budget)
+                assert m.u.reg_read(UC_MIPS_REG_PC)==site+8
+                covers=m.items(m.get(syms['pdeq_albumcoverlist']))
+                assert [m.text(m.get(c+4)) for c in covers]==[want,'Other'], hex(site)
+                assert [m.get(c)&0xffff for c in covers]==[0 if want!='Album' else 0x101,0x101]
+                assert [m.text(m.get(c+8)) for c in covers]==[path,'/p/Row 1']
+            for i,k in enumerate((want,'Other')):
+                m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
+                m.u.reg_write(UC_MIPS_REG_S1,buf); m.u.reg_write(UC_MIPS_REG_S2,i)
+                m.u.reg_write(UC_MIPS_REG_V0,m.row(i)); m.u.reg_write(UC_MIPS_REG_A1,0x100)
+                m.u.emu_start(0x4ab7f4,0x4ab80c,count=m.budget)
+                assert m.u.reg_read(UC_MIPS_REG_PC)==0x4ab80c
+                assert m.text(buf)==k, (path,artist,i,m.text(buf))
+            m.call(address=HOOKS['load_localartist_list'][0],args=(0,0,0,0),gap=0)
+            m.call(address=art['ringnav_artist_art_name'],args=(buf,0x100,0,m.string('Album')),gap=0); assert m.text(buf)=='Album'
         passed()
-    # Same-named albums by other artists stay out, in both artist modes. Membership follows
-    # the artist's songs, so a guest artist and multiple albums of one name work too.
-    for mode in (0,1):
-        m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.config['ARTISTCF']='1'
-        m.word(syms['artist_type'],mode)
-        m.u.mem_write(syms['g_local_classinfo_save']+0x10d,b'Artist\0')
-        m.word(m.row(0)+O['REC_ARTIST'],m.string('Guest singer'))  # selected album artist comes from page context
-        m.split=[m.song(name) for name in ('Selected','Other','Guest')]
-        for r in m.split:
-            m.word(r+O['REC_ALBUM_ARTIST'],m.get(r+O['REC_NAME']))
-        m.found=[m.split[0],m.split[2],m.split[0]]  # duplicates must not create extra cards
-        staging=m.names(m.get(syms['tools_pdeq_directory'])); m.artist_page('artistinfo_page')
-        assert m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)==1
-        assert m.query[:2]==(('getMusicByAlbumArtist' if mode else 'getMusicBySonger'),'Artist')
-        assert m.names(m.get(syms['tools_pdeq_directory']))==staging
+        # Artist albums: Coverflow (Display settings): the albums tab's split albums go to Coverflow once the artist page is
+        # up, once per page, so coming back from it shows the grid; Grid, the songs tab or another page leave it stock. Until
+        # then the artist page is unseen (opacity 0) and has no slide, so the Artists list cuts straight to the covers; once
+        # they are up it is shown under them with its slide back.
+        SLIDE_HINT='htranslate(duration=200)'
+        class ArtistCoverflow(ArtistMachine):
+            def __init__(self,*a,**k):
+                super().__init__(*a,**k); self.handlers[syms['widget_set_prop_str']]='widget_set_prop_str'
+            def artist_page(self,name):
+                self.top=self.node('window',name); self.nodes[self.top]['anim_hint']=SLIDE_HINT; self.byte(self.top+0x34,0xff)
+            def veiled(self): return self.u.mem_read(self.top+0x34,1)[0]==0 and self.nodes[self.top]['anim_hint']==''
+            def shown(self): return self.u.mem_read(self.top+0x34,1)[0]==0xff and self.nodes[self.top]['anim_hint']==SLIDE_HINT
+            def hook(self,u,address,size,unused):
+                if address!=payload_syms['coverflow_artist']: return super().hook(u,address,size,unused)
+                self.handed.append(len(self.items(u.reg_read(REGS[0])))); self.covers=self.names(u.reg_read(REGS[0])); u.reg_write(UC_MIPS_REG_V0,1); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+        for on,tab,page,want in ((1,1,'artistinfo_page',[1]),(2,1,'artistinfo_page',[1]),(0,1,'artistinfo_page',[]),(1,0,'artistinfo_page',[]),(1,1,'localclass_page',[])):
+            m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=2); m.handed=[]
+            m.word(m.row(1)+O['REC_ALBUM'],m.string('Other album'))
+            m.config['ARTISTCF']=str(on)
+            m.split=[m.song('Baroness'),m.song('STP')]
+            for r in m.split: m.word(r+O['REC_ALBUM_ARTIST'],m.get(r+O['REC_NAME']))
+            m.found=[m.split[0]]; m.artist_page(page)
+            m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0)
+            assert m.veiled()==bool(want); m.advance(0)
+            assert m.handed==want and m.shown(),(on,tab,page,m.handed)
+            if want:  # back from Coverflow, the tab loads again on the same page: the grid stays, seen
+                m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); assert m.shown(); m.advance(0); assert len(m.handed)==1
+                # The page gone, another at the same address gets Coverflow again.
+                f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+                m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); m.advance(0); assert len(m.handed)==2
+            passed()
+        # Same-named albums by other artists stay out, in both artist modes. Membership follows
+        # the artist's songs, so a guest artist and multiple albums of one name work too.
+        for mode in (0,1):
+            m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.config['ARTISTCF']='1'
+            m.word(syms['artist_type'],mode)
+            m.u.mem_write(syms['g_local_classinfo_save']+0x10d,b'Artist\0')
+            m.word(m.row(0)+O['REC_ARTIST'],m.string('Guest singer'))  # selected album artist comes from page context
+            m.split=[m.song(name) for name in ('Selected','Other','Guest')]
+            for r in m.split:
+                m.word(r+O['REC_ALBUM_ARTIST'],m.get(r+O['REC_NAME']))
+            m.found=[m.split[0],m.split[2],m.split[0]]  # duplicates must not create extra cards
+            staging=m.names(m.get(syms['tools_pdeq_directory'])); m.artist_page('artistinfo_page')
+            assert m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)==1
+            assert m.query[:2]==(('getMusicByAlbumArtist' if mode else 'getMusicBySonger'),'Artist')
+            assert m.names(m.get(syms['tools_pdeq_directory']))==staging
+            m.advance(0)
+            assert m.covers==['Selected','Guest'] and m.handed==[2],(mode,m.covers)
+            assert m.names(m.get(syms['p_deque_showlist']))==['Row 0']  # the Library grid stays intact
+            passed()
+        # No albums in the selected artist query leaves the grid rather than opening an empty Coverflow.
+        m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.config['ARTISTCF']='1'; m.found=[]
+        m.artist_page('artistinfo_page'); m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)
         m.advance(0)
-        assert m.covers==['Selected','Guest'] and m.handed==[2],(mode,m.covers)
-        assert m.names(m.get(syms['p_deque_showlist']))==['Row 0']  # the Library grid stays intact
+        assert m.handed==[0] and m.shown(); passed()  # coverflow_artist rejects the empty list (test/coverflow.py)
+        # A local art job that finishes after a list rebuild must not mark the new row ready.
+        # Run the worker's real completion call site, including its stack-buffer argument, then stock's
+        # readiness check (used by the renderer and by the request queue to skip completed covers).
+        class CoverQueueMachine(ArtistMachine):
+            def __init__(self):
+                super().__init__(rows=12)
+                self.pending=[]
+                self.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
+            def hook(self,u,address,size,unused):
+                if address not in (syms['list_clear'],syms['_list_push_back']):
+                    return super().hook(u,address,size,unused)
+                if address==syms['list_clear']: self.pending.clear()
+                else:
+                    p=u.reg_read(REGS[1])
+                    self.pending.append(tuple(self.get(p+i) for i in (0,4,8)))
+                u.reg_write(UC_MIPS_REG_V0,0)
+                u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+        m=CoverQueueMachine()
+        def cover_requests(start,big):
+            name='local_albumcover_task' if big else 'local_albumsmallcover_task'
+            m.call(address=syms[name],args=(start,9,0,0),gap=0)
+            return [row for row,kind,size in m.pending if kind==0 and size==big]
+        def cover_ready(row,big):
+            return m.call(address=syms['check_albumcover_flag'],args=(row,big,0,0),gap=0)
+        def cover_done(row,big,key):
+            sp=0x7000d000
+            m.u.mem_write(sp+0x1688,key.encode()+b'\0')
+            m.word(sp+0x1828,row); m.word(sp+0x1830,big); m.word(sp+0x18,0xa26cc0)
+            m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
+            m.u.emu_start(0x4edd98,0x4edda8,count=m.budget)
+            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4edda8
+        for visit in range(5):
+            keys=[f'Artist {visit} album {i}' for i in range(12)]
+            covers=[]
+            for key in keys:
+                c=m.alloc(0x60); m.word(c+4,m.string(key)); covers.append(c)
+            m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
+            if visit==0:
+                fixed=bytes(m.u.mem_read(0x4edd9c,8))
+                m.u.mem_write(0x4edd9c,struct.pack('<II',0x8f99b6d4,0x0411ff44))
+                m.u.ctl_remove_cache(0x4edd98,0x4edda8)
+                cover_done(11,1,'previous artist')
+                assert cover_ready(11,1)==1  # stock falsely completes the last album
+                assert cover_requests(9,1)==[9,10]  # scrolling cannot request its missing art
+                m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[11]+1,0)
+                m.u.mem_write(0x4edd9c,fixed)
+                m.u.ctl_remove_cache(0x4edd98,0x4edda8)
+            for row in (0,8,9,11):  # first screen, scroll boundary and last album
+                for big in (0,1):
+                    cover_done(row,big,f'Artist {visit-1} album {row}')
+                    assert cover_ready(row,big)==0, (visit,row,big)
+                    assert row in cover_requests(row//9*9,big), (visit,row,big)
+                    cover_done(row,big,keys[row])
+                    assert cover_ready(row,big)==1, (visit,row,big)
+                    assert row not in cover_requests(row//9*9,big), (visit,row,big)
+            for row in (-1,12): cover_done(row,1,'gone')
+        # The folder-cover path (0x4eeddc) reaches the same completion call with its own copied key, not
+        # whatever its last call left in a2.
+        def folder_done(row,key,a2):
+            sp=0x7000d000
+            m.u.mem_write(sp+0x1688,key.encode()+b'\0'); m.word(sp+0x1828,row); m.word(sp+0x18,0xa26cc0)
+            m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
+            m.u.reg_write(UC_MIPS_REG_S2,1); m.u.reg_write(UC_MIPS_REG_A2,m.string(a2))
+            m.u.emu_start(0x4eedd4,0x4edda8,count=m.budget)
+            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4edda8
+        for key,a2,ready in ((keys[3],'left over',1),('previous folder',keys[3],0)):
+            m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[3],0)
+            folder_done(3,key,a2); assert cover_ready(3,0)==ready, (key,a2)
         passed()
-    # No albums in the selected artist query leaves the grid rather than opening an empty Coverflow.
-    m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.config['ARTISTCF']='1'; m.found=[]
-    m.artist_page('artistinfo_page'); m.call(address=HOOKS['load_localartist_list'][0],args=(1,0,0,0),gap=0)
-    m.advance(0)
-    assert m.handed==[0] and m.shown(); passed()  # coverflow_artist rejects the empty list (test/coverflow.py)
-    # A local art job that finishes after a list rebuild must not mark the new row ready.
-    # Run the worker's real completion call site, including its stack-buffer argument, then stock's
-    # readiness check (used by the renderer and by the request queue to skip completed covers).
-    class CoverQueueMachine(ArtistMachine):
-        def __init__(self):
-            super().__init__(rows=12)
-            self.pending=[]
-            self.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
-        def hook(self,u,address,size,unused):
-            if address not in (syms['list_clear'],syms['_list_push_back']):
-                return super().hook(u,address,size,unused)
-            if address==syms['list_clear']: self.pending.clear()
-            else:
-                p=u.reg_read(REGS[1])
-                self.pending.append(tuple(self.get(p+i) for i in (0,4,8)))
-            u.reg_write(UC_MIPS_REG_V0,0)
-            u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-    m=CoverQueueMachine()
-    def cover_requests(start,big):
-        name='local_albumcover_task' if big else 'local_albumsmallcover_task'
-        m.call(address=syms[name],args=(start,9,0,0),gap=0)
-        return [row for row,kind,size in m.pending if kind==0 and size==big]
-    def cover_ready(row,big):
-        return m.call(address=syms['check_albumcover_flag'],args=(row,big,0,0),gap=0)
-    def cover_done(row,big,key):
-        sp=0x7000d000
-        m.u.mem_write(sp+0x1688,key.encode()+b'\0')
-        m.word(sp+0x1828,row); m.word(sp+0x1830,big); m.word(sp+0x18,0xa26cc0)
-        m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-        m.u.emu_start(0x4edd98,0x4edda8,count=m.budget)
-        assert m.u.reg_read(UC_MIPS_REG_PC)==0x4edda8
-    for visit in range(5):
-        keys=[f'Artist {visit} album {i}' for i in range(12)]
+        # Scrolling never leaves the shared cover worker paused (albumcover_taskstate 2): stock resumed it only
+        # when scroll end saw a new first row, so a wheel tick or a return to a scrolled grid stopped every
+        # grid's art. An artist's albums scroll end takes rows as 160 px, three a row, not 256.
+        class ScrollEndMachine(CoverQueueMachine):
+            def hook(self,u,address,size,unused):
+                if address!=syms['toolsGetSysMemFree']: return super().hook(u,address,size,unused)
+                u.reg_write(UC_MIPS_REG_V0,1<<20); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+        m=ScrollEndMachine(); m.mock('widget_lookup','widget_get_prop_int')
+        for pause in (0x4aab40,0x4a22b0):  # an artist's albums, Library Albums
+            m.word(syms['albumcover_taskstate'],1)
+            m.call(address=pause,args=(0,0,0,0),gap=0); assert m.get(syms['albumcover_taskstate'])==1, hex(pause)
         covers=[]
-        for key in keys:
-            c=m.alloc(0x60); m.word(c+4,m.string(key)); covers.append(c)
+        for i in range(30):
+            c=m.alloc(0x60); m.word(c+4,m.string(f'album {i}')); covers.append(c)
         m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
-        if visit==0:
-            fixed=bytes(m.u.mem_read(0x4edd9c,8))
-            m.u.mem_write(0x4edd9c,struct.pack('<II',0x8f99b6d4,0x0411ff44))
-            m.u.ctl_remove_cache(0x4edd98,0x4edda8)
-            cover_done(11,1,'previous artist')
-            assert cover_ready(11,1)==1  # stock falsely completes the last album
-            assert cover_requests(9,1)==[9,10]  # scrolling cannot request its missing art
-            m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[11]+1,0)
-            m.u.mem_write(0x4edd9c,fixed)
-            m.u.ctl_remove_cache(0x4edd98,0x4edda8)
-        for row in (0,8,9,11):  # first screen, scroll boundary and last album
-            for big in (0,1):
-                cover_done(row,big,f'Artist {visit-1} album {row}')
-                assert cover_ready(row,big)==0, (visit,row,big)
-                assert row in cover_requests(row//9*9,big), (visit,row,big)
-                cover_done(row,big,keys[row])
-                assert cover_ready(row,big)==1, (visit,row,big)
-                assert row not in cover_requests(row//9*9,big), (visit,row,big)
-        for row in (-1,12): cover_done(row,1,'gone')
-    # The folder-cover path (0x4eeddc) reaches the same completion call with its own copied key, not
-    # whatever its last call left in a2.
-    def folder_done(row,key,a2):
-        sp=0x7000d000
-        m.u.mem_write(sp+0x1688,key.encode()+b'\0'); m.word(sp+0x1828,row); m.word(sp+0x18,0xa26cc0)
-        m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-        m.u.reg_write(UC_MIPS_REG_S2,1); m.u.reg_write(UC_MIPS_REG_A2,m.string(a2))
-        m.u.emu_start(0x4eedd4,0x4edda8,count=m.budget)
-        assert m.u.reg_read(UC_MIPS_REG_PC)==0x4edda8
-    for key,a2,ready in ((keys[3],'left over',1),('previous folder',keys[3],0)):
-        m.byte(m.items(m.get(syms['pdeq_albumcoverlist']))[3],0)
-        folder_done(3,key,a2); assert cover_ready(3,0)==ready, (key,a2)
-    passed()
-    # Scrolling never leaves the shared cover worker paused (albumcover_taskstate 2): stock resumed it only
-    # when scroll end saw a new first row, so a wheel tick or a return to a scrolled grid stopped every
-    # grid's art. An artist's albums scroll end takes rows as 160 px, three a row, not 256.
-    class ScrollEndMachine(CoverQueueMachine):
-        def hook(self,u,address,size,unused):
-            if address!=syms['toolsGetSysMemFree']: return super().hook(u,address,size,unused)
-            u.reg_write(UC_MIPS_REG_V0,1<<20); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
-    m=ScrollEndMachine(); m.mock('widget_lookup','widget_get_prop_int')
-    for pause in (0x4aab40,0x4a22b0):  # an artist's albums, Library Albums
-        m.word(syms['albumcover_taskstate'],1)
-        m.call(address=pause,args=(0,0,0,0),gap=0); assert m.get(syms['albumcover_taskstate'])==1, hex(pause)
-    covers=[]
-    for i in range(30):
-        c=m.alloc(0x60); m.word(c+4,m.string(f'album {i}')); covers.append(c)
-    m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
-    view=m.node('scroll_view','scroll_view_album',yoffset=800); win=m.node('window','artistinfo_page',[view])
-    m.word(0xa27678,1); m.word(0xa2767c,0)  # the Albums tab; its last requested first row
-    for tick in range(2):  # the second, at the same offset, requests nothing and leaves the worker running
-        m.pending.clear(); m.call(address=0x4ad7c0,args=(win,0,0,0),gap=0)
-        assert [row for row,kind,size in m.pending]==([] if tick else list(range(15,24))), m.pending
-        assert m.get(0xa2767c)==15 and m.get(syms['albumcover_taskstate'])==1
-    passed()
-else:
-    not_ported("Same-named albums apart in art and artist pages' covers (ALBUM_ART patches not applied to V2.1)")
+        view=m.node('scroll_view','scroll_view_album',yoffset=800); win=m.node('window','artistinfo_page',[view])
+        m.word(0xa27678,1); m.word(0xa2767c,0)  # the Albums tab; its last requested first row
+        for tick in range(2):  # the second, at the same offset, requests nothing and leaves the worker running
+            m.pending.clear(); m.call(address=0x4ad7c0,args=(win,0,0,0),gap=0)
+            assert [row for row,kind,size in m.pending]==([] if tick else list(range(15,24))), m.pending
+            assert m.get(0xa2767c)==15 and m.get(syms['albumcover_taskstate'])==1
+        passed()
 if is_m1plus and 'COVER_DONE' in SITES:
     # V2.1's cover worker (parse_albumcovertask_thd) is V1.32's, the same checks as above on V2.1's own
     # code: its local completion (0x4dd62c) and folder path (0x4de658) as COVER_DONE patches them, then
@@ -5455,7 +5456,35 @@ else:
     assert m.sqls[0].endswith('order by ifnull(max(year),0)=0,max(year),album COLLATE NOCASE'), m.sqls; passed()
     m,shown=artist_years(ARTISTAZ='1')
     assert shown==['Row 1','Row 2','Row 0'] and m.sqls[0].endswith(' order by album COLLATE NOCASE'), m.sqls; passed()
-    not_ported("Artist albums tab art keys and Coverflow (V2.1's artist page renderer and Coverflow not patched)")
+    # Their art (ALBUM_ART): album_page lists them, so its row renderer (0x523a1c, the row in s2) and
+    # cover tasks (albumcoverinfo_init at 0x524720, 0x524760, 0x5248d0) give each row artist_tab's key:
+    # Mid, whose name another artist's album shares, by its folder; a name of one album stays. The album
+    # page's big cover (0x525b84) follows its row's cover task. Each site runs V2.1's own code.
+    m,shown=artist_years(); GP21=0xa03ed0; sp=0x7000d000; m.word(sp+0x10,GP21)
+    m.mock('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
+    keys=['New','Mid\x1f/p','Old']
+    def run(start,stop,**regs):
+        m.u.reg_write(UC_MIPS_REG_SP,sp); m.u.reg_write(UC_MIPS_REG_GP,GP21)
+        for r,v in regs.items(): m.u.reg_write(globals()['UC_MIPS_REG_'+r],v)
+        m.u.emu_start(start,stop,count=m.budget); assert m.u.reg_read(UC_MIPS_REG_PC)==stop
+    for i,r in enumerate(m.items(m.get(syms['p_deque_showlist']))):
+        run(0x523a1c,0x523a3c,V0=r,S1=sp+0x18,S2=i); assert m.text(sp+0x18)==keys[i], (i,m.text(sp+0x18))
+    fixed=bytes(m.u.mem_read(0x523a34,8)); m.u.mem_write(0x523a34,struct.pack('<II',0x0320f809,0x24c61158))
+    m.u.ctl_remove_cache(0x523a1c,0x523a3c)  # V2.1's own words: Mid's name alone, the other artist's art
+    run(0x523a1c,0x523a3c,V0=m.items(m.get(syms['p_deque_showlist']))[1],S1=sp+0x18,S2=1); assert m.text(sp+0x18)=='Mid'
+    m.u.mem_write(0x523a34,fixed); m.u.ctl_remove_cache(0x523a1c,0x523a3c)
+    for site,stop,reg in ((0x52471c,0x524728,'S2'),(0x52475c,0x524768,'S2'),(0x5248c8,0x5248d8,'V0')):
+        covers=[]
+        for r in m.items(m.get(syms['p_deque_showlist'])):  # stock's tasks, by name, one done
+            c=m.alloc(0x60); m.word(c,0x101); m.word(c+4,m.string(m.text(m.get(r+O['REC_ALBUM'])))); covers.append(c)
+        m.word(syms['pdeq_albumcoverlist'],m.deque(covers))
+        run(site,stop,**{reg:syms['p_deque_showlist']})
+        covers=m.items(m.get(syms['pdeq_albumcoverlist']))  # the deque's own records
+        assert [m.text(m.get(c+4)) for c in covers]==keys and [m.get(c)&0xffff for c in covers]==[0x101,0,0x101], hex(site)
+    m.u.mem_write(syms['g_local_classinfo_save']+0xd,b'Mid\0')
+    for row,want in ((1,'Mid\x1f/p'),(2,'Mid')):  # its row's task, else the name
+        m.word(O['ALBUMINFO_ROW'],row); run(0x525b64,0x525b8c,S1=sp+0x18); assert m.text(sp+0x18)==want, row
+    passed()
     # On the device: a long press on the second album, the one under the finger (Rate Album, rated as
     # its album).
     m,shown=artist_years(); assert long_press(m,60)==(('Mid',[*COVER_ALBUM,'Add to Playlist']),False); passed()

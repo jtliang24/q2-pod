@@ -3951,10 +3951,20 @@ static const char *art_key(char *buf, void *list, unsigned i) {
                  path ? path : "");
     return buf;
 }
-/* The Albums row renderer's snprintf(buf, 0x100, "%s", album) (0x4a388c), a2 the row. */
+#if M1PLUS
+/* V2.1's album_page lists an artist's albums too (loadAlbumList's 0xff01, ringnav_localclass): a row
+ * there takes artist_tab's key, the library's Albums art_key's. */
+static const char *artist_key(char *buf, void *list, unsigned i);
+#endif
+/* The Albums row renderer's snprintf(buf, 0x100, "%s", album) (0x4a388c; V2.1's 0x523a34), a2 the
+ * row. */
 int ringnav_art_name(char *buf, unsigned size, unsigned row, const char *album) {
     char key[256];
     void *list = P(p_deque_showlist, 0);
+#if M1PLUS
+    const char *k = artist_key(key, list, row);
+    if (k) return snprintf(buf, size, "%s", k);
+#endif
     return snprintf(buf, size, "%s", row < deque_size(list) ? art_key(key, list, row) : album);
 }
 /* A list's albumcoverinfo_init: the art thread hashes each cover task's copy of its row's name
@@ -3979,8 +3989,17 @@ static int rename_covers(void *list, const char *(*key)(char *, void *, unsigned
 static const char *split_key(char *buf, void *list, unsigned i) {
     return art_key(buf, list, i) == buf ? buf : 0;
 }
+#if M1PLUS
+static const char *page_key(char *buf, void *list, unsigned i) {
+    const char *k = artist_key(buf, list, i);
+    return k ? k : split_key(buf, list, i);
+}
+/* album_page's albumcoverinfo_init calls (0x524720, 0x524760, 0x5248d0), an artist's albums too. */
+int ringnav_albumcovers(void *list) { return rename_covers(list, page_key); }
+#else
 /* The Albums page's albumcoverinfo_init calls. */
 int ringnav_albumcovers(void *list) { return rename_covers(list, split_key); }
+#endif
 
 /* A job can finish after navigation rebuilt the list: its row number now belongs to another
  * album. Compare the key copied by the worker before setting either cover-ready flag. */
@@ -4159,9 +4178,8 @@ int ringnav_artist_art_name(char *buf, unsigned size, unsigned row, const char *
 int ringnav_artist_covers(void *list) {
     return st.art_keys ? rename_covers(list, artist_key) : albumcoverinfo_init(list);
 }
-#if !M1PLUS /* entered only from V1.32's ALBUM_ART */
-/* The album page's big cover, snprintf of classinfo +0xd (0x4a72a4): its Albums row's cover task
- * name, as the thread hashed it, when that is this album's key. */
+/* The album page's big cover, snprintf of classinfo +0xd (0x4a72a4; V2.1's 0x525b84): its Albums
+ * row's cover task name, as the thread hashed it, when that is this album's key. */
 int ringnav_art_header(char *buf, unsigned size, const char *fmt, const char *album) {
     void *covers = P(pdeq_albumcoverlist, 0);
     unsigned i = (unsigned)I(ALBUMINFO_ROW, 0), n = strlen(album);
@@ -4169,7 +4187,6 @@ int ringnav_art_header(char *buf, unsigned size, const char *fmt, const char *al
     return snprintf(buf, size, fmt,
                     key && !strncasecmp(key, album, n) && key[n] == 0x1f ? key : album);
 }
-#endif
 
 static int empty_toast(const void *unused) {
     static const char *const none[] = { "No albums", "No artists", "No composers", "No genres" };
@@ -4213,8 +4230,10 @@ int ringnav_localclass(int cls) {
     if (n > 0 && cls == 0xff10 && a) album_only(list, a, 0), n = (int)deque_size(list);
     if (n > 0 && cls == CLASS_ALBUMS) n = coverflow_split(list);
 #if M1PLUS /* V2.1's artist albums load here (loadAlbumList, on album_page: never Coverflow's
-            * artistinfo_page), not in load_localartist_list */
+            * artistinfo_page), not in load_localartist_list; the library's Albums on the same page
+            * take no artist's keys */
     if (cls == CLASS_ARTIST_ALBUMS) artist_tab(n);
+    if (cls == CLASS_ALBUMS) artist_keys_free();
 #endif
     if (IPOD) /* an untagged song's row reads its file name without the extension (track_name) */
         for (int i = 0; i < n; ++i) {
