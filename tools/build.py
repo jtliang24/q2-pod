@@ -966,11 +966,13 @@ def m1plus_names(sq, out):
     tree = out/'v21-assets'
     run('unsquashfs', '-q', '-no-xattrs', '-f', '-d', tree, sq, 'release/assets/default/raw/ui',
         'release/assets/default/raw/styles/default.bin', 'release/assets/default/raw/styles/home_page.bin',
+        'release/assets/default/raw/styles/playing_page.bin',
         'release/assets/default/raw/images/xx')
     raw = tree/'release/assets/default/raw'
     widgets = {n[2].get('name') for p in raw.glob('ui/**/*.bin') for n in walk(decode(p.read_bytes()))}
-    # Home's cards are styled from its own file (styles/home_page.bin), which home_page's widgets use.
-    styles = {s for f in ('default', 'home_page') for _, s, *_ in style_props((raw/f'styles/{f}.bin').read_bytes())}
+    # Home's cards and Now Playing's heart are styled from their pages' own files, which those pages'
+    # widgets use.
+    styles = {s for f in ('default', 'home_page', 'playing_page') for _, s, *_ in style_props((raw/f'styles/{f}.bin').read_bytes())}
     images = {p.stem for p in raw.glob('images/xx/*')}
     for key, value in sorted(defines.items()):
         kind = ('image', images) if key.startswith('ICON_') or key == 'ROW_CHEVRON' else \
