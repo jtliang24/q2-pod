@@ -1222,6 +1222,27 @@ the bare name. The key and header helpers' Q2 checks run on M1 too. The V1.32 ar
 Q2 only. `test/patch.py` on M1 passes 1004 scenarios, with 8 `NOT PORTED` lines; Q2's runs are
 unchanged and its `update.tar` files byte-identical.
 
+## 36. Dev 20 (V00Ks) for the device (Oct 22)
+
+Built from commit `f21632f` with `--dev` (`build-m1-dev20`, `update.bin` `35474ff9…`). `test/build.py`,
+`test/patch.py` (1004 scenarios, 8 `NOT PORTED`), `test/playback.py` and the three `test/boot.py` walks
+pass on it. It was copied to the card over q2remote, hash-checked, as `update.bin`, ready for System
+Update → TF card update. What to check on it:
+- **Shuffle:** in stock Shuffle, Play next from the hold menu plays next; Previous then Next returns to
+  the track Previous left.
+- **Ratings:** a hold on Now Playing's heart opens the picker; a tap still toggles My Fav. A saved 1-4
+  shows as a badge on the empty heart.
+- **Hold menu:** Add to Favourites and Add to Playlist add the held song only; Add to Playlist from Now
+  Playing refuses ("Queue unchanged") when the track changed meanwhile.
+- **Lock Screen page:** the built-ins show as pictures, the grid scrolls to Time show, Clock and About,
+  and every picture can be picked. Clock: Large lays out the lock window's clock.
+- **Lock window:** Next shows the new track's cover (V2.1's own repaint).
+- **Library:** an article-free sort (The Cure under C), M4B files in folder view, and covers that load
+  after a small scroll on Albums.
+- **Hardware and settings:** LDAC HQ at 990 kbps (WH-1000XM6, multipoint off); gapless in Shuffle
+  Albums with Gapless on; Resume on Connect off keeps a paused queue paused on reconnect; two
+  same-named albums by different artists show their own covers.
+
 ## How to check a build now
 
 ```sh

@@ -15,9 +15,10 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** section 4, from the top of its table; Spotify on the device
-(section 3) when there is an account. Functionality comes first:
-items that only change how something looks wait for the final pass (section 7).
+**Next:** the dev 20 device pass for section 4 (its checklist is in
+[m1plus-progress.md](m1plus-progress.md) section 36); Spotify on the device (section 3) when there is
+an account. Functionality comes first: items that only change how something looks wait for the final
+pass (section 7).
 
 ## Ground rules
 
@@ -106,17 +107,9 @@ advanced play and across speed changes (section 33), still to hear with Gapless 
 (section 34), still to try with a Bluetooth headphone. Same-named albums' art, on Library Albums and an
 artist's albums (section 35), still to see with two such albums on the card.
 
-Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
-section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
-value and effort:
-
-| Feature | V2.1 site | Notes | Size |
-|---|---|---|---|
-
-These need hardware, a setting or a library to check on the device, so they come last:
-
-| Feature | V2.1 site | Notes | Size |
-|---|---|---|---|
+Every row had been checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
+section 24). All are now ported or found native in V2.1. Four wait for the device: LDAC HQ, gapless,
+Resume on connect and same-named albums' art.
 
 Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 - **Artist pages open on Albums** (`ARTIST_ALBUMS`): V2.1's artist page lists the artist's albums.
