@@ -1159,6 +1159,23 @@ V2.1's `switchBtPriority` (`0x4d3024`) is V1.32's moved: the same dispatch, with
 0x16 and Auto 0x18 patched, and stock sends 0x16 for HQ. On M1 it passes 998 scenarios, with 12
 `NOT PORTED` lines. To hear on the device: a WH-1000XM6 with its multipoint off reports 990 kbps on HQ.
 
+## 33. Gapless in advanced play and across speed changes (Oct 22)
+
+Section 24 found that Shuffle Albums and Shuffle Folders lost gapless on M1: `mcl_preload` wasn't
+hooked, so stock preloaded its own next track, and `ringnav_next` dropped it and started the right
+one without the handoff. V2.1's `mcl_preload` (`0x5d0ea4`) is V1.32's instruction for instruction;
+its `mcl_open_preload` (`0x5d0bd8`) differs only in register allocation and its loop's tail. Neither
+has a symbol. Both are now `M1PLUS_HOOKS`, as on the Q2:
+- `ringnav_preload` picks advanced play's successor into `MCL_PREPOS` and opens it;
+- `ringnav_open_preload` refuses to open across a speed boundary, as a gapless handoff skips
+  `player_initconfig`'s speed.
+
+They are also `M1PLUS_PRIVATE_FUNCTIONS`, so `ringnav_preload`'s own open goes through the hook, and
+`test/build.py` accepts a hook named there, still a PIC entry with V2.1's GOT base.
+`test/playback.py` had stood in for both on M1. It now runs them, and the open-preload check is no
+longer `NOT PORTED`. To hear on the device: with Gapless on, a gapless album in Shuffle Albums plays
+through without a gap.
+
 ## How to check a build now
 
 ```sh
