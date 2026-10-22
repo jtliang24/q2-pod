@@ -104,6 +104,7 @@ if is_m1plus:
 else:
     syms.update(PRIVATE_FUNCTIONS)
 VG_MOCKS=[n for n in syms if n.startswith(('vgcanvas_','vg_gradient_'))]
+HEART_ON,HEART_OFF=('p_fav','p_unfav') if is_m1plus else ('play_fav','play_unfav')  # the rating picker's hearts (offsets.inc ICON_FAV)
 
 def _fp64_fix():
     """The stock binary is -mfp64 (FR=1); Unicorn's MIPS32 FPU only implements FR=0, so
@@ -5256,9 +5257,9 @@ assert m.run(3)=='Removed from Favourites' and m.kept()==[] and not song_side_ef
 m.word(m.slide+O['SLIDE_INDEX'],0); assert m.menu()[3:5]==['Add to Favourites','Rate Album']
 m.word(m.slide+O['SLIDE_INDEX'],1); passed()
 # The picker over the covers, on the album's hearts; the wheel moves the rating, never the covers.
-assert m.run(4) is None and m.caption()=='Unrated' and m.hearts()==['play_unfav']*5
+assert m.run(4) is None and m.caption()=='Unrated' and m.hearts()==[HEART_OFF]*5
 for _ in range(3): assert m.call()==11
-assert m.caption()=='3 of 5' and m.hearts()==['play_fav']*3+['play_unfav']*2 and m.get(m.slide+O['SLIDE_INDEX'])==1 and not m.slides
+assert m.caption()=='3 of 5' and m.hearts()==[HEART_ON]*3+[HEART_OFF]*2 and m.get(m.slide+O['SLIDE_INDEX'])==1 and not m.slides
 # Hold Play/Pause meanwhile opens nothing, and its release does not toggle playback.
 m.press(9000); assert m.hold()==11 and m.top==m.page and m.release()==0 and m.panel(); passed()
 # Return leaves it as it was (taken before the page's own Return), and Coverflow stays; Centre saves, without opening
@@ -7064,10 +7065,12 @@ assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=50_000_000)==0 and ca
 m.page=m.top; assert m.texts()==['Most Played']+[x for p in zip(ranked[:3],details[:3]) for x in p]; passed()
 
 # Ratings (navigation.c rate_*): 5 hearts are stock's My Fav, 1-4 kept in /mnt/data/ringnav-ratings by listen_key with
-# the hearts in its low three bits. Now Playing's heart: stock's click (0x52b154, bound to img_fav with the window) is
-# swapped for one telling a tap, stock's toggle that leaves nothing kept, from a RATE_HOLD_MS hold, which opens the
-# picker: five of the heart's images on a dark panel, the wheel moving the rating, Centre saving and Return leaving it.
-FAV_CLICK=0x52b154
+# the hearts in its low three bits. Now Playing's heart: stock's click (bound with the window: V1.32's 0x52b154 to the
+# image img_fav, V2.1's 0x53b480 to the button btn_fav) is swapped for one telling a tap, stock's toggle that leaves
+# nothing kept, from a RATE_HOLD_MS hold, which opens the picker: five of the heart's images on a dark panel, the wheel
+# moving the rating, Centre saving and Return leaving it. V2.1's heart is lit by its style, V1.32's by its image.
+FAV_CLICK=O['FAV_CLICK_ADDR']
+V21_NP_VISIT=0x53b190  # playing_page_init's widget_foreach visit (0x53d2b4), which binds each button by its name
 class RateMachine(FileMocks,ShuffleMachine):
     def __init__(self,saved=b''):
         super().__init__()
@@ -7077,12 +7080,21 @@ class RateMachine(FileMocks,ShuffleMachine):
         for n in ('getAllFav','fseek@GLIBC_2.0','ftell@GLIBC_2.0','taglib_file_new','taglib_file_audioproperties','taglib_file_free'):
             self.handlers[syms[n]]='r:'+n
         self.lengths={}; self.probed=[]; self.handlers[0x1000030]='r:length'  # AudioProperties::length(), vtable +0xc
-        self.handlers[FAV_CLICK]='r:fav_click'
-        self.fav=self.node('image','img_fav'); self.word(self.fav+O['W_X'],303); self.word(self.fav+O['W_Y'],176)
-        self.word(self.fav+O['W_W'],50); self.word(self.fav+O['W_H'],50); self.nodes[self.fav]['image']='play_unfav'
-        self.np=self.node('window','playing_page',[self.node('view','view_album',[self.fav])])
-        self.word(self.np+O['W_W'],375); self.word(self.np+O['W_H'],320); self.word(self.np+O['W_PARENT'],self.wm)
-        for w in self.nodes[self.np]['children']: self.word(self.fav+O['W_PARENT'],w); self.word(w+O['W_PARENT'],self.np)
+        if is_m1plus:
+            # V2.1's page from its asset, its heart's click bound by V2.1's own visit, which then runs for real:
+            # only the toggle (manage_myfav) and its notice are mocked.
+            for n in ('manage_myfav','notifyFavor','mclGetPlayType'): self.handlers[syms[n]]='r:'+n
+            self.mock('widget_use_style')
+            self.np=self.v21_page('playing_page'); self.fav=named(self,self.np,'btn_fav')
+            assert self.call(address=V21_NP_VISIT,args=(self.np,self.fav,0,0),gap=0)==0
+            assert self.nodes[self.fav]['handlers']==[(O['EVT_CLICK'],FAV_CLICK,self.np)]
+        else:
+            self.handlers[FAV_CLICK]='r:fav_click'
+            self.fav=self.node('image','img_fav'); self.word(self.fav+O['W_X'],303); self.word(self.fav+O['W_Y'],176)
+            self.word(self.fav+O['W_W'],50); self.word(self.fav+O['W_H'],50); self.nodes[self.fav]['image']='play_unfav'
+            self.np=self.node('window','playing_page',[self.node('view','view_album',[self.fav])])
+            self.word(self.np+O['W_W'],375); self.word(self.np+O['W_H'],320); self.word(self.np+O['W_PARENT'],self.wm)
+            for w in self.nodes[self.np]['children']: self.word(self.fav+O['W_PARENT'],w); self.word(w+O['W_PARENT'],self.np)
         em=self.alloc(4); it=self.alloc(0x28); self.word(self.fav+O['W_EMITTER'],em); self.word(em,it)
         self.word(it+O['EMIT_TYPE'],O['EVT_CLICK']); self.word(it+12,FAV_CLICK); self.word(it,self.np)
         playing=HOOKS['playing_page_init'][0]; self.handlers[playing+12]='stock_playing'
@@ -7106,8 +7118,12 @@ class RateMachine(FileMocks,ShuffleMachine):
         elif name=='fav_click':  # stock: My Fav toggled for the playing track, and the heart's image
             assert a==self.np; t=self.names()[self.get(O['MCL_POS'])]; self.favs^={t}
             self.nodes[self.fav]['image']='play_fav' if t in self.favs else 'play_unfav'
+        elif name=='manage_myfav': t=self.names()[self.get(O['MCL_POS'])]; self.favs^={t}; ret=int(t in self.favs)
+        elif name=='mclGetPlayType': ret=self.mcl('MCL_TYPE')
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+    def lit(self):  # the heart full: V2.1's by its style, V1.32's by its image
+        return self.nodes[self.fav]['style']=='btn_imgfav_style' if is_m1plus else self.nodes[self.fav]['image']=='play_fav'
     def kept(self):
         data=self.files.get('/mnt/data/ringnav-ratings',b'')
         return sorted(v for v in struct.unpack(f'<{len(data)//4}I',data) if v)
@@ -7121,53 +7137,51 @@ class RateMachine(FileMocks,ShuffleMachine):
     def caption(self): return self.nodes[self.nodes[self.panel()]['children'][0]]['text']
     def tap(self,press=True):  # a press, then its click
         if press: f,ctx=self.handler(self.fav,O['EVT_POINTER_DOWN']); self.call(address=f,args=(ctx,self.event,0,0),gap=0)
-        f,ctx=self.handler(self.fav,O['EVT_CLICK']); return self.call(address=f,args=(ctx,self.event,0,0),gap=0)
+        f,ctx=self.handler(self.fav,O['EVT_CLICK']); self.word(self.event+O['EVENT_TARGET'],self.fav)  # as AWTK's click
+        return self.call(address=f,args=(ctx,self.event,0,0),gap=0)
     def heart(self,ms=O['RATE_HOLD_MS']):  # a press held ms on the heart
         f,ctx=self.handler(self.fav,O['EVT_POINTER_DOWN']); self.call(address=f,args=(ctx,self.event,0,0),gap=0)
         self.pressed=1; self.advance(ms,clear=False); self.pressed=0
 def key_of(name): k=fnv('/p/'+name); return k|(k==0)
-if not is_m1plus:
-    m=RateMachine()
-    # Bound: stock's click off img_fav, the payload's click and press on, the badge hidden; nothing read yet beyond the file.
-    assert ('widget_off_by_func',m.fav,O['EVT_CLICK'],FAV_CLICK) in m.calls and m.badge() is None and m.panel() is None
-    assert [t for t,f,ctx in m.nodes[m.fav]['handlers']]==[O['EVT_CLICK'],O['EVT_POINTER_DOWN']]; passed()
-    # A tap is stock's heart: B (playing) into My Fav, nothing kept; again, out.
-    assert m.tap()==11 and m.favs=={'B'} and m.nodes[m.fav]['image']=='play_fav' and m.kept()==[]
-    assert m.tap()==11 and m.favs==set(); passed()
-    # A press shorter than the hold, then its click: still the tap.
-    m.heart(O['RATE_HOLD_MS']-1); assert m.panel() is None and m.tap(press=False)==11 and m.favs=={'B'}; passed()
-    # A hold opens the picker on 5 (My Fav); its release's click does nothing.
-    m.heart(); assert m.hearts()==['play_fav']*5 and m.caption()=='5 of 5'
-    assert m.tap(press=False)==11 and m.favs=={'B'}; passed()
-    # The wheel moves the rating within 0-5; Return leaves it as it was.
-    m.top=m.np
-    for k,want in ((O['KEY_NEXT'],5),(O['KEY_PREV'],4),(O['KEY_PREV'],3)): assert m.call(k)==11
-    assert m.hearts()==['play_fav']*3+['play_unfav']*2 and m.caption()=='3 of 5' and m.favs=={'B'}
-    assert m.call(O['KEY_RETURN'])==11 and m.panel() is None and m.favs=={'B'} and m.kept()==[]; passed()
-    # Centre saves 3: My Fav out through stock's own click, 3 kept, the badge on the empty heart.
-    m.heart()
-    for _ in range(2): m.call(O['KEY_PREV'])
-    assert m.call(O['KEY_CENTER'])==11 and m.panel() is None and m.favs==set()
-    assert m.kept()==[(key_of('B')&~7)|3] and m.badge()=='3'; passed()
-    # Down to 0 clears it; a tap on the third heart saves 3 again; a tap on the heart (into My Fav) leaves nothing kept.
-    m.heart()
-    for _ in range(4): m.call(O['KEY_PREV'])
-    assert m.caption()=='Unrated' and m.hearts()==['play_unfav']*5
-    m.call(O['KEY_CENTER']); assert m.kept()==[] and m.badge() is None and m.favs==set()
-    m.heart(); p=m.panel(); heart=[h for h in m.nodes[p]['children'] if m.nodes[h]['type']=='image'][2]
-    f,ctx=m.handler(heart,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    assert m.panel() is None and m.kept()==[(key_of('B')&~7)|3] and m.badge()=='3'
-    assert m.tap()==11 and m.favs=={'B'} and m.kept()==[] and m.badge() is None; passed()
-    # Kept across boots; the badge follows the playing track on the UI tick.
-    assert m.tap()==11 and m.favs==set(); m.heart(); m.call(O['KEY_NEXT']); m.call(O['KEY_NEXT']); m.call(O['KEY_CENTER'])
-    m2=RateMachine(m.files['/mnt/data/ringnav-ratings']); assert m2.badge()=='2'
-    m2.word(O['MCL_POS'],0); m2.advance(500); assert m2.badge() is None; passed()
-    # Hold Play/Pause on Now Playing: Rate last, with the hearts, and no Next/Previous album outside Shuffle Albums/Folders; its row opens the same picker.
-    m2.word(O['MCL_POS'],1); m2.handlers[syms['navigator_to']]='q:navigator_to'; m2.press(100)
-    assert m2.hold()==11 and m2.labels()[-2:]==['Group by: Album','Rate  ♥♥♡♡♡'] and m2.release()==0
-    m2.pick(len(m2.labels())-1); m2.advance(0); m2.top=m2.np; assert m2.caption()=='2 of 5' and m2.call(O['KEY_RETURN'])==11; passed()
-else:
-    not_ported("Ratings: Now Playing's heart binding (V1.32 img_fav handler)")
+m=RateMachine()
+# Bound: stock's click off the heart, the payload's click and press on, the badge hidden; nothing read yet beyond the file.
+assert ('widget_off_by_func',m.fav,O['EVT_CLICK'],FAV_CLICK) in m.calls and m.badge() is None and m.panel() is None
+assert [t for t,f,ctx in m.nodes[m.fav]['handlers']]==[O['EVT_CLICK'],O['EVT_POINTER_DOWN']]; passed()
+# A tap is stock's heart: B (playing) into My Fav, nothing kept; again, out.
+assert m.tap()==11 and m.favs=={'B'} and m.lit() and m.kept()==[]
+assert m.tap()==11 and m.favs==set(); passed()
+# A press shorter than the hold, then its click: still the tap.
+m.heart(O['RATE_HOLD_MS']-1); assert m.panel() is None and m.tap(press=False)==11 and m.favs=={'B'}; passed()
+# A hold opens the picker on 5 (My Fav); its release's click does nothing.
+m.heart(); assert m.hearts()==[HEART_ON]*5 and m.caption()=='5 of 5'
+assert m.tap(press=False)==11 and m.favs=={'B'}; passed()
+# The wheel moves the rating within 0-5; Return leaves it as it was.
+m.top=m.np
+for k,want in ((O['KEY_NEXT'],5),(O['KEY_PREV'],4),(O['KEY_PREV'],3)): assert m.call(k)==11
+assert m.hearts()==[HEART_ON]*3+[HEART_OFF]*2 and m.caption()=='3 of 5' and m.favs=={'B'}
+assert m.call(O['KEY_RETURN'])==11 and m.panel() is None and m.favs=={'B'} and m.kept()==[]; passed()
+# Centre saves 3: My Fav out through stock's own click, 3 kept, the badge on the empty heart.
+m.heart()
+for _ in range(2): m.call(O['KEY_PREV'])
+assert m.call(O['KEY_CENTER'])==11 and m.panel() is None and m.favs==set()
+assert m.kept()==[(key_of('B')&~7)|3] and m.badge()=='3'; passed()
+# Down to 0 clears it; a tap on the third heart saves 3 again; a tap on the heart (into My Fav) leaves nothing kept.
+m.heart()
+for _ in range(4): m.call(O['KEY_PREV'])
+assert m.caption()=='Unrated' and m.hearts()==[HEART_OFF]*5
+m.call(O['KEY_CENTER']); assert m.kept()==[] and m.badge() is None and m.favs==set()
+m.heart(); p=m.panel(); heart=[h for h in m.nodes[p]['children'] if m.nodes[h]['type']=='image'][2]
+f,ctx=m.handler(heart,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+assert m.panel() is None and m.kept()==[(key_of('B')&~7)|3] and m.badge()=='3'
+assert m.tap()==11 and m.favs=={'B'} and m.kept()==[] and m.badge() is None; passed()
+# Kept across boots; the badge follows the playing track on the UI tick.
+assert m.tap()==11 and m.favs==set(); m.heart(); m.call(O['KEY_NEXT']); m.call(O['KEY_NEXT']); m.call(O['KEY_CENTER'])
+m2=RateMachine(m.files['/mnt/data/ringnav-ratings']); assert m2.badge()=='2'
+m2.word(O['MCL_POS'],0); m2.advance(500); assert m2.badge() is None; passed()
+# Hold Play/Pause on Now Playing: Rate last, with the hearts, and no Next/Previous album outside Shuffle Albums/Folders; its row opens the same picker.
+m2.word(O['MCL_POS'],1); m2.handlers[syms['navigator_to']]='q:navigator_to'; m2.press(100)
+assert m2.hold()==11 and m2.labels()[-2:]==['Group by: Album','Rate  ♥♥♡♡♡'] and m2.release()==0
+m2.pick(len(m2.labels())-1); m2.advance(0); m2.top=m2.np; assert m2.caption()=='2 of 5' and m2.call(O['KEY_RETURN'])==11; passed()
 # Ratings: Top Rated (4-5), Loved (5), All Rated and Disliked (1), most hearts first, then title order.
 m=RateMachine(b''.join(struct.pack('<I',(key_of(n)&~7)|h) for n,h in (('A',1),('C',4),('E',2))).ljust(4*O['RATE_SLOTS'],b'\0'))
 m.found=[m.song(n) for n in ('A','B','C','D','E')]; m.fav_songs=[m.song('D')]

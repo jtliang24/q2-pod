@@ -4551,9 +4551,7 @@ static int most_played(void *ctx, void *event) {
 /* Albums keep 1 to 5 hearts apart from their songs, by coverflow.c's album_id: 5 is the album's
  * favourite, there being no stock one. */
 #define ALBUM_RATINGS_FILE "/mnt/data/ringnav-album-ratings"
-/* Now Playing's heart click (playing_page_init binds it to img_fav with the window): stock's My
- * Fav toggled for the playing track (manage_myfav), and the heart's image with it. */
-#define FAV_CLICK ((int (*)(void *, void *))0x52b154)
+#define FAV_CLICK ((int (*)(void *, void *))FAV_CLICK_ADDR) /* Now Playing's heart (offsets.inc) */
 
 /* The songs' table, or with album the albums'. */
 static int rate_io(int album, int write) {
@@ -4622,7 +4620,11 @@ static void rate_badge(void) {
     if (!st.rate_badge) return;
     void *r = rate_track();
     int n = r ? rate_kept(0, listen_key(r)) : 0;
-    if (n && !tk_strcmp(widget_get_prop_str(st.rate_fav, "image", ""), "play_fav")) n = 0;
+#if M1PLUS
+    if (n && !tk_strcmp(widget_get_prop_str(st.rate_fav, "style", ""), STYLE_FAV)) n = 0;
+#else
+    if (n && !tk_strcmp(widget_get_prop_str(st.rate_fav, "image", ""), ICON_FAV)) n = 0;
+#endif
     char s[4] = { (char)('0' + n) };
     widget_set_text_utf8(st.rate_badge, s);
     widget_set_visible(st.rate_badge, n != 0, 0);
@@ -4669,7 +4671,7 @@ static void rate_paint(void) {
     char t[24] = "Unrated";
     for (int i = 0; i < 5; i++)
         image_base_set_image(widget_get_child(panel, (unsigned)i + 1),
-                             i < st.rate_pick ? "play_fav" : "play_unfav");
+                             i < st.rate_pick ? ICON_FAV : ICON_UNFAV);
     if (st.rate_pick) tk_snprintf(t, sizeof t, "%d of 5", st.rate_pick);
     widget_set_text_utf8(widget_get_child(panel, 0), t);
 }
@@ -4696,11 +4698,13 @@ static void rate_close(int save) {
     }
     void *r = save ? rate_track() : (void *)0;
     if (!r) return;
-#if M1PLUS /* V2.1's Now Playing has no img_fav click to replay: My Fav stays as it is */
-    if (!rate_saved(rate_keep(0, listen_key(r), n), (void *)0)) return;
-#else
     int fav = checkFavExist(r) != 0;
     if (!rate_saved(rate_keep(0, listen_key(r), n), (void *)0)) return;
+#if M1PLUS /* V2.1's click takes the heart from the event */
+    void *click[8] = { (void *)EVT_CLICK };
+    click[EVENT_TARGET / 4] = st.rate_fav;
+    if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, click);
+#else
     if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, (void *)0);
 #endif
     rate_badge();
@@ -4785,11 +4789,7 @@ static int rate_gone(void *win, void *event) {
 /* Now Playing's heart (both builds' playing_page_init): stock's click is swapped for one that
  * tells a hold from a tap, and the badge sits on the heart's top right. */
 static void rate_bind(void *win) {
-#if M1PLUS /* FAV_CLICK is V1.32's; V2.1's Now Playing has no img_fav */
-    (void)win;
-    return;
-#endif
-    void *fav = widget_lookup(win, "img_fav", 1), *emitter = fav ? P(fav, W_EMITTER) : (void *)0;
+    void *fav = widget_lookup(win, VIEW_FAV, 1), *emitter = fav ? P(fav, W_EMITTER) : (void *)0;
     stop_timer(&st.rate_tick);
     stop_timer(&st.rate_hold);
     st.rate_ctx = (void *)0;

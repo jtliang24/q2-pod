@@ -516,6 +516,21 @@ static inline int arc_out(int r, int y) {
  * Now Playing's heart RATE_HOLD_MS opens the picker. */
 #define RATE_SLOTS 4096
 #define RATE_HOLD_MS 500
+/* Now Playing's heart and its stock click, which toggles My Fav for the playing track (manage_myfav)
+ * and the heart with it; playing_page_init binds it with the window. */
+#if M1PLUS /* the button btn_fav, lit by its style: the init's visit (0x53b190) binds 0x53b480, which
+            * takes the button from the event's target */
+#define VIEW_FAV "btn_fav"
+#define FAV_CLICK_ADDR 0x53b480
+#define STYLE_FAV "btn_imgfav_style"
+#define ICON_FAV "p_fav"
+#define ICON_UNFAV "p_unfav"
+#else /* the image img_fav */
+#define VIEW_FAV "img_fav"
+#define FAV_CLICK_ADDR 0x52b154
+#define ICON_FAV "play_fav"
+#define ICON_UNFAV "play_unfav"
+#endif
 /* M1 Plus: a press held still this long on a library row opens its hold menu (ringnav_input). */
 #define LONG_PRESS_MS 500
 /* Long Songs (docs/internals.md#long-songs): songs longer than this. */
