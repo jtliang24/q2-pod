@@ -8685,10 +8685,10 @@ assert wake(DOWN,O['KEY_PLAY'],gap=1000) and wake(UP,O['KEY_PLAY']) and wake(UP,
 m.byte(syms['g_backlight_status'],1); assert wake(DOWN,gap=1000) and wake(UP) and all(wake(t,RET,gap=1000) for t in (DOWN,LONG,UP)); passed()
 # Standby's resume (STANDBY_WAKE, device_standby's awake_screen) stays dark in both modes, so the
 # resuming key acts as dark (#27); a wake press clears stock's resume guard, which would drop its release.
-if 'STANDBY_WAKE' in SITES:
+# Q2 only: it goes with Wake's Double Press. M1 Plus keeps V2.1's own wake from Standby, which a screen
+# tap (Tap the Screen to Activate) can also make.
+if not is_m1plus:
     site_patched('STANDBY_WAKE')
-else:
-    not_ported('Standby resume stays dark (STANDBY_WAKE not patched in V2.1)')
 if not is_m1plus:
     m.byte(syms['g_backlight_status'],0)
     m.byte(O['BOOT_KEY_GUARD'],1); assert not wake(DOWN,gap=1000) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\1'
