@@ -290,7 +290,7 @@ class Machine:
         if name=='memcpy': self.u.mem_write(a,bytes(self.u.mem_read(b,c))); ret=a
         elif name=='memset': self.u.mem_write(a,bytes([b&255])*c); ret=a
         elif name in ('table_row_create', 'list_item_create', 'button_create', 'image_create', 'view_create',
-                       'hscroll_label_create', 'gif_image_create', 'label_create'):
+                       'hscroll_label_create', 'gif_image_create', 'label_create', 'scroll_view_create'):
             kind = {'gif_image_create': 'gif'}.get(name, name.removesuffix('_create'))
             ret = self.node(kind)
             for off, value in zip((O['W_X'], O['W_Y'], O['W_W'], O['W_H']),
@@ -301,7 +301,11 @@ class Machine:
         elif name=='widget_factory_create_widget':
             ret=self.node(self.text(b)); self.word(ret+O['W_PARENT'],c); self.nodes[c]['children'].append(ret)
             for off,value in zip(('W_X','W_Y','W_W','W_H'),(d,self.get(u.reg_read(UC_MIPS_REG_SP)+16),self.get(u.reg_read(UC_MIPS_REG_SP)+20),self.get(u.reg_read(UC_MIPS_REG_SP)+24))): self.word(ret+O[off],value)
-        elif name=='widget_set_name': n['name']=self.text(b); ret=0
+        elif name=='widget_set_name':
+            n['name']=self.text(b); ret=0
+            if is_m1plus: self.word(a+0x10,self.string(n['name']))  # widget_t name, which V2.1's visits read
+        elif name=='widget_remove_child': n['children'].remove(b); ret=0  # not destroyed
+        elif name=='widget_add_child': n['children'].append(b); self.word(b+O['W_PARENT'],a); ret=0
         elif name=='widget_set_enable': n['enable']=b; ret=0
         elif name=='widget_on': n.setdefault('handlers',[]).append((b,c,d)); ret=len(n['handlers'])
         elif name=='widget_to_local':
@@ -336,6 +340,7 @@ class Machine:
             assert a==3 and self.text(b)=='/mnt/mmc/.rockbox/rockbox'
             self.word(c+20,self.rockbox_mode); ret=0 if self.rockbox_mode else -1
         elif name=='strlen@GLIBC_2.0': ret=len(self.text(a).encode())
+        elif name=='strcpy@GLIBC_2.0': self.u.mem_write(a,self.text(b).encode()+b'\0'); ret=a
         elif name=='strrchr@GLIBC_2.0': i=self.text(a).encode().rfind(bytes([b&255])); ret=a+i if i>=0 else 0
         elif name=='memcmp@GLIBC_2.0': x,y=bytes(u.mem_read(a,c)),bytes(u.mem_read(b,c)); ret=(x>y)-(x<y)
         elif name in ('strcasecmp@GLIBC_2.0','strncasecmp@GLIBC_2.0'):  # ASCII case, as the C locale
@@ -8876,6 +8881,10 @@ class LockMachine(QueueMachine):
     def hook(self,u,address,size,unused):
         if self.handlers.get(address)=='stock_saverlist' and self.reset:
             self.u.mem_write(syms['g_screensaver_picture'],b'screensaver_default\0')
+        if self.handlers.get(address)=='widget_get_window':  # up the parents to the window
+            w=u.reg_read(REGS[0]); self.calls.append(('widget_get_window',w,0,0))
+            while w and self.nodes.get(w,{}).get('type')!='window': w=self.get(w+O['W_PARENT'])
+            u.reg_write(UC_MIPS_REG_V0,w); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
         return super().hook(u,address,size,unused)
 def lock_machine(picture='screensaver_default',config={}):
     m=LockMachine(); m.config.update(config); m.restack=True
@@ -8922,7 +8931,46 @@ if not is_m1plus:
     assert clock_click()==[(0,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Standard'; passed()
     m,_,_,label,_=lock_page({'LOCKCLOCK':'1'}); assert m.nodes[label]['text']=='Clock: Large'; passed()
 else:
-    not_ported('Lock screen Clock row and built-in thumbnails (screensaver_rows not hooked in V2.1)')
+    # V2.1's page from its asset, built by V2.1's own init and visit (its grid: each picture's image
+    # and check, the first six's clicks), which the hook follows: a scroll view over view_covers
+    # holds the grid, three to a row, then Time show, Clock (Time show's icon, Standard unless Q2POD
+    # LOCKCLOCK is 1) and About. The built-ins lose V2.1's file:// image; pictures past the sixth
+    # run V2.1's own pick.
+    def lock_page(config={}):
+        m=lock_machine(config=config)
+        m.word(syms['p_deque_screensaverlist'],m.deque([m.string(n) for n in ['screensaver_default',*cards]],'char*'))
+        m.top=m.v21_page('systemset/screensaver_page'); m.nodes[m.wm]={'children':[m.top]}
+        m.mock('scroll_view_create','widget_remove_child','widget_add_child','image_base_set_clickable',
+               'widget_load_image','widget_unload_image','strcpy@GLIBC_2.0')
+        m.handlers.pop(syms['saver_pick'])  # V2.1's pick runs, from its clicks and the hook's
+        m.v21_init(HOOKS['systemset_screensaver_page_init'][0],m.top)
+        covers=named(m,m.top,'view_covers'); view=named(m,m.top,'saver_list')
+        return m,covers,view
+    m,covers,view=lock_page()
+    pictures=['screensaver_default',*WALLS,*cards]
+    assert m.nodes[covers]['children']==[view] and m.nodes[view]['type']=='scroll_view'
+    box=lambda w:tuple(signed(m.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H'))
+    thumbs=[named(m,view,f'imgcover{i}') for i in range(len(pictures))]
+    assert [box(t) for t in thumbs]==[(12+i%3*103,i//3*143,90,135) for i in range(len(pictures))]
+    assert [m.nodes[t]['image'] for t in thumbs]==[p if p=='screensaver_default' else '' if p in WALLS else 'file://'+p for p in pictures]
+    time,about=named(m,view,'listitem_time'),named(m,view,'listitem_about')
+    clock=m.nodes[view]['children'][-1]; label=m.nodes[clock]['children'][-1]
+    assert [box(r) for r in (time,clock,about)]==[(0,y,320,54) for y in (431,489,547)] and m.nodes[view]['virtual_h']==601
+    assert m.nodes[m.nodes[clock]['children'][0]]['image']=='screensaver_timeshow' and m.nodes[label]['text']=='Clock: Standard'
+    def clock_click():
+        m.calls=[]; f,ctx=m.handler(clock,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+        return [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
+    assert clock_click()==[(1,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Large'
+    assert clock_click()==[(0,'Q2POD','LOCKCLOCK')] and m.nodes[label]['text']=='Clock: Standard'; passed()
+    # Every picture picks, by V2.1's own pick: the first six by V2.1's clicks, the rest by the hook's.
+    for i in (8,3,7,0):
+        m.calls=[]; f,ctx=m.handler(thumbs[i],O['EVT_CLICK']); m.word(m.event+O['EVENT_TARGET'],thumbs[i])
+        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.text(syms['g_screensaver_picture'])==pictures[i]
+        assert [(m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='toolsWriteConfig']==[('SYSSET','SCREENSAVERPATH')]
+        assert [m.nodes[named(m,t,f'img_choice{j}')]['image'] for j,t in enumerate(thumbs)]==['screensaver_selected' if j==i else 'screensaver_unselect' for j in range(len(thumbs))]
+    passed()
+    m,_,view=lock_page({'LOCKCLOCK':'1'}); clock=m.nodes[view]['children'][-1]
+    assert m.nodes[m.nodes[clock]['children'][-1]]['text']=='Clock: Large'; passed()
 # The lock window: a built-in drops stock's picture name (the wallpaper paints over it); Large lays
 # the date, battery and time out across the top; Standard and card pictures stay stock's.
 # V2.1's window (its asset) has a digit clock and date, and a battery icon with a level bar; the

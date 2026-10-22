@@ -250,6 +250,14 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('knob_home', BACK, 5, ('not', 'crossfade_back')),
                 ('knob_sysset', tap(82, 318) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('as', 'sysset')),
                 ('display', tap(160, 302), 4, ('not', 'knob_sysset')),
+                # Lock screen: switched on, V2.1's grid shows its pictures, the built-ins drawn, in
+                # the payload's scroll view; scrolled to its end, Time show, Clock and About. Switched
+                # off again, then the back button returns to Display.
+                ('lockscreen', tap(160, 238), 4, ('not', 'display')),
+                ('lockscreen_on', tap(221, 53), 4, ('not', 'lockscreen')),
+                ('lockscreen_end', DOWN_LIST, 4, ('not', 'lockscreen_on')),
+                ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
+                ('lockscreen_back', BACK, 4, ('as', 'display')),
                 ('knob_row', tap(160, 430), 3, ('as', 'display', (30, 398), (398, 462))),  # Knob: Navigation
                 ('display_back', BACK, 4, ('as', 'knob_sysset')),
                 ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),

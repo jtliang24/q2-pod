@@ -644,6 +644,11 @@ FUNCTIONS = {
  'widget_unload_image': ('int', 'void *, void *'),
  'list_view_create': ('void *', 'void *, int, int, int, int'),
  'scroll_view_create': ('void *', 'void *, int, int, int, int'),
+ 'widget_add_child': ('int', 'void *, void *'),
+ 'widget_remove_child': ('int', 'void *, void *'),  # out of its parent, not destroyed
+ 'widget_get_window': ('void *', 'void *'),
+ # V2.1's Lock screen page: its pick of picture index (lockscreen.c lockscreen_page)
+ 'saver_pick': ('int', 'void *, int'),
  'navigator_back': ('int', 'void'),
  'write_int_config': ('int', 'int, const char *, const char *'),
  # V2.1's Play mode page's other two calls (0x49fc88): the M1 Plus's config_playmode (patch/peq.h)
@@ -811,6 +816,9 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'album_row': 0x4e93c8,  # getAllAlbum's toolsQueryDbTable callback (0x4ea458): a record to tools_pdeq_directory
     'gif_image_create': 0x5fb69c,
     'mcl_shuffle_pick': 0x5d03b0,  # mclNextSong's and mclPrevSong's shuffle pick (SHUFFLE_CALL)
+    # The Lock screen page's pick (systemset_screensaver_page_init's visit binds the first six
+    # pictures' clicks to it): the picture's index into pdeq_screensaverlist, saved and checked
+    'saver_pick': 0x4ab52c,
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
 }
 M1PLUS_FUNCTION_ALIASES = {
@@ -861,6 +869,8 @@ M1PLUS_HOOKS = {
     'on_wm_keyup_fun': (0x4cd9ac, 'ringnav', 'keyup'),
     'on_wm_before_tsdown_fun': (0x4cd608, 'ringnav_touch', 'touch'),
     'screensaver_page_init': (0x53fd44, 'lockscreen_init', 'saver'),
+    # The Lock screen page: its picture grid, Time show and About; V2.1 has no rows hook
+    'systemset_screensaver_page_init': (0x4abe04, 'lockscreen_page', 'saverpage'),
     'loadLocalClassList': (0x4ee504, 'ringnav_localclass', 'localclass'),
     'loadAlbumdetailList': (0x4eea98, 'ringnav_album_detail', 'detail'),
     'change_music': (0x4e3cec, 'ringnav_change', 'change'),

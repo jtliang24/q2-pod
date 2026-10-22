@@ -537,6 +537,18 @@ static inline int arc_out(int r, int y) {
 #define VIEW_LOCK_DATE "dclock_date"
 #define VIEW_LOCK_LEVEL "pgbar_battery"
 #define LOCK_CLOCK_Y 60 /* Large's top line: all above the now-playing card at 362 */
+/* The Lock screen page (systemset_screensaver_page_init): view_covers holds V2.1's picture grid,
+ * 90 x 135 pictures three to a row, over its Time show and About rows; its visit binds the first
+ * SAVER_PICTURES pictures' clicks to V2.1's pick (saver_pick). */
+#define VIEW_SAVER_COVERS "view_covers"
+#define VIEW_SAVER_TIME "listitem_time"
+#define VIEW_SAVER_ABOUT "listitem_about"
+#define ICON_SAVER_CLOCK "screensaver_timeshow" /* Time show's own, on the Clock row */
+#define SAVER_PICTURES 6
+#define SAVER_X 12
+#define SAVER_COL 103
+#define SAVER_ROW 143
+#define SAVER_ITEM 58 /* Time show to About */
 #else
 #define VIEW_LOCK_TIME "clock_time"
 #define VIEW_LOCK_DATE "clock_date"
