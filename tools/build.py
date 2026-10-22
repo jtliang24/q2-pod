@@ -285,7 +285,11 @@ CALL_SITES = {
         'COVER_DONE': ((0x4edd9c, 0x8f99b6d4, 0x27a61688), (0x4edda0, 0x0411ff44, 'ringnav_cover_done'),
                        (0x4eeddc, 0x1000fbf0, 0x1000fbef)),
     },
-    'm1plus': {},
+    # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
+    'm1plus': {
+        # mclNextSong's bal to the shuffle pick (0x5d03b0).
+        'SHUFFLE_CALL': ((0x5d5a28, 0x0411ea61, 'ringnav_shuffle'),),
+    },
 }
 CALL_SITE_PURPOSES = {
     'BOOT_MODE_CALL': 'config_init preserves the saved queue when applying the boot play mode',
@@ -796,6 +800,7 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'folder_refresh': 0x5318ac,  # folder_page_init's (0x53354c): navbar and table from pdeq_showlist
     'album_row': 0x4e93c8,  # getAllAlbum's toolsQueryDbTable callback (0x4ea458): a record to tools_pdeq_directory
     'gif_image_create': 0x5fb69c,
+    'mcl_shuffle_pick': 0x5d03b0,  # mclNextSong's and mclPrevSong's shuffle pick (SHUFFLE_CALL)
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
 }
 M1PLUS_FUNCTION_ALIASES = {

@@ -5424,9 +5424,8 @@ assert [c[1:3] for c in m.calls if c[0]=='batch_add_file']==[(0xf001,0xf00a)] an
 assert [c[3] for c in m.calls if c[0]=='batch_add_file'][0]!=m.get(syms['p_deque_showlist']); passed()
 m=CoverflowMachine(queue=0,cls=O['CLASS_ALBUMS']); m.open(); m.tracks()
 assert m.run(1)=='Added to Queue' and m.names()==['T1'] and m.mcl('MCL_TYPE')==0xff10 and not m.playback(); passed()
-# Play next from Coverflow's tracks, then stock mclNextSong plays it. On M1 Plus in order (mode 0):
-# Shuffle's pick of it waits for SHUFFLE_CALL, which is NOT PORTED above.
-m=CoverflowMachine(mode=0 if is_m1plus else 2); m.open(); m.tracks(); m.run(0)
+# Play next from Coverflow's tracks, then stock mclNextSong plays it in Shuffle (SHUFFLE_CALL).
+m=CoverflowMachine(mode=2); m.open(); m.tracks(); m.run(0)
 m.call(address=syms['mclNextSong'],args=(0,0,0,0),gap=0)
 assert m.names()==['A','T1','B','C'] and m.mcl('MCL_POS')==1; passed()
 # Return cancels without losing the highlighted song. Changed or closed sources refuse.

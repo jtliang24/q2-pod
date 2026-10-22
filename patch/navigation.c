@@ -5941,7 +5941,6 @@ int ringnav_keylong(void *ctx, void *event) {
     return stock_keylong_trampoline(ctx, event);
 }
 
-#if !M1PLUS /* entered only from V1.32's SHUFFLE_CALL */
 /* Replaces mclNextSong's shuffle pick call: stock picks and bookkeeps, then a pending Play next
  * becomes the next track if it is still at its index. */
 int ringnav_shuffle(int forward) {
@@ -5954,7 +5953,6 @@ int ringnav_shuffle(int forward) {
         MCL(MCL_POS) = (int)at;
     return result;
 }
-#endif
 
 /* Replaces the name comparators' toolsTrimLeft calls (SORT_TRIMS): each trims its own copy of a
  * name, which then sorts without its article. */
