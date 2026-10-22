@@ -1176,6 +1176,26 @@ They are also `M1PLUS_PRIVATE_FUNCTIONS`, so `ringnav_preload`'s own open goes t
 longer `NOT PORTED`. To hear on the device: with Gapless on, a gapless album in Shuffle Albums plays
 through without a gap.
 
+## 34. Resume on connect (Oct 22)
+
+Q2 Pod's Bluetooth row, **Resume on Connect** (off by default), keeps a paused queue paused when a
+headphone connects, where stock restarts it unpaused. On M1 neither part was ported:
+- **The restart.** V2.1's `checkBluetoothStatus` restarts the queue with `bal save_start_player` at
+  `0x4d6320`, `a0 = 0`, where V1.32's has a `jalr`. `BT_CONNECT_START` makes it
+  `jal ringnav_bt_connect_start`.
+- **The row.** V2.1's list builder (`0x4a3734`, unnamed) is new code: five callers, 64 px rows in
+  V1.32's order (switch, name, Quality, Bluetooth Headset Volume Control, search, then the devices).
+  It is hooked as `btmenu_rows` with the Q2's `ringnav_btrows`, so the row goes fifth with Bluetooth
+  on. V2.1 calls the builder with any widget of the page, usually the clicked row, so on M1 the hook
+  finds the window first (`widget_get_window`). The row's height is `offsets.inc`'s `BT_ROW_H`.
+- **The tests.** The row test runs on M1, with V2.1's label offset and row height, and once more
+  with a row passed to the builder. The harness's `widget_get_window` now walks up to the window
+  for every `QueueMachine`, and its settings page sets its views' parents.
+
+`test/patch.py` on M1 passes 1002 scenarios, with 10 `NOT PORTED` lines. Q2's `update.tar` files are
+byte-identical. To try on the device: with a Bluetooth headphone, pause, disconnect and reconnect it,
+and the queue stays paused with the row off and plays with it on.
+
 ## How to check a build now
 
 ```sh
