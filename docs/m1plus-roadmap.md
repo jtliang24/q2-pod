@@ -100,7 +100,8 @@ Done: the boot queue bug the check found. A reboot no longer deletes the saved a
 Shuffle's Play next and history, the page cache, the 65,000-song scan, the article-free sort and M4B in
 folder scans (section 26). The Ratings hold on Now Playing's heart (section 27). The Lock screen page's
 Clock row and built-in thumbnails, and the Large clock on V2.1's lock window (section 28). The cover
-worker's pause and stale completion (section 30).
+worker's pause and stale completion (section 30). The hold menu's row selection, and the Now Playing hold's
+Add to Playlist guard (section 31).
 
 Every row was checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). "Same code" means V2.1's function is V1.32's after normalising addresses. Ordered by
@@ -108,7 +109,6 @@ value and effort:
 
 | Feature | V2.1 site | Notes | Size |
 |---|---|---|---|
-| Now Playing hold's Add to Playlist when the queue changed | V2.1's playlist pick handler, still to find | M1 already selects the row (`qm_select`). Only the stale-queue guard is missing. `playlist_rebuild` is iPod only | S |
 
 These need hardware, a setting or a library to check on the device, so they come last:
 

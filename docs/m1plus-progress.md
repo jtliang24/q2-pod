@@ -1124,6 +1124,29 @@ keys, then V2.1's readiness check and small-cover request queue. With V2.1's wor
 job marks the new row ready, and the scroll start pauses the worker. `test/patch.py` on M1 passes 994
 scenarios. Q2's `update.tar` files are byte-identical.
 
+## 31. The hold menu's selection and the Add to Playlist guard (Oct 22)
+
+The roadmap said M1 already selected the held row for Add to Playlist (`qm_select`). It didn't:
+- **The selection.** `qm_select` puts the row alone in the batch record, which `batch_add_file`
+  reads. V1.32's calls are `batch_init_selectrecord` and `batch_set_selectitem`. V2.1 has neither
+  name, so `peq.h`'s stubs made `qm_select` a no-op on M1. V2.1 renamed them: `select_recordinit`
+  (`0x4da3b0`, the vector cleared and `n` zeros pushed) and `set_selectindex` (`0x4da434`, one
+  index toggled), both on `pvec_selectrecord`, as V1.32's on `p_vector_select_record`. V2.1's
+  `batch_add_file` adds only the entries the vector flags. So on M1 the hold menu's Add to
+  Favourites and Add to Playlist added nothing, or a leftover multi-selection. Both are now
+  `M1PLUS_FUNCTION_ALIASES`. Five `test/patch.py` checks had encoded the empty selection on M1;
+  they now expect the Q2's.
+- **The guard.** Opened from Now Playing's hold, the playlist page adds the queue's selected record
+  in add mode 2. If the queue changed while the page was open, the Q2 refuses ("Queue unchanged")
+  rather than add another song. V2.1's row click is `0x53d300`, which its row builder (`0x53e74c`)
+  binds with the row. It is V1.32's `0x4b1d24` in role: in mode 2 it calls `batch_add_file` on
+  `mcl_pdeqplaylist`. `offsets.inc` names it per model (`PLAYLIST_PICK_ADDR`), and
+  `qm_playlist_bind` swaps it on M1 too. The guard test runs on both models. The V1.32 rows builder
+  tests stay Q2 only: V2.1's builder isn't hooked, as Legacy's isn't.
+
+`test/patch.py` on M1 passes 996 scenarios, with 13 `NOT PORTED` lines. Q2's `update.tar` files are
+byte-identical.
+
 ## How to check a build now
 
 ```sh
