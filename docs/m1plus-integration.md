@@ -257,6 +257,6 @@ On a difference, `q2compare.py` names the differing `manifest.json` components a
 that moved; `--keep <scratch>` keeps this tree's snapshot and builds to look into. Without `--suites` it
 only compares, in about a minute once the base is built.
 
-`test/patch.py` ends with its scenario count, which must match or exceed the base's on Q2: 1016 (Legacy) and
-1397 (iPod) at `c0a2d6b`. When a suite's exit status is captured in a script, read `$?` straight after the
+`test/patch.py` ends with its scenario count, which must match or exceed the base's on Q2: 1029 (Legacy) and
+1410 (iPod) at `1.2.2`. When a suite's exit status is captured in a script, read `$?` straight after the
 command, never after a `$(…)` in the same line: the substitution resets it.

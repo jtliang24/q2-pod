@@ -1338,6 +1338,46 @@ user flashed it with the TF card update: the updater took `V1221` over `V00Ks`, 
 passed. It is not uploaded: it carries 1.2.2, which upstream has moved past, so the first published M1
 release is the first after the 1.3.9 sync (U3), 1.3.9-m1.1.
 
+## 39. U2: the sync tooling, and a pilot sync to upstream 1.2.2 (Oct 23)
+
+Roadmap U2: the tools a sync runs, then one small sync by them before 1.3.9's ~150 conflict hunks
+(U3). The branch had forked at `c0a2d6b`, 13 commits before upstream's `1.2.2` tag (`87e2417`), so the
+pilot merged those.
+
+| Commit | Change | Why |
+|---|---|---|
+| `579f9a4` | `UPSTREAM_BASE`, `test/q2compare.py` | The Q2 byte check as one command: it builds the base from `git archive` (kept in `work/q2compare/`) and a snapshot of this tree, from the vendor ZIP, the only input upstream's trees take. On a difference it names the manifest components and the first patch symbol that moved. `--suites` runs the base's suites, failing on one it doesn't know or the tree dropped. |
+| `d34c0d4` | `test/m1plus/ports.py`, `M1PLUS_PORTS`, `M1_UNPORTED` | The port report. A Q2 hook is ported when the M1 hooks it by name or by the same payload symbol, which covers V2.1's renames. Every other hook and site needs a row saying why: ported another way, native, Q2 only or unported. A name without an M1 value is used only by Q2 code, which the M1 compile proves. It found two unported hooks no doc listed: `player_play_pause` (`headset_manual`) and `folder_load_top` (OTG). |
+| `c2a3e47` | The checklist, runbook and roadmap use them | |
+| `facecdf` | Merge upstream 1.2.2 | No conflicts. `test/playback.py` is upstream's text again, since 1.2.2 has the same label pick. |
+| `24897cc` | Every Q2 hook's trampoline stubbed on M1 | 1.2.2's `toolsGetMusicInfo` failed the M1 link (`stock_music_info_trampoline`). The stubs came from a hand-kept list; now they come from `HOOKS \| IPOD_HOOKS`, so the port report, not the linker, is where a new hook is decided. |
+| `92f7282` | 1.2.2's shared C on M1 | `REC_TIDAL_ID` and `MUSIC_INFO_ALBUM_ARTIST` are `M1_UNPORTED`: their code can't run on M1. On M1 `tidal_start` passes no song id, and `toolsGetMusicInfo` isn't hooked. V2.1's `get_tidal_trackurl` (`0x512ed0`) gives its URL thread (`0x51c288`) the whole queue row, not V1.32's id at `+4`. The new `tidal_downloads` page is named from `m1plus_nav_library.c`, so `-Wunused-function` passes without a seam in `navigation.c`. |
+| `77293b8` | 1.2.2's new test cases in `test/m1plus/patch.py` | The M1's copy doesn't take upstream's cases by itself. 13 of the 17 hunks of `git diff c0a2d6b 1.2.2 -- test/patch.py` applied with `patch`. The other four needed the M1's paths: Streaming rows by name, Spotify's new `Loading…`, `np_views` for the back button, and the FLAC case only where the hook is. |
+
+Results:
+- `test/q2compare.py 1.2.2 --suites`: Legacy `f617fb2a…` and iPod `16cc5ed1…` are byte-identical to
+  1.2.2's build, and its 21 suite runs pass. `test/patch.py` passes 1029 and 1410 scenarios, 1.2.2's
+  own.
+- Against `c0a2d6b` before the merge, the compare reproduced U0's hand compare (`8190e0c8…`,
+  `48784f86…`). A one-byte change to a shared string, in a scratch worktree, failed it with
+  `patch_sha256` named.
+- The M1: `build --build`, `patch` (1016 scenarios, 9 not ported), `boot`, `playback`, `id3`, `m4b`,
+  `headset_io`, `ldac` and `bluealsa` pass.
+- `test/m1plus/ports.py`: 60 hooks, 18 sites and 432 names, each classified. NOT PORTED:
+  `player_play_pause`, `folder_load_top`, `toolsGetMusicInfo`, `NP_INFO_CALL`, `REC_TIDAL_ID` and
+  `MUSIC_INFO_ALBUM_ARTIST` (roadmap U4).
+- Footprint over 1.2.2's files: +1,416/−278 over 30, from +1,417/−279 over 31.
+
+What the runbook needed ([m1plus-sync.md](m1plus-sync.md)):
+- **The M1 follow-ups are commits after the merge commit.** The merge takes upstream's tree, so the M1
+  build may fail at it.
+- **An upstream static function that only Q2 code calls** fails the M1 compile as unused. Name it in the
+  M1 file that stands in for its caller, rather than adding a seam.
+- **Upstream's new test cases:** apply `git diff <old base> <tag> -- test/<suite>.py` to its
+  `test/m1plus/` copy with `patch -p1`, then port the rejects.
+- **Edit nothing between an M1 build and its gates.** They check the build's `source_sha256` against
+  the tree, and a table edit made after the build fails all of them.
+
 ## How to check a build now
 
 ```sh

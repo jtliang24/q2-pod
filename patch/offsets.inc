@@ -194,14 +194,16 @@ static inline int arc_out(int r, int y) {
 #define HOME_DOT_GAP 8
 /* iPod Theme: Classic (IPOD/THEME 1, docs/ipod.md#display-settings) puts the pre-1.0.1 look back
  * over the Minimal assets at runtime. In Home's Full the rows end at HOME_CLASSIC_ROW, so the
- * chevron's glyph (x 20 to 31 of list_into) moves 6px right of its old column. Labels start at
- * HOME_CLASSIC_TEXT_X and end 16px before the glyph. The status bar is BAR_CLASSIC and the progress bar an NP_BAR_CLASSIC capsule
+ * chevron's glyph (x 20 to 30 of list_into) sits close to the panel edge without touching the
+ * glass on the bottom row. Labels start at HOME_CLASSIC_TEXT_X and leave room for the glyph.
+ * The status bar is BAR_CLASSIC and the progress bar an NP_BAR_CLASSIC capsule
  * (Minimal's NP_BAR_MINIMAL line). Minimal has no accent: its fills are MINIMAL_FILL, its
  * settings icons grey and list_into MINIMAL_CHEVRON. */
 #define HOME_SPLIT_W 187
 #define HOME_CLASSIC_ROW 369
 #define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
-#define HOME_CHEVRON_SHIFT 6
+#define HOME_CHEVRON_SHIFT 15
+#define HOME_FULL_CHEVRON_SHIFT 10
 #define HOME_CLASSIC_TEXT_X 33
 #define HOME_CLASSIC_LABEL_END (CHEVRON_W - 10)
 #define BAR_CLASSIC 0x242424
@@ -380,6 +382,7 @@ static inline int arc_out(int r, int y) {
 #define INPUT_KEY_TIME 0x08
 /* stSongInfo rows of p_deque_showlist and the mcl queue. */
 #define REC_ID 0x00             /* -1/-2: unknown album/artist */
+#define REC_TIDAL_ID 0x04       /* a Tidal queue row's song id (get_tidal_trackurl 0x48323c) */
 #define REC_NAME 0x08           /* the file name; REC_TITLE is the tag's, empty when untagged */
 #define REC_PATH 0x0c
 #define REC_TITLE 0x10
@@ -395,6 +398,7 @@ static inline int arc_out(int r, int y) {
 #define ID3_ALBUM 0x404
 #define ID3_ARTIST 0x504
 #define ID3_TITLE 0x684
+#define MUSIC_INFO_ALBUM_ARTIST 0x580 /* toolsGetMusicInfo's info (ID3_ALBUM's base): abmartist, the scan's albumsonger */
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */

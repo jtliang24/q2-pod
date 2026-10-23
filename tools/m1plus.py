@@ -210,6 +210,8 @@ M1PLUS_PORTS = {
     'player_play_pause': ('unported', "a manual Play/Pause isn't marked (headset_manual), so a headset's automatic "
                           "resume can undo it; V2.1's play_pause_music is unhooked"),
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
+    'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); "
+                          'MUSIC_INFO_ALBUM_ARTIST is M1_UNPORTED'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -366,14 +368,6 @@ M1PLUS_HOOKS = {
     # The hold menu: its sortselect_dialog opens non-modal, as V1.32's init leaves it
     'dialog_sortselect_dialog_init': (0x47d358, 'qm_sortselect_init', 'sortselect'),
 }
-ALL_TRAMPOLINES = [
-    'dbquery', 'quicksettings', 'keyup', 'touch', 'paint', 'dispatch',
-    'keylong', 'paint_bg', 'playing', 'display', 'bigcover', 'localmusic',
-    'keydown', 'btvol', 'sleep', 'color', 'image', 'about', 'folder',
-    'folder_back', 'folder_top', 'input', 'buzzer', 'localclass',
-    'detail', 'artist', 'power', 'systemset', 'audioset', 'btrows',
-    'playlist', 'stream', 'start_player',
-]
 
 def m1plus_symbols(syms, symbol_table):
     """Resolve V1.32 names against the V2.1 demo: aliases (size-checked), then stubs.
@@ -611,7 +605,10 @@ def compile_payload(out):
     for x, address in resume.items():
         asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', f'lui $gp, {gp >> 16}',
                 f'ori $gp, $gp, {gp & 65535}', f'j 0x{address + 12:x}', 'nop']
-    for x in ALL_TRAMPOLINES:  # a hook V2.1 lacks has no stock code to resume, so its trampoline returns 0
+    # A Q2 hook V2.1 lacks has no stock code to resume, so its trampoline returns 0. Every Q2 hook's
+    # gets one, so a new upstream hook's payload links on M1 before it is ported (M1PLUS_PORTS).
+    from build import HOOKS, IPOD_HOOKS
+    for x in dict.fromkeys(x for _, _, x in (HOOKS | IPOD_HOOKS).values() if x):
         if x not in resume:
             asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', 'jr $ra', 'move $v0, $zero']
     (out/'trampoline.S').write_text('\n'.join(asm)+'\n')

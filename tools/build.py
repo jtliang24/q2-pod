@@ -64,6 +64,8 @@ HOOKS = {
     'buzzeer_switch': (0x4f3cc8, 'ringnav_buzzer', 'buzzer'),
     # Artists (PLAYSET ARTISTTYPE) without a saved choice is Album Artist
     'read_artistype_value': (0x4f4724, 'ringnav_read_artistype', None),
+    # Tag reads: a FLAC's "ALBUM ARTIST" when stock's libtag finds no ALBUMARTIST
+    'toolsGetMusicInfo': (0x5c5f40, 'ringnav_music_info', 'music_info'),
     # Power gains Charge limit and Low power; Audio settings gains Artists (Album Artist)
     'systemset_sysset_page_init': (0x4cc4cc, 'ringnav_systemset', 'systemset'),
     'systemset_display_page_init': (0x4c1d04, 'ringnav_display', 'display'),
@@ -386,6 +388,8 @@ def machine(raw, scratch, load=0):
     load_elf(u, raw, load)
     u.mem_map(scratch, 0x10000)
     return u
+def word(u, address, value): u.mem_write(address, struct.pack('<I', value & 0xffffffff))
+def read(u, address): return struct.unpack('<I', u.mem_read(address, 4))[0]
 def fileoff(b, a):
     for _, (t, o, v, _, f, _, _, _) in segments(b):
         if t == 1 and v <= a < v+f: return o+a-v

@@ -35,7 +35,9 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    ```
 
    Merge the tag; don't rebase. [m1plus-progress.md](m1plus-progress.md) cites the branch's commit
-   hashes, and a merge commit records which release the branch took.
+   hashes, and a merge commit records which release the branch took. The merge commit resolves only
+   conflicts. The M1 follow-ups below are commits after it, so the M1 build may fail at the merge itself
+   (the 1.2.2 pilot's did).
 2. **Resolve conflicts by these rules.**
    - **Upstream's side wins in upstream's files.** Take upstream's text, then put back only the seam
      lines: a hook call or `M1_HOOK(...)`, a target lookup, an `#if !M1PLUS` wrapper. Any other M1 line
@@ -43,7 +45,8 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    - **A new upstream hook or call site** needs nothing for the Q2: `tools/build.py` is upstream's. For
      the M1, it gets V2.1 words in `tools/m1plus.py` (`M1PLUS_HOOKS`, `CALL_SITES['m1plus']`), or a row in
      `M1PLUS_PORTS` saying why not: `native`, `q2only`, or `unported` (a U4 row). The port report fails
-     until it has one or the other.
+     until it has one or the other. Its trampoline is stubbed on M1 by itself, so its payload links
+     either way.
    - **Upstream's other changes to `build()`**, those not at a V1.32 address (a new asset, helper, input
      or packing step): review `git diff <old base> <tag> -- tools/build.py`, and port each into
      `m1plus.build()` or give it a U4 row. The M1's pipeline doesn't take them by itself.
@@ -52,11 +55,16 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
      only for a name whose code can't run on M1, because the hook or site that reaches it is unported.
      The M1 compile fails until each new name has one or the other. A name only Q2 code uses needs
      neither.
+   - **A new upstream static function that only Q2 code calls** fails the M1 compile as unused
+     (`-Werror`). Name it from the M1 file that stands in for its caller, with why, as
+     `m1plus_nav_library.c` names `tidal_downloads`. Don't wrap upstream's function in `#if`.
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
      `test/m1plus/`.
    - **Upstream's new test cases**, conflict or not: review `git diff <old base> <tag> -- test/`. The
-     M1's copies in `test/m1plus/` don't take them. Port each case of shared code the M1 runs into its
-     `test/m1plus/` copy, or mark it with `not_ported`.
+     M1's copies in `test/m1plus/` don't take them. For each suite with a copy, run
+     `git diff <old base> <tag> -- test/<suite>.py | patch -p1 test/m1plus/<suite>.py`, then port the
+     rejected hunks by hand. A case for code the M1 doesn't run goes behind its hook or site
+     (`if 'NAME' in HOOKS`) with a `not_ported` line.
    - **A conflict in a doc** takes upstream's text. The M1 docs are the `m1plus-*.md` files.
 3. **Gates, in order.**
    1. **Q2 output and suites.** `python3 test/q2compare.py <tag> --suites`. Legacy and iPod `update.tar`
@@ -66,7 +74,8 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    2. **Q2 scenario counts.** `test/patch.py`'s counts are at least the tag's own: no case dropped or
       skipped.
    3. **M1 gates.** The V2.1 name check, `test/m1plus/build.py --build`, `test/m1plus/patch.py` and
-      `test/m1plus/boot.py` on a fresh M1 build.
+      `test/m1plus/boot.py` on a fresh M1 build. Edit no source between the build and its gates: they
+      check its `source_sha256` against the tree, and a table edit after the build fails every one.
    4. **Port report.** `python3 test/m1plus/ports.py` passes: every hook, site and name is classified
       (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for U4.
 4. **Record.**
@@ -104,3 +113,4 @@ stay flat or fall.
 | U1b: `offsets.inc` split (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,172/−1,696 over 36 files; `patch/offsets.inc` +5/−0 |
 | U1c: the M1 blocks out of `patch/*.c` (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +4,368/−1,665 over 36 files; `patch/` +671/−226 |
 | After U1 (U1d: the M1 suites in `test/m1plus/`, Oct 23) | 1.2.2 (`c0a2d6b`, through `main`) | +1,417/−279 over 31 files |
+| Pilot sync to 1.2.2 (U2, Oct 23) | 1.2.2 (`87e2417`) | +1,416/−278 over 30 files |

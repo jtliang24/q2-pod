@@ -7,6 +7,7 @@
 #undef select /* the UI selection helper below; headset.c uses libc select */
 extern int stock_dbquery_trampoline(const char *, const char *, void *, int);
 extern int stock_quicksettings_trampoline(void *, void *);
+extern int stock_music_info_trampoline(int, char *, const char *);
 static int library_music __attribute__((section(".scratch")));
 
 /* Restrict the Library's category queries, including Unknown and split albums, before grouping.
@@ -160,7 +161,7 @@ typedef struct {
     int ls_sec, ls_heard, ls_done;
     /* Most Played's page and its tracks: the last ranking plus the songs counted since, kept across
      * opens while the library is at mp_gen (~library_gen once stale). */
-    void *mp_page, *mp_list;
+    void *mp_page, *mp_list, *td_page, *td_list;
     unsigned mp_gen;
     void *sp_page; /* the Library Shuffle menu's page, kept across picks */
     /* Ratings: the songs' 1-4 and albums' 1-5 heart tables (calloc'd on first use); Now Playing's
@@ -1525,10 +1526,11 @@ static void paint_chevrons(void *w, void *canvas) {
     for (int i = 0; i < g_menu.n; ++i) {
         rect_t r = bounds(&g_menu, i);
         if (2 * r.w >= I(w, W_W) && (!home || i == st.sel_row))
-            canvas_draw_icon(canvas, bitmap,
-                             r.x + r.w - CHEVRON_W + (int)bitmap[0] / 2 +
-                                 (home ? HOME_CHEVRON_SHIFT : 0),
-                             home ? st.sel_y : r.y + r.h / 2); /* bitmap_t width @0 */
+            canvas_draw_icon(
+                canvas, bitmap,
+                r.x + r.w - CHEVRON_W + (int)bitmap[0] / 2 +
+                    (home ? (ipod_home_full() ? HOME_FULL_CHEVRON_SHIFT : HOME_CHEVRON_SHIFT) : 0),
+                home ? st.sel_y : r.y + r.h / 2); /* bitmap_t width @0 */
     }
     canvas_set_clip_rect(canvas, &old);
 }
@@ -2028,6 +2030,53 @@ int ringnav_bt_resume(void) {
  * ringnav_bootmode): Artists as stock reads it, PLAYSET ARTISTTYPE, but Album Artist when no choice
  * is saved; stock writes the key only when Artists or the artist page's switch toggles. */
 void ringnav_read_artistype(void) { I(artist_type, 0) = config_or("PLAYSET", "ARTISTTYPE", 2, 1); }
+static unsigned le32(const unsigned char *p) {
+    return p[0] | p[1] << 8 | p[2] << 16 | (unsigned)p[3] << 24;
+}
+/* A FLAC's "ALBUM ARTIST" Vorbis comment (foobar2000's spelling) into out (0x100 bytes); stock's
+ * libtag reads only ALBUMARTIST. ponytail: FLAC only; Ogg/Opus would need page reassembly. */
+static void flac_album_artist(const char *path, char *out) {
+    const char *ext = strrchr(path, '.');
+    if (!ext || strcasecmp(ext, ".flac")) return;
+    void *f = fopen(path, "rb");
+    unsigned char h[4], *b = 0;
+    if (!f) return;
+    if (fread(h, 4, 1, f) == 1 && !memcmp(h, "fLaC", 4))
+        while (fread(h, 4, 1, f) == 1) {
+            unsigned len = (unsigned)h[1] << 16 | h[2] << 8 | h[3];
+            if ((h[0] & 0x7f) != 4) {
+                if (h[0] & 0x80 || fseek(f, (long)len, 1)) break;
+                continue;
+            }
+            if (len < 8 || len > 0x10000 || !(b = calloc(len, 1)) || fread(b, len, 1, f) != 1)
+                break;
+            /* vendor length and string, the comment count, then each comment's length and bytes */
+            unsigned at = le32(b) <= len - 8 ? 8 + le32(b) : len, n = le32(b + at - 4);
+            while (n-- && at <= len - 4) {
+                unsigned c = le32(b + at);
+                at += 4;
+                if (c > len - at) break;
+                if (c > 13 && !strncasecmp((char *)b + at, "ALBUM ARTIST=", 13)) {
+                    c = c - 13 > 0xff ? 0xff : c - 13;
+                    memcpy(out, b + at + 13, c);
+                    out[c] = 0;
+                    break;
+                }
+                at += c;
+            }
+            break;
+        }
+    free(b);
+    fclose(f);
+}
+/* toolsGetMusicInfo (the library scan and the player's tag reads): an empty album artist falls back
+ * to flac_album_artist. */
+int ringnav_music_info(int a, char *info, const char *path) {
+    int r = stock_music_info_trampoline(a, info, path);
+    if (path && !info[MUSIC_INFO_ALBUM_ARTIST])
+        flac_album_artist(path, info + MUSIC_INFO_ALBUM_ARTIST);
+    return r;
+}
 /* checkBluetoothStatus' player_save_start(0) once a headset's A2DP comes up (tools/build.py
  * BT_CONNECT_START): player_save_stop stopped the local or Tidal queue, and stock restarts it
  * unpaused, so a paused queue plays, and a stopped one starts over whatever owns playback
@@ -2261,6 +2310,16 @@ static void bar_sync(void *bar) {
         st.bar_idle = widget_lookup(bar, "label_idle", 1);
         st.bar_state = widget_lookup(bar, "img_state", 1);
         st.bar_eq = widget_lookup(bar, "label_eq", 1);
+    }
+    if (st.bar_state) {
+        int status = media_owner() == 1 ? mclGetPlayStatus() :
+                     video_status() ?: radio_status() ?: spot_status();
+        widget_set_visible(st.bar_state, status == 2 || status == 3, 0);
+        if (status == 2 || status == 3) {
+            const char *icon = status == 2 ? "bar_play" : "bar_pause";
+            if (tk_strcmp(widget_get_prop_str(st.bar_state, "image", ""), icon))
+                image_base_set_image(st.bar_state, icon);
+        }
     }
     if (st.bar_idle && st.bar_state && st.bar_eq)
         widget_set_visible(st.bar_idle,
@@ -4263,6 +4322,11 @@ static int page_closed(void *ctx, void *event) {
     }
     if (ctx == st.rt_menu) st.rt_menu = 0;
     if (ctx == st.mp_page) st.mp_page = 0;
+    if (ctx == st.td_page) {
+        st.td_page = 0;
+        if (st.td_list) deque_destroy(st.td_list);
+        st.td_list = 0;
+    }
     if (ctx == st.sp_page) st.sp_page = 0;
 #if M1PLUS
     if (ctx == st.lib_page) st.lib_page = 0;
@@ -4416,6 +4480,58 @@ static int most_played(void *ctx, void *event) {
         tk_snprintf(detail, sizeof detail, a ? "%s · %u play%s" : "%s%u play%s", a ? artist : "",
                     plays, plays == 1 ? "" : "s");
         page_row_detail(view, i, track_name(name, sizeof name, t), detail, mp_play);
+    }
+    return 0;
+}
+
+/* Tidal Downloads (docs/internals.md#tidal-cache): Streaming's row lists tidal.c's complete
+ * downloads, newest first, and plays them from the card as a folder queue, without Wi-Fi.
+ * ponytail: newest download first, not last played; demo imports no utime to touch a replay. */
+typedef struct {
+    long mtime;
+    void *r;
+} td_row;
+static int td_newer(const void *a, const void *b) {
+    long x = ((const td_row *)a)->mtime, y = ((const td_row *)b)->mtime;
+    return (y > x) - (y < x);
+}
+static int td_play(void *ctx, void *event) {
+    (void)event;
+    void *t = deque_at(st.td_list, (unsigned)(long)ctx);
+    if (t && !access(P(t, REC_PATH), 0)) play_folder(st.td_list, (int)(long)ctx, 0xf001);
+    return 0;
+}
+static int tidal_downloads(void *ctx, void *event) {
+    (void)ctx, (void)event;
+    if (st.td_page || !(st.td_page = page_open("tidal_downloads", page_closed, page_keyup)))
+        return 0;
+    int n = 0;
+    void *rows = staged(directory, TIDAL_DIR, &n);
+    unsigned size = deque_size(rows), info[36];
+    td_row *v = calloc(size + 1, sizeof *v);
+    n = 0;
+    for (unsigned i = 0; v && i < size; i++) { /* songs only: .tmp and folders aren't audio */
+        void *r = deque_at(rows, i);
+        if (I(r, REC_TYPE) == 8 && P(r, REC_PATH) && !__xstat(3, P(r, REC_PATH), info))
+            v[n++] = (td_row){ (long)info[16], r };
+    }
+    if (n) qsort(v, (unsigned)n, sizeof *v, td_newer);
+    st.td_list = _create_deque("stSongInfo");
+    deque_init(st.td_list);
+    for (int i = 0; i < n; i++) _deque_push_back(st.td_list, v[i].r);
+    free(v);
+    deque_destroy(rows);
+    void *view =
+        page_list(st.td_page, st.td_page, 0, n ? "Tidal Downloads" : "No downloads yet", n, 48);
+    char name[256];
+    for (int i = 0; i < n;
+         i++) { /* tidal_name's label: the name after "<id>-<quality> ", less its extension */
+        const char *f = P(deque_at(st.td_list, (unsigned)i), REC_NAME),
+                   *sp = f ? strstr(f, " ") : 0;
+        tk_snprintf(name, sizeof name, "%s", sp ? sp + 1 : f ? f : "");
+        char *dot = strrchr(name, '.');
+        if (dot && dot != name) *dot = 0;
+        page_row_detail(view, i, name, 0, td_play);
     }
     return 0;
 }
@@ -5216,6 +5332,7 @@ int ringnav_stream(void *win, void *ctx) {
     void *view = win ? widget_lookup(win, "scroll_view_streamsset", 1) : (void *)0;
     if (view) {
         library_into(view, "stream_spotify", spot_open, 0, "Spotify");
+        library_into(view, "list_tidal", tidal_downloads, 0, "Tidal Downloads");
         library_into(view, "stream_radio", radio_open, 0, "Internet Radio");
         library_into(view, "stream_airplay", airplay_open, 0, "AirPlay");
     }
@@ -6580,7 +6697,7 @@ int ringnav(void *ctx, void *event) {
     int result = stock_keyup_trampoline(ctx, event);
     if (key == KEY_PLAY && hold_released()) return STOP;
     /* Media controls follow the active source, including when local Now Playing is visible. */
-    if (!result && media_owner() != 1 &&
+    if (!result && (media_focused() || media_owner() != 1) &&
         (key == KEY_PLAY || key == KEY_FWD_BTN || key == KEY_BACK_BTN)) {
         media_key(key);
         return STOP;
