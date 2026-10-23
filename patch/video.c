@@ -14,7 +14,11 @@
  * (spotify.c): stdin's 44.1 kHz sound, v and q on SINK_SOCK. No MIPS sysroot: the declarations
  * below are glibc 2.28's and alsa-lib's, with MIPS o32 constants. */
 #define W 320 /* /dev/fb0: 320 x 375, 32 bpp, red at bit 16, two pages (docs/internals.md#videos) */
+#if M1PLUS
+#define H 480 /* M1 Plus: 320 x 480, the picture fitted upright, not turned */
+#else
 #define H 375
+#endif
 #define FPS 25
 #define RATE 48000
 #define CHUNK 512      /* frames per ALSA write: the audio clock's step, about 11 ms */
@@ -48,23 +52,20 @@ char *strstr(const char *, const char *);
 unsigned strlen(const char *);
 #endif
 
-static int fb_h = H;
-#ifdef PEQ_HOST
-void set_fb_height(int h) { fb_h = h; }
-#endif
-
 /* ffmpeg's argv into a (27 slots) for frames from second at; ss holds the start. The picture is
  * fitted into the landscape H x W view, then turned clockwise onto the portrait framebuffer. Without
  * audio there is no sound output. */
 void ffmpeg_argv(const char **a, char *ss, int at, const char *file, int audio) {
     snprintf(ss, 16, "%d", at);
-    const char *vf_q2 = "scale=375:320:force_original_aspect_ratio=decrease:flags=fast_bilinear,"
-                        "format=bgra,pad=375:320:(ow-iw)/2:(oh-ih)/2,transpose=clock";
-    const char *vf_m1plus = "scale=320:480:force_original_aspect_ratio=decrease:flags=fast_bilinear,"
-                            "format=bgra,pad=320:480:(ow-iw)/2:(oh-ih)/2";
-    const char *vf = (fb_h == 480) ? vf_m1plus : vf_q2;
     const char *v[27] = { FFMPEG, "-nostdin", "-loglevel", "quiet", "-ss", ss, "-i", file,
-                          "-map", "0:v:0", "-vf", vf,
+                          "-map", "0:v:0", "-vf",
+#if M1PLUS
+                          "scale=320:480:force_original_aspect_ratio=decrease:flags=fast_bilinear,"
+                          "format=bgra,pad=320:480:(ow-iw)/2:(oh-ih)/2",
+#else
+                          "scale=375:320:force_original_aspect_ratio=decrease:flags=fast_bilinear,"
+                          "format=bgra,pad=375:320:(ow-iw)/2:(oh-ih)/2,transpose=clock",
+#endif
                           "-r", "25", "-f", "rawvideo", "pipe:3",
                           "-map", "0:a:0", "-ac", "2", "-ar", "48000", "-f", "s16le", "pipe:4", 0 };
     memcpy(a, v, sizeof v);
@@ -98,22 +99,29 @@ int duration(const char *s) {
 int resume_at(int pos, int len) { return pos < EDGE_S || (len && pos > len - EDGE_S) ? 0 : pos; }
 
 /* The overlay on framebuffer page f, line bytes a row: a bar along the picture's bottom, white for
- * n of total, black for the rest. On Q2 the picture is turned clockwise (picture x is panel y), so the
- * bar runs down the panel's columns BAR_Y to BAR_Y + BAR_H. On M1 Plus it runs horizontally along the bottom. */
+ * n of total, black for the rest. The picture is turned clockwise (picture x is panel y), so the
+ * bar runs down the panel's columns BAR_Y to BAR_Y + BAR_H. On M1 Plus the picture is upright, and
+ * the bar runs along the panel's rows BAR_Y to BAR_Y + BAR_H from the bottom, from x M1_BAR_X to
+ * H - M1_BAR_X, which is past the row's W pixels (docs/m1plus-roadmap.md, section 1). */
+#if M1PLUS
+#define M1_BAR_X 20
 void overlay(unsigned char *f, unsigned line, int n, int total) {
-    int bar_x = (fb_h == 480) ? 20 : BAR_X;
-    int end = fb_h - bar_x;
+    int end = H - M1_BAR_X;
     if (total <= 0) return;
     n = n < 0 ? 0 : n > total ? total : n;
-    int fill = bar_x + (end - bar_x) * n / total; /* total: seconds, far below overflow */
-    if (fb_h == 480) {
-        for (int y = fb_h - BAR_Y - BAR_H; y < fb_h - BAR_Y; ++y)
-            for (int x = bar_x; x < end; ++x)
-                memset(f + y * line + x * 4, x < fill ? 0xff : 0, 4);
-    } else {
-        for (int y = bar_x; y < end; ++y) memset(f + y * line + BAR_Y * 4, y < fill ? 0xff : 0, BAR_H * 4);
-    }
+    int fill = M1_BAR_X + (end - M1_BAR_X) * n / total; /* total: seconds, far below overflow */
+    for (int y = H - BAR_Y - BAR_H; y < H - BAR_Y; ++y)
+        for (int x = M1_BAR_X; x < end; ++x) memset(f + y * line + x * 4, x < fill ? 0xff : 0, 4);
 }
+#else
+void overlay(unsigned char *f, unsigned line, int n, int total) {
+    int end = H - BAR_X;
+    if (total <= 0) return;
+    n = n < 0 ? 0 : n > total ? total : n;
+    int fill = BAR_X + (end - BAR_X) * n / total; /* total: seconds, far below overflow */
+    for (int y = BAR_X; y < end; ++y) memset(f + y * line + BAR_Y * 4, y < fill ? 0xff : 0, BAR_H * 4);
+}
+#endif
 
 #if M1PLUS || defined(PEQ_HOST)
 /* M1 Plus has no Return key: on its upright panel every frame shows a back chevron at the top left,
@@ -442,13 +450,12 @@ int main(int argc, char **argv) {
     unsigned var[40], fix[17];
     int fb = open("/dev/fb0", O_RDWR | O_CLOEXEC);
     if (fb < 0 || ioctl(fb, FBIOGET_VSCREENINFO, var) || ioctl(fb, FBIOGET_FSCREENINFO, fix)) return 1;
-    if (var[0] != W || (var[1] != 375 && var[1] != 480) || var[3] < 2 * var[1] || var[6] != 32 || var[8] != 16)
+    unsigned line = fix[11], row = W * 4, y0 = var[5], back = y0 ? 0 : H; /* demo's other page */
+    /* anything but the Q2's xres, yres, yres_virtual, bpp and red offset: no drawing */
+    if (var[0] != W || var[1] != H || var[3] < 2 * H || var[6] != 32 || var[8] != 16 || row > line ||
+        2 * H * line > fix[5])
         return 1;
-    fb_h = var[1];
-    unsigned line = fix[11], row = W * 4, y0 = var[5], back = y0 ? 0 : fb_h; /* demo's other page */
-    if (row > line || 2 * fb_h * line > fix[5])
-        return 1;
-    unsigned char *mem = mmap(0, fix[5], 3, 1, fb, 0), *frame = malloc(row * fb_h);
+    unsigned char *mem = mmap(0, fix[5], 3, 1, fb, 0), *frame = malloc(row * H);
     if (mem == (void *)-1 || !frame) return 1;
     int sock = socket(AF_UNIX, SOCK_DGRAM | O_CLOEXEC, 0);
     struct sockaddr_un addr = { AF_UNIX, Q2VIDEO_SOCK };
@@ -515,7 +522,7 @@ int main(int argc, char **argv) {
         }
         int n = 0, seek = 0, ended = pid < 0, paced = audio;
         au.paused = held;
-        unsigned have = 0, size = row * fb_h;
+        unsigned have = 0, size = row * H;
         long long wall = 0, last = now_ms(), seek_at = 0;
         while (!ended && !quit) {
             long long t = now_ms(), clock;
@@ -526,7 +533,7 @@ int main(int argc, char **argv) {
             if (until && t >= until) until = 0, redraw = au.paused;
             int wait = 100, fate = have == size ? frame_due(n, clock) : 0;
             if (fate == 1 || (redraw && have == size)) { /* paused, the next frame shows the change */
-                for (int y = 0; y < fb_h; ++y)
+                for (unsigned y = 0; y < H; ++y)
                     memcpy(mem + (back + y) * line, frame + y * row, row);
                 if (until)
                     overlay(mem + back * line, line, pos_bar ? at + seek + n / FPS : vol,
@@ -536,7 +543,7 @@ int main(int argc, char **argv) {
 #endif
                 var[5] = back; /* draw the hidden page and pan, as demo does */
                 ioctl(fb, FBIOPAN_DISPLAY, var);
-                back = back ? 0 : fb_h;
+                back = back ? 0 : H;
                 redraw = 0;
             }
             if (fate) {
