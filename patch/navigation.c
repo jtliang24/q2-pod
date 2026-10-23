@@ -6557,6 +6557,7 @@ static int wake_gate(void *e) {
     return !st.wake_pass;
 }
 
+#if M1PLUS
 /* A Return press and release, as the input thread queues a key's (the window manager drops a
  * release whose press it never saw: input_device_status). */
 void dispatch_key_return(void) {
@@ -6569,7 +6570,6 @@ void dispatch_key_return(void) {
     stock_input_trampoline(window_manager(), (void *)ev);
 }
 
-#if M1PLUS
 /* Touch long-press: a press held still LONG_PRESS_MS on a row or tile of a library page opens
  * that row's hold menu, as Play/Pause held on a highlighted row does (qm_hold takes the row under
  * the finger). The native press is aborted, as a claimed pull is (pull_event), and the release's

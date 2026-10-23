@@ -178,6 +178,7 @@ void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(vo
 void *page_title(void *body, const char *caption);
 #if M1PLUS
 void *back_button(void *parent);
+void dispatch_key_return(void); /* navigation.c: back_button's Return */
 #endif
 void *page_list(void *page, void *body, void **title, const char *caption, int n, int item_h);
 void *page_row_detail(void *view, int index, const char *caption, const char *detail,
@@ -204,7 +205,6 @@ unsigned hash_bytes(unsigned h, const unsigned char *s, unsigned n);
 unsigned fnv(unsigned h, const unsigned char *s);
 void stop_timer(unsigned *timer), rearm(unsigned *timer, int (*fn)(const void *), unsigned ms);
 int return_key(void *event, unsigned *timer, int (*leave)(const void *)); /* a page's keyup: Return */
-void dispatch_key_return(void);
 int center_press(unsigned *timer, unsigned *at, int (*single)(const void *), int scrubbing);
 int config_value(const char *section, const char *key, int n); /* navigation.c: Q2POD and IPOD digits */
 int image_show(void *img, const char *url, unsigned *size);
