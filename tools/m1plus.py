@@ -210,6 +210,8 @@ M1PLUS_PORTS = {
     'player_play_pause': ('unported', "a manual Play/Pause isn't marked (headset_manual), so a headset's automatic "
                           "resume can undo it; V2.1's play_pause_music is unhooked"),
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
+    'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); "
+                          'MUSIC_INFO_ALBUM_ARTIST is M1_UNPORTED'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),

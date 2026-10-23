@@ -29,4 +29,8 @@ int library_open(void *ctx, void *event) {
     if (scrobbles) library_row(view, "local_scrobble", upload_scrobbles, 0, "Upload Scrobbles");
     return 0;
 }
+/* No Tidal Downloads row (navigation.c tidal_downloads, Streaming's on the Q2): on M1, tidal_start
+ * passes no song id, so tidal_play downloads nothing (docs/m1plus-roadmap.md U4). Named here so the
+ * M1 compile takes the unused page; nothing calls it, so it isn't linked. */
+static void *const m1_unported_tidal_downloads __attribute__((unused)) = (void *)tidal_downloads;
 #endif

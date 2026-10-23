@@ -501,7 +501,10 @@ static inline int arc_out(int r, int y) {
 #define INPUT_KEY_TIME 0x08
 /* stSongInfo rows of p_deque_showlist and the mcl queue. */
 #define REC_ID 0x00             /* -1/-2: unknown album/artist */
-#define REC_NAME 0x08           /* the file name; REC_TITLE is the tag's, empty when untagged */
+/* tidal_play's Downloads naming only: on M1, tidal_start passes no song id, so it streams stock's
+ * way first. V2.1's get_tidal_trackurl (0x512ed0) hands its URL thread (0x51c288) the whole row. */
+#define REC_TIDAL_ID M1_UNPORTED
+#define REC_NAME 0x08          /* the file name; REC_TITLE is the tag's, empty when untagged */
 #define REC_PATH 0x0c
 #define REC_TITLE 0x10
 #define REC_ALBUM 0x14
@@ -516,6 +519,7 @@ static inline int arc_out(int r, int y) {
 #define ID3_ALBUM 0x404
 #define ID3_ARTIST 0x504
 #define ID3_TITLE 0x684
+#define MUSIC_INFO_ALBUM_ARTIST M1_UNPORTED /* ringnav_music_info's only: toolsGetMusicInfo isn't hooked on M1 */
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
