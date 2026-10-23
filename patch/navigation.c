@@ -4118,12 +4118,17 @@ static int artist_cf_open(const void *unused) {
     if (veiled) artist_cf_veil(veiled, 0);
     return 0;
 }
+#if M1PLUS
 /* An artist's albums, the n rows stock just put in p_deque_showlist (none for another tab): by
- * year or A-Z, with each row's art key and album_id. */
-static void artist_tab(int n) {
+ * year or A-Z, with each row's art key and album_id. V2.1 loads them in ringnav_localclass too. */
+static int artist_tab(int tab, int n) {
+#else
+int ringnav_artist_list(int tab) {
+    int n = stock_artist_trampoline(tab);
+#endif
     void *list = P(p_deque_showlist, 0), *all;
     artist_keys_free();
-    if (n <= 0 || !(st.art_keys = calloc((unsigned)n, sizeof(char *)))) return;
+    if (tab != 1 || n <= 0 || !(st.art_keys = calloc((unsigned)n, sizeof(char *)))) return n;
     st.art_ids = calloc((unsigned)n, sizeof *st.art_ids);
     st.art_n = (unsigned)n;
     all = _create_deque("stSongInfo");
@@ -4156,12 +4161,11 @@ static void artist_tab(int n) {
     }
     if (mine) deque_destroy(mine);
     deque_destroy(all);
-}
-int ringnav_artist_list(int tab) {
-    int n = stock_artist_trampoline(tab);
-    artist_tab(tab == 1 ? n : 0);
     return n;
 }
+#if M1PLUS
+int ringnav_artist_list(int tab) { return artist_tab(tab, stock_artist_trampoline(tab)); }
+#endif
 static const char *artist_key(char *buf, void *list, unsigned i) {
     (void)buf;
     return st.art_keys && list == P(p_deque_showlist, 0) && st.art_n == deque_size(list) &&
@@ -4232,7 +4236,7 @@ int ringnav_localclass(int cls) {
 #if M1PLUS /* V2.1's artist albums load here (loadAlbumList, on album_page: never Coverflow's
             * artistinfo_page), not in load_localartist_list; the library's Albums on the same page
             * take no artist's keys */
-    if (cls == CLASS_ARTIST_ALBUMS) artist_tab(n);
+    if (cls == CLASS_ARTIST_ALBUMS) artist_tab(1, n);
     if (cls == CLASS_ALBUMS) artist_keys_free();
 #endif
     if (IPOD) /* an untagged song's row reads its file name without the extension (track_name) */
