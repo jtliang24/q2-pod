@@ -119,15 +119,17 @@ def shared_checks(directory, manifest, stock, demo, read):
     """What both models' builds share: the identity strings in demo, the M4B cover dispatcher, the
     helpers and init scripts, bluealsa, the watchdog and hciplayer."""
     import hashlib, pathlib, re, struct, subprocess, tarfile, tempfile
-    from build import (sha, run, fileoff, segments, symbols, ROOT, TAG_C, patch_m4b_cover, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK,
+    from build import (sha, run, fileoff, segments, symbols, ROOT, TAG_C, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK,
                        REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG,
                        WATCHDOG_SLEEP, BLUEALSA, AAC_44K1, STOCK_EQ)
     from peq import PLAYER_PROFILES
-    m1plus = manifest['model'] == 'Shanling M1 Plus'
+    import build as q2, m1plus as m1
+    m1plus = manifest.get('model') == 'Shanling M1 Plus'  # upstream's Q2 manifest has no model
+    patch_m4b_cover = (m1 if m1plus else q2).patch_m4b_cover
     assert manifest['version'].encode()+b'\0' in demo
-    # Each of the model's call sites (build.py CALL_SITES) holds stock's word, now its replacement; the
+    # Each of the model's call sites (m1plus.py CALL_SITES) holds stock's word, now its replacement; the
     # manifest lists the M4B extension checks among them.
-    from build import call_site_words
+    from m1plus import call_site_words
     words = call_site_words(m1plus, symbols(directory/'patch.elf'))
     for name, address, old, new in words:
         off = fileoff(stock, address)
@@ -140,7 +142,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     # The lock window's 12-hour clock reads hour:minutes (H:mm), in stock HH:TT's slot after its 24-hour hh:mm.
     assert demo.index(LOCK_CLOCK_12H[1]) == stock.index(LOCK_CLOCK_12H[0]) and LOCK_CLOCK_12H[0] not in demo
     tag_old, tag_new = read('stock.squashfs', TAG_C), read('rootfs.squashfs', TAG_C)
-    assert tag_new == patch_m4b_cover(tag_old, m1plus=m1plus)
+    assert tag_new == patch_m4b_cover(tag_old)
     assert manifest['changed_assets'][TAG_C] == dict(original_sha256=sha(tag_old), sha256=sha(tag_new))
     tag_segment = segments(tag_new)[-1][1]
     assert tag_segment[0] == 1 and tag_segment[2] == 0x30000 and tag_segment[4:7] == (48, 48, 5)
@@ -221,7 +223,7 @@ def shared_checks(directory, manifest, stock, demo, read):
         kernel, rootfs = (t.extractfile('recovery-update/'+n).read() for n in ('xImage', 'rootfs.squashfs'))
         info = t.extractfile('firmware_v20.info').read().decode()
     assert rootfs == (directory/'rootfs.squashfs').read_bytes() and sha(kernel) == manifest['kernel_sha256']
-    assert info == f"{manifest['model']}\n{manifest['version']}\n{hashlib.md5(kernel).hexdigest()}  recovery-update/xImage\n" \
+    assert info == f"{manifest.get('model', 'Shanling Q2')}\n{manifest['version']}\n{hashlib.md5(kernel).hexdigest()}  recovery-update/xImage\n" \
                    f"{hashlib.md5(rootfs).hexdigest()}  recovery-update/rootfs.squashfs\n"
     # The helpers can start: their loader and every library they name are in the rootfs.
     libs = {n.rsplit('/', 1)[-1] for n in names if n.startswith(('squashfs-root/lib/', 'squashfs-root/usr/lib/'))}
@@ -241,10 +243,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     identity strings, and its rootfs only in the files build.py names; and V2.1 still provides
     what the boot hook relies on."""
     import filecmp, os, pathlib, re, struct, subprocess, tarfile, tempfile
-    from build import (sha, run, fileoff, segments, symbols, pic_gp, BASE, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS,
-                       PDR_M1PLUS, RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ, OBSOLETE, HELPER,
-                       BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, WATCHDOG, S90PLAY, S11LOGO, call_site_words,
-                       M1PLUS_PRIVATE_FUNCTIONS)
+    from build import (sha, run, fileoff, segments, symbols, BASE, RTC_WRITE, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ,
+                       OBSOLETE, HELPER, BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, WATCHDOG, S90PLAY, S11LOGO)
+    from m1plus import (pic_gp, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS, PDR_M1PLUS, RTC_READ_M1PLUS,
+                        call_site_words, M1PLUS_PRIVATE_FUNCTIONS)
     ps = symbols(directory/'patch.elf')
     payload = (directory/'patch.bin').read_bytes()
     assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
@@ -476,7 +478,7 @@ def validate_assets(directory):
     def read(image, rel):
         return subprocess.check_output(['unsquashfs', '-cat', str(directory/image), rel])
     shared_checks(directory, manifest, stock, demo, read)
-    if manifest['model'] == 'Shanling M1 Plus':
+    if manifest.get('model') == 'Shanling M1 Plus':
         m1plus_checks(directory, manifest, stock, demo, read)
         print(f'M1 Plus {manifest["variant"]}: hook jumps, demo diff, rootfs file parity and boot scripts passed.')
         return
@@ -901,9 +903,10 @@ if __name__ == '__main__':
     if args.build: validate_assets(args.build)
     if args.zip:
         # Reproducibility and update.tar's MD5s are release.py package's; this covers the logo and quoting.
-        from build import INPUTS, M1PLUS_BIN_SHA
-        assert sha(args.zip.read_bytes()) in INPUTS, f'{args.zip}: not an audited firmware'
-        m1plus = INPUTS[sha(args.zip.read_bytes())][1] == M1PLUS_BIN_SHA
+        from build import ZIP_SHA, Q2_TAR_SHA
+        import m1plus as m1
+        m1plus = m1.takes(args.zip)
+        assert m1plus or sha(args.zip.read_bytes()) in (ZIP_SHA, Q2_TAR_SHA), f'{args.zip}: not an audited firmware'
         card_logo = logo
         if m1plus:  # its splash is 320x480: a stand-in in the stock baseline RGB format
             from ipod import imagemagick
@@ -918,11 +921,11 @@ if __name__ == '__main__':
                   if command[0]=='mksquashfs': custom.write_bytes(b'edited during compression')
                   return run(*command)
               a=root/"build ' a"
-              with patch('build.run',side_effect=change_source):
+              with patch('build.run',side_effect=change_source), patch('m1plus.run',side_effect=change_source):
                   build(args.zip,a,custom,ipod)
               validate_assets(a)
               manifest=json.loads((a/'manifest.json').read_text())
-              assert manifest['logo_sha256']==sha(card_logo) and manifest['logo_source']=='custom'
+              assert manifest['logo_sha256']==sha(card_logo) and manifest.get('logo_source', 'custom')=='custom'
               for rel,expected in [('release/assets/default/raw/images/xx/logo.jpg',card_logo),
                                    ('release/bin/demo',(a/'demo').read_bytes())]:
                   assert subprocess.check_output(['unsquashfs','-cat',str(a/'rootfs.squashfs'),rel])==expected

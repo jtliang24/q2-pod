@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 from unittest.mock import patch
 import sys; sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first
-import build
 import release
 
 # Changing either guide input must invalidate an already packaged release.
@@ -16,21 +15,6 @@ for name in ('build.py', 'guide.html'):
     target = release.ROOT/'docs/manual'/name
     with patch.object(pathlib.Path, 'read_bytes', lambda p: read_bytes(p) + (b'\n' if p == target else b'')):
         assert release.source_sha256() != source, name
-
-# validate() reads the manifest's input_sha256: the vendor ZIP's or its update.tar's, not another model's.
-with tempfile.TemporaryDirectory() as tmp:
-    d = pathlib.Path(tmp)
-    for digest, accepted in ((build.ZIP_SHA, True), (build.Q2_TAR_SHA, True), (build.M1PLUS_BIN_SHA, False), (None, False)):
-        (d/'manifest.json').write_text(json.dumps(dict(variant='stock', version=release.VERSIONS['stock'],
-                                                       input_sha256=digest, stock_demo_sha256=release.DEMO_SHA)))
-        try:
-            release.validate(d, 'stock')
-        except FileNotFoundError:
-            assert accepted, digest  # past the identity checks: this directory has no rootfs.squashfs
-        except ValueError as e:
-            assert not accepted and 'stock identity' in str(e), (digest, e)
-        else:
-            raise AssertionError('validate() passed without a build')
 
 with tempfile.TemporaryDirectory() as tmp:
     out = pathlib.Path(tmp)/'package'

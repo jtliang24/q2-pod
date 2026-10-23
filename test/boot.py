@@ -17,7 +17,8 @@ Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
 import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]/'tools'))
-from build import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS, BASE, SCRATCH, source_sha256, symbols, run
+from build import BASE, SCRATCH, source_sha256, symbols, run
+from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
 
 W, H = 320, 480
 # The hooks V2.1's startup reaches with no input: Home, the paint and dispatch paths, the UI loop and
@@ -402,7 +403,7 @@ if __name__ == '__main__':
     manifest = json.loads((args.build/'manifest.json').read_text())
     if manifest.get('source_sha256') != source_sha256():
         raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
-    if manifest['model'] != 'Shanling M1 Plus':
+    if manifest.get('model') != 'Shanling M1 Plus':
         raise SystemExit('test/boot.py emulates M1 Plus builds only')
     sn_addr = symbols(args.build/'stock-demo')['product_sncode']
     with tempfile.TemporaryDirectory(prefix='m1-boot-') as tmp, \

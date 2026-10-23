@@ -1,25 +1,13 @@
 #!/usr/bin/env python3
-"""Reproducibly patch only the audited Q2 V1.32 or M1 Plus V2.1 firmware (the vendor ZIP or the archive
-in it). Requires LLVM and squashfs-tools, and ImageMagick for --ipod (Q2 only).
+"""Reproducibly patch only the audited Q2 V1.32 ZIP. Requires LLVM and squashfs-tools, and ImageMagick for --ipod.
 
---logo swaps the boot splash JPEG (320x375 on Q2, 320x480 on M1 Plus); it defaults to
-assets/boot-logo.jpg on Q2 and to V2.1's own splash on M1 Plus.
+--logo swaps the boot splash JPEG (320x375); it defaults to assets/boot-logo.jpg.
 """
-import argparse, hashlib, io, json, os, pathlib, re, shlex, struct, subprocess, tarfile, zipfile
-os.environ.pop('SOURCE_DATE_EPOCH', None)
+import argparse, hashlib, io, json, pathlib, re, shlex, struct, subprocess, tarfile, zipfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-Q2_ZIP_SHA = '154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00'
-Q2_DEMO_SHA = '2c5f06142850b4fc168f82b44a81550cce0a5b4b9fe1c179dced4a08a3049138'
-M1PLUS_BIN_SHA = '1ccb4667e3e9bdf9a35be4dc58d09b898ca53c5fd58396b7667fb91fe895f925'
-# Every accepted input, by SHA-256: a vendor ZIP and the archive it holds, or that archive alone.
-Q2_TAR_SHA = '0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1'
-M1PLUS_ZIP_SHA = 'db7bdbc42ffe6d5c1e3fdca9363edb78a01898b9a725c34793394cf6abfa33c0'
-INPUTS = {Q2_ZIP_SHA: ('Q2 Firmware V1.32/update.tar', Q2_TAR_SHA), Q2_TAR_SHA: (None, Q2_TAR_SHA),
-          M1PLUS_ZIP_SHA: ('M1 Plus Firmware V2.1/update.bin', M1PLUS_BIN_SHA), M1PLUS_BIN_SHA: (None, M1PLUS_BIN_SHA)}
-M1PLUS_DEMO_SHA = '29e23119bc2a0f153f3ea0ba942a39754d1aab0879c1040fae2269df8bd9b3f1'
-ZIP_SHA = Q2_ZIP_SHA
-DEMO_SHA = Q2_DEMO_SHA
-M1PLUS_GP = 0xa03ed0
+ZIP_SHA = '154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00'
+DEMO_SHA = '2c5f06142850b4fc168f82b44a81550cce0a5b4b9fe1c179dced4a08a3049138'
+Q2_TAR_SHA = '0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1'  # the update.tar in the ZIP, alone
 VERSION = '1.2.2'  # major.minor.patch, single digits, shown as is (About, release tag and ZIPs)
 # The updater's identity (firmware_v20.info and demo's version literal) must be 5 characters and
 # differ from the installed one, so it packs the digits: 1.0.1 is V101I. About shows the stock
@@ -128,7 +116,6 @@ IPOD_LEAF = ('style_get_gradient', 0x649f3c, 'ringnav_style_gradient', (0x108000
 # Videos: window_manager_paint is a leaf too (null-checks the manager and its vtable at +0x94, then
 # tail-calls paint, +0xc); the payload does the whole of it and skips it while q2video plays.
 WM_PAINT_LEAF = ('window_manager_paint', 0x66d46c, 'ringnav_wm_paint', (0x10800009, 0, 0x8c820094))
-WM_PAINT_LEAF_M1PLUS = ('window_manager_paint', 0x677b44, 'ringnav_wm_paint', (0x10800009, 0, 0x8c820088))
 # Videos' player (patch/video.c): a separate executable against the rootfs's own libraries,
 # with display_logo's inode metadata.
 HELPER, HELPER_LIKE = 'usr/bin/q2video', 'usr/bin/display_logo'
@@ -179,7 +166,6 @@ REMOTE_HOOK = (b'/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf\n',
                b'/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf\n/usr/bin/q2remote &\n')
 # The byte in bluealsa's AAC capability holding the 44.1 kHz bit; see docs/internals.md.
 BLUEALSA = 'usr/bin/bluealsa'
-BLUEALSA_SHA = '0a4ffb7cc8207a46a3568440c5f31022b7125befd164e2f1af52537340a9892a'  # the same binary in Q2 V1.32 and M1 Plus V2.1
 SCROBBLE_CA = 'etc/scrobble-ca.pem'
 AAC_44K1 = 0x317b8
 # DROP is acknowledged before the encoder handles its signal. Flush in the control
@@ -196,157 +182,62 @@ WATCHDOG = 'usr/bin/checkappprocess.sh'
 WATCHDOG_SLEEP = (b'\tsleep 2\n', b'\tsleep 10\n')
 # toolsSetRtcTime's command, with its padding; -u keeps the RTC in UTC. See docs/internals.md#clock.
 RTC_WRITE = (b'hwclock -w\0\0', b'hwclock -wu\0')
-# V2.1 also reads the RTC back each time demo starts (platform_init's toolsGetRtcTime), local time
-# too: it reads UTC as well, or every start would shift the clock by the zone's offset.
-RTC_READ_M1PLUS = (b'hwclock -s\0\0', b'hwclock -su\0')
 # The lock window's 12-hour clock format (after its 24-hour hh:mm, by clock_time): stock's HH:TT shows
 # "05:PM"; H:mm is the hour 1-12 unpadded and the minutes (tk_date_time_format_impl), "5:07".
 LOCK_CLOCK_12H = (b'hh:mm\0\0\0HH:TT\0', b'hh:mm\0\0\0H:mm\0\0')
-# Call-site patches: stock calls and words the payload replaces, per model, each found in that model's
-# own demo (docs/m1plus-roadmap.md section 4). Each entry is (address, original word, replacement): a str
-# replacement is a jal to that payload symbol, None pins the word unchanged. A model without an entry
-# leaves that behaviour stock; test/build.py and test/patch.py read the same table.
-CALL_SITES = {
-    'q2': {
-        # config_init's bal config_playmode becomes jal ringnav_bootmode, which keeps the saved queue
-        # while it applies the boot play mode, and reads Artists.
-        'BOOT_MODE_CALL': ((0x4f999c, 0x0411e992, 'ringnav_bootmode'),),
-        # Stock init builds the Songs view (0x4adcbc); it calls the stock Albums tab click handler
-        # (0x4ac7ec) instead, which sets the tab state, queries the artist's albums and builds them.
-        'ARTIST_ALBUMS': ((0x4aebd0, 0x2739dcbc, 0x2739c7ec), (0x4aebd4, 0x0411fc39, 0x0411f705)),
-        # mclNextSong's bal mcl_shuffle_pick; the payload calls the stock pick, then applies a pending
-        # Play next. Its delay slot (a0=1) stays.
-        'SHUFFLE_CALL': ((0x5addf0, 0x0411e8cb, 'ringnav_shuffle'),),
-        # Hold Return: only on_wm_keylong_fun's final Home call (bal) changes; all stock gates and its
-        # release guard precede it (docs/ipod.md#hold-return).
-        'HOLD_RETURN': ((0x4e8924, 0x04110fdf, 'compact_now_playing'),),
-        # device_standby's bal awake_screen after the resume from Standby becomes li $v0, 1: the screen
-        # stays dark, so the resuming key acts as it does dark (Play plays, centre wakes).
-        'STANDBY_WAKE': ((0x4f7d24, 0x0411ff26, 0x24020001),),
-        # checkBluetoothStatus' jalr player_save_start once a headset's A2DP comes up (a0 0: the queue
-        # restarts unpaused, whatever it was doing) (docs/internals.md#resume-on-connect).
-        'BT_CONNECT_START': ((0x4f358c, 0x0320f809, 'ringnav_bt_connect_start'),),
-        # toolsLoadAllFile stops a scan at 20,000 songs: lw $2,count; slti $2,$2,0x4e20 before each
-        # entry. 65,000 overflows slti's signed immediate, so the lw becomes jal ringnav_scan_room and the
-        # slti loads the count into a0 in its delay slot (lw $2/$4, -0x3cac($fp)); the bnez after it, and
-        # its delay slot's stop-flag load, stay.
-        'SCAN_LIMIT': ((0x5c977c, 0x8fc2c354, 'ringnav_scan_room'), (0x5c9780, 0x28424e20, 0x8fc4c354)),
-        # check_mem_thd's "open failed, skip the write" beq becomes b: it never writes 3 to drop_caches.
-        'DROP_CACHES': ((0x5120a8, 0x12220006, 0x10000006),),
-        # Now Playing's info page: its one fill (bal 0x52a508) goes through ringnav_np_info, which tidies
-        # the lines.
-        'NP_INFO_CALL': ((0x52baf4, 0x0411fa84, 'ringnav_np_info'),),
-        # switchBtPriority sends LDAC quality 0x16 (SQ, 660 kbps) for both HQ (row 0) and Standard (row
-        # 1). The dispatch keeps 0x15 + row in its free 0x14($sp) slot, so HQ sends 0x15 (990 kbps); see
-        # docs/internals.md.
-        'LDAC_HQ': ((0x4f033c, 0x00042080, 0x00041880),   # sll $3,$4,2
-                    (0x4f0340, 0x2442f030, 0x00431021),   # addu $2,$2,$3
-                    (0x4f0344, 0x00442021, 0x8c42f030),   # lw $2,-0xfd0($2)
-                    (0x4f0348, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
-                    (0x4f0354, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
-                    (0x4f0360, 0x24040016, 0x8fa40014)),  # lw $4,0x14($sp), was li $4,0x16
-        # The encoder thread's ts_read call (jalr $t9) becomes jal ringnav_ts_read, which makes the
-        # wheel's ticks from the samples (playback.c wheel_sample).
-        'WHEEL_TS_READ': ((0x625b6c, 0x0320f809, 'ringnav_ts_read'),),
-        # The extension checks' jalr strstr (its lw $t9 two words before) in toolsLoadDirectory and the
-        # recursive scan also accept M4B (manifest audio_extension_calls).
-        'AUDIO_EXTENSION_CALLS': ((0x5c204c, 0x8f99f950, None), (0x5c2054, 0x0320f809, 'ringnav_audio_extension'),
-                                  (0x5c3d9c, 0x8f99f950, None), (0x5c3da4, 0x0320f809, 'ringnav_audio_extension')),
-        # The bal toolsTrimLeft on each name copy in the two library name comparators (0x5b9d40, 0x5ba658,
-        # the Chinese and other-language sorts) becomes jal ringnav_sort_key, which also drops a leading
-        # article.
-        'SORT_TRIMS': ((0x5b9e38, 0x0411ff86, 'ringnav_sort_key'), (0x5b9ea4, 0x0411ff6b, 'ringnav_sort_key'),
-                       (0x5ba750, 0x0411fd40, 'ringnav_sort_key'), (0x5ba7bc, 0x0411fd25, 'ringnav_sort_key')),
-        # Library Albums' cover cache names (navigation.c art_key): the row renderer's snprintf of the
-        # name, with a2 the row (addiu a2,"%s" becomes move a2,s3), the Albums page's
-        # albumcoverinfo_init calls and the album page's big cover snprintf become jal to the payload;
-        # so do an artist page's albums renderer (its row in s2) and albumcoverinfo_init calls on tab
-        # entry, return and init.
-        'ALBUM_ART': ((0x4a388c, 0x0320f809, 'ringnav_art_name'), (0x4a3890, 0x24c66c04, 0x02603025),
-                      (0x4a421c, 0x0320f809, 'ringnav_albumcovers'), (0x4a42c0, 0x0320f809, 'ringnav_albumcovers'),
-                      (0x4a5718, 0x0320f809, 'ringnav_albumcovers'), (0x4a72a4, 0x0320f809, 'ringnav_art_header'),
-                      (0x4ab804, 0x0320f809, 'ringnav_artist_art_name'), (0x4ab808, 0x24c66c04, 0x02403025),
-                      (0x4ac840, 0x0320f809, 'ringnav_artist_covers'), (0x4ae860, 0x0320f809, 'ringnav_artist_covers'),
-                      (0x4ae968, 0x0320f809, 'ringnav_artist_covers'), (0x4aebc0, 0x0320f809, 'ringnav_artist_covers')),
-        # Library Artists rows: the row bind's bal to class_icon becomes jal ringnav_class_icon, which
-        # hides the head.
-        'CLASS_ICON': ((0x4b0cec, 0x0411fbc9, 'ringnav_class_icon'),),
-        # Album grids' and Songs' scroll start no longer pauses the cover worker (sw $3,0($2) -> nop); see
-        # docs/internals.md.
-        'COVER_PAUSE': ((0x4aab60, 0xac430000, 0), (0x4a22d0, 0xac430000, 0), (0x4a7bb0, 0xac430000, 0)),
-        # An artist's albums scroll end divides yoffset by its 160 px rows, not 256; see docs/internals.md.
-        'ARTIST_COVER_ROW': ((0x4ad878, 0x244400ff, 0x240400a0),   # addiu $4,$2,0xff -> li $4,160
-                             (0x4ad880, 0x28430000, 0x0044001a),   # slti $3,$2,0 -> div $zero,$2,$4
-                             (0x4ad884, 0x0043200a, 0),            # movz $4,$2,$3 -> nop
-                             (0x4ad88c, 0x00042203, 0x00002012)),  # sra $4,$4,8 -> mflo $4
-        # Local art completion passes the worker's copied key (sp + 0x1688) and the payload validates the
-        # row under aclist_mutex; the folder-cover path, which branched past the key (b 0x4edda0), enters
-        # at the key as the others do.
-        'COVER_DONE': ((0x4edd9c, 0x8f99b6d4, 0x27a61688), (0x4edda0, 0x0411ff44, 'ringnav_cover_done'),
-                       (0x4eeddc, 0x1000fbf0, 0x1000fbef)),
-    },
-    # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
-    'm1plus': {
-        # mclNextSong's bal to the shuffle pick (0x5d03b0).
-        'SHUFFLE_CALL': ((0x5d5a28, 0x0411ea61, 'ringnav_shuffle'),),
-        # check_cpumem's "open failed, skip the write" beq.
-        'DROP_CACHES': ((0x50b868, 0x12220006, 0x10000006),),
-        # toolsLoadAllFile's count check, the count at -0x4f7c($fp).
-        'SCAN_LIMIT': ((0x5efeb4, 0x8fc2b084, 'ringnav_scan_room'), (0x5efeb8, 0x28424e20, 0x8fc4b084)),
-        # toolsLoadDirectory's and the recursive scan's (0x5ea364) extension checks.
-        'AUDIO_EXTENSION_CALLS': ((0x5e8ae8, 0x8f99f694, None), (0x5e8af0, 0x0320f809, 'ringnav_audio_extension'),
-                                  (0x5ea838, 0x8f99f694, None), (0x5ea840, 0x0320f809, 'ringnav_audio_extension')),
-        # The two name comparators, 0x5e0dac and 0x5e16c4.
-        'SORT_TRIMS': ((0x5e0ea4, 0x0411ff86, 'ringnav_sort_key'), (0x5e0f10, 0x0411ff6b, 'ringnav_sort_key'),
-                       (0x5e17bc, 0x0411fd40, 'ringnav_sort_key'), (0x5e1828, 0x0411fd25, 'ringnav_sort_key')),
-        # album_page, which lists the library's albums and an artist's: its row renderer's snprintf of the
-        # name (the row in s2), its three albumcoverinfo_init calls, and the album page's big cover's.
-        'ALBUM_ART': ((0x523a34, 0x0320f809, 'ringnav_art_name'), (0x523a38, 0x24c61158, 0x02403025),
-                      (0x524720, 0x0320f809, 'ringnav_albumcovers'), (0x524760, 0x0320f809, 'ringnav_albumcovers'),
-                      (0x5248d0, 0x0320f809, 'ringnav_albumcovers'), (0x525b84, 0x0320f809, 'ringnav_art_header')),
-        # The Albums list's (album_page) scroll start (0x522870); V2.1's Songs and artist page don't pause.
-        'COVER_PAUSE': ((0x522890, 0xac430000, 0),),
-        # parse_albumcovertask_thd's local completion and its folder path's branch to it (0x4de660).
-        'COVER_DONE': ((0x4dd630, 0x8f99b86c, 0x27a61688), (0x4dd634, 0x0411fde3, 'ringnav_cover_done'),
-                       (0x4de660, 0x1000fbf4, 0x1000fbf3)),
-        # checkBluetoothStatus' bal save_start_player once a headset's A2DP comes up (a0 0).
-        'BT_CONNECT_START': ((0x4d6320, 0x04113031, 'ringnav_bt_connect_start'),),
-        # switchBtPriority's dispatch, its jump table at -0x5b50 from its GOT page: HQ and Standard (rows 0
-        # and 1, btquality_page's btcode_ldachq and btcode_ldacst) share the li $4,0x16.
-        'LDAC_HQ': ((0x4d304c, 0x00042080, 0x00041880),   # sll $3,$4,2
-                    (0x4d3050, 0x2442a4b0, 0x00431021),   # addu $2,$2,$3
-                    (0x4d3054, 0x00442021, 0x8c42a4b0),   # lw $2,-0x5b50($2)
-                    (0x4d3058, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
-                    (0x4d3064, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
-                    (0x4d3070, 0x24040016, 0x8fa40014)),  # lw $4,0x14($sp), was li $4,0x16
-    },
-}
-CALL_SITE_PURPOSES = {
-    'BOOT_MODE_CALL': 'config_init preserves the saved queue when applying the boot play mode',
-    'ARTIST_ALBUMS': 'artist detail opens on Albums',
-    'SHUFFLE_CALL': 'shuffle honours Play next',
-    'HOLD_RETURN': 'long Return destination after stock input gates',
-    'STANDBY_WAKE': 'Standby resume stays dark',
-    'BT_CONNECT_START': 'Bluetooth: Resume on connect',
-    'SCAN_LIMIT': 'scan up to 65,000 songs',
-    'DROP_CACHES': 'keep the page cache',
-    'NP_INFO_CALL': "Now Playing's info lines",
-    'LDAC_HQ': 'LDAC HQ sends 990 kbps',
-    'WHEEL_TS_READ': 'wheel ticks',
-    'AUDIO_EXTENSION_CALLS': 'recognize M4B alongside existing audio extensions',
-    'SORT_TRIMS': 'sort without a leading article',
-    'ALBUM_ART': 'same-named albums apart in art',
-    'CLASS_ICON': 'Artists rows without the head picture',
-    'COVER_PAUSE': 'album grids never pause the cover worker',
-    'ARTIST_COVER_ROW': "an artist's albums request the covers in view",
-    'COVER_DONE': 'discard stale cover completion',
-}
-def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
-def call_site_words(m1plus, ps):
-    """Each of the model's call-site words as (name, address, original, replacement), the
-    replacement resolved against the payload's symbols ps (a pin's is its original)."""
-    return [(name, address, old, old if new is None else 0x0c000000 | ps[new] >> 2 if isinstance(new, str) else new)
-            for name, words in call_sites(m1plus).items() for address, old, new in words]
+# Now Playing's info page: its one fill (0x52a508), a bal, becomes jal ringnav_np_info, which tidies the lines.
+NP_INFO_CALL = 0x52baf4
+# mclNextSong's shuffle pick; the payload calls the stock pick, then applies a pending Play next.
+SHUFFLE_CALL = (0x5addf0, 0x0411e8cb)  # bal mcl_shuffle_pick; its delay slot (a0=1) stays
+# Hold Return: only on_wm_keylong_fun's final Home call (bal) changes; all stock gates and its release
+# guard precede it. It becomes jal compact_now_playing (docs/ipod.md#hold-return).
+HOLD_RETURN = (0x4e8924, 0x04110fdf)
+# device_standby's bal awake_screen after the resume from Standby becomes li $v0, 1: the screen stays dark,
+# so the resuming key acts as it does dark (Play plays, centre wakes).
+STANDBY_WAKE = (0x4f7d24, 0x0411ff26, 0x24020001)
+# checkBluetoothStatus' jalr player_save_start once a headset's A2DP comes up (a0 0: the queue restarts
+# unpaused, whatever it was doing). It becomes jal ringnav_bt_connect_start (docs/internals.md#resume-on-connect).
+BT_CONNECT_START = (0x4f358c, 0x0320f809)
+# The bal toolsTrimLeft on each name copy in the two library name comparators (0x5b9d40, 0x5ba658, the
+# Chinese and other-language sorts); they become jal ringnav_sort_key, which also drops a leading article.
+AUDIO_EXTENSION_CALLS = (0x5c2054, 0x5c3da4)  # toolsLoadDirectory and recursive scan
+SORT_TRIMS = (0x5b9e38, 0x5b9ea4, 0x5ba750, 0x5ba7bc)
+# toolsLoadAllFile stops a scan at 20,000 songs: lw $2,count; slti $2,$2,0x4e20 before each entry. 65,000
+# overflows slti's signed immediate, so the lw becomes jal ringnav_scan_room and the slti loads the count
+# into a0 in its delay slot; the bnez after it, and its delay slot's stop-flag load, stay.
+SCAN_LIMIT = (0x5c977c, 0x8fc2c354, 0x28424e20, 0x8fc4c354)  # lw $2/$4, -0x3cac($fp)
+# Library Albums' cover cache names (navigation.c art_key): the row renderer's snprintf of the name,
+# with a2 the row (addiu a2,"%s" becomes move a2,s3), the Albums page's albumcoverinfo_init calls
+# and the album page's big cover snprintf become jal to the payload; so do an artist page's albums
+# renderer (its row in s2) and albumcoverinfo_init calls on tab entry, return and init.
+ALBUM_ART = ((0x4a388c, 'ringnav_art_name'), (0x4a421c, 'ringnav_albumcovers'), (0x4a42c0, 'ringnav_albumcovers'),
+             (0x4a5718, 'ringnav_albumcovers'), (0x4a72a4, 'ringnav_art_header'),
+             (0x4ab804, 'ringnav_artist_art_name'), (0x4ac840, 'ringnav_artist_covers'),
+             (0x4ae860, 'ringnav_artist_covers'), (0x4ae968, 'ringnav_artist_covers'),
+             (0x4aebc0, 'ringnav_artist_covers'))
+ALBUM_ART_ROW = ((0x4a3890, 0x24c66c04, 0x02603025), (0x4ab808, 0x24c66c04, 0x02403025))
+# Library Artists rows: the row bind's bal to class_icon becomes jal ringnav_class_icon, which hides the head.
+CLASS_ICON = 0x4b0cec
+# Album grids' and Songs' scroll start no longer pauses the cover worker (sw $3,0($2) -> nop); see docs/internals.md.
+COVER_PAUSE = ((0x4aab60, 0xac430000, 0), (0x4a22d0, 0xac430000, 0), (0x4a7bb0, 0xac430000, 0))
+# An artist's albums scroll end divides yoffset by its 160 px rows, not 256; see docs/internals.md.
+ARTIST_COVER_ROW = ((0x4ad878, 0x244400ff, 0x240400a0),   # addiu $4,$2,0xff -> li $4,160
+                    (0x4ad880, 0x28430000, 0x0044001a),   # slti $3,$2,0 -> div $zero,$2,$4
+                    (0x4ad884, 0x0043200a, 0),            # movz $4,$2,$3 -> nop
+                    (0x4ad88c, 0x00042203, 0x00002012))   # sra $4,$4,8 -> mflo $4
+# switchBtPriority sends LDAC quality 0x16 (SQ, 660 kbps) for both HQ (row 0) and Standard (row 1).
+# The dispatch keeps 0x15 + row in its free 0x14($sp) slot, so HQ sends 0x15 (990 kbps); see docs/internals.md.
+LDAC_HQ = ((0x4f033c, 0x00042080, 0x00041880),   # sll $3,$4,2
+           (0x4f0340, 0x2442f030, 0x00431021),   # addu $2,$2,$3
+           (0x4f0344, 0x00442021, 0x8c42f030),   # lw $2,-0xfd0($2)
+           (0x4f0348, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
+           (0x4f0354, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
+           (0x4f0360, 0x24040016, 0x8fa40014))   # lw $4,0x14($sp), was li $4,0x16
+# check_mem_thd's "open failed, skip the write" beq becomes b: it never writes 3 to drop_caches.
+DROP_CACHES = (0x5120a8, 0x12220006, 0x10000006)
+# The encoder thread's ts_read call (jalr $t9) becomes jal ringnav_ts_read, which makes the wheel's
+# ticks from the samples (playback.c wheel_sample).
+WHEEL_TS_READ = (0x625b6c, 0x0320f809)
 # English labels renamed, as an iPod words them: Now Playing More's queue, which stock calls "Playlists"
 # (player_playlist, used nowhere else); the Library's plural categories; settings rows in title case
 # and plain words; the Lock screen help; and Baidu without its (BETA).
@@ -422,7 +313,6 @@ def relabel(data):
 # demo's .pdr section (offset, size): MIPS procedure descriptors past every LOAD segment, which nothing
 # reads at run time. Zeroed, they pack to almost nothing, which keeps the Stock rootfs within stock's size.
 PDR = (0x61694c, 0x69d40)
-PDR_M1PLUS = (0x5f388c, 0x65800)
 
 def run(*args):
     return subprocess.check_output([str(a) for a in args], text=True)
@@ -518,9 +408,6 @@ FUNCTIONS = {
  'widget_to_local': ('int', 'void *, void *'),
  'widget_dispatch_event_to_target_recursive': ('int', 'void *, void *'),
  'label_create': ('void *', 'void *, int, int, int, int'),
- 'view_create': ('void *', 'void *, int, int, int, int'),  # M1 Plus: the Home card's page and card views
- 'label_set_line_wrap': ('int', 'void *, int'),
- 'slide_indicator_set_max': ('int', 'void *, unsigned'),
  'stock_search': ('int', 'void *, void *'),
  'widget_set_children_layout': ('int', 'void *, const char *'),
  'widget_resize': ('int', 'void *, int, int'),
@@ -572,8 +459,6 @@ FUNCTIONS = {
  'canvas_measure_text': ('float', 'void *, const unsigned *, unsigned'),
  'canvas_fill_rounded_rect': ('int', 'void *, const void *, const void *, const void *, unsigned'),
  'canvas_stroke_rounded_rect': ('int', 'void *, const void *, const void *, const void *, unsigned, unsigned'),
- # its four corner radii, the width and the edges (0xffff all), as V1.32's wrapper (0x63d034) passes them
- 'canvas_stroke_rounded_rect_ex': ('int', 'void *, const void *, const void *, const void *, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned'),
  # The PEQ curve (peq_ui.c) and the visualizer (visualizer.c): AWTK's software nanovg, float_t float, color_t by value
  'canvas_get_vgcanvas': ('void *', 'void *'),
  'vgcanvas_save': ('int', 'void *'), 'vgcanvas_restore': ('int', 'void *'),
@@ -630,8 +515,6 @@ FUNCTIONS = {
  'getAllFav': ('int', 'void'),
  # Long Songs (navigation.c): a file's length, probed once, as stock's scanner reads tags
  'taglib_file_new': ('void *', 'const char *'),
- # Shanling's real signature, (name, readAudioProperties): the M1 Plus passes 1 (V2.1's scanner passes 0)
- 'taglib_file_open': ('void *', 'const char *, int'),
  'taglib_file_audioproperties': ('void *', 'void *'),
  'taglib_file_free': ('void', 'void *'),
  'deleteMusicFromFav': ('int', 'void *'),
@@ -664,16 +547,8 @@ FUNCTIONS = {
  'widget_unload_image': ('int', 'void *, void *'),
  'list_view_create': ('void *', 'void *, int, int, int, int'),
  'scroll_view_create': ('void *', 'void *, int, int, int, int'),
- 'widget_add_child': ('int', 'void *, void *'),
- 'widget_remove_child': ('int', 'void *, void *'),  # out of its parent, not destroyed
- 'widget_get_window': ('void *', 'void *'),
- # V2.1's Lock screen page: its pick of picture index (lockscreen.c lockscreen_page)
- 'saver_pick': ('int', 'void *, int'),
  'navigator_back': ('int', 'void'),
  'write_int_config': ('int', 'int, const char *, const char *'),
- # V2.1's Play mode page's other two calls (0x49fc88): the M1 Plus's config_playmode (patch/peq.h)
- 'notifyPlayMode': ('int', 'void'),
- 'dmrSendPlayMode': ('int', 'int'),
  'toolsWriteConfig': ('int', 'const char *, const char *, const char *, const char *'),
  'toolsReadConfig': ('int', 'const char *, const char *, const char *, char *, const char *'),
  'button_create': ('void *', 'void *, int, int, int, int'),
@@ -734,7 +609,6 @@ FUNCTIONS = {
  'np_info': ('int', 'void *'),  # Now Playing's info page labels (ringnav_np_info)
  'getFormatString': ('int', 'const char *, char *, int'),  # a string's label in the language: key, out, size
  'mclSetSeek': ('int', 'int'),  # the player's seek in file seconds; it plays on from there, or on Play once paused
- 'volume_refresh': ('void', 'void *'),  # V2.1 only: the volume dialog shows the output's level
 }
 # Local stock routines in the SHA-256-pinned V1.32 executable.
 PRIVATE_FUNCTIONS = {
@@ -766,158 +640,6 @@ GLOBALS = ['g_playspeed_mode', 'g_time24h_flag', 'g_backlight_status', 'g_locksc
            'g_memory_play', 'g_carmode',
            'g_headset_output',  # the output config_outputchannel sets: 0, 1 the jacks, 2 Bluetooth
            'g_usbdet_value']  # 1 while a USB cable is in (USB mode's scan prompt outlives it)
-M1PLUS_GLOBAL_ALIASES = {
-    'g_playspeed_mode': 'playspeed_mode',
-    'g_backlight_status': 'backlight_status',
-    'g_lockscreen_pageflag': 'lockscreen_pageflag',
-    'g_keylock_flag': 'keylock_flag',
-    'g_keylock_mode': 'keylock_mode',
-    'g_bluetoothflag': 'bluetoothflag',
-    'g_usblink_status': 'usblink_status',
-    'g_equalizer_flag': 'equalizer_flag',
-    'g_playcover_type': 'playcover_type',
-    'g_folder_layer': 'folder_layer',
-    'g_otg_status': 'otg_status',
-    'g_delete_flag': 'delete_flag',
-    'g_volume': 'volume',
-    'g_po_status': 'po_status',
-    'g_bal_status': 'bal_status',
-    'g_usbvol_mode': 'usbvol_mode',
-    'g_usbdac_chargeflag': 'usbdac_chargeflag',
-    'g_memory_play': 'memory_play',
-    'g_headset_output': 'headset_output',
-    'g_usbdet_value': 'usbdet_value',
-    'g_time24h_flag': 'time24hflag',
-    'bt__recv_pageflag': 'btrecv_pageflag',
-    'g_maxvolume': 'max_volume',
-    'g_carmode': 'car_mode',
-    # Matched by their users in both firmwares (config_init's first-boot guide; folder_enter and
-    # folder_back clear the navbar state).
-    'g_guideflag': 'first_guideflag',
-    'g_navbar_status': 'navigation_status',
-    'g_btvolume': 'btsource_volume',
-    'g_rotate_mode': 'rotate_mode',
-}
-# V2.1 globals V1.32 lacks, read as GLOBALS are. Bluetooth keeps its own level, [PLAYSET] BTVOLUME:
-# the volume dialog (on_volume_tsup_fun), status bar and set_devicevolume use it while headset_output
-# is 2, and `volume` stays the jacks'. on_wm_keyup_fun swaps Previous and Next, and the volume keys,
-# while rotate_mode is 1 (the rotated screen, 0x4cd9f8).
-M1PLUS_GLOBALS = ['g_btvolume', 'g_rotate_mode']
-# V2.1 data V1.32 lacks, read as CONTEXT_DATA is (sizes checked). pdeq_choicemenu: the Home menu's
-# chosen cards, a deque of ids that home_page_init's grid builder (0x534064) lays out six to a page.
-M1PLUS_CONTEXT_DATA = {'pdeq_choicemenu': 4}
-# Renamed in V2.1; each has the size of its V1.32 counterpart (checked in m1plus_symbols).
-M1PLUS_CONTEXT_ALIASES = {
-    'g_folder_path': 'folder_path',
-    'g_dacoff_time': 'dacoff_time',
-    'g_power_capacity': 'power_capacity',
-    'g_screensaver_picture': 'screensaver_picture',
-    'g_memory_info': 'meminfo_save',
-    'g_class_type': 'cur_classtype',
-    'g_local_classinfo_save': 'classinfo_save',
-    'p_deque_showlist': 'pdeq_showlist',
-    'p_vector_select_record': 'pvec_selectrecord',
-    'g_play_id3_info': 'playsong_id3info',
-    'p_deque_screensaverlist': 'pdeq_screensaverlist',
-    'g_power_chargestate': 'pmucharge_status',  # get_battery_capacity keeps 0-2 in both
-}
-# V1.32's g_artist_type (load_localclass_list's flag) has no V2.1 twin: loadLocalClassList reads
-# artist_type itself, which home_page_init saves, so the payload's flag keeps its own storage.
-# A V1.32 global with no V2.1 counterpart gets zeroed storage of its own in the payload's .scratch
-# (m1stub_<name>), never a guessed address. Every reader must treat zero as "off" or "none".
-M1PLUS_STUB = 'm1stub_'
-# V2.1 globals without a symbol. on_wm_keylong_fun sets this byte on a long power (knob) press
-# (0x4cde14) and on_wm_keyup_fun drops that release and clears it (0x4cdc5c), as V1.32 does.
-M1PLUS_RAW_GLOBALS = {'g_power_longkey': 0xa041b8}
-# Local V2.1 routines, each checked to be a PIC entry with V2.1's GOT base.
-M1PLUS_PRIVATE_FUNCTIONS = {
-    'slide_menu_on_scroll_done': 0x6123f4,  # what slide_menu's scroll_to binds to its animator's end (0x612320)
-    'folder_refresh': 0x5318ac,  # folder_page_init's (0x53354c): navbar and table from pdeq_showlist
-    'album_row': 0x4e93c8,  # getAllAlbum's toolsQueryDbTable callback (0x4ea458): a record to tools_pdeq_directory
-    'gif_image_create': 0x5fb69c,
-    'mcl_shuffle_pick': 0x5d03b0,  # mclNextSong's and mclPrevSong's shuffle pick (SHUFFLE_CALL)
-    # The Lock screen page's pick (systemset_screensaver_page_init's visit binds the first six
-    # pictures' clicks to it): the picture's index into pdeq_screensaverlist, saved and checked
-    'saver_pick': 0x4ab52c,
-    'mcl_preload': 0x5d0ea4,  # the gapless pick and its open, hooked (M1PLUS_HOOKS) as on the Q2
-    'mcl_open_preload': 0x5d0bd8,
-    'btmenu_rows': 0x4a3734,  # the Bluetooth page's list: switch, name, quality, volume, search, devices
-    'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
-}
-M1PLUS_FUNCTION_ALIASES = {
-    'device_set_volume': 'set_devicevolume',
-    'config_outputchannel': 'set_outputchannel',
-    'player_stop': 'stop_player',  # mclStop with the mute, seek, play status and headset updates (V1.32 has both)
-    'player_play_pause': 'play_pause_music',
-    'player_prev_music': 'prev_music',
-    'player_next_music': 'next_music',
-    'player_save_start': 'save_start_player',
-    'folder_reload_data': 'folder_reload',
-    'player_playtime_and_length': 'get_playtimeandlength',
-    'player_seek_time': 'seek_time',
-    'switch_charge_enable': 'toolsSetChargeSwitch',
-    'taglib_file_open': 'taglib_file_new',
-    # The batch record (pvec_selectrecord): n rows unselected, then one row's selection toggled
-    'batch_init_selectrecord': 'select_recordinit',
-    'batch_set_selectitem': 'set_selectindex',
-}
-M1PLUS_HOOKS = {
-    'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
-    'widget_dispatch': (0x66cec8, 'ringnav_dispatch', 'dispatch'),
-    'on_wm_keylong_fun': (0x4cdd9c, 'ringnav_keylong', 'keylong'),
-    'playset_equalizer_page_init': (0x49e358, 'peq_page_init', None),
-    'set_equalizer_value': (0x4d851c, 'peq_stock_eq', 'eq'),
-    'home_page_init': (0x534cd4, 'coverflow_home', 'home'),
-    'toolsQueryDbTable': (0x5ee77c, 'ringnav_library_query', 'dbquery'),
-    'scanAllMusicFile': (0x4e9df4, 'coverflow_scan_all', 'scan_all'),
-    'scanSpecFolder': (0x4e9e90, 'coverflow_scan_folder', 'scan_folder'),
-    'deleteMusicFromMusicDb': (0x4ede44, 'coverflow_delete_song', 'delete_song'),
-    'main_loop_sleep_default': (0x658f70, 'ringnav_sleep', 'sleep'),
-    'systemset_about_page_init': (0x4a170c, 'ringnav_about', 'about'),
-    'folder_page_init': (0x53349c, 'ringnav_folder', 'folder'),
-    'folder_back': (0x4dbecc, 'ringnav_folder_back', 'folder_back'),
-    'window_manager_dispatch_input_event': (0x677b74, 'ringnav_input', 'input'),
-    'systemset_sysset_page_init': (0x4ada78, 'ringnav_systemset', 'systemset'),
-    'systemset_display_page_init': (0x4a5eb8, 'ringnav_display', 'display'),
-    'get_screensaver_image': (0x4d7524, 'lockscreen_images', 'saverlist'),
-    'save_memoryplay_info': (0x4e3340, 'ringnav_savequeue', 'savequeue'),
-    'mclLoadPlayList': (0x5d1f28, 'ringnav_load', 'load'),
-    'mclNextSong': (0x5d5800, 'ringnav_next', 'next'),
-    'mclPrevSong': (0x5d56dc, 'ringnav_prev', 'prev'),
-    'mclSetPlayMode': (0x5d278c, 'ringnav_mode', 'mode'),
-    'mclSetPlaySpeed': (0x5d281c, 'ringnav_speed', 'speed'),
-    # Gapless: the next track's pick and its decoder's open, V1.32's moved
-    'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
-    'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),
-    # The Bluetooth page's list builder, rebuilt whole on every search and switch: Resume on Connect
-    'btmenu_rows': (0x4a3734, 'ringnav_btrows', 'btrows'),
-    'memeory_startplayer': (0x4e34dc, 'ringnav_memory', 'memory'),
-    'systemset_powermanager_page_init': (0x4a9d18, 'ringnav_powermanager', 'power'),
-    'playset_playset_page_init': (0x4a0c88, 'ringnav_audioset', 'audioset'),
-    'mclStartPlayer': (0x5d5300, 'ringnav_start_player', 'start_player'),
-    'mcl_tidalStartPlayer': (0x5d5184, 'tidal_start', 'tidal'),
-    'playing_page_init': (0x53d1e4, 'ringnav_playing', 'playing'),
-    'on_wm_keyup_fun': (0x4cd9ac, 'ringnav', 'keyup'),
-    'on_wm_before_tsdown_fun': (0x4cd608, 'ringnav_touch', 'touch'),
-    'screensaver_page_init': (0x53fd44, 'lockscreen_init', 'saver'),
-    # The Lock screen page: its picture grid, Time show and About; V2.1 has no rows hook
-    'systemset_screensaver_page_init': (0x4abe04, 'lockscreen_page', 'saverpage'),
-    'loadLocalClassList': (0x4ee504, 'ringnav_localclass', 'localclass'),
-    'loadAlbumdetailList': (0x4eea98, 'ringnav_album_detail', 'detail'),
-    'change_music': (0x4e3cec, 'ringnav_change', 'change'),
-    # Bluetooth absolute volume: V2.1 merged V1.32's mclSetLocalVol and mclSetBtVol into mclSetVol
-    'mclSetVol': (0x5d4cb0, 'ringnav_btvol', 'btvol'),
-    # The hold menu: its sortselect_dialog opens non-modal, as V1.32's init leaves it
-    'dialog_sortselect_dialog_init': (0x47d358, 'qm_sortselect_init', 'sortselect'),
-}
-ALL_TRAMPOLINES = [
-    'dbquery', 'quicksettings', 'keyup', 'touch', 'paint', 'dispatch',
-    'keylong', 'paint_bg', 'playing', 'display', 'bigcover', 'localmusic',
-    'keydown', 'btvol', 'sleep', 'color', 'image', 'about', 'folder',
-    'folder_back', 'folder_top', 'input', 'buzzer', 'localclass',
-    'detail', 'artist', 'power', 'systemset', 'audioset', 'btrows',
-    'playlist', 'stream', 'start_player',
-]
 # Audited stock browsing state, deque pointers, art locks, the status bar widget
 # (system_bar_init stores it), the playing cover's track path and the playing track's tags as
 # player_get_id3info parsed them; sizes are checked against the ELF.
@@ -961,133 +683,35 @@ FLAGS = ['--target=mipsel-linux-gnu','-march=mips32r2','-mabi=32','-mfp64',
 
 def hooks(ipod): return HOOKS | IPOD_HOOKS if ipod else HOOKS
 
-def m1plus_symbols(syms, symbol_table):
-    """Resolve V1.32 names against the V2.1 demo: aliases (size-checked), then stubs.
-
-    Returns syms with the aliases applied and the [(name, size)] that get m1stub_ storage. Private
-    V1.32 routines are never merged: their addresses are V1.32 code."""
-    syms = dict(syms)
-    def size(name):
-        found = re.search(rf'\b(\d+)\s+OBJECT\s+GLOBAL\s+DEFAULT\s+\d+\s+{re.escape(name)}$', symbol_table, re.M)
-        return int(found.group(1)) if found else None
-    for k, v in M1PLUS_FUNCTION_ALIASES.items():
-        if v in syms: syms[k] = syms[v]
-    syms.update(M1PLUS_PRIVATE_FUNCTIONS)
-    stubs = []
-    for name in GLOBALS + M1PLUS_GLOBALS:  # payload reads one byte: little-endian, a 4-byte flag's low byte
-        alias = M1PLUS_GLOBAL_ALIASES.get(name, name)
-        if name in M1PLUS_RAW_GLOBALS:
-            syms[name] = M1PLUS_RAW_GLOBALS[name]
-            continue
-        check(name not in M1PLUS_GLOBALS or size(alias) is not None, f'{name}: no {alias} in V2.1')
-        if size(alias) is None:
-            stubs.append((name, 1))
-            continue
-        check(size(alias) in (1, 4), f'{name}: {alias} is not a byte or word global')
-        syms[name] = syms[alias]
-    for name, want in CONTEXT_DATA.items():
-        alias = M1PLUS_CONTEXT_ALIASES.get(name, name)
-        if size(alias) is None:
-            stubs.append((name, want))
-            continue
-        check(size(alias) == want, f'{name}: {alias} context data size mismatch')
-        syms[name] = syms[alias]
-    for name, want in M1PLUS_CONTEXT_DATA.items():
-        check(size(name) == want, f'{name}: no {want}-byte {name} in V2.1')
-    return syms, stubs
-
-def m1plus_names(sq, out):
-    """Every stock widget, image and style the M1 Plus payload names (patch/offsets.inc VIEW_, ICON_,
-    STYLE_, ROW_ and ABOUT_, as it compiles them) is in V2.1's rootfs: a V1.32 name there finds
-    nothing, and a missing style draws AWTK's light default."""
-    from ipod import decode, walk, style_props
-    defines = dict(re.findall(r'^#define ((?:VIEW|ICON|STYLE|ROW|ABOUT)_\w+) "([^"]+)"$',
-                              run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c', ROOT/'patch/offsets.inc'), re.M))
-    check(defines, 'No M1 Plus asset names in patch/offsets.inc')
-    tree = out/'v21-assets'
-    run('unsquashfs', '-q', '-no-xattrs', '-f', '-d', tree, sq, 'release/assets/default/raw/ui',
-        'release/assets/default/raw/styles/default.bin', 'release/assets/default/raw/styles/home_page.bin',
-        'release/assets/default/raw/styles/playing_page.bin',
-        'release/assets/default/raw/images/xx')
-    raw = tree/'release/assets/default/raw'
-    widgets = {n[2].get('name') for p in raw.glob('ui/**/*.bin') for n in walk(decode(p.read_bytes()))}
-    # Home's cards and Now Playing's heart are styled from their pages' own files, which those pages'
-    # widgets use.
-    styles = {s for f in ('default', 'home_page', 'playing_page') for _, s, *_ in style_props((raw/f'styles/{f}.bin').read_bytes())}
-    images = {p.stem for p in raw.glob('images/xx/*')}
-    for key, value in sorted(defines.items()):
-        kind = ('image', images) if key.startswith('ICON_') or key == 'ROW_CHEVRON' else \
-               ('style', styles) if key.startswith('STYLE_') or key.endswith('_STYLE') else ('widget', widgets)
-        check(value in kind[1], f'{key}: no {kind[0]} named {value!r} in V2.1')
-    import shutil
-    shutil.rmtree(tree)
-
-def pic_gp(image, address):
-    """The GOT base a PIC entry (lui $gp; addiu $gp; addu $gp, $t9) computes, else None."""
-    lui, addiu, addu = struct.unpack_from('<III', image, fileoff(image, address))
-    if lui >> 16 != 0x3c1c or addiu >> 16 != 0x279c or addu != 0x0399e021: return None
-    low = addiu & 65535
-    return ((lui & 65535) << 16) + (low if low < 32768 else low - 65536) + address
-
-def m1plus_inc(name):
-    """An integer #define of patch/offsets.inc as the M1 Plus payload compiles it."""
-    found = re.search(rf'^#define {name} (0x[0-9a-f]+|\d+)$', run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c',
-                                                              ROOT/'patch/offsets.inc'), re.M)
-    check(found, f'{name}: not defined for M1 Plus')
-    return int(found.group(1), 0)
-
-def stub_asm(stubs):
-    """Zeroed .scratch storage for the stubbed globals (link.ld maps .scratch R/W, zero-filled)."""
-    asm = ['.section .scratch,"aw",@nobits', '.balign 8']
-    for name, size in stubs:
-        asm += [f'.globl {M1PLUS_STUB}{name}', f'{M1PLUS_STUB}{name}:', f'.space {(size + 7) & ~7}']
-    return '\n'.join(asm) + '\n'
-
-def compile_payload(out, ipod=False, m1plus=False):
+def compile_payload(out, ipod=False):
     """Compile and link the payload."""
     from peq import compile_common
-    extra = compile_common(out, out/'stock-demo', ipod=ipod, m1plus=m1plus)  # also writes the libc/libcstl imports navigation.c uses
-    flags = [*FLAGS, f'-DIPOD={int(ipod)}']
-    if m1plus: flags += ['-DM1PLUS=1']
-    run('clang',*flags,'-I',out,'-c',ROOT/'patch/navigation.c','-o',out/'navigation.o')
+    extra = compile_common(out, out/'stock-demo', ipod=ipod)  # also writes the libc/libcstl imports navigation.c uses
+    run('clang',*FLAGS,f'-DIPOD={int(ipod)}','-I',out,'-c',ROOT/'patch/navigation.c','-o',out/'navigation.o')
     asm = ['.set noreorder', '.text']
-    active_hooks = M1PLUS_HOOKS if m1plus else hooks(ipod)
-    gp = M1PLUS_GP if m1plus else GP
-    # Q2 resumes every hook's stock code, as upstream does: Legacy links the iPod trampolines too.
-    resume = {x: address for address, _, x in (M1PLUS_HOOKS if m1plus else HOOKS | IPOD_HOOKS).values() if x}
+    resume = {x: address for address, _, x in (HOOKS | IPOD_HOOKS).values() if x}
     for x, address in resume.items():
-        asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', f'lui $gp, {gp >> 16}',
-                f'ori $gp, $gp, {gp & 65535}', f'j 0x{address + 12:x}', 'nop']
-    if m1plus:  # a hook V2.1 lacks has no stock code to resume, so its trampoline returns 0
-        for x in ALL_TRAMPOLINES:
-            if x not in resume:
-                asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', 'jr $ra', 'move $v0, $zero']
+        asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', f'lui $gp, {GP >> 16}',
+                f'ori $gp, $gp, {GP & 65535}', f'j 0x{address + 12:x}', 'nop']
     (out/'trampoline.S').write_text('\n'.join(asm)+'\n')
-    run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
-    leaf_paint = WM_PAINT_LEAF_M1PLUS if m1plus else WM_PAINT_LEAF
-    undefined = [f'--undefined={name}' for _, name, _ in active_hooks.values()]
-    if ipod and not m1plus:
-        undefined.append(f'--undefined={IPOD_LEAF[2]}')
-    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
-    if not m1plus:
-        undefined.append('--undefined=ringnav_ts_read')
+    run('clang',*FLAGS,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
-        *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
+        *[f'--undefined={name}' for _, name, _ in hooks(ipod).values()], *[f'--undefined={IPOD_LEAF[2]}'] * ipod,
+        f'--undefined={WM_PAINT_LEAF[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=ringnav_ts_read',
+        out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
     return symbols(out/'patch.elf')
 
-def compile_helper(out, cat, src, name, rels, m1plus=False):
+def compile_helper(out, cat, src, name, rels):
     """Link patch/src (and start.c) as name against the stock rootfs's libraries rels."""
     libs = []
     for rel in rels:
         libs.append(out/rel.rsplit('/', 1)[-1])
         libs[-1].write_bytes(cat(rel))
     objs = [out/f'{s}.o' for s in (src, 'start')]
-    cflags = [f for f in FLAGS if f not in ('-mno-abicalls', '-G0')] + ['-mnan=2008', '-mabs=2008', '-mabicalls']
-    if m1plus:
-        cflags += ['-DM1PLUS=1']
     for o in objs:
-        run('clang', *cflags, '-c', ROOT/'patch'/f'{o.stem}.c', '-o', o)
+        run('clang', *[f for f in FLAGS if f not in ('-mno-abicalls', '-G0')], '-mnan=2008', '-mabs=2008',
+            '-mabicalls', '-c', ROOT/'patch'/f'{o.stem}.c', '-o', o)
     run('ld.lld', '-m', 'elf32ltsmip', '-e', '__start', '--dynamic-linker', '/lib/ld-linux-mipsn8.so.1',
         '--image-base=0x400000', '-z', 'noexecstack', '--gc-sections', '-s', '--hash-style=sysv', '--build-id=none',
         *objs, *libs, '-o', out/name)
@@ -1105,21 +729,14 @@ def append_payload(image, payload, base, memsz, label):
     struct.pack_into('<8I',image,nulls[0][0],1,off,base,base,len(payload),memsz,7,65536)
 
 TAG_C = 'usr/lib/libtag_c.so.2.0.1'
-TAG_C_SHA = {
-    'q2': 'b00f06c20b33b1238d095fcbcd9e9e04594e715b44e8a9e1a0aa9e3962e8b2b1',
-    'm1plus': '2541a577c124d62221c15d68a92ca72d7395b43ead3ed9968aa78c0f28e21dce',
-}
+TAG_C_SHA = 'b00f06c20b33b1238d095fcbcd9e9e04594e715b44e8a9e1a0aa9e3962e8b2b1'
 
-def patch_m4b_cover(raw, m1plus=False):
+def patch_m4b_cover(raw):
     """Extend the pinned TagLib cover dispatcher with its existing MP4 extractor."""
     from ipod import branch
-    expected_sha = TAG_C_SHA['m1plus' if m1plus else 'q2']
-    check(sha(raw) == expected_sha, 'Unexpected TagLib cover library')
+    check(sha(raw) == TAG_C_SHA, 'Unexpected TagLib cover library')
     image = bytearray(raw)
-    base, site, mp4, next_format, gp = (
-        (0x30000, 0x1255c, 0x12688, 0x12564, 0x32770) if m1plus
-        else (0x30000, 0x125ac, 0x126d8, 0x125b4, 0x327e0)
-    )
+    base, site, mp4, next_format, gp = 0x30000, 0x125ac, 0x126d8, 0x125b4, 0x327e0
     # Keep M4A's successful comparison, then compare M4B before the original MP4 check.
     # GP-relative data and PC-relative branches work at any shared-library load address.
     words = [branch(0x10400000, base, mp4), 0,
@@ -1138,7 +755,6 @@ def patch_m4b_cover(raw, m1plus=False):
 def patch_bluealsa(raw):
     """Offer AAC at 48 kHz only. A headset that opens the stream itself (AirPods out of the case)
     picks 44.1 kHz, and bluealsa, still fed 48 kHz, drops about 8% of the AAC frames."""
-    check(sha(raw) == BLUEALSA_SHA, 'Unexpected bluealsa')
     image = bytearray(raw)
     image[AAC_44K1] = 0
     # o32: preserve PCM and ra; hold its fd mutex while flushing the nonblocking
@@ -1173,204 +789,186 @@ def patch_bluealsa(raw):
     struct.pack_into('<2I', image, fileoff(raw, BT_DROP_HANDLER), 0x08000000 | reset >> 2, 0)
     return bytes(image)
 
-def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
-    """m1_release: an M1 Plus release's (name, tag), from tools/release_m1.py: the tag instead of
-    VERSIONS', and the name in About and the manifest."""
+def build(zip_path, out, logo, ipod=False, dev=False):
+    import m1plus  # the M1 Plus's own pipeline, beside this one (docs/m1plus-roadmap.md U1)
+    if m1plus.takes(zip_path): return m1plus.build(zip_path, out, logo, ipod, dev)
     variant = 'ipod' if ipod else 'stock'
     version = VERSIONS[variant]
     out.mkdir(parents=True, exist_ok=True)
+    check(not (out/'update.tar').exists(), 'Output already exists; use a fresh --out directory')
     if dev:  # the next number in the untracked .build-number
         counter = ROOT/'.build-number'
         dev = int(counter.read_text()) + 1 if counter.exists() else 1
         counter.write_text(f'{dev}\n')
         version = dev_tag(dev, version[-1])
     source = source_sha256()
-    raw = target_path.read_bytes()
-    input_sha = sha(raw)
-    check(input_sha in INPUTS, 'Unsupported input: SHA-256 differs from every audited original')
-    member, archive_sha = INPUTS[input_sha]
-    if member:
+    raw = zip_path.read_bytes()
+    tarbytes = raw if sha(raw) == Q2_TAR_SHA else None
+    if tarbytes is None:
+        check(sha(raw) == ZIP_SHA, 'Unsupported ZIP: SHA-256 differs from audited original')
         with zipfile.ZipFile(io.BytesIO(raw)) as z:
-            tarbytes = z.read(member)
-    else:
-        tarbytes = raw
-    check(sha(tarbytes) == archive_sha, 'Unsupported update archive: SHA-256 differs from audited original')
+            tarbytes = z.read('Q2 Firmware V1.32/update.tar')
     with tarfile.open(fileobj=io.BytesIO(tarbytes)) as t:
         meta = t.getmembers()
         check([m.name for m in meta] == ['firmware_v20.info','recovery-update',
               'recovery-update/xImage','recovery-update/rootfs.squashfs'], 'Unexpected package members')
         blobs = {m.name:t.extractfile(m).read() for m in meta if m.isfile()}
     info = blobs['firmware_v20.info'].decode().splitlines()
-    if info[0] == 'Shanling M1 Plus':
-        m1plus = True
-        model = 'Shanling M1 Plus'
-        stock_version = info[1]
-        check(stock_version == 'V2.1', f'Unsupported M1 Plus version: {stock_version}')
-        check(not ipod, 'M1 Plus has no iPod build yet')
-        archive_name = 'update.bin'
-        expected_logo = (320, 480)
-        if m1_release:
-            check(not dev and len(m1_release[1]) == 5, 'An M1 release is no dev build, and its tag is 5 characters')
-            version = m1_release[1]
-        pdr_off, pdr_size = PDR_M1PLUS
-    elif info[0] == 'Shanling Q2':
-        m1plus = False
-        model = 'Shanling Q2'
-        stock_version = info[1]
-        check(info[:2] == ['Shanling Q2','V1.32'], 'Wrong model/version')
-        archive_name = 'update.tar'
-        expected_logo = (320, 375)
-        pdr_off, pdr_size = PDR
-    else:
-        raise ValueError(f'Unsupported model: {info[0]}')
-    check(not m1_release or m1plus, 'Only an M1 Plus build takes an M1 release')
-    check(not (out/archive_name).exists(), 'Output already exists; use a fresh --out directory')
+    check(info[:2] == ['Shanling Q2','V1.32'], 'Wrong model/version')
     sq = out/'stock.squashfs'; sq.write_bytes(blobs['recovery-update/rootfs.squashfs'])
     def cat(path): return subprocess.check_output(['unsquashfs', '-cat', str(sq), path])
     raw_demo = cat('release/bin/demo')
     # Every allowlisted context must be a window name. The runtime name is the root "name"
     # property of the UI asset, not the asset path, so check the stock rootfs assets directly:
     # a prefix-trimmed typo cannot silently disable a screen this way.
-    from ipod import (AUDIT, ARTIST_PAGE, HOME_PAGE, SETTINGS_ICONS, inc, UI_ASSETS, patch_asset,
+    from ipod import (AUDIT, ARTIST_ALBUMS, ARTIST_PAGE, HOME_PAGE, SETTINGS_ICONS, inc, UI_ASSETS, patch_asset,
                       QUIET_ICONS, quiet_icon, imagemagick, patch_code, patch_style, patch_word, jal, branch, settings_icon,
                       STATUS_ICONS, status_icon, row_icon, ART_PLACEHOLDERS, sized_art)
-    if not m1plus:
-        contexts = re.findall(r'"([^"]+)"', (ROOT/'patch/contexts.inc').read_text())
-        check(contexts, 'No navigation contexts audited')
-        windows = set()
-        for line in run('unsquashfs', '-l', sq).splitlines():
-            found = re.search(r'/raw/ui/(.+)\.bin$', line)
-            if not found: continue
-            rel = found.group(1)
-            data = cat('release/assets/default/raw/ui/'+rel+'.bin')
-            i = data.find(b'name\x00')
-            name = data[i+5:data.find(b'\x00', i+5)].decode('utf-8', 'replace') if i >= 0 else ''
-            windows.add(name or rel.split('/')[-1])
-            # iPod pre-sizes the settings icons, so no UI asset may name one (only native settings code does).
-            for icon in SETTINGS_ICONS:
-                check(icon.removesuffix('.png').encode() + b'\0' not in data, f'{rel}: names settings icon {icon}')
-        check(windows, 'No UI assets in the stock rootfs')
-        for name in contexts:
-            check(name in windows | PAYLOAD_WINDOWS, f'Context {name} is not a window name in the stock rootfs')
-    else:
-        m1plus_names(sq, out)
+    contexts = re.findall(r'"([^"]+)"', (ROOT/'patch/contexts.inc').read_text())
+    check(contexts, 'No navigation contexts audited')
+    windows = set()
+    for line in run('unsquashfs', '-l', sq).splitlines():
+        found = re.search(r'/raw/ui/(.+)\.bin$', line)
+        if not found: continue
+        rel = found.group(1)
+        data = cat('release/assets/default/raw/ui/'+rel+'.bin')
+        i = data.find(b'name\x00')
+        name = data[i+5:data.find(b'\x00', i+5)].decode('utf-8', 'replace') if i >= 0 else ''
+        windows.add(name or rel.split('/')[-1])
+        # iPod pre-sizes the settings icons, so no UI asset may name one (only native settings code does).
+        for icon in SETTINGS_ICONS:
+            check(icon.removesuffix('.png').encode() + b'\0' not in data, f'{rel}: names settings icon {icon}')
+    check(windows, 'No UI assets in the stock rootfs')
+    for name in contexts:
+        check(name in windows | PAYLOAD_WINDOWS, f'Context {name} is not a window name in the stock rootfs')
     demo = out/'stock-demo'; demo.write_bytes(raw_demo)
     symbol_table = run('readelf', '-Ws', demo)
     syms = symbols(demo, symbol_table)
-    if not m1plus:
-        syms.update(PRIVATE_FUNCTIONS)
+    syms.update(PRIVATE_FUNCTIONS)
     header = [f'#define RING_STEP {RING_STEP}']
-    if m1plus:
-        syms, stubs = m1plus_symbols(syms, symbol_table)
-        stubbed = dict(stubs)
-        for name in [*CONTEXT_DATA, *M1PLUS_CONTEXT_DATA]:
-            if name in stubbed:
-                header += [f'extern unsigned char {M1PLUS_STUB}{name}[{stubbed[name]}];',
-                           f'#define {name} ((const unsigned char *){M1PLUS_STUB}{name})']
-            else:
-                header.append(f'#define {name} ((const unsigned char *)0x{syms[name]:x}u)')
-    else:
-        for name in GLOBALS:
-            check(re.search(rf'\b1\s+OBJECT\s+GLOBAL\s+DEFAULT\s+\d+\s+{name}$',
-                            symbol_table, re.M), f'{name}: byte global size mismatch')
-        for name, size in CONTEXT_DATA.items():
-            check(re.search(rf'\b{size}\s+OBJECT\s+GLOBAL\s+DEFAULT\s+\d+\s+{name}$',
-                            symbol_table, re.M), f'{name}: context data size mismatch')
-            header.append(f'#define {name} ((const unsigned char *)0x{syms[name]:x}u)')
+    for name in GLOBALS:
+        check(re.search(rf'\b1\s+OBJECT\s+GLOBAL\s+DEFAULT\s+\d+\s+{name}$',
+                        symbol_table, re.M), f'{name}: byte global size mismatch')
+    for name, size in CONTEXT_DATA.items():
+        check(re.search(rf'\b{size}\s+OBJECT\s+GLOBAL\s+DEFAULT\s+\d+\s+{name}$',
+                        symbol_table, re.M), f'{name}: context data size mismatch')
+        header.append(f'#define {name} ((const unsigned char *)0x{syms[name]:x}u)')
     # iPod's image hook leaves the settings icons' category colours alone (navigation.c settings_icon).
     names = ''.join(n.removesuffix('.png') + '\\0' for n in SETTINGS_ICONS)
     header.append(f'#define SETTINGS_ICON_NAMES "{names}"')
     header.append(f'#define ROCKBOX_FLAG "{ROCKBOX_FLAG}"')  # Home's Rockbox row, for S90play
     # About: the stock firmware's version on its own row, and this build's on the CFW. Version row.
-    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{m1_release[0] if m1_release else VERSION}{" Pod" if (ipod and not m1plus) else ""}{f" dev {dev}" if dev else ""}"']
+    header += [f'#define STOCK_VERSION "{info[1]}"', f'#define Q2POD_VERSION "{VERSION}{" Pod" if ipod else ""}{f" dev {dev}" if dev else ""}"']
     (out/'stock.h').write_text('\n'.join(header)+'\n')
-    ps = compile_payload(out, ipod and not m1plus, m1plus=m1plus)
+    ps = compile_payload(out, ipod)
     payload = (out/'patch.bin').read_bytes()
     check(len(payload) < SCRATCH-BASE, 'Payload overlaps its scratch page')
     check(ps['__scratch_start'] == SCRATCH, 'Scratch state moved')
     check(ps['__scratch_end'] <= SCRATCH + 0x10000, 'Scratch state exceeds its page')
     patched = bytearray(raw_demo)
     def jump(off, name): patched[off:off+8] = struct.pack('<II', 0x08000000 | (ps[name] >> 2), 0)
-    active_hooks = M1PLUS_HOOKS if m1plus else hooks(ipod)
-    active_gp = M1PLUS_GP if m1plus else GP
-    for name, (address, replacement, _) in active_hooks.items():
+    for name, (address, replacement, _) in hooks(ipod).items():
         check(syms[name] == address, f'{name}: callback address mismatch')
-        check(pic_gp(patched, address) == active_gp, f'{name}: unexpected PIC prologue or GOT base')
-        jump(fileoff(patched, address), replacement)
-    leaf_paint = WM_PAINT_LEAF_M1PLUS if m1plus else WM_PAINT_LEAF
-    for name, address, replacement, words in [leaf_paint] + ([IPOD_LEAF] if (ipod and not m1plus) else []):
+        off = fileoff(patched, address)
+        prolog = struct.unpack_from('<III', patched, off)
+        check(prolog[0] >> 16 == 0x3c1c and prolog[1] >> 16 == 0x279c and
+              prolog[2] == 0x0399e021, f'{name}: unexpected PIC prologue')
+        low = prolog[1] & 65535
+        gp = ((prolog[0] & 65535) << 16) + (low if low < 32768 else low - 65536) + address
+        check(gp == GP, f'{name}: unexpected GOT base')
+        jump(off, replacement)
+    for name, address, replacement, words in [WM_PAINT_LEAF] + [IPOD_LEAF] * ipod:
         off = fileoff(patched, address)
         check(syms[name] == address and struct.unpack_from('<III', patched, off) == words, f'{name}: unexpected code')
         jump(off, replacement)
-    if m1plus:
-        for name, address in M1PLUS_PRIVATE_FUNCTIONS.items():
-            check(pic_gp(raw_demo, address) == M1PLUS_GP, f'{name}: not a V2.1 PIC entry')
-        # ringnav_speed and ringnav_mode tell config_mplayer's re-applying calls, and config_init's
-        # boot one, from a choice by their return addresses: each a jalr $t9 after lw $t9, <callee's
-        # GOT slot>($gp).
-        for ret, callee in (('INITCONFIG_SPEED_RET', 'mclSetPlaySpeed'), ('INITCONFIG_MODE_RET', 'mclSetPlayMode'),
-                            ('BOOT_MODE_RET', 'mclSetPlayMode')):
-            ret = m1plus_inc(ret)
-            words = struct.unpack_from('<5I', raw_demo, fileoff(raw_demo, ret - 24))
-            load = next((w for w in reversed(words[:4]) if w >> 16 == 0x8f99), 0)
-            slot = M1PLUS_GP + (load & 0xffff) - (0x10000 if load & 0x8000 else 0)
-            check(load and words[4] == 0x0320f809 and
-                  struct.unpack_from('<I', raw_demo, fileoff(raw_demo, slot))[0] == syms[callee],
-                  f'config_mplayer: unexpected {callee} call')
+    if ipod:
+        # style_get_color's own bal style_get_gradient, returning to STYLE_COLOR_GRADIENT_RET, stays unmapped.
+        ret = inc('STYLE_COLOR_GRADIENT_RET')
+        check(struct.unpack_from('<I', patched, fileoff(patched, ret - 8))[0] == branch(0x04110000, ret - 8, IPOD_LEAF[1]),
+              'style_get_color: unexpected gradient call')
+    # tidal_start reads the song id from $s2: set to the thread's own copy at 0x48647c, freed after
+    # its only mcl_tidalStartPlayer call (lw t9; jalr; move a0, s7).
+    check(struct.unpack_from('<I', patched, fileoff(patched, 0x48647c))[0] == 0x00409025 and
+          struct.unpack_from('<III', patched, fileoff(patched, 0x486d88)) == (0x8f99aaec, 0x0320f809, 0x02e02025),
+          'Tidal URL thread: unexpected song id register')
+    # ringnav_mode leaves advanced play on for player_initconfig's call, which returns to INITCONFIG_MODE_RET.
+    ret = inc('INITCONFIG_MODE_RET')
+    check(struct.unpack_from('<II', patched, fileoff(patched, ret - 12)) == (0x8f99b77c, 0x0320f809),
+          'player_initconfig: unexpected mclSetPlayMode call')
+    patch_word(patched, 0x4f999c, 0x0411e992, jal(ps['ringnav_bootmode']),
+               'config_init preserves the saved queue when applying the boot play mode')
     from peq import patch_player
     raw_player = cat('usr/bin/hciplayer')
     audio = patch_player(raw_player, out/'peq')
     bluealsa = patch_bluealsa(cat(BLUEALSA))
     (out/'bluealsa').write_bytes(bluealsa)
     (out/'watchdog').write_bytes(cat(WATCHDOG).replace(*WATCHDOG_SLEEP))
+    for address, old, new in ARTIST_ALBUMS:
+        patch_word(patched, address, old, new, 'artist detail opens on Albums')
+    patch_word(patched, *SHUFFLE_CALL, jal(ps['ringnav_shuffle']),
+               'shuffle honours Play next')
+    patch_word(patched, *HOLD_RETURN, jal(ps['compact_now_playing']),
+               'long Return destination after stock input gates')
+    patch_word(patched, *STANDBY_WAKE, 'Standby resume stays dark')
+    patch_word(patched, *BT_CONNECT_START, jal(ps['ringnav_bt_connect_start']),
+               'Bluetooth: Resume on connect')
+    scan, load, limit, count = SCAN_LIMIT
+    patch_word(patched, scan, load, jal(ps['ringnav_scan_room']), 'scan up to 65,000 songs')
+    patch_word(patched, scan + 4, limit, count, 'scan up to 65,000 songs')
+    patch_word(patched, *DROP_CACHES, 'keep the page cache')
+    patch_word(patched, NP_INFO_CALL, branch(0x04110000, NP_INFO_CALL, PRIVATE_FUNCTIONS['np_info']),
+               jal(ps['ringnav_np_info']), "Now Playing's info lines")
+    for address, old, new in LDAC_HQ:
+        patch_word(patched, address, old, new, 'LDAC HQ sends 990 kbps')
+    patch_word(patched, WHEEL_TS_READ[0], WHEEL_TS_READ[1], jal(ps['ringnav_ts_read']), 'wheel ticks')
+    for address in AUDIO_EXTENSION_CALLS:
+        check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, address-8))[0] == 0x8f99f950,
+              'audio extension: expected strstr import')
+        patch_word(patched, address, 0x0320f809, jal(ps['ringnav_audio_extension']),
+                   'recognize M4B alongside existing audio extensions')
+    for address in SORT_TRIMS:
+        patch_word(patched, address, branch(0x04110000, address, syms['toolsTrimLeft']),
+                   jal(ps['ringnav_sort_key']), 'sort without a leading article')
+    for address, name in ALBUM_ART:
+        patch_word(patched, address, 0x0320f809, jal(ps[name]), 'same-named albums apart in art')
+    for row in ALBUM_ART_ROW:
+        patch_word(patched, *row, 'same-named albums apart in art')
+    patch_word(patched, CLASS_ICON, branch(0x04110000, CLASS_ICON, syms['class_icon']),
+               jal(ps['ringnav_class_icon']), 'Artists rows without the head picture')
+    for word in COVER_PAUSE:
+        patch_word(patched, *word, 'album grids never pause the cover worker')
+    for word in ARTIST_COVER_ROW:
+        patch_word(patched, *word, "an artist's albums request the covers in view")
+    # Local art completion: pass the worker's copied key, then validate the row under aclist_mutex.
+    patch_word(patched, 0x4edd9c, 0x8f99b6d4, 0x27a61688, 'cover completion key')
+    patch_word(patched, 0x4edda0, 0x0411ff44, jal(ps['ringnav_cover_done']),
+               'discard stale cover completion')
+    # The folder-cover path branched past the key (b 0x4edda0); it enters at the key as the others do.
+    patch_word(patched, 0x4eeddc, 0x1000fbf0, 0x1000fbef, 'folder cover completion key')
+    # Pin added private entry points as well as every replaced instruction, and the stock bitmap,
+    # canvas and slide_menu entries Coverflow's depth renderer calls (docs/internals.md#coverflow-depth).
+    for name, original in AUDIT['private_prologues'].items():
+        off = fileoff(raw_demo, syms[name])
+        check(raw_demo[off:off+12].hex() == original, f'{name}: unexpected stock entry')
+    for address, original in AUDIT['event_abi_words'].items():
+        off = fileoff(raw_demo, int(address, 16))
+        check(raw_demo[off:off+4].hex() == original, f'{address}: unexpected event ABI instruction')
     code_changes = []
-    for name, address, old, new in call_site_words(m1plus, ps):
-        patch_word(patched, address, old, new, CALL_SITE_PURPOSES[name])
-    if not m1plus:
-        if ipod:
-            # style_get_color's own bal style_get_gradient, returning to STYLE_COLOR_GRADIENT_RET, stays unmapped.
-            ret = inc('STYLE_COLOR_GRADIENT_RET')
-            check(struct.unpack_from('<I', patched, fileoff(patched, ret - 8))[0] == branch(0x04110000, ret - 8, IPOD_LEAF[1]),
-                  'style_get_color: unexpected gradient call')
-        # tidal_start reads the song id from $s2: set to the thread's own copy at 0x48647c, freed after
-        # its only mcl_tidalStartPlayer call (lw t9; jalr; move a0, s7).
-        check(struct.unpack_from('<I', patched, fileoff(patched, 0x48647c))[0] == 0x00409025 and
-              struct.unpack_from('<III', patched, fileoff(patched, 0x486d88)) == (0x8f99aaec, 0x0320f809, 0x02e02025),
-              'Tidal URL thread: unexpected song id register')
-        # ringnav_mode leaves advanced play on for player_initconfig's call, which returns to INITCONFIG_MODE_RET.
-        ret = inc('INITCONFIG_MODE_RET')
-        check(struct.unpack_from('<II', patched, fileoff(patched, ret - 12)) == (0x8f99b77c, 0x0320f809),
-              'player_initconfig: unexpected mclSetPlayMode call')
-        # Pin added private entry points as well as every replaced instruction, and the stock bitmap,
-        # canvas and slide_menu entries Coverflow's depth renderer calls (docs/internals.md#coverflow-depth).
-        for name, original in AUDIT['private_prologues'].items():
-            off = fileoff(raw_demo, syms[name])
-            check(raw_demo[off:off+12].hex() == original, f'{name}: unexpected stock entry')
-        for address, original in AUDIT['event_abi_words'].items():
-            off = fileoff(raw_demo, int(address, 16))
-            check(raw_demo[off:off+4].hex() == original, f'{address}: unexpected event ABI instruction')
-        if ipod:
-            code_changes = patch_code(patched, ps)
+    if ipod:
+        code_changes = patch_code(patched, ps)
     # Single shared version literal: the updater refuses an equal firmware_v20.info version (update_firmware
     # 0x4f8440, check_otginfo 0x4f8968), so it carries the build tag and stock V1.32 can be flashed back.
     # About's FW. Version row reads it too (0x4bc52c); ringnav_about shows STOCK_VERSION there instead.
-    if m1plus:
-        check(patched.count(b'V2.1\0') == 1, 'Version literal is not unique')
-        off = patched.find(b'V2.1\0')
-        patched[off:off+len(version)+1] = version.encode() + b'\0'
-    else:
-        check(patched.count(b'V1.32\0') == 1, 'Version literal is not unique')
-        check(len(version) + 1 == len(b'V1.32\0'),
-              'VERSION must be three single digits (x.y.z): the 5-character tag would shift every later file offset')
-        patched = patched.replace(b'V1.32\0', version.encode()+b'\0')
-    for rtc in [RTC_WRITE] + [RTC_READ_M1PLUS] * m1plus:
-        check(patched.count(rtc[0]) == 1, f'Unexpected RTC command {rtc[0]!r}')
-        patched = patched.replace(*rtc)
+    check(patched.count(b'V1.32\0') == 1, 'Version literal is not unique')
+    check(len(version) + 1 == len(b'V1.32\0'),
+          'VERSION must be three single digits (x.y.z): the 5-character tag would shift every later file offset')
+    patched = patched.replace(b'V1.32\0', version.encode()+b'\0')
+    patched = patched.replace(*RTC_WRITE)
     check(patched.count(LOCK_CLOCK_12H[0]) == 1, 'Unexpected lock clock formats')
     patched = patched.replace(*LOCK_CLOCK_12H)
-    check(re.search(r'\.pdr +PROGBITS +0+ +0*%x +0*%x ' % (pdr_off, pdr_size), run('readelf', '-SW', demo)) and
-          all(p[1]+p[4] <= pdr_off for _,p in segments(patched) if p[0] == 1), '.pdr: not the audited section')
-    patched[pdr_off:pdr_off+pdr_size] = bytes(pdr_size)
+    check(re.search(r'\.pdr +PROGBITS +0+ +0*%x +0*%x ' % PDR, run('readelf', '-SW', demo)) and
+          all(p[1]+p[4] <= PDR[0] for _,p in segments(patched) if p[0] == 1), '.pdr: not the audited section')
+    patched[PDR[0]:PDR[0]+PDR[1]] = bytes(PDR[1])
     append_payload(patched, payload, BASE, ps['__scratch_end']-BASE, 'demo')
     (out/'demo').write_bytes(patched)
     # Pseudo-file round trip preserves every original inode's metadata and hardlinks.
@@ -1395,74 +993,43 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     s11logo = cat(S11LOGO)
     check(s11logo.count(LOGO_HOOK[0]) == 1, 'Unexpected S11logo_display_shell')
     (out/'S11logo').write_bytes(s11logo.replace(*LOGO_HOOK))
-    # assets/boot-logo.jpg is 320x375: an M1 Plus build without --logo keeps V2.1's own splash.
-    logo_source = 'stock' if m1plus and logo == ROOT/'assets/boot-logo.jpg' else 'custom'
-    if logo_source == 'stock':
-        logo_data = cat('release/assets/default/raw/images/xx/logo.jpg')
-    else:
-        logo_data = logo.read_bytes()
-    check(jpeg_size(logo_data) == expected_logo, f'Logo must be {expected_logo[0]}x{expected_logo[1]} like the stock splash')
+    logo_data = logo.read_bytes()
+    check(jpeg_size(logo_data) == (320, 375), 'Logo must be 320x375 like the stock splash')
     # Package exactly the validated bytes, even if the input is edited during compression.
-    logo_target = out/'logo.jpg'
-    logo_target.write_bytes(logo_data)
+    logo = out/'logo.jpg'
+    logo.write_bytes(logo_data)
     for path, src in ((b'release/bin/demo', out/'demo'), (b'usr/bin/hciplayer', out/'peq/hciplayer'),
                       (BLUEALSA.encode(), out/'bluealsa'), (WATCHDOG.encode(), out/'watchdog'),
                       (S90PLAY.encode(), out/'S90play'), (S11LOGO.encode(), out/'S11logo'),
-                      (b'release/assets/default/raw/images/xx/logo.jpg', logo_target)):
+                      (b'release/assets/default/raw/images/xx/logo.jpg', logo)):
         p = swap_inode(p, path, src)
     # New inodes, each with its stock image's metadata: the Stock build's Coverflow card icons (menu_music's),
     # the Local Music and Spotify rows' icons, drawn in assets/icons/ (stock's 52px style) or else a copy of the stock image named
     # (not the copies iPod pre-sizes for Settings), and q2video.
     xx = 'release/assets/default/raw/images/xx/'
-    if m1plus:
-        mapping = dict(
-            shuffle='pset_playmode.png', scrobble='drop_wifi.png', podcasts='dlna.png',
-            audiobooks='playset_foldercover.png', photos='pset_covermode.png', books='system_language.png',
-            videos='sset_display.png', longsongs='system_time.png')
-    else:
-        mapping = dict(
-            shuffle='playset_playmode.png', scrobble='wifiset_wifi.png', podcasts='netservice_dlna.png',
-            audiobooks='playset_foldercover.png', photos='playset_covermode.png', books='system_language.png',
-            videos='system_display.png', longsongs='system_time.png')
-    icons = {} if (ipod and not m1plus) else {n: ('system_language.png' if m1plus else n.replace('coverflow', 'music'), (ROOT/'assets/icons'/n).read_bytes()) for n in ICONS}
+    icons = {} if ipod else {n: (n.replace('coverflow', 'music'), (ROOT/'assets/icons'/n).read_bytes()) for n in ICONS}
     drawn = ('podcasts', 'audiobooks', 'books', 'videos')
     icons.update({f'local_{n}.png': (like, (ROOT/'assets/icons'/f'local_{n}.png').read_bytes() if n in drawn
-                                     else cat(xx+like)) for n, like in mapping.items()})
+                                     else cat(xx+like)) for n, like in dict(
+        shuffle='playset_playmode.png', scrobble='wifiset_wifi.png', podcasts='netservice_dlna.png',
+        audiobooks='playset_foldercover.png', photos='playset_covermode.png', books='system_language.png',
+        videos='system_display.png', longsongs='system_time.png').items()})
     for n in ('spotify', 'radio'):  # Streaming's Spotify and Internet Radio rows
-        icons[f'stream_{n}.png'] = ('tidal.png' if m1plus else 'list_tidal.png', (ROOT/'assets/icons'/f'stream_{n}.png').read_bytes())
-    if m1plus:
-        # V2.1's rows draw a 40 px icon (list_row_core) where V1.32's drew 52: the drawn ones at its size,
-        # and the Q2 Pod page's Coverflow row from the Coverflow card's art. The Home card's pair is V2.1's
-        # 66 px card art (mymusic.png's).
-        for n in drawn:
-            like, data = icons[f'local_{n}.png']
-            icons[f'local_{n}.png'] = (like, sized_art(data, 40))
-        icons['local_coverflow.png'] = ('pset_playmode.png', sized_art((ROOT/'assets/icons/menu_coverflow.png').read_bytes(), 40))
-        # V1.32's Local Music icons Ratings and Most Played name, which V2.1 lacks: its Favourites and
-        # Frequent cards' art at the rows' size.
-        icons['local_fav.png'] = ('pset_playmode.png', sized_art(cat(xx+'fav.png'), 40))
-        icons['local_frequentplay.png'] = ('pset_playmode.png', sized_art(cat(xx+'many.png'), 40))
-        for n in ('home_q2pod', 'home_q2pod_down'):
-            icons[f'{n}.png'] = ('mymusic.png', (ROOT/'assets/icons'/f'{n}.png').read_bytes())
-    if m1plus:
-        icons['stream_airplay.png'] = ('airplay.png', cat(xx+'airplay.png'))
-    else:
-        icons['stream_airplay.png'] = ('list_tidal.png', cat(xx+'netservice_airplay.png'))  # iPod resizes stock's
-    art = (ROOT/'assets/icons/default_album_home.png').read_bytes() if (ipod and not m1plus) else None
-    if ipod and not m1plus:  # Streaming's rows draw them at SET_ICON; Home's placeholder at the art panel's 290px
+        icons[f'stream_{n}.png'] = ('list_tidal.png', (ROOT/'assets/icons'/f'stream_{n}.png').read_bytes())
+    icons['stream_airplay.png'] = ('list_tidal.png', cat(xx+'netservice_airplay.png'))  # iPod resizes stock's
+    art = (ROOT/'assets/icons/default_album_home.png').read_bytes() if ipod else None
+    if ipod:  # Streaming's rows draw them at SET_ICON; Home's placeholder at the art panel's 290px
         for n in ('spotify', 'radio', 'airplay'):
             like, data = icons[f'stream_{n}.png']
             icons[f'stream_{n}.png'] = (like, row_icon(data))
         icons['default_album_home.png'] = ('default_album_big.png', art)
         icons['default_album_flow.png'] = ('default_album_big.png', sized_art(art, 160))
     added = []
-    helper_items = {
-        HELPER: (HELPER_LIKE, compile_helper(out, cat, 'video', 'q2video', HELPER_LIBS, m1plus=m1plus)),
-        SCROBBLE_CA: ('etc/hosts', (ROOT/'assets/scrobble-ca.pem').read_bytes()),
-        BOOT: (HELPER_LIKE, compile_helper(out, cat, 'boot', 'q2boot', HELPER_LIBS[:1], m1plus=m1plus)),
-        **({REMOTE: (HELPER_LIKE, compile_helper(out, cat, 'remote', 'q2remote', HELPER_LIBS[:1], m1plus=m1plus))} if dev else {})
-    }
-    for path, (like, data) in {**{xx+n: (xx+l, d) for n, (l, d) in icons.items()}, **helper_items}.items():
+    for path, (like, data) in {**{xx+n: (xx+l, d) for n, (l, d) in icons.items()},
+                               HELPER: (HELPER_LIKE, compile_helper(out, cat, 'video', 'q2video', HELPER_LIBS)),
+                               SCROBBLE_CA: ('etc/hosts', (ROOT/'assets/scrobble-ca.pem').read_bytes()),
+                               BOOT: (HELPER_LIKE, compile_helper(out, cat, 'boot', 'q2boot', HELPER_LIBS[:1])),
+                               **({REMOTE: (HELPER_LIKE, compile_helper(out, cat, 'remote', 'q2remote', HELPER_LIBS[:1]))} if dev else {})}.items():
         stock = inode(p, like.encode())
         check(stock is not None, f'Missing stock inode for {path}')
         name = path.rsplit('/', 1)[-1]
@@ -1473,46 +1040,39 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
         p = p[:at]+entry+p[at:]
         added.append([path, b'R', *stock.groups()])
     removed = []
-    to_remove = STOCK_EQ + OBSOLETE + (CAROUSEL if (ipod and not m1plus) else [])
-    for path in to_remove:
+    for path in STOCK_EQ + OBSOLETE + (CAROUSEL if ipod else []):
         line = re.search(rb'^'+re.escape(path.encode())+rb' R .+\n', p, re.M)
-        if line is None and m1plus and path in STOCK_EQ:
-            continue
         check(line is not None, f'Missing stock inode {path}')
         removed.append(line.group().split()[:6])
         p = p[:line.start()]+p[line.end():]
     changed_assets = {}
-    patch_list = [(TAG_C, lambda raw: patch_m4b_cover(raw, m1plus=m1plus), 'libtag_c.so.2.0.1')]
-    if not m1plus:
-        patch_list.append((FONT, font_quotes, 'default.ttf'))
-    for path, fix, name in patch_list:
+    for path, fix, name in ((TAG_C, patch_m4b_cover, 'libtag_c.so.2.0.1'), (FONT, font_quotes, 'default.ttf')):
         original = cat(path)
         data = fix(original)
         (out/name).write_bytes(data)
         p = swap_inode(p, path.encode(), out/name)
         changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
-    if not m1plus:
-        assets = ['ui/'+rel for rel in (UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])] + ['strings/en_US.bin']
-        if ipod:
-            assets += ['styles/'+rel for rel in AUDIT['styles']]
-            # settings icons pre-sized to the rows' SET_ICON, in place, so each keeps its inode metadata
-            assets += ['images/'+name for name in SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS]
-            assets += ['images/'+name for name in ART_PLACEHOLDERS]
-        for rel in assets:
-            kind, name = rel.split('/', 1)
-            path = 'release/assets/default/raw/' + ('images/xx/'+name if kind == 'images' else rel)
-            original = cat(path)
-            data = (relabel(original) if kind == 'strings' else
-                    patch_style(original, AUDIT['styles'][name]) if kind == 'styles' else
-                    (sized_art(art, ART_PLACEHOLDERS[name]) if name in ART_PLACEHOLDERS else
-                     status_icon(name, original) if name in STATUS_ICONS else quiet_icon(name, original) if name in QUIET_ICONS else settings_icon(name, original)) if kind == 'images' else patch_asset(name, original, ipod))
-            target = out/rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-            p = swap_inode(p, path.encode(), target)
-            changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
+    assets = ['ui/'+rel for rel in (UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])] + ['strings/en_US.bin']
+    if ipod:
+        assets += ['styles/'+rel for rel in AUDIT['styles']]
+        # settings icons pre-sized to the rows' SET_ICON, in place, so each keeps its inode metadata
+        assets += ['images/'+name for name in SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS]
+        assets += ['images/'+name for name in ART_PLACEHOLDERS]
+    for rel in assets:
+        kind, name = rel.split('/', 1)
+        path = 'release/assets/default/raw/' + ('images/xx/'+name if kind == 'images' else rel)
+        original = cat(path)
+        data = (relabel(original) if kind == 'strings' else
+                patch_style(original, AUDIT['styles'][name]) if kind == 'styles' else
+                (sized_art(art, ART_PLACEHOLDERS[name]) if name in ART_PLACEHOLDERS else
+                 status_icon(name, original) if name in STATUS_ICONS else quiet_icon(name, original) if name in QUIET_ICONS else settings_icon(name, original)) if kind == 'images' else patch_asset(name, original, ipod))
+        target = out/rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        p = swap_inode(p, path.encode(), target)
+        changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
     pseudo.write_bytes(p)
-    (out/'empty').mkdir(exist_ok=True)
+    (out/'empty').mkdir()
     newsq = out/'rootfs.squashfs'
     epoch = struct.unpack_from('<I',sq.read_bytes(),8)[0]
     run('mksquashfs',out/'empty',newsq,'-pf',pseudo,'-noappend','-comp','lzo',
@@ -1526,38 +1086,37 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     blobs['recovery-update/rootfs.squashfs'] = newsq.read_bytes()
     # Stock image proves this size fits; do not enlarge beyond its padded size.
     check(len(blobs['recovery-update/rootfs.squashfs']) <= sq.stat().st_size, 'Repacked rootfs exceeds stock size')
-    blobs['firmware_v20.info'] = (f'{model}\n{version}\n'+''.join(
+    blobs['firmware_v20.info'] = (f'Shanling Q2\n{version}\n'+''.join(
         hashlib.md5(blobs[n]).hexdigest()+'  '+n+'\n' for n in [
             'recovery-update/xImage','recovery-update/rootfs.squashfs'])).encode()
-    out_archive = out/archive_name
-    with tarfile.open(out_archive,'w',format=tarfile.GNU_FORMAT) as t:
+    with tarfile.open(out/'update.tar','w',format=tarfile.GNU_FORMAT) as t:
         for m in meta:
             data = blobs.get(m.name)
             if data is not None: m.size=len(data)
             t.addfile(m,io.BytesIO(data) if data is not None else None)
-    manifest = dict(model=model, input_sha256=input_sha, stock_demo_sha256=M1PLUS_DEMO_SHA if m1plus else DEMO_SHA,
-        source_sha256=source, demo_sha256=sha(patched), patch_sha256=sha(payload),
-        update_sha256=sha(out_archive.read_bytes()), rootfs_sha256=sha(newsq.read_bytes()),
-        kernel_sha256=sha(blobs['recovery-update/xImage']), patch_bytes=len(payload), ring_step_pixels=RING_STEP,
-        audio_extension_calls=[dict(address=hex(a), original=f'{o:#010x}', replacement=hex(n)) for name, a, o, n in call_site_words(m1plus, ps) if name == 'AUDIO_EXTENSION_CALLS' and n != o],
-        version=version, **({'release': m1_release[0]} if m1_release else {}), variant=variant, dev=dev, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=code_changes, changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
+    manifest = dict(input_zip_sha256=ZIP_SHA, stock_demo_sha256=DEMO_SHA, source_sha256=source,
+        demo_sha256=sha(patched), patch_sha256=sha(payload), update_sha256=sha((out/'update.tar').read_bytes()),
+        rootfs_sha256=sha(newsq.read_bytes()), kernel_sha256=sha(blobs['recovery-update/xImage']),
+        patch_bytes=len(payload), ring_step_pixels=RING_STEP,
+        audio_extension_calls=[dict(address=hex(a), original='0x0320f809', replacement=hex(jal(ps['ringnav_audio_extension']))) for a in AUDIO_EXTENSION_CALLS],
+        version=version, variant=variant, dev=dev, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=code_changes, changed_assets=changed_assets, logo_sha256=sha(logo_data),
         patch_symbols={n:hex(v) for n,v in ps.items() if n.startswith('stock_')},
         tools={t:run(t,'--version').splitlines()[0] for t in ['clang','ld.lld','llvm-objcopy']} |
-              ({'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]} if ipod or m1plus else {}))
+              ({'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]} if ipod else {}))
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print(json.dumps({k:manifest[k] for k in ['update_sha256','patch_bytes','version']},indent=2))
 
 if __name__ == '__main__':
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('target',type=pathlib.Path, help='Target firmware (Q2 ZIP or update.tar, M1 Plus ZIP or update.bin)')
+    ap.add_argument('zip',type=pathlib.Path)
     ap.add_argument('--out',type=pathlib.Path,default=ROOT/'build')
     ap.add_argument('--logo',type=pathlib.Path,default=ROOT/'assets/boot-logo.jpg',
-                    help='Boot splash JPEG (default: assets/boot-logo.jpg)')
+                    help='320x375 JPEG boot splash (default: assets/boot-logo.jpg)')
     ap.add_argument('--ipod', action='store_true', help='iPod UI: compact local browsing and long Return to Now Playing')
     ap.add_argument('--dev', action='store_true',
                     help='development build: tag from the next .build-number (V001i, V002i...); never a release input')
     a=ap.parse_args()
     try:
-        build(a.target,a.out.resolve(),a.logo,a.ipod,a.dev)
+        build(a.zip,a.out.resolve(),a.logo,a.ipod,a.dev)
     except (OSError, ValueError, zipfile.BadZipFile, subprocess.CalledProcessError) as exc:
         ap.error(str(exc))

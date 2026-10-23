@@ -7,6 +7,7 @@ import tempfile
 from unittest.mock import patch
 import sys; sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first
 import build
+import m1plus
 import release_m1 as r
 
 # The tag: V, VERSION's digits and the M1 revision. Never a Q2 tag, a --dev one or another release's.
@@ -41,10 +42,10 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # validate(): the release's identity, then the stock's, then the splash; then the files (absent here).
     good = dict(model=r.MODEL, release=name, version=r.m1_tag(name), variant='stock', dev=False,
-                input_sha256=build.M1PLUS_BIN_SHA, stock_demo_sha256=build.M1PLUS_DEMO_SHA, logo_source='stock')
+                input_sha256=m1plus.M1PLUS_BIN_SHA, stock_demo_sha256=m1plus.M1PLUS_DEMO_SHA, logo_source='stock')
     d = root/'build'
     d.mkdir()
-    for change, error in ((dict(), None), (dict(input_sha256=build.M1PLUS_ZIP_SHA), None),
+    for change, error in ((dict(), None), (dict(input_sha256=m1plus.M1PLUS_ZIP_SHA), None),
                           (dict(model='Shanling Q2'), 'release identity'), (dict(version='V122S'), 'release identity'),
                           (dict(dev=21), 'release identity'), (dict(release=f'{v}-m1.2'), 'release identity'),
                           (dict(input_sha256=build.Q2_TAR_SHA), 'stock identity'),

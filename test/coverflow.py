@@ -10,9 +10,10 @@ import subprocess
 import tempfile
 import sys; sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first
 from build import FUNCTIONS, ROOT
+from m1plus import M1PLUS_FUNCTIONS
 from peq import LIBC
 
-PROTOTYPES = {**FUNCTIONS, **LIBC}  # the stock calls the host shims stand in for
+PROTOTYPES = {**FUNCTIONS, **M1PLUS_FUNCTIONS, **LIBC}  # the stock calls the host shims stand in for
 
 SHIM_H = r"""
 #include <dirent.h>

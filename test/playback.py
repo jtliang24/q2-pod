@@ -461,7 +461,7 @@ for cls in (0xf001,0xff10,1):
 # Boot applies the saved stock mode before restoring the queue, then again when hciplayer
 # connects. Execute config_init's actual call site: neither startup call is a mode choice.
 if is_m1plus:
-    from build import M1PLUS_GP
+    from m1plus import M1PLUS_GP
     for folder in (0,1):
         for mode in range(4):
             m=PlaybackMachine()

@@ -15,8 +15,8 @@ import sys
 import tarfile
 import tempfile
 import zipfile
-from build import (ROOT, VERSION, M1PLUS_ZIP_SHA, M1PLUS_BIN_SHA, M1PLUS_DEMO_SHA, build, check, run, sha,
-                   source_sha256)
+from build import ROOT, VERSION, check, run, sha, source_sha256
+from m1plus import M1PLUS_ZIP_SHA, M1PLUS_BIN_SHA, M1PLUS_DEMO_SHA, build
 
 REPO = 'jtliang24/q2-pod'  # the fork: upstream's releases are the Q2's
 MODEL = 'Shanling M1 Plus'

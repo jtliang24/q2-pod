@@ -38,9 +38,11 @@ print('Installed TagLib: M4B and M4A reach the same MP4 metadata constructor.')
 
 # Cover extraction has a separate vendor dispatcher; metadata support alone is insufficient.
 raw = subprocess.check_output(['unsquashfs', '-cat', str(pathlib.Path(sys.argv[1])/'stock.squashfs'), TAG_C])
-patched = patch_m4b_cover(raw, m1plus=is_m1plus)
+import m1plus
+if is_m1plus: patch_m4b_cover = m1plus.patch_m4b_cover
+patched = patch_m4b_cover(raw)
 try:
-    patch_m4b_cover(raw[:-1], m1plus=is_m1plus)
+    patch_m4b_cover(raw[:-1])
     raise AssertionError('Accepted an unrecognized TagLib library')
 except ValueError:
     pass

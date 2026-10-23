@@ -168,15 +168,16 @@ def compile_common(out, binary, player=False, ipod=False, target_profile=None, m
     if not player:
         stubs = []
         if m1plus:  # V1.32's private routines are V1.32 code: never merged into V2.1's table
-            from build import M1PLUS_STUB, m1plus_symbols
+            from m1plus import M1PLUS_STUB, m1plus_symbols
             syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
         else:
             syms = symbols(binary) | PRIVATE_FUNCTIONS
         # A routine V2.1 hooks where V1.32 does not (on_wm_keyup_fun, ringnav's): the payload's own
         # replays reach stock through its trampoline, not back into the hook.
-        from build import HOOKS, IPOD_HOOKS, M1PLUS_HOOKS, M1PLUS_GLOBALS
+        from build import HOOKS, IPOD_HOOKS
+        from m1plus import M1PLUS_HOOKS, M1PLUS_GLOBALS, M1PLUS_FUNCTIONS
         resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS | IPOD_HOOKS} if m1plus else {}
-        for name, (ret, args) in FUNCTIONS.items():
+        for name, (ret, args) in (FUNCTIONS | M1PLUS_FUNCTIONS if m1plus else FUNCTIONS).items():
             if name in resumed:
                 header += [f'extern {ret} stock_{resumed[name]}_trampoline({args});',
                            f'#define {name} stock_{resumed[name]}_trampoline']
@@ -203,7 +204,7 @@ def compile_common(out, binary, player=False, ipod=False, target_profile=None, m
     run('clang', *flags, '-c', out/'peq_imports.S', '-o', obj)
     objects.append(obj)
     if m1plus and not player:
-        from build import stub_asm
+        from m1plus import stub_asm
         (out/'m1stubs.S').write_text(stub_asm(stubs))
         run('clang', *flags, '-c', out/'m1stubs.S', '-o', out/'m1stubs.o')
         objects.append(out/'m1stubs.o')

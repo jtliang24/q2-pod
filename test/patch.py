@@ -27,8 +27,8 @@ if manifest.get('release'):  # an M1 Plus release (tools/release_m1.py): its tag
 assert v and manifest['version'] == (dev_tag(manifest['dev'], v[-1]) if manifest.get('dev') else v), 'Wrong variant/version'
 assert (manifest.get('compact_code') != []) == (variant == 'ipod')
 is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
-from build import call_sites, call_site_words
-SITES = call_sites(is_m1plus)  # this model's call-site patches (build.py CALL_SITES); a missing one is NOT PORTED
+from m1plus import call_sites, call_site_words, M1PLUS_FUNCTIONS
+SITES = call_sites(is_m1plus)  # this model's call-site patches (m1plus.py CALL_SITES); a missing one is NOT PORTED
 def site_patched(name):
     """Each of name's words in the built demo is its replacement (test/build.py checks every site too)."""
     from build import fileoff
@@ -37,7 +37,8 @@ def site_patched(name):
     for _, address, _, new in words: assert struct.unpack_from('<I', d, fileoff(d, address))[0] == new, (name, hex(address))
 from ipod import INC, O  # patch/offsets.inc and its integer #defines
 if is_m1plus:
-    from build import run, M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
+    from build import run
+    from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
     inc_m1 = run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c', '-I', '.', str(ROOT/'patch/offsets.inc'))
     O = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b', inc_m1, re.M)}
     HOOKS = dict(M1PLUS_HOOKS)
@@ -86,7 +87,8 @@ FILL,SHADE,OUTLINE=((O[a]<<24)|O[c] for a,c in (('FILL_ALPHA','FILL_RGB'),('SHAD
 LCD_COLORS=(0x9abcdef0,0x12345678)
 syms=symbols(B/'stock-demo')
 if is_m1plus:
-    from build import m1plus_symbols, run
+    from build import run
+    from m1plus import m1plus_symbols
     syms, _ = m1plus_symbols(syms, run('readelf', '-sW', str(B/'stock-demo')))
     for k in ('g_testmode_flag', 'g_poweroff_state', 'g_ingore_bootkey_flag', 'g_keytone_flag',
               'g_artist_type', 'album_modetype', 'g_playcover_mutex', 'g_lastcover_url'):
@@ -154,7 +156,7 @@ class Machine:
         for off,v in zip(('LCD_FILL_COLOR','LCD_STROKE_COLOR'),LCD_COLORS): self.word(self.lcd+O[off],v)
         self.clip=(0,0,240,240)
         self.handlers={}
-        for name in FUNCTIONS:
+        for name in FUNCTIONS | M1PLUS_FUNCTIONS:
             if name in syms: self.handlers[syms[name]]=name
         # canvas_get_vgcanvas runs stock, down to the mocked lcd_get_vgcanvas, as the rounded wrappers need
         for name in ('slide_menu_item_width','slide_menu_on_scroll_done','canvas_get_vgcanvas',
@@ -8854,7 +8856,7 @@ passed()
 # handler that destroys the rows and builds stock's again. The payload's handler adds its rows again,
 # as they were; AWTK runs the newest handler first, so it is bound before stock's init runs.
 if is_m1plus:
-    from build import M1PLUS_GP
+    from m1plus import M1PLUS_GP
     v21=(B/'stock-demo').read_bytes()
     def word(a): return struct.unpack_from('<I',v21,fileoff(v21,a))[0]
     def half(a): return struct.unpack_from('<h',v21,fileoff(v21,a))[0]
