@@ -5,7 +5,7 @@ build.py keeps upstream's Q2 code; its build() hands an M1 Plus input to build()
 (docs/m1plus-roadmap.md U1). The pipeline reuses build.py's helpers and tables where V2.1 matches V1.32,
 and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
-from build import (ROOT, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, GLOBALS, CONTEXT_DATA, HELPER,
+from build import (ROOT, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
                    REMOTE_HOOK, BLUEALSA, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, ICONS,
                    STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
@@ -17,7 +17,7 @@ M1PLUS_ZIP_SHA = 'db7bdbc42ffe6d5c1e3fdca9363edb78a01898b9a725c34793394cf6abfa33
 M1PLUS_DEMO_SHA = '29e23119bc2a0f153f3ea0ba942a39754d1aab0879c1040fae2269df8bd9b3f1'
 M1PLUS_GP = 0xa03ed0
 INPUTS = {M1PLUS_ZIP_SHA: ('M1 Plus Firmware V2.1/update.bin', M1PLUS_BIN_SHA), M1PLUS_BIN_SHA: (None, M1PLUS_BIN_SHA)}
-# Stock routines only the M1 Plus payload calls, beside build.py's FUNCTIONS (peq.compile_common merges them).
+# Stock routines only the M1 Plus payload calls, beside build.py's FUNCTIONS (compile_common merges them).
 M1PLUS_FUNCTIONS = {
  'view_create': ('void *', 'void *, int, int, int, int'),  # the Home card's page and card views
  'label_set_line_wrap': ('int', 'void *, int'),
@@ -423,10 +423,151 @@ def stub_asm(stubs):
         asm += [f'.globl {M1PLUS_STUB}{name}', f'{M1PLUS_STUB}{name}:', f'.space {(size + 7) & ~7}']
     return '\n'.join(asm) + '\n'
 
+# hciplayer: the PEQ, ReplayGain and MP3 seek patch (tools/peq.py) at V2.1's addresses, each found in V2.1's
+# binary; peq.py's constants are V1.32's.
+M1PLUS_PLAYER_SHA = 'a64503746862af3e69b57f2e06167351b30cda28479348a845be5172e083a8c6'
+PLAYER_PROFILE = {
+    'desc': 0x893808,
+    'desc_bytes': 'bc3789002c5e88004c358900b8c388000100000014fd4400',
+    'open_slot': 0x89381c,
+    'vbr_scan': 0x48f5fc,
+    'eq_rate_gates': ((0x42ce34, 0x10400098, 0),
+                      (0x42e6fc, 0x10400015, 0)),
+    'seek_slot': 0x89f76c,
+    'stock_seek': 0x48cc6c,
+    'id3_calls': (0x48ee74, 0x492028, 0x492ab4),
+    'stock_id3': 0x48b760,
+    'written_audio_pts': 0x4300f4,
+    'length_addr': 0xb10e5c,
+    'av_dict_set': 0x6ea1a4,
+    'av_dict_free': 0x6ea65c,
+    'rg_export': 0x5381c4,
+    'hr_mp3_seek': 0xb15298,
+}
+# libc/libcstl imports only the M1 payload uses, placed after peq.py's deque_pop_back.
+M1PLUS_LIBC = {
+    # V2.1 imports no deque_pop_back; navigation.c erases the last element through these
+    'deque_begin': ('cstl_iter', 'const void *'), 'deque_end': ('cstl_iter', 'const void *'),
+    'deque_erase': ('cstl_iter', 'void *, cstl_iter'), 'iterator_next': ('cstl_iter', 'cstl_iter'),
+    'iterator_equal': ('int', 'cstl_iter, cstl_iter'),
+}
+
+def m1plus_libc(libc):
+    """peq.py's LIBC with M1PLUS_LIBC after deque_pop_back: the import stubs' order is the payload's layout."""
+    out = {}
+    for name, value in libc.items():
+        out[name] = value
+        if name == 'deque_pop_back': out.update(M1PLUS_LIBC)
+    return out
+
+def compile_common(out, binary, player=False):
+    """peq.compile_common for V2.1: its imports, V2.1's symbols, and the player's addresses."""
+    from peq import LIBC
+    got = {}
+    for line in run('readelf', '-AW', binary).splitlines():
+        words = line.split()
+        if len(words) >= 6 and 'UND' in words and re.fullmatch('[0-9a-f]{8}', words[0]):
+            got[words[-1].split('@')[0]] = int(words[0], 16)
+    gp = 0xb16750 if player else M1PLUS_GP
+    header = ['struct dirent { unsigned ino, off; unsigned short reclen; unsigned char d_type; char d_name[256]; };',
+              'typedef struct { void *w[7]; } cstl_iter; /* libcstl 2.2 iterator_t, passed by value */']
+    asm = ['.set noreorder', '.text']
+    for name, (ret, args) in m1plus_libc(LIBC).items():
+        # Unused I/O is removed by --gc-sections in the player payload.
+        alias = {'fopen': 'fopen64', 'readdir': 'readdir64', 'pow': '__pow_finite'}.get(name, name) if player else name
+        if alias not in got:
+            header.append(f'extern {ret} {name}({args});')
+            continue
+        address = got[alias]
+        header += [f'extern {ret} peq_lib_{name}({args});', f'#define {name} peq_lib_{name}']
+        asm += [f'.section .text.peq_lib_{name},"ax",@progbits', f'.globl peq_lib_{name}',
+                f'peq_lib_{name}:', f'lui $gp, {gp >> 16}', f'ori $gp, $gp, {gp & 65535}',
+                f'lui $t8, {address >> 16}', f'ori $t8, $t8, {address & 65535}',
+                'lw $t9, 0($t8)', 'jr $t9', 'nop']
+        if name in ('memcpy', 'memset'):
+            asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
+    if player:  # peq_player.c's stock addresses, V1.32's by default
+        header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}u' for macro, key in (
+            ('WRITTEN_AUDIO_PTS', 'written_audio_pts'), ('LENGTH_ADDR', 'length_addr'), ('STOCK_ID3_ADDR', 'stock_id3'),
+            ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
+            ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'))]
+    if not player:
+        # V1.32's private routines are V1.32 code: never merged into V2.1's table
+        syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
+        # A routine V2.1 hooks where V1.32 does not (on_wm_keyup_fun, ringnav's): the payload's own
+        # replays reach stock through its trampoline, not back into the hook.
+        from build import HOOKS, IPOD_HOOKS
+        resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS | IPOD_HOOKS}
+        for name, (ret, args) in (FUNCTIONS | M1PLUS_FUNCTIONS).items():
+            if name in resumed:
+                header += [f'extern {ret} stock_{resumed[name]}_trampoline({args});',
+                           f'#define {name} stock_{resumed[name]}_trampoline']
+            elif name in syms and syms[name]:
+                header.append(f'#define {name} (({ret} (*)({args}))0x{syms[name]:x}u)')
+        # build.py has already checked each is a one-byte global (or, on V2.1, a byte or word).
+        stubbed = dict(stubs)
+        for name in GLOBALS + M1PLUS_GLOBALS:
+            if name in stubbed:
+                header += [f'extern volatile unsigned char {M1PLUS_STUB}{name};', f'#define {name} {M1PLUS_STUB}{name}']
+            else:
+                header.append(f'#define {name} (*(volatile unsigned char *)0x{syms[name]:x}u)')
+    (out/'peq_platform.h').write_text('\n'.join(header)+'\n')
+    (out/'peq_imports.S').write_text('\n'.join(asm)+'\n')
+    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=0', '-DM1PLUS=1']
+    if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
+    objects = []
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'spotify.c', 'radio.c', 'tidal.c', 'crossfade.c', 'headset.c', 'lockscreen.c']:
+        obj = out/(name+'.o')
+        run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
+        objects.append(obj)
+    obj = out/'peq_imports.o'
+    run('clang', *flags, '-c', out/'peq_imports.S', '-o', obj)
+    objects.append(obj)
+    if not player:
+        (out/'m1stubs.S').write_text(stub_asm(stubs))
+        run('clang', *flags, '-c', out/'m1stubs.S', '-o', out/'m1stubs.o')
+        objects.append(out/'m1stubs.o')
+    return objects
+
+def patch_player(raw, out):
+    """peq.patch_player for V2.1's hciplayer, at PLAYER_PROFILE's addresses."""
+    from ipod import jal, patch_word
+    from peq import PLAYER_BASE
+    out.mkdir(exist_ok=True)
+    binary = out/'stock-hciplayer'
+    binary.write_bytes(raw)
+    raw_sha = sha(raw)
+    check(raw_sha == M1PLUS_PLAYER_SHA, f'Unknown hciplayer sha256: {raw_sha}')
+    prof = PLAYER_PROFILE
+    check(raw[fileoff(raw, prof['desc']):fileoff(raw, prof['desc'])+24].hex() ==
+          prof['desc_bytes'], 'EQ descriptor mismatch')
+    objects = compile_common(out, binary, True)
+    script = out/'link.ld'
+    script.write_text('SECTIONS { . = 0xe10000; .text : { *(.text*) } .rodata : { *(.rodata*) } '
+                      '.data : { *(.data*) *(.sdata*) } .bss : { *(.bss*) *(.sbss*) } '
+                      '__end = .; /DISCARD/ : { *(.comment) *(.note*) *(.pdr) *(.mdebug*) '
+                      '*(.MIPS.abiflags) *(.reginfo) } }')
+    run('ld.lld', '-m', 'elf32ltsmip', '--gc-sections', '-T', script, '-e', 'peq_open', '--undefined=mp3_seek', '--undefined=id3_gain',
+        *objects, '-o', out/'peq.elf')
+    run('llvm-objcopy', '-O', 'binary', out/'peq.elf', out/'peq.bin')
+    ps = symbols(out/'peq.elf')
+    payload = (out/'peq.bin').read_bytes()
+    data = bytearray(raw)
+    off = fileoff(raw, prof['open_slot'])
+    data[off:off+4] = struct.pack('<I', ps['peq_open'])
+    patch_word(data, prof['vbr_scan'], 0x144008a8, 0, 'VBR scan')  # bnez $v0, ... -> nop
+    for address, stock, patched in prof['eq_rate_gates']:
+        patch_word(data, address, stock, patched, 'Equalizer rate gate')
+    patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
+    for address in prof['id3_calls']:
+        patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')
+    append_payload(data, payload, PLAYER_BASE, max(len(payload), ps['__end']-PLAYER_BASE), 'player')
+    (out/'hciplayer').write_bytes(data)
+    return dict(stock_sha256=raw_sha, sha256=sha(data), payload_sha256=sha(payload))
+
 def compile_payload(out):
     """Compile and link the payload."""
-    from peq import compile_common
-    extra = compile_common(out, out/'stock-demo', ipod=False, m1plus=True)  # also writes the libc/libcstl imports navigation.c uses
+    extra = compile_common(out, out/'stock-demo')  # also writes the libc/libcstl imports navigation.c uses
     flags = [*FLAGS, '-DIPOD=0', '-DM1PLUS=1']
     run('clang',*flags,'-I',out,'-c',ROOT/'patch/navigation.c','-o',out/'navigation.o')
     asm = ['.set noreorder', '.text']
@@ -585,7 +726,6 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
         check(load and words[4] == 0x0320f809 and
               struct.unpack_from('<I', raw_demo, fileoff(raw_demo, slot))[0] == syms[callee],
               f'config_mplayer: unexpected {callee} call')
-    from peq import patch_player
     raw_player = cat('usr/bin/hciplayer')
     audio = patch_player(raw_player, out/'peq')
     check(sha(cat(BLUEALSA)) == BLUEALSA_SHA, 'Unexpected bluealsa')

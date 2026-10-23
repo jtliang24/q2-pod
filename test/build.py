@@ -122,8 +122,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     from build import (sha, run, fileoff, segments, symbols, ROOT, TAG_C, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK,
                        REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG,
                        WATCHDOG_SLEEP, BLUEALSA, AAC_44K1, STOCK_EQ)
-    from peq import PLAYER_PROFILES
-    import build as q2, m1plus as m1
+    import build as q2, m1plus as m1, peq
     m1plus = manifest.get('model') == 'Shanling M1 Plus'  # upstream's Q2 manifest has no model
     patch_m4b_cover = (m1 if m1plus else q2).patch_m4b_cover
     assert manifest['version'].encode()+b'\0' in demo
@@ -195,7 +194,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates
     # and the ID3v2 walker calls, now id3_gain (MP3 ReplayGain); each model's at its own addresses.
     old, new = read('stock.squashfs', 'usr/bin/hciplayer'), read('rootfs.squashfs', 'usr/bin/hciplayer')
-    profile = PLAYER_PROFILES[sha(old)]
+    profile = m1.PLAYER_PROFILE if m1plus else dict(vbr_scan=peq.VBR_SCAN, eq_rate_gates=peq.EQ_RATE_GATES, id3_calls=peq.ID3_CALLS)
     assert manifest['peq']['stock_sha256'] == sha(old) and manifest['peq']['sha256'] == sha(new)
     assert (directory/'peq'/'stock-hciplayer').read_bytes() == old
     text = re.search(r'\.text +PROGBITS +[0-9a-f]+ ([0-9a-f]+) ([0-9a-f]+) ', run('readelf', '-SW', directory/'peq'/'stock-hciplayer'))

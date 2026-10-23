@@ -6,7 +6,8 @@ the stream's buffer refill and the fd are modelled. Usage: test/id3.py BUILD_DIR
 import pathlib, struct, subprocess, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]/'tools'))
 from build import machine, symbols, sha
-from peq import PLAYER_PROFILES, ID3_CALLS, STOCK_ID3
+from peq import ID3_CALLS, STOCK_ID3
+from m1plus import M1PLUS_PLAYER_SHA, PLAYER_PROFILE
 from ipod import jal
 from unicorn import UC_HOOK_CODE
 from unicorn.mips_const import *
@@ -14,7 +15,8 @@ from unicorn.mips_const import *
 out = pathlib.Path(sys.argv[1])/'peq'
 path = out/'hciplayer'
 raw = path.read_bytes()
-profile = PLAYER_PROFILES.get(sha((out/'stock-hciplayer').read_bytes()))
+is_m1plus = sha((out/'stock-hciplayer').read_bytes()) == M1PLUS_PLAYER_SHA
+profile = PLAYER_PROFILE if is_m1plus else None
 id3_calls = profile['id3_calls'] if profile else ID3_CALLS
 stock_id3 = profile['stock_id3'] if profile else STOCK_ID3
 id3_gain = symbols(out/'peq.elf')['id3_gain']
@@ -115,7 +117,7 @@ def run(data, entry):
         u.reg_write(UC_MIPS_REG_PC, u.reg_read(UC_MIPS_REG_RA))
     u.hook_add(UC_HOOK_CODE, hook)
     u.reg_write(UC_MIPS_REG_SP, 0x200f000)
-    if profile and profile.get('name') == 'm1plus':
+    if is_m1plus:
         u.reg_write(UC_MIPS_REG_A0, data[3])
         u.reg_write(UC_MIPS_REG_A1, s)
     else:
@@ -137,7 +139,6 @@ cases = [  # name, tag, stock's result, the fix's
     ('2.3 Latin-1, gains first', tag(3, rg(3, 0)), WANT, WANT),
     ('no gains', tag(4, [title, frame(4, b'APIC', ART)]), none, none),
 ]
-is_m1plus = profile and profile.get('name') == 'm1plus'
 for name, data, stock, fixed in cases:
     data += b'\xff\xfb\x90\0' + bytes(400)
     # V2.1's own walker exports no gain from any of them, so the claim below is checked, not assumed.
