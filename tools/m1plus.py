@@ -187,6 +187,40 @@ def call_site_words(m1plus, ps):
     replacement resolved against the payload's symbols ps (a pin's is its original)."""
     return [(name, address, old, old if new is None else 0x0c000000 | ps[new] >> 2 if isinstance(new, str) else new)
             for name, words in call_sites(m1plus).items() for address, old, new in words]
+# The port report (test/m1plus/ports.py): each Q2 hook and call site the M1 doesn't have by the same
+# name, or for a hook the same payload symbol, as (status, why). ported: by another route; native: V2.1
+# does it itself; q2only: by design (docs/m1plus-roadmap.md, "Already Q2-only by design"); unported:
+# a roadmap U4 row. IPOD_HOOKS are Q2 only as a group (roadmap section 5). A sync adds a row for each
+# new upstream hook or site it doesn't port, and the report fails until it has one.
+M1PLUS_PORTS = {
+    # Hooks
+    'on_wm_keydown_before_fun': ('q2only', "Key Tone's click on the wheel's press; V2.1 has no buzzer command (progress 15)"),
+    'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
+    'localmusic_page_init': ('ported', "the Library's rows are the Q2 Pod page's Library page (progress 17)"),
+    'load_localartist_list': ('ported', "V2.1 has no such function: an artist's albums are loadLocalClassList(0xff01), "
+                              'hooked as ringnav_localclass (progress 12)'),
+    'screensaver_rows': ('ported', "V2.1 has no rows hook: the Lock screen page's rows are lockscreen_page's (progress 28)"),
+    'stream_page_init': ('ported', 'V2.1 has no Streaming page: Spotify, Internet Radio and AirPlay are Q2 Pod page rows '
+                         '(progress 22)'),
+    'keylock_rows': ('native', "V2.1's Buttons lock has a switch and Volume, Keys and All modes (roadmap 4)"),
+    'quick_lock': ('native', "V2.1's Buttons lock (roadmap 4)"),
+    'dialog_statusbar_dialog_init': ('native', "quick settings' lock label, which goes with quick_lock (roadmap 4)"),
+    'read_artistype_value': ('native', "V2.1's Artists page has its own Artist/Album Artist switch (roadmap 4)"),
+    'saver_cover': ('native', "V2.1's image_base_set_image always invalidates (progress 29)"),
+    'player_play_pause': ('unported', "a manual Play/Pause isn't marked (headset_manual), so a headset's automatic "
+                          "resume can undo it; V2.1's play_pause_music is unhooked"),
+    'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
+    # Call sites
+    'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
+    'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
+    'CLASS_ICON': ('native', 'V2.1 draws its own artist icon (roadmap 4)'),
+    'ARTIST_COVER_ROW': ('native', "V2.1 has no artist page of 160 px rows: an artist's albums are an album list, "
+                         'whose covers COVER_PAUSE and ALBUM_ART cover (progress 12, 30)'),
+    'NP_INFO_CALL': ('unported', "Now Playing's info lines read better; V2.1's site is 0x53bebc (roadmap 7)"),
+    'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
+    'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
+    'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
+}
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
     'g_playspeed_mode': 'playspeed_mode',

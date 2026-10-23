@@ -3,6 +3,11 @@
  * rules). An upstream name missing here fails the M1 compile, so a sync gives each new one a V2.1
  * value or compiles its feature out. Names V2.1 shares with V1.32 keep V1.32's comments. */
 
+/* A name whose code can't run on M1, since the hook or call site that reaches it isn't ported
+ * (M1PLUS_PORTS 'unported'): #define NAME M1_UNPORTED. test/m1plus/ports.py lists each. A name that
+ * code the M1 runs uses gets its V2.1 value instead. */
+#define M1_UNPORTED 0
+
 #define UI_W 320
 #define UI_H 480
 #define BOTTOM 450
