@@ -1342,12 +1342,12 @@ release is the first after the 1.3.9 sync (U3), 1.3.9-m1.1.
 
 ```sh
 python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses unknown inputs and V2.1 names
-python3 test/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
-python3 test/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
-python3 test/boot.py build-m1 --home-menu  # the same with six Home cards: the Q2 Pod card on a page of its own
-python3 test/boot.py build-m1 --media    # a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Streaming, Shuffle Songs
-python3 test/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
-python3 test/playback.py build-m1        # and m4b, id3, ldac, headset_io, bluealsa
+python3 test/m1plus/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
+python3 test/m1plus/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
+python3 test/m1plus/boot.py build-m1 --home-menu  # the same with six Home cards: the Q2 Pod card on a page of its own
+python3 test/m1plus/boot.py build-m1 --media    # a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Streaming, Shuffle Songs
+python3 test/m1plus/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
+python3 test/m1plus/playback.py build-m1        # and test/m1plus/m4b, id3, headset_io; test/ldac, bluealsa
 ```
 
 On a `--dev` build, `python3 tools/q2remote.py` reaches the device over Wi-Fi: files, settings,

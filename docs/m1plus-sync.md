@@ -49,8 +49,8 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
       `<tag>`'s own build.
    2. **Q2 suites.** The tag's suites on both Q2 builds, as in
       [the checklist](m1plus-integration.md#checklist): no case dropped or skipped.
-   3. **M1 gates.** The V2.1 name check, `test/build.py --build`, `test/patch.py` and `test/boot.py` on a
-      fresh M1 build.
+   3. **M1 gates.** The V2.1 name check, `test/m1plus/build.py --build`, `test/m1plus/patch.py` and
+      `test/m1plus/boot.py` on a fresh M1 build.
    4. **Port report.** Every new hook, site and name is classified (ported, native in V2.1, Q2 only, or
       `NOT PORTED`).
 4. **Record.**
@@ -86,3 +86,4 @@ stay flat or fall.
 | U1a done: `peq.py`, `ipod.py` upstream's (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,639/−1,729 over 36 files |
 | U1b: `offsets.inc` split (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,172/−1,696 over 36 files; `patch/offsets.inc` +5/−0 |
 | U1c: the M1 blocks out of `patch/*.c` (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +4,368/−1,665 over 36 files; `patch/` +671/−226 |
+| After U1 (U1d: the M1 suites in `test/m1plus/`, Oct 23) | 1.2.2 (`c0a2d6b`, through `main`) | +1,417/−279 over 31 files |

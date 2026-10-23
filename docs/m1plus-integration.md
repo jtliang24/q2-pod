@@ -33,7 +33,7 @@ where it isn't.
 - **R3. The Q2 release works.** `tools/release.py package` and `upload`, and `test/release.py`, work as on
   `main`: two builds per variant, byte comparison, the suites on each.
 - **R4. M1 is unchanged.** The M1 build and its gates keep passing: the V2.1 name check,
-  `test/build.py --build`, `test/patch.py` and `test/boot.py`.
+  `test/m1plus/build.py --build`, `test/m1plus/patch.py` and `test/m1plus/boot.py`.
 - **R5. The docs give both targets.** `building.md` and the README give both targets' commands, and say
   what ships for each device.
 
@@ -45,14 +45,15 @@ Measured as below, `main` from the vendor ZIP and the branch from `stock/`'s `up
   The manifests still differ, in keys only: `input_sha256` for `input_zip_sha256`, and the new `model`
   and `logo_source`. The manifest is not in `update.tar`.
 - **R2 is met.** On both Q2 builds, `test/build.py --build`, `test/patch.py` (Legacy 1017, iPod 1398
-  scenarios, one more than `main`'s each), `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa`
+  scenarios, one more than `main`'s each; since U1d, upstream's own `test/patch.py`, `main`'s 1016 and
+  1397), `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa`
   pass, and so do `peq`, `mp3`, `remote`, `coverflow` and `release`.
 - **R3 is met.** `tools/release.py package 'stock/Q2 Firmware V1.32/update.tar'` builds both variants
   twice, validates them, finds each pair byte-identical and writes both ZIPs and the user guide. The
   guide's build (`docs/manual/build.py`) needs `pdftotext`, which the devShell lacks: it ran with
   `nix shell nixpkgs#poppler-utils` on the `PATH`. `test/release.py` passes.
 - **R4 holds.** On the M1 build, `test/build.py --build`, `test/patch.py` (1004 scenarios, no `KNOWN
-  GAP`, 8 `NOT PORTED`) and `test/boot.py` pass.
+  GAP`, 8 `NOT PORTED`) and `test/boot.py` pass: since U1d, their copies in `test/m1plus/`.
 
 U0 closed items 1 and 3–9 below. The byte compare then found three more differences, which the
 2026-10-18 measurement had not listed:
@@ -258,9 +259,9 @@ python3 test/release.py
 python3 tools/release.py package 'stock/Q2 Firmware V1.32/update.tar' --out <scratch>/release
 
 # R4
-python3 test/build.py --build <scratch>/m1
-python3 test/patch.py <scratch>/m1
-python3 test/boot.py <scratch>/m1
+python3 test/m1plus/build.py --build <scratch>/m1
+python3 test/m1plus/patch.py <scratch>/m1
+python3 test/m1plus/boot.py <scratch>/m1
 ```
 
 `test/patch.py` ends with its scenario count. `main` passes 1016 (Legacy) and 1397 (iPod), so the branch must

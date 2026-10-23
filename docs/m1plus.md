@@ -159,7 +159,7 @@ icons, named in `offsets.inc` so the build's V2.1 name check covers them). Make 
 [`back_button`](../patch/coverflow.c), or with `page_title`, which adds one beside the title. Its
 click sends `KEY_RETURN` through `dispatch_key_return` on a timer, so the page's own keyup decides
 what Back means: close the page, or step back one screen as the PEQ editor's Advanced tab does.
-No gesture, hidden tap or key may be a page's only way out. A new page's `test/boot.py` step
+No gesture, hidden tap or key may be a page's only way out. A new page's `test/m1plus/boot.py` step
 closes it with that button.
 
 **The Back button is always there.** V2.1's own pages have theirs. In Knob: Volume, Previous, Next
@@ -186,7 +186,7 @@ Two rows in **System Settings $\rightarrow$ Display setting** provide:
 The remap happens on the key's release, in [`ringnav()`](../patch/navigation.c) (the
 `on_wm_keyup_fun` hook), before stock's key-up runs. That is enough, because V2.1 turns the volume
 there: `on_wm_keyup_fun` opens the volume dialog for keys 220/221. V2.1 binds no key-down handler
-(`home_page_init` binds key-up and key-long only), so there is no key-down to remap. `test/build.py`
+(`home_page_init` binds key-up and key-long only), so there is no key-down to remap. `test/m1plus/build.py`
 pins both facts.
 
 When switched to **Navigation**:
@@ -350,7 +350,7 @@ Where upstream's code in `patch/*.c` behaves differently on V2.1, the note lives
 comments, so a sync never conflicts on a comment (roadmap U1c). By file and function:
 
 - `coverflow.c`, `build_art`: V2.1 has the one cover lock. Its player cover thread (`parseplaycover_thd`)
-  holds `parse_cover_mutex` too (`test/build.py`).
+  holds `parse_cover_mutex` too (`test/m1plus/build.py`).
 - `coverflow.c`, `changed`: on M1 Plus the view under the carousel takes the touch (`touched`).
 - `coverflow.c`, `pick` and `coverflow_home_back`: Return from the covers or the message goes to the Q2 Pod
   page, since V2.1's Home is a grid of cards and the Q2 Pod card follows them.

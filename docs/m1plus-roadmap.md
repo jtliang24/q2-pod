@@ -10,17 +10,18 @@ Every item ends in the same loop. First the Q2 checks must pass:
 - the Q2 suites pass on both.
 
 See [m1plus-integration.md](m1plus-integration.md#checklist). Then the build's name check,
-`test/build.py --build`, `test/patch.py` and `test/boot.py` must pass on M1. Then flash through the
+`test/m1plus/build.py --build`, `test/m1plus/patch.py` and `test/m1plus/boot.py` must pass on M1. Then flash through the
 menu updater, and use the menu updater with stock `update.bin` to get back. Where an item's test is a `KNOWN GAP` or `NOT PORTED`
 line today, the fix removes that marker. `known_gap` fails the run once its check passes, so a fixed
 gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** U0 is done: the Q2 builds are `main`'s again. The M1 release tool is done (section 6). Its
-first package, 1.2.2-m1.1, passed its device check and is not published, since upstream is past 1.2.2:
-the first published M1 release is 1.3.9-m1.1, after U3. Then section U goes on in order: the restructure (U1) and the sync tooling (U2) against
-1.2.2, then the first sync to upstream 1.3.9 (U3). The M1 feature work waits until U3 lands: Spotify on the
+**Next:** U2, the sync tooling, against 1.2.2, then the first sync to upstream 1.3.9 (U3). Done so far:
+U0 (the Q2 builds are `main`'s again), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
+check and is not published, since upstream is past 1.2.2, so the first published M1 release is
+1.3.9-m1.1, after U3), and U1 (the M1 code beside upstream's: +1,417/−279 lines over upstream's files,
+from +6,417/−2,036). The M1 feature work waits until U3 lands: Spotify on the
 device (section 3), the iPod UI (section 5) and the final pass (section 7). Section 4 is done for 1.2.2;
 one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes
 first: items that only change how something looks wait for the final pass (section 7).
@@ -43,7 +44,7 @@ first: items that only change how something looks wait for the final pass (secti
   until a sync brings the fix in.
 - **Find each V2.1 address in V2.1's code, then pin it in a test.** Read the same-named or same-role
   function in V2.1's demo, and pin the instruction or string the change relies on, as
-  `test/build.py`'s updater check and `test/patch.py`'s `tslib_run` check do. Never reuse a V1.32
+  `test/m1plus/build.py`'s updater check and `test/m1plus/patch.py`'s `tslib_run` check do. Never reuse a V1.32
   address.
 - **Name every stock widget, image and style through `offsets.inc`** (`VIEW_`, `ICON_`, `STYLE_`,
   `ROW_`, `ABOUT_`), so the build's V2.1 name check covers it.
@@ -56,7 +57,7 @@ first: items that only change how something looks wait for the final pass (secti
   one; its click sends Return, and the page's keyup decides whether that closes the page or steps
   back one screen. The M1 has no Return key. Previous, Next and Play/Pause are media keys, as on
   stock, except that in Knob: Navigation Previous also presses the page's back button. So no
-  gesture, hidden tap or key may be a page's only way out. Each new page's `test/boot.py` step
+  gesture, hidden tap or key may be a page's only way out. Each new page's `test/m1plus/boot.py` step
   closes it with the button (`BACK`).
 
 ## U. Tracking upstream
@@ -137,14 +138,20 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       +671/−226, from about +1,945/−290: most of the rest are one-line seams that stay by design, a literal
       named by a macro with upstream's Q2 value (`UI_W`, `STYLE_…`, `view_show`), an `#include`, or an
       `#if` around a Q2-only line. Lowering it further would mean restructuring upstream's functions.
-  - **d. Move the M1 tests out.**
-    - `test/patch.py`'s and `test/build.py`'s M1 paths move to `test/m1plus/`. That covers the V2.1 harness
-      addresses, the `KNOWN GAP` and `NOT PORTED` lists and the M1 scenarios, which import the shared
-      helpers.
-    - Upstream's Q2 sections go back to upstream's text wherever the branch only added an M1 branch.
-    - `test/boot.py` is M1-only already.
-  - **e. Measure the footprint.** `git diff --stat <upstream base> -- <upstream's files>`, recorded in
-    [m1plus-sync.md](m1plus-sync.md#footprint) after U1 and after each sync, so that growth shows.
+  - **d. Move the M1 tests out. Done (Oct 22).**
+    - `test/` holds upstream's suites, and `patch.py`, `build.py`, `playback.py`, `id3.py`, `m4b.py` and
+      `headset_io.py` there are upstream's text but for one line: `playback.py` picks the hold menu's
+      Shuffle by its label, as upstream 1.3.9 does, since `main`'s fixed index fails on `main`'s own build.
+      Upstream's `patch.py` passes `main`'s 1016 (Legacy) and 1397 (iPod) scenarios.
+    - `test/m1plus/` holds the M1's: those six as the branch had them, with both models' paths, and
+      `boot.py`. They run on M1 builds as before; their Q2 branches are dead there and can be trimmed.
+    - `coverflow.py` and `peq.py` stay in `test/` with small seams: they build the shared C on the host,
+      which the port changed. `remote.py` keeps its M1 cases, as `tools/q2remote.py` does.
+  - **e. Measure the footprint. Done (Oct 23).** After U1: +1,417/−279 over upstream's 31 changed files,
+    from +6,417/−2,036 over 38. What remains is `patch/*.c`'s one-line seams (+671/−226), `tools/q2remote.py`
+    (+443) and the docs' and tests' M1 notes. It is measured with `git diff --stat <upstream base> --
+    <upstream's files>` and recorded in [m1plus-sync.md](m1plus-sync.md#footprint) after U1 and after each
+    sync, so that growth shows.
 - **U2. Sync tooling (M).**
   - **`test/q2compare.py`** ([integration item 12](m1plus-integration.md#work-items), now required). It
     builds `UPSTREAM_BASE` from `git archive` and this tree, for Legacy and iPod, and compares their
@@ -154,7 +161,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     the Q2 baseline that `q2compare.py` and these docs refer to.
   - **A port report.** It lists every Q2 hook, call site and `offsets.inc` name, and classifies each for
     M1 as ported, native in V2.1 (section 4's "Not ported, because V2.1 has them"), Q2 only by design, or
-    `NOT PORTED`. It goes in `test/m1plus/`, or is a mode of `test/build.py`. A sync's new `NOT PORTED`
+    `NOT PORTED`. It goes in `test/m1plus/`, or is a mode of `test/m1plus/build.py`. A sync's new `NOT PORTED`
     rows go into U4.
   - **The `upstream` remote** (`https://github.com/DiamondBond/q2-pod.git`) and the merge recipe in
     [m1plus-sync.md](m1plus-sync.md).
@@ -184,7 +191,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `lockscreen_access` (1.3.9, `f1cfeb7`) replaces the two `jalr $25` to `access`: V1.32's
       `0x4fa41c` (`config_init`) and `0x4fad60` (`get_screensaver_image`). V2.1's are `0x4e6218`
       (`config_init`, `0x4e5030`) and `0x4d75b0` (`get_screensaver_image`, `0x4d7524`), both
-      `0x0320f809` with `access` at `-0x834($gp)`. Pin both in `test/build.py` when they are ported.
+      `0x0320f809` with `access` at `-0x834($gp)`. Pin both in `test/m1plus/build.py` when they are ported.
 - **U5. Each later release (S–M each).** Sync each upstream release tag soon after it ships, by the same
   runbook as U3. Its new features go into U4.
 
@@ -238,8 +245,8 @@ This section is complete for upstream 1.2.2's call sites. Call sites that later 
 Each `NOT PORTED` line below names a patch or hook made at a V1.32 address. A call site is ported by
 adding its V2.1 words under its name in `CALL_SITES['m1plus']` (`tools/m1plus.py`):
 - the build applies them, as it applies Q2's;
-- `test/build.py` checks each word, and allows it in M1's demo diff;
-- `test/patch.py`'s test for that name runs once the name is in the table (`'NAME' in SITES`). Its
+- `test/m1plus/build.py` checks each word, and allows it in M1's demo diff;
+- `test/m1plus/patch.py`'s test for that name runs once the name is in the table (`'NAME' in SITES`). Its
   harness addresses are V1.32's until the test is ported too.
 
 A hook goes in `M1PLUS_HOOKS` instead.
@@ -309,7 +316,7 @@ Their V2.1 site is the fill's one call, `0x53bebc` (`0x0411f760`, the fill at `0
 `--ipod` is refused for M1 Plus. The iPod UI patches V1.32's UI assets, styles and code layout, and
 assumes the Q2's 375x320 landscape screen and touch wheel. An M1 version would be a redesign for a
 320x480 portrait touchscreen with a knob, not a port. Decide whether it is wanted before starting.
-Two `test/patch.py` checks go with it: the library rows' title bounds (`compact_row_layout`) and the
+Two `test/m1plus/patch.py` checks go with it: the library rows' title bounds (`compact_row_layout`) and the
 info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own code as a control.
 
 ## 6. Tooling and release
@@ -324,8 +331,8 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   stock's V2.1 `update.bin` (or its vendor ZIP) and has:
   - a reproducible `update.bin`: two builds, compared byte for byte;
   - a manifest check (`model`, `input_sha256`, `logo_source`);
-  - the M1 gates on the first build: the V2.1 name check, `test/build.py --build`, `test/patch.py` and
-    `test/boot.py`;
+  - the M1 gates on the first build: the V2.1 name check, `test/m1plus/build.py --build`, `test/m1plus/patch.py` and
+    `test/m1plus/boot.py`;
   - a version from upstream's `VERSION` plus an M1 suffix (for example `1.3.9-m1.1`), so a release
     says which upstream release it carries, and a tag the updater takes over the last (`V1391`);
   - a release note with the reflash-to-stock instructions;
@@ -368,7 +375,7 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   play this station". Seen with Los 40 Principales México on dev 16. The Q2 has the same code, so this
   is a Q2 Pod change: resolve a remote playlist to its first stream, or ask radio-browser for
   `url_resolved`.
-- **A card library in the emulator.** `test/boot.py --media` mounts a small card on a tmpfs: two long
+- **A card library in the emulator.** `test/m1plus/boot.py --media` mounts a small card on a tmpfs: two long
   songs (header-only FLAC and MP3), a book and a photo, with V2.1's `songtable` seeded. Tags (album,
   artist) in the files and a scan would let the walk open Album, Artist and Now Playing. Playback itself
   would still need a stand-in for `hciplayer`'s audio output. The touch long-press's walk step (hold an
