@@ -8,7 +8,7 @@ from build import ROOT, ZIP_SHA, sha
 
 VARIANTS = {'legacy': [], 'ipod': ['--ipod']}
 # Every upstream tree's tools/build.py takes only the audited ZIP, so both sides build from it.
-ZIPS = [ROOT/'stock/Q2 Firmware V1.32.zip', pathlib.Path.home()/'Downloads/Q2 Firmware V1.32.zip']
+ZIPS = [ROOT/'stock/Q2 Firmware V1.32.zip']
 CACHE = ROOT/'work/q2compare'  # the base's builds, by commit: a base never changes
 # source_sha256 hashes tools/*.py and patch/*, which the M1 files are in; tools is the toolchain's versions.
 IGNORED = {'source_sha256', 'tools'}
@@ -141,7 +141,7 @@ def suites(commit, src, builds, out):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('base', nargs='?', help='tag or commit to compare with (default: UPSTREAM_BASE)')
-    ap.add_argument('--zip', type=pathlib.Path, help=f'the vendor ZIP (default: {ZIPS[0]} or {ZIPS[1]})')
+    ap.add_argument('--zip', type=pathlib.Path, help=f'the vendor ZIP (default: {ZIPS[0]})')
     ap.add_argument('--fresh', action='store_true', help="rebuild the base's builds instead of reusing them")
     ap.add_argument('--suites', action='store_true', help="then run the base's Q2 suites on this tree's builds")
     ap.add_argument('--keep', type=pathlib.Path, help="a fresh directory to keep this tree's snapshot and builds in")

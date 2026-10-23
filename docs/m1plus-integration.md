@@ -240,8 +240,7 @@ and tests alike.
 
 Run these in `nix develop`. `<scratch>` is any fresh directory, and the build commands refuse an existing
 output directory. `test/q2compare.py` needs the vendor ZIP, the only input upstream's `tools/build.py`
-takes: it looks for `stock/Q2 Firmware V1.32.zip`, then `~/Downloads/Q2 Firmware V1.32.zip`, or takes
-`--zip`.
+takes: it takes `stock/Q2 Firmware V1.32.zip`, or `--zip`.
 
 ```sh
 # R1–R3: Legacy and iPod update.tar byte-identical to UPSTREAM_BASE's build, then the base's suites on

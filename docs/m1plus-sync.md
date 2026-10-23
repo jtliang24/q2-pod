@@ -19,8 +19,8 @@ git remote add upstream https://github.com/DiamondBond/q2-pod.git
 ```
 
 `test/q2compare.py` builds upstream's trees, whose `tools/build.py` takes only the vendor ZIP
-(`Q2 Firmware V1.32.zip`). Put it at `stock/Q2 Firmware V1.32.zip`, or leave it in `~/Downloads/`, or pass
-`--zip`.
+(`Q2 Firmware V1.32.zip`). It is at `stock/Q2 Firmware V1.32.zip`, beside `stock/M1 Plus Firmware V2.1.zip`; `--zip`
+takes another path.
 
 ## Each release
 
