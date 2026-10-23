@@ -9810,6 +9810,11 @@ if is_m1plus:
                dict(setup=lambda m:(m.byte(syms['g_backlight_status'],0),m.byte(syms['g_keylock_flag'],1),m.byte(syms['g_keylock_mode'],0)))):
         assert previous(**kw)==(False,True,False),kw
     assert previous(page='home_page',setup=lambda m:m.mock('media_owner'))==(False,False,True); passed()
+    # A focused Spotify or radio page takes the playback keys while local music owns them, as the
+    # Q2's key-up does (headset.c media_focused): elsewhere they stay stock's.
+    for page,want in (('spotify_page',True),('radionp_page',True),('tidal_page',True),('sysset_page',False)):
+        assert previous('KEY_PLAY',mode='0',page=page)==(False,not want,want),page
+    passed()
     # A payload page's back button (back_button) is found the same way; its click is the Return the
     # back button test above follows.
     m=input_machine('shuffle_page'); m.config['KNOB']='1'; page=m.top

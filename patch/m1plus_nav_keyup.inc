@@ -5,7 +5,7 @@
      * (screen off, locked, mode other than 1: 0x4cda44) is kept. */
     int locked = !g_backlight_status && g_keylock_flag && g_keylock_mode != 1;
     if (key == KEY_PLAY && hold_released()) return STOP;
-    if (!locked && media_owner() != 1 &&
+    if (!locked && (media_focused() || media_owner() != 1) &&
         (key == KEY_PLAY || key == KEY_FWD_BTN || key == KEY_BACK_BTN)) {
         media_key(key);
         return STOP;
