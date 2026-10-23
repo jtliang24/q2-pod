@@ -45,7 +45,7 @@ RTC_READ_M1PLUS = (b'hwclock -s\0\0', b'hwclock -su\0')
 # own demo (docs/m1plus-roadmap.md section 4). Each entry is (address, original word, replacement): a str
 # replacement is a jal to that payload symbol, None pins the word unchanged. A model without an entry
 # leaves that behaviour stock. build.py applies the Q2's with upstream's own code; build() here applies
-# the M1's; test/build.py and test/patch.py read both.
+# the M1's; test/m1plus/build.py and test/m1plus/patch.py read both.
 CALL_SITES = {
     'q2': {
         # config_init's bal config_playmode becomes jal ringnav_bootmode, which keeps the saved queue

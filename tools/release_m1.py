@@ -99,9 +99,10 @@ def validate(directory, name):
             data = t.extractfile(member).read()
             check(line.split() == [hashlib.md5(data).hexdigest(), member] and sha(data) == m[key],
                   'Update payload mismatch')
-    # test/build.py checks V2.1's names, test/patch.py the payload and test/boot.py demo under QEMU.
-    for test, *args in (('peq',), ('build', '--build', directory), ('patch', directory), ('boot', directory),
-                        ('playback', directory), ('m4b', directory), ('ldac', directory)):
+    # The M1 suites (test/m1plus/): build checks V2.1's names, patch the payload, boot demo under QEMU.
+    for test, *args in (('peq',), ('m1plus/build', '--build', directory), ('m1plus/patch', directory),
+                        ('m1plus/boot', directory), ('m1plus/playback', directory), ('m1plus/m4b', directory),
+                        ('ldac', directory)):
         subprocess.run([sys.executable, ROOT/f'test/{test}.py', *map(str, args)], check=True)
 
 

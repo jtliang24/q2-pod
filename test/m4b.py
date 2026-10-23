@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
 """Exercise the installed TagLib's native MP4 dispatch, without decoding audio or flashing."""
-import json, pathlib, struct, subprocess, sys
+import pathlib, struct, subprocess, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]/'tools'))
 from build import machine, fileoff, segments, TAG_C, patch_m4b_cover
 from unicorn import UC_HOOK_CODE
 from unicorn.mips_const import *
-manifest_path = pathlib.Path(sys.argv[1]) / 'manifest.json'
-manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
 raw = subprocess.check_output(['unsquashfs','-cat',str(pathlib.Path(sys.argv[1])/'stock.squashfs'),'usr/lib/libtag.so.2.0.1'])
 # Pin the native resolver: M4A and M4B compare in the same chain and branch to MP4's constructor.
-m4b_string_addr = 0x114d30 if is_m1plus else 0x115130
-assert raw[fileoff(raw, m4b_string_addr):fileoff(raw, m4b_string_addr)+4] == b'M4B\0'
+assert raw[fileoff(raw,0x115130):fileoff(raw,0x115130)+4] == b'M4B\0'
 for ext in ('M4A','M4B','m4b','M4b','m4B','MP4'):
     u=machine(raw,0x2000000)
     def word(addr): return struct.unpack('<I',u.mem_read(addr,4))[0]
-    gp = 0x158070 if is_m1plus else 0x158590
+    gp=0x158590
     eq,alloc,mp4=[word(gp+n) for n in (-0x7c10,-0x69ac,-0x6e90)]
-    assert (eq==0xa4178 and mp4==0xdc9ec) if is_m1plus else (eq==0xa44e8 and mp4==0xdcc9c)
+    assert eq==0xa44e8 and mp4==0xdcc9c
     seen=[]
     def hook(u,addr,size,_):
         if addr==eq:
@@ -32,14 +28,12 @@ for ext in ('M4A','M4B','m4b','M4b','m4B','MP4'):
     u.reg_write(UC_MIPS_REG_GP,gp); u.reg_write(UC_MIPS_REG_SP,0x200f000)
     u.reg_write(UC_MIPS_REG_S1,0x2000100); u.reg_write(UC_MIPS_REG_S2,0x2000300)
     u.mem_write(0x200f018,struct.pack('<I',gp))
-    u.emu_start(0x10a3ac if is_m1plus else 0x10a7ac, 0x10a4a8 if is_m1plus else 0x10a3f4, count=200)
+    u.emu_start(0x10a7ac,0x10a3f4,count=200)
     assert seen==[mp4],ext
 print('Installed TagLib: M4B and M4A reach the same MP4 metadata constructor.')
 
 # Cover extraction has a separate vendor dispatcher; metadata support alone is insufficient.
 raw = subprocess.check_output(['unsquashfs', '-cat', str(pathlib.Path(sys.argv[1])/'stock.squashfs'), TAG_C])
-import m1plus
-if is_m1plus: patch_m4b_cover = m1plus.patch_m4b_cover
 patched = patch_m4b_cover(raw)
 try:
     patch_m4b_cover(raw[:-1])
@@ -49,8 +43,7 @@ except ValueError:
 _, segment = segments(patched)[-1]
 assert segment[0] == 1 and segment[2] == 0x30000 and segment[4:7] == (48, 48, 5)
 # The dispatch table's GOT slots are pinned by the library hash in patch_m4b_cover.
-gp = 0x32770 if is_m1plus else 0x327e0
-entry = 0x124b8 if is_m1plus else 0x12508
+gp = 0x327e0
 slots = dict(mp3=-0x7d1c, m4a=-0x7cb8, wma=-0x7e24, wav=-0x7f38,
              ape=-0x7c9c, aiff=-0x7e7c, flac=-0x7d84, ogg=-0x7c88, dsf=-0x7f14)
 helpers = {struct.unpack_from('<I', raw, fileoff(raw, gp+slot))[0]: name for name, slot in slots.items()}
@@ -89,10 +82,10 @@ def cover_dispatch(data, ext, load, readable=True):
     u.hook_add(UC_HOOK_CODE, hook)
     for reg, val in ((UC_MIPS_REG_A0, path), (UC_MIPS_REG_A1, dst),
                      (UC_MIPS_REG_A2, 0x100000), (UC_MIPS_REG_A3, 0x600000),
-                     (UC_MIPS_REG_T9, load+entry), (UC_MIPS_REG_RA, stop),
+                     (UC_MIPS_REG_T9, load+0x12508), (UC_MIPS_REG_RA, stop),
                      (UC_MIPS_REG_SP, 0x200f000)):
         u.reg_write(reg, val)
-    u.emu_start(load+entry, stop, count=500)
+    u.emu_start(load+0x12508, stop, count=500)
     return seen
 
 for load in (0, 0x40000000):

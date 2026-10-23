@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Start an M1 Plus build's demo and V2.1's own, side by side, under qemu-mipsel: the patched one must
-come up as stock does. Usage: python3 test/boot.py BUILD [--seconds N] [--captures DIR]
+come up as stock does. Usage: python3 test/m1plus/boot.py BUILD [--seconds N] [--captures DIR]
 
 Each runs in a bwrap sandbox (no network, no host files but the Nix store qemu needs) whose root is
 that build's rootfs, with V2.1's own dbus-daemon. A preloaded shim (SHIM) gives demo a 320x480
@@ -16,7 +16,7 @@ back button must close its EQ and Previous must not.
 Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
 import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]/'tools'))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]/'tools'))
 from build import BASE, SCRATCH, source_sha256, symbols, run
 from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
 
@@ -404,7 +404,7 @@ if __name__ == '__main__':
     if manifest.get('source_sha256') != source_sha256():
         raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
     if manifest.get('model') != 'Shanling M1 Plus':
-        raise SystemExit('test/boot.py emulates M1 Plus builds only')
+        raise SystemExit('test/m1plus/boot.py emulates M1 Plus builds only')
     sn_addr = symbols(args.build/'stock-demo')['product_sncode']
     with tempfile.TemporaryDirectory(prefix='m1-boot-') as tmp, \
          tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
