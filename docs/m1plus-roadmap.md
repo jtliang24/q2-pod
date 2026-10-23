@@ -101,8 +101,12 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       helpers and tables where V2.1 matches V1.32.
     - The cost: a change upstream makes to `build()` that isn't at a V1.32 address (a new asset, helper
       or packing step) doesn't reach the M1 by itself. The sync runbook reviews `build()`'s diff for them.
-    - Done for `tools/build.py` (Oct 22): byte-identical Q2 and M1 builds, and every suite and gate
-      passes. `tools/peq.py`'s player profiles, `tools/ipod.py` and `tools/q2remote.py` follow.
+    - **Done (Oct 22).** `tools/build.py` keeps 14 seam lines; `tools/peq.py` (the player's PEQ and
+      ReplayGain patch, whose V2.1 profile moved too) and `tools/ipod.py` are upstream's text. Each step
+      kept the Q2 and M1 builds byte-identical, and every suite and gate passes.
+    - `tools/q2remote.py` keeps its M1 support (knob, swipe, the upright screen, `peek`) in place:
+      upstream changed 4 of its lines in the 226 commits to 1.3.9, and moving it out would itself need
+      seams in its command dispatch. Revisit if a sync conflicts there.
   - **b. Split `offsets.inc`.**
     - Upstream's body stays as upstream wrote it, inside `#if !M1PLUS … #endif`, and
       `patch/m1plus/offsets.inc` holds the V2.1 values.

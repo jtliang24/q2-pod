@@ -83,3 +83,4 @@ stay flat or fall.
 |---|---|---|
 | Before U1 (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +6,417/−2,036 over 38 files |
 | U1a's `build.py` split (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,767/−1,765 over 38 files; `tools/build.py` +10/−4 |
+| U1a done: `peq.py`, `ipod.py` upstream's (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,639/−1,729 over 36 files |
