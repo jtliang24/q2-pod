@@ -1,0 +1,8 @@
+/* M1 Plus: mp3_seek's stock routine and flag at V2.1's hciplayer addresses (tools/m1plus.py PLAYER_PROFILE).
+ * patch/peq_player.c includes this after upstream's (docs/m1plus-roadmap.md U1c). */
+#if M1PLUS
+#undef STOCK_SEEK
+#undef HR_MP3_SEEK
+#define STOCK_SEEK ((void (*)(void *, float, float, int))STOCK_SEEK_ADDR)
+#define HR_MP3_SEEK (*(volatile int *)HR_MP3_SEEK_ADDR)
+#endif

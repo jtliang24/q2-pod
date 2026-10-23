@@ -1,5 +1,13 @@
 /* M1 Plus: MP3 ReplayGain through V2.1's ID3v2 walker, whose arguments are swapped. patch/peq_player.c includes this where it stood (docs/m1plus-roadmap.md U1c). */
 #if M1PLUS
+#undef STOCK_ID3
+#undef AV_DICT_SET
+#undef AV_DICT_FREE
+#undef RG_EXPORT
+#define STOCK_ID3 ((int (*)(int, void *))STOCK_ID3_ADDR) /* V2.1's walker takes (version, stream) */
+#define AV_DICT_SET ((int (*)(void **, const char *, const char *, int))AV_DICT_SET_ADDR)
+#define AV_DICT_FREE ((void (*)(void **))AV_DICT_FREE_ADDR)
+#define RG_EXPORT ((int (*)(void *, void *))RG_EXPORT_ADDR)
 int id3_gain(int version, void *s) {
     long long at = AT(s, 0x30, long long) + AT(s, 0x28, int) - AT(s, 0x2c, int) - 10; /* stream_tell */
     int ret = STOCK_ID3(version, s);

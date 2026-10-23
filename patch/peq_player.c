@@ -111,19 +111,16 @@ extern int peq_length;
 static double decoded(void) { return peq_pts; }
 #define LENGTH peq_length
 #else
-#ifndef WRITTEN_AUDIO_PTS
-#define WRITTEN_AUDIO_PTS 0x44641cu
-#endif
-#ifndef LENGTH_ADDR
-#define LENGTH_ADDR 0xb10e84u
-#endif
-/* written_audio_pts: seconds decoded so far, NOPTS (-2^63) without a stream;
- * the length is {media-info}'s whole seconds (demo's mclGetPlayTime). */
+#if !M1PLUS
+/* written_audio_pts (0x44641c, a leaf): seconds decoded so far, NOPTS (-2^63) without a stream;
+ * the length is {media-info}'s whole seconds (0xb10e84, demo's mclGetPlayTime). */
 static double decoded(void) {
     char *mp = MPCTX, *sh = mp ? *(char **)(mp + 0x2c) : 0, *ds = mp ? *(char **)(mp + 0x34) : 0;
-    return sh && ds ? ((double (*)(void *, void *))WRITTEN_AUDIO_PTS)(sh, ds) : -1;
+    return sh && ds ? ((double (*)(void *, void *))0x44641cu)(sh, ds) : -1;
 }
-#define LENGTH (*(volatile int *)LENGTH_ADDR)
+#define LENGTH (*(volatile int *)0xb10e84u)
+#endif
+#include "m1plus_peq_player_pts.c"
 #endif
 static struct {
     float *ring;
@@ -291,26 +288,10 @@ unsigned id3_txxx(const unsigned char *f, unsigned n, char *out, unsigned cap) {
  * runs it, then walks the whole tag again through the stream's fd, as mp3_seek reads, puts each TXXX
  * into a dictionary and gives it to stock's ff_replaygain_export, as the walker does. That stores
  * the gains only when it finds one, for the replaygain filter's next setup. */
-#ifndef STOCK_ID3_ADDR
-#define STOCK_ID3_ADDR 0x48e6b0u
-#endif
-#ifndef AV_DICT_SET_ADDR
-#define AV_DICT_SET_ADDR 0x6ea744u
-#endif
-#ifndef AV_DICT_FREE_ADDR
-#define AV_DICT_FREE_ADDR 0x6eabfcu
-#endif
-#ifndef RG_EXPORT_ADDR
-#define RG_EXPORT_ADDR 0x538764u
-#endif
-#if M1PLUS
-#define STOCK_ID3 ((int (*)(int, void *))STOCK_ID3_ADDR)
-#else
-#define STOCK_ID3 ((void (*)(void *, int))STOCK_ID3_ADDR)
-#endif
-#define AV_DICT_SET ((int (*)(void **, const char *, const char *, int))AV_DICT_SET_ADDR)
-#define AV_DICT_FREE ((void (*)(void **))AV_DICT_FREE_ADDR)
-#define RG_EXPORT ((int (*)(void *, void *))RG_EXPORT_ADDR)
+#define STOCK_ID3 ((void (*)(void *, int))0x48e6b0u)
+#define AV_DICT_SET ((int (*)(void **, const char *, const char *, int))0x6ea744u)
+#define AV_DICT_FREE ((void (*)(void **))0x6eabfcu)
+#define RG_EXPORT ((int (*)(void *, void *))0x538764u)
 #define AT(p, o, type) (*(type *)((char *)(p) + (o)))
 static unsigned id3_int(const unsigned char *p, int syncsafe) {
     return syncsafe ? (p[0] & 127u) << 21 | (p[1] & 127u) << 14 | (p[2] & 127u) << 7 | (p[3] & 127u)
@@ -354,14 +335,9 @@ void id3_gain(void *s, int size) {
  * first frame through the stream's fd (stream_t +0x14) and puts its offset back, since stock's
  * stream_seek may reuse its buffer without seeking. STOCK_SEEK is SEEK_SLOT's pinned stock value
  * in tools/peq.py. */
-#ifndef STOCK_SEEK_ADDR
-#define STOCK_SEEK_ADDR 0x48d1acu
-#endif
-#ifndef HR_MP3_SEEK_ADDR
-#define HR_MP3_SEEK_ADDR 0xb152b8u
-#endif
-#define STOCK_SEEK ((void (*)(void *, float, float, int))STOCK_SEEK_ADDR)
-#define HR_MP3_SEEK (*(volatile int *)HR_MP3_SEEK_ADDR)
+#define STOCK_SEEK ((void (*)(void *, float, float, int))0x48d1acu)
+#define HR_MP3_SEEK (*(volatile int *)0xb152b8u)
+#include "m1plus_peq_player_seek.h"
 void mp3_seek(void *demuxer, float rel, float delay, int flags) {
     unsigned char h[192];
     void *priv = AT(demuxer, 0xc70, void *), *s = AT(demuxer, 0x20, void *);
