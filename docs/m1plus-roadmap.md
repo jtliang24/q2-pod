@@ -17,8 +17,9 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** section U, in order: U0, then the restructure (U1) and the sync tooling (U2) against 1.2.2,
-then the first sync to upstream 1.3.9 (U3). The M1 feature work waits until U3 lands: Spotify on the
+**Next:** U0 is done: the Q2 builds are `main`'s again. Next is the M1 release (`tools/release_m1.py`,
+section 6). Then section U goes on in order: the restructure (U1) and the sync tooling (U2) against
+1.2.2, then the first sync to upstream 1.3.9 (U3). The M1 feature work waits until U3 lands: Spotify on the
 device (section 3), the iPod UI (section 5) and the final pass (section 7). Section 4 is done for 1.2.2;
 one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes
 first: items that only change how something looks wait for the final pass (section 7).
@@ -79,12 +80,13 @@ while the base is still 1.2.2 and the Q2 byte check can prove each move. Then me
 Each upstream release also adds V1.32-only work: hooks and call sites at V1.32 addresses, and new pages.
 They stay off on M1 until ported (U4), so a sync never waits for them.
 
-- **U0. Re-establish R1 against `main` (M).** Close the open items of
-  [m1plus-integration.md](m1plus-integration.md#work-items): 1 (`release.py` reads `input_sha256`) and 3–9
-  (the trampolines, `dispatch_key_return`, `boot_guard`, the V2.1 defences, `scratch_t`, the helpers,
-  `ringnav_artist_list`). Item 2 is done. Item 9 must be fixed, not accepted: a sync's check is exact
-  equality, and a known difference would ride along in every later compare. Done when `cmp` passes for
-  Legacy and iPod `update.tar` against `main`'s build.
+- **U0. Re-establish R1 against `main` (M). Done (Oct 22).** The open items of
+  [m1plus-integration.md](m1plus-integration.md#work-items) are closed: 1 (`release.py` reads
+  `input_sha256`) and 3–9 (the trampolines, `dispatch_key_return`, `boot_guard`, the V2.1 defences,
+  `scratch_t`, the helpers, `ringnav_artist_list`). The byte compare found three more differences, now
+  fixed: `ringnav_audioset`'s strings, the EQ's tab split and the AirPlay icon's mode
+  ([m1plus-progress.md](m1plus-progress.md) section 37). Legacy and iPod `update.tar` are byte-identical
+  to `main`'s build.
 - **U1. Move the M1 beside upstream (L).** Each step keeps Q2 `update.tar` byte-identical to `main`'s.
   - **a. A `Target` record** ([integration item 11](m1plus-integration.md#work-items), now required).
     - `tools/build.py` keeps upstream's Q2 constants and code. A new `tools/m1plus.py` gets the M1's:
@@ -105,6 +107,10 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       that starts with the blocks at 643, 6572, 5428, 3328, 1989, 6675, 5344 and 6269. The shared file
       keeps one call or `M1_HOOK(...)` line, empty on Q2.
     - Small inline differences stay inline, through named macros.
+    - Prove each move with the byte compare, not by reading it. U0 found two moves that read as no-ops
+      and weren't: a block factored into a static function, inlined on Q2, still moved that block's
+      strings in `.rodata` and shifted every string address after them; and a macro that was meant to
+      give upstream's literal was off by one.
     - Aim for under about 150 changed lines across upstream's `patch/*.c`, from about 1,400 now.
   - **d. Move the M1 tests out.**
     - `test/patch.py`'s and `test/build.py`'s M1 paths move to `test/m1plus/`. That covers the V2.1 harness
@@ -156,6 +162,11 @@ Done: Crossfade's page on V2.1, the Playback rows that V2.1's list rebuild dropp
 lines that could be ported (see [m1plus-progress.md](m1plus-progress.md), section 14). What is left
 here goes with other sections' features:
 
+- **Videos' position bar on M1 (S).** q2video's M1 `overlay` (`patch/video.c`) runs the bar from
+  x 20 to `H - 20` (460) on a 320 px row, so each of its 8 rows spills 140 px into the next one: it
+  paints rows 450–458 across the whole width, where 450–457 from x 20 to 299 is meant. Found in U0 on
+  the host, unchanged by it. The fix is `W - M1_BAR_X` as the end, with a host check in `test/m1plus/`
+  (U1d) and a look on the device.
 - **The `test:` lines whose features M1 can't reach yet.** Two lines, each going with its feature:
   - the stock key-down helper with STOP (`0x65f688`): with V2.1's copy of that private AWTK
     helper, still to be found (V2.1 binds no key-down handler for the payload to hook);
@@ -271,10 +282,10 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
 
 ## 6. Tooling and release
 
-- **Q2 from the same tree.** Section U0 closes the measured differences
+- **Q2 from the same tree.** Section U0 closed the measured differences
   ([m1plus-integration.md](m1plus-integration.md)), and U2 turns the compare into `test/q2compare.py`
-  against `UPSTREAM_BASE`. The Q2 release (`tools/release.py`) is broken on this branch until
-  integration item 1 lands.
+  against `UPSTREAM_BASE`. The Q2 release (`tools/release.py package`) works on this branch again. Its
+  user guide needs `pdftotext`, which the devShell could add (`poppler-utils` in `flake.nix`).
 - **Release packaging for M1 (M, after U0).** The README tells M1 users to download `update.bin` from a
   release, but `tools/release.py` packages only the Q2, and upstream owns it. The M1's goes beside it
   as `tools/release_m1.py`, which takes stock's V2.1 `update.bin` (or its vendor ZIP) and needs:

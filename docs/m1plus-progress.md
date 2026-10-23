@@ -1264,6 +1264,41 @@ page and Large clock, the lock window's cover, and the library items. Over q2rem
 - **Same-named albums:** the card's 24 albums share no name, across artists or folders, so that check
   needs two such albums on the card. It is kept as a later validation in the roadmap's section 4.
 
+## 37. U0: the Q2 builds are upstream's again (Oct 22)
+
+Roadmap U0, before the branch moves its M1 code beside upstream's (U1) and merges upstream 1.3.9 (U3).
+Every sync checks the Q2 build by exact equality with the upstream base's, so no known difference can
+be accepted. Legacy and iPod `update.tar` are now byte-identical to `main`'s build.
+
+| Commit | Change | Why |
+|---|---|---|
+| `a547843` | `release.py` reads `input_sha256` (integration item 1) | `build.py` had renamed the manifest key, so `release.py package` failed with `KeyError` after its first build. |
+| `8b239c1` | Q2 resumes `HOOKS \| IPOD_HOOKS` (item 3) | Legacy's five iPod trampolines were `return 0` stubs. The stubs are M1's only. |
+| `264806f` | `dispatch_key_return` M1-only (item 4) | Its only caller is M1's back button. |
+| `6c4f352` | `boot_guard`'s entry read M1-only (item 5) | On Q2 it could cancel a Centre release that `main` lets through. |
+| `611bdc3` | V2.1's widget checks M1-only (item 6) | `qm_open`'s and `xfade_open`'s missing-widget checks, `widget_set_enable` and `arc_out`'s zero radius ran on Q2. |
+| `a400c39` | `scratch_t` as `main`'s on Q2 (item 7) | `knob_mode` and a sixth `setting_label` grew Q2's state. |
+| `94ec8a0` | The helpers' M1 paths by `#if M1PLUS` (item 8) | q2boot's `KEY_PLAYPAUSE` and q2video's 480-line screen were chosen at run time. |
+| `91b3dcc` | `main`'s `ringnav_artist_list` on Q2 (item 9) | On M1 the body is `artist_tab(tab, n)`, which `ringnav_localclass` also calls. |
+| `a0ecac9` | `main`'s `ringnav_audioset` on Q2 | Found by the compare: the static `audioset_rows` moved its strings in `.rodata`, shifting every string address after them. |
+| `b7af86f` | The EQ's tab split rounded up | Found by the compare: 187 on Q2, where `main` has 188. It is 180 on M1 either way. |
+| `ef2f638` | The Q2 AirPlay icon's mode from `list_tidal.png` | Found by the compare: the rootfs differed in that one file's mode. |
+
+How it was checked:
+- A function-by-function compare of `patch.elf`, with addresses normalised, then `cmp` of `patch.bin`,
+  `q2boot`, `q2video`, the unpacked rootfs (`unsquashfs -lls` for modes) and `update.tar`.
+- Each commit on its own: the three builds, the Q2 suites on Legacy and iPod, the host suites and the M1
+  gates. At `ef2f638`: `test/patch.py` passes Legacy 1017, iPod 1398 and M1 1004 scenarios, and
+  `test/boot.py`'s walk passes.
+- `tools/release.py package` from `stock/`'s `update.tar`: both variants validated and reproducible,
+  their `update.tar` `main`'s, with `pdftotext` added to the devShell's `PATH` for the user guide.
+
+Item 7 moved `setting_label` back into the iPod block, where every use is, so the M1 payload's state
+shrank, with no change in behaviour. Items 8 and 9 changed the M1's code too. q2video's M1 position bar
+was checked on the host before and after item 8, and paints the same pixels. Those pixels show a bug the
+M1 has had since `09dba3a`: the bar runs from x 20 to 460 on a 320 px row, so it spills into the next
+row. It is in the roadmap's section 1.
+
 ## How to check a build now
 
 ```sh

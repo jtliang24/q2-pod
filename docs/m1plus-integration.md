@@ -37,7 +37,34 @@ where it isn't.
 - **R5. The docs give both targets.** `building.md` and the README give both targets' commands, and say
   what ships for each device.
 
-## Current status (measured 2026-10-18)
+## Current status (measured 2026-10-22, after U0)
+
+Measured as below, `main` from the vendor ZIP and the branch from `stock/`'s `update.tar`.
+
+- **R1 is met.** Legacy and iPod `update.tar` are byte-identical to `main`'s: `8190e0c8…` and `48784f86…`.
+  The manifests still differ, in keys only: `input_sha256` for `input_zip_sha256`, and the new `model`
+  and `logo_source`. The manifest is not in `update.tar`.
+- **R2 is met.** On both Q2 builds, `test/build.py --build`, `test/patch.py` (Legacy 1017, iPod 1398
+  scenarios, one more than `main`'s each), `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa`
+  pass, and so do `peq`, `mp3`, `remote`, `coverflow` and `release`.
+- **R3 is met.** `tools/release.py package 'stock/Q2 Firmware V1.32/update.tar'` builds both variants
+  twice, validates them, finds each pair byte-identical and writes both ZIPs and the user guide. The
+  guide's build (`docs/manual/build.py`) needs `pdftotext`, which the devShell lacks: it ran with
+  `nix shell nixpkgs#poppler-utils` on the `PATH`. `test/release.py` passes.
+- **R4 holds.** On the M1 build, `test/build.py --build`, `test/patch.py` (1004 scenarios, no `KNOWN
+  GAP`, 8 `NOT PORTED`) and `test/boot.py` pass.
+
+U0 closed items 1 and 3–9 below. The byte compare then found three more differences, which the
+2026-10-18 measurement had not listed:
+- **`ringnav_audioset`'s strings.** The branch had moved its body into a static `audioset_rows`, for
+  V2.1's foreground rebuild. Q2 inlined it, so its code was the same, but a static function is generated
+  after the others. Its strings moved in `.rodata`, and every string address after them shifted.
+- **The EQ's tab split.** `tab_touch`'s `(TAB_LEFT + TAB_W + TAB_RIGHT) / 2` is 187 on Q2, where `main`
+  has 188.
+- **The AirPlay icon's mode.** Its rootfs entry copied its mode from `netservice_airplay.png` (0775),
+  where `main` copies it from `list_tidal.png` (0664).
+
+## Status before U0 (measured 2026-10-18)
 
 ### How it was measured
 
@@ -166,9 +193,10 @@ suites (see [Checklist](#checklist)). Then run the M1 gates for R4.
 | 11 | Per-target profile (roadmap U1a) | Replace the `m1plus` bool and the repeated `ipod and not m1plus` in `build.py` with one `Target` record. It would hold the model, version literal, archive, GP, hooks, paint leaf, `.pdr`, logo size, TagLib, icons, RTC patches and asset policy, after `PLAYER_PROFILES` in `tools/peq.py`. The M1's half moves to `tools/m1plus.py`, so upstream's `build.py` changes merge with few conflicts | M | R1 |
 | 12 | The compare as a script (roadmap U2) | A `test/q2compare.py` that builds the baseline (`main`, then `UPSTREAM_BASE`) from `git archive` and the working tree, and reports differing components. This turns the checklist into one command, and every sync runs it | S | R1 |
 
-Items 1 and 3–9 are open (checked 2026-10-22), and item 2 is done. They make up roadmap U0. Once they
-land, R1–R3 should hold. Items 11 and 12 are required for syncing (roadmap U1 and U2). An M1 release path
-is not in scope here: see the roadmap's "Release packaging for M1".
+Items 1–9 are done: item 2 earlier, and 1 and 3–9 as roadmap U0 (2026-10-22), with R1–R3 met (see
+[Current status](#current-status-measured-2026-10-22-after-u0)). Item 10 is still open. Items 11 and 12
+are required for syncing (roadmap U1 and U2). An M1 release path is not in scope here: see the
+roadmap's "Release packaging for M1".
 
 ## Rule for future work: don't break Q2
 
@@ -189,6 +217,9 @@ and tests alike.
 - **M1 code goes behind the target.**
   - New M1 code goes behind `#if M1PLUS` or `if m1plus`, or into a per-model table.
   - Shared code changes only through macros whose Q2 values are `main`'s.
+  - Trust the byte compare, not a reading of the source. U0 found a macro that was meant to give
+    `main`'s literal and was off by one, and a body factored into a static function: on Q2 it was
+    inlined, but its strings still moved in `.rodata`.
   - A defensive check that only V2.1 needs is M1-only too.
 - **The Q2 release works.** `release.py package` keeps working.
 - **Check both before each commit:** the Q2 compare and the Q2 suites, then the M1 gates.
