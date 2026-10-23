@@ -64,15 +64,15 @@ f63408dc999c94d70b5bd01f164b9162  recovery-update/rootfs.squashfs
 
 > [!IMPORTANT]
 > **Critical Orientation Difference:**
-> On the **Shanling Q2**, `/dev/fb0` is `320 × 375` portrait (`is_rotated=0`), **but the physical LCD is mounted sideways**. AWTK renders the Q2 UI on a **`375 × 320` landscape canvas** (width = `375`, height = `320`, status bar = `30`, client height [`BOTTOM = 290`](file:///home/jtliang/Projects/q2-pod/tools/ipod.py#L29)) and rotates frames 90° clockwise onto `/dev/fb0`.
+> On the **Shanling Q2**, `/dev/fb0` is `320 × 375` portrait (`is_rotated=0`), **but the physical LCD is mounted sideways**. AWTK renders the Q2 UI on a **`375 × 320` landscape canvas** (width = `375`, height = `320`, status bar = `30`, client height [`BOTTOM = 290`](../tools/ipod.py)) and rotates frames 90° clockwise onto `/dev/fb0`.
 >
 > On the **Shanling M1 Plus**, both the LCD (`lcd_h320qn01.ko`), the touchscreen (`gt9xx_touch.ko`: `gtp_x_coords_max=320`, `gtp_y_coords_max=480`, `gtp_x_y_coords_exchange=0`), and AWTK operate in **upright `320 × 480` portrait** (width = `320`, height = `480`, status bar = `30`, client height = `450`) with **no 90° rotation**.
 
  Consequently, every hardcoded `375` in Q2 Pod is a **horizontal width**, not a height:
 - **Logical UI Width shrinks by `55 px`**: `375 px` $\to$ `320 px`.
 - **Logical UI Height grows by `160 px`**: `320 px` (`290 px` client area) $\to$ `480 px` (`450 px` client area).
-- **Corner Radius (`CORNER_R`)**: The Q2 has a pill-shaped glass bezel with an `80 px` corner radius ([`CORNER_R = 80`](file:///home/jtliang/Projects/q2-pod/tools/ipod.py#L30), [`STATUS_MARGIN = 52`](file:///home/jtliang/Projects/q2-pod/tools/ipod.py#L32), [`BAR_CORNER_R = 76`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L323)), which curves top/bottom list rows and insets the status bar via [`corner_inset(y)`](file:///home/jtliang/Projects/q2-pod/tools/ipod.py#L39-L43) and [`arc_inset()`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L604-L621). The M1 Plus has a rectangular display; these corner insets must be set to `0` (with standard rectangular margins) so rows and status bar icons are not pinched inward.
-- **180° Screen Flip (`ROTATEMODE=1`)**: `/etc/init.d/S11logo_display_shell` checks `grep -c "ROTATEMODE=1" /mnt/data/config.ini` to choose between `/release/assets/default/raw/images/xx/logo180.jpg` and `logo.jpg`. Boot logo hooks ([`LOGO_HOOK`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L161-L163) and [`logo_sync`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L5866-L5898)) must accept upright `320 × 480` baseline JPEGs without applying Q2's `ffmpeg -vf transpose=1` 90° rotation.
+- **Corner Radius (`CORNER_R`)**: The Q2 has a pill-shaped glass bezel with an `80 px` corner radius ([`CORNER_R = 80`](../tools/ipod.py), [`STATUS_MARGIN = 52`](../tools/ipod.py), [`BAR_CORNER_R = 76`](../patch/m1plus_q2.inc)), which curves top/bottom list rows and insets the status bar via [`corner_inset(y)`](../tools/ipod.py). The M1 Plus has a rectangular display; these corner insets must be set to `0` (with standard rectangular margins) so rows and status bar icons are not pinched inward.
+- **180° Screen Flip (`ROTATEMODE=1`)**: `/etc/init.d/S11logo_display_shell` checks `grep -c "ROTATEMODE=1" /mnt/data/config.ini` to choose between `/release/assets/default/raw/images/xx/logo180.jpg` and `logo.jpg`. Boot logo hooks ([`LOGO_HOOK`](../tools/build.py) and [`logo_sync`](../patch/navigation.c)) must accept upright `320 × 480` baseline JPEGs without applying Q2's `ffmpeg -vf transpose=1` 90° rotation.
 
 ### 3.3 Audio, FPGA & Peripheral Hardware
 Discovered from `/module_driver/driver_default_init_script.sh`:
@@ -101,10 +101,10 @@ On the device (V00A, read over `q2remote`), the kernel lists event0 as `axp2101-
 
 > [!WARNING]
 > **1. Linux Keycodes vs. AWTK `EVENT_KEY` Codes:**
-> Linux kernel keycodes (`114`, `115`, `116`, `163`, `164`, `165`) are read from `/dev/input/event*` by `demo`'s input thread and translated into AWTK's internal `EVENT_KEY` numbers (`170`–`223` in [`patch/offsets.inc`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L329-L335)) *before* reaching [`window_manager_dispatch_input_event`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6126) or [`on_wm_keyup_before_fun` (`ringnav`)](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6353). Do not compare `I(event, EVENT_KEY)` against raw Linux keycodes `114`/`115`/`116` inside AWTK hooks; inspect M1 Plus's key translation table in `demo` (and `encoderknob_thread_run` / `gpio_keys` reader) first.
+> Linux kernel keycodes (`114`, `115`, `116`, `163`, `164`, `165`) are read from `/dev/input/event*` by `demo`'s input thread and translated into AWTK's internal `EVENT_KEY` numbers (`170`–`223` in [`patch/offsets.inc`](../patch/offsets.inc)) *before* reaching [`window_manager_dispatch_input_event`](../patch/navigation.c) or [`on_wm_keyup_before_fun` (`ringnav`)](../patch/navigation.c). Do not compare `I(event, EVENT_KEY)` against raw Linux keycodes `114`/`115`/`116` inside AWTK hooks; inspect M1 Plus's key translation table in `demo` (and `encoderknob_thread_run` / `gpio_keys` reader) first.
 >
 > **2. Do Not Hook `ts_read` (`WHEEL_TS_READ`) on M1 Plus:**
-> On the Q2, the touch wheel is a capacitive strip on `/dev/input/event1` read via `ts_read` ([`WHEEL_TS_READ = 0x6258cc`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L140), hooked by [`ringnav_ts_read`](file:///home/jtliang/Projects/q2-pod/patch/playback.c#L684-L699)). On the M1 Plus, the main touchscreen is `Goodix-CTP` (event3 on the device), while the rotary knob uses `keyboard_encoder.ko`. Hooking `ts_read` with `ringnav_ts_read` on M1 Plus would corrupt touchscreen coordinates!
+> On the Q2, the touch wheel is a capacitive strip on `/dev/input/event1` read via `ts_read` ([`WHEEL_TS_READ = 0x6258cc`](../tools/build.py), hooked by [`ringnav_ts_read`](../patch/playback.c)). On the M1 Plus, the main touchscreen is `Goodix-CTP` (event3 on the device), while the rotary knob uses `keyboard_encoder.ko`. Hooking `ts_read` with `ringnav_ts_read` on M1 Plus would corrupt touchscreen coordinates!
 
 ---
 
@@ -140,18 +140,18 @@ flowchart TD
 ```
 
 ### 4.1 Solving the Missing Physical `KEY_RETURN` (`170`) Button
-In Q2 Pod, [`KEY_RETURN`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L329) is the sole exit path for:
-- Every custom full-screen page created via [`page_open()`](file:///home/jtliang/Projects/q2-pod/patch/coverflow.c#L926-L934) (a bare window: on M1 Plus its back button comes from `page_title` or `back_button`):
-  - Coverflow ([`coverflow.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/coverflow.c#L1696))
-  - 30-Band PEQ / 10-Band EQ / 3-Band EQ ([`peq_ui.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/peq_ui.c#L661))
-  - Photos viewer ([`photos.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/photos.c#L118))
-  - Books reader & Video player ([`books.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/books.c#L628), [`video.c:video_key`](file:///home/jtliang/Projects/q2-pod/patch/video.c#L329))
-  - Crossfade settings ([`crossfade.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/crossfade.c#L61))
-  - Spotify Connect & Internet Radio ([`spotify.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/spotify.c#L728), [`radio.c:keyup`](file:///home/jtliang/Projects/q2-pod/patch/radio.c#L129))
-  - Shuffle, Most Played, Ratings, and Long Songs pages ([`navigation.c:page_keyup`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L4145))
-- Returning from the iPod Home `Settings` submenu ([`coverflow_home_back`](file:///home/jtliang/Projects/q2-pod/patch/coverflow.c#L1971))
-- Opening Now Playing from Home or via hold ([`HOLD_RETURN`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L121), [`compact_now_playing`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L3504))
-- Canceling an active scrub on Now Playing ([`navigation.c:6399`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6399))
+In Q2 Pod, [`KEY_RETURN`](../patch/offsets.inc) is the sole exit path for:
+- Every custom full-screen page created via [`page_open()`](../patch/coverflow.c) (a bare window: on M1 Plus its back button comes from `page_title` or `back_button`):
+  - Coverflow ([`coverflow.c:keyup`](../patch/coverflow.c))
+  - 30-Band PEQ / 10-Band EQ / 3-Band EQ ([`peq_ui.c:keyup`](../patch/peq_ui.c))
+  - Photos viewer ([`photos.c:keyup`](../patch/photos.c))
+  - Books reader & Video player ([`books.c:keyup`](../patch/books.c), [`video.c:video_key`](../patch/video.c))
+  - Crossfade settings ([`crossfade.c:keyup`](../patch/crossfade.c))
+  - Spotify Connect & Internet Radio ([`spotify.c:keyup`](../patch/spotify.c), [`radio.c:keyup`](../patch/radio.c))
+  - Shuffle, Most Played, Ratings, and Long Songs pages ([`navigation.c:page_keyup`](../patch/navigation.c))
+- Returning from the iPod Home `Settings` submenu ([`coverflow_home_back`](../patch/coverflow.c))
+- Opening Now Playing from Home or via hold ([`HOLD_RETURN`](../tools/build.py), [`compact_now_playing`](../patch/navigation.c))
+- Canceling an active scrub on Now Playing ([`navigation.c:6399`](../patch/navigation.c))
 
 **Rule: every page has an explicit Back button.** On M1 Plus, every page Q2 Pod opens or replaces
 shows V2.1's title-bar back button at its top left (`btn_return`'s style and `return`/`return_down`
@@ -191,7 +191,7 @@ pins both facts.
 
 When switched to **Navigation**:
 - **In Menus, Lists, Coverflow, Books & EQ**:
-  - Turning the knob translates encoder ticks into AWTK `KEY_PREV` (`172`) / `KEY_NEXT` (`173`) events (volume up is `KEY_PREV`, up the list, unless `Knob Up: List Down`) (suppressing stock volume changes) and feeds them into [`ringnav()`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6353) with duration acceleration (`ramp()`), edge bumping (`BUMP_PX`), and list wrap-around (`EDGE_PAUSE_MS`).
+  - Turning the knob translates encoder ticks into AWTK `KEY_PREV` (`172`) / `KEY_NEXT` (`173`) events (volume up is `KEY_PREV`, up the list, unless `Knob Up: List Down`) (suppressing stock volume changes) and feeds them into [`ringnav()`](../patch/navigation.c) with duration acceleration (`ramp()`), edge bumping (`BUMP_PX`), and list wrap-around (`EDGE_PAUSE_MS`).
 - **Previous is Back** (`KEY_BACK_BTN`, or `KEY_FWD_BTN` while `rotate_mode` is 1, since V2.1 swaps
   the two on a rotated screen): on its release, a timer clicks the top page's first showing button
   in `navbar_btnreturn_style`. That is V2.1's own back button, whose click is `on_back_onclick` (its
@@ -224,11 +224,11 @@ V1.32 has a Local Music menu that Q2 Pod extends with its own rows. V2.1 has non
 ## 5. Verified Memory Addresses, Symbols & Patch Inventory
 
 ### 5.1 Audited Hook Targets in `/release/bin/demo` (24 Verified + 33 Remaining)
-[`tools/build.py`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L26-L116) installs **57 function hooks** in total: **49 `HOOKS`**, **6 `IPOD_HOOKS`**, and **2 leaf hooks (`IPOD_LEAF`, `WM_PAINT_LEAF`)**.
+[`tools/build.py`](../tools/build.py) installs **57 function hooks** in total: **49 `HOOKS`**, **6 `IPOD_HOOKS`**, and **2 leaf hooks (`IPOD_LEAF`, `WM_PAINT_LEAF`)**.
 
 > [!IMPORTANT]
-> **32-Byte Preamble Constraint:**
-> Every non-leaf hook in `HOOKS` and `IPOD_HOOKS` is installed by [`make_trampoline`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L436-L452), which copies the first **8 instructions (`32 bytes`)** of the target function into a trampoline and asserts `not has_branch_or_jump(insn)`. All 55 preamble-hooked functions in M1 Plus's `demo` must be checked to ensure no branch (`beq`/`bne`/`bgez`/etc.) or jump (`jal`/`j`) occurs within their first 8 instructions.
+> **PIC Prologue Constraint:**
+> Every non-leaf hook is installed by overwriting the first two words of the target function with a `j` to its payload replacement and a `nop` ([`tools/m1plus.py`](../tools/m1plus.py) `build`, as upstream's [`tools/build.py`](../tools/build.py) does for the Q2). So each target must start with the standard 3-instruction PIC prologue (`lui $gp` / `addiu $gp` / `addu $gp, $t9`) computing V2.1's GOT base, which the build checks (`pic_gp(...) == M1PLUS_GP`). The function's `stock_<x>_trampoline` (`compile_payload`) sets `$gp` itself and resumes at the target's address + 12, past the prologue.
 
 #### Verified M1 Plus V2.1 Hook Addresses (25 of 57)
 
@@ -261,24 +261,24 @@ V1.32 has a Local Music menu that Q2 Pod extends with its own rows. V2.1 has non
 | `memeory_startplayer` | `0x005164e0` | `0x004e34dc` | `ringnav_memory_start` | Resumes playback queue at startup |
 
 #### Remaining 32 `demo` Hooks to Resolve in M1 Plus `demo`
-From [`tools/build.py`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L26-L116):
+From [`tools/build.py`](../tools/build.py):
 - **Core Input & Painting**: `on_wm_keyup_before_fun` (`0x511c74` $\to$ `ringnav`), `on_wm_keydown_before_fun` (`0x5117d4` $\to$ `ringnav_keydown`), `on_wm_LongKeydown_before_fun` (`0x511ad8` $\to$ `ringnav_keylong`), `on_wm_pointer_down_before_fun` (`0x511f08` $\to$ `ringnav_touch`), `widget_on_paint_background` (`0x6595b4` $\to$ `ringnav_paint_bg`), `widget_on_paint_self` (`0x659628` $\to$ `ringnav_paint_self`), `window_manager_paint` (`0x66df68` $\to$ `ringnav_wm_paint`, leaf hook), `buzzeer_switch` (`0x4f3cc8` $\to$ `ringnav_buzzer`).
 - **Library, Lists & Artwork**: `localmusic_page_init` (`0x524928` $\to$ `ringnav_localmusic`), `load_localclass_list` (`0x504698` $\to$ `ringnav_localclass`), `load_localartist_list` (`0x5069a4` $\to$ `ringnav_artist_list`; V2.1 has none: `loadAlbumList` loads an artist's albums through `loadLocalClassList(0xff01)`, where `ringnav_localclass` now orders them by year or A–Z and keeps their album ids for Rate Album. Rate Album can't be reached yet: the hold menu acts on the highlighted row, and nothing highlights one on M1 until Knob Navigation Mode or a touch long-press lands ([m1plus-roadmap.md](m1plus-roadmap.md) §2). The art keys still need V2.1's renderer sites), `load_album_detaillist` (`0x5063e0` $\to$ `ringnav_album_detail`), `folder_load_top` (`0x507d68` $\to$ `ringnav_folder_top`), `playlist_rebuild` (`0x4b20dc` $\to$ `ringnav_playlist`), `stock_search` (`0x4b3388` $\to$ `ringnav_search`), `albumcoverinfo_init` (`0x4ee6c0` $\to$ `ringnav_albumcovers`), `artist_covers` (`0x4ab9e0` $\to$ `ringnav_artist_covers`), `list_get_img_pic` (`0x501134` $\to$ `ringnav_badge`, leaf hook in iPod mode).
 - **Playback, PEQ & ReplayGain**: `playset_page_init` (`0x4b7778` $\to$ `ringnav_playset`), `playset_Filter_page_init` (`0x4b6bec` $\to$ `ringnav_filter`), `playset_replaygain_page_init` (`0x4b7234` $\to$ `ringnav_rg_page`), `get_replaygain_value` (`0x5aa474` $\to$ `peq_get_replaygain_value`), `mclSend Eq` (`0x5abc3c` $\to$ `peq_mcl_send_eq`), `mclSetPlaySpeed` (`0x5abd2c` $\to$ `ringnav_speed`), `mclStopPlayer` (`0x5ae214` $\to$ `ringnav_stop_player`), `on_player_autochange` (`0x50f8cc` $\to$ `ringnav_autochange`), `player_load_songlist` (`0x50eb34` $\to$ `ringnav_load_songlist`), `config_playmode` (`0x4f849c` $\to$ `ringnav_playmode`).
 - **Bluetooth, Streaming & Screensaver**: `stream_page_init` (`0x4ba98c` $\to$ `ringnav_stream`), `tidal_ReadSessionInfo` (`0x5ca180` $\to$ `ringnav_tidal_session`), `systemset_bluetooth_page_init` (`0x4bdfbc` $\to$ `ringnav_bt_page`), `btmenu_rows` (`0x4beae8` $\to$ `ringnav_bt_rows`), `bt_AutoConnect_proc` (`0x4dbf78` $\to$ `ringnav_bt_autoconnect`), `mclSetBtSoftwareVolume` (`0x5ac93c` $\to$ `ringnav_btvol`), `systemset_screensaver_page_init` (`0x4c9cb0` $\to$ `ringnav_screensaver`), `screensaver_rows` (`0x4ca160` $\to$ `ringnav_saver_rows`), `standy_page_init` (`0x530c34` $\to$ `ringnav_standby`), `saver_cover` (`0x530754` $\to$ `ringnav_saver_cover`), `statusbar_page_init` (`0x531dd0` $\to$ `ringnav_statusbar`).
 
 ### 5.2 Unnamed Static Functions (`PRIVATE_FUNCTIONS`) & Raw Offsets
-In addition to dynamic symbol table entries (`FUNCTIONS`, `GLOBALS`, `CONTEXT_DATA`), [`tools/build.py`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L217-L235) and [`patch/offsets.inc`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L326-L418) reference unnamed `static` functions and raw `.bss`/`.data`/`.rodata` addresses that must be located by disassembly pattern matching in M1 Plus's `demo`:
-1. **17 `PRIVATE_FUNCTIONS`** ([`tools/build.py:217-235`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L217-L235)):
+In addition to dynamic symbol table entries (`FUNCTIONS`, `GLOBALS`, `CONTEXT_DATA`), [`tools/build.py`](../tools/build.py) and [`patch/offsets.inc`](../patch/offsets.inc) reference unnamed `static` functions and raw `.bss`/`.data`/`.rodata` addresses that must be located by disassembly pattern matching in M1 Plus's `demo`:
+1. **17 `PRIVATE_FUNCTIONS`** ([`tools/build.py`](../tools/build.py)):
    `keylock_rows`, `quick_lock`, `playlist_rebuild`, `stock_search`, `slide_menu_item_width`, `slide_menu_on_scroll_done`, `mcl_preload`, `mcl_open_preload`, `btmenu_rows`, `mcl_shuffle_pick`, `album_row`, `folder_refresh`, `class_icon`, `screensaver_rows`, `saver_cover`, `np_info`.
-2. **Raw Addresses in [`patch/offsets.inc`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc) & `.c` Files**:
-   - AWTK vtables: [`DEFAULT_LAYOUT_VTABLE`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L326), [`LIST_VIEW_LAYOUT`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L327), [`LIST_VIEW_LAYOUT_SLOT`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L328).
-   - Input latches: [`KEY_LOCKOUT`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L365), [`BOOT_KEY_GUARD`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L366), [`RETURN_RELEASE_LATCH`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L367).
-   - Media control internals: [`ALBUMINFO_ROW`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L372), [`MCL_POOL` through `MCL_FD` and `USB_MIXER`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L373-L384), [`SCAN_THREAD` & `SCAN_DONE`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L417-L418), [`pdeq_btpairlist`](file:///home/jtliang/Projects/q2-pod/patch/headset.c#L17), `responseSetVolume` byte ([`0xa38c41`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L6052)).
-   - Event callbacks: [`SORTSELECT_KEYUP` & `SORTSELECT_CLOSE`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L385-L386), [`BOOTVOL_TOGGLE` / `UP` / `DOWN`](file:///home/jtliang/Projects/q2-pod/patch/offsets.inc#L388-L390), [`FAV_CLICK`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L4320), [`PLAYLIST_PICK`](file:///home/jtliang/Projects/q2-pod/patch/navigation.c#L5175), and `initconfig` caller return address in [`ringnav_speed`](file:///home/jtliang/Projects/q2-pod/patch/playback.c#L603).
+2. **Raw Addresses in [`patch/offsets.inc`](../patch/offsets.inc) & `.c` Files**:
+   - AWTK vtables: [`DEFAULT_LAYOUT_VTABLE`](../patch/offsets.inc), [`LIST_VIEW_LAYOUT`](../patch/offsets.inc), [`LIST_VIEW_LAYOUT_SLOT`](../patch/offsets.inc).
+   - Input latches: [`KEY_LOCKOUT`](../patch/offsets.inc), [`BOOT_KEY_GUARD`](../patch/offsets.inc), [`RETURN_RELEASE_LATCH`](../patch/offsets.inc).
+   - Media control internals: [`ALBUMINFO_ROW`](../patch/offsets.inc), [`MCL_POOL` through `MCL_FD` and `USB_MIXER`](../patch/offsets.inc), [`SCAN_THREAD` & `SCAN_DONE`](../patch/offsets.inc), [`pdeq_btpairlist`](../patch/m1plus_offsets.inc), `responseSetVolume` byte ([`0xa38c41`](../patch/navigation.c)).
+   - Event callbacks: [`SORTSELECT_KEYUP` & `SORTSELECT_CLOSE`](../patch/offsets.inc), [`FAV_CLICK`](../patch/navigation.c), [`PLAYLIST_PICK`](../patch/navigation.c), and `initconfig` caller return address in [`ringnav_speed`](../patch/playback.c).
 3. **Inline Instruction Patches (`patch_word`)**:
-   - [`tools/build.py`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L120-L163): `SHUFFLE_CALL`, `HOLD_RETURN`, `STANDBY_WAKE`, `BT_CONNECT_START`, `AUDIO_EXTENSION_CALLS` (15 sites for `.m4b`), `SORT_TRIMS` (4 sites), `SCAN_LIMIT` (65,000 song limit), `ALBUM_ART`, `ALBUM_ART_ROW`, `CLASS_ICON`, `COVER_PAUSE`, `ARTIST_COVER_ROW`, `LDAC_HQ`, `DROP_CACHES`, `NP_INFO_CALL`, `LOGO_HOOK`, `ringnav_bootmode`, `ringnav_cover_done`, Tidal null guards, `INITCONFIG_MODE_RET`, `STYLE_COLOR_GRADIENT_RET`.
-   - [`tools/ipod.py`](file:///home/jtliang/Projects/q2-pod/tools/ipod.py#L465-L539): `ARTIST_ALBUMS`, `lookup` unwind, 23 `AUDIT['immediates']`, 8 `AUDIT['row_layout_calls']`, All Songs swipe-delete disable, playlist tile geometry, and `toolsTimeItoa`.
+   - [`tools/build.py`](../tools/build.py): `SHUFFLE_CALL`, `HOLD_RETURN`, `STANDBY_WAKE`, `BT_CONNECT_START`, `AUDIO_EXTENSION_CALLS` (15 sites for `.m4b`), `SORT_TRIMS` (4 sites), `SCAN_LIMIT` (65,000 song limit), `ALBUM_ART`, `ALBUM_ART_ROW`, `CLASS_ICON`, `COVER_PAUSE`, `ARTIST_COVER_ROW`, `LDAC_HQ`, `DROP_CACHES`, `NP_INFO_CALL`, `LOGO_HOOK`, `ringnav_bootmode`, `ringnav_cover_done`, Tidal null guards, `INITCONFIG_MODE_RET`, `STYLE_COLOR_GRADIENT_RET`.
+   - [`tools/ipod.py`](../tools/ipod.py): `ARTIST_ALBUMS`, `lookup` unwind, 23 `AUDIT['immediates']`, 8 `AUDIT['row_layout_calls']`, All Songs swipe-delete disable, playlist tile geometry, and `toolsTimeItoa`.
 
 ### 5.3 SQLite Library Queries (Coverflow & Local Music)
 All stock database functions in `demo` retain identical function signatures:
@@ -295,29 +295,29 @@ All stock database functions in `demo` retain identical function signatures:
 | `getMusicByAlbumAndComposer` | `0x00502cb8` | `0x004ed2d4` |
 | `getMusicByAlbumAndGenre` | `0x00502f84` | `0x004ed5a0` |
 
-### 5.4 Audio Player (`/usr/bin/hciplayer` — [`tools/peq.py`](file:///home/jtliang/Projects/q2-pod/tools/peq.py) & [`patch/peq_player.c`](file:///home/jtliang/Projects/q2-pod/patch/peq_player.c))
-In M1 Plus's `hciplayer`, the `.rodata` string `"equalizer\0"` is at offset `0x00485e2c` (and `"Equalizer audio filter"` at `0x004937bc`). However, [`tools/peq.py`](file:///home/jtliang/Projects/q2-pod/tools/peq.py#L14-L66) and [`patch/peq_player.c`](file:///home/jtliang/Projects/q2-pod/patch/peq_player.c) require resolving **all** of the following in `hciplayer`:
+### 5.4 Audio Player (`/usr/bin/hciplayer` — [`tools/peq.py`](../tools/peq.py) & [`patch/peq_player.c`](../patch/peq_player.c))
+In M1 Plus's `hciplayer`, the `.rodata` string `"equalizer\0"` is at offset `0x00485e2c` (and `"Equalizer audio filter"` at `0x004937bc`). However, [`tools/peq.py`](../tools/peq.py) and [`patch/peq_player.c`](../patch/peq_player.c) require resolving **all** of the following in `hciplayer`:
 1. **`af_info_equalizer` Struct (`EQ_DESC` & `EQ_OPEN_SLOT`)**: Locate the `.data` structure referencing `"equalizer\0"` (`0x00485e2c`) and patch its `open` function pointer (`EQ_DESC + 0x14`) to `peq_af_open`.
 2. **Hi-Res Sample Rate Gates (`EQ_RATE_GATES`)**: Stock `hciplayer` skips attaching `af_equalizer` when `samplerate > 48000` (`0x42ced0` and `0x42fd84` on Q2). Both branches must be NOPed so PEQ, ReplayGain, crossfade, and the visualizer work on Hi-Res (>48 kHz) tracks.
-3. **`GP` & 22 GOT `LIBC` Imports**: Verify `hciplayer`'s `_gp` value and the 22 GOT slot offsets listed in [`tools/peq.py:32-55`](file:///home/jtliang/Projects/q2-pod/tools/peq.py#L32-L55).
-4. **MP3 VBR Scan & Fast Seek (`VBR_SCAN`, `SEEK_SLOT`, `STOCK_SEEK`, `HR_MP3_SEEK`)**: NOP the slow full-file MP3 frame walk on open and redirect `demux_audio`'s seek slot to [`mp3_seek`](file:///home/jtliang/Projects/q2-pod/patch/peq_player.c#L604).
-5. **MP3 ReplayGain (`ID3_CALLS`, `STOCK_ID3`, `AV_DICT_SET`, `AV_DICT_FREE`, `RG_EXPORT`)**: Redirect `ff_id3v2_parse_apic` call sites to [`mp3_id3`](file:///home/jtliang/Projects/q2-pod/patch/peq_player.c#L661) and export `TXXX` `replaygain_*` tags to `/tmp/q2_rg`.
-6. **DSD Native Passthrough (`MPCTX`)**: [`dsd()`](file:///home/jtliang/Projects/q2-pod/patch/peq_player.c#L320-L335) reads `mpctx->sh_audio->format` (`0x11100003` / `0x11100004`) to bypass PCM biquad filtering on native DSD streams.
-7. **Crossfade & Visualizer Timing (`written_audio_pts`, `LENGTH`)**: [`decoded()`](file:///home/jtliang/Projects/q2-pod/patch/peq_player.c#L339-L511) calls `written_audio_pts()` and reads `LENGTH` in `hciplayer` to synchronize the 16-slot visualizer ring in `/dev/shm/q2peq` and trigger track-end crossfades.
+3. **`GP` & 22 GOT `LIBC` Imports**: Verify `hciplayer`'s `_gp` value and the 22 GOT slot offsets listed in [`tools/peq.py`](../tools/peq.py).
+4. **MP3 VBR Scan & Fast Seek (`VBR_SCAN`, `SEEK_SLOT`, `STOCK_SEEK`, `HR_MP3_SEEK`)**: NOP the slow full-file MP3 frame walk on open and redirect `demux_audio`'s seek slot to [`mp3_seek`](../patch/peq_player.c).
+5. **MP3 ReplayGain (`ID3_CALLS`, `STOCK_ID3`, `AV_DICT_SET`, `AV_DICT_FREE`, `RG_EXPORT`)**: Redirect `ff_id3v2_parse_apic` call sites to [`id3_gain`](../patch/m1plus_peq_player_id3.c) and export `TXXX` `replaygain_*` tags to `/tmp/q2_rg`.
+6. **DSD Native Passthrough (`MPCTX`)**: [`dsd()`](../patch/peq_player.c) reads `mpctx->sh_audio->format` (`0x11100003` / `0x11100004`) to bypass PCM biquad filtering on native DSD streams.
+7. **Crossfade & Visualizer Timing (`written_audio_pts`, `LENGTH`)**: [`decoded()`](../patch/peq_player.c) calls `written_audio_pts()` and reads `LENGTH` in `hciplayer` to synchronize the 16-slot visualizer ring in `/dev/shm/q2peq` and trigger track-end crossfades.
 
 ---
 
 ## 6. Auxiliary Binaries, Libraries & Hardware Subsystems
 
-Beyond `demo` and `hciplayer`, [`tools/build.py`](file:///home/jtliang/Projects/q2-pod/tools/build.py) patches or compiles five additional binaries/libraries that require M1 Plus adaptation:
+Beyond `demo` and `hciplayer`, [`tools/build.py`](../tools/build.py) patches or compiles five additional binaries/libraries that require M1 Plus adaptation:
 
 | Binary / Library | Q2 Implementation | Required M1 Plus Changes |
 | :--- | :--- | :--- |
-| **`usr/bin/bluealsa`** | [`patch_bluealsa`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L926-L967) patches `AAC_44K1`, `BT_DROP`, `BT_DROP_HANDLER`, `BT_DROP_PAYLOAD`, and `BT_PCM_CALLERS`. | Verify `bluealsa` binary in M1 Plus rootfs (which uses `rtl8733bs.ko`) and update instruction offsets before patching. |
-| **`usr/lib/libtag_c.so.2.0.1`** | [`patch_m4b_cover`](file:///home/jtliang/Projects/q2-pod/tools/build.py#L914-L923) patches offset `0x2278` so `.m4b` audiobooks extract cover art. | Verify `libtag_c.so.2.0.1` SHA-256 / offset in M1 Plus rootfs. |
-| **`usr/bin/q2boot`** ([`patch/boot.c`](file:///home/jtliang/Projects/q2-pod/patch/boot.c)) | Matches input device `"md-gpio-keys"` and checks `KEY_PLAY = 108` at boot to toggle Rockbox vs. CFW. | Update input device name to match `keyboard_gpio_add.ko` and change `KEY_PLAY` from `108` to `164` (`KEY_PLAYPAUSE`). |
-| **`usr/bin/q2video`** ([`patch/video.c`](file:///home/jtliang/Projects/q2-pod/patch/video.c)) | Checks `w != 320 \|\| h != 375` on `/dev/fb0`, rotates video with `transpose=clock`, and sends `DAC_PCM`/`DAC_MUTE` ioctls to `/dev/shanling_dac`. | Change framebuffer check to `320 × 480`, remove 90° `transpose=clock` rotation, and verify ES9069Q (`codec_es9069q.ko`) DAC device node & ioctls. |
-| **`usr/bin/q2remote`** ([`patch/remote.c`](file:///home/jtliang/Projects/q2-pod/patch/remote.c)) | `--shot` checks `w != 320 \|\| h != 375` ([`remote.c:139`](file:///home/jtliang/Projects/q2-pod/patch/remote.c#L139)). | Update `--shot` dimension check to `w != 320 \|\| h != 480`. |
+| **`usr/bin/bluealsa`** | [`patch_bluealsa`](../tools/build.py) patches `AAC_44K1`, `BT_DROP`, `BT_DROP_HANDLER`, `BT_DROP_PAYLOAD`, and `BT_PCM_CALLERS`. | Verify `bluealsa` binary in M1 Plus rootfs (which uses `rtl8733bs.ko`) and update instruction offsets before patching. |
+| **`usr/lib/libtag_c.so.2.0.1`** | [`patch_m4b_cover`](../tools/build.py) patches offset `0x2278` so `.m4b` audiobooks extract cover art. | Verify `libtag_c.so.2.0.1` SHA-256 / offset in M1 Plus rootfs. |
+| **`usr/bin/q2boot`** ([`patch/boot.c`](../patch/boot.c)) | Matches input device `"md-gpio-keys"` and checks `KEY_PLAY = 108` at boot to toggle Rockbox vs. CFW. | Update input device name to match `keyboard_gpio_add.ko` and change `KEY_PLAY` from `108` to `164` (`KEY_PLAYPAUSE`). |
+| **`usr/bin/q2video`** ([`patch/video.c`](../patch/video.c)) | Checks `w != 320 \|\| h != 375` on `/dev/fb0`, rotates video with `transpose=clock`, and sends `DAC_PCM`/`DAC_MUTE` ioctls to `/dev/shanling_dac`. | Change framebuffer check to `320 × 480`, remove 90° `transpose=clock` rotation, and verify ES9069Q (`codec_es9069q.ko`) DAC device node & ioctls. |
+| **`usr/bin/q2remote`** ([`patch/remote.c`](../patch/remote.c)) | `--shot` checks `w != 320 \|\| h != 375` ([`remote.c:139`](../patch/remote.c)). | Update `--shot` dimension check to `w != 320 \|\| h != 480`. |
 
 ---
 
