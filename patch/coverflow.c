@@ -1665,7 +1665,7 @@ static int to_tracks(const void *unused) {
     for (int i = 0; i < n; ++i) {
         void *row = page_row_detail(
             view, i, track_name(name, sizeof name, deque_at(cf.tracks, (unsigned)i)), 0, play);
-        widget_use_style(widget_get_child(row, 0), "s_scrlabel_white20c");
+        widget_use_style(widget_get_child(row, 0), STYLE_SCRLABEL_WHITE20C);
     }
     return 0;
 }
