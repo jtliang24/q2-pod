@@ -17,8 +17,9 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** U0 is done: the Q2 builds are `main`'s again. The M1 release tool is done (section 6); its
-first release, 1.2.2-m1.1, waits for a device pass. Then section U goes on in order: the restructure (U1) and the sync tooling (U2) against
+**Next:** U0 is done: the Q2 builds are `main`'s again. The M1 release tool is done (section 6). Its
+first package, 1.2.2-m1.1, passed its device check and is not published, since upstream is past 1.2.2:
+the first published M1 release is 1.3.9-m1.1, after U3. Then section U goes on in order: the restructure (U1) and the sync tooling (U2) against
 1.2.2, then the first sync to upstream 1.3.9 (U3). The M1 feature work waits until U3 lands: Spotify on the
 device (section 3), the iPod UI (section 5) and the final pass (section 7). Section 4 is done for 1.2.2;
 one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes

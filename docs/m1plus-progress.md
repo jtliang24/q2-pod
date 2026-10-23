@@ -1333,6 +1333,11 @@ is not uploaded. To check on the device, over dev 20 (`V00Ks`):
 A release build has no q2remote (it is a `--dev` helper), so state can't be read over Wi-Fi while it is
 installed. Flashing a `--dev` build brings it back.
 
+**The device pass (Oct 22).** It was copied to the card over dev 20's q2remote (hash checked), and the
+user flashed it with the TF card update: the updater took `V1221` over `V00Ks`, and every item above
+passed. It is not uploaded: it carries 1.2.2, which upstream has moved past, so the first published M1
+release is the first after the 1.3.9 sync (U3), 1.3.9-m1.1.
+
 ## How to check a build now
 
 ```sh
