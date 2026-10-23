@@ -6,11 +6,12 @@ in [m1plus-progress.md](m1plus-progress.md). How one sync runs is in [m1plus-syn
 
 Every item ends in the same loop. First the Q2 checks must pass:
 - Q2 Legacy and iPod still build byte-identical to the upstream base's build (`UPSTREAM_BASE`,
-  section U). Until U2 records one, the base is `main`, which is upstream 1.2.2;
+  section U);
 - the Q2 suites pass on both.
 
-See [m1plus-integration.md](m1plus-integration.md#checklist). Then the build's name check,
-`test/m1plus/build.py --build`, `test/m1plus/patch.py` and `test/m1plus/boot.py` must pass on M1. Then flash through the
+`python3 test/q2compare.py --suites` checks both ([m1plus-integration.md](m1plus-integration.md#checklist)).
+Then the build's name check, `test/m1plus/build.py --build`, `test/m1plus/patch.py`,
+`test/m1plus/boot.py` and the port report, `test/m1plus/ports.py`, must pass on M1. Then flash through the
 menu updater, and use the menu updater with stock `update.bin` to get back. Where an item's test is a `KNOWN GAP` or `NOT PORTED`
 line today, the fix removes that marker. `known_gap` fails the run once its check passes, so a fixed
 gap can't be left marked.
@@ -175,6 +176,13 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
 - **U4. Upstream features to port (M each, many).** This is the porting queue from now on; section 4 is
   the record for 1.2.2. One row per feature from the port report: its hooks and sites, and what V2.1
   has. Porting follows the ground rules: find it in V2.1's code, then pin it in a test.
+  - **Found by the port report** (U2), in 1.2.2's hooks:
+    - **A manual Play/Pause and the headset** (`player_play_pause` → `ringnav_play_pause`). On the Q2
+      it calls `headset_manual`, so a headset's automatic resume doesn't undo a pause the user made.
+      V2.1's `play_pause_music` is aliased but not hooked. Find its callers in V2.1's `demo` first.
+    - **Folder's roots without OTG** (`folder_load_top` → `ringnav_folder_top`). Without a drive, the
+      Q2 lists the card alone. Check whether V2.1's Folder lists OTG at all before porting.
+    - `NP_INFO_CALL` stays in section 7.
   - **Seeded by 1.3.9** (to confirm against the report):
     - **New pages:** games (`games.c`), chapters (`chapters.c`), Up Next (`upnext.c`), network update
       (`netupdate.c`, `systemset_fwupdate_page_init`), online match (`onlinematch.c`), Qobuz.
@@ -322,7 +330,7 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
 ## 6. Tooling and release
 
 - **Q2 from the same tree.** Section U0 closed the measured differences
-  ([m1plus-integration.md](m1plus-integration.md)), and U2 turns the compare into `test/q2compare.py`
+  ([m1plus-integration.md](m1plus-integration.md)), and U2 turned the compare into `test/q2compare.py`
   against `UPSTREAM_BASE`. The Q2 release (`tools/release.py package`) works on this branch again. Its
   user guide needs `pdftotext`, which the devShell could add (`poppler-utils` in `flake.nix`).
 - **Release packaging for M1 (M). Done (Oct 22),** as `tools/release_m1.py`

@@ -7,15 +7,17 @@ the port has done is in [m1plus-progress.md](m1plus-progress.md), and what it st
 
 The fork point is `main` at `b229c24`: upstream `c0a2d6b` (Q2 Pod 1.2.2) plus three M1 doc commits, so its
 Q2 code is 1.2.2's. The branch then follows upstream release by release
-([m1plus-roadmap.md](m1plus-roadmap.md#u-tracking-upstream), [m1plus-sync.md](m1plus-sync.md)). Once
-`UPSTREAM_BASE` exists (roadmap U2), the Q2 baseline below is that tag's build, not `main`'s, and each sync
-moves it forward. Until then it is `main`'s.
+([m1plus-roadmap.md](m1plus-roadmap.md#u-tracking-upstream), [m1plus-sync.md](m1plus-sync.md)). Since
+U2, the Q2 baseline below is the build of `UPSTREAM_BASE`, the file at the repo's root naming the
+upstream tag or commit the branch is level with. Each sync moves it forward. It was `main`'s before
+that.
 
 Sizes are rough: **S** is a day or less, **M** a few days.
 
 ## Goal
 
-`tools/build.py <input>` picks the target from the audited input's SHA-256 (`INPUTS`, `tools/build.py:17`):
+`tools/build.py <input>` picks the target from the audited input's SHA-256 (`ZIP_SHA` and `Q2_TAR_SHA` in
+`tools/build.py`, `INPUTS` in `tools/m1plus.py`):
 
 - a Q2 V1.32 input (the vendor ZIP or its `update.tar`) gives the fork point's Q2 Pod 1.2.2, Legacy or iPod;
 - an M1 Plus V2.1 input (the vendor ZIP or its `update.bin`) gives the M1 Plus build.
@@ -26,7 +28,7 @@ where it isn't.
 ## Requirements
 
 - **R1. Q2 output is upstream's.** For Legacy and iPod, `update.tar` is byte-identical to the baseline's
-  build with the same toolchain: `main`'s now, the `UPSTREAM_BASE` tag's once U2 lands.
+  build with the same toolchain: `UPSTREAM_BASE`'s (`main`'s before U2).
 - **R2. Q2 tests are upstream's.**
   - Every Q2 suite and case that the baseline has runs and passes on the branch's Q2 builds.
   - None is dropped, skipped or turned into an M1-only check. New Q2 cases are welcome.
@@ -198,8 +200,8 @@ suites (see [Checklist](#checklist)). Then run the M1 gates for R4.
 Items 1–10 are done: item 2 earlier, 1 and 3–9 as roadmap U0 (2026-10-22), with R1–R3 met (see
 [Current status](#current-status-measured-2026-10-22-after-u0)), and 10 with the M1 release. `building.md`
 gives both targets, and the README points M1 users to the `M1Plus.Firmware.*.zip` that
-`tools/release_m1.py` makes ([m1plus-releasing.md](m1plus-releasing.md)). Items 11 and 12 are required
-for syncing (roadmap U1 and U2).
+`tools/release_m1.py` makes ([m1plus-releasing.md](m1plus-releasing.md)). Items 11 and 12, which
+syncing needs, are done too: 11 as roadmap U1 (2026-10-22), 12 as U2's `test/q2compare.py` (2026-10-23).
 
 ## Rule for future work: don't break Q2
 
@@ -207,7 +209,7 @@ From now on, no change on this branch may break Q2 support. That holds for M1 fe
 and tests alike.
 
 - **Q2 output stays upstream's.** Q2 Legacy and iPod `update.tar` stay byte-identical to the baseline's
-  build: `main`'s until `UPSTREAM_BASE` exists, then that tag's.
+  build: `UPSTREAM_BASE`'s, checked by `test/q2compare.py`.
   - A change that alters Q2 bytes on purpose says so in its commit message, with the reason and the Q2 test
     that covers it.
   - Such a change belongs upstream: send it there, and let a sync bring it in. A Q2 change made only in
@@ -230,40 +232,31 @@ and tests alike.
 ## Checklist
 
 Run these in `nix develop`. `<scratch>` is any fresh directory, and the build commands refuse an existing
-output directory. Once `test/q2compare.py` exists (item 12), it replaces the fork-point builds and the
-R1 `cmp`s below, and builds `UPSTREAM_BASE` instead of `main`.
+output directory. `test/q2compare.py` needs the vendor ZIP, the only input upstream's `tools/build.py`
+takes: it looks for `stock/Q2 Firmware V1.32.zip`, then `~/Downloads/Q2 Firmware V1.32.zip`, or takes
+`--zip`.
 
 ```sh
-# The fork point. main takes only the vendor ZIP (the devShell unsets SOURCE_DATE_EPOCH, as it needs)
-git archive main | tar -x -C <scratch>/main-src
-(cd <scratch>/main-src && env -u SOURCE_DATE_EPOCH python3 tools/build.py ~/Downloads/'Q2 Firmware V1.32.zip' --out <scratch>/main-stock)
-(cd <scratch>/main-src && env -u SOURCE_DATE_EPOCH python3 tools/build.py ~/Downloads/'Q2 Firmware V1.32.zip' --out <scratch>/main-ipod --ipod)
+# R1–R3: Legacy and iPod update.tar byte-identical to UPSTREAM_BASE's build, then the base's suites on
+# this tree's builds (build --build, patch, playback, id3, m4b, headset_io, ldac, bluealsa on each;
+# peq, mp3, remote, coverflow, release once). The base's builds are kept in work/q2compare/<commit>/.
+python3 test/q2compare.py --suites
 
-# This tree: Q2 both variants, and M1
-python3 tools/build.py 'stock/Q2 Firmware V1.32/update.tar' --out <scratch>/q2-stock
-python3 tools/build.py 'stock/Q2 Firmware V1.32/update.tar' --out <scratch>/q2-ipod --ipod
+# R4: a fresh M1 build and its gates
 python3 tools/build.py 'stock/M1 Plus Firmware V2.1/update.bin' --out <scratch>/m1
-
-# R1: identical update.tar; if not, compare manifest.json hashes to find the component
-cmp <scratch>/main-stock/update.tar <scratch>/q2-stock/update.tar
-cmp <scratch>/main-ipod/update.tar <scratch>/q2-ipod/update.tar
-
-# R2: on each Q2 build (q2-stock, q2-ipod), compare scenario counts with main's
-python3 test/build.py --build <scratch>/q2-stock
-python3 test/patch.py <scratch>/q2-stock
-python3 test/playback.py <scratch>/q2-stock      # and id3, m4b, headset_io, ldac, bluealsa
-python3 test/peq.py; python3 test/mp3.py; python3 test/remote.py; python3 test/coverflow.py
-
-# R3
-python3 test/release.py
-python3 tools/release.py package 'stock/Q2 Firmware V1.32/update.tar' --out <scratch>/release
-
-# R4
 python3 test/m1plus/build.py --build <scratch>/m1
 python3 test/m1plus/patch.py <scratch>/m1
 python3 test/m1plus/boot.py <scratch>/m1
+python3 test/m1plus/ports.py
+
+# Before a Q2 release
+python3 tools/release.py package 'stock/Q2 Firmware V1.32/update.tar' --out <scratch>/release
 ```
 
-`test/patch.py` ends with its scenario count. `main` passes 1016 (Legacy) and 1397 (iPod), so the branch must
-match or exceed those on Q2. When a suite's exit status is captured in a script, read `$?` straight after the
+On a difference, `q2compare.py` names the differing `manifest.json` components and the first patch symbol
+that moved; `--keep <scratch>` keeps this tree's snapshot and builds to look into. Without `--suites` it
+only compares, in about a minute once the base is built.
+
+`test/patch.py` ends with its scenario count, which must match or exceed the base's on Q2: 1016 (Legacy) and
+1397 (iPod) at `c0a2d6b`. When a suite's exit status is captured in a script, read `$?` straight after the
 command, never after a `$(…)` in the same line: the substitution resets it.
