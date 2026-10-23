@@ -58,6 +58,16 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    - **A new upstream static function that only Q2 code calls** fails the M1 compile as unused
      (`-Werror`). Name it from the M1 file that stands in for its caller, with why, as
      `m1plus_nav_library.c` names `tidal_downloads`. Don't wrap upstream's function in `#if`.
+   - **Upstream's changes to Q2-only code.** The merge takes them in an `#if !M1PLUS` branch (or the
+     `#else` of `#if M1PLUS`) and leaves its M1 side, often a `patch/m1plus_*` file it includes, as it
+     was. `python3 test/m1plus/q2only.py <tag>` lists each line the tag added in such a branch: make the
+     same change on the M1 side, or rule it out. The 1.2.2 pilot missed one, `navigation.c`'s key-up
+     taking `media_focused()`, which `m1plus_nav_keyup.inc` didn't until dev 21's device pass.
+   - **A style, view or icon named by a string in shared C** uses its `STYLE_*`, `VIEW_*` or `ICON_*`
+     name (`patch/m1plus_q2.inc` has the Q2's, `patch/m1plus_offsets.inc` V2.1's), adding one for a new
+     string. On M1 the Q2's string is a style V2.1's theme lacks, and the widget stays unstyled: 1.2.2's
+     Coverflow tracks came out grey and left-aligned on dev 21. `test/m1plus/patch.py` fails on a style
+     the payload sets that V2.1's theme lacks; nothing checks views and icons.
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
      `test/m1plus/`.
    - **Upstream's new test cases**, conflict or not: review `git diff <old base> <tag> -- test/`. The
@@ -84,9 +94,11 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    - Add the footprint to the [table below](#footprint).
    - Add a section to [m1plus-progress.md](m1plus-progress.md) naming the tag, the conflicts and how
      each was resolved.
-5. **Device pass.** Flash the M1 build through the menu updater, run the checklist of features the sync
-   touched, then use the menu updater with stock `update.bin` to get back
-   ([m1plus-roadmap.md](m1plus-roadmap.md), the loop at the top).
+5. **Device pass.** Flash a `--dev` M1 build through the menu updater and run the checklist of features
+   the sync touched, over q2remote where it can reach them. Stay on the build afterwards; the menu
+   updater with stock `update.bin` is only for a catastrophic error (a boot loop, demo crashing at
+   start, dead touch input). Keep the screen awake for touch checks: touch still works on a dark
+   screen, but the hold menu and other gated input refuse it.
 6. **Land.** Merge `sync/<tag>` into `feature/m1plus-port` with `--no-ff`.
 7. **Release.** Add a `- **<tag>-m1.1**:` entry to [m1plus-changelog.md](m1plus-changelog.md), then
    release by [m1plus-releasing.md](m1plus-releasing.md).
@@ -114,3 +126,4 @@ stay flat or fall.
 | U1c: the M1 blocks out of `patch/*.c` (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +4,368/−1,665 over 36 files; `patch/` +671/−226 |
 | After U1 (U1d: the M1 suites in `test/m1plus/`, Oct 23) | 1.2.2 (`c0a2d6b`, through `main`) | +1,417/−279 over 31 files |
 | Pilot sync to 1.2.2 (U2, Oct 23) | 1.2.2 (`87e2417`) | +1,416/−278 over 30 files |
+| Dev 21's fixes (Oct 23) | 1.2.2 (`87e2417`) | +1,417/−279 over 30 files: Coverflow's `STYLE_SCRLABEL_WHITE20C` |

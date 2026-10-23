@@ -1378,6 +1378,30 @@ What the runbook needed ([m1plus-sync.md](m1plus-sync.md)):
 - **Edit nothing between an M1 build and its gates.** They check the build's `source_sha256` against
   the tree, and a table edit made after the build fails all of them.
 
+**On the device (dev 21, `V00Ls`, Oct 23).** The user flashed it over V1221 by hand, and the rest
+was checked over q2remote. About shows CFW 1.2.2 dev 21, and demo, q2remote and the card's
+`update.bin` hash as built. These work: Spotify (Loading…, then its menu, and Back), Coverflow's
+album to its track list and playback in album order, Play/Pause and Next, Shuffle Songs, and the hold
+menu on Album's rows. Tidal's Home card opens to its login; the device isn't signed in. Two sync
+misses and one older gap were found:
+
+| Commit | Change | Why |
+|---|---|---|
+| `faee011` | Coverflow's tracks in V2.1's centred label | 1.2.2's `to_tracks` names `s_scrlabel_white20c` by its string, a style V2.1's theme lacks, so the rows came out grey and left-aligned. `STYLE_SCRLABEL_WHITE20C` is that string on Q2, so both `update.tar` are unchanged. |
+| `a36bb61` | The harness fails on a style V2.1's theme lacks | Its `widget_use_style` took any name. It checks the payload's calls against the build's `default.bin`; stock's own calls build names at run time, which the mocks don't. |
+| `e3f6282` | A focused Spotify or radio page takes the device's playback keys | 1.2.2's key-up takes `media_focused()` in its `#if !M1PLUS` branch, and the merge left the M1's copy, `m1plus_nav_keyup.inc`, as it was. Only a headset's keys followed the page. |
+| `e1ef05c` | `test/m1plus/q2only.py` | Lists each line a tag adds in a Q2-only branch, for a by-hand check of its M1 side. On `c0a2d6b..1.2.2` it lists 9: the key-up, the Tidal Downloads row (named from an M1 file), and `offsets.inc`'s Q2 values. |
+
+- **A touch hold on an album's tracks plays the track** (roadmap U4). `load` counts 17 rows for 16
+  tracks, so `qm_hold` refuses the hold. Its code is V1221's: M1 builds at `a5b0d20` (V1221),
+  `7a61bf6` (U1 done) and `c2a3e47` (before the merge) have the same `patch_sha256`, `aac49259…`.
+- **Not bugs:** a single knob press locked the screen, because the knob is in Volume mode. Holds failed
+  at first because the screen had timed out between q2remote commands (`g_backlight_status` 0):
+  touch works on a dark screen, but `usable()` refuses the hold.
+
+After the fixes: `test/q2compare.py --suites` is exact, with 21 suite runs passing; the M1 gates pass
+on a fresh build (`patch` 1017 scenarios).
+
 ## How to check a build now
 
 ```sh

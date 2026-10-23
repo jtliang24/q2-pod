@@ -12,7 +12,7 @@ Every item ends in the same loop. First the Q2 checks must pass:
 `python3 test/q2compare.py --suites` checks both ([m1plus-integration.md](m1plus-integration.md#checklist)).
 Then the build's name check, `test/m1plus/build.py --build`, `test/m1plus/patch.py`,
 `test/m1plus/boot.py` and the port report, `test/m1plus/ports.py`, must pass on M1. Then flash through the
-menu updater, and use the menu updater with stock `update.bin` to get back. Where an item's test is a `KNOWN GAP` or `NOT PORTED`
+menu updater and stay on the build; stock `update.bin` is only for a catastrophic error. Where an item's test is a `KNOWN GAP` or `NOT PORTED`
 line today, the fix removes that marker. `known_gap` fails the run once its check passes, so a fixed
 gap can't be left marked.
 
@@ -195,6 +195,12 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `tidal_start` passes no song id, since V2.1's two callers (`0x500d5c`, `0x51c7b0`) keep none, so
       Tidal streams uncached and there is no Downloads row. V2.1's `get_tidal_trackurl` (`0x512ed0`) hands
       its URL thread (`0x51c288`) the queue row: the id is to be found there.
+  - **Found on the device** (dev 21, Oct 23):
+    - **A touch hold on an album's tracks plays the track.** On Album's list the hold menu opens for the
+      row held. On an album's track list (16 tracks), `load` counted 17 rows (`g_menu.rows`, read over
+      q2remote), so `qm_hold`'s check against the showlist's size fails and the release's click plays the
+      row. The hold code is the same as V1221's, so the gap is likely older than 1.2.2. Find what the
+      17th row is first (the album header?).
     - `NP_INFO_CALL` stays in section 7.
   - **Seeded by 1.3.9** (to confirm against the report):
     - **New pages:** games (`games.c`), chapters (`chapters.c`), Up Next (`upnext.c`), network update
