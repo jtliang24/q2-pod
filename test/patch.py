@@ -36,6 +36,9 @@ def site_patched(name):
     assert words, name
     for _, address, _, new in words: assert struct.unpack_from('<I', d, fileoff(d, address))[0] == new, (name, hex(address))
 from ipod import INC, O  # patch/offsets.inc and its integer #defines
+if not is_m1plus:  # and the names the M1 port adds to shared code, at the Q2's values
+    O = {**O, **{m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b',
+                                                       (ROOT/'patch/m1plus_q2.inc').read_text(), re.M)}}
 if is_m1plus:
     from build import run
     from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
