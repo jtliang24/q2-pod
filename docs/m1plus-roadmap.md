@@ -34,13 +34,13 @@ first: items that only change how something looks wait for the final pass (secti
 - **Q2 output is upstream's.** No change for M1 may change the Q2 firmware or its tests:
   - Q2 Legacy and iPod `update.tar` stay byte-identical to the `UPSTREAM_BASE` tag's build with the same
     toolchain (`test/q2compare.py`, U2), and every Q2 suite and case of that tag keeps running and passing.
-  - M1 code goes behind `#if M1PLUS` / `if m1plus` or into a per-model table. That includes defensive checks
-    only V2.1 needs.
+  - M1 code, defensive checks only V2.1 needs included, goes in M1 files (the next rule).
   - A deliberate Q2 change says so in its commit, with its reason and its test.
   - The full rule is in [m1plus-integration.md](m1plus-integration.md#rule-for-future-work-dont-break-q2).
 - **M1 code sits beside upstream's, not inside it** (from U1 on). It lives in `tools/m1plus.py`,
-  `patch/m1plus_*` and `test/m1plus/`. An upstream file changes only by a seam: a hook call or
-  `M1_HOOK(...)`, a target lookup, or an `#if !M1PLUS` wrapper. Each seam line is a conflict in every
+  `patch/m1plus_*` and `test/m1plus/`. An upstream file changes only by a seam: an `#include` of an
+  M1 file where its block stood, an `#if M1PLUS` / `#if !M1PLUS` wrapper, a name the M1 gives its own
+  value (a `STYLE_*` for a literal), or `build.py`'s hand-off to `m1plus.takes()` / `m1plus.build()`. Each seam line is a conflict in every
   later sync, so keep them few.
 - **Fix Q2 bugs upstream.** Never change upstream's Q2 code in the fork to fix a Q2 bug. Send the fix to
   DiamondBond/q2-pod (section 6, "Upstream contributions"), and keep any M1 copy of it behind `M1PLUS`
@@ -49,8 +49,9 @@ first: items that only change how something looks wait for the final pass (secti
   function in V2.1's demo, and pin the instruction or string the change relies on, as
   `test/m1plus/build.py`'s updater check and `test/m1plus/patch.py`'s `tslib_run` check do. Never reuse a V1.32
   address.
-- **Name every stock widget, image and style through `offsets.inc`** (`VIEW_`, `ICON_`, `STYLE_`,
-  `ROW_`, `ABOUT_`), so the build's V2.1 name check covers it.
+- **Name every stock widget, image and style through a name** (`VIEW_`, `ICON_`, `STYLE_`, `ROW_`,
+  `ABOUT_`: V2.1's in `patch/m1plus_offsets.inc`, the Q2's in `patch/m1plus_q2.inc`), never a string in
+  shared code, so the build's V2.1 name check covers it and the Q2 keeps its own.
 - **Build rows with `list_row`/`row_of`.** They build V2.1's row structure on M1. Don't reach a row's
   parts by child index.
 - **Prefer V2.1's own UI conventions.** Its title-bar back button, its row styles, and its native
@@ -69,7 +70,7 @@ The branch forked from upstream 1.2.2 (`c0a2d6b`). By Oct 22, upstream was at **
 +9.7k/−1.9k lines over 71 files in six days, about 40 commits a day. A trial merge of 1.3.9 into this
 branch conflicts in 22 files, about 150 hunks:
 
-| File | Hunks | M1 footprint today |
+| File | Hunks | M1 footprint then (before U1) |
 |---|---|---|
 | `test/patch.py` | 50 | +2,357/−1,159, 161 `m1plus` branches |
 | `patch/navigation.c` | 25 | +724/−92, 64 `M1PLUS` sites (the largest 97 lines) |
@@ -143,11 +144,12 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `#if` around a Q2-only line. Lowering it further would mean restructuring upstream's functions.
   - **d. Move the M1 tests out. Done (Oct 22).**
     - `test/` holds upstream's suites, and `patch.py`, `build.py`, `playback.py`, `id3.py`, `m4b.py` and
-      `headset_io.py` there are upstream's text but for one line: `playback.py` picks the hold menu's
-      Shuffle by its label, as upstream 1.3.9 does, since `main`'s fixed index fails on `main`'s own build.
-      Upstream's `patch.py` passes `main`'s 1016 (Legacy) and 1397 (iPod) scenarios.
+      `headset_io.py` there were upstream's text but for one line: `playback.py` picked the hold menu's
+      Shuffle by its label, as upstream 1.3.9 does, since `main`'s fixed index failed on `main`'s own build.
+      Since the 1.2.2 sync, which has the same pick, all six are upstream's text, and `patch.py` passes
+      1.2.2's 1029 (Legacy) and 1410 (iPod) scenarios.
     - `test/m1plus/` holds the M1's: those six as the branch had them, with both models' paths, and
-      `boot.py`. They run on M1 builds as before; their Q2 branches are dead there and can be trimmed.
+      `boot.py`; U2 added `ports.py` and `q2only.py`. They run on M1 builds as before; their Q2 branches are dead there and can be trimmed.
     - `coverflow.py` and `peq.py` stay in `test/` with small seams: they build the shared C on the host,
       which the port changed. `remote.py` keeps its M1 cases, as `tools/q2remote.py` does.
   - **e. Measure the footprint. Done (Oct 23).** After U1: +1,417/−279 over upstream's 31 changed files,
@@ -267,9 +269,9 @@ from the Q2 Pod page, a back button, and the touch long-press where the Q2 has a
   out of favourites), a Spotify track (Spotify's queue) and Coverflow's centre cover (the album menu).
 
 A video and Internet Radio play through q2video on the ES9069Q, straight after a boot too (dev 18,
-[m1plus-progress.md](m1plus-progress.md) section 23). Left for the device:
-- Spotify, with q2-librespot on the card: its `aplay` on `plughw:0,0`, and whether the Q2's static
-  MIPS build runs on the M1's kernel.
+[m1plus-progress.md](m1plus-progress.md) section 23). The Q2's static q2-librespot runs on the M1's
+kernel: on dev 21 it was up and signed in, and the Spotify page's menu loaded. Left for the device:
+- Spotify's sound: a track through its `aplay` on `plughw:0,0`.
 
 ## 4. Re-pointing V1.32 call-site patches (M each, many)
 
@@ -290,10 +292,9 @@ Shuffle's Play next and history, the page cache, the 65,000-song scan, the artic
 folder scans (section 26). The Ratings hold on Now Playing's heart (section 27). The Lock screen page's
 Clock row and built-in thumbnails, and the Large clock on V2.1's lock window (section 28). The cover
 worker's pause and stale completion (section 30). The hold menu's row selection, and the Now Playing hold's
-Add to Playlist guard (section 31). LDAC HQ (section 32), still to hear on the device. Gapless in
-advanced play and across speed changes (section 33), still to hear with Gapless on. Resume on connect
-(section 34), still to try with a Bluetooth headphone. Same-named albums' art, on Library Albums and an
-artist's albums (section 35), still to see with two such albums on the card.
+Add to Playlist guard (section 31). LDAC HQ (section 32). Gapless in advanced play and across
+speed changes (section 33). Resume on connect (section 34). Same-named albums' art, on Library Albums and
+an artist's albums (section 35).
 
 Every row had been checked against V2.1's `demo` on Oct 21 ([m1plus-progress.md](m1plus-progress.md)
 section 24). All are now ported or found native in V2.1, and dev 20's device pass confirmed them
@@ -357,7 +358,7 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
 - **Q2 from the same tree.** Section U0 closed the measured differences
   ([m1plus-integration.md](m1plus-integration.md)), and U2 turned the compare into `test/q2compare.py`
   against `UPSTREAM_BASE`. The Q2 release (`tools/release.py package`) works on this branch again. Its
-  user guide needs `pdftotext`, which the devShell could add (`poppler-utils` in `flake.nix`).
+  user guide's `pdftotext` is in the devShell (`poppler-utils` in `flake.nix`).
 - **Release packaging for M1 (M). Done (Oct 22),** as `tools/release_m1.py`
   ([m1plus-releasing.md](m1plus-releasing.md), [m1plus-progress.md](m1plus-progress.md) section 38).
   `tools/release.py` packages only the Q2, and upstream owns it, so the M1's goes beside it. It takes
@@ -385,9 +386,10 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   DiamondBond/q2-pod rather than made in the fork (ground rules). Once one lands upstream, the next sync
   brings it in, and the fork's `M1PLUS`-only copy can go. The three items after this one (the latent
   bugs, late-sound videos and playlist stations) are the first candidates. Two more go here:
-  - **The seams.** Once U1's footprint is small, offer the `Target` record, the `offsets.inc` split and
-    `M1_HOOK` on their own. They change no Q2 bytes, and with them upstream the fork's seam lines stop
-    conflicting.
+  - **The seams.** U1 made the footprint small (+1,417/−279), so offer the seams on their own: the
+    `offsets.inc` split, the `#include` points for the M1 files, the names that stand for literals
+    (`patch/m1plus_q2.inc`) and `build.py`'s hand-off to `m1plus`. They change no Q2 bytes, and with them
+    upstream the fork's seam lines stop conflicting.
   - **The M1 target itself (later).** Once a few syncs have gone cleanly, offer the M1 target upstream.
     The squash-and-split note in [m1plus-integration.md](m1plus-integration.md#decision-finish-on-this-tree)
     covers its history.

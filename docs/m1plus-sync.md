@@ -5,12 +5,14 @@ works this way, and what has to be in place first, is in the roadmap's section U
 ([m1plus-roadmap.md](m1plus-roadmap.md#u-tracking-upstream)). The Q2 rule a sync must keep is in
 [m1plus-integration.md](m1plus-integration.md#rule-for-future-work-dont-break-q2).
 
-The M1 code sits in `tools/m1plus.py`, `patch/m1plus_*` and `test/m1plus/` (U1). Three tools check a
+The M1 code sits in `tools/m1plus.py`, `patch/m1plus_*` and `test/m1plus/` (U1). These tools check a
 sync (U2):
 - `UPSTREAM_BASE`, at the repo's root, names the upstream tag or commit the branch is level with;
 - `test/q2compare.py` builds it and this tree, Legacy and iPod, and requires byte-identical `update.tar`;
 - `test/m1plus/ports.py`, the port report, classifies every Q2 hook, call site and `offsets.inc` name for
-  M1. It fails on any it can't place.
+  M1. It fails on any it can't place;
+- `test/m1plus/q2only.py` lists the tag's changes inside Q2-only branches, whose M1 side the merge
+  leaves as it was.
 
 ## Once
 
@@ -40,7 +42,8 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    (the 1.2.2 pilot's did).
 2. **Resolve conflicts by these rules.**
    - **Upstream's side wins in upstream's files.** Take upstream's text, then put back only the seam
-     lines: a hook call or `M1_HOOK(...)`, a target lookup, an `#if !M1PLUS` wrapper. Any other M1 line
+     lines: an `#include` of an M1 file, an `#if M1PLUS` / `#if !M1PLUS` wrapper, a `STYLE_*`-style
+     name for a literal, `build.py`'s hand-off to `m1plus`. Any other M1 line
      in the conflict belongs in an M1 file.
    - **A new upstream hook or call site** needs nothing for the Q2: `tools/build.py` is upstream's. For
      the M1, it gets V2.1 words in `tools/m1plus.py` (`M1PLUS_HOOKS`, `CALL_SITES['m1plus']`), or a row in
@@ -83,7 +86,8 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
       doesn't know how to run (`SUITES`), and names the suites whose text differs from the tag's.
    2. **Q2 scenario counts.** `test/patch.py`'s counts are at least the tag's own: no case dropped or
       skipped.
-   3. **M1 gates.** The V2.1 name check, `test/m1plus/build.py --build`, `test/m1plus/patch.py` and
+   3. **M1 gates.** The V2.1 name check (the M1 build itself: `m1plus_names` fails on a V2.1 name the rootfs lacks),
+      `test/m1plus/build.py --build`, `test/m1plus/patch.py` and
       `test/m1plus/boot.py` on a fresh M1 build. Edit no source between the build and its gates: they
       check its `source_sha256` against the tree, and a table edit after the build fails every one.
    4. **Port report.** `python3 test/m1plus/ports.py` passes: every hook, site and name is classified

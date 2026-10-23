@@ -1,7 +1,7 @@
 # One tree for Q2 and M1 Plus
 
-What it takes for `feature/m1plus-port` to build the Q2 Pod firmware exactly as the fork point does, and the
-M1 Plus firmware as it does now, from one `tools/build.py`. It also sets the rule that keeps it that way. What
+What it takes for `feature/m1plus-port` to build the Q2 Pod firmware exactly as upstream's release in
+`UPSTREAM_BASE` does, and the M1 Plus firmware, from one `tools/build.py`. It also sets the rule that keeps it that way. What
 the port has done is in [m1plus-progress.md](m1plus-progress.md), and what it still lacks on M1 is in
 [m1plus-roadmap.md](m1plus-roadmap.md).
 
@@ -19,11 +19,10 @@ Sizes are rough: **S** is a day or less, **M** a few days.
 `tools/build.py <input>` picks the target from the audited input's SHA-256 (`ZIP_SHA` and `Q2_TAR_SHA` in
 `tools/build.py`, `INPUTS` in `tools/m1plus.py`):
 
-- a Q2 V1.32 input (the vendor ZIP or its `update.tar`) gives the fork point's Q2 Pod 1.2.2, Legacy or iPod;
+- a Q2 V1.32 input (the vendor ZIP or its `update.tar`) gives `UPSTREAM_BASE`'s Q2 Pod, Legacy or iPod;
 - an M1 Plus V2.1 input (the vendor ZIP or its `update.bin`) gives the M1 Plus build.
 
-That dispatch already works. What is missing is proof that the Q2 output is the fork point's, and the fixes
-where it isn't.
+The dispatch works, and `test/q2compare.py` proves the Q2 output is `UPSTREAM_BASE`'s (R1 below).
 
 ## Requirements
 
@@ -51,8 +50,8 @@ ZIP.
   each, and `peq`, `mp3`, `remote`, `coverflow` and `release` once.
 - **R3 was last met on Oct 22, at the fork point.** `tools/release.py package 'stock/Q2 Firmware
   V1.32/update.tar'` built both variants twice, validated them, found each pair byte-identical and wrote
-  both ZIPs and the user guide. The guide's build (`docs/manual/build.py`) needs `pdftotext`, which the
-  devShell lacks: it ran with `nix shell nixpkgs#poppler-utils` on the `PATH`. At 1.2.2, `test/release.py`
+  both ZIPs and the user guide. The guide's build (`docs/manual/build.py`) needs `pdftotext`, then run with
+  `nix shell nixpkgs#poppler-utils`; the devShell has it since `1f737de`. At 1.2.2, `test/release.py`
   passes (part of R2); the package step wasn't rerun.
 - **R4 holds.** On a fresh M1 build, `test/m1plus/build.py --build`, `test/m1plus/patch.py` (1017
   scenarios, no `KNOWN GAP`, 9 `NOT PORTED`), `test/m1plus/boot.py` and `test/m1plus/ports.py` pass, and
@@ -173,7 +172,7 @@ Q2 support is finished on `feature/m1plus-port`, not reimplemented on a fresh br
 - **The M1 work is large and proven.** It is about 5,000 lines, most of them V2.1 addresses, struct offsets
   and event numbers, each found by reading V2.1's code.
 - **Its harnesses keep it correct:** `test/boot.py`, M1 support in `test/patch.py`, and
-  `test/build.py --build`.
+  `test/build.py --build` (since U1d, their M1 copies in `test/m1plus/`).
 - **It has passed three device tests.**
 - **A rewrite would re-derive all of it.** That brings back the risk the correction pass of 2026-10-16 paid
   for, and it would need fresh device tests.
@@ -186,8 +185,8 @@ logical commits. That is cheaper than redoing the work. The reasons stay in
 
 ## Work items
 
-Each item ends with the same check: build Q2 Legacy and iPod, compare them with `main`'s, and run the Q2
-suites (see [Checklist](#checklist)). Then run the M1 gates for R4.
+Each item ended with the same check: build Q2 Legacy and iPod, compare them with the baseline's (`main`'s
+then; `UPSTREAM_BASE`'s now), and run the Q2 suites (see [Checklist](#checklist)). Then run the M1 gates for R4.
 
 | # | Item | Fix | Size | For |
 |---|---|---|---|---|
@@ -205,7 +204,7 @@ suites (see [Checklist](#checklist)). Then run the M1 gates for R4.
 | 12 | The compare as a script (roadmap U2) | A `test/q2compare.py` that builds the baseline (`main`, then `UPSTREAM_BASE`) from `git archive` and the working tree, and reports differing components. This turns the checklist into one command, and every sync runs it | S | R1 |
 
 Items 1–10 are done: item 2 earlier, 1 and 3–9 as roadmap U0 (2026-10-22), with R1–R3 met (see
-[Current status](#current-status-measured-2026-10-22-after-u0)), and 10 with the M1 release. `building.md`
+[Current status](#current-status-measured-2026-10-23-at-upstream-122-after-u2)), and 10 with the M1 release. `building.md`
 gives both targets, and the README points M1 users to the `M1Plus.Firmware.*.zip` that
 `tools/release_m1.py` makes ([m1plus-releasing.md](m1plus-releasing.md)). Items 11 and 12, which
 syncing needs, are done too: 11 as roadmap U1 (2026-10-22), 12 as U2's `test/q2compare.py` (2026-10-23).
@@ -226,9 +225,10 @@ and tests alike.
   - An M1 port of a test adds an M1 path beside the Q2 one. It never replaces the Q2 one.
   - A new shared test helper must not clash with names a Q2 section already uses. The crash above came from
     exactly that.
-- **M1 code goes behind the target.**
-  - New M1 code goes behind `#if M1PLUS` or `if m1plus`, or into a per-model table.
-  - Shared code changes only through macros whose Q2 values are `main`'s.
+- **M1 code goes beside upstream's.**
+  - New M1 code goes in an M1 file (`tools/m1plus.py`, `patch/m1plus_*`, `test/m1plus/`), joined to
+    upstream's files only by seams ([m1plus-roadmap.md](m1plus-roadmap.md), the ground rules).
+  - Shared code changes only through names whose Q2 values are upstream's (`patch/m1plus_q2.inc`).
   - Trust the byte compare, not a reading of the source. U0 found a macro that was meant to give
     `main`'s literal and was off by one, and a body factored into a static function: on Q2 it was
     inlined, but its strings still moved in `.rodata`.

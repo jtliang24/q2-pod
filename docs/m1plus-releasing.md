@@ -35,7 +35,7 @@ About's **CFW. Version** row shows the name, and **FW. Version** the tag.
    `M1Plus.Firmware.<name>.zip` (`update.bin` and `manifest.json`), `SHA256SUMS`, `release-notes.md`
    and `release.json`. It uses no network.
 3. Flash `m1plus/update.bin` from the output through the menu updater, run the device checklist, and
-   go back with stock's `update.bin` (the roadmap's loop).
+   stay on it: stock's `update.bin` is only for a catastrophic error (the roadmap's loop).
 4. Upload a draft, check it on GitHub, then publish:
 
    ```sh
