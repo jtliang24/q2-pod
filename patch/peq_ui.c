@@ -688,7 +688,8 @@ static int tab_touch(void *ctx, void *event) {
     (void)ctx;
     int xy[2] = { I(event, EVENT_X), I(event, EVENT_Y) };
     widget_to_local(ui.page, xy);
-    tab_to(xy[0] < (TAB_LEFT + TAB_W + TAB_RIGHT) / 2 ? SIMPLE : ADVANCED);
+    /* the gap between Simple's end and Advanced's x, its middle rounded up */
+    tab_to(xy[0] < (TAB_LEFT + TAB_W + TAB_RIGHT + 1) / 2 ? SIMPLE : ADVANCED);
     return 0;
 }
 
