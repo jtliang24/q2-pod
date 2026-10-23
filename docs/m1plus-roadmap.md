@@ -17,8 +17,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** U0 is done: the Q2 builds are `main`'s again. Next is the M1 release (`tools/release_m1.py`,
-section 6). Then section U goes on in order: the restructure (U1) and the sync tooling (U2) against
+**Next:** U0 is done: the Q2 builds are `main`'s again. The M1 release tool is done (section 6); its
+first release, 1.2.2-m1.1, waits for a device pass. Then section U goes on in order: the restructure (U1) and the sync tooling (U2) against
 1.2.2, then the first sync to upstream 1.3.9 (U3). The M1 feature work waits until U3 lands: Spotify on the
 device (section 3), the iPod UI (section 5) and the final pass (section 7). Section 4 is done for 1.2.2;
 one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes
@@ -286,15 +286,16 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   ([m1plus-integration.md](m1plus-integration.md)), and U2 turns the compare into `test/q2compare.py`
   against `UPSTREAM_BASE`. The Q2 release (`tools/release.py package`) works on this branch again. Its
   user guide needs `pdftotext`, which the devShell could add (`poppler-utils` in `flake.nix`).
-- **Release packaging for M1 (M, after U0).** The README tells M1 users to download `update.bin` from a
-  release, but `tools/release.py` packages only the Q2, and upstream owns it. The M1's goes beside it
-  as `tools/release_m1.py`, which takes stock's V2.1 `update.bin` (or its vendor ZIP) and needs:
+- **Release packaging for M1 (M). Done (Oct 22),** as `tools/release_m1.py`
+  ([m1plus-releasing.md](m1plus-releasing.md), [m1plus-progress.md](m1plus-progress.md) section 38).
+  `tools/release.py` packages only the Q2, and upstream owns it, so the M1's goes beside it. It takes
+  stock's V2.1 `update.bin` (or its vendor ZIP) and has:
   - a reproducible `update.bin`: two builds, compared byte for byte;
   - a manifest check (`model`, `input_sha256`, `logo_source`);
   - the M1 gates on the first build: the V2.1 name check, `test/build.py --build`, `test/patch.py` and
     `test/boot.py`;
   - a version from upstream's `VERSION` plus an M1 suffix (for example `1.3.9-m1.1`), so a release
-    says which upstream release it carries;
+    says which upstream release it carries, and a tag the updater takes over the last (`V1391`);
   - a release note with the reflash-to-stock instructions;
   - a `test/release_m1.py` for its failure paths, as `test/release.py` has for the Q2's.
 - **q2remote on M1 (first: it makes the rest faster).** Done ([remote.md](remote.md#m1-plus)):

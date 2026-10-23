@@ -40,7 +40,8 @@ M1 Plus has only the Stock UI so far: `--ipod` is refused for it.
 M1 Plus work must not break the Q2. Q2 builds stay byte-identical to the build of the upstream release the
 branch is level with, and every Q2 test keeps passing. The rule, the current differences and how to check
 are in [m1plus-integration.md](m1plus-integration.md). How to bring in a new upstream release is in
-[m1plus-sync.md](m1plus-sync.md).
+[m1plus-sync.md](m1plus-sync.md), and how to release for the M1 Plus is in
+[m1plus-releasing.md](m1plus-releasing.md).
 
 On Q2, rebuilt firmware uses `assets/boot-logo.jpg` (320x375) as the boot splash. `assets/boot-logo.jpg` doesn't fit M1 Plus's 320x480 splash, so an M1 Plus build keeps V2.1's own splash (the manifest records `logo_source: stock`). Pass a JPEG of the device's size with `--logo` to use your own; see [boot.md](boot.md#custom-boot-logo).
 

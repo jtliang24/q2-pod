@@ -61,6 +61,8 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    touched, then use the menu updater with stock `update.bin` to get back
    ([m1plus-roadmap.md](m1plus-roadmap.md), the loop at the top).
 6. **Land.** Merge `sync/<tag>` into `feature/m1plus-port` with `--no-ff`.
+7. **Release.** Add a `- **<tag>-m1.1**:` entry to [m1plus-changelog.md](m1plus-changelog.md), then
+   release by [m1plus-releasing.md](m1plus-releasing.md).
 
 ## Footprint
 

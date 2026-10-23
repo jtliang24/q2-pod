@@ -1299,6 +1299,40 @@ was checked on the host before and after item 8, and paints the same pixels. Tho
 M1 has had since `09dba3a`: the bar runs from x 20 to 460 on a 320 px row, so it spills into the next
 row. It is in the roadmap's section 1.
 
+## 38. The M1 release, and 1.2.2-m1.1 for the device (Oct 22)
+
+`tools/release.py` is upstream's and packages only the Q2, so the M1's release goes beside it as
+`tools/release_m1.py` ([m1plus-releasing.md](m1plus-releasing.md)).
+
+| Commit | Change | Why |
+|---|---|---|
+| `a4734f4` | `build()` takes `m1_release=(name, tag)` | Every M1 build had the Q2 Legacy tag, `V122S`, so a second release of one upstream version would be refused over the first. A release's tag replaces it, and About's CFW. Version row shows the name. Q2 output is unchanged, and so is the plain M1 build. |
+| `ea225e4` | `tools/release_m1.py`, `test/release_m1.py`, [m1plus-changelog.md](m1plus-changelog.md) | Two builds compared byte for byte, the first validated by its manifest, V2.1's updater rule and the M1 gates, a ZIP, notes and a record, and an upload to the fork as `release.py` does upstream. |
+
+A release is named `<VERSION>-m1.<n>` by the changelog's top entry, and its tag is `V`, `VERSION`'s
+digits and `n`. The last character is a digit, so the tag never equals a Q2 tag, a `--dev` one or another
+release's. `test/release_m1.py` checks that over every name, as well as the identity checks and the
+build and upload failure paths.
+
+`release_m1.py package 'stock/M1 Plus Firmware V2.1/update.bin'` at `ea225e4` gives 1.2.2-m1.1 (`V1221`):
+`update.bin` `7872e551…`, `M1Plus.Firmware.1.2.2-m1.1.zip` `241b5869…`. Both builds are byte-identical,
+and `peq`, `build --build`, `patch` (1004 scenarios), `boot`, `playback`, `m4b` and `ldac` pass on it. It
+is not uploaded. To check on the device, over dev 20 (`V00Ks`):
+- **The flash:** the updater takes `V1221` over `V00Ks`. About shows FW. Version `V1221` and CFW. Version
+  `1.2.2-m1.1`, which must fit its row.
+- **What U0 changed in M1 code** (section 37), which should behave as on dev 20:
+  - Display's **Knob**: Navigation moves the list and Previous goes back; Volume turns the volume.
+  - **Videos** from a cold boot: the picture and sound play, and a seek shows the position bar. The bar
+    still spills past the screen's width (roadmap section 1).
+  - An **artist's albums** (Artists → an artist): in year or A-Z order, with their own covers.
+  - **Playback Setting**: Year order, Artists A-Z and Crossfade are there, and still there after the EQ
+    and back.
+- **A quick pass:** the Q2 Pod page, Shuffle Songs, Coverflow by touch, a touch long-press's hold menu.
+- **Back to stock** (optional): the TF card update with stock V2.1's `update.bin`.
+
+A release build has no q2remote (it is a `--dev` helper), so state can't be read over Wi-Fi while it is
+installed. Flashing a `--dev` build brings it back.
+
 ## How to check a build now
 
 ```sh

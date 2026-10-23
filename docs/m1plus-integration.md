@@ -193,10 +193,11 @@ suites (see [Checklist](#checklist)). Then run the M1 gates for R4.
 | 11 | Per-target profile (roadmap U1a) | Replace the `m1plus` bool and the repeated `ipod and not m1plus` in `build.py` with one `Target` record. It would hold the model, version literal, archive, GP, hooks, paint leaf, `.pdr`, logo size, TagLib, icons, RTC patches and asset policy, after `PLAYER_PROFILES` in `tools/peq.py`. The M1's half moves to `tools/m1plus.py`, so upstream's `build.py` changes merge with few conflicts | M | R1 |
 | 12 | The compare as a script (roadmap U2) | A `test/q2compare.py` that builds the baseline (`main`, then `UPSTREAM_BASE`) from `git archive` and the working tree, and reports differing components. This turns the checklist into one command, and every sync runs it | S | R1 |
 
-Items 1–9 are done: item 2 earlier, and 1 and 3–9 as roadmap U0 (2026-10-22), with R1–R3 met (see
-[Current status](#current-status-measured-2026-10-22-after-u0)). Item 10 is still open. Items 11 and 12
-are required for syncing (roadmap U1 and U2). An M1 release path is not in scope here: see the
-roadmap's "Release packaging for M1".
+Items 1–10 are done: item 2 earlier, 1 and 3–9 as roadmap U0 (2026-10-22), with R1–R3 met (see
+[Current status](#current-status-measured-2026-10-22-after-u0)), and 10 with the M1 release. `building.md`
+gives both targets, and the README points M1 users to the `M1Plus.Firmware.*.zip` that
+`tools/release_m1.py` makes ([m1plus-releasing.md](m1plus-releasing.md)). Items 11 and 12 are required
+for syncing (roadmap U1 and U2).
 
 ## Rule for future work: don't break Q2
 
