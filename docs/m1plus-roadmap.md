@@ -154,6 +154,13 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - **Call sites:** `FOLDER_NAME`, `BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`, `PLAYER_COVER`,
       `ID3_PATH`, `LYRIC_FOLLOW`, `GRID_COVER`, `SCAN_REFRESH`, `DROP_CACHES`, and the lock screen's
       `lockscreen_access` sites.
+    - **A known bug these fix:** a built-in wallpaper doesn't survive a reboot, on the Q2 at 1.2.2 and on
+      the M1 (seen on 1.2.2-m1.1). `config_init` resets a picture that `access()` can't find to
+      `screensaver_default`, and `q2pod:aurora` and the others aren't files. Upstream's
+      `lockscreen_access` (1.3.9, `f1cfeb7`) replaces the two `jalr $25` to `access`: V1.32's
+      `0x4fa41c` (`config_init`) and `0x4fad60` (`get_screensaver_image`). V2.1's are `0x4e6218`
+      (`config_init`, `0x4e5030`) and `0x4d75b0` (`get_screensaver_image`, `0x4d7524`), both
+      `0x0320f809` with `access` at `-0x834($gp)`. Pin both in `test/build.py` when they are ported.
 - **U5. Each later release (S–M each).** Sync each upstream release tag soon after it ships, by the same
   runbook as U3. Its new features go into U4.
 
