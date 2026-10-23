@@ -3,10 +3,7 @@
 #include "peq.h" /* libc/libcstl imports (deque_*, send) and the shared helpers */
 #include "playback.h"
 #include "stock.h"
-#if M1PLUS /* V2.1 has only the per-corner form (V1.32's wrapper calls it so) */
-#define canvas_stroke_rounded_rect(c, rect, s, color, radius, width)                              \
-    canvas_stroke_rounded_rect_ex(c, rect, s, color, radius, radius, radius, radius, width, 0xffff)
-#endif
+#include "m1plus_nav.h" /* the M1 Plus's declarations and V2.1 stand-ins (docs/m1plus-roadmap.md U1c) */
 #undef select /* the UI selection helper below; headset.c uses libc select */
 extern int stock_dbquery_trampoline(const char *, const char *, void *, int);
 extern int stock_quicksettings_trampoline(void *, void *);
@@ -42,9 +39,6 @@ extern int stock_keyup_trampoline(void *, void *), stock_touch_trampoline(void *
 extern void *coverflow_tracks(void *page);
 extern int coverflow_jump(void *w, int from, int dir, unsigned *letter), coverflow_bounded(void *w);
 extern void *coverflow_album(void *page), *coverflow_album_tracks(void *r);
-#if M1PLUS
-extern int coverflow_centre(int x, int y);
-#endif
 extern unsigned coverflow_scope(void *page);
 extern void coverflow_home_art(void *top);
 extern void coverflow_home_layout(void);
@@ -55,9 +49,6 @@ extern void coverflow_paint(void *w, void *canvas), photos_paint(void *w, void *
     photos_open(const char *root), books_paint(void *w, void *canvas),
     books_open(const char *root, int videos), video_poll(void), video_key(unsigned key);
 extern int books_key(void *top, unsigned key), video_on(void);
-#if M1PLUS
-extern void video_touch(void *e);
-#endif
 extern void spot_poll(void), spot_yield(void), spot_paint(void *w, void *canvas), *spot_art(void);
 extern int spot_media(unsigned key), spot_key(void *top, unsigned key),
     spot_open(void *ctx, void *event), spot_hold(void *top);
@@ -256,26 +247,14 @@ typedef struct {
     int held_sec; /* a paused seek to scrub_to on scrub_track: the player's second then, +1; 0 none
                    */
     unsigned lyric_timer; /* runs while the wheel holds the lyrics and stock's timer is stopped */
-    /* The Display settings, read from config.ini on first use, and the display page's value labels. */
+    /* The Display settings, read from config.ini on first use, and the display page's value labels.
+     */
     int settings_read, accent, home_full, battery, home_rockbox, classic, shortcut;
     void *setting_label[5];
     unsigned tone_key; /* the wheel key whose press ringnav_keydown silenced, 0 when none */
     int greeted;       /* the first reachable list got its boot repaint */
 #endif
-#if M1PLUS
-    /* A touch long-press (lp_input): its timer, the page and point pressed, set while qm_hold
-     * takes the row under that point (lp_touch), and the press's click to swallow. */
-    unsigned lp_timer;
-    void *lp_top;
-    int lp_x, lp_y, lp_touch, lp_swallow;
-    /* A finger on a carousel (slide_swipe): its slide_menu, px to an item, the press's x and
-     * time, the offset then, and whether it has moved far enough to drag. */
-    void *sw_slide;
-    unsigned sw_at;
-    int sw_px, sw_x, sw_live, sw_drag;
-    int qm_opening; /* qm_open's navigator_to is running: its sortselect_dialog is the menu */
-    void *lib_page; /* the Q2 Pod Home card's page (library_open) */
-#endif
+#include "m1plus_nav_state.inc"
     /* Queue menu: the hold's AWTK press time marks its release; the target is a track/list row
      * checked by count, record and browsing-state hashes; qm_cls is the class its list holds;
      * qm_forced is a shuffle Play next. */
@@ -640,104 +619,7 @@ static void home_step(void *w, int dir, unsigned now, int jump) {
     st.home_dir = dir;
 }
 
-#if M1PLUS
-#define FLICK_MS 300 /* a drag released this soon after the press moves at least one item */
-
-static int floor_div(int a, int b) { return a / b - (a % b < 0); } /* b > 0 */
-
-/* The offset nearest live that leaves a whole item centred and, bounded, a real one (index i of
- * n, committed as i - offset / stride). */
-static int slide_snap(int live, int stride, int i, int n, int bounded) {
-    int goal = floor_div(2 * live + stride, 2 * stride) * stride;
-    if (bounded && goal > i * stride) goal = i * stride;
-    if (bounded && goal < (i - n + 1) * stride) goal = (i - n + 1) * stride;
-    return goal;
-}
-
-/* The carousel s from offset live to goal, through the knob's animator (home_done commits
- * index - goal / stride); straight there without one. */
-static void slide_settle(void *s, int live, int goal) {
-    void *a = P(s, SLIDE_ANIMATOR);
-    int i = I(s, SLIDE_INDEX), n = (int)widget_count_children(s), stride = slide_stride(s);
-    I(s, SLIDE_OFFSET) = live;
-    if (!a) {
-        a = widget_animator_scroll_create(s, HOME_SLIDE_MS, 0, SLIDE_EASING);
-        if (a && !widget_animator_on(a, EVT_ANIM_END, home_done, s)) {
-            widget_animator_destroy(a);
-            a = (void *)0;
-        }
-        P(s, SLIDE_ANIMATOR) = a;
-        if (!a) {
-            I(s, SLIDE_OFFSET) = 0;
-            slide_menu_set_value(s, ((i - goal / stride) % n + n) % n);
-            widget_invalidate_force(s, 0);
-            return;
-        }
-        widget_set_focused(widget_get_child(s, i), 0);
-    }
-    widget_animator_pause(a);
-    widget_animator_scroll_set_params(a, live, 0, goal, 0);
-    I(a, ANIM_ELAPSED) = I(a, ANIM_START_TIME) = 0;
-    I(a, ANIM_DURATION) = HOME_SLIDE_MS;
-    widget_animator_start(a);
-}
-
-/* k items on from the one at rest, as a tap on a side cover: Coverflow's touch. */
-void slide_step(void *s, int k, int bounded) {
-    int stride = slide_stride(s), n = (int)widget_count_children(s);
-    if (stride <= 0 || !n || P(s, SLIDE_ANIMATOR)) return;
-    slide_settle(s, 0, slide_snap(-k * stride, stride, I(s, SLIDE_INDEX), n, bounded));
-}
-
-/* A finger on a carousel the payload paints over an insensitive slide_menu: Coverflow's covers
- * and the photo viewer, whose view passes its pointer events here. V2.1's slide_menu steps by its
- * own height (260 and 450 px), wider than an item as painted, so its own drag would lag the finger
- * and a swipe would have to cross more than the screen. Here the finger moves the offset a stride
- * per px, an item as painted; the release settles on the nearest item, or the next for a flick. A
- * press on a moving carousel catches it, and px 0 on the press is one the carousel doesn't take
- * (the back button's). Returns 1 on the release of a tap, a press that neither moved nor caught
- * anything. */
-int slide_swipe(void *s, void *e, int px, int bounded) {
-    unsigned type = (unsigned)I(e, EVENT_TYPE), now = time_now_ms();
-    int x = I(e, EVENT_X), stride = slide_stride(s), n = (int)widget_count_children(s);
-    void *a = P(s, SLIDE_ANIMATOR);
-    if (type == EVT_INPUT_POINTER_DOWN) {
-        st.sw_slide = px > 0 ? s : (void *)0;
-        if (!st.sw_slide) return 0;
-        if (a) widget_animator_pause(a);
-        st.sw_px = px;
-        st.sw_x = x;
-        st.sw_at = now;
-        st.sw_live = I(s, SLIDE_OFFSET);
-        st.sw_drag = 0;
-        return 0;
-    }
-    if (s != st.sw_slide || stride <= 0 || !n) return 0;
-    int dx = x - st.sw_x, i = I(s, SLIDE_INDEX);
-    if (dx >= PULL_CLAIM_PX || -dx >= PULL_CLAIM_PX) st.sw_drag = 1;
-    int live = st.sw_drag ? st.sw_live + dx * stride / st.sw_px : I(s, SLIDE_OFFSET);
-    if (bounded) { /* past an end by at most the knob's bounce */
-        int hi = i * stride + stride / CF_BOUNCE, lo = (i - n + 1) * stride - stride / CF_BOUNCE;
-        live = live > hi ? hi : live < lo ? lo : live;
-    }
-    if (type == EVT_INPUT_POINTER_MOVE) {
-        if (st.sw_drag && live != I(s, SLIDE_OFFSET)) {
-            I(s, SLIDE_OFFSET) = live;
-            widget_invalidate_force(s, 0);
-        }
-        return 0;
-    }
-    if (type != EVT_POINTER_UP && type != EVT_POINTER_ABORT) return 0;
-    st.sw_slide = (void *)0;
-    if (!st.sw_drag && !a) return type == EVT_POINTER_UP;
-    int goal = st.sw_drag || !a ? slide_snap(live, stride, i, n, bounded) : I(a, ANIM_X_TO);
-    if (st.sw_drag && type == EVT_POINTER_UP && now - st.sw_at < FLICK_MS &&
-        goal == slide_snap(st.sw_live, stride, i, n, bounded))
-        goal = slide_snap(goal + (dx > 0 ? stride : -stride), stride, i, n, bounded);
-    slide_settle(s, live, goal);
-    return 0;
-}
-#endif
+#include "m1plus_nav_slide.c"
 
 static int usable(void) {
     if (!g_backlight_status || g_lockscreen_pageflag || g_testmode_flag || g_guideflag ||
@@ -1463,7 +1345,7 @@ _Static_assert(sizeof accent_names / sizeof *accent_names == ACCENT_N, "one name
 int config_digit(const char *key, int n) {
     return config_value("IPOD", key, n);
 } /* and visualizer.c's */
-/* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme, 4 Shortcut. */
+/* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme. */
 static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT" };
 static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 5 };
 static int *const setting_values[] = { &st.accent, &st.home_full, &st.battery, &st.classic,
@@ -1986,24 +1868,8 @@ int ringnav_paint(void *w, void *canvas) {
 }
 
 /* A s_listitem_black list_item in view with a 335x70 s_btn_listitem button; returns the button. */
-#if M1PLUS
-/* A stock settings row as V2.1 builds them (playset's, 0x4a0578): a list_item_style list_item (64
- * high, the list's item height), a 40 px icon at 12,10, a 21 px srlabel_leftwhite21_style label at
- * 60,20 (no icon: at 12), and, opening a page, right_arrow at 295. The click is the row's. Returns
- * the label. */
-static void *list_row_core(void *view, const char *icon, int (*click)(void *, void *), void *ctx,
-                           int w, int into) {
-    (void)w;
-    void *item = list_item_create(view, 0, 0, 0, 0);
-    widget_use_style(item, ROW_STYLE);
-    if (click) widget_on(item, EVT_CLICK, click, ctx);
-    if (icon) image_base_set_image(image_create(item, 12, 10, 40, 40), icon);
-    void *label = hscroll_label_create(item, icon ? 60 : 12, 20, into ? 220 : 240, 21);
-    widget_use_style(label, ROW_LABEL_STYLE);
-    if (into) image_base_set_image(image_create(item, 295, 21, 13, 22), ROW_CHEVRON);
-    return label;
-}
-#else
+#include "m1plus_nav_rows.c"
+#if !M1PLUS
 static void *list_button(void *view) {
     void *item = list_item_create(view, 0, 0, 0, 0);
     widget_use_style(item, STYLE_LISTITEM_BLACK);
@@ -2235,7 +2101,7 @@ int ringnav_powermanager(void *win, void *ctx) {
 /* The Bluetooth page's list (stock's local builder, btmenu_rows), rebuilt whole on every search and
  * link change: its rows, five with Bluetooth on (one, the switch, off), then the device lists.
  * With Bluetooth on, Resume on connect follows the fourth, Bluetooth Headset Volume Control
- * (bt_adjvol), each time, iconless and BT_ROW_H high as stock's rows. */
+ * (bt_adjvol), each time, iconless and 78 high as stock's rows. */
 int ringnav_btrows(void *win, void *ctx) {
     static const char *const icons[] = { 0 };
     int result = stock_btrows_trampoline(win, ctx);
@@ -2301,24 +2167,7 @@ int ringnav_audioset(void *win, void *ctx) {
     return result;
 #endif
 }
-#if M1PLUS
-/* V2.1 rebuilds the list whole, stock's rows only, each time the page comes back to the front (from
- * EQ, Default Vol or Crossfade's page): its init binds EVT_WINDOW_FOREGROUND to the list's builder
- * (0x4a0c50), which destroys every row first. This adds ours again after it. AWTK runs a widget's
- * handlers newest first (emitter_on_with_tag puts each at the head, 0x6f4668), so it is bound
- * before stock's init binds its own. */
-static int audioset_again(void *win, void *event) {
-    (void)event;
-    audioset_rows(win);
-    return 0;
-}
-int ringnav_audioset(void *win, void *ctx) {
-    if (win) widget_on(win, EVT_WINDOW_FOREGROUND, audioset_again, win);
-    int result = stock_audioset_trampoline(win, ctx);
-    audioset_rows(win);
-    return result;
-}
-#endif
+#include "m1plus_nav_audioset.c"
 
 /* Nearest collected ancestor of a tap: a clickable child selects the row that owns it. */
 static int selects(menu_t *m, void *target) {
@@ -3996,14 +3845,8 @@ static int rename_covers(void *list, const char *(*key)(char *, void *, unsigned
 static const char *split_key(char *buf, void *list, unsigned i) {
     return art_key(buf, list, i) == buf ? buf : 0;
 }
-#if M1PLUS
-static const char *page_key(char *buf, void *list, unsigned i) {
-    const char *k = artist_key(buf, list, i);
-    return k ? k : split_key(buf, list, i);
-}
-/* album_page's albumcoverinfo_init calls (0x524720, 0x524760, 0x5248d0), an artist's albums too. */
-int ringnav_albumcovers(void *list) { return rename_covers(list, page_key); }
-#else
+#include "m1plus_nav_page_key.c"
+#if !M1PLUS
 /* The Albums page's albumcoverinfo_init calls. */
 int ringnav_albumcovers(void *list) { return rename_covers(list, split_key); }
 #endif
@@ -4189,8 +4032,8 @@ int ringnav_artist_art_name(char *buf, unsigned size, unsigned row, const char *
 int ringnav_artist_covers(void *list) {
     return st.art_keys ? rename_covers(list, artist_key) : albumcoverinfo_init(list);
 }
-/* The album page's big cover, snprintf of classinfo +0xd (0x4a72a4; V2.1's 0x525b84): its Albums
- * row's cover task name, as the thread hashed it, when that is this album's key. */
+/* The album page's big cover, snprintf of classinfo +0xd (0x4a72a4): its Albums row's cover task
+ * name, as the thread hashed it, when that is this album's key. */
 int ringnav_art_header(char *buf, unsigned size, const char *fmt, const char *album) {
     void *covers = P(pdeq_albumcoverlist, 0);
     unsigned i = (unsigned)I(ALBUMINFO_ROW, 0), n = strlen(album);
@@ -5352,37 +5195,7 @@ int ringnav_localmusic(void *win, void *ctx) {
     return result;
 }
 
-#if M1PLUS
-extern int coverflow_row(void *ctx, void *event); /* coverflow.c */
-static int airplay_open(void *ctx, void *event);
-/* The Q2 Pod Home card's page (coverflow.c home_card): the Library's added rows, which V2.1 has no
- * menu for (its Home is the library, and its categories stay there), in V2.1's rows and the Library's
- * order, with Coverflow, Q2's own Home card, after the media. Then Streaming's rows: V2.1 has no
- * Streaming page (its Tidal is a Home card), so Spotify, Internet Radio and AirPlay are here. */
-int library_open(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
-    if (st.lib_page || !(st.lib_page = page_open("library_page", page_closed, page_keyup))) return 0;
-    static const char *const icons[] = { "local_podcasts", "local_audiobooks", "local_photos",
-                                         "local_books", "local_videos" };
-    char path[sizeof st.media_root];
-    int media[VIDEOS], scrobbles = scrobble_ready(), n = 8 + scrobbles;
-    for (int k = 0; k < VIDEOS; k++) n += media[k] = media_find(k + 1, path);
-    void *view = page_list(st.lib_page, st.lib_page, 0, "Q2 Pod", n, 64);
-    library_into(view, "local_shuffle", shuffle_menu, 0, "Shuffle");
-    library_into(view, "local_fav", ratings_menu, 0, "Ratings");
-    library_row(view, "local_frequentplay", most_played, 0, "Most Played");
-    library_row(view, "local_longsongs", long_songs, 0, "Long Songs");
-    for (int k = 0; k < VIDEOS; k++)
-        if (media[k]) library_row(view, icons[k], media_click, (void *)(long)(k + 1), MEDIA[k]);
-    library_row(view, "local_coverflow", coverflow_row, 0, "Coverflow");
-    library_into(view, "stream_spotify", spot_open, 0, "Spotify");
-    library_into(view, "stream_radio", radio_open, 0, "Internet Radio");
-    library_into(view, "stream_airplay", airplay_open, 0, "AirPlay");
-    if (scrobbles) library_row(view, "local_scrobble", upload_scrobbles, 0, "Upload Scrobbles");
-    return 0;
-}
-#endif
+#include "m1plus_nav_library.c"
 
 /* Streaming's AirPlay row (M1 Plus: the Q2 Pod page's): stock's own receiver (Shairport 1.1.1,
  * AirPlay 1), whose switch is on System settings' Network service page; that page, one press away.
@@ -5436,35 +5249,8 @@ static void about_label(void *button, int x, int w, const char *style, const cha
 }
 #endif
 
-#if M1PLUS
-/* V2.1's About (systemset_about_page_init's widget_foreach callback, 0x4a12c0): each row is a
- * list_item holding one hscroll_label, getFormatString's title and the value as "%s:%s"; FW. Version
- * is scrlabel1, from demo's version literal (the updater tag). It shows the stock firmware's again,
- * and a row in the same widgets and styles after it shows this build's. */
-static void about_row(void *label, const char *key, const char *value) {
-    char title[0x100], text[0x200];
-    getFormatString(key, title, sizeof title);
-    tk_snprintf(text, sizeof text, "%s:%s", title, value);
-    widget_set_text_utf8(label, text);
-}
-int ringnav_about(void *win, void *ctx) {
-    int result = stock_about_trampoline(win, ctx);
-    void *view = win ? widget_lookup(win, VIEW_ABOUT, 1) : (void *)0;
-    void *fw = win ? widget_lookup(win, ABOUT_FW_LABEL, 1) : (void *)0;
-    if (view && fw) {
-        about_row(fw, "about_version", STOCK_VERSION);
-        void *item = list_item_create(view, 0, 0, 0, 0);
-        widget_use_style(item, ROW_STYLE);
-        void *label = hscroll_label_create(item, 12, 20, 260, 21);
-        widget_use_style(label, ROW_LABEL_STYLE);
-        char cfw[0x100];
-        tk_snprintf(cfw, sizeof cfw, "CFW. Version:%s", Q2POD_VERSION);
-        widget_set_text_utf8(label, cfw);
-        widget_restack(item, 2);
-    }
-    return result;
-}
-#else
+#include "m1plus_nav_about.c"
+#if !M1PLUS
 int ringnav_about(void *win, void *ctx) {
     int result = stock_about_trampoline(win, ctx);
     void *view = win ? widget_lookup(win, VIEW_ABOUT, 1) : (void *)0;
@@ -5646,23 +5432,10 @@ static int qm_pick(void *action, void *event) {
     return 0;
 }
 
-#if M1PLUS
-int stock_sortselect_trampoline(void *, void *);
-/* dialog_sortselect_dialog_init. V2.1's navigator runs a dialog modally (dialog_modal, its own
- * event loop until the dialog closes) when to_modal is set after its init, and V2.1's sortselect
- * leaves it at the default, set: navigator_to would return only once the menu had gone, and the
- * menu would show V2.1's sort rows. The hold menu's own open clears it, as V1.32's init does; a
- * sort dialog V2.1 opens itself stays modal. */
-int qm_sortselect_init(void *win, void *ctx) {
-    int result = stock_sortselect_trampoline(win, ctx);
-    if (st.qm_opening && win) widget_set_prop_int(win, "to_modal", 0);
-    return result;
-}
-#endif
+#include "m1plus_nav_sortselect.c"
 
 /* Deferred out of the long-press dispatch. The sortselect init is synchronous and non-modal
- * (it clears to_modal; on V2.1 qm_sortselect_init does), so the dialog is the top window once
- * navigator_to returns. */
+ * (it clears to_modal), so the dialog is the top window once navigator_to returns. */
 /* Hold menu rows: stock sortselect's list is 210, so three whole rows and the reading margin
  * (SCROLL_MARGIN) show at every scroll, never a half row under the title. V2.1's is 250: five of
  * its own 50 px rows. */
@@ -5834,33 +5607,14 @@ static int qm_open(const void *unused) {
     return 0;
 }
 
-#if M1PLUS
-/* A touch long-press's row: the entry under the pressed point, as an index into m. The point must
- * be on the list itself, since a recycled table keeps rows past its viewport. V2.1's
- * widget_to_local adds each widget's own scroll offset (get_offset), the list's too, so the
- * point is in the list's content; bounds() and m->height are on screen, so take the list's
- * offset off again, as bounds() does: a scroll view's (SCROLL_X, SCROLL_Y), a table's TABLE_TOP. */
-static int lp_entry(menu_t *m) {
-    int xy[2] = { st.lp_x, st.lp_y };
-    widget_to_local(m->w, xy);
-    xy[1] -= view_top(m);
-    if (m->kind == 1) xy[0] -= I(m->w, SCROLL_X);
-    if (xy[0] < 0 || xy[1] < 0 || xy[0] >= I(m->w, W_W) || xy[1] >= m->height) return -1;
-    for (int i = 0; i < m->n; ++i) {
-        rect_t r = bounds(m, i);
-        if (xy[0] >= r.x && xy[0] < r.x + r.w && xy[1] >= r.y && xy[1] < r.y + r.h) return i;
-    }
-    return -1;
-}
-#define LP_TOUCH st.lp_touch
-#else
+#include "m1plus_nav_lp_entry.c"
+#if !M1PLUS
 #define LP_TOUCH 0
 #endif
 
 /* The hold: the same gates and row as a centre press, over the stock showlist or Coverflow's
  * own tracks (row count checked), or the album at the centre of Coverflow's covers. Everything
- * else stays stock. On M1 Plus a touch long-press (LP_TOUCH) takes the row under the finger
- * instead of the highlighted one, with the finger still down and no key to swallow. */
+ * else stays stock. */
 static int qm_hold(void) {
     st.qm_choice = 0;
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
@@ -6278,15 +6032,8 @@ static unsigned char *logo_read(const char *path, unsigned *n) {
 static void *logo_sync(void *unused) {
     unsigned n = 0, old_n;
     unsigned char *b = 0, *old = 0;
-#if M1PLUS
-    const char *err = "Boot logo must be a 320x480 JPEG";
-    (void)unused;
-    if (access(LOGO_SRC, 0))
-        unlink(LOGO_DST), err = 0;
-    else
-        b = logo_read(LOGO_SRC, &n);
-    if (b && jpeg_size(b, n) == (320u << 16 | 480)) {
-#else
+#include "m1plus_nav_logo.inc"
+#if !M1PLUS
     const char *err = "Boot logo must be a 320x375 JPEG";
     (void)unused;
     if (access(LOGO_SRC, 0))
@@ -6433,26 +6180,14 @@ static int bt_sync_volume(int left, int right) {
     return 1;
 }
 
-#if M1PLUS
-/* V2.1 keeps Bluetooth's level apart, [PLAYSET] BTVOLUME: its volume dialog, status bar and
- * set_devicevolume use it while the output is Bluetooth, and g_volume stays the jacks'. */
-#define BT_VOLUME g_btvolume
-#define BT_VOLUME_KEY "BTVOLUME"
-int headset_gain(void) {
-    if (!bt_audio_ready()) return g_volume;
-    return btvol.ready && BT_VOLUME ? 100 : BT_VOLUME;
-}
-#else
+#include "m1plus_nav_btvol.c"
+#if !M1PLUS
 #define BT_VOLUME g_volume
 #define BT_VOLUME_KEY "VOLUME"
 int headset_gain(void) { return bt_audio_ready() && btvol.ready && g_volume ? 100 : g_volume; }
 #endif
 
-/* Absolute zero still needs software mute. Unsupported/failed writes retain stock gain.
- * V2.1 has no mclSetBtVol: its mclSetVol sets the DAC and, on Bluetooth, hciplayer's gain. Over 100
- * is its player's own full scale (the private routine at 0x5d4e00 sends 255, 255), never a volume,
- * and stays stock's. Bluetooth's end puts the DAC back: checkBluetoothStatus and switchBluetooth
- * stop the player, change the output and call set_devicevolume before they restart it. */
+/* Absolute zero still needs software mute. Unsupported/failed writes retain stock gain. */
 int ringnav_btvol(int left, int right) {
 #if M1PLUS
     if (left > 100 || right > 100) return stock_btvol_trampoline(left, right);
@@ -6569,97 +6304,15 @@ static int wake_gate(void *e) {
     return !st.wake_pass;
 }
 
-#if M1PLUS
-/* A Return press and release, as the input thread queues a key's (the window manager drops a
- * release whose press it never saw: input_device_status). */
-void dispatch_key_return(void) {
-    unsigned ev[12] = { 0 };
-    ev[1] = sizeof ev; /* event_t's size */
-    ev[EVENT_KEY / 4] = KEY_RETURN;
-    ev[EVENT_TYPE / 4] = EVT_KEY_DOWN;
-    stock_input_trampoline(window_manager(), (void *)ev);
-    ev[EVENT_TYPE / 4] = EVT_KEY_UP;
-    stock_input_trampoline(window_manager(), (void *)ev);
-}
-
-/* Touch long-press: a press held still LONG_PRESS_MS on a row or tile of a library page opens
- * that row's hold menu, as Play/Pause held on a highlighted row does (qm_hold takes the row under
- * the finger). The native press is aborted, as a claimed pull is (pull_event), and the release's
- * click swallowed, so the row doesn't open as well. A press that moves is the list's scroll. */
-/* Internet Radio's stations and Spotify's tracks: their holds (radio_hold, spot_hold) take the
- * highlighted row, as Play/Pause held does, so the row under the finger is highlighted first. */
-static int lp_select(void *top) {
-    const char *name = widget_get_prop_str(top, "name", "");
-    if (tk_strcmp(name, "radio_page") && tk_strcmp(name, "spotbrowse_page")) return 0;
-    void *w = surface_under(top, (void *)0, (void *)0, 0);
-    int cur = w && load(&g_menu, w, 0) && g_menu.kind == 1 ? lp_entry(&g_menu) : -1;
-    if (cur < 0) return 0;
-    ringnav_select(w, g_menu.id[cur], g_menu.rows);
-    return 1;
-}
-
-/* The pages a hold can act on: V2.1's library pages, the payload's track lists (Most Played,
- * Ratings' and Long Songs', Coverflow's tracks), Coverflow's covers, the stations and the tracks. */
-static int lp_page(void *top) {
-    const char *name = top ? widget_get_prop_str(top, "name", "") : "";
-    int ctx = top ? context_id(name) : -1;
-    return ctx >= 0 && (contexts[ctx].kind >= CTX_FOLDER || page_tracks(top) || coverflow_album(top) ||
-                        !tk_strcmp(name, "radio_page") || !tk_strcmp(name, "spotbrowse_page"));
-}
-
-static int lp_fire(const void *unused) {
-    (void)unused;
-    st.lp_timer = 0;
-    void *wm = window_manager(), *top = window_manager_get_top_window(wm);
-    if (!top || top != st.lp_top || !window_manager_get_pointer_pressed(wm)) return 0;
-    st.lp_touch = 1;
-    const char *fav = (void *)0;
-    int taken = lp_select(top) && ((fav = radio_hold(top)) || spot_hold(top));
-    if (fav) toast(fav);
-    if (!taken) taken = qm_hold();
-    st.lp_touch = 0;
-    if (!taken) return 0;
-    st.lp_swallow = 1;
-    unsigned abort_event[12];
-    pointer_event_init(abort_event, EVT_POINTER_ABORT, top, st.lp_x, st.lp_y);
-    widget_dispatch_event_to_target_recursive(top, abort_event);
-    return 0; /* RET_REMOVE */
-}
-
-static void lp_input(void *e) {
-    unsigned type = e ? (unsigned)I(e, EVENT_TYPE) : 0;
-    if (type == EVT_INPUT_POINTER_DOWN) {
-        st.lp_swallow = 0;
-        stop_timer(&st.lp_timer);
-        void *top = window_manager_get_top_window(window_manager());
-        if (!lp_page(top)) return;
-        st.lp_top = top;
-        st.lp_x = I(e, EVENT_X);
-        st.lp_y = I(e, EVENT_Y);
-        rearm(&st.lp_timer, lp_fire, LONG_PRESS_MS);
-    } else if (st.lp_timer && type == EVT_INPUT_POINTER_MOVE) {
-        int dx = I(e, EVENT_X) - st.lp_x, dy = I(e, EVENT_Y) - st.lp_y;
-        if (dx >= PULL_CLAIM_PX || -dx >= PULL_CLAIM_PX || dy >= PULL_CLAIM_PX || -dy >= PULL_CLAIM_PX)
-            stop_timer(&st.lp_timer);
-    } else if (type == EVT_POINTER_UP)
-        stop_timer(&st.lp_timer);
-}
-#endif
+#include "m1plus_nav_touch.c"
 
 /* window_manager_dispatch_input_event: while q2video plays (books.c) no key or touch reaches the
  * UI; a key's release goes to the player instead. Every event times ringnav_sleep's idle. */
 int ringnav_input(void *wm, void *e) {
     if (e && wake_gate(e)) return 0;
     st.last_input = time_now_ms();
-#if M1PLUS
-    lp_input(e);
-    if (e && video_on()) video_touch(e);
-    if (!video_on()) {
-        int result = stock_input_trampoline(wm, e);
-        if (e && I(e, EVENT_TYPE) == EVT_POINTER_UP) st.lp_swallow = 0; /* its click is past */
-        return result;
-    }
-#else
+#include "m1plus_nav_input.inc"
+#if !M1PLUS
     if (!video_on()) return stock_input_trampoline(wm, e);
 #endif
     if (e && I(e, EVENT_TYPE) == EVT_KEY_UP) video_key((unsigned)I(e, EVENT_KEY));
@@ -6684,45 +6337,7 @@ int ringnav_buzzer(int on) {
     return stock_buzzer_trampoline(on);
 }
 
-#if M1PLUS
-/* A page's title-bar back button: V2.1's, which each page's init makes in navbar_btnreturn_style
- * with on_back_onclick as its click (its pages take no Return), or the payload's (back_button, the
- * same style, a Return). The first one showing, depth first. A widget with no style reads NULL, not
- * the default (value_str of a NULL string). */
-static void *back_of(void *w, int depth) {
-    if (!w || depth > 8 || !widget_get_visible(w)) return (void *)0;
-    const char *style =
-        !tk_strcmp(widget_get_type(w), "button") ? widget_get_prop_str(w, "style", "") : 0;
-    if (style && !tk_strcmp(style, STYLE_NAVBAR_RETURN)) return w;
-    for (unsigned i = 0, n = widget_count_children(w); i < n; i++) {
-        void *found = back_of(widget_get_child(w, i), depth + 1);
-        if (found) return found;
-    }
-    return (void *)0;
-}
-/* Previous as Back, after its key's dispatch (the click closes the page): the top page's back
- * button, clicked. */
-static int previous_back(const void *info) {
-    (void)info;
-    void *button = back_of(window_manager_get_top_window(window_manager()), 0);
-    char click[0x30];
-    if (button && widget_get_prop_bool(button, "enable", 1))
-        stock_dispatch_trampoline(button, pointer_event_init(click, EVT_CLICK, button, 0, 0));
-    return 0; /* not RET_REPEAT: one shot */
-}
-
-/* Display's Knob: Navigation. The knob's turns are Previous and Next (volume up is Previous, up the
- * list, unless Knob Up: List Down) and its press Centre, on their release, which is where V2.1
- * changes the volume (on_wm_keyup_fun opens the volume dialog for 220/221); V2.1 binds no key-down
- * handler. Only where ringnav navigates: elsewhere the turn would do nothing, so Now Playing, the
- * volume dialog, Bluetooth receiver and USB DAC modes (their pages are no context, and usable()
- * leaves both modes to stock) and a dark screen keep the volume. */
-static int knob_nav_active(void) {
-    pod_settings();
-    if (!st.knob_mode || !usable() || now_playing()) return 0;
-    return allowed_top(window_manager_get_top_window(window_manager()));
-}
-#endif
+#include "m1plus_nav_back.c"
 
 /* on_wm_keydown_before_fun. Stock clicks (buzzeer_switch, which reads g_keytone_flag) on the press,
  * before the release moves anything. A wheel press on a page whose release ringnav() takes as row
@@ -6935,25 +6550,7 @@ int ringnav(void *ctx, void *event) {
         return 0;
     }
     unsigned key = (unsigned)I(event, EVENT_KEY);
-#if M1PLUS
-    int boot_guard = g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD;
-    if (knob_nav_active()) {
-        /* Knob Up: List Up, the default, takes the volume-up turn toward the list's top */
-        unsigned up = st.knob_reverse ? KEY_NEXT : KEY_PREV, down = st.knob_reverse ? KEY_PREV : KEY_NEXT;
-        if (key == KEY_VOLUMEUP) key = up, I(event, EVENT_KEY) = up;
-        else if (key == KEY_VOLUMEDOWN) key = down, I(event, EVENT_KEY) = down;
-        else if (key == KEY_POWER && !boot_guard) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
-        /* Previous is Back: the page's back button, pressed (Home has nothing to go back to: there
-         * it stays Previous track). It is the button stock takes as Previous: V2.1 swaps the two
-         * on a rotated screen (on_wm_keyup_fun, rotate_mode 1). knob_nav_active() already leaves a
-         * dark screen and the key lock to stock. */
-        else if (key == (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) &&
-                 !home_menu(window_manager_get_top_window(window_manager()))) {
-            timer_add(previous_back, 0, 0);
-            return STOP;
-        }
-    }
-#endif
+#include "m1plus_nav_knob.inc"
 #if IPOD
     /* This release's press was silenced by ringnav_keydown: a row change below clicks instead. */
     int owned = st.tone_key == key;
@@ -6978,19 +6575,8 @@ int ringnav(void *ctx, void *event) {
         }
     }
 #endif
-#if M1PLUS
-    /* V2.1 has no key-up filter: this hooks on_wm_keyup_fun itself, which plays, skips and wakes
-     * as it runs and returns 0. So the keys taken below are taken before it, and its key lock
-     * (screen off, locked, mode other than 1: 0x4cda44) is kept. */
-    int locked = !g_backlight_status && g_keylock_flag && g_keylock_mode != 1;
-    if (key == KEY_PLAY && hold_released()) return STOP;
-    if (!locked && media_owner() != 1 &&
-        (key == KEY_PLAY || key == KEY_FWD_BTN || key == KEY_BACK_BTN)) {
-        media_key(key);
-        return STOP;
-    }
-    int result = stock_keyup_trampoline(ctx, event);
-#else
+#include "m1plus_nav_keyup.inc"
+#if !M1PLUS
     int result = stock_keyup_trampoline(ctx, event);
     if (key == KEY_PLAY && hold_released()) return STOP;
     /* Media controls follow the active source, including when local Now Playing is visible. */
@@ -7233,18 +6819,4 @@ int ringnav(void *ctx, void *event) {
     return STOP;
 }
 
-#if M1PLUS
-void deque_init_copy(void *dest, const void *src) {
-    deque_init(dest);
-    deque_assign(dest, src);
-}
-
-/* V2.1's demo imports no deque_pop_back (libcstl's is _deque_shrink_at_end(d, 1)): erase the last
- * element through the iterators it does import, so the deque keeps its own element type. */
-void deque_pop_back(void *d) {
-    if (!deque_size(d)) return;
-    cstl_iter end = deque_end(d), last = deque_begin(d);
-    for (cstl_iter it = iterator_next(last); !iterator_equal(it, end); it = iterator_next(it)) last = it;
-    deque_erase(d, last);
-}
-#endif
+#include "m1plus_nav_deque.c"

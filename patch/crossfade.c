@@ -119,8 +119,7 @@ static int gone(void *ctx, void *event) {
 }
 
 /* The row's click: stock's Boot volume page, its handlers swapped for these; ctx 1 for Wheel
- * sensitivity's row. V2.1's page has its switch on a settings row (VIEW_BOOTVOL_SWITCH), which
- * becomes Crossfade's, and its title bar's Back button, which stays stock's. */
+ * sensitivity's row. */
 int xfade_open(void *ctx, void *event) {
     (void)event;
     int wheel = ctx != 0;

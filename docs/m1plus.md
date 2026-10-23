@@ -343,3 +343,31 @@ All phases of the Shanling M1 Plus port have been implemented and verified:
   - `tools/build.py`: Automatic model detection between Q2 and M1 Plus (`update.bin` tar container vs `update.zip`).
   - Symbol resolution, hook relocation, and trampoline generation for M1 Plus V2.1 `demo` binary.
   - Repacking into valid `update.bin` with recalculated MD5s in `firmware_v20.info`.
+
+## 8. Notes on the shared code
+
+Where upstream's code in `patch/*.c` behaves differently on V2.1, the note lives here, not in upstream's
+comments, so a sync never conflicts on a comment (roadmap U1c). By file and function:
+
+- `coverflow.c`, `build_art`: V2.1 has the one cover lock. Its player cover thread (`parseplaycover_thd`)
+  holds `parse_cover_mutex` too (`test/build.py`).
+- `coverflow.c`, `changed`: on M1 Plus the view under the carousel takes the touch (`touched`).
+- `coverflow.c`, `pick` and `coverflow_home_back`: Return from the covers or the message goes to the Q2 Pod
+  page, since V2.1's Home is a grid of cards and the Q2 Pod card follows them.
+- `crossfade.c`, `xfade_open`: V2.1's Boot volume page has its switch on a settings row
+  (`VIEW_BOOTVOL_SWITCH`), which becomes Crossfade's, and its title bar's Back button stays stock's.
+- `lockscreen.c`, `big_clock`: the Large clock's top line is at `LOCK_CLOCK_Y`; at its right end the M1
+  Plus shows V2.1's battery icon with its level bar, where the Q2 shows the percent.
+- `navigation.c`, `ringnav_art_header`: V2.1's album page big cover snprintf is at `0x525b84`.
+- `navigation.c`, `qm_pick`: on V2.1, `qm_sortselect_init` clears `to_modal`, so the dialog is the top
+  window once `navigator_to` returns.
+- `navigation.c`, `qm_hold`: a touch long-press (`LP_TOUCH`) takes the row under the finger instead of the
+  highlighted one, with the finger still down and no key to swallow.
+- `navigation.c`, `headset_gain`: V2.1 has no `mclSetBtVol`. Its `mclSetVol` sets the DAC and, on Bluetooth,
+  hciplayer's gain. Over 100 is its player's own full scale (the private routine at `0x5d4e00` sends 255,
+  255), never a volume, and stays stock's. Bluetooth's end puts the DAC back: `checkBluetoothStatus` and
+  `switchBluetooth` stop the player, change the output and call `set_devicevolume` before they restart it.
+- `peq_ui.c`, `render` and `bar`: there is no Back row; the M1 Plus's back button, over the title bar's left
+  end, steps back as Return does, created after the page's other widgets so it takes the taps there.
+- `photos.c`, `moved`: V2.1's `slide_menu` has no spacer and steps by its height, so on M1 Plus the viewer
+  takes the touch (`swiped`) and the paint spaces the photos a screen apart.

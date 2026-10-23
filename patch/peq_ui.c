@@ -434,7 +434,7 @@ static int render(const void *unused) {
     char text[160], value[32];
     int n = 0;
     static const char *const types[] = {"Peaking", "Low shelf", "High shelf"};
-    /* No Back row: Return steps back on every screen (keyup), as M1 Plus's back button does (bar). */
+    /* No Back row: Return steps back on every screen (keyup). */
     if (ui.screen == HOME) {
         row(view, n++, ui.dirty ? "Apply changes" : "Nothing to apply", ui.dirty ? APPLY : -1);
         row_dim(view, n++, "Advanced", ui.draft.bypass ? "Off" : "On", BYPASS, 0);
@@ -693,8 +693,7 @@ static int tab_touch(void *ctx, void *event) {
     return 0;
 }
 
-/* The title label; the tabs' bar when the bar takes their taps. On M1 Plus the back button sits over
- * its left end, created after the page's other widgets so it takes the taps there. */
+/* The title label; the tabs' bar when the bar takes their taps. */
 static void *bar(void *page, int x, int w) {
     void *title = label_create(page, x, 0, w, 48);
     widget_use_style(title, STYLE_LABEL_WHITE20C);

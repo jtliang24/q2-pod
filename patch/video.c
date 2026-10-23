@@ -103,17 +103,8 @@ int resume_at(int pos, int len) { return pos < EDGE_S || (len && pos > len - EDG
  * bar runs down the panel's columns BAR_Y to BAR_Y + BAR_H. On M1 Plus the picture is upright, and
  * the bar runs along the panel's rows BAR_Y to BAR_Y + BAR_H from the bottom, from x M1_BAR_X to
  * H - M1_BAR_X, which is past the row's W pixels (docs/m1plus-roadmap.md, section 1). */
-#if M1PLUS
-#define M1_BAR_X 20
-void overlay(unsigned char *f, unsigned line, int n, int total) {
-    int end = H - M1_BAR_X;
-    if (total <= 0) return;
-    n = n < 0 ? 0 : n > total ? total : n;
-    int fill = M1_BAR_X + (end - M1_BAR_X) * n / total; /* total: seconds, far below overflow */
-    for (int y = H - BAR_Y - BAR_H; y < H - BAR_Y; ++y)
-        for (int x = M1_BAR_X; x < end; ++x) memset(f + y * line + x * 4, x < fill ? 0xff : 0, 4);
-}
-#else
+#include "m1plus_video_overlay.c"
+#if !M1PLUS
 void overlay(unsigned char *f, unsigned line, int n, int total) {
     int end = H - BAR_X;
     if (total <= 0) return;
@@ -483,24 +474,8 @@ int main(int argc, char **argv) {
         fcntl(vp[0], F_SETPIPE_SZ, 4 << 20); /* frames ahead, so the sound paces ffmpeg */
         const char *args[27];
         char ss[16];
-#if M1PLUS
-        /* The sound from an ffmpeg of its own. One ffmpeg writing both stops on the picture's pipe
-         * until it reaches the file's first sound, which an mp4 interleaved by the second puts 25
-         * frames (15 MB here) on, while the picture waits for the sound's clock: the first frame
-         * stays. Without a sound stream this one ends at once, and the picture goes by the wall. */
-        ffmpeg_argv(args, ss, at, argv[2], 0);
-        int apid = -1;
-        if (audio) {
-            const char *aa[] = { FFMPEG, "-nostdin", "-loglevel", "quiet", "-ss", ss, "-i", argv[2],
-                                 "-vn", "-map", "0:a:0", "-ac", "2", "-ar", "48000", "-f", "s16le",
-                                 "pipe:4", 0 };
-            if (!(apid = fork())) {
-                move_fd(ap[1], 4);
-                execv(FFMPEG, aa);
-                _exit(127);
-            }
-        }
-#else
+#include "m1plus_video_sound.inc"
+#if !M1PLUS
         ffmpeg_argv(args, ss, at, argv[2], audio);
 #endif
         int pid = fork();

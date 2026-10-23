@@ -171,8 +171,7 @@ static void build_art(const job_t *j) {
     art_path(tmp, j->key, ".tmp");
     /* toolsGetAlbumCover goes through the shared /tmp/.tmp_picture, which stock guards with
      * either lock (parse_albumcovertask_thd, player_parsecover_thd); hold both. Stock never
-     * nests them, so this order cannot deadlock. V2.1 has the one lock: its player cover thread
-     * (parseplaycover_thd) holds parse_cover_mutex too (test/build.py). */
+     * nests them, so this order cannot deadlock. */
     pthread_mutex_lock((void *)parse_cover_mutex);
 #if !M1PLUS
     pthread_mutex_lock((void *)g_playcover_mutex);
@@ -938,33 +937,7 @@ void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(vo
     return page;
 }
 
-#if M1PLUS
-static int back_return(const void *info) {
-    (void)info;
-    dispatch_key_return();
-    return 0; /* not RET_REPEAT: one shot */
-}
-/* After the click: the Return closes the page, which must not happen inside the button's dispatch. */
-static int back_click(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
-    timer_add(back_return, 0, 0);
-    return STOP;
-}
-
-/* M1 Plus has no Return key: every page the payload opens or replaces gets V2.1's title-bar back
- * button at its top left, a Return when clicked (the page's keyup closes it or steps back a screen).
- * Shared with peq_ui.c. */
-void *back_button(void *parent) {
-    void *button = widget_factory_create_widget(widget_factory(), "button", parent, 0, 0, BACK_W, 48);
-    widget_use_style(button, STYLE_NAVBAR_RETURN);
-    widget_set_prop_str(button, "style:normal:icon", ICON_RETURN);
-    widget_set_prop_str(button, "style:over:icon", ICON_RETURN);
-    widget_set_prop_str(button, "style:pressed:icon", ICON_RETURN_DOWN);
-    widget_on(button, EVT_CLICK, back_click, 0);
-    return button;
-}
-#endif
+#include "m1plus_coverflow_back.c"
 
 /* A page's 48px title bar, on M1 Plus after a back button; shared with photos.c. */
 void *page_title(void *body, const char *caption) {
@@ -1435,42 +1408,10 @@ static int changed(void *ctx, void *event) {
     return 0;
 }
 
-#if M1PLUS
-/* The covers' touch (navigation.c slide_swipe): a swipe turns them a cover per CF_STRIDE px, as
- * the frame draws them (the flat fallback's at its own stride). A tap on the centre cover opens
- * it, as Centre does, and one on a side cover brings that cover to the centre. The back button's
- * press is its own. */
-static int touched(void *ctx, void *e) {
-    (void)ctx;
-    if (cf.screen != COVERS || !cf.slide || cf.timer) return 0;
-    int xy[2] = { I(e, EVENT_X), I(e, EVENT_Y) }, depth = fx.frame != 0;
-    widget_to_local(cf.covers, xy);
-    int px = xy[0] < BACK_W && xy[1] < 48 ? 0 : depth ? CF_STRIDE : slide_stride(cf.slide);
-    int bounded = coverflow_bounded(cf.slide);
-    int top = I(cf.slide, W_Y), d = xy[0] - CF_CX, far = d < 0 ? -d : d;
-    if (!slide_swipe(cf.slide, e, px, bounded) || xy[1] < top || xy[1] >= top + I(cf.slide, W_H))
-        return 0;
-    if (far < ART_SIZE / 2) /* the centre cover */
-        return pick((void *)(long)I(cf.slide, SLIDE_INDEX), 0);
-    int k = !depth || far < CF_X1 + CF_XS / 2 ? 1 : 2 + (far - CF_X1 - CF_XS / 2) / CF_XS;
-    slide_step(cf.slide, d < 0 ? -k : k, bounded);
-    return 0;
-}
-
-/* A touch long-press's point (screen pixels) on the centre cover, whose album menu it opens
- * (navigation.c qm_hold), at rest. */
-int coverflow_centre(int x, int y) {
-    if (!cf.slide || cf.screen != COVERS || P(cf.slide, SLIDE_ANIMATOR) || I(cf.slide, SLIDE_OFFSET))
-        return 0;
-    int xy[2] = { x, y }, top = fx.frame ? CF_TOP : I(cf.slide, W_Y);
-    widget_to_local(cf.covers, xy);
-    return xy[0] >= CF_CX - ART_SIZE / 2 && xy[0] < CF_CX + ART_SIZE / 2 && xy[1] >= top &&
-           xy[1] < top + ART_SIZE;
-}
-#endif
+#include "m1plus_coverflow_touch.c"
 
 /* One child per album plus the Sort and Refresh cards, moved by the wheel only: the slide_menu takes no
- * touch (on M1 Plus the view under it does: touched). With depth it spans the frame, so every step repaints all of it, and its CF_VIEW_H square
+ * touch. With depth it spans the frame, so every step repaints all of it, and its CF_VIEW_H square
  * items with a negative spacer move one album per CF_STRIDE px; the children stay empty under the
  * frame. The flat fallback is the stock images, 160 px, as before. ponytail: one child per album;
  * if large libraries lag on hardware, virtualize to a recycled window of children. */
@@ -1771,7 +1712,7 @@ static int pick(void *ctx, void *event) {
 }
 
 /* Return: tracks -> covers (the slide_menu kept its album), preparing -> cancel and covers,
- * covers or the message -> Home (M1 Plus: the Q2 Pod page), or back out of a scoped page. */
+ * covers or the message -> Home, or back out of a scoped page. */
 static int keyup(void *ctx, void *event) {
     (void)ctx;
     if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
@@ -2058,53 +1999,10 @@ int coverflow_home_back(void *top) {
 }
 #endif
 
-#if M1PLUS
-extern int library_open(void *ctx, void *event); /* navigation.c: the Q2 Pod page */
-
-/* The Q2 Pod card: after V2.1's own, in the next slot of its Home grid, laid out as its builder lays
- * out its cards (0x533d8c), on a new page when the last is full. The image has no name, so V2.1's
- * card click (0x533b80, atoi of the name) never sees it; its own opens the Q2 Pod page. A rebuild of
- * the grid (Home menu edited, language changed) destroys it with V2.1's cards, and home_card_again
- * puts it back. Nothing is added when the grid isn't as V2.1 builds it. */
-static void home_card(void *win) {
-    void *slides = win ? widget_lookup(win, VIEW_HOME_SLIDES, 1) : (void *)0;
-    void *dots = win ? widget_lookup(win, VIEW_HOME_DOTS, 1) : (void *)0;
-    void *menu = P(pdeq_choicemenu, 0);
-    if (!slides || !dots || !menu || widget_lookup(slides, "q2pod_card", 1)) return;
-    unsigned n = deque_size(menu), pages = widget_count_children(slides), slot = n % HOME_CARDS;
-    if (pages != (n + HOME_CARDS - 1) / HOME_CARDS) return;
-    void *page = slot ? widget_get_child(slides, pages - 1) : (void *)0;
-    if (!page) {
-        page = view_create(slides, 0, 0, HOME_PAGE_W, HOME_PAGE_H);
-        slide_indicator_set_max(dots, pages + 1);
-    }
-    void *card = view_create(page, HOME_CARD_X + slot % 2 * HOME_CARD_W, slot / 2 * HOME_CARD_H,
-                             HOME_CARD_W, HOME_CARD_H);
-    widget_set_name(card, "q2pod_card");
-    void *icon = image_create(card, HOME_ICON_X, HOME_ICON_Y, HOME_ICON, HOME_ICON);
-    widget_set_prop_int(icon, "clickable", 1);
-    widget_set_prop_str(icon, "style:normal:bg_image", "home_q2pod");
-    widget_set_prop_str(icon, "style:pressed:bg_image", "home_q2pod_down");
-    widget_on(icon, EVT_CLICK, library_open, 0);
-    void *label = label_create(card, 0, HOME_LABEL_Y, HOME_CARD_W, HOME_LABEL_H);
-    widget_use_style(label, STYLE_HOME_LABEL);
-    label_set_line_wrap(label, 1);
-    widget_set_text_utf8(label, "Q2 Pod");
-}
-/* Bound before V2.1's init binds its own, so it runs after V2.1's rebuild (newest runs first). */
-static int home_card_again(void *win, void *event) {
-    (void)event;
-    home_card(win);
-    return 0;
-}
-
-/* The Q2 Pod page's Coverflow row (navigation.c). */
-int coverflow_row(void *ctx, void *event) { return coverflow_open(ctx, event); }
-#endif
+#include "m1plus_coverflow_home.c"
 
 /* home_page_init: stock binds the name-matched img_* cards, then the Coverflow card binds here,
- * on its image as stock does, whatever stock returned. M1 Plus: V2.1's Home is a grid of cards,
- * and the Q2 Pod card follows them. */
+ * on its image as stock does, whatever stock returned. */
 int coverflow_home(void *win, void *ctx) {
 #if M1PLUS
     if (win) widget_on(win, EVT_WINDOW_FOREGROUND, home_card_again, win);

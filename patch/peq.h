@@ -20,75 +20,7 @@
 #else
 #include "peq_platform.h"
 #define PEQ_ROOT "" /* host tests pass a scratch directory */
-#ifndef tk_strcmp
-#if M1PLUS
-/* V2.1 has no tk_strcmp. AWTK's, which the Q2 calls, takes NULL, and the payload relies on it: V2.1's
- * widget_get_prop_str returns NULL, not the default, for a value that is unset or empty (a label
- * with no text yet, an image with none), and Internet Radio's first station crashed demo there. */
-static inline int tk_strcmp_m1(const char *a, const char *b) {
-    return a == b ? 0 : !a ? -1 : !b ? 1 : strcmp(a, b);
-}
-#define tk_strcmp tk_strcmp_m1
-#else
-#define tk_strcmp strcmp
-#endif
-#endif
-#ifndef set_hscroll_label_attribute
-static inline void set_hscroll_label_attribute(void *w) { (void)w; }
-#endif
-#ifndef slide_menu_set_spacer
-#define slide_menu_set_spacer(s, sp) ((void)0)
-#endif
-#ifndef window_manager_get_input_device_status
-#if M1PLUS
-#define window_manager_get_input_device_status(wm) ((char *)(wm) + 0xf8)
-#else
-#define window_manager_get_input_device_status(wm) ((char *)"")
-#endif
-#endif
-#ifndef folder_reinit_navbarname
-static inline int folder_reinit_navbarname(void) { return 0; }
-#endif
-#ifndef batch_init_selectrecord
-static inline int batch_init_selectrecord(int n) { (void)n; return 0; }
-#endif
-#ifndef batch_set_selectitem
-static inline int batch_set_selectitem(int n) { (void)n; return 0; }
-#endif
-#ifndef switch_charge_enable
-static inline int switch_charge_enable(int n) { (void)n; return 0; }
-#endif
-#if !defined(getMusicByAlbumArtist) && defined(getMusicByAlbumAndAlbumSonger)
-/* V2.1 has none: its album query's All songs flag drops the album (where albumsonger like the
- * artist, or ="" for none); the album is copied even then, so it can't be null */
-static inline int getMusicByAlbumArtist(const char *artist) {
-    return getMusicByAlbumAndAlbumSonger("", artist, 1);
-}
-#endif
-#if !defined(config_playmode) && defined(dmrSendPlayMode)
-/* V2.1 has none: its Play mode page's sequence (0x49fc78). The mode goes through the payload's
- * mclSetPlayMode hook, as stock's own call does; then the remote apps, the DLNA renderer, and the
- * saved setting. */
-int ringnav_mode(int mode);
-static inline int config_playmode(int mode, int notify) {
-    int result = ringnav_mode(mode);
-    if (notify) notifyPlayMode();
-    dmrSendPlayMode(mode);
-    write_int_config(mode, "PLAYSET", "PLAYMODE");
-    return result;
-}
-#elif !defined(config_playmode)
-static inline int config_playmode(int mode, int notify) { (void)mode; (void)notify; return 0; }
-#endif
-#ifndef window_manager_dispatch_input_event
-extern int window_manager_dispatch_input_event(void *, void *);
-#endif
-#ifndef slide_menu_scroll_to_next
-static inline int slide_menu_scroll_to_next(void *w) { (void)w; return 0; }
-#endif
-#ifndef slide_menu_scroll_to_prev
-static inline int slide_menu_scroll_to_prev(void *w) { (void)w; return 0; }
-#endif
+#include "m1plus_peq.h" /* stand-ins for routines V2.1 lacks (docs/m1plus-roadmap.md U1c) */
 #endif
 
 #define PEQ_BANDS 30 /* 10 per side plus 10 shared, as L/R APO files use */
@@ -176,30 +108,15 @@ typedef struct { peq_dsp dsp; peq_preset preset; int id; } player_state; /* id: 
 void *text(void *parent, int x, int y, int w, int h);
 void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(void *, void *));
 void *page_title(void *body, const char *caption);
-#if M1PLUS
-void *back_button(void *parent);
-void dispatch_key_return(void); /* navigation.c: back_button's Return */
-#endif
+#include "m1plus_peq_decls.h" /* the M1 Plus's shared helpers, and view_show (U1c) */
 void *page_list(void *page, void *body, void **title, const char *caption, int n, int item_h);
 void *page_row_detail(void *view, int index, const char *caption, const char *detail,
                       int (*click)(void *, void *));
 void page_row_into(void *view, int index, const char *caption, int (*click)(void *, void *));
 void *bottom_caption(void *parent, int h);
 int visual(void *s, int n, int *c, int *frac);
-#if M1PLUS
-int slide_swipe(void *s, void *e, int px, int bounded); /* navigation.c: a finger on a carousel */
-void slide_step(void *s, int k, int bounded);
-#endif
 int thumb(const char *src, const char *dst, int w, int h);
 int card_space(const char *dir);
-/* A page's full-size view shown or hidden. AWTK's hit test skips insensitive children but not
- * hidden ones, so on the M1 Plus's touch screen a hidden view over a list would take its taps. The
- * Q2 has the same hit test; its build is kept as it was. */
-#if M1PLUS
-#define view_show(w, on) (widget_set_visible(w, on, 0), widget_set_sensitive(w, on))
-#else
-#define view_show(w, on) widget_set_visible(w, on, 0)
-#endif
 int by_string(const void *a, const void *b);
 unsigned hash_bytes(unsigned h, const unsigned char *s, unsigned n);
 unsigned fnv(unsigned h, const unsigned char *s);
