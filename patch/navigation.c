@@ -6941,8 +6941,6 @@ int ringnav(void *ctx, void *event) {
             return STOP;
         }
     }
-#else
-    int boot_guard = g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD;
 #endif
 #if IPOD
     /* This release's press was silenced by ringnav_keydown: a row change below clicks instead. */
@@ -7049,7 +7047,11 @@ int ringnav(void *ctx, void *event) {
     }
     /* Match the stock power-key release exclusions, including release after long press. */
     if (key == KEY_CENTER &&
+#if M1PLUS /* also the guard as it was on entry, before the knob's Power became this Centre */
         (boot_guard || g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD)) {
+#else
+        (g_power_longkey || g_ingore_bootkey_flag || *(volatile unsigned char *)BOOT_KEY_GUARD)) {
+#endif
         cancel_center();
         return result;
     }
