@@ -56,7 +56,14 @@ if is_m1plus:
     assert set(HOOKS.values()) <= set(M1PLUS_HOOKS.values())
     WM_PAINT_LEAF = WM_PAINT_LEAF_M1PLUS
     FREE_GOT = 0xa032f4
+    # The styles V2.1's theme has: one the payload uses that it lacks leaves the widget unstyled, as a
+    # Q2 style named by a literal in shared C, not by its STYLE_* (patch/m1plus_q2.inc), would.
+    import subprocess
+    from ipod import style_props
+    THEME_STYLES = {s for _, s, *_ in style_props(subprocess.check_output(
+        ['unsquashfs', '-cat', str(B/'rootfs.squashfs'), 'release/assets/default/raw/styles/default.bin']))}
 else:
+    THEME_STYLES = None
     FREE_GOT = 0xa2638c
 # The Library's rows: Q2's Local Music hook. V2.1 has no Local Music menu, so M1 Plus binds nothing
 # there and its rows are on the Q2 Pod page (library_open, checked on its own); the tests that click
@@ -329,7 +336,11 @@ class Machine:
             self.word(b,x); self.word(b+4,y); ret=0
         elif name=='widget_set_text_utf8': n['text']=self.text(b); ret=0
         elif name=='image_base_set_image': n['image']=self.text(b); ret=0
-        elif name=='widget_use_style': n['style']=self.text(b); ret=0
+        elif name=='widget_use_style':
+            n['style']=self.text(b); ret=0
+            # the payload's own calls (stock code builds some names at run time, which the mocks don't)
+            assert THEME_STYLES is None or not BASE <= u.reg_read(UC_MIPS_REG_RA) < SCRATCH or \
+                n['style'] in THEME_STYLES, f"No {n['style']} in V2.1's theme"
         elif name.startswith('hscroll_label_set_') or name=='set_hscroll_label_attribute':
             n[name]=b if name!='set_hscroll_label_attribute' else True; ret=0
         elif name=='image_set_draw_type': n['draw_type']=b; ret=a
