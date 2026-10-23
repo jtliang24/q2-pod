@@ -1402,6 +1402,12 @@ misses and one older gap were found:
 After the fixes: `test/q2compare.py --suites` is exact, with 21 suite runs passing; the M1 gates pass
 on a fresh build (`patch` 1017 scenarios).
 
+**On the device (dev 22, `V00Ms`, Oct 23).** The user flashed it; About shows CFW 1.2.2 dev 22 and
+`demo` hashes as built. Over q2remote: Coverflow's album tracks are white and centred under the title.
+On Internet Radio's Now Playing, Play stopped a station and Play again restarted it (`rd.pid` set,
+its ffmpeg back) where dev 21's key-up, which didn't check `media_focused()`, hands a stopped station's Play to
+stock (read from the code, not tried on dev 21). `/dev/shanling_dac` exists on V2.1, as `q2video` expects.
+
 ## How to check a build now
 
 ```sh
