@@ -5,7 +5,7 @@ works this way, and what has to be in place first, is in the roadmap's section U
 ([m1plus-roadmap.md](m1plus-roadmap.md#u-tracking-upstream)). The Q2 rule a sync must keep is in
 [m1plus-integration.md](m1plus-integration.md#rule-for-future-work-dont-break-q2).
 
-This runbook assumes U1 and U2 are done: the M1 code sits in `tools/m1plus.py`, `patch/m1plus/` and
+This runbook assumes U1 and U2 are done: the M1 code sits in `tools/m1plus.py`, `patch/m1plus_*` and
 `test/m1plus/`, and `test/q2compare.py`, `UPSTREAM_BASE` and the port report exist. Until then, a merge
 hits the conflicts measured in section U.
 
@@ -38,7 +38,7 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    - **Upstream's other changes to `build()`**, those not at a V1.32 address (a new asset, helper, input
      or packing step): review `git diff <old base> <tag> -- tools/build.py`, and port each into
      `m1plus.build()` or give it a U4 row. The M1's pipeline doesn't take them by itself.
-   - **A new `offsets.inc` name** gets a V2.1 value in `patch/m1plus/offsets.inc`, found in V2.1's code
+   - **A new `offsets.inc` name** gets a V2.1 value in `patch/m1plus_offsets.inc`, found in V2.1's code
      by the roadmap's ground rules, or `M1_UNPORTED`, which compiles its feature out on M1. The M1
      compile fails until each new name has one or the other.
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
@@ -84,3 +84,4 @@ stay flat or fall.
 | Before U1 (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +6,417/−2,036 over 38 files |
 | U1a's `build.py` split (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,767/−1,765 over 38 files; `tools/build.py` +10/−4 |
 | U1a done: `peq.py`, `ipod.py` upstream's (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,639/−1,729 over 36 files |
+| U1b: `offsets.inc` split (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,172/−1,696 over 36 files; `patch/offsets.inc` +5/−0 |

@@ -35,7 +35,7 @@ first: items that only change how something looks wait for the final pass (secti
   - A deliberate Q2 change says so in its commit, with its reason and its test.
   - The full rule is in [m1plus-integration.md](m1plus-integration.md#rule-for-future-work-dont-break-q2).
 - **M1 code sits beside upstream's, not inside it** (from U1 on). It lives in `tools/m1plus.py`,
-  `patch/m1plus/` and `test/m1plus/`. An upstream file changes only by a seam: a hook call or
+  `patch/m1plus_*` and `test/m1plus/`. An upstream file changes only by a seam: a hook call or
   `M1_HOOK(...)`, a target lookup, or an `#if !M1PLUS` wrapper. Each seam line is a conflict in every
   later sync, so keep them few.
 - **Fix Q2 bugs upstream.** Never change upstream's Q2 code in the fork to fix a Q2 bug. Send the fix to
@@ -107,14 +107,19 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - `tools/q2remote.py` keeps its M1 support (knob, swipe, the upright screen, `peek`) in place:
       upstream changed 4 of its lines in the 226 commits to 1.3.9, and moving it out would itself need
       seams in its command dispatch. Revisit if a sync conflicts there.
-  - **b. Split `offsets.inc`.**
-    - Upstream's body stays as upstream wrote it, inside `#if !M1PLUS … #endif`, and
-      `patch/m1plus/offsets.inc` holds the V2.1 values.
+  - **b. Split `offsets.inc`. Done (Oct 22).**
+    - Upstream's body stays as upstream wrote it, behind `#if M1PLUS #include "m1plus_offsets.inc" #else`,
+      5 seam lines. `patch/m1plus_offsets.inc` holds every name at its V2.1 value.
+    - `patch/m1plus_q2.inc` holds the Q2's values for the 86 names the port added to shared code (styles,
+      views, icons, `UI_W`, `W_CHILDREN`...), included after upstream's. Each is V1.32's, or an upstream
+      literal the shared code now names; U1c can drop those the moved code no longer needs.
+    - The M1 files are flat, `patch/m1plus_*`, not `patch/m1plus/`: upstream's `source_sha256` hashes
+      `patch/*` as files, and a flat name stays in it with no seam.
     - A new upstream name then fails the M1 compile, which forces a choice: a V2.1 value, or
       `M1_UNPORTED`, which compiles its feature out on M1.
     - A geometry or style macro is shared only where its Q2 value is upstream's literal.
   - **c. Move the M1 blocks out of the shared `.c` files.**
-    - Each `#if M1PLUS` block of more than about 10 lines moves to `patch/m1plus/*.c`. In `navigation.c`
+    - Each `#if M1PLUS` block of more than about 10 lines moves to `patch/m1plus_*.c`. In `navigation.c`
       that starts with the blocks at 643, 6572, 5428, 3328, 1989, 6675, 5344 and 6269. The shared file
       keeps one call or `M1_HOOK(...)` line, empty on Q2.
     - Small inline differences stay inline, through named macros.
