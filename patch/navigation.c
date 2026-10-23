@@ -5680,11 +5680,12 @@ static int qm_open(const void *unused) {
     if (!st.qm_choice) st.touch_mode = 0;
     void *back = widget_lookup(dialog, SORTSELECT_BACK, 1),
          *view = widget_lookup(dialog, SORTSELECT_VIEW, 1);
+#if M1PLUS
     if (!back || !view) {
         window_close(dialog);
         return 0;
     }
-#if !M1PLUS
+#else
     widget_off_by_func(dialog, EVT_KEY_UP, (void *)SORTSELECT_KEYUP, dialog);
 #endif
     widget_off_by_func(back, EVT_CLICK, (void *)SORTSELECT_CLOSE, dialog);

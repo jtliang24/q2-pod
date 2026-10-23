@@ -282,7 +282,9 @@
 #define NP_ART_RADIUS 12 /* Now Playing's art corners (paint_cover), as stock's play_defaultcover scaled to the art */
 /* A radius-r corner's arc at row y (0 the outermost): how far in it starts, in 1/16 pixels. */
 static inline int arc_out(int r, int y) {
+#if M1PLUS
     if (!r) return 0;
+#endif
     int d = 2 * (r - y) - 1, v = (4 * r * r - d * d) * 64, s = 0;
     while ((s + 1) * (s + 1) <= v) ++s;
     return 16 * r - s;

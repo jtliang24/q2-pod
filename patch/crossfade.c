@@ -134,9 +134,10 @@ int xfade_open(void *ctx, void *event) {
     void *title = widget_lookup(page, VIEW_BOOTVOL_TITLE, 1);
     void *row = widget_lookup(page, VIEW_BOOTVOL_SWITCH, 1);
     void *name = widget_lookup(page, VIEW_BOOTVOL_SWITCH_LABEL, 1);
+#define SW_ROW row
 #else
     void *nav = widget_lookup(page, "view_navbar", 1), *title = nav ? widget_get_child(nav, 0) : 0;
-    void *row = widget_lookup(page, VIEW_BOOTVOL_SWITCH, 1), *name = row;
+#define SW_ROW xf.sw /* the switch is its own row */
 #endif
     xf.sw = widget_lookup(page, VIEW_BOOTVOL_SWITCH_ICON, 1);
     xf.view = widget_lookup(page, VIEW_BOOTVOL, 1);
@@ -144,19 +145,22 @@ int xfade_open(void *ctx, void *event) {
     xf.dec = widget_lookup(page, VIEW_BOOTVOL_DEC, 1);
     xf.add = widget_lookup(page, VIEW_BOOTVOL_ADD, 1);
     xf.label = widget_lookup(page, VIEW_BOOTVOL_VALUE, 1);
-    if (tk_strcmp(widget_get_prop_str(page, "name", ""), "bootvol_page") || !title || !row ||
-        !name || !xf.sw || !xf.view || !xf.slider || !xf.dec || !xf.add || !xf.label) {
+    if (tk_strcmp(widget_get_prop_str(page, "name", ""), "bootvol_page") || !title ||
+#if M1PLUS
+        !row || !name ||
+#endif
+        !xf.sw || !xf.view || !xf.slider || !xf.dec || !xf.add || !xf.label) {
         window_close(page);
         return 0;
     }
-    widget_off_by_func(row, EVT_CLICK, (void *)BOOTVOL_SWITCH, page);
+    widget_off_by_func(SW_ROW, EVT_CLICK, (void *)BOOTVOL_SWITCH, page);
     widget_off_by_func(xf.dec, EVT_CLICK, (void *)BOOTVOL_DEC, page);
     widget_off_by_func(xf.add, EVT_CLICK, (void *)BOOTVOL_ADD, page);
     widget_off_by_func(xf.slider, EVT_VALUE_CHANGING, (void *)BOOTVOL_CHANGING, page);
 #if !M1PLUS
     widget_off_by_func(xf.slider, EVT_VALUE_CHANGED, (void *)BOOTVOL_CHANGED, page);
 #endif
-    widget_on(row, EVT_CLICK, toggle, 0);
+    widget_on(SW_ROW, EVT_CLICK, toggle, 0);
     widget_on(xf.dec, EVT_CLICK, step, (void *)-1L);
     widget_on(xf.add, EVT_CLICK, step, (void *)1L);
     widget_on(xf.slider, EVT_VALUE_CHANGING, slid, 0);
@@ -168,8 +172,10 @@ int xfade_open(void *ctx, void *event) {
 #endif
     /* Stock shows it only while Boot volume is in use; V2.1 also disables it while it is hidden. */
     widget_set_visible(xf.view, 1, 0);
+#if M1PLUS
     widget_set_enable(xf.view, 1);
-    if (wheel) widget_set_visible(row, 0, 0);
+#endif
+    if (wheel) widget_set_visible(SW_ROW, 0, 0);
     slider_set_min(xf.slider, wheel ? 50 : 0);
     slider_set_max(xf.slider, wheel ? 200 : XF_MAX);
     slider_set_step(xf.slider, wheel ? 10 : 1);
