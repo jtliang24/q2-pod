@@ -89,14 +89,20 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   ([m1plus-progress.md](m1plus-progress.md) section 37). Legacy and iPod `update.tar` are byte-identical
   to `main`'s build.
 - **U1. Move the M1 beside upstream (L).** Each step keeps Q2 `update.tar` byte-identical to `main`'s.
-  - **a. A `Target` record** ([integration item 11](m1plus-integration.md#work-items), now required).
-    - `tools/build.py` keeps upstream's Q2 constants and code. A new `tools/m1plus.py` gets the M1's:
-      `M1PLUS_HOOKS`, `CALL_SITES['m1plus']`, `M1PLUS_GP`, `m1plus_symbols`, `m1plus_names`, `m1plus_inc`,
-      the paint leaf, `RTC_READ_M1PLUS`, the icons and assets, and the `update.bin` packing.
-    - `build()` reads one target instead of branching on `m1plus` 61 times.
-    - A patch upstream applies inline in `build()` becomes a Q2 table entry, or stays inline under
-      `if target.q2`. `patch_word`'s original-word check makes a missed one fail the M1 build, not
-      corrupt it.
+  - **a. The M1's own build pipeline** ([integration item 11](m1plus-integration.md#work-items), now
+    required). The user chose this over a shared `build()` reading a `Target` record (Oct 22): most of the
+    M1's lines sat in `build()`'s Q2-only steps, and sharing them would re-indent upstream's lines under
+    `if target.q2`, a conflict at every sync.
+    - `tools/build.py` is upstream's, but for its seams: stock's `update.tar` as an input, `library_page`
+      in `PAYLOAD_WINDOWS`, and one dispatch, `m1plus.build()` for an M1 input.
+    - `tools/m1plus.py` holds the M1's tables (`M1PLUS_HOOKS`, `CALL_SITES`, `M1PLUS_GP`, the aliases and
+      stubs, `M1PLUS_FUNCTIONS`, the paint leaf, `RTC_READ_M1PLUS`, `.pdr`, TagLib) and its pipeline:
+      `build()`, `compile_payload()`, `compile_helper()`, `patch_m4b_cover()`. It reuses `build.py`'s
+      helpers and tables where V2.1 matches V1.32.
+    - The cost: a change upstream makes to `build()` that isn't at a V1.32 address (a new asset, helper
+      or packing step) doesn't reach the M1 by itself. The sync runbook reviews `build()`'s diff for them.
+    - Done for `tools/build.py` (Oct 22): byte-identical Q2 and M1 builds, and every suite and gate
+      passes. `tools/peq.py`'s player profiles, `tools/ipod.py` and `tools/q2remote.py` follow.
   - **b. Split `offsets.inc`.**
     - Upstream's body stays as upstream wrote it, inside `#if !M1PLUS … #endif`, and
       `patch/m1plus/offsets.inc` holds the V2.1 values.
@@ -212,7 +218,7 @@ A video and Internet Radio play through q2video on the ES9069Q, straight after a
 This section is complete for upstream 1.2.2's call sites. Call sites that later releases add go into U4.
 
 Each `NOT PORTED` line below names a patch or hook made at a V1.32 address. A call site is ported by
-adding its V2.1 words under its name in `CALL_SITES['m1plus']` (`tools/build.py`):
+adding its V2.1 words under its name in `CALL_SITES['m1plus']` (`tools/m1plus.py`):
 - the build applies them, as it applies Q2's;
 - `test/build.py` checks each word, and allows it in M1's demo diff;
 - `test/patch.py`'s test for that name runs once the name is in the table (`'NAME' in SITES`). Its
@@ -246,7 +252,7 @@ test card has no two albums of one name, so this waits until one does. To check:
 4. Each artist's page (Artists → the artist) shows its album with its own cover.
 5. Over q2remote, `ls /tmp/abp` holds two different `<md5>0.jpg` files for the name, one per album.
 
-If they share a cover, the build's `ALBUM_ART` sites (`tools/build.py`, `CALL_SITES['m1plus']`) and
+If they share a cover, the build's `ALBUM_ART` sites (`tools/m1plus.py`, `CALL_SITES['m1plus']`) and
 `artist_tab`'s keys are where to look.
 
 **Later validation: gapless by ear** ([m1plus-progress.md](m1plus-progress.md) section 33). On dev 20,

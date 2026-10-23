@@ -151,8 +151,9 @@ The devShell sets `SOURCE_DATE_EPOCH=315532800`. mksquashfs 4.7 refuses that tog
 the build passes ("SOURCE_DATE_EPOCH and command line options can't be used at the same time"). So
 `main`'s `build.py` can't build in the devShell at all.
 
-The branch clears the variable at import (`tools/build.py:9`), and the build then takes stock's times, as
-`main` does without Nix. This is an environment fix, and it doesn't change any output.
+The branch first cleared the variable at import in `tools/build.py`. Since U1a the devShell's `shellHook`
+unsets it (`flake.nix`), so `build.py` is upstream's there, and `main`'s builds in the devShell too. The
+build then takes stock's times, as without Nix. This is an environment fix, and it changes no output.
 
 ## Decision: finish on this tree
 
@@ -190,7 +191,7 @@ suites (see [Checklist](#checklist)). Then run the M1 gates for R4.
 | 8 | Helpers | `compile_helper` already passes `-DM1PLUS=1` for M1. Choose `KEY_PLAYPAUSE` and `video.c`'s 480-line path by `#if M1PLUS`, not at run time | S | R1 |
 | 9 | `ringnav_artist_list` | Restore `main`'s body under `#if !M1PLUS`. The difference is behaviour-neutral, but syncing needs exact equality: an accepted difference would show in every later compare | S | R1 |
 | 10 | Docs | `building.md` gives both targets' commands and gates. The README stops pointing M1 users to a release `update.bin` until releases carry one | S | R5 |
-| 11 | Per-target profile (roadmap U1a) | Replace the `m1plus` bool and the repeated `ipod and not m1plus` in `build.py` with one `Target` record. It would hold the model, version literal, archive, GP, hooks, paint leaf, `.pdr`, logo size, TagLib, icons, RTC patches and asset policy, after `PLAYER_PROFILES` in `tools/peq.py`. The M1's half moves to `tools/m1plus.py`, so upstream's `build.py` changes merge with few conflicts | M | R1 |
+| 11 | Per-target split (roadmap U1a) | The M1's tables and its own build pipeline move to `tools/m1plus.py`, and `build.py` hands it an M1 input: `build.py` is upstream's but for a few seam lines, so upstream's changes merge with few conflicts. (Planned as one `build()` reading a `Target` record; the separate pipeline re-indents none of upstream's lines.) | M | R1 |
 | 12 | The compare as a script (roadmap U2) | A `test/q2compare.py` that builds the baseline (`main`, then `UPSTREAM_BASE`) from `git archive` and the working tree, and reports differing components. This turns the checklist into one command, and every sync runs it | S | R1 |
 
 Items 1–10 are done: item 2 earlier, 1 and 3–9 as roadmap U0 (2026-10-22), with R1–R3 met (see
@@ -232,7 +233,7 @@ output directory. Once `test/q2compare.py` exists (item 12), it replaces the for
 R1 `cmp`s below, and builds `UPSTREAM_BASE` instead of `main`.
 
 ```sh
-# The fork point. main takes only the vendor ZIP, and needs SOURCE_DATE_EPOCH unset in the devShell
+# The fork point. main takes only the vendor ZIP (the devShell unsets SOURCE_DATE_EPOCH, as it needs)
 git archive main | tar -x -C <scratch>/main-src
 (cd <scratch>/main-src && env -u SOURCE_DATE_EPOCH python3 tools/build.py ~/Downloads/'Q2 Firmware V1.32.zip' --out <scratch>/main-stock)
 (cd <scratch>/main-src && env -u SOURCE_DATE_EPOCH python3 tools/build.py ~/Downloads/'Q2 Firmware V1.32.zip' --out <scratch>/main-ipod --ipod)

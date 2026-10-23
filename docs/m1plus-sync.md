@@ -33,9 +33,11 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    - **Upstream's side wins in upstream's files.** Take upstream's text, then put back only the seam
      lines: a hook call or `M1_HOOK(...)`, a target lookup, an `#if !M1PLUS` wrapper. Any other M1 line
      in the conflict belongs in an M1 file.
-   - **A new upstream hook or call site** goes into the Q2 target's table in `tools/build.py`. An inline
-     `patch_word` in `build()` goes under `if target.q2`. If one is missed, its original-word check fails
-     the M1 build.
+   - **A new upstream hook or call site** needs nothing for the Q2: `tools/build.py` is upstream's. For
+     the M1 it is `NOT PORTED` until it has V2.1 words in `tools/m1plus.py` (the port report lists it).
+   - **Upstream's other changes to `build()`**, those not at a V1.32 address (a new asset, helper, input
+     or packing step): review `git diff <old base> <tag> -- tools/build.py`, and port each into
+     `m1plus.build()` or give it a U4 row. The M1's pipeline doesn't take them by itself.
    - **A new `offsets.inc` name** gets a V2.1 value in `patch/m1plus/offsets.inc`, found in V2.1's code
      by the roadmap's ground rules, or `M1_UNPORTED`, which compiles its feature out on M1. The M1
      compile fails until each new name has one or the other.
@@ -80,3 +82,4 @@ stay flat or fall.
 | After | Upstream base | Lines changed in upstream's files |
 |---|---|---|
 | Before U1 (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +6,417/−2,036 over 38 files |
+| U1a's `build.py` split (Oct 22) | 1.2.2 (`c0a2d6b`, through `main`) | +5,767/−1,765 over 38 files; `tools/build.py` +10/−4 |
