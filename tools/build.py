@@ -1173,7 +1173,9 @@ def patch_bluealsa(raw):
     struct.pack_into('<2I', image, fileoff(raw, BT_DROP_HANDLER), 0x08000000 | reset >> 2, 0)
     return bytes(image)
 
-def build(target_path, out, logo, ipod=False, dev=False):
+def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
+    """m1_release: an M1 Plus release's (name, tag), from tools/release_m1.py: the tag instead of
+    VERSIONS', and the name in About and the manifest."""
     variant = 'ipod' if ipod else 'stock'
     version = VERSIONS[variant]
     out.mkdir(parents=True, exist_ok=True)
@@ -1207,6 +1209,9 @@ def build(target_path, out, logo, ipod=False, dev=False):
         check(not ipod, 'M1 Plus has no iPod build yet')
         archive_name = 'update.bin'
         expected_logo = (320, 480)
+        if m1_release:
+            check(not dev and len(m1_release[1]) == 5, 'An M1 release is no dev build, and its tag is 5 characters')
+            version = m1_release[1]
         pdr_off, pdr_size = PDR_M1PLUS
     elif info[0] == 'Shanling Q2':
         m1plus = False
@@ -1218,6 +1223,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
         pdr_off, pdr_size = PDR
     else:
         raise ValueError(f'Unsupported model: {info[0]}')
+    check(not m1_release or m1plus, 'Only an M1 Plus build takes an M1 release')
     check(not (out/archive_name).exists(), 'Output already exists; use a fresh --out directory')
     sq = out/'stock.squashfs'; sq.write_bytes(blobs['recovery-update/rootfs.squashfs'])
     def cat(path): return subprocess.check_output(['unsquashfs', '-cat', str(sq), path])
@@ -1276,7 +1282,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
     header.append(f'#define SETTINGS_ICON_NAMES "{names}"')
     header.append(f'#define ROCKBOX_FLAG "{ROCKBOX_FLAG}"')  # Home's Rockbox row, for S90play
     # About: the stock firmware's version on its own row, and this build's on the CFW. Version row.
-    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{VERSION}{" Pod" if (ipod and not m1plus) else ""}{f" dev {dev}" if dev else ""}"']
+    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{m1_release[0] if m1_release else VERSION}{" Pod" if (ipod and not m1plus) else ""}{f" dev {dev}" if dev else ""}"']
     (out/'stock.h').write_text('\n'.join(header)+'\n')
     ps = compile_payload(out, ipod and not m1plus, m1plus=m1plus)
     payload = (out/'patch.bin').read_bytes()
@@ -1534,7 +1540,7 @@ def build(target_path, out, logo, ipod=False, dev=False):
         update_sha256=sha(out_archive.read_bytes()), rootfs_sha256=sha(newsq.read_bytes()),
         kernel_sha256=sha(blobs['recovery-update/xImage']), patch_bytes=len(payload), ring_step_pixels=RING_STEP,
         audio_extension_calls=[dict(address=hex(a), original=f'{o:#010x}', replacement=hex(n)) for name, a, o, n in call_site_words(m1plus, ps) if name == 'AUDIO_EXTENSION_CALLS' and n != o],
-        version=version, variant=variant, dev=dev, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=code_changes, changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
+        version=version, **({'release': m1_release[0]} if m1_release else {}), variant=variant, dev=dev, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=code_changes, changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
         patch_symbols={n:hex(v) for n,v in ps.items() if n.startswith('stock_')},
         tools={t:run(t,'--version').splitlines()[0] for t in ['clang','ld.lld','llvm-objcopy']} |
               ({'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]} if ipod or m1plus else {}))

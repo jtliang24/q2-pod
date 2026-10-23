@@ -21,6 +21,9 @@ CF_PLACEHOLDER = 'default_album_flow' if variant=='ipod' else 'default_album_big
 # iPod writes times as 0:02 and -1:02:05; Legacy keeps stock's 00:02 and -01:02:05.
 def mmss(t): return t if variant=='ipod' else re.sub(r'^(-?)(\d):',r'\g<1>0\2:',t)
 v = VERSIONS.get(variant, '')
+if manifest.get('release'):  # an M1 Plus release (tools/release_m1.py): its tag, from its name
+    from release_m1 import m1_tag
+    v = m1_tag(manifest['release']) if manifest.get('model') == 'Shanling M1 Plus' else ''
 assert v and manifest['version'] == (dev_tag(manifest['dev'], v[-1]) if manifest.get('dev') else v), 'Wrong variant/version'
 assert (manifest.get('compact_code') != []) == (variant == 'ipod')
 is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
@@ -8547,7 +8550,7 @@ else:  # M1 Plus: V2.1's About rows are in its asset; its init's widget_foreach 
         return (n['type'],[m.get(w+O[k]) for k in ('W_X','W_Y','W_W','W_H')],n.get('style'),[tree(c) for c in n['children']])
     item=kids[2]; label,=m.nodes[item]['children']
     assert tree(item)==tree(rows[1]) and m.nodes[item]['style']==NAMES['ROW_STYLE']  # stock's row and label alike
-    assert m.nodes[label]['text']==f"CFW. Version:{VERSION}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
+    assert m.nodes[label]['text']==f"CFW. Version:{manifest.get('release', VERSION)}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
     assert not m.nodes[item].get('handlers') and not m.nodes[item].get('name'); passed()
 
 # Resume: once a second the UI loop polls the playing track; one of RESUME_MIN_S or longer keeps its
