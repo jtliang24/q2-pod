@@ -118,16 +118,25 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - A new upstream name then fails the M1 compile, which forces a choice: a V2.1 value, or
       `M1_UNPORTED`, which compiles its feature out on M1.
     - A geometry or style macro is shared only where its Q2 value is upstream's literal.
-  - **c. Move the M1 blocks out of the shared `.c` files.**
-    - Each `#if M1PLUS` block of more than about 10 lines moves to `patch/m1plus_*.c`. In `navigation.c`
-      that starts with the blocks at 643, 6572, 5428, 3328, 1989, 6675, 5344 and 6269. The shared file
-      keeps one call or `M1_HOOK(...)` line, empty on Q2.
+  - **c. Move the M1 blocks out of the shared `.c` files. Done (Oct 22).**
+    - Each `#if M1PLUS` block of about 10 lines or more moved to its own `patch/m1plus_*` file (31 of
+      them), and the shared file keeps one `#include` where it stood, after any Q2 `#else` code inside
+      `#if !M1PLUS`. Each file wraps its code in `#if M1PLUS`, so each model compiles the same text in the
+      same order: both builds stayed byte-identical through every move. Blocks inside a function or
+      `scratch_t` are `.inc` fragments of it.
+    - The declarations went to `m1plus_nav.h`, `m1plus_peq.h` and `m1plus_peq_decls.h`, and
+      `peq_player.c`'s V2.1 addresses override upstream's literals after them.
+    - The port's rewrites of upstream's comments are undone; their V2.1 notes are in
+      [m1plus.md](m1plus.md) section 8.
     - Small inline differences stay inline, through named macros.
     - Prove each move with the byte compare, not by reading it. U0 found two moves that read as no-ops
       and weren't: a block factored into a static function, inlined on Q2, still moved that block's
       strings in `.rodata` and shifted every string address after them; and a macro that was meant to
       give upstream's literal was off by one.
-    - Aim for under about 150 changed lines across upstream's `patch/*.c`, from about 1,400 now.
+    - The aim was under about 150 changed lines across upstream's `patch/*.c`. The result is
+      +671/−226, from about +1,945/−290: most of the rest are one-line seams that stay by design, a literal
+      named by a macro with upstream's Q2 value (`UI_W`, `STYLE_…`, `view_show`), an `#include`, or an
+      `#if` around a Q2-only line. Lowering it further would mean restructuring upstream's functions.
   - **d. Move the M1 tests out.**
     - `test/patch.py`'s and `test/build.py`'s M1 paths move to `test/m1plus/`. That covers the V2.1 harness
       addresses, the `KNOWN GAP` and `NOT PORTED` lists and the M1 scenarios, which import the shared
