@@ -18,11 +18,12 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** the first full sync, to upstream 1.3.9 (U3). Done so far:
+**Next:** the first full sync, to upstream's latest release (U3), chosen when it starts: upstream was at
+1.3.9 when U3 was planned (Oct 22) and at 1.4.1 a day later. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
-1.3.9-m1.1, after U3), and U1 (the M1 code beside upstream's: +1,417/−279 lines over upstream's files,
+U3's `<tag>-m1.1`), and U1 (the M1 code beside upstream's: +1,417/−279 lines over upstream's files,
 from +6,417/−2,036). The M1 feature work waits until U3 lands: Spotify on the
 device (section 3), the iPod UI (section 5) and the final pass (section 7). Section 4 is done for 1.2.2;
 one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes
@@ -172,11 +173,16 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     The merge had no conflicts, but the M1 needed three follow-ups: a trampoline stub, two
     `M1_UNPORTED` names and an unused page. Those, and the new test cases the M1 copies missed, became
     runbook rules.
-- **U3. First sync: upstream 1.3.9 (L).**
+  - **Its device pass** (dev 21) found two more the gates had missed: a Q2 style named by its string in
+    Coverflow, and a key-up change the merge took only in Q2-only code. Both are fixed (dev 22), with a
+    harness check for the first and `test/m1plus/q2only.py` for the second, both now runbook rules.
+- **U3. First sync: upstream's latest release (L).**
+  - The tag is picked when U3 starts: upstream releases several times a week (1.3.9 on Oct 22, 1.4.1 on
+    Oct 23), so the latest then saves a second sync right after.
   - Merge the tag, by the [sync runbook](m1plus-sync.md). Don't rebase: `m1plus-progress.md` cites the
     branch's commit hashes.
   - Done when:
-    - `q2compare.py` against 1.3.9 is exact, and 1.3.9's suites pass on the Q2 builds;
+    - `q2compare.py` against the tag is exact, and its suites pass on the Q2 builds;
     - the M1 gates pass, and the port report fills U4;
     - a device pass on the M1 has run.
 - **U4. Upstream features to port (M each, many).** This is the porting queue from now on; section 4 is
@@ -195,14 +201,14 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `tidal_start` passes no song id, since V2.1's two callers (`0x500d5c`, `0x51c7b0`) keep none, so
       Tidal streams uncached and there is no Downloads row. V2.1's `get_tidal_trackurl` (`0x512ed0`) hands
       its URL thread (`0x51c288`) the queue row: the id is to be found there.
+    - `NP_INFO_CALL` stays in section 7.
   - **Found on the device** (dev 21, Oct 23):
     - **A touch hold on an album's tracks plays the track.** On Album's list the hold menu opens for the
       row held. On an album's track list (16 tracks), `load` counted 17 rows (`g_menu.rows`, read over
       q2remote), so `qm_hold`'s check against the showlist's size fails and the release's click plays the
       row. The hold code is the same as V1221's, so the gap is likely older than 1.2.2. Find what the
       17th row is first (the album header?).
-    - `NP_INFO_CALL` stays in section 7.
-  - **Seeded by 1.3.9** (to confirm against the report):
+  - **Seeded by 1.3.9** (to confirm against the report; a later tag adds its own):
     - **New pages:** games (`games.c`), chapters (`chapters.c`), Up Next (`upnext.c`), network update
       (`netupdate.c`, `systemset_fwupdate_page_init`), online match (`onlinematch.c`), Qobuz.
     - **Hooks:** lyric search and cover search (`kugou_obtainlyric`, `kugou_obtaincover`),

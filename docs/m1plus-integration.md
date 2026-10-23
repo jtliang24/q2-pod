@@ -39,23 +39,30 @@ where it isn't.
 - **R5. The docs give both targets.** `building.md` and the README give both targets' commands, and say
   what ships for each device.
 
-## Current status (measured 2026-10-22, after U0)
+## Current status (measured 2026-10-23, at upstream 1.2.2 after U2)
 
-Measured as below, `main` from the vendor ZIP and the branch from `stock/`'s `update.tar`.
+Measured with `test/q2compare.py --suites` against `UPSTREAM_BASE` (1.2.2, `87e2417`), from the vendor
+ZIP.
 
-- **R1 is met.** Legacy and iPod `update.tar` are byte-identical to `main`'s: `8190e0c8…` and `48784f86…`.
-  The manifests still differ, in keys only: `input_sha256` for `input_zip_sha256`, and the new `model`
-  and `logo_source`. The manifest is not in `update.tar`.
-- **R2 is met.** On both Q2 builds, `test/build.py --build`, `test/patch.py` (Legacy 1017, iPod 1398
-  scenarios, one more than `main`'s each; since U1d, upstream's own `test/patch.py`, `main`'s 1016 and
-  1397), `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa`
-  pass, and so do `peq`, `mp3`, `remote`, `coverflow` and `release`.
-- **R3 is met.** `tools/release.py package 'stock/Q2 Firmware V1.32/update.tar'` builds both variants
-  twice, validates them, finds each pair byte-identical and writes both ZIPs and the user guide. The
-  guide's build (`docs/manual/build.py`) needs `pdftotext`, which the devShell lacks: it ran with
-  `nix shell nixpkgs#poppler-utils` on the `PATH`. `test/release.py` passes.
-- **R4 holds.** On the M1 build, `test/build.py --build`, `test/patch.py` (1004 scenarios, no `KNOWN
-  GAP`, 8 `NOT PORTED`) and `test/boot.py` pass: since U1d, their copies in `test/m1plus/`.
+- **R1 is met.** Legacy and iPod `update.tar` are byte-identical to 1.2.2's build: `f617fb2a…` and
+  `16cc5ed1…`.
+- **R2 is met.** 1.2.2's 21 suite runs pass on this tree's builds: `build --build`, `patch` (Legacy 1029,
+  iPod 1410 scenarios, 1.2.2's own), `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa` on
+  each, and `peq`, `mp3`, `remote`, `coverflow` and `release` once.
+- **R3 was last met on Oct 22, at the fork point.** `tools/release.py package 'stock/Q2 Firmware
+  V1.32/update.tar'` built both variants twice, validated them, found each pair byte-identical and wrote
+  both ZIPs and the user guide. The guide's build (`docs/manual/build.py`) needs `pdftotext`, which the
+  devShell lacks: it ran with `nix shell nixpkgs#poppler-utils` on the `PATH`. At 1.2.2, `test/release.py`
+  passes (part of R2); the package step wasn't rerun.
+- **R4 holds.** On a fresh M1 build, `test/m1plus/build.py --build`, `test/m1plus/patch.py` (1017
+  scenarios, no `KNOWN GAP`, 9 `NOT PORTED`), `test/m1plus/boot.py` and `test/m1plus/ports.py` pass, and
+  so do the M1's `playback`, `id3`, `m4b` and `headset_io` and the shared `ldac` and `bluealsa`. Dev 22
+  (`V00Ms`) is the build for the device.
+
+Measured on Oct 22, after U0, `main` from the vendor ZIP and the branch from `stock/`'s `update.tar`: the
+same byte-identity at the fork point (`8190e0c8…`, `48784f86…`), with the manifests differing in keys only
+(`input_sha256` for `input_zip_sha256`, and the new `model` and `logo_source`; the manifest is not in
+`update.tar`).
 
 U0 closed items 1 and 3–9 below. The byte compare then found three more differences, which the
 2026-10-18 measurement had not listed:
