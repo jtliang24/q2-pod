@@ -194,6 +194,7 @@ typedef struct {
         cpu_marked, artist_cf, year_old, resume, lock_clock, artist_az;
 #if M1PLUS
     void *pod_label[11];
+    int knob_mode;    /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
     int knob_reverse; /* Display's Knob Up: 0 List Up (Previous), 1 List Down (Next) */
 #else
     void *pod_label[9];
@@ -257,11 +258,10 @@ typedef struct {
     unsigned lyric_timer; /* runs while the wheel holds the lyrics and stock's timer is stopped */
     /* The Display settings, read from config.ini on first use, and the display page's value labels. */
     int settings_read, accent, home_full, battery, home_rockbox, classic, shortcut;
+    void *setting_label[5];
     unsigned tone_key; /* the wheel key whose press ringnav_keydown silenced, 0 when none */
     int greeted;       /* the first reachable list got its boot repaint */
 #endif
-    int knob_mode;
-    void *setting_label[6];
 #if M1PLUS
     /* A touch long-press (lp_input): its timer, the page and point pressed, set while qm_hold
      * takes the row under that point (lp_touch), and the press's click to swallow. */
