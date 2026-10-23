@@ -1,4 +1,4 @@
 # The upstream Q2 Pod release (DiamondBond/q2-pod) this branch is level with: a tag or commit, then its
 # commit. Q2 Legacy and iPod update.tar must stay byte-identical to its build (test/q2compare.py), and a
-# sync sets it to the tag it merged (docs/m1plus-sync.md). The fork point c0a2d6b is 1.2.2~13.
-c0a2d6b c0a2d6b0887ca0f886627dda3561008b94d3c95e
+# sync sets it to the tag it merged (docs/m1plus-sync.md).
+1.2.2 87e2417e2c0f7a149e83affbaeb6b305c17f6f59

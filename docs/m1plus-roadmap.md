@@ -18,8 +18,9 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** U2, the sync tooling, against 1.2.2, then the first sync to upstream 1.3.9 (U3). Done so far:
-U0 (the Q2 builds are `main`'s again), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
+**Next:** the first full sync, to upstream 1.3.9 (U3). Done so far:
+U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
+now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
 1.3.9-m1.1, after U3), and U1 (the M1 code beside upstream's: +1,417/−279 lines over upstream's files,
 from +6,417/−2,036). The M1 feature work waits until U3 lands: Spotify on the
@@ -153,19 +154,24 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     (+443) and the docs' and tests' M1 notes. It is measured with `git diff --stat <upstream base> --
     <upstream's files>` and recorded in [m1plus-sync.md](m1plus-sync.md#footprint) after U1 and after each
     sync, so that growth shows.
-- **U2. Sync tooling (M).**
-  - **`test/q2compare.py`** ([integration item 12](m1plus-integration.md#work-items), now required). It
-    builds `UPSTREAM_BASE` from `git archive` and this tree, for Legacy and iPod, and compares their
-    `update.tar`. On a difference, it diffs the `manifest.json` component hashes. It replaces the
-    hand-run compare in the checklist.
-  - **`UPSTREAM_BASE`,** a file holding the upstream tag and commit the branch is level with. This is
-    the Q2 baseline that `q2compare.py` and these docs refer to.
-  - **A port report.** It lists every Q2 hook, call site and `offsets.inc` name, and classifies each for
-    M1 as ported, native in V2.1 (section 4's "Not ported, because V2.1 has them"), Q2 only by design, or
-    `NOT PORTED`. It goes in `test/m1plus/`, or is a mode of `test/m1plus/build.py`. A sync's new `NOT PORTED`
-    rows go into U4.
-  - **The `upstream` remote** (`https://github.com/DiamondBond/q2-pod.git`) and the merge recipe in
+- **U2. Sync tooling (M). Done (Oct 23)** ([m1plus-progress.md](m1plus-progress.md) section 39).
+  - **`test/q2compare.py`** ([integration item 12](m1plus-integration.md#work-items)). It builds
+    `UPSTREAM_BASE` from `git archive` and a snapshot of this tree, Legacy and iPod, from the vendor ZIP,
+    and requires byte-identical `update.tar`. On a difference it names the differing `manifest.json`
+    components and the first moved symbol. `--suites` runs the base's suites on the tree's builds. It
+    replaces the hand-run compare in the checklist.
+  - **`UPSTREAM_BASE`**, at the repo's root: the upstream tag and commit the branch is level with, the Q2
+    baseline these docs refer to. It is `1.2.2` (`87e2417`).
+  - **The port report**, `test/m1plus/ports.py`. It lists every Q2 hook, call site and `offsets.inc`
+    name, and classifies each for M1 as ported, native in V2.1, Q2 only, or `NOT PORTED`, from
+    `M1PLUS_PORTS` in `tools/m1plus.py` and `M1_UNPORTED` in `patch/m1plus_offsets.inc`. A hook or site
+    it can't place fails it. A sync's new `NOT PORTED` rows go into U4.
+  - **The `upstream` remote** (`https://github.com/DiamondBond/q2-pod.git`) and the runbook,
     [m1plus-sync.md](m1plus-sync.md).
+  - **A pilot sync to the `1.2.2` tag.** The branch had forked at `c0a2d6b`, 13 commits before the tag.
+    The merge had no conflicts, but the M1 needed three follow-ups: a trampoline stub, two
+    `M1_UNPORTED` names and an unused page. Those, and the new test cases the M1 copies missed, became
+    runbook rules.
 - **U3. First sync: upstream 1.3.9 (L).**
   - Merge the tag, by the [sync runbook](m1plus-sync.md). Don't rebase: `m1plus-progress.md` cites the
     branch's commit hashes.
@@ -176,12 +182,19 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
 - **U4. Upstream features to port (M each, many).** This is the porting queue from now on; section 4 is
   the record for 1.2.2. One row per feature from the port report: its hooks and sites, and what V2.1
   has. Porting follows the ground rules: find it in V2.1's code, then pin it in a test.
-  - **Found by the port report** (U2), in 1.2.2's hooks:
+  - **Found by the port report** (U2), in 1.2.2's hooks and names:
     - **A manual Play/Pause and the headset** (`player_play_pause` → `ringnav_play_pause`). On the Q2
       it calls `headset_manual`, so a headset's automatic resume doesn't undo a pause the user made.
       V2.1's `play_pause_music` is aliased but not hooked. Find its callers in V2.1's `demo` first.
     - **Folder's roots without OTG** (`folder_load_top` → `ringnav_folder_top`). Without a drive, the
       Q2 lists the card alone. Check whether V2.1's Folder lists OTG at all before porting.
+    - **A FLAC's ALBUM ARTIST** (`toolsGetMusicInfo` → `ringnav_music_info`, new in 1.2.2). The Q2 reads
+      foobar2000's spelling when stock's libtag finds no `ALBUMARTIST`. `MUSIC_INFO_ALBUM_ARTIST` is
+      `M1_UNPORTED`. V2.1's `ID3_*` offsets are V1.32's, so check its info struct's `+0x580` first.
+    - **Tidal's cache and Tidal Downloads** (`tidal_play`, `tidal_downloads`, `REC_TIDAL_ID`). On M1
+      `tidal_start` passes no song id, since V2.1's two callers (`0x500d5c`, `0x51c7b0`) keep none, so
+      Tidal streams uncached and there is no Downloads row. V2.1's `get_tidal_trackurl` (`0x512ed0`) hands
+      its URL thread (`0x51c288`) the queue row: the id is to be found there.
     - `NP_INFO_CALL` stays in section 7.
   - **Seeded by 1.3.9** (to confirm against the report):
     - **New pages:** games (`games.c`), chapters (`chapters.c`), Up Next (`upnext.c`), network update
@@ -189,7 +202,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - **Hooks:** lyric search and cover search (`kugou_obtainlyric`, `kugou_obtaincover`),
       `mclLoadExLyric`, the timezone page, `localmusic_playlistsmore_page_init`,
       `toolsQueryDbTableAndSort` and `toolsQueryContentDbTable`, `mclSetOutputWay`, `write_int_config`,
-      `toolsGetMusicInfo`, `toolsIntoStandby`, `player_start_queue`, `networkGetWifiSignal`.
+      `toolsIntoStandby`, `player_start_queue`, `networkGetWifiSignal`.
     - **Call sites:** `FOLDER_NAME`, `BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`, `PLAYER_COVER`,
       `ID3_PATH`, `LYRIC_FOLLOW`, `GRID_COVER`, `SCAN_REFRESH`, `DROP_CACHES`, and the lock screen's
       `lockscreen_access` sites.
