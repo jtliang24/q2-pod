@@ -1438,8 +1438,10 @@ def build(target_path, out, logo, ipod=False, dev=False):
         icons['local_frequentplay.png'] = ('pset_playmode.png', sized_art(cat(xx+'many.png'), 40))
         for n in ('home_q2pod', 'home_q2pod_down'):
             icons[f'{n}.png'] = ('mymusic.png', (ROOT/'assets/icons'/f'{n}.png').read_bytes())
-    stream_airplay_like = 'airplay.png' if m1plus else 'netservice_airplay.png'
-    icons['stream_airplay.png'] = (stream_airplay_like, cat(xx+stream_airplay_like))  # iPod resizes stock's
+    if m1plus:
+        icons['stream_airplay.png'] = ('airplay.png', cat(xx+'airplay.png'))
+    else:
+        icons['stream_airplay.png'] = ('list_tidal.png', cat(xx+'netservice_airplay.png'))  # iPod resizes stock's
     art = (ROOT/'assets/icons/default_album_home.png').read_bytes() if (ipod and not m1plus) else None
     if ipod and not m1plus:  # Streaming's rows draw them at SET_ICON; Home's placeholder at the art panel's 290px
         for n in ('spotify', 'radio', 'airplay'):
