@@ -38,7 +38,7 @@ python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out /tmp/m1plus-build   # o
 M1 Plus has only the Stock UI so far: `--ipod` is refused for it.
 
 M1 Plus work must not break the Q2. Q2 builds stay byte-identical to the build of the upstream release the
-branch is level with, and every Q2 test keeps passing. The rule, the current differences and how to check
+branch is level with, and every Q2 test keeps passing. The rule, its status and how to check
 are in [m1plus-integration.md](m1plus-integration.md). How to bring in a new upstream release is in
 [m1plus-sync.md](m1plus-sync.md), and how to release for the M1 Plus is in
 [m1plus-releasing.md](m1plus-releasing.md).

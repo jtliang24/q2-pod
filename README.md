@@ -56,7 +56,7 @@
 >
 > Flashing firmware carries risk. Back up anything on the card you can't lose before you start.
 
-1. **Download** `Q2.Firmware.*.zip` (for Q2) from the [latest release](https://github.com/DiamondBond/q2-pod/releases/latest), or `M1Plus.Firmware.*.zip` (for M1 Plus) from [the M1 Plus releases](https://github.com/jtliang24/q2-pod/releases), and unzip it.
+1. **Download** `Q2.Firmware.*.zip` (for Q2) from the [latest release](https://github.com/DiamondBond/q2-pod/releases/latest), or `M1Plus.Firmware.*.zip` (for M1 Plus) from [the M1 Plus releases](https://github.com/jtliang24/q2-pod/releases) (none yet: the first comes after the next upstream sync; until then, [build it](docs/building.md)), and unzip it.
 2. **Plug your device into your computer** with the USB-C cable. The card shows up as a drive.
 3. **Copy the update archive** to the **root** of the card (copy `update.tar` for Q2 or `update.bin` for M1 Plus, not inside a folder), then eject and unplug.
 4. **Update:** open **System settings → System Update → TF card update**. Leave the card in until the player restarts.
