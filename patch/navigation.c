@@ -2284,13 +2284,22 @@ static const unsigned char sysset_order[] = {
     11 /* About */,
 };
 
+#if M1PLUS
 static void audioset_rows(void *win) {
     static const char *const icons[] = { ICON_COVERMODE, ICON_FOLDERJUMP };
+#else
+int ringnav_audioset(void *win, void *ctx) {
+    static const char *const icons[] = { ICON_COVERMODE, ICON_FOLDERJUMP };
+    int result = stock_audioset_trampoline(win, ctx);
+#endif
     pod_rows(win, VIEW_PLAYSET, POD_YEAR_OLD, 2, icons);
     pod_rows(win, VIEW_PLAYSET, POD_ARTIST_AZ, 1, icons);
     void *view = win ? widget_lookup(win, VIEW_PLAYSET, 1) : (void *)0;
     if (view) xfade_row(list_row(view, ICON_GAPLESS, xfade_open, (void *)0)); /* crossfade.c */
     reorder(view, playset_order, sizeof playset_order);
+#if !M1PLUS
+    return result;
+#endif
 }
 #if M1PLUS
 /* V2.1 rebuilds the list whole, stock's rows only, each time the page comes back to the front (from
@@ -2303,15 +2312,13 @@ static int audioset_again(void *win, void *event) {
     audioset_rows(win);
     return 0;
 }
-#endif
 int ringnav_audioset(void *win, void *ctx) {
-#if M1PLUS
     if (win) widget_on(win, EVT_WINDOW_FOREGROUND, audioset_again, win);
-#endif
     int result = stock_audioset_trampoline(win, ctx);
     audioset_rows(win);
     return result;
 }
+#endif
 
 /* Nearest collected ancestor of a tap: a clickable child selects the row that owns it. */
 static int selects(menu_t *m, void *target) {
