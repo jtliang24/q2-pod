@@ -345,8 +345,9 @@ class Machine:
         elif name=='atoi@GLIBC_2.0': ret=int(re.match(r'[+-]?\d+',self.text(a))[0]) if re.match(r'[+-]?\d+',self.text(a)) else 0
         elif name=='access@GLIBC_2.0': ret=0 if self.text(a) in self.present else -1
         elif name=='rockbox_stat':
-            assert a==3 and self.text(b)=='/mnt/mmc/.rockbox/rockbox'
-            self.word(c+20,self.rockbox_mode); ret=0 if self.rockbox_mode else -1
+            assert a==3
+            if self.text(b)!='/mnt/mmc/.rockbox/rockbox': ret=-1  # Tidal Downloads' rows: no such files here
+            else: self.word(c+20,self.rockbox_mode); ret=0 if self.rockbox_mode else -1
         elif name=='strlen@GLIBC_2.0': ret=len(self.text(a).encode())
         elif name=='strcpy@GLIBC_2.0': self.u.mem_write(a,self.text(b).encode()+b'\0'); ret=a
         elif name=='strrchr@GLIBC_2.0': i=self.text(a).encode().rfind(bytes([b&255])); ret=a+i if i>=0 else 0
@@ -1131,7 +1132,7 @@ def check_title_bounds(m, button, drill=False):
                     name=m.nodes[c]['name']
                     m.nodes[c]['visible']=choice if name.startswith('img_choice') else controls if c in children[children.index(text)+1:] else artwork
                 # Rebind the same row with different strings, then repeat layout (scroll/reuse).
-                for label in ('Short','A very long title '*12,'日本語の長い曲名と歌手 — සිංහල — العربية'):
+                for label in ('Short','A very long title '*12,'日本語の長い曲名と歌手 - සිංහල - العربية'):
                     m.nodes[title]['text']=label
                     native_row_layout(m,button)
                     before=children[:children.index(text)]
@@ -4385,7 +4386,7 @@ if variant=='ipod':
     # Classic: Home's accent bar spans the list and the chevron rides it alone.
     m=Machine(); m.config['THEME']='1'; view,imgs=home_list(m); click_target(m,imgs[2]); m.clip=(0,0,375,320)
     m.paint(view)
-    cbar=lambda: [(HOME_LIST_W-half+6,m.sel()[1]+HOME_ROW//2,(0,0,HOME_LIST_W,7*HOME_ROW))]
+    cbar=lambda: [(HOME_LIST_W-half+O['HOME_CHEVRON_SHIFT'],m.sel()[1]+HOME_ROW//2,(0,0,HOME_LIST_W,7*HOME_ROW))]
     assert m.sel()==(0,0,HOME_LIST_W,HOME_ROW) and m.icons==cbar() and not m.rounded
     assert m.bands[0][4]==color_t(ACCENTS[0][0]) and loaded(m)==['list_into'] and m.clip==(0,0,375,320)
     m.call(); m.paint(view); assert m.selected(view)==1 and m.sel()[1]>0 and m.icons==cbar(); passed()
@@ -4452,9 +4453,12 @@ if variant=='ipod':
     paint_live_bar()
     idle=named(m,bar,'label_idle'); state=named(m,bar,'img_state'); eq=named(m,bar,'label_eq')
     clock_box=tuple(m.get(title+O[k]) for k in ('W_X','W_Y','W_W','W_H'))
-    for playing,equalizer,icon in ((0,0,''),(1,0,'bar_play'),(1,0,'bar_pause'),(0,1,''),(1,1,'bar_play'),(0,0,'')):
-        m.nodes[state].update(visible=playing,image=icon); m.nodes[eq]['visible']=equalizer
-        paint_live_bar()
+    # bar_sync shows the play state (here local's, mclGetPlayStatus: 2 playing, 3 paused) itself.
+    m.handlers.pop(syms['mclGetPlayStatus'],None)
+    for status,equalizer,icon in ((0,0,''),(2,0,'bar_play'),(3,0,'bar_pause'),(0,1,''),(2,1,'bar_play'),(0,0,'')):
+        m.word(0xa3beac,status); m.nodes[eq]['visible']=equalizer
+        paint_live_bar(); playing=int(bool(icon))
+        assert m.nodes[state]['visible']==playing and (not playing or m.nodes[state]['image']==icon)
         assert m.nodes[idle]['visible']==int(not playing and not equalizer)
         assert tuple(m.get(title+O[k]) for k in ('W_X','W_Y','W_W','W_H'))==clock_box
     passed()
@@ -5060,7 +5064,7 @@ def cf_jump(m,at,direction):
     steps=m.call(address=symbols(B/'patch.elf')['coverflow_jump'],args=(m.slide,at,direction,letter),gap=0)
     return steps,m.get(letter)
 m=CoverflowMachine(albums=8)
-for r,name in zip(m.albums,['Apple One','The Apple','Dawn','Dusk','Zulu','9 Lives','—Noise','Été']):
+for r,name in zip(m.albums,['Apple One','The Apple','Dawn','Dusk','Zulu','9 Lives','-Noise','Été']):
     m.word(r+O['REC_ALBUM'],m.string(name))
 m.open()
 assert cf_jump(m,0,1)==(2,ord('D')) and cf_jump(m,3,-1)==(3,ord('A'))
@@ -5069,7 +5073,7 @@ assert cf_jump(m,5,1)==(2,ord('É')) and cf_jump(m,7,1)==(1,0)
 assert cf_jump(m,0,-1)==(1,0) and cf_jump(m,1,-1)==(2,0)
 assert cf_jump(m,8,1)==(1,0) and cf_jump(m,9,1)==(1,0); passed()
 # Unicode punctuation/numbers and missing names share #; letters retain their codepoints.
-for name,want in (('١ Song',ord('#')),('० Song',ord('#')),('—Song',ord('#')),('',ord('#')),
+for name,want in (('١ Song',ord('#')),('० Song',ord('#')),('-Song',ord('#')),('',ord('#')),
                   ('Жизнь',ord('Ж')),('東京',ord('東')),('Ａ Song',ord('Ａ')),('Ｂ Song',ord('Ｂ')),
                   ('Ⰰ Song',ord('Ⰰ'))):
     m=CoverflowMachine(albums=2)
@@ -5220,6 +5224,8 @@ for found,want in (((('b.mp3','/p/b.mp3',2,1),('a.mp3','/p/a.mp3',1,2),('c.mp3',
                    ((('Mr. Blue','/p/img.flac',0,0,300),('Intro','/p/img.flac'),('01 x.flac','/p/01 x.flac')),['01 x','Intro','Mr. Blue'])):
     m=CoverflowMachine(); m.found=[track(m,*t) for t in found]; m.open(); view=m.tracks()
     assert [m.nodes[m.nodes[i]['children'][0]].get('text') for i in m.nodes[view]['children']]==want
+    assert all(m.nodes[m.nodes[i]['children'][0]]['style']=='s_scrlabel_white20c' for i in m.nodes[view]['children'])
+    body=next(n for n in m.nodes.values() if m.find('list_view') in n.get('children',())); assert m.nodes[body['children'][0]]['style:normal:font_size']==O['CF_NAME_PX']
     f,ctx=m.handler(m.nodes[view]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     assert [n.rsplit('.',1)[0] if n.endswith(('.mp3','.flac')) else n for n in m.names(m.plays[-1][1]&0xffffffff)]==want; passed()
 
@@ -7068,7 +7074,8 @@ def home_settings(full,classic=0):
             m.clip=(0,0,375,320); m.paint(v)
             roww=O['HOME_CLASSIC_ROW'] if full else O['HOME_SPLIT_W']
             x,y,_=m.icons[0]
-            assert x==roww-O['CHEVRON_W']+25+6 and y==m.sel()[1]+HOME_ROW//2
+            shift=O['HOME_FULL_CHEVRON_SHIFT'] if full else O['HOME_CHEVRON_SHIFT']
+            assert x==roww-O['CHEVRON_W']+25+shift and y==m.sel()[1]+HOME_ROW//2
             # Check the shipped glyph's ink, including its tapered ends, against the glass.
             for ix,iy in ink:
                 inset=corner_inset(30+y-25+iy)
@@ -7968,12 +7975,19 @@ def streaming(m):
     else:
         view=m.node('scroll_view','scroll_view_streamsset',[m.node('list_item')]); m.top=m.node('window','stream_page',[view])
         assert m.call(address=HOOKS['stream_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0 and m.calls[0][0]=='stock_stream'
-        rows=m.nodes[view]['children']; assert len(rows)==4
-        names=[None,'Spotify','Internet Radio','AirPlay']
+        rows=m.nodes[view]['children']; assert len(rows)==5
+        names=[None,'Spotify','Tidal Downloads','Internet Radio','AirPlay']
     return {n:row_button(m,r) for n,r in zip(names,rows) if n}
 def stream_page(m):
     """Streaming's rows; returns Spotify's button."""
     rows=streaming(m)
+    if not is_m1plus:  # Tidal Downloads, after Spotify: the card's cached Tidal tracks, here none. M1: no row (U4)
+        tidal=rows['Tidal Downloads']; icon,label=m.nodes[tidal]['children'][:2]
+        assert m.nodes[icon]['image']=='list_tidal' and m.nodes[label]['text']=='Tidal Downloads'
+        top=m.top; f,ctx=m.handler(tidal,O['EVT_CLICK']); m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
+        assert [m.text(c[1]) for c in m.calls if c[0]=='toolsLoadDirectory']==['/mnt/mmc/.tidal']
+        assert m.nodes[m.top]['name']=='tidal_downloads' and 'No downloads yet' in [n.get('text') for n in m.nodes.values()]
+        f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.top=top
     # AirPlay, last: stock's own receiver, its switch on System settings' Network service page, one press away.
     airplay=rows['AirPlay']; icon,label=m.nodes[airplay]['children'][:2]
     assert m.nodes[icon]['image']=='stream_airplay' and m.nodes[label]['text']=='AirPlay'
@@ -8003,9 +8017,9 @@ page=spot_open(m,button); info,msg=np_views(m,page)
 assert not m.nodes[info]['visible'] and m.nodes[msg]['visible'] and texts(msg)==["Spotify isn't on the card",'See the Q2 Pod guide to add it']
 m.poll(); assert not m.systems; m.close(); passed()
 # With it, the first open starts it once (its launcher backgrounds itself); with no state yet, or no
-# Connect session, the page asks for the phone.
+# Connect session, the page waits for a confirmed authentication response.
 m=SpotMachine({BIN:bytearray()}); button=stream_page(m); page=spot_open(m,button); info,msg=np_views(m,page)
-assert m.systems==['/bin/sh /mnt/mmc/.spotify/run'] and texts(msg)==['Open Spotify on your phone','and choose Q2']
+assert m.systems==['/bin/sh /mnt/mmc/.spotify/run'] and texts(msg)==['Loading…','Waiting for Spotify']
 m.state('none',track=''); m.poll(); m.advance(250); assert m.nodes[msg]['visible'] and not m.nodes[info]['visible']
 m.close(); spot_open(m,button); assert len(m.systems)==1; m.close(); passed()
 # Until the row is opened nothing Spotify runs, a saved login on the card or not: no start, no
@@ -8040,6 +8054,9 @@ m.state('playing',position=10000,at=m.now+500,cover=1); m.files[STATE+'.jpg']=by
 assert m.nodes[info]['visible'] and not m.nodes[msg]['visible']
 assert m.thumbs==[(STATE+'.jpg','/tmp/q2spot.jpg',O['SPOT_ART_PX'],O['SPOT_ART_PX'])] and 'file:///tmp/q2spot.jpg' in [m.text(c[2]) for c in m.calls if c[0]=='widget_load_image']
 assert texts(info)==['Spotify','Song','A, B','LP',mmss('0:10'),mmss('-3:10')]
+for value in ('Song','A, B','LP'):
+    w=next(w for w in m.nodes if under(w,info) and m.nodes[w].get('text')==value)
+    assert m.nodes[w]['hscroll_label_set_only_focus']==0 and m.nodes[w]['hscroll_label_set_ellipses']==0
 for text, rgb in [('Song', 0xffffff), ('A, B', O['NP_ARTIST_RGB'] if variant=='ipod' else 0xaaaaaa), ('LP', O['NP_ALBUM_RGB'] if variant=='ipod' else 0xaaaaaa)]:
     label=next(w for w in m.nodes if under(w,info) and m.nodes[w].get('text')==text)
     assert m.nodes[label]['style:normal:text_color']==signed(color_t(rgb))
@@ -8375,11 +8392,17 @@ def track(uri,title,ctx='',pos=''): return ('track',uri,title,'An Artist',ctx,po
 # signed in, the menu: Now Playing, Queue and Playback settings only with a track.
 m=BrowseMachine(); m.open(); assert m.labels()==['Loading…'] and m.systems==['/bin/sh /mnt/mmc/.spotify/run']
 m.answer(*ME); assert m.wire==[b'Q2SPOT/1\n1\taccount\n']
-MENU=['Spotify','Liked Songs','Playlists','Albums','Artists','Search','Account']
+MENU=['Spotify','Liked Songs','Playlists','Albums','Artists','Search','Account','Downloaded Tracks']
 assert m.labels()==MENU
 m.state('playing'); m.poll(); m.advance(250)
-assert m.labels()==['Spotify','Now Playing','Liked Songs','Playlists','Albums','Artists','Search','Queue','Playback Settings','Account']
+assert m.labels()==['Spotify','Now Playing','Liked Songs','Playlists','Albums','Artists','Search','Queue','Playback Settings','Account','Downloaded Tracks']
 m.row(0); assert m.nodes[m.top]['name']=='spotify_page'; m.destroy(m.top); m.top=m.page; m.state('none',track=''); m.poll(); m.advance(250); assert m.labels()==MENU; passed()
+# Downloaded tracks stay reachable while the service cannot answer catalogue requests, and a row
+# uses the cache-only play operation.
+m.row(6); assert m.asked()==('downloaded',)
+m.answer(*OK,[track('spotify:track:cached','Cached')])
+m.row(0); assert m.asked()==('playdownload','spotify:track:cached')
+m.answer(*OK,[]); assert m.nodes[m.top]['name']=='spotify_page'; m.destroy(m.top); m.top=m.page; m.back(); passed()
 # Loading, an error with Retry (offline, throttled, error, or no answer), one without, and empty.
 m.row(0); assert m.labels()==['Loading…'] and m.asked()==('liked',)
 m.answer('offline',"Spotify can't be reached",'',[]); assert m.labels()==["Spotify can't be reached",'Retry']
@@ -8515,6 +8538,64 @@ assert m.now-start>=15000 and not m.wire and m.labels()==["Spotify didn't answer
 m.stalled=False; m.row(0); m.answer(*ME); m.row(0); m.answer(*OK,[track('spotify:track:1','One')])
 m.row(0); assert m.asked()==('play','spotify:track:1'); m.back(); assert m.labels()==MENU
 assert m.get(payload_syms['wk']+32)==0; m.advance(1000); assert m.top==m.page; passed()
+
+# A successful play waits for the requested track, including offline playback. Missing metadata
+# and another track's position updates cannot flash pairing or reveal the previous track.
+for size in (1, 2, 3, 4, 255, 256):
+    m=SpotMachine({}); out=m.alloc(300); title='A汉字é'*80
+    m.call(address=payload_syms['field'],args=(m.string('\ntitle='+title+'\n'),m.string('title'),out,size),gap=0)
+    assert m.text(out)==title.encode()[:size-1].decode('utf-8',errors='ignore')
+passed()
+for op in ('liked','downloaded'):
+    m=BrowseMachine(); m.open(); m.answer(*ME)
+    m.state('paused',track='old'); m.poll(); m.advance(250)
+    m.row(1 if op=='liked' else 9)
+    m.answer(*OK,[track('spotify:track:new','New')]); m.row(0); m.answer(*OK,[])
+    np=m.top; info,msg=np_views(m,np)
+    assert texts(msg)==['Loading…','Starting playback'] and not m.nodes[info]['visible']
+    m.state('playing',track='old',position=2000); m.poll(); m.advance(250)
+    assert m.nodes[msg]['visible'] and texts(msg)[0]=='Loading…'
+    m.state('none',track=''); m.poll(); m.advance(250)
+    assert texts(msg)[0]=='Loading…'
+    m.state('playing',track='new',title='相同的标题 Long title '*6,artist='Long artist 艺术家 '*6,album='Long album 专辑 '*6)
+    m.poll(); m.advance(250)
+    assert m.nodes[info]['visible'] and not m.nodes[msg]['visible']
+    assert texts(info)[1:4]==['相同的标题 Long title '*6,'Long artist 艺术家 '*6,'Long album 专辑 '*6]
+    # Same title, different artist and album: all three fields have their own change detection.
+    m.state('paused',track='next',title='相同的标题 Long title '*6,artist='Other 艺术家',album='Other 专辑')
+    m.poll(); m.advance(250); assert texts(info)[2:4]==['Other 艺术家','Other 专辑']
+    fields=[w for w in m.nodes if under(w,info) and m.nodes[w].get('text') in texts(info)[1:4]]
+    assert all(m.nodes[w]['xoffset']==0 for w in fields)
+    m.state('stopped',track=''); m.poll(); m.advance(250)
+    assert texts(msg)==['Nothing playing','Choose music in Spotify']
+    m.state('none',track=''); m.poll(); m.advance(250)
+    assert 'Open Spotify on your phone' not in texts(msg)
+    passed()
+
+# Metadata can also precede the acknowledgement: do not wait for a second state change.
+m=BrowseMachine(); m.open(); m.answer(*ME); m.row(0)
+m.answer(*OK,[track('spotify:track:early','Early')]); m.row(0)
+m.state('playing',track='early',title='Early'); m.poll(); m.answer(*OK,[])
+info,msg=np_views(m,m.top); assert m.nodes[info]['visible'] and texts(info)[1]=='Early'
+passed()
+# A relinked track (another id than asked for) is the play's too.
+m=BrowseMachine(); m.open(); m.answer(*ME); m.row(0)
+m.answer(*OK,[track('spotify:track:asked','Asked')]); m.row(0); m.answer(*OK,[])
+m.state('playing',track='relinked',title='Asked'); m.poll(); m.advance(250)
+info,msg=np_views(m,m.top); assert m.nodes[info]['visible'] and texts(info)[1]=='Asked'
+passed()
+
+# The loading wait is bounded, does not repeat play, and accepts late metadata after a timeout.
+m=BrowseMachine(); m.open(); m.answer(*ME); m.row(0)
+m.answer(*OK,[track('spotify:track:late','Late')]); m.row(0); m.answer(*OK,[])
+np=m.top; info,msg=np_views(m,np); requests=len(m.requests)
+m.advance(15250)
+assert texts(msg)==["Playback didn't start",'Go back and try again'] and len(m.requests)==requests
+m.state('playing',track='late'); m.poll(); m.advance(250); assert m.nodes[info]['visible']
+m.destroy(np); m.top=m.page; m.back(); m.row(8); m.answer(*ME); m.row(1); m.row(1); m.answer(*OK,[])
+m.call(address=payload_syms['spot_np'],args=(0,0,0,0),gap=0,count=5_000_000)
+info,msg=np_views(m,m.top); assert texts(msg)==['Open Spotify on your phone','and choose Q2']
+passed()
 
 # About: FW. Version shows the stock firmware's version again, not the updater tag in demo's
 # literal, and a CFW. Version row follows it. Stock's own row builder (0x4bc274) builds Model and FW.
@@ -8837,6 +8918,37 @@ if not is_m1plus:
     passed()
 else:
     not_ported('Artists defaults to Album Artist (read_artistype_value not hooked in V2.1)')
+# A FLAC's "ALBUM ARTIST" comment (foobar2000's spelling) when stock's libtag found no ALBUMARTIST (ringnav_music_info).
+if 'toolsGetMusicInfo' in HOOKS:
+    class TagMachine(BooksMachine):
+        def __init__(self,files):
+            super().__init__({},files); self.stock_artist=b''
+            tramp=int(manifest['patch_symbols']['stock_music_info_trampoline'],16)
+            self.handlers[tramp]='stock_music_info'; self.u.hook_add(UC_HOOK_CODE,self.hook,begin=tramp,end=tramp)
+        def hook(self,u,address,size,unused):
+            if self.handlers.get(address)!='stock_music_info': return super().hook(u,address,size,unused)
+            u.mem_write(u.reg_read(UC_MIPS_REG_A1)+0x580,self.stock_artist+b'\0')
+            u.reg_write(UC_MIPS_REG_V0,1); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+        def album_artist(self,path,stock=b''):
+            self.stock_artist=stock; info=self.alloc(0x6a0); p=self.alloc(256); self.u.mem_write(p,path.encode()+b'\0')
+            assert self.call(address=HOOKS['toolsGetMusicInfo'][0],args=(0,info,p,0),gap=0)==1
+            return self.text(info+0x580)
+    def flac(*comments,picture=0):
+        vc=struct.pack('<I',6)+b'vendor'+struct.pack('<I',len(comments))+b''.join(struct.pack('<I',len(c))+c for c in comments)
+        blocks=[(0,bytes(34))]+([(6,bytes(picture))] if picture else [])+[(4,vc)]
+        return bytearray(b'fLaC'+b''.join(bytes([t|(0x80 if i==len(blocks)-1 else 0)])+len(d).to_bytes(3,'big')+d
+                                          for i,(t,d) in enumerate(blocks))+b'audio')
+    t=TagMachine({'/mnt/mmc/a.flac':flac(b'ARTIST=Chikoi The Maid',b'Album Artist=Chikoi The Maid',picture=70000),
+                  '/mnt/mmc/b.flac':flac(b'ARTIST=Evan Call'),'/mnt/mmc/c.FLAC':flac(b'ALBUM ARTIST='+b'x'*300),
+                  '/mnt/mmc/d.mp3':flac(b'ALBUM ARTIST=No')})
+    assert t.album_artist('/mnt/mmc/a.flac')=='Chikoi The Maid'
+    assert t.album_artist('/mnt/mmc/a.flac',b'Stock')=='Stock'  # stock's ALBUMARTIST wins
+    assert t.album_artist('/mnt/mmc/b.flac')=='' and t.album_artist('/mnt/mmc/c.FLAC')=='x'*255
+    assert t.album_artist('/mnt/mmc/d.mp3')=='' and t.album_artist('/mnt/mmc/none.flac')==''
+    assert not t.handles  # every file closed
+    passed()
+else:
+    not_ported('FLAC ALBUM ARTIST (toolsGetMusicInfo not hooked in V2.1)')
 # Boot reads it too (ringnav_bootmode), so Audio settings shows it before any Library page has opened.
 if 'BOOT_MODE_CALL' in SITES:
     for config,text in (({},'Artists: Album Artist'),({'ARTISTTYPE':'0'},'Artists: Artist')):
@@ -9441,7 +9553,7 @@ class HeadsetMachine(Machine):
         elif name.endswith('_session'): ret=self.session
         elif name.endswith('_set_playing'): self.playing=bool(a); self.actions.append((owner,'play' if a else 'pause'))
         elif name=='local_toggle': self.playing=not self.playing; self.actions.append((1,'play' if self.playing else 'pause'))
-        else: self.actions.append((owner,a if owner!=1 else name))
+        else: self.actions.append((owner,a if owner!=1 else name)); ret=int(name.endswith('_media') and self.owner==owner)
         u.reg_write(UC_MIPS_REG_V0,ret); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
     def fn(self,name,value=0,gap=0): return self.call(address=payload_syms[name],args=(value,0,0,0),gap=gap)
     def ears(self,mask,gap=100): return self.fn('headset_ears',4|mask,gap)
@@ -9549,6 +9661,11 @@ passed()
 # Stock Tidal shares the native queue controls and session cancellation.
 m=HeadsetMachine(); m.word(O['MCL_TYPE'],2); m.ears(3); m.ears(1); assert not m.playing
 m.ears(3); assert m.playing; m.command(163); assert m.actions[-1]==(1,'local_next'); passed()
+# A focused streaming page owns the keys: Spotify's while it runs, else the owner's; Tidal's are local's.
+for owner,page,want in ((2,'spotbrowse_page',[(2,O['KEY_PLAY'])]),(1,'spotify_page',[(2,O['KEY_PLAY']),(1,'pause')]),
+                        (3,'radionp_page',[(3,O['KEY_PLAY'])]),(2,'tidal_downloads',[(1,'pause')]),(2,'home_page',[(2,O['KEY_PLAY'])])):
+    m=HeadsetMachine(owner); m.top=m.node('window',page,[])
+    m.fn('media_key',O['KEY_PLAY']); assert m.actions==want,(page,m.actions); passed()
 # Resume on connect (docs/internals.md#resume-on-connect), local music and Spotify. Off (default): a
 # headset's PLAY within CONNECT_HOLD_MS (5 s) of the link starts nothing, a later one plays. On: it plays.
 for owner in (1,2):
