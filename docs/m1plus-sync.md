@@ -94,6 +94,13 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
      string. On M1 the Q2's string is a style V2.1's theme lacks, and the widget stays unstyled: 1.2.2's
      Coverflow tracks came out grey and left-aligned on dev 21. `test/m1plus/patch.py` fails on a style
      the payload sets that V2.1's theme lacks; nothing checks views and icons.
+   - **A V1.32 number in shared C**: a load class, or a stock address called directly. Nothing fails on
+     one. List the tag's hex literals with `git diff <old base> <tag> -- 'patch/*.c' | grep '^+' | grep
+     -E '0x[0-9a-f]{4,}'`, and check each against V2.1's `demo` (`llvm-objdump -d` on the gated build's
+     `stock-demo`). 1.3.0's artist albums took V1.32's `0xff11` where V2.1 loads `0xff01`; 1.3.9's
+     Frequent and Recent (`0xf008`, `0xf007`) are V2.1's too (`guide_page_init`). An address goes in
+     `offsets.inc` before its code runs on M1; until then the hook or site that reaches it stays
+     unported (1.3.9's `ringnav_lyric_rows`).
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
      `test/m1plus/`.
    - **Upstream's new test cases**, conflict or not: review `git diff <old base> <tag> -- test/`. The
@@ -140,7 +147,8 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    the sync touched, over q2remote where it can reach them. Stay on the build afterwards; the menu
    updater with stock `update.bin` is only for a catastrophic error (a boot loop, demo crashing at
    start, dead touch input). Keep the screen awake for touch checks: touch still works on a dark
-   screen, but the hold menu and other gated input refuse it.
+   screen, but the hold menu and other gated input refuse it. Set System Setting → Display setting →
+   Screen Off to Off for the pass (`[SYSSET] LIGHTTIME` 0), and put the user's value back after.
 6. **Land.** Merge `sync/<tag>` into `feature/m1plus-port` with `--no-ff`.
 7. **Release.** Add a `- **<tag>-m1.1**:` entry to [m1plus-changelog.md](m1plus-changelog.md), then
    release by [m1plus-releasing.md](m1plus-releasing.md).
