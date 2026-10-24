@@ -4453,7 +4453,7 @@ static void fav_titles(void *list, int n) {
 }
 int ringnav_localclass(int cls) {
     I(g_artist_type, 0) = I(artist_type, 0) == 1;
-    library_music = cls == CLASS_ALBUMS || cls == 0xf004 || cls == 0xff10 || cls == 0xff11;
+    library_music = cls == CLASS_ALBUMS || cls == 0xf004 || cls == 0xff10 || cls == CLASS_LOAD_ARTIST_ALBUMS;
     int n = stock_localclass_trampoline(cls);
     void *list = P(p_deque_showlist, 0), *dir = P(tools_pdeq_directory, 0), *a = album_opened();
     if (n > 0 && cls == 0xff10 && a) album_only(list, a, 0), n = (int)deque_size(list);
