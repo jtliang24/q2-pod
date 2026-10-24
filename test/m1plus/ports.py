@@ -52,7 +52,25 @@ def report():
         else: rows.append(('name', name, 'ported', ''))
     problems += [f'name {name}: M1_UNPORTED, but the Q2 has no such name'
                  for name, value in m1.items() if value == 'M1_UNPORTED' and name not in q2]
+    # CALL_SITES['q2'] mirrors build.py's call-site constants; one build() patches that the mirror lacks
+    # (a sync's new site) fails, so the report sees it.
+    problems += [f'site {name}: tools/build.py patches it, but CALL_SITES["q2"] has no entry; mirror it there'
+                 for name in build_sites() if name not in CALL_SITES['q2'] and name not in SITE_PARTS]
     return rows, problems
+
+
+# build.py constants that are part of a mirrored site, under its name.
+SITE_PARTS = {'ALBUM_ART_ROW': 'ALBUM_ART'}
+
+
+def build_sites():
+    """The module constants tools/build.py's build() hands to patch_word, by name: `patch_word(patched,
+    *NAME` and `for ... in NAME:` before a patch_word."""
+    text = (ROOT/'tools/build.py').read_text()
+    consts = set(re.findall(r'^([A-Z][A-Z0-9_]+) = \(', text, re.M))
+    used = set(re.findall(r'patch_word\(patched, \*?([A-Z][A-Z0-9_]+)\b', text))
+    used |= set(re.findall(r'^\s+for [\w, ]+ in ([A-Z][A-Z0-9_]+):\n(?:\s+check\(.*\n.*\n)?\s+patch_word\(', text, re.M))
+    return sorted(used & consts)
 
 
 def main():

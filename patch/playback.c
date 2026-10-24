@@ -9,10 +9,13 @@
 #define CHECKPOINT_FILE QUEUE_FILE "-elapsed"
 #define QUEUE_LIMIT 65536
 #define HISTORY_LIMIT 4096
+/* ponytail: a larger queue is not kept across a reboot, as the snapshot is the whole queue, rewritten
+ * each track change; save the order once and positions after to lift it. */
+#define SAVE_LIMIT 999
 extern int stock_load_trampoline(void *, int, int), stock_next_trampoline(int),
     stock_prev_trampoline(void), stock_mode_trampoline(int), stock_preload_trampoline(void),
     stock_memory_trampoline(void *), stock_savequeue_trampoline(void), stock_change_trampoline(int),
-    stock_speed_trampoline(int), stock_open_preload_trampoline(void);
+    stock_speed_trampoline(int), stock_open_preload_trampoline(void), stock_start_queue_trampoline(int);
 extern void *staged(int (*)(void *), void *, int *);
 extern int album_before(const void *, const void *), folder_cmp(void *, void *),
     album_only(void *, void *, int);
@@ -36,6 +39,9 @@ static playback s __attribute__((section(".scratch")));
  * so stock's Next draws a random one instead: ringnav_shuffle returns to it (playback_back).
  * back_to is that index + 1, back_at where Previous landed. */
 static int back_to __attribute__((section(".scratch"))), back_at __attribute__((section(".scratch")));
+/* Shuffle Songs is one-shot: the stock mode it replaced + 1, which the next other queue restores.
+ * ponytail: RAM only, so a reboot mid-shuffle keeps Shuffle; a queue-file header field fixes it. */
+static int unshuffle __attribute__((section(".scratch")));
 /* The wheel's ticks. Stock's encoder thread looks at the wheel once per 80 ms (200 ms after
  * touching) and ticks at most once a look, dropping any travel past its threshold: on the device
  * a tick took 27 units of travel against a threshold of 12, a fast half turn gave a single tick,
@@ -86,7 +92,40 @@ void wheel_set_pct(int n) {
 }
 
 #if !M1PLUS /* the Q2 touch wheel (ts_read); M1 Plus has a knob */
+/* Volume guard (Power, Q2POD VOLGUARD, off by default; navigation.c's pod rows set wheel_guard):
+ * screen off, a pocket brush must not move the volume (#46). A touch's travel one way counts in
+ * wh_guard (1/16 unit) and ticks nothing; past WHEEL_DARK_GUARD the wheel is open (DARK_OPEN) and
+ * ticks as lit, reversals too, across lifts. A reversal or a lift before then, or WHEEL_DARK_IDLE_MS
+ * without travel, arms it again; so does the screen on. The guard's travel is dropped, not ticked:
+ * it is the dead zone, so a brush past it moves the volume by its excess only. */
+#define DARK_OPEN (WHEEL_DARK_GUARD * WHEEL_FINE)
+int wheel_guard __attribute__((section(".scratch")));
+static int wh_guard __attribute__((section(".scratch")));
+static unsigned wh_dark_at __attribute__((section(".scratch"))); /* the last dark travel */
+void wheel_guard_reset(void) { wh_guard = 0; }
+static int dark_held(int *delta) {
+    int d = *delta;
+    if (g_backlight_status || !wheel_guard) return wh_guard = 0;
+    unsigned now = (unsigned)time_now_ms();
+    if (now - wh_dark_at >= WHEEL_DARK_IDLE_MS || (d && wh_guard != DARK_OPEN && (d ^ wh_guard) < 0))
+        wh_guard = 0;
+    if (d) wh_dark_at = now;
+    if (wh_guard == DARK_OPEN) return 0;
+    wh_acc = 0;
+    wh_guard += d;
+    if (wh_guard >= DARK_OPEN || wh_guard <= -DARK_OPEN) {
+        *delta = wh_guard > 0 ? wh_guard - DARK_OPEN : wh_guard + DARK_OPEN;
+        wh_guard = DARK_OPEN;
+        return 0;
+    }
+    return 1;
+}
+
 static void wheel_post(char *info, int key) {
+    /* Read unlocked: off by one at worst, and the headroom covers it. */
+    unsigned short *q = *(unsigned short **)(*(char **)(info + WHEEL_INFO_LOOP) + LOOP_QUEUE);
+    int used = q[2] ? q[3] : (q[1] - q[0] + q[3]) % q[3];
+    if (q[3] - used < WHEEL_QUEUE_FREE + 2) return;
     for (int type = 0x110; type <= 0x114; type += 4) { /* key down, then up */
         *(int *)(info + WHEEL_INFO_KEY) = key;
         *(int *)(info + WHEEL_INFO_EVENT) = type;
@@ -100,6 +139,7 @@ void wheel_sample(int *s, int ret, char *info) {
     if (!s[2]) { /* lifted */
         if (wh_anchor) s[0] = wh_anchor;
         wh_anchor = 0;
+        if (wh_guard != DARK_OPEN) wh_guard = 0;
         return;
     }
     if (!wh_anchor) {
@@ -116,8 +156,8 @@ void wheel_sample(int *s, int ret, char *info) {
         wh_acc = wh_units ? wh_acc * units / wh_units : 0;
         wh_units = units;
     }
-    if ((d ^ wh_acc) < 0) wh_acc = 0; /* reversed */
-    wh_acc += d;
+    if (d && (d ^ wh_acc) < 0) wh_acc = 0; /* reversed */
+    wh_acc = dark_held(&d) ? 0 : wh_acc + d;
     while (wh_acc >= units || wh_acc <= -units) {
         int dir = wh_acc > 0 ? 1 : -1;
         wh_acc -= dir * units;
@@ -197,6 +237,7 @@ int ringnav_speed(int mode) {
     speed_file(path, saved.folder);
     tk_snprintf(tmp, sizeof tmp, "%s.tmp", path);
     if (!blob_io(path, tmp, &saved, sizeof saved, 1)) {
+        unlink(tmp);
         playback_speed_start();
         toast("Could not save folder speed");
         return stock_speed_trampoline(g_playspeed_mode);
@@ -307,6 +348,7 @@ static int rebuild(int keep) {
         free(groups);
         free(seen);
         free(hist);
+        playback_clear(); /* every caller ends advanced play: no older queue's snapshot stays */
         return 0;
     }
     if (s.order) free(s.order);
@@ -417,28 +459,62 @@ int playback_groups(void *all, int folder) {
     playback_save();
     return 1;
 }
-/* Peek has no side effects, RNG or history writes. Manual next bypasses single-song rules. */
-static int successor(int automatic) {
-    unsigned at = (unsigned)M(MCL_POS);
-    if (!s.active || at >= s.n) return -1;
-    if (automatic && s.repeat == 0) return -1;
-    if (automatic && s.repeat == 3) return (int)at;
-    int category = s.repeat == 1 || s.repeat == 4;
-    if (s.forced && s.forced <= s.n && (!category || s.groups[s.forced - 1] == s.groups[at]))
-        return (int)s.forced - 1;
-    for (unsigned i = s.cursor + 1; i < s.n; ++i)
-        if (!s.seen[s.order[i].index] && (!category || s.groups[s.order[i].index] == s.groups[at]))
-            return (int)s.order[i].index;
-    if (s.repeat < 3) return -1;
-    for (unsigned i = 0; i < s.n; ++i)
-        if (!category || s.groups[s.cycle[i].index] == s.groups[at]) return (int)s.cycle[i].index;
-    return -1;
+/* The mode Shuffle Songs replaces: the one it already would restore, else the current one. Taken
+ * before its own mode change and load, so neither forgets nor restores it. */
+int playback_unshuffle(void) {
+    int mode = unshuffle ? unshuffle - 1 : M(MCL_MODE);
+    unshuffle = 0;
+    return mode;
 }
+/* Shuffle Songs: stock's shuffle draws each next at random, so it has no order for Up Next. Take
+ * the loaded queue over as advanced Shuffle Songs, Repeat All, as stock's never ends. */
+int playback_shuffle(int mode) {
+    unshuffle = mode == 2 ? 0 : mode + 1;
+    s.shuffle = 1;
+    s.repeat = 5;
+    s.folder = 0;
+    s.forced = s.force_end = 0;
+    close_preload();
+    s.active = rebuild(0);
+    playback_save();
+    return s.active;
+}
+/* The indices that play after this track, in order, ignoring the single-song rules. Peek has no
+ * side effects, RNG or history writes. */
+static unsigned upcoming(unsigned *out, unsigned max) {
+    unsigned at = (unsigned)M(MCL_POS), k = 0;
+    if (!s.active || at >= s.n) return 0;
+    int category = s.repeat == 1 || s.repeat == 4;
+    /* Play Next's tracks [forced-1, force_end) play back to back first (commit moves forced on) */
+    unsigned f = s.forced ? s.forced - 1 : s.n, fe = f;
+    while (fe < s.force_end && fe < s.n && k < max && (!category || s.groups[fe] == s.groups[at]))
+        out[k++] = fe++;
+    for (unsigned i = s.cursor + 1; i < s.n && k < max; ++i) {
+        unsigned x = s.order[i].index;
+        if (!s.seen[x] && (x < f || x >= fe) && (!category || s.groups[x] == s.groups[at])) out[k++] = x;
+    }
+    if (s.repeat < 3) return k;
+    /* the next pass after the order runs out: the cycle, wrapped */
+    for (unsigned i = 0; i < s.n && k < max; ++i) {
+        unsigned x = s.cycle[i].index;
+        if (!category || s.groups[x] == s.groups[at]) out[k++] = x;
+    }
+    return k;
+}
+/* Up Next: what an automatic next plays after this track. Repeat Song and Play One Song have none,
+ * as a natural end has none. */
+unsigned playback_upcoming(unsigned *out, unsigned max) {
+    return s.repeat == 0 || s.repeat == 3 ? 0 : upcoming(out, max);
+}
+/* Manual next bypasses single-song rules. */
 int playback_successor(int automatic) {
-    if (!automatic) return successor(0);
-    unsigned at = (unsigned)M(MCL_POS);
+    unsigned at = (unsigned)M(MCL_POS), x;
+    if (!automatic) return upcoming(&x, 1) ? (int)x : -1;
     if (!s.next_valid || s.next_pos != at) {
-        s.next_value = successor(1);
+        s.next_value = s.repeat == 0                           ? -1
+                       : s.repeat == 3 && s.active && at < s.n ? (int)at
+                       : upcoming(&x, 1)                       ? (int)x
+                                                               : -1;
         s.next_pos = at;
         s.next_valid = 1;
     }
@@ -448,14 +524,21 @@ static void commit(unsigned next) {
     s.resume_key = s.resume_pending = 0;
     if (s.forced && next == s.forced - 1) {
         s.forced = next + 1 < s.force_end ? next + 2 : 0;
-        /* Move the priority occurrence immediately after the cursor, leaving other order intact. */
+        /* Move the priority occurrence immediately after the cursor, leaving other order intact,
+         * even when the order sorted it before the cursor (already marked seen). */
         unsigned i = 0;
         while (i < s.n && s.order[i].index != next) ++i;
-        if (i > s.cursor && i < s.n) {
+        if (i < s.cursor) {
+            entry t = s.order[i];
+            for (; i < s.cursor; ++i) s.order[i] = s.order[i + 1];
+            s.order[i] = t;
+            --s.cursor;
+        } else if (i > s.cursor && i < s.n) {
             entry t = s.order[i];
             for (; i > s.cursor + 1; --i) s.order[i] = s.order[i - 1];
             s.order[i] = t;
         }
+        s.seen[next] = 0;
     }
     unsigned i = s.cursor + 1;
     while (i < s.n && s.order[i].index != next) ++i;
@@ -471,9 +554,27 @@ static void commit(unsigned next) {
     s.next_valid = 0;
     s.dirty = 1;
 }
+/* player_start_queue: stock's View Queue row (and its queue delete, DLNA and URL plays) start queue
+ * index at. In advanced play the pick is committed first: a shuffle's through Play Next's path, so
+ * the order carries on after it and it neither plays again later in the pass nor drops the tracks
+ * it jumped; an ordered queue's in place, so the tracks after it follow. A pick inside a pending
+ * Play Next keeps the rest of that range, as Next would. */
+int ringnav_start_queue(int at) {
+    unsigned f = s.forced, fe = s.force_end, x = (unsigned)at;
+    if (s.active && x < s.n && x != (unsigned)M(MCL_POS) && queue() && deque_size(queue()) == s.n) {
+        int in = f && x + 1 >= f && x < fe;
+        close_preload();
+        if (in || s.shuffle == 1) s.forced = x + 1, s.force_end = in ? fe : x + 1;
+        commit(x);
+        if (!in) s.forced = f, s.force_end = fe;
+    }
+    return stock_start_queue_trampoline(at);
+}
 int ringnav_load(void *q, int at, int type) {
     if (s.restoring == 2) type = M(MCL_TYPE);
     close_preload();
+    /* After Shuffle Songs, before stock loads; ringnav_mode's playback_clear ends its shuffle. */
+    if (unshuffle && !s.restoring) config_playmode(playback_unshuffle(), 1);
     int result = stock_load_trampoline(q, at, type);
     back_to = 0;
     if (s.restoring == 2)
@@ -524,6 +625,7 @@ int ringnav_mode(int mode) {
 #endif
     )
         return stock_mode_trampoline(mode);
+    unshuffle = 0; /* a mode choice outlasts Shuffle Songs */
     /* Stock Shuffle (2) on Shuffle Albums/Folders keeps the groups; any other mode ends them. */
     if (!(s.active && s.shuffle >= 3 && mode == 2)) playback_clear();
     return stock_mode_trampoline(mode);
@@ -680,9 +782,14 @@ void playback_insert(unsigned at, unsigned n, int next) {
     for (unsigned i = 0; i < s.hn; ++i)
         if (s.history[i] >= at) s.history[i] += n;
     s.active = rebuild(1);
+    if (s.forced && s.forced - 1 >= at) {
+        s.forced += n;
+        s.force_end += n;
+    }
     if (next) {
+        /* Play Next again before the last one finished: the new tracks, then what is left of it */
+        s.force_end = s.forced == at + n + 1 ? s.force_end : at + n;
         s.forced = at + 1;
-        s.force_end = at + n;
     }
     playback_save();
 }
@@ -703,8 +810,9 @@ static int save_elapsed(int sec) {
 }
 void playback_save(void) {
     if (!s.active) return;
-    if (!s.n) {
+    if (!s.n || s.n > SAVE_LIMIT) {
         unlink(QUEUE_FILE);
+        s.dirty = 0;
         return;
     }
     int sec = 0, total = 0;
@@ -779,7 +887,6 @@ void playback_save(void) {
     }
 }
 static int library(void *unused) {
-    (void)unused;
     /* Snapshot order wins; avoid stock's expensive pinyin title sort. */
     return getAllMusic(3);
 }

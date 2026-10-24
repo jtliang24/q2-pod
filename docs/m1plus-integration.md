@@ -38,25 +38,25 @@ The dispatch works, and `test/q2compare.py` proves the Q2 output is `UPSTREAM_BA
 - **R5. The docs give both targets.** `building.md` and the README give both targets' commands, and say
   what ships for each device.
 
-## Current status (measured 2026-10-23, at upstream 1.2.2 after U2)
+## Current status (measured 2026-10-23, at upstream 1.2.9, U3 step 1)
 
-Measured with `test/q2compare.py --suites` against `UPSTREAM_BASE` (1.2.2, `87e2417`), from the vendor
-ZIP.
+Measured with `TMPDIR=/tmp test/q2compare.py --suites` against `UPSTREAM_BASE` (1.2.9, `7116f34`), from
+the vendor ZIP.
 
-- **R1 is met.** Legacy and iPod `update.tar` are byte-identical to 1.2.2's build: `f617fb2a…` and
-  `16cc5ed1…`.
-- **R2 is met.** 1.2.2's 21 suite runs pass on this tree's builds: `build --build`, `patch` (Legacy 1029,
-  iPod 1410 scenarios, 1.2.2's own), `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa` on
+- **R1 is met.** Legacy and iPod `update.tar` are byte-identical to 1.2.9's build: `3b4170a6…` and
+  `36589b78…`.
+- **R2 is met.** 1.2.9's 21 suite runs pass on this tree's builds: `build --build`, `patch` (Legacy 1071,
+  iPod 1453 scenarios, 1.2.9's own), `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa` on
   each, and `peq`, `mp3`, `remote`, `coverflow` and `release` once.
 - **R3 was last met on Oct 22, at the fork point.** `tools/release.py package 'stock/Q2 Firmware
   V1.32/update.tar'` built both variants twice, validated them, found each pair byte-identical and wrote
   both ZIPs and the user guide. The guide's build (`docs/manual/build.py`) needs `pdftotext`, then run with
   `nix shell nixpkgs#poppler-utils`; the devShell has it since `1f737de`. At 1.2.2, `test/release.py`
   passes (part of R2); the package step wasn't rerun.
-- **R4 holds.** On a fresh M1 build, `test/m1plus/build.py --build`, `test/m1plus/patch.py` (1017
-  scenarios, no `KNOWN GAP`, 9 `NOT PORTED`), `test/m1plus/boot.py` and `test/m1plus/ports.py` pass, and
+- **R4 holds.** On a fresh M1 build, `test/m1plus/build.py --build`, `test/m1plus/patch.py` (1032
+  scenarios, no `KNOWN GAP`, 16 `NOT PORTED`), `test/m1plus/boot.py` and `test/m1plus/ports.py` pass, and
   so do the M1's `playback`, `id3`, `m4b` and `headset_io` and the shared `ldac` and `bluealsa`. Dev 22
-  (`V00Ms`) is the build for the device.
+  (`V00Ms`, 1.2.2) is on the device; U3 flashes again at its end.
 
 Measured on Oct 22, after U0, `main` from the vendor ZIP and the branch from `stock/`'s `update.tar`: the
 same byte-identity at the fork point (`8190e0c8…`, `48784f86…`), with the manifests differing in keys only
@@ -204,7 +204,7 @@ then; `UPSTREAM_BASE`'s now), and run the Q2 suites (see [Checklist](#checklist)
 | 12 | The compare as a script (roadmap U2) | A `test/q2compare.py` that builds the baseline (`main`, then `UPSTREAM_BASE`) from `git archive` and the working tree, and reports differing components. This turns the checklist into one command, and every sync runs it | S | R1 |
 
 Items 1–10 are done: item 2 earlier, 1 and 3–9 as roadmap U0 (2026-10-22), with R1–R3 met (see
-[Current status](#current-status-measured-2026-10-23-at-upstream-122-after-u2)), and 10 with the M1 release. `building.md`
+[Current status](#current-status-measured-2026-10-23-at-upstream-129-u3-step-1)), and 10 with the M1 release. `building.md`
 gives both targets, and the README points M1 users to the `M1Plus.Firmware.*.zip` that
 `tools/release_m1.py` makes ([m1plus-releasing.md](m1plus-releasing.md)). Items 11 and 12, which
 syncing needs, are done too: 11 as roadmap U1 (2026-10-22), 12 as U2's `test/q2compare.py` (2026-10-23).

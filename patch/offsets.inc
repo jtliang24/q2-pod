@@ -58,6 +58,7 @@
 #define EVT_CLICK 0x10c
 #define EVT_FOCUS 0x10e /* widget_set_focused_internal @0x65fdf4 */
 #define EVT_BLUR 0x10f  /* widget_set_focused_internal @0x65fe40 */
+#define EVT_IM_ACTION 0x13a /* the keyboard's OK, input_method_dispatch_action @0x645e20 */
 #define EVT_SCROLL 0x14e /* stock scroll_view on_scroll @0x5efa40; table setter emits this too */
 #define EVT_SCROLL_END 0x14f /* stock lists queue their visible covers on this (album page registers @0x4a43d0) */
 #define VIEW_ON_SCROLL 0x100 /* scroll_view callback installed by list_view, called by touch @0x5efa5c */
@@ -309,7 +310,7 @@ static inline int arc_out(int r, int y) {
  * track change, a pause and every RESUME_SAVE_S of play; restored if the track has played less
  * than RESUME_START_S when first seen playing. */
 #define RESUME_MIN_S 1200
-#define RESUME_SLOTS 32
+#define RESUME_SLOTS 512
 #define RESUME_EDGE_S 30
 #define RESUME_SAVE_S 60
 #define RESUME_START_S 5
@@ -357,6 +358,18 @@ static inline int arc_out(int r, int y) {
 #define WHEEL_POST 0x6257f0
 #define WHEEL_INFO_EVENT 0x20 /* event type: 0x110 key down, 0x114 key up */
 #define WHEEL_INFO_KEY 0x38   /* the event's key (EVENT_KEY) */
+/* The poster's target is the info's main loop, whose input queue (stock event_queue_t: u16 r, w,
+ * full, capacity) holds 20 events and drops its oldest when full. A tick is two events, so a fast
+ * turn while the UI is busy evicted a touch's release and left the pointer pressed, which stops the
+ * wheel until the next tap. wheel_post drops ticks that would leave under WHEEL_QUEUE_FREE slots. */
+#define WHEEL_INFO_LOOP 0x10
+#define LOOP_QUEUE 0x38
+#define WHEEL_QUEUE_FREE 8
+/* With the screen off (the wheel is the volume), WHEEL_DARK_GUARD units of one touch's travel one
+ * way (100, half a turn, whatever the sensitivity) tick nothing; the wheel then ticks until it has
+ * been still WHEEL_DARK_IDLE_MS, which also restarts an unfinished guard. Calibration knobs. */
+#define WHEEL_DARK_GUARD 100
+#define WHEEL_DARK_IDLE_MS 1500
 #define BOOT_KEY_GUARD 0xa37c8a /* no symbol: set after a Standby resume, on_wm_keyup_fun drops the next centre release */
 #define RETURN_RELEASE_LATCH 0xa37c8b /* stock long Return arms it; the key-up filter consumes it */
 
@@ -399,6 +412,7 @@ static inline int arc_out(int r, int y) {
 #define ID3_ARTIST 0x504
 #define ID3_TITLE 0x684
 #define MUSIC_INFO_ALBUM_ARTIST 0x580 /* toolsGetMusicInfo's info (ID3_ALBUM's base): abmartist, the scan's albumsonger */
+#define ID3_ALBUM_ARTIST (ID3_ALBUM + MUSIC_INFO_ALBUM_ARTIST) /* empty for CUE tracks, copied from the record */
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */

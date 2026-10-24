@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 ZIP_SHA = '154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00'
 DEMO_SHA = '2c5f06142850b4fc168f82b44a81550cce0a5b4b9fe1c179dced4a08a3049138'
 Q2_TAR_SHA = '0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1'  # the update.tar in the ZIP, alone
-VERSION = '1.2.2'  # major.minor.patch, single digits, shown as is (About, release tag and ZIPs)
+VERSION = '1.2.9'  # major.minor.patch, single digits, shown as is (About, release tag and ZIPs)
 # The updater's identity (firmware_v20.info and demo's version literal) must be 5 characters and
 # differ from the installed one, so it packs the digits: 1.0.1 is V101I. About shows the stock
 # firmware version and a CFW. Version row with VERSION and the edition instead (ringnav_about).
@@ -33,11 +33,14 @@ HOOKS = {
     'on_wm_keylong_fun': (0x4e873c, 'ringnav_keylong', 'keylong'),
     'playset_equalizer_page_init': (0x4b642c, 'peq_page_init', None),
     'set_equalizer_value': (0x4f9230, 'peq_stock_eq', 'eq'),
+    'select_timezone': (0x4f93b0, 'ringnav_timezone', 'timezone'),
     'home_page_init': (0x523c84, 'coverflow_home', 'home'),
     'localmusic_page_init': (0x524424, 'ringnav_localmusic', 'localmusic'),
     # Library lists: an Unknown row with no songs is dropped
     'load_localclass_list': (0x5088cc, 'ringnav_localclass', 'localclass'),
     'toolsQueryDbTable': (0x5c8044, 'ringnav_library_query', 'dbquery'),
+    # An artist's albums tab (getAlbumByAlbumArtist): the same album-artist rewrite
+    'toolsQueryContentDbTable': (0x5c863c, 'ringnav_content_query', 'content_query'),
     'keylock_rows': (0x4c3cb4, 'ringnav_keylock_rows', None),
     'quick_lock': (0x4a0170, 'ringnav_quick_lock', None),
     'dialog_statusbar_dialog_init': (0x4a0d88, 'ringnav_quick_settings', 'quicksettings'),
@@ -94,6 +97,8 @@ HOOKS = {
     # Spotify (patch/spotify.c): Streaming's row, and local music letting librespot go first
     'stream_page_init': (0x52efdc, 'ringnav_stream', 'stream'),
     'mclStartPlayer': (0x5ad6ac, 'ringnav_start_player', 'start_player'),
+    # View Queue's row and Up Next's (navigation.c): a picked queue index, kept in advanced play's order
+    'player_start_queue': (0x5160dc, 'ringnav_start_queue', 'start_queue'),
     # Tidal cache (patch/tidal.c): the stream URL thread's player start, with its song id in $s2
     'mcl_tidalStartPlayer': (0x5ad240, 'tidal_start', 'tidal'),
     # Ratings (navigation.c rate_bind): Now Playing's heart, held, opens the picker
@@ -200,8 +205,14 @@ STANDBY_WAKE = (0x4f7d24, 0x0411ff26, 0x24020001)
 # checkBluetoothStatus' jalr player_save_start once a headset's A2DP comes up (a0 0: the queue restarts
 # unpaused, whatever it was doing). It becomes jal ringnav_bt_connect_start (docs/internals.md#resume-on-connect).
 BT_CONNECT_START = (0x4f358c, 0x0320f809)
+# openBluetooth's first GPIO write: install callbacks before powering the radio.
+BT_POWER = (0x4efcbc, 0x0320f809)
+# player_parsecover_thd's jalr toolsGetExternCover (lw $t9 at 0x51300c; Now Playing's folder art, after its
+# embedded art failed) becomes jal coverflow_player_cover, which gives ffmpeg what stock's decoder refuses.
+PLAYER_COVER = (0x51301c, 0x0320f809)
 # The bal toolsTrimLeft on each name copy in the two library name comparators (0x5b9d40, 0x5ba658, the
 # Chinese and other-language sorts); they become jal ringnav_sort_key, which also drops a leading article.
+SCAN_REFRESH = (0x5c981c, 0x0411fd88)  # toolsLoadAllFile's existing-song check, folder scans only
 AUDIO_EXTENSION_CALLS = (0x5c2054, 0x5c3da4)  # toolsLoadDirectory and recursive scan
 SORT_TRIMS = (0x5b9e38, 0x5b9ea4, 0x5ba750, 0x5ba7bc)
 # toolsLoadAllFile stops a scan at 20,000 songs: lw $2,count; slti $2,$2,0x4e20 before each entry. 65,000
@@ -235,8 +246,9 @@ LDAC_HQ = ((0x4f033c, 0x00042080, 0x00041880),   # sll $3,$4,2
            (0x4f0348, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
            (0x4f0354, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
            (0x4f0360, 0x24040016, 0x8fa40014))   # lw $4,0x14($sp), was li $4,0x16
-# check_mem_thd's "open failed, skip the write" beq becomes b: it never writes 3 to drop_caches.
-DROP_CACHES = (0x5120a8, 0x12220006, 0x10000006)
+# check_mem_thd (platform_init's detached thread) returns NULL on entry: it never opens drop_caches,
+# writes 3 to it or wakes each second. lui/addiu $gp -> jr $ra; move $v0,$zero.
+DROP_CACHES = ((0x512050, 0x3c1c0051, 0x03e00008), (0x512054, 0x279c4c70, 0x00001025))
 # The encoder thread's ts_read call (jalr $t9) becomes jal ringnav_ts_read, which makes the wheel's
 # ticks from the samples (playback.c wheel_sample).
 WHEEL_TS_READ = (0x625b6c, 0x0320f809)
@@ -252,6 +264,7 @@ LABELS = tuple((k.encode(), o.encode(), n.encode()) for k, o, n in (
     ('playset_covermode', 'Enlarged album art(10s wait)', 'Enlarged Album Art'),
     ('playset_filter', 'Digital filters', 'Digital Filters'),
     ('playset_memplay', 'Memory playback', 'Memory Playback'),
+    ('replaygain_track', 'Audio', 'Song'),
     ('small_playset', 'Playback Setting', 'Playback'), ('small_sysset', 'System Setting', 'System'),
     ('system_wifiset', 'Wireless Setting', 'Wireless'), ('system_display', 'Display setting', 'Display'),
     ('system_netservice', 'Network Service', 'Network'), ('system_time', 'Date and time', 'Date & Time'),
@@ -269,7 +282,8 @@ LABELS = tuple((k.encode(), o.encode(), n.encode()) for k, o, n in (
     ('screenlock_info3', '3.Maximum of 5 images in folder.', '3. Up to 5 pictures.'),
     ('about_sn', 'Serial number', 'Serial Number'), ('about_version', 'FW. Version', 'Version'),
     ('list_baidu', 'Baidu Netdisk(BETA)', 'Baidu Netdisk'), ('msg_poweroff', 'Confirm Shutdown?', 'Shut Down?'),
-    ('genre', 'Genres', 'Genre'), ('player_era', 'Era', 'Year'), ('batch_addplaylist', 'Add to playlist', 'Add to Playlist')))
+    ('genre', 'Genres', 'Genre'), ('player_era', 'Era', 'Year'), ('batch_addplaylist', 'Add to playlist', 'Add to Playlist'),
+    ('scan_startscan', 'Scanning', 'Scan')))  # Scan specified folders' button; wifi_scan keeps its "Scanning"
 
 # The stock font (Arial merged with a CJK font) gives curly quotes the CJK em advance, a wide gap
 # inside words wherever a tag has one; its cmaps map them to the straight glyphs instead. Its hearts
@@ -330,6 +344,8 @@ def source_sha256():
         h.update(path.read_bytes())
     return h.hexdigest()
 
+def j(addr): return 0x08000000 | addr >> 2  # MIPS j
+def jal(addr): return 0x0c000000 | addr >> 2  # MIPS jal
 def check(condition, message):
     if not condition: raise ValueError(message)
 def jpeg_size(b):
@@ -395,7 +411,41 @@ def fileoff(b, a):
         if t == 1 and v <= a < v+f: return o+a-v
     raise ValueError(f'Unmapped address {a:x}')
 
+EXTRA_TIMEZONES = (
+    ('GMT-09:30 Marquesas', 'Pacific/Marquesas'),
+    ('GMT-02:00 South Georgia', 'Atlantic/South_Georgia'),
+    ('GMT+05:30 Asia/Colombo', 'Asia/Colombo'),
+    ('GMT+05:45 Asia/Kathmandu', 'Asia/Kathmandu'),
+    ('GMT+06:30 Asia/Yangon', 'Asia/Yangon'),
+    ('GMT+08:45 Australia/Eucla', 'Australia/Eucla'),
+    ('GMT+10:30 Lord Howe', 'Australia/Lord_Howe'),
+    ('GMT+11:00 Noumea', 'Pacific/Noumea'),
+    ('GMT+12:45 Chatham', 'Pacific/Chatham'),
+    ('GMT+13:00 Tongatapu', 'Pacific/Tongatapu'),
+    ('GMT+14:00 Kiritimati', 'Pacific/Kiritimati'),
+)
+
+def patch_timezones(demo):
+    # Keep the stock indices so saved zones survive; fit the extra rows in the existing table.
+    start = fileoff(demo, 0x76b5d0)
+    original = demo[start:start+28*64]
+    labels = [original[i:i+64].split(b'\0')[0] for i in range(0, len(original), 64)]
+    check(labels[0] == b'timedate_auto' and labels[-1] == b'timezone_gmt+12', 'Unexpected timezone labels')
+    labels += [label.encode() for label, _ in EXTRA_TIMEZONES]
+    check(len(labels)*32 <= len(original) and all(len(label) < 32 for label in labels), 'Timezone labels exceed stock table')
+    demo[start:start+len(original)] = b''.join(label.ljust(32, b'\0') for label in labels).ljust(len(original), b'\0')
+    for address, old, new in (
+        (0x4bce34, 0x00102980, 0x00102940),  # label stride: 64 -> 32
+        (0x4bd090, 0x2402001c, 0x24020000 | len(labels)),
+        (0x4bd4d0, 0x2402001c, 0x24020000 | (len(labels)-1)),
+        (0x4fa5dc, 0x2c43001b, 0x2c430000 | (len(labels)-1)),  # boot accepts saved additions
+    ):
+        off = fileoff(demo, address)
+        check(struct.unpack_from('<I', demo, off)[0] == old, f'Unexpected timezone code at {address:x}')
+        struct.pack_into('<I', demo, off, new)
+
 FUNCTIONS = {
+ 'toolsSetTimeZone': ('int', 'const char *'),
  'widget_on': ('unsigned', 'void *, unsigned, int (*)(void *, void *), void *'),
  'widget_set_visible': ('int', 'void *, int, int'),
  'widget_set_opacity': ('int', 'void *, unsigned'),
@@ -519,6 +569,13 @@ FUNCTIONS = {
  'getAllFav': ('int', 'void'),
  # Long Songs (navigation.c): a file's length, probed once, as stock's scanner reads tags
  'taglib_file_new': ('void *', 'const char *'),
+ 'taglib_file_tag': ('void *', 'void *'),
+ 'toolsCheckItemExist': ('int', 'void *, const char *, int'),
+ 'toolsGetMusicInfo': ('int', 'int, char *, const char *'),
+ 'toolsUpdateDbTable': ('int', 'const char *, const char *'),
+ 'toolsTrimRight': ('void', 'char *'),
+ 'toolsHanziToPinyin': ('int', 'const char *, char *'),
+ 'toolsGetMusicNum': ('int', 'void'),
  'taglib_file_audioproperties': ('void *', 'void *'),
  'taglib_file_free': ('void', 'void *'),
  'deleteMusicFromFav': ('int', 'void *'),
@@ -527,6 +584,7 @@ FUNCTIONS = {
  'batch_add_file': ('int', 'int, int, void *, void *, int'),
  'navigator_window_is_exist': ('int', 'const char *'),
  'mclStartPlayer': ('int', 'void'),
+ 'player_start_queue': ('int', 'int'),
  'mclStop': ('int', 'void'),
  'mclGetPlayTime': ('int', 'int *, int *'),
  'mclSetStartSeekTime': ('int', 'int'),
@@ -541,6 +599,7 @@ FUNCTIONS = {
  'widget_restack': ('int', 'void *, unsigned'),
  'toolsThumbSpecCover': ('int', 'const char *, const char *, int, int'),
  'toolsGetAlbumCover': ('int', 'const char *, const char *, int, int'),
+ 'toolsGetExternCover': ('int', 'const char *, const char *, int, int'),
  'window_create': ('void *', 'void *, int, int, int, int'),
  'widget_factory': ('void *', 'void'),
  'widget_factory_create_widget': ('void *', 'void *, const char *, void *, int, int, int, int'),
@@ -581,6 +640,7 @@ FUNCTIONS = {
  'get_wifisignal': ('int', 'void'),  # the status bar's Wi-Fi bars, 1-4; -1 when not connected
  # Podcasts and Audiobooks (navigation.c): folder_page's reload of g_folder_path, title and list rebuild
  'folder_reload_data': ('int', 'void'),
+ 'folder_reset_variable': ('int', 'void'),  # a fresh visit: layer 0, no path, enter history or CUE
  'folder_reinit_navbarname': ('int', 'void'),
  'folder_refresh': ('int', 'void *'),
  # Videos (books.c): stop the music, the DAC's power, and the screen and standby timeouts held off
@@ -589,6 +649,11 @@ FUNCTIONS = {
  'player_play_pause': ('int', 'void'),
  'player_next_music': ('int', 'void'), 'player_prev_music': ('int', 'void'),
  'getBtLinkSize': ('int', 'void'), 'getBtLinkItem': ('int', 'int, int *, char *'),
+ 'toolsGpioSetValue': ('int', 'const char *, int'),
+ 'btctl_set_prompt_callback': ('void', 'void *, void *'),
+ 'btctl_device_status_callback': ('void', 'void *, void *'),
+ 'btctl_set_a2dp_callback': ('void', 'void *, void *'),
+ 'btrecvA2dpFunc': ('int', 'int, void *, void *'),
  'mclGetPlayStatus': ('int', 'void'),  # 1 stopped, 2 playing, 3 paused (mclStop, mclSetResume, mclSetPause)
  'player_stop': ('int', 'void'),
  'player_save_start': ('int', 'int'),  # pause: mclStartPlayer at the saved seek, then paused if set
@@ -633,7 +698,7 @@ PRIVATE_FUNCTIONS = {
     "saver_cover": HOOKS['saver_cover'][0],  # the lock window's img_playcover from the playing track
     "np_info": 0x52a508,  # Now Playing's info page labels, from the track (NP_INFO_CALL)
 }
-GLOBALS = ['g_playspeed_mode', 'g_time24h_flag', 'g_backlight_status', 'g_lockscreen_pageflag', 'g_testmode_flag',
+GLOBALS = ['g_time_zone', 'g_playspeed_mode', 'g_time24h_flag', 'g_backlight_status', 'g_lockscreen_pageflag', 'g_testmode_flag',
            'g_keylock_flag', 'g_keylock_mode',
            'g_bluetoothflag', 'bt_linkstatus', 'g_guideflag', 'g_poweroff_state', 'g_usblink_status', 'bt__recv_pageflag',
            'g_power_longkey', 'g_ingore_bootkey_flag', 'g_equalizer_flag', 'g_navbar_status', 'g_playcover_type',
@@ -661,8 +726,8 @@ CONTEXT_DATA = {'bt_showcoding': 4, 'g_memory_info': 3476, 'g_folder_path': 1024
                 # the lock screen's picture (SYSSET SCREENSAVERPATH) and the picker's list
                 'g_screensaver_picture': 256, 'p_deque_screensaverlist': 4}
 # Windows the payload creates at runtime (window_create), so no rootfs asset names them.
-PAYLOAD_WINDOWS = {'coverflow_page', 'photos_page', 'books_page', 'mostplayed_page', 'shuffle_page', 'ratings_page', 'rated_page', 'longsongs_page', 'spotify_page',
-                   'spotbrowse_page', 'radio_page', 'radionp_page',
+PAYLOAD_WINDOWS = {'coverflow_page', 'photos_page', 'books_page', 'mostplayed_page', 'shuffle_page', 'upnext_page', 'ratings_page', 'rated_page', 'longsongs_page', 'spotify_page',
+                   'spotbrowse_page', 'radio_page', 'radionp_page', 'streamconf_page', 'tidal_downloads',
                    'library_page'}  # M1 Plus only: the Q2 Pod Home card's page
 ICONS = ['menu_coverflow.png', 'menu_coverflowdown.png']
 # The stock EQ preset page and the images only it and the stock equalizer page show: the PEQ
@@ -683,11 +748,11 @@ OBSOLETE = ['usr/lib/libdbus-1.so.3.19.8', *(f'usr/lib/lib{n}-2.0.so.0.5400.3' f
 FLAGS = ['--target=mipsel-linux-gnu','-march=mips32r2','-mabi=32','-mfp64',
          '-mno-abicalls','-fno-pic','-G0','-ffreestanding','-fno-builtin',
          '-fno-stack-protector','-fno-unwind-tables','-fno-asynchronous-unwind-tables',
-         '-Oz','-Wall','-Wextra','-Werror']
+         '-Oz','-Wall','-Wextra','-Werror','-Wno-unused-parameter']
 
 def hooks(ipod): return HOOKS | IPOD_HOOKS if ipod else HOOKS
 
-def compile_payload(out, ipod=False):
+def compile_payload(out, ipod):
     """Compile and link the payload."""
     from peq import compile_common
     extra = compile_common(out, out/'stock-demo', ipod=ipod)  # also writes the libc/libcstl imports navigation.c uses
@@ -702,12 +767,13 @@ def compile_payload(out, ipod=False):
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *[f'--undefined={name}' for _, name, _ in hooks(ipod).values()], *[f'--undefined={IPOD_LEAF[2]}'] * ipod,
         f'--undefined={WM_PAINT_LEAF[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=ringnav_ts_read',
+        '--undefined=coverflow_player_cover', '--undefined=headset_bt_power',
         out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
     return symbols(out/'patch.elf')
 
 def compile_helper(out, cat, src, name, rels):
-    """Link patch/src (and start.c) as name against the stock rootfs's libraries rels."""
+    """Link patch/{src}.c and start.c as name against the stock rootfs's libraries rels."""
     libs = []
     for rel in rels:
         libs.append(out/rel.rsplit('/', 1)[-1])
@@ -788,9 +854,9 @@ def patch_bluealsa(raw):
     payload = struct.pack(f'<{len(words)}I', *words)
     append_payload(image, payload, BT_DROP_PAYLOAD, len(payload), 'bluealsa')
     struct.pack_into('<2I', image, fileoff(raw, BT_DROP),
-                     0x08000000 | BT_DROP_PAYLOAD >> 2, 0)
+                     j(BT_DROP_PAYLOAD), 0)
     # Never flush the new track's FIFO from this asynchronously handled signal.
-    struct.pack_into('<2I', image, fileoff(raw, BT_DROP_HANDLER), 0x08000000 | reset >> 2, 0)
+    struct.pack_into('<2I', image, fileoff(raw, BT_DROP_HANDLER), j(reset), 0)
     return bytes(image)
 
 def build(zip_path, out, logo, ipod=False, dev=False):
@@ -826,7 +892,7 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     # property of the UI asset, not the asset path, so check the stock rootfs assets directly:
     # a prefix-trimmed typo cannot silently disable a screen this way.
     from ipod import (AUDIT, ARTIST_ALBUMS, ARTIST_PAGE, HOME_PAGE, SETTINGS_ICONS, inc, UI_ASSETS, patch_asset,
-                      QUIET_ICONS, quiet_icon, imagemagick, patch_code, patch_style, patch_word, jal, branch, settings_icon,
+                      QUIET_ICONS, quiet_icon, imagemagick, patch_code, patch_style, patch_word, branch, settings_icon,
                       STATUS_ICONS, status_icon, row_icon, ART_PLACEHOLDERS, sized_art)
     contexts = re.findall(r'"([^"]+)"', (ROOT/'patch/contexts.inc').read_text())
     check(contexts, 'No navigation contexts audited')
@@ -850,6 +916,7 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     syms = symbols(demo, symbol_table)
     syms.update(PRIVATE_FUNCTIONS)
     header = [f'#define RING_STEP {RING_STEP}']
+    header.append('#define EXTRA_TIMEZONE_NAMES {' + ','.join(json.dumps(zone) for _, zone in EXTRA_TIMEZONES) + '}')
     for name in GLOBALS:
         check(re.search(rf'\b1\s+OBJECT\s+GLOBAL\s+DEFAULT\s+\d+\s+{name}$',
                         symbol_table, re.M), f'{name}: byte global size mismatch')
@@ -870,7 +937,8 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     check(ps['__scratch_start'] == SCRATCH, 'Scratch state moved')
     check(ps['__scratch_end'] <= SCRATCH + 0x10000, 'Scratch state exceeds its page')
     patched = bytearray(raw_demo)
-    def jump(off, name): patched[off:off+8] = struct.pack('<II', 0x08000000 | (ps[name] >> 2), 0)
+    patch_timezones(patched)
+    def jump(off, name): patched[off:off+8] = struct.pack('<II', j(ps[name]), 0)
     for name, (address, replacement, _) in hooks(ipod).items():
         check(syms[name] == address, f'{name}: callback address mismatch')
         off = fileoff(patched, address)
@@ -914,12 +982,20 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     patch_word(patched, *HOLD_RETURN, jal(ps['compact_now_playing']),
                'long Return destination after stock input gates')
     patch_word(patched, *STANDBY_WAKE, 'Standby resume stays dark')
+    check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, 0x51300c))[0] == 0x8f99b6e4,
+          'player cover: expected toolsGetExternCover import')
+    patch_word(patched, *PLAYER_COVER, jal(ps['coverflow_player_cover']), 'Now Playing art through ffmpeg')
     patch_word(patched, *BT_CONNECT_START, jal(ps['ringnav_bt_connect_start']),
                'Bluetooth: Resume on connect')
+    check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, BT_POWER[0] - 12))[0] == 0x8f99ad10,
+          'Bluetooth power: expected toolsGpioSetValue import')
+    patch_word(patched, *BT_POWER, jal(ps['headset_bt_power']), 'Bluetooth callbacks before radio power')
+    patch_word(patched, *SCAN_REFRESH, jal(ps['ringnav_scan_refresh']), 'folder scan refreshes existing tags')
     scan, load, limit, count = SCAN_LIMIT
     patch_word(patched, scan, load, jal(ps['ringnav_scan_room']), 'scan up to 65,000 songs')
     patch_word(patched, scan + 4, limit, count, 'scan up to 65,000 songs')
-    patch_word(patched, *DROP_CACHES, 'keep the page cache')
+    for address, old, new in DROP_CACHES:
+        patch_word(patched, address, old, new, 'keep the page cache')
     patch_word(patched, NP_INFO_CALL, branch(0x04110000, NP_INFO_CALL, PRIVATE_FUNCTIONS['np_info']),
                jal(ps['ringnav_np_info']), "Now Playing's info lines")
     for address, old, new in LDAC_HQ:
@@ -1021,9 +1097,10 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     for n in ('spotify', 'radio'):  # Streaming's Spotify and Internet Radio rows
         icons[f'stream_{n}.png'] = ('list_tidal.png', (ROOT/'assets/icons'/f'stream_{n}.png').read_bytes())
     icons['stream_airplay.png'] = ('list_tidal.png', cat(xx+'netservice_airplay.png'))  # iPod resizes stock's
+    icons['stream_config.png'] = ('list_tidal.png', cat(xx+'system_netservice.png'))  # Configuration's
     art = (ROOT/'assets/icons/default_album_home.png').read_bytes() if ipod else None
     if ipod:  # Streaming's rows draw them at SET_ICON; Home's placeholder at the art panel's 290px
-        for n in ('spotify', 'radio', 'airplay'):
+        for n in ('spotify', 'radio', 'airplay', 'config'):
             like, data = icons[f'stream_{n}.png']
             icons[f'stream_{n}.png'] = (like, row_icon(data))
         icons['default_album_home.png'] = ('default_album_big.png', art)
@@ -1076,7 +1153,7 @@ def build(zip_path, out, logo, ipod=False, dev=False):
         p = swap_inode(p, path.encode(), target)
         changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
     pseudo.write_bytes(p)
-    (out/'empty').mkdir()
+    (out/'empty').mkdir(exist_ok=True)
     newsq = out/'rootfs.squashfs'
     epoch = struct.unpack_from('<I',sq.read_bytes(),8)[0]
     run('mksquashfs',out/'empty',newsq,'-pf',pseudo,'-noappend','-comp','lzo',

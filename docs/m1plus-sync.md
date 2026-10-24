@@ -12,7 +12,8 @@ sync (U2):
 - `test/m1plus/ports.py`, the port report, classifies every Q2 hook, call site and `offsets.inc` name for
   M1. It fails on any it can't place;
 - `test/m1plus/q2only.py` lists the tag's changes inside Q2-only branches, whose M1 side the merge
-  leaves as it was.
+  leaves as it was;
+- `test/m1plus/fndiff.py` lists the payload functions two M1 builds differ in, for the device checklist.
 
 ## Once
 
@@ -49,15 +50,29 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
      the M1, it gets V2.1 words in `tools/m1plus.py` (`M1PLUS_HOOKS`, `CALL_SITES['m1plus']`), or a row in
      `M1PLUS_PORTS` saying why not: `native`, `q2only`, or `unported` (a U4 row). The port report fails
      until it has one or the other. Its trampoline is stubbed on M1 by itself, so its payload links
-     either way.
+     either way. A new site also goes into `CALL_SITES['q2']`, the copy of build.py's sites the
+     report reads; the report fails on a site constant `build()` patches that the copy lacks.
+   - **A new stock routine in `FUNCTIONS`** that shared code calls fails the M1 compile if V2.1 has no
+     symbol of that name. Find V2.1's by its callers (V1.32's `folder_reset_variable` is V2.1's
+     `clear_foldervariate`, called at the same place in `folder_back`), alias it in
+     `M1PLUS_FUNCTION_ALIASES` and pin the call in `test/m1plus/build.py`. A new `GLOBALS` name likewise
+     goes in `M1PLUS_GLOBAL_ALIASES` (`g_time_zone` is `time_zone`).
    - **Upstream's other changes to `build()`**, those not at a V1.32 address (a new asset, helper, input
      or packing step): review `git diff <old base> <tag> -- tools/build.py`, and port each into
-     `m1plus.build()` or give it a U4 row. The M1's pipeline doesn't take them by itself.
+     `m1plus.build()` or give it a U4 row. The M1's pipeline doesn't take them by itself. The same
+     goes for `tools/peq.py`, the player patch: `m1plus.PLAYER_PROFILE` takes none of its new words
+     (1.2.9's MQA side chain), and for a new `#define` the M1 compile needs from build.py's header
+     (1.2.9's `EXTRA_TIMEZONE_NAMES`).
    - **A new `offsets.inc` name** gets a V2.1 value in `patch/m1plus_offsets.inc`, found in V2.1's code
      by the roadmap's ground rules, or `M1_UNPORTED` (defined at the top of that file). `M1_UNPORTED` is
      only for a name whose code can't run on M1, because the hook or site that reaches it is unported.
      The M1 compile fails until each new name has one or the other. A name only Q2 code uses needs
-     neither.
+     neither. A changed value counts too: `patch/m1plus_offsets.inc` copies upstream's tunables, so
+     `git diff <old base> <tag> -- patch/offsets.inc` shows each `-#define` to follow there or rule out
+     (1.2.9's `RESUME_SLOTS` 32 to 512). Nothing fails on a missed one.
+   - **A seam must survive upstream's host tests.** `test/peq.py` and `test/coverflow.py` compile
+     shared C on the host after cutting it by text; 1.2.9's strips every `#endif` from `tidal.c`, which
+     left an M1 `#if`/`#else` open. Prefer a name with each model's value over an `#if` in such a file.
    - **A new upstream static function that only Q2 code calls** fails the M1 compile as unused
      (`-Werror`). Name it from the M1 file that stands in for its caller, with why, as
      `m1plus_nav_library.c` names `tidal_downloads`. Don't wrap upstream's function in `#if`.
@@ -74,13 +89,19 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
      `test/m1plus/`.
    - **Upstream's new test cases**, conflict or not: review `git diff <old base> <tag> -- test/`. The
-     M1's copies in `test/m1plus/` don't take them. For each suite with a copy, run
-     `git diff <old base> <tag> -- test/<suite>.py | patch -p1 test/m1plus/<suite>.py`, then port the
-     rejected hunks by hand. A case for code the M1 doesn't run goes behind its hook or site
-     (`if 'NAME' in HOOKS`) with a `not_ported` line.
+     M1's copies in `test/m1plus/` don't take them. Merge each copy three ways, with the old base's
+     suite as the base: `git merge-file --diff3 test/m1plus/<suite>.py <old base's test/<suite>.py>
+     <tag's test/<suite>.py>` (1.2.9's `patch.py`: 43 conflicts, where `patch -p1` rejected 109 of 134
+     hunks). In a conflict where the M1 copy restructured a section, keep the M1 side and bring in
+     upstream's new cases and changed expectations; upstream's equivalent rewrites (`jal()`,
+     `self.returns()`) can stay out. A case for code the M1 doesn't run, or one that needs V1.32 code,
+     goes behind its hook or site (`if 'NAME' in HOOKS`) with a `not_ported` line. Then run the copies
+     on a fresh M1 build: they find the rest.
    - **A conflict in a doc** takes upstream's text. The M1 docs are the `m1plus-*.md` files.
 3. **Gates, in order.**
-   1. **Q2 output and suites.** `python3 test/q2compare.py <tag> --suites`. Legacy and iPod `update.tar`
+   1. **Q2 output and suites.** `TMPDIR=/tmp python3 test/q2compare.py <tag> --suites`. Under
+      `nix develop`'s long `TMPDIR`, 1.2.9's `test/peq.py` fails its Tidal check on `-Wformat-truncation`,
+      upstream's own tree too. Legacy and iPod `update.tar`
       must be byte-identical to `<tag>`'s own build, and the tag's suites must pass on both
       ([the checklist](m1plus-integration.md#checklist)). It fails on a suite the tag adds that it
       doesn't know how to run (`SUITES`), and names the suites whose text differs from the tag's.
@@ -92,6 +113,9 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
       check its `source_sha256` against the tree, and a table edit after the build fails every one.
    4. **Port report.** `python3 test/m1plus/ports.py` passes: every hook, site and name is classified
       (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for U4.
+   5. **What changed on M1.** Keep the gated `--dev` build (U3: `work/u3/<tag>/`), and list
+      `python3 test/m1plus/fndiff.py <the last flashed build> <this build>`: the payload functions the
+      device checklist covers.
 4. **Record.**
    - Set `UPSTREAM_BASE` to `<tag>` and its commit.
    - Add a row to the roadmap's U4 for each new `NOT PORTED` feature.
@@ -131,3 +155,4 @@ stay flat or fall.
 | After U1 (U1d: the M1 suites in `test/m1plus/`, Oct 23) | 1.2.2 (`c0a2d6b`, through `main`) | +1,417/−279 over 31 files |
 | Pilot sync to 1.2.2 (U2, Oct 23) | 1.2.2 (`87e2417`) | +1,416/−278 over 30 files |
 | Dev 21's fixes (Oct 23) | 1.2.2 (`87e2417`) | +1,417/−279 over 30 files: Coverflow's `STYLE_SCRLABEL_WHITE20C` |
+| U3 step 1: sync to 1.2.9 (Oct 23) | 1.2.9 (`7116f34`) | +1,417/−283 over 30 files: `tidal.c`'s seam now one line (`TIDAL_ID_REG`) |

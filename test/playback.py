@@ -4,16 +4,15 @@ Run: python3 test/playback.py BUILD_DIRECTORY
 """
 import pathlib
 from unicorn import UC_HOOK_MEM_READ, UC_HOOK_CODE
-from functools import cmp_to_key
 # Load only fixture definitions; the full UI suite remains independently runnable.
 source = pathlib.Path(__file__).with_name('patch.py').read_text()
 exec(compile(source[:source.index('checks=0')], 'test/patch.py', 'exec'))
 exec(compile(source[source.index('class QueueMachine'):source.index('sel=lambda m:')], 'test/patch.py', 'exec'))
-ps = symbols(B/'patch.elf')
+ps = payload_syms
 
 class PlaybackMachine(QueueMachine):
-    def __init__(self, files=None):
-        super().__init__()
+    def __init__(self, files=None, **kw):
+        super().__init__(**kw)
         self.files = dict(files or {}); self.handles = {}; self.fd = 100
         self.fail = ''; self.elapsed = 37; self.random_calls = 0; self.rng = 71
         self.allocations = 0; self.write_opens = 0
@@ -24,6 +23,7 @@ class PlaybackMachine(QueueMachine):
         self.handlers[ps['stock_savequeue_trampoline']] = 'p:saved'
         self.handlers[ps['stock_speed_trampoline']] = 'p:speed'
         self.handlers[ps['stock_open_preload_trampoline']] = 'p:mcl_open_preload'
+        self.handlers[ps['stock_start_queue_trampoline']] = 'p:start_queue'
         self.handlers[ps['toast']] = 'p:toast'
         self.sent_speed = None; self.toasts = []
         for name in ('calloc@GLIBC_2.0','qsort@GLIBC_2.0','memcmp@GLIBC_2.0','strcmp@GLIBC_2.0',
@@ -63,16 +63,7 @@ class PlaybackMachine(QueueMachine):
         elif name=='strcmp':
             x,y=self.text(a),self.text(b); ret=(x>y)-(x<y)
             self.path_comparisons += x.startswith('/') and y.startswith('/')
-        elif name=='qsort':
-            regs=[UC_MIPS_REG_PC,*range(UC_MIPS_REG_0,UC_MIPS_REG_31+1)]
-            saved=[u.reg_read(r) for r in regs]; pair=self.alloc(2*c); sp=u.reg_read(UC_MIPS_REG_SP)
-            def compare(x,y):
-                u.mem_write(pair,x); u.mem_write(pair+c,y)
-                for r,v in ((UC_MIPS_REG_SP,sp-0x400),(UC_MIPS_REG_RA,0x1000000),(UC_MIPS_REG_T9,d),(REGS[0],pair),(REGS[1],pair+c)): u.reg_write(r,v)
-                u.emu_start(d,0x1000000,count=self.budget); return signed(u.reg_read(UC_MIPS_REG_V0))
-            values=sorted([bytes(u.mem_read(a+c*i,c)) for i in range(b)],key=cmp_to_key(compare))
-            for i,v in enumerate(values): u.mem_write(a+c*i,v)
-            for r,v in zip(regs,saved): u.reg_write(r,v)
+        elif name=='qsort': self.qsort(a,b,c,d)
         elif name=='fopen':
             path,mode=self.text(a),self.text(b)
             if mode=='wb': self.write_opens+=1
@@ -98,6 +89,7 @@ class PlaybackMachine(QueueMachine):
         elif name=='mclGetPlayTime': self.word(a,self.elapsed); self.word(b,300)
         elif name=='mclStartPlayer': self.starts.append(self.mcl('MCL_POS')); ret=1
         elif name=='mclStop': self.stops+=1; ret=1
+        elif name=='start_queue': self.word(O['MCL_POS'],a); self.starts.append(a); ret=1  # mclSetPlayPos, mclStartPlayer
         elif name=='mclSetStartSeekTime': self.seek=a; ret=1
         elif name=='mcl_open_preload': self.word(O['MCL_PRELOAD'],1); ret=1
         elif name=='toolsRandnum':
@@ -109,8 +101,7 @@ class PlaybackMachine(QueueMachine):
         elif name=='fallback':  # stock resume: stock_resume's (class, rows, index) into out, else none
             cls,rows,ret=self.stock_resume or (0,[],-1)
             self.deqs[a][1]=[self.copy('stSongInfo',e) for e in rows]; self.word(syms['g_memory_info'],cls)
-        for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
-        u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+        self.returns(ret,clobber=True)
     def fn(self,name,*args): return signed(self.call(address=ps[name],args=tuple(args)+(0,)*(4-len(args)),gap=0))
     def options(self,shuffle,repeat,folder):
         for kind,value in ((2,folder),(0,shuffle),(1,repeat)): assert self.fn('playback_set',kind,value)==1
@@ -155,6 +146,64 @@ for grouping in (0,1):
             if repeat in (1,4): assert set(m.sequence(0,10))<={0,2,6}
             checks+=1
 
+# Up Next lists exactly the tracks the following advances play, in order, and listing draws nothing.
+for grouping in (0,1):
+    for shuffle in range(5):
+        for repeat in range(6):
+            m=PlaybackMachine(); m.options(shuffle,repeat,grouping)
+            out=m.alloc(24*4); calls=m.random_calls
+            n=m.fn('playback_upcoming',out,24); up=[m.get(out+4*i) for i in range(n)]
+            assert m.random_calls==calls and m.fn('playback_upcoming',out,24)==n
+            if repeat in (0,3): assert n==0
+            else: assert m.sequence(limit=n)[1:]==up, (shuffle,repeat,grouping)
+            checks+=1
+
+# Shuffle Songs takes the loaded queue over as Shuffle Songs, Repeat All: an order Up Next lists,
+# every track once a pass from the playing one, then the next pass, without end.
+m=PlaybackMachine(); assert m.fn('playback_shuffle')==1
+assert [m.fn('playback_option',k) for k in range(3)]==[1,5,0]
+out=m.alloc(24*4); n=m.fn('playback_upcoming',out,24); up=[m.get(out+4*i) for i in range(n)]
+seq=m.sequence(limit=20); assert n==13 and seq[1:14]==up and len(seq)==21 and sorted(seq[:7])==list(range(7)) and seq[0]==2; checks+=1
+
+# Shuffle Songs is one-shot: the next other queue plays in the mode it replaced (twice over, too),
+# without the shuffle; a mode choice in between is kept instead.
+for shuffles,chosen in ((1,None),(2,None),(1,0)):
+    m=PlaybackMachine(); m.handlers.pop(syms['config_playmode'],None)
+    mode=lambda n,notify=0: m.call(address=syms['config_playmode'],args=(n,notify,0,0),gap=0)
+    mode(3)
+    for _ in range(shuffles):  # shuffle_play's order
+        was=m.fn('playback_unshuffle'); mode(2,1); m.fn('ringnav_load',m.deque([m.song('a'),m.song('b')]),0,0xf001)
+        assert m.fn('playback_shuffle',was)==1 and m.mcl('MCL_MODE')==2
+    if chosen is not None: mode(chosen)
+    m.fn('ringnav_load',m.deque([m.song('album')]),0,1)
+    assert m.mcl('MCL_MODE')==(3 if chosen is None else chosen) and m.fn('playback_option',0)==0; checks+=1
+# Shuffle Albums straight after restores it too, and keeps its groups.
+m=PlaybackMachine(); m.handlers.pop(syms['config_playmode'],None); all=m.deque(list(m.items(m.get(syms['mcl_pdeqplaylist'])))); mode(3)
+was=m.fn('playback_unshuffle'); mode(2,1); m.fn('ringnav_load',m.deque([m.song('a'),m.song('b')]),0,0xf001); m.fn('playback_shuffle',was)
+assert m.fn('playback_groups',all,0)==1 and m.mcl('MCL_MODE')==3 and m.fn('playback_option',0)==3; checks+=1
+
+# Over SAVE_LIMIT (999) tracks nothing is saved, and an older snapshot goes.
+for n,kept in ((999,True),(1000,False)):
+    m=PlaybackMachine({'/mnt/data/ringnav-queue':b'old'}); m.budget=100000000; m.install([(f't{i}',f'/L/{i}.flac','L',1,i,0,0) for i in range(n)])
+    assert m.fn('playback_shuffle')==1 and ('/mnt/data/ringnav-queue' in m.files)==kept and m.files.get('/mnt/data/ringnav-queue')!=b'old'; checks+=1
+
+# A failed rebuild ends advanced play and drops the older queue's snapshot, so a reboot cannot
+# restore it.
+m=PlaybackMachine(); assert m.fn('playback_shuffle')==1 and '/mnt/data/ringnav-queue' in m.files
+m.fail='alloc'; assert m.fn('playback_shuffle')==0 and '/mnt/data/ringnav-queue' not in m.files and m.fn('playback_option',0)==0; checks+=1
+
+# The Now Playing hold offers Up Next only while a shuffle is on; its page lists those rows, in play
+# order, and opens nothing else.
+def now_playing():
+    m=PlaybackMachine(page='playing_page',pos=1); m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(0xa3beac,2); return m
+m=now_playing(); m.options(0,2,0); m.press(5000); assert m.release()==1
+m.press(6000); assert m.hold()==11 and 'Up Next' not in m.labels() and m.release()==0
+m.press(7000); assert m.release()==1; checks+=1
+m=now_playing(); m.options(1,2,0); calls=m.random_calls
+m.press(6000); assert m.hold()==11 and m.release()==0 and 'Up Next' in m.labels()
+m.pick(m.labels().index('Up Next')); m.advance(0)
+assert 'window_create' in [c[0] for c in m.calls] and m.random_calls==calls and not m.playback(); checks+=1
+
 # Album identity (name, then album artist, else folder) crosses folders with an album artist;
 # folder grouping does not. Disc/track and CUE order differ from source order, and categories keep
 # their first appearance without shuffle.
@@ -174,6 +223,14 @@ for folder,want in ((0,[1,0]),(1,[1])):
     assert m.sequence()==want
 m=PlaybackMachine(); m.install([('a','/a/1','A',0,0,0,0),('b','/b/1','B',0,0,0,0),('c','/c/1','C',0,0,0,0)],1)
 m.options(0,2,0); assert m.sequence()==[1,2]
+# Play Next of an album track the order sorts before the cursor plays next, then the album goes on;
+# a second Play Next before the first plays goes first and keeps the first.
+album=[(f't{k}',f'/a/0{k}','A',1,k,0,0) for k in range(1,7)]
+for copies,want in (((1,),[4,5,6]),((1,2),[4,5,6,7])):
+    m=PlaybackMachine(); m.install(album,4); m.options(0,2,0); q=m.get(syms['mcl_pdeqplaylist'])
+    for k in copies:
+        m.items(q).insert(5,m.copy('stSongInfo',m.items(q)[k])); m.fn('playback_insert',5,1,1)
+    seq=m.sequence(); assert seq==want and m.names()[5]=='t%d'%(copies[-1]+1), (copies,seq)
 m=PlaybackMachine(); m.options(1,2,0); q=m.get(syms['mcl_pdeqplaylist'])
 m.items(q).append(m.song('appended')); m.fn('playback_insert',7,1,0)
 assert set(m.sequence())==set(range(8))
@@ -207,6 +264,34 @@ m.fn('ringnav_preload'); assert m.mcl('MCL_PREPOS')==m.fn('playback_successor',1
 for name in ('pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0','mclLoadExLyric'): m.mock(name)
 m.byte(0xa3be54,1); want=m.fn('playback_successor',1); starts=len(m.starts)
 assert m.advance_song()==1 and m.current()==want and len(m.starts)==starts
+checks+=1
+
+# Up Next lists a multi-track Play Next back to back, as it plays.
+m=PlaybackMachine(); m.options(1,5,0)
+q=m.get(syms['mcl_pdeqplaylist']); old=m.current()
+m.deqs[q][1][old+1:old+1]=[m.song('next%d'%i) for i in range(3)]
+m.fn('playback_insert',old+1,3,1)
+out=m.alloc(24*4); n=m.fn('playback_upcoming',out,24); up=[m.get(out+4*i) for i in range(n)]
+assert up[:3]==[old+1,old+2,old+3] and m.sequence(limit=n)[1:]==up, up
+checks+=1
+
+# A View Queue or Up Next pick plays now; the pass carries on without it, the tracks it jumped stay
+# up next, Previous returns to it, and a Play Next it is not part of stays first.
+m=PlaybackMachine(); m.options(1,5,0); out=m.alloc(24*4)
+up=[m.get(out+4*i) for i in range(m.fn('playback_upcoming',out,24))]; x=up[3]; rest=[t for t in up[:6] if t!=x]
+assert m.fn('ringnav_start_queue',x)==1 and m.current()==x and m.sequence(limit=5)[1:]==rest
+m=PlaybackMachine(); m.options(1,5,0); x=m.fn('playback_successor',0); m.fn('ringnav_start_queue',x)
+assert m.advance_song()==1 and m.fn('ringnav_prev')==1 and m.current()==x
+m=PlaybackMachine(); m.options(1,5,0); q=m.get(syms['mcl_pdeqplaylist']); old=m.current()
+m.deqs[q][1][old+1:old+1]=[m.song('next')]; m.fn('playback_insert',old+1,1,1)
+out=m.alloc(24*4); up=[m.get(out+4*i) for i in range(m.fn('playback_upcoming',out,24))]; x=up[3]
+m.fn('ringnav_start_queue',x); assert m.sequence(limit=1)[1:]==[old+1]
+starts=len(m.starts); assert m.fn('ringnav_start_queue',m.current())==1 and len(m.starts)==starts+1  # the playing one: restarted
+m=PlaybackMachine(); m.options(1,5,0); q=m.get(syms['mcl_pdeqplaylist']); old=m.current()  # the top of a Play Next keeps the rest
+m.deqs[q][1][old+1:old+1]=[m.song('next%d'%i) for i in range(3)]; m.fn('playback_insert',old+1,3,1)
+m.fn('ringnav_start_queue',old+1); assert m.sequence(limit=2)[1:]==[old+2,old+3]
+m=PlaybackMachine(); m.options(0,2,0); m.fn('ringnav_start_queue',4)  # ordered: the tracks after it follow
+assert m.sequence(limit=3)==[4,5]  # the play order is 2,6,0,1,3,4,5
 checks+=1
 
 # Add and Play next remap history and occurrences, including multiple priority tracks.
@@ -523,10 +608,13 @@ assert m.fn('playback_set',0,1)==0 and m.fn('playback_successor',1)==-1; checks+
 
 # The wheel's ticks (wheel_sample): one per WHEEL_TICK_UNITS of travel, the rest carried; a reversal
 # starts again; the 200 -> 1 seam wraps; stock is handed the touch-down x, so its own logic sees a
-# still finger. Ticks go to stock's poster as key down, then up.
-def wheel(samples,m=None):
+# still finger. Ticks go to stock's poster as key down, then up, while the main loop's 20-event
+# queue (u16 r, w, full, capacity) keeps WHEEL_QUEUE_FREE slots for a touch's release.
+def wheel(samples,m=None,used=0):
     m=m or PlaybackMachine(); m.handlers[O['WHEEL_POST']]='wheel_post'
-    info,s=m.alloc(0x60),m.alloc(20); posted=[]; seen=[]
+    info,s,loop,q=m.alloc(0x60),m.alloc(20),m.alloc(0x60),m.alloc(8); posted=[]; seen=[]
+    m.word(info+O['WHEEL_INFO_LOOP'],loop); m.word(loop+O['LOOP_QUEUE'],q)
+    m.u.mem_write(q,struct.pack('<4H',15,(15+used)%20,used==20,20))
     m.u.hook_add(UC_HOOK_CODE,lambda u,a,n,_: posted.append((m.get(info+O['WHEEL_INFO_EVENT']),
                  m.get(info+O['WHEEL_INFO_KEY']))),begin=O['WHEEL_POST'],end=O['WHEEL_POST'])
     for sample in samples:
@@ -541,6 +629,8 @@ assert wheel([(195,1),((195+U)%200,1)])[0]==[P] and wheel([((195+U)%200,1),(195,
 assert wheel([(10,1),(10+2*U,1)])[0]==[P,P]                          # one sample, two ticks
 assert wheel([(10,1),(9+U,1)])[0]==[] and wheel([(10,1),(10+U,1)])[0]==[P]  # one tick is U of travel
 assert wheel([(50,1),(52+U,1),(52+U,0),(52+U,1),(51+2*U,1)])[0]==[P]  # a lift drops the carry
+F=O['WHEEL_QUEUE_FREE']  # a busy UI: a tick that would leave fewer free slots is dropped, not queued
+assert [len(wheel([(10,1),(10+U,1)],used=n)[0]) for n in (20-F-2,20-F-1,20)]==[1,0,0]
 checks+=1
 # Wheel sensitivity (Q2POD WHEELSENSITIVITY, 50-200% in tens, 1.0.6's key and scale): the travel
 # per tick is 50/pct of U, in sixteenths of a unit, so 50% is exactly U (28), the wheel before the
@@ -582,6 +672,47 @@ assert wheel([(10,1),(10+U-1,1),fast,(10+U,1),(9+U+U//2,1)])[0]==[P] and wheel([
 # From 100%, 13 of 14 is 26 of 28: two more units tick, one does not; a reversal still starts over.
 for more,want in ((1,[]),(2,[P]),(-1,[])):
     assert wheel([(10,1),(23,1),slow,(23+more,1)],sensitivity('100')[0])[0]==want,more
+checks+=1
+# Volume guard on (Q2POD VOLGUARD, #46), screen off: a touch's first WHEEL_DARK_GUARD units one way
+# tick nothing and are dropped; then it ticks as lit, reversals and new touches too, until WHEEL_DARK_IDLE_MS without travel. A
+# reversal, lift or pause under the guard starts it again; travel is units, so sensitivity aside.
+D,IDLE=O['WHEEL_DARK_GUARD'],O['WHEEL_DARK_IDLE_MS']
+lit=lambda m: m.byte(syms['g_backlight_status'],1)
+def dark(m,on=1):
+    m.config['VOLGUARD']=str(on)
+    m.byte(syms['g_backlight_status'],0); m.word(ps['wheel_guard'],on)
+def later(ms): return lambda m: setattr(m,'now',m.now+ms)
+def turn(x,n,step=1): return [((x+step*k-1)%200+1,1) for k in range(1,n+1)]  # a unit per sample from x
+X=10+D-1  # where D-1 units up from 10 stop
+assert D==100 and wheel([dark,(10,1)]+turn(10,D-1))[0]==[]           # a brush under half a turn
+assert wheel([dark,(10,1)]+turn(10,D-1),sensitivity('200')[0])[0]==[]  # at any sensitivity
+assert wheel([dark,(10,1)]+turn(10,D+2*U-1))[0]==[P]                  # past it: every U ticks
+assert wheel([dark,(10,1)]+turn(10,D+2*U))[0]==[P,P]
+assert wheel([dark,(150,1)]+turn(150,D+U,-1))[0]==[N]                 # either way, over the seam
+assert wheel([dark,(150,1),(90,1),(90,1)]+turn(90,D+U-60,-1))[0]==[N]  # still samples do not reverse
+for step,key in ((1,P),(-1,N)):
+    samples=[dark,(100,1),((100+90*step-1)%200+1,1),((100+140*step-1)%200+1,1)]
+    assert wheel(samples)[0]==[key]                                  # crossing carries its excess
+    assert wheel(samples+[((100+(D+2*U)*step-1)%200+1,1)])[0]==[key,key]
+assert wheel([(100,1),(100-U//2,1),(100-U//2,1),(100-U,1)])[0]==[N]  # lit carry survives still samples too
+assert wheel([dark,(10,1)]+turn(10,D+U//4),sensitivity('200')[0])[0]==[P]
+assert wheel([dark,(10,1)]+turn(10,D-1)+turn(X,D+U-1,-1))[0]==[]      # a reversal starts it again
+assert wheel([dark,(10,1)]+turn(10,D-1)+turn(X,D+U,-1))[0]==[N]
+assert wheel([dark,(10,1)]+turn(10,D-1)+[(X,0),(X,1)]+turn(X,D-1))[0]==[]  # so does a lift
+assert wheel([dark,(10,1)]+turn(10,D-1)+[later(IDLE)]+turn(X,U))[0]==[]    # and a pause
+assert wheel([dark,(10,1)]+turn(10,D-1)+[later(IDLE-1)]+turn(X,1+U))[0]==[P]
+Y=10+D  # open: a new touch and a reversal tick at once, until the wheel idles
+assert wheel([dark,(10,1)]+turn(10,D)+[(Y,0),later(IDLE-1),(Y,1)]+turn(Y,U))[0]==[P]
+assert wheel([dark,(10,1)]+turn(10,D)+turn(Y,U,-1))[0]==[N]
+assert wheel([dark,(10,1)]+turn(10,D)+[(Y,0),later(IDLE),(Y,1)]+turn(Y,D))[0]==[]
+assert wheel([(10,1)]+turn(10,U))[0]==[P]                               # lit: as before
+assert wheel([lambda m: dark(m,0),(10,1)]+turn(10,U))[0]==[P]           # the guard off (default): as before
+assert wheel([dark,(10,1)]+turn(10,D-1)+[lit]+turn(X,U))[0]==[P]       # lit mid-turn ticks at once
+assert wheel([dark,(10,1)]+turn(10,D)+[lit]+turn(Y,1)+[dark]+turn(Y+1,U))[0]==[]  # and dark again arms
+def ui_pass(m):
+    m.handlers[ps['stock_sleep_trampoline']]='stock_sleep'
+    m.fn('ringnav_sleep',0x1234)
+assert wheel([dark,ui_pass,(10,1)]+turn(10,D)+[(Y,0),lit,ui_pass,dark,(Y,1)]+turn(Y,U))[0]==[]  # wake without wheel travel re-arms
 checks+=1
 # UI wiring in both variants: stock-style choice menu, selected marker, touch and wheel slider.
 m=PlaybackMachine(); m.top=m.node('window','playing_page'); m.stack=[m.top]; m.word(m.top+O['W_PARENT'],m.wm)
@@ -627,8 +758,7 @@ class ChangeMachine(PlaybackMachine):
         if not name.startswith('x:'): return super().hook(u,address,size,unused)
         name=name[2:]; a=u.reg_read(REGS[0]); self.seen.append((name,a) if name=='mclSetPlayPos' else name)
         ret=1 if name in ('toolsCheckMount','toolsLoadNextDir','toolsLoadPrevDir','player_refresh_playqueue') else 0
-        for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
-        u.reg_write(UC_MIPS_REG_V0,ret); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
+        self.returns(ret,clobber=True)
 for nxt,pos,wrap,folder in ((1,6,0,'toolsLoadNextDir'),(0,0,6,'toolsLoadPrevDir')):
     for active in (0,1):
         for cls in (1,0xff10,0xf001):
@@ -740,8 +870,8 @@ m=PlaybackMachine(fresh.files); m.word(O['MCL_POS'],0)
 m.u.mem_write(syms['g_playspeed_mode'],b'\x03')
 # A MIPS jal to the hook gives it player_initconfig's audited return address.
 pc=0x513394
-m.u.mem_write(pc,struct.pack('<II',0x0c000000 | (ps['ringnav_speed']>>2),0))
-m.u.mem_write(pc+8,struct.pack('<II',0x08000000 | (0x1000000>>2),0))
+m.u.mem_write(pc,struct.pack('<II',jal(ps['ringnav_speed']),0))
+m.u.mem_write(pc+8,struct.pack('<II',j(0x1000000),0))
 before=dict(m.files)
 m.call(address=pc,args=(3,0,0,0),gap=0)
 assert m.sent_speed==2 and m.files==before
@@ -758,6 +888,7 @@ for failure in ('write','close','rename'):
     m.fn('ringnav_speed',1)
     assert m.sent_speed==(0 if failure=='close' else 2) and m.toasts==['Could not save folder speed']
     assert not [k for k,v in before.items() if m.files[k]!=v]
+    assert not any(k.endswith(".tmp") for k in m.files)
 # Truncated, invalid and wrong-folder records cannot change a track's speed.
 path=next(k for k,v in fresh.files.items() if v.startswith(b'/A/\0'))
 for data in (b'broken',b'/B/\0'+bytes(1020)+struct.pack('<I',2),fresh.files[path][:-4]+struct.pack('<I',99)):

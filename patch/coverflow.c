@@ -28,8 +28,9 @@
 #define ART_NEAR 3 /* real art only this many covers either side, like PictureFlow's cache */
 #define HOME_PLACEHOLDER "default_album_home" /* Classic Home's, at 290px (stock's: 110) */
 enum { ARTIST_ALBUMS = 1, RATED_ALBUMS }; /* cf.scoped */
-/* after the albums: Sort, then Refresh library; an artist's none, the rated albums' Sort alone */
-#define CARDS (cf.scoped == ARTIST_ALBUMS ? 0 : cf.scoped ? 1 : 2)
+/* after the albums: Sort, then Refresh library; an artist's All albums (two or more), the rated
+ * albums' Sort alone */
+#define CARDS (cf.scoped == ARTIST_ALBUMS ? deque_size(cf.albums) > 1 : cf.scoped ? 1 : 2)
 
 extern int stock_home_trampoline(void *win, void *ctx), stock_scan_all_trampoline(void *, void *),
     stock_scan_folder_trampoline(void *, void *), stock_delete_song_trampoline(void *, void *);
@@ -135,7 +136,7 @@ static int ff_thumb(const char *src, const char *dst, int w, int h) {
     if (!pid) {
         execl(ART_FFMPEG, ART_FFMPEG, "-nostdin", "-v", "quiet", "-i", src, "-frames:v", "1", "-vf",
               vf, "-pix_fmt", "yuvj420p", "-q:v", "3", "-f", "mjpeg", "-y", dst, (char *)0);
-        exit(127);
+        child_exit(127);
     }
     return pid > 0 && waitpid(pid, &status, 0) == pid && !status;
 }
@@ -160,12 +161,52 @@ static int folder_shared(unsigned key, const char *track) {
     return 0;
 }
 
-/* One album: embedded art, then cover and folder images (not from a folder shared with other
- * albums, whose cover.jpg would be theirs too), then ffmpeg's read of the embedded art, last as it
+/* The cover and folder images beside track through fit (none when shared: a folder shared with
+ * other albums, whose cover.jpg would be theirs too). */
+static int beside_art(const char *track, const char *dst, int w, int h, int shared,
+                      int (*fit)(const char *, const char *, int, int)) {
+    char src[1024];
+    const char *slash = strrchr(track, '/');
+    int folder = slash ? (int)(slash - track) : 0, ok = 0;
+    static const char *const names[] = { "cover.jpg",  "folder.jpg",  "cover.png",
+                                          "folder.png", "cover.webp", "folder.webp" };
+    for (unsigned i = 0; i < sizeof(names) / sizeof(*names) && !ok && !shared; ++i) {
+        snprintf(src, sizeof(src), "%.*s/%s", folder, track, names[i]);
+        ok = !access(src, 4) && fit(src, dst, w, h);
+    }
+    return ok;
+}
+
+/* Whether Coverflow marked the album of the track the player parsed (g_play_id3_info, keyed as
+ * Home's art is) empty: its build found no art for the album's track. */
+static int marked_empty(const char *track) {
+    const char *id3 = (const char *)g_play_id3_info;
+    if (tk_strcmp(id3, track)) return 0;
+    char art[512];
+    void *f = fopen(art_path(art, tags_key(id3 + ID3_ARTIST, id3 + ID3_ALBUM), ""), "rb");
+    long size = f && !fseek(f, 0, 2) ? ftell(f) : -1;
+    if (f) fclose(f);
+    return !size;
+}
+
+/* player_parsecover_thd's folder-image call, after its embedded art failed, under
+ * g_playcover_mutex: what stock refuses (a PNG over 1 MB or palette/greyscale, WebP) goes to
+ * ffmpeg, so Now Playing gets the art Coverflow shows. ff_thumb takes no lock, so Coverflow's
+ * parse-then-play order cannot deadlock with it. The folder images cost a process only when one
+ * exists; the embedded probe, a process for every track without art, is skipped for an album
+ * Coverflow marked empty. ponytail: the marker is one track's verdict, so another disc's or a
+ * same-named album's embedded-only WebP or large PNG shows no art here; a per-track probe cache
+ * if that matters. */
+int coverflow_player_cover(const char *track, const char *dst, int w, int h) {
+    return toolsGetExternCover(track, dst, w, h) == 1 || beside_art(track, dst, w, h, 0, ff_thumb) ||
+           (!marked_empty(track) && ff_thumb(track, dst, w, h));
+}
+
+/* One album: embedded art, then beside_art, then ffmpeg's read of the embedded art, last as it
  * costs a process for every album without art; written to .tmp and renamed. An empty file marks
  * "no art", so the placeholder shows and the album is not retried until Refresh. */
 static void build_art(const job_t *j) {
-    char dst[512], tmp[512], src[1024];
+    char dst[512], tmp[512];
     if (access(j->track, 0)) return; /* storage gone: no marker, the next open retries */
     art_path(dst, j->key, "");
     art_path(tmp, j->key, ".tmp");
@@ -181,15 +222,8 @@ static void build_art(const job_t *j) {
     pthread_mutex_unlock((void *)g_playcover_mutex);
 #endif
     pthread_mutex_unlock((void *)parse_cover_mutex);
-    const char *slash = strrchr(j->track, '/');
-    int folder = slash ? (int)(slash - j->track) : 0;
-    static const char *const names[] = { "cover.jpg",  "folder.jpg",  "cover.png",
-                                          "folder.png", "cover.webp", "folder.webp" };
-    for (unsigned i = 0; i < sizeof(names) / sizeof(*names) && !ok && !j->shared; ++i) {
-        snprintf(src, sizeof(src), "%.*s/%s", folder, j->track, names[i]);
-        ok = !access(src, 4) && thumb(src, tmp, ART_SIZE, ART_SIZE);
-    }
-    ok = ok || ff_thumb(j->track, tmp, ART_SIZE, ART_SIZE);
+    ok = ok || beside_art(j->track, tmp, ART_SIZE, ART_SIZE, j->shared, thumb) ||
+         ff_thumb(j->track, tmp, ART_SIZE, ART_SIZE);
     if (ok && !rename(tmp, dst)) return;
     unlink(tmp);
     if (access(j->track, 0)) return;
@@ -198,7 +232,6 @@ static void build_art(const job_t *j) {
 }
 
 static void *worker(void *unused) {
-    (void)unused;
     while (cf.done < cf.total && !cf.cancel) {
         build_art(&cf.jobs[cf.done]);
         ++cf.done;
@@ -739,17 +772,51 @@ static const char *album_name(void *r) {
     const char *s = P(r, REC_ALBUM);
     return s ? s : "";
 }
-/* The row of r's album (album_cmp) in list, or -1: the Unknown row never matches. A linear
- * scan: the rank queries and play counts together look up at most the album count + 512 songs. */
-static int album_in(void *list, void *r) {
-    unsigned n = list ? deque_size(list) : 0;
-    for (unsigned i = 0; i < n; ++i) {
-        void *s = deque_at(list, i);
-        if (I(s, REC_ID) != -1 && !album_cmp(s, r)) return (int)i;
-    }
-    return -1;
+/* Rows sorted to look up by binary search, ties in their list's order. */
+typedef struct {
+    void *a;
+    unsigned j;
+} row_t;
+static int name_cmp(void *a, void *b) { return strcasecmp(album_name(a), album_name(b)); }
+static int tie(int d, const row_t *p, const row_t *q) {
+    return d ? d : (p->j > q->j) - (p->j < q->j);
 }
-static int album_index(void *r) { return album_in(cf.stock, r); }
+static int by_name(const void *x, const void *y) {
+    const row_t *p = x, *q = y;
+    return tie(name_cmp(p->a, q->a), p, q);
+}
+static int by_album(const void *x, const void *y) {
+    const row_t *p = x, *q = y;
+    return tie(album_cmp(p->a, q->a), p, q);
+}
+/* The first of v's n rows not before r by cmp. */
+static unsigned lower(row_t *v, unsigned n, void *r, int (*cmp)(void *, void *)) {
+    unsigned lo = 0;
+    while (n) {
+        unsigned h = n / 2;
+        if (cmp(v[lo + h].a, r) < 0) lo += h + 1, n -= h + 1;
+        else n = h;
+    }
+    return lo;
+}
+/* list's rows sorted by by, *m of them, Unknown (REC_ID -1) only if all; 0 out of memory. */
+static row_t *album_rows(void *list, unsigned *m, int (*by)(const void *, const void *), int all) {
+    row_t *v = calloc(deque_size(list) + 1, sizeof *v);
+    *m = 0;
+    for (unsigned i = 0; v && i < deque_size(list); ++i)
+        if (all || I(deque_at(list, i), REC_ID) != -1) v[*m].a = deque_at(list, i), v[(*m)++].j = i;
+    if (v) qsort(v, *m, sizeof *v, by);
+    return v;
+}
+/* The list row of r's album among album_rows' v, or -1: the Unknown row never matches. */
+static int album_in(row_t *v, unsigned m, void *r) {
+    unsigned k = lower(v, m, r, album_cmp);
+    return k < m && !album_cmp(v[k].a, r) ? (int)v[k].j : -1;
+}
+/* cf.stock's album_rows while sorted() ranks it. */
+static row_t *stock_rows;
+static unsigned stock_n;
+static int album_index(void *r) { return album_in(stock_rows, stock_n, r); }
 /* album_row on the first four columns, then the fifth, the album artist, on the row it added; the
  * stSongInfo copy (0x5b3b1c) duplicates +0x24 as it does the other strings. */
 static int split_row(void *a, int n, char **v, char **c) {
@@ -762,20 +829,23 @@ static int split_row(void *a, int n, char **v, char **c) {
 static int rank_query(void *sql) { return toolsQueryDbTable("/mnt/data/database.db", sql, split_row, 0); }
 
 /* list's albums with music, in a new deque (list goes), using a music track for their art even when
- * tags are shared with an audiobook. The card's files stay untouched. */
+ * tags are shared with an audiobook. The card's files stay untouched. Out of memory,
+ * audiobooks stay. */
 static void *music_albums(void *list) {
     int n;
-    void *rows = staged(rank_query, MUSIC_ALBUM_SQL, &n), *out = _create_deque("stSongInfo");
+    void *rows = staged(rank_query, MUSIC_ALBUM_SQL, &n), *out;
+    unsigned m;
+    row_t *v = album_rows(rows, &m, by_album, 0);
+    if (!v) return deque_destroy(rows), list;
+    out = _create_deque("stSongInfo");
     deque_init(out);
     for (unsigned i = 0; i < deque_size(list); ++i) {
         void *r = deque_at(list, i);
-        for (unsigned j = 0; j < deque_size(rows); ++j) {
-            void *a = deque_at(rows, j);
-            if (I(r, REC_ID) == -1 ? I(a, REC_ID) != -1 : I(a, REC_ID) == -1 || album_cmp(r, a) != 0) continue;
-            _deque_push_back(out, I(r, REC_ID) == -1 ? r : a);
-            break;
-        }
+        int k = I(r, REC_ID) == -1 ? -1 : album_in(v, m, r);
+        if (k >= 0) _deque_push_back(out, deque_at(rows, (unsigned)k));
+        else if (I(r, REC_ID) == -1 && m < deque_size(rows)) _deque_push_back(out, r);
     }
+    free(v);
     deque_destroy(rows);
     deque_destroy(list);
     return out;
@@ -783,23 +853,27 @@ static void *music_albums(void *list) {
 
 /* getAllAlbum groups by name alone, as stock's Albums list does: each of its rows becomes that
  * name's ALBUM_SQL rows, one per album_cmp album (the SQL keeps disc folders apart), in its place;
- * a row the query missed stays. ponytail: a scan per row, albums squared; merge name-sorted lists
- * if large libraries feel it. */
+ * a row the query missed stays. Out of memory, the rows stay unsplit. ponytail: a scan of the
+ * name's albums so far per row, its albums squared; fine unless one name has thousands. */
 static void *split(void *stock) {
     int n;
-    void *rows = staged(rank_query, ALBUM_SQL, &n), *out = _create_deque("stSongInfo");
+    void *rows = staged(rank_query, ALBUM_SQL, &n), *out;
+    unsigned m;
+    row_t *v = album_rows(rows, &m, by_name, 1);
+    if (!v) return deque_destroy(rows), stock;
+    out = _create_deque("stSongInfo");
     deque_init(out);
     for (unsigned i = 0; i < deque_size(stock); ++i) {
         void *r = deque_at(stock, i);
         unsigned from = deque_size(out), k;
-        for (unsigned j = 0; I(r, REC_ID) != -1 && j < deque_size(rows); ++j) {
-            void *a = deque_at(rows, j);
-            if (strcasecmp(album_name(r), album_name(a))) continue;
+        for (unsigned j = I(r, REC_ID) == -1 ? m : lower(v, m, r, name_cmp); j < m && !name_cmp(v[j].a, r); ++j) {
+            void *a = v[j].a;
             for (k = from; k < deque_size(out) && album_cmp(deque_at(out, k), a); ++k) {}
             if (k == deque_size(out)) _deque_push_back(out, a);
         }
         if (from == deque_size(out)) _deque_push_back(out, r);
     }
+    free(v);
     deque_destroy(rows);
     deque_destroy(stock);
     return out;
@@ -860,8 +934,10 @@ static void *sorted(void) {
     if (!cf.scoped) cf.year_old = ringnav_year_old(); /* the rated page's sort is its own */
     unsigned *sum = v && played ? calloc(n + 1, sizeof *sum) : 0;
     char *keys = v && artist ? calloc(n + 1, ARTIST_KEY) : 0;
-    if (!v || (played && !sum) || (artist && !keys)) {
-        free(v), free(sum), free(keys);
+    int ranked = cf.sort != SORT_RATING && cf.sort != SORT_RANDOM; /* uses album_index */
+    stock_rows = v && ranked ? album_rows(cf.stock, &stock_n, by_album, 0) : 0;
+    if (!v || (ranked && !stock_rows) || (played && !sum) || (artist && !keys)) {
+        free(v), free(sum), free(keys), free(stock_rows), stock_rows = 0;
         cf.sort = SORT_ALBUM;
         return cf.stock;
     }
@@ -889,21 +965,25 @@ static void *sorted(void) {
     void *out = _create_deque("stSongInfo");
     deque_init(out);
     for (unsigned i = 0; i < n; ++i) _deque_push_back(out, v[i].r);
-    free(v), free(sum), free(keys);
+    free(v), free(sum), free(keys), free(stock_rows), stock_rows = 0;
     return out;
 }
 extern int ringnav_artist_az(void);
 /* albums (split's rows) in place by year, as year_sql, or by name (Playback's Artist album order
  * A-Z): the query's order, then the albums it missed, then the Unknown album. navigation.c's artist pages. Out of memory they keep their order. */
 void coverflow_by_year(void *albums) {
-    unsigned n = deque_size(albums);
+    unsigned n = deque_size(albums), m;
     char *taken = calloc(n + 1, 1);
+    row_t *v = taken ? album_rows(albums, &m, by_album, 0) : 0;
     int found;
-    if (!taken) return;
+    if (!v) {
+        free(taken);
+        return;
+    }
     void *rows = staged(rank_query, (void *)(ringnav_artist_az() ? SORT_SQL "album COLLATE NOCASE" : year_sql()), &found), *out = _create_deque("stSongInfo");
     deque_init(out);
     for (unsigned j = 0; j < deque_size(rows); ++j) {
-        int i = album_in(albums, deque_at(rows, j));
+        int i = album_in(v, m, deque_at(rows, j));
         if (i >= 0 && !taken[i]) taken[i] = 1, _deque_push_back(out, deque_at(albums, (unsigned)i));
     }
     deque_destroy(rows);
@@ -911,7 +991,7 @@ void coverflow_by_year(void *albums) {
         for (unsigned i = 0; i < n; ++i)
             if (!taken[i] && (I(deque_at(albums, i), REC_ID) == -1) == unknown)
                 _deque_push_back(out, deque_at(albums, i));
-    free(taken);
+    free(taken), free(v);
     deque_clear(albums);
     deque_assign(albums, out);
     deque_destroy(out);
@@ -1042,6 +1122,7 @@ int image_show(void *img, const char *url, unsigned *size) {
     if (size) size[0] = bitmap[0], size[1] = bitmap[1];
     image_base_set_image(img, url);
     widget_unload_image(img, bitmap);
+    widget_invalidate_force(img, 0); /* A reused file URL still contains new pixels. */
     return 1;
 }
 
@@ -1394,8 +1475,6 @@ static void cover(void *img, unsigned i, int near) {
 }
 
 static int changed(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     unsigned n = widget_count_children(cf.slide), c = (unsigned)I(cf.slide, SLIDE_INDEX);
     for (unsigned i = 0; !fx.frame && i < n; ++i) { /* the flat fallback's own images */
         unsigned d = i > c ? i - c : c - i;
@@ -1403,14 +1482,19 @@ static int changed(void *ctx, void *event) {
     }
     void *r = c + CARDS < n ? deque_at(cf.albums, c) : (void *)0;
     if (r && !cf.scoped) cf.saved_album = album_key(r);
-    widget_set_text_utf8(cf.name, r ? P(r, REC_ALBUM) : c + CARDS == n ? sort_names[cf.sort] : "Refresh library");
+    widget_set_text_utf8(cf.name, r ? P(r, REC_ALBUM)
+                                  : c + CARDS != n ? "Refresh library"
+                                  : cf.scoped == ARTIST_ALBUMS ? "All albums" : sort_names[cf.sort]);
     widget_set_text_utf8(cf.artist, r ? P(r, REC_ARTIST) : ""); /* NULL leaves the old one */
+    /* Stock draws even a centred caption at -xoffset: a long one's scroll would shift the next left. */
+    widget_set_prop_int(cf.name, "xoffset", 0);
+    widget_set_prop_int(cf.artist, "xoffset", 0);
     return 0;
 }
 
 #include "m1plus_coverflow_touch.c"
 
-/* One child per album plus the Sort and Refresh cards, moved by the wheel only: the slide_menu takes no
+/* One child per album plus the cards (CARDS), moved by the wheel only: the slide_menu takes no
  * touch. With depth it spans the frame, so every step repaints all of it, and its CF_VIEW_H square
  * items with a negative spacer move one album per CF_STRIDE px; the children stay empty under the
  * frame. The flat fallback is the stock images, 160 px, as before. ponytail: one child per album;
@@ -1463,7 +1547,6 @@ static void covers(void) {
 }
 
 static int to_covers(const void *unused) {
-    (void)unused;
     cf.timer = 0;
     stop();
     covers();
@@ -1471,14 +1554,11 @@ static int to_covers(const void *unused) {
 }
 
 static int cancel_row(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     rearm(&cf.timer, to_covers, 0);
     return 0;
 }
 
 static int poll(const void *unused) {
-    (void)unused;
     cf.timer = 0;
     if (cf.done == cf.total) return to_covers(0); /* stop() joins the thread's last steps */
     char progress[64];
@@ -1582,7 +1662,6 @@ void play_folder(void *dq, int idx, int cls) {
 }
 
 static int play(void *ctx, void *event) {
-    (void)event;
     int i = (int)(long)ctx;
     void *t = deque_at(cf.tracks, (unsigned)i);
     if (!t || access(P(t, REC_PATH), 0)) {
@@ -1645,7 +1724,6 @@ void *coverflow_album_tracks(void *r) {
 }
 
 static int to_tracks(const void *unused) {
-    (void)unused;
     cf.timer = 0;
     int n;
     char name[512];
@@ -1670,8 +1748,27 @@ static int to_tracks(const void *unused) {
     return 0;
 }
 
+/* The All albums card: every album's tracks, the covers' order and each album's in album order,
+ * from the first, as a library queue (0xff10 would resume one album of the name). ponytail: a
+ * query per album; one artist query split back into albums if a large artist drags. */
+static int play_all(const void *unused) {
+    cf.timer = 0;
+    void *all = _create_deque("stSongInfo");
+    deque_init(all);
+    for (unsigned i = 0; i < deque_size(cf.albums); ++i) {
+        void *t = coverflow_album_tracks(deque_at(cf.albums, i));
+        for (unsigned j = 0; j < deque_size(t); ++j) _deque_push_back(all, deque_at(t, j));
+        deque_destroy(t);
+    }
+    if (deque_size(all) && !access(P(deque_at(all, 0), REC_PATH), 0))
+        play_folder(all, 0, 0xf001);
+    else
+        widget_set_text_utf8(cf.name, "Storage unavailable");
+    deque_destroy(all);
+    return 0;
+}
+
 static int refresh(const void *unused) {
-    (void)unused;
     cf.timer = 0;
     void *dir = opendir(ART_DIR);
     for (struct dirent *e; dir && (e = readdir(dir));) {
@@ -1688,7 +1785,6 @@ static int refresh(const void *unused) {
 /* The Sort card: the next order, saved, and the covers again in it, still on the Sort card. The
  * stock list is kept, so nothing is queried but the order's own ranking. */
 static int resort(const void *unused) {
-    (void)unused;
     cf.timer = 0;
     cf.sort = sort_next(1);
     if (cf.scoped) BLOB_IO(RATED_SORT_FILE, cf.sort, 1);
@@ -1702,9 +1798,10 @@ static int resort(const void *unused) {
 
 /* Clicks only schedule: a screen change never destroys the widget whose click is running. */
 static int pick(void *ctx, void *event) {
-    (void)event;
     int i = (int)(long)ctx, n = (int)deque_size(cf.albums);
-    if (i == n + 1)
+    if (i == n && cf.scoped == ARTIST_ALBUMS)
+        rearm(&cf.timer, play_all, 0);
+    else if (i == n + 1)
         rearm(&cf.timer, refresh, 0);
     else if (i == n)
         rearm(&cf.timer, resort, 0);
@@ -1718,7 +1815,6 @@ static int pick(void *ctx, void *event) {
 /* Return: tracks -> covers (the slide_menu kept its album), preparing -> cancel and covers,
  * covers or the message -> Home, or back out of a scoped page. */
 static int keyup(void *ctx, void *event) {
-    (void)ctx;
     if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
     if (cf.screen == TRACKS || cf.screen == PREPARING)
         rearm(&cf.timer, to_covers, 0);
@@ -1742,7 +1838,6 @@ static int keyup(void *ctx, void *event) {
 }
 
 static int closed(void *ctx, void *event) {
-    (void)ctx; (void)event;
     if (cf.saved_album) BLOB_IO(LAST_ALBUM, cf.saved_album, 1);
     drop();
     cf.page = cf.body = cf.covers = cf.slide = 0;
@@ -1760,8 +1855,6 @@ static int closed(void *ctx, void *event) {
 }
 
 static int coverflow_open(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     if (cf.page || !(cf.page = page_open("coverflow_page", closed, keyup))) return 0;
     load();
     return 0;
@@ -1823,15 +1916,16 @@ void *queue_now(unsigned *pos, unsigned *n) {
     return *pos < *n ? deque_at(queue, *pos) : (void *)0;
 }
 
-/* r's REC_ALBUM, REC_ARTIST or REC_TITLE as the player parsed it from the file, once it has
- * parsed r's; else the record's own. Folder plays' records, and those of the next folder, which
+/* r's REC_ALBUM, REC_ARTIST, REC_ALBUM_ARTIST or REC_TITLE as the player parsed it from the file,
+ * once it has parsed r's; else the record's own. Folder plays' records, and those of the next folder, which
  * stock queues when a folder play ends (on_player_autochange), carry no tags (issue #7). */
 const char *now_tag(void *r, int field) {
     if (!r) return (void *)0;
     if (!tk_strcmp((const char *)g_play_id3_info, P(r, REC_PATH)))
-        return (const char *)g_play_id3_info + (field == REC_ALBUM   ? ID3_ALBUM
-                                                 : field == REC_TITLE ? ID3_TITLE
-                                                                      : ID3_ARTIST);
+        return (const char *)g_play_id3_info + (field == REC_ALBUM          ? ID3_ALBUM
+                                                 : field == REC_TITLE        ? ID3_TITLE
+                                                 : field == REC_ALBUM_ARTIST ? ID3_ALBUM_ARTIST
+                                                                             : ID3_ARTIST);
     return P(r, field);
 }
 
@@ -1857,7 +1951,6 @@ static const char *const player_covers[] = { 0, "file://" PEQ_ROOT "/tmp/coverpi
 /* Repaint every window once the paint that changed the art is over: AWTK drops what a paint
  * invalidates when the frame ends, so the new art would reach only regions repainted later. */
 static int home_repaint(const void *unused) {
-    (void)unused;
     home.repaint = 0;
     widget_invalidate_force(window_manager(), 0);
     return 0; /* RET_REMOVE */
@@ -1948,7 +2041,7 @@ static void home_width(void *w, int outer, int inner, int x, int end, int depth)
 /* Stored HOME=0/1 is Split/Full in both themes: Split halves the screen, the art in the right
  * panel; Full hides the art and widens the list, its rows to HOME_FULL_ROW (Minimal) or
  * HOME_CLASSIC_ROW. Hidden Rockbox is restacked last because the native layout includes hidden
- * rows. */
+ * rows, and made insensitive, as hidden rows keep their taps. */
 void coverflow_home_layout(void) {
     int full = ipod_home_full(), classic = ipod_classic();
     if (!home.list) return;
@@ -1957,6 +2050,7 @@ void coverflow_home_layout(void) {
         int shown = ipod_home_rockbox();
         widget_restack(rockbox, shown ? 4 : 6); /* after Folder, else last */
         widget_set_visible(rockbox, shown, 0);
+        widget_set_sensitive(rockbox, shown); /* hidden, it would still take Streaming's taps */
         widget_set_text_utf8(widget_lookup(home.win, "label_rockbox", 1), ipod_home_shortcut());
     }
     int split = HOME_SPLIT_W, outer = full ? UI_W : split,
@@ -1989,8 +2083,6 @@ static void home_swap(void *from, void *to, int dx) {
 }
 
 static int home_settings(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     if (home.sets && !widget_get_visible(home.sets)) home_swap(home.list, home.sets, I(home.list, W_W));
     return 0;
 }

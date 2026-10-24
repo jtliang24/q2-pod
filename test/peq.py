@@ -40,7 +40,7 @@ class DSP(C.Structure):
 
 def compile_host(tmp, name, *sources):
     path = tmp/name
-    subprocess.run(['cc', '-DPEQ_HOST', f'-DPEQ_ROOT="{tmp}/root"', '-O2', '-Wall', '-Wextra', '-Werror',
+    subprocess.run(['cc', '-DPEQ_HOST', f'-DPEQ_ROOT="{tmp}/root"', '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
                     '-shared', '-fPIC', *map(str, sources), '-lm', '-o', str(path)], check=True)
     return C.CDLL(str(path))
 
@@ -299,7 +299,7 @@ list_item_create label_create list_view_create scroll_view_create widget_use_sty
 widget_set_text_utf8 widget_on widget_get_prop_int widget_set_prop_int widget_destroy_children
 widget_resize scroll_view_set_offset widget_invalidate_force timer_add timer_remove
 navigator_back write_int_config widget_factory widget_factory_create_widget widget_set_prop_str
-widget_get_text widget_set_focused widget_lookup window_manager pages_set_active_by_name
+widget_get_text_utf8 widget_set_focused widget_lookup window_manager pages_set_active_by_name
 canvas_set_fill_color canvas_fill_rect canvas_get_vgcanvas vgcanvas_save vgcanvas_restore vgcanvas_translate
 vgcanvas_begin_path vgcanvas_close_path vgcanvas_move_to vgcanvas_line_to vgcanvas_arc vgcanvas_fill vgcanvas_stroke
 vgcanvas_set_fill_color vgcanvas_set_stroke_color vgcanvas_set_fill_linear_gradient vgcanvas_set_line_width
@@ -321,7 +321,7 @@ static int edit_widget, focused;
 static char keyboard[32];
 void *widget_factory(void) { return 0; }
 void *widget_factory_create_widget(void *f, const char *type, void *p, int x, int y, int ww, int h) {
-    (void)f; (void)x; (void)y; (void)ww; void *e = make(p, h);
+    void *e = make(p, h);
     if (!strcmp(type, "edit")) { edit_widget = (int)(long)e; keyboard[0] = 0; focused = 0; }
     return e;
 }
@@ -330,28 +330,26 @@ void *widget_factory_create_widget(void *f, const char *type, void *p, int x, in
 static unsigned fill_color, screen[290 * 375];
 static struct { int r[4]; unsigned px, color; char s[32]; } texts[64];
 static int ntexts;
-int canvas_set_fill_color(void *c, unsigned v) { (void)c; fill_color = v; return 0; }
+int canvas_set_fill_color(void *c, unsigned v) { fill_color = v; return 0; }
 int canvas_fill_rect(void *c, int x, int y, int ww, int h) {
-    (void)c;
     for (int j = y < 0 ? 0 : y; j < y + h && j < 290; ++j)
         for (int i = x < 0 ? 0 : x; i < x + ww && i < 375; ++i) screen[j * 375 + i] = fill_color;
     return 0;
 }
-void *canvas_get_vgcanvas(void *c) { (void)c; return 0; }
-#define VG(name, ...) int name(void *vg, ##__VA_ARGS__) { (void)vg; return 0; }
+void *canvas_get_vgcanvas(void *c) { return 0; }
+#define VG(name, ...) int name(void *vg, ##__VA_ARGS__) { return 0; }
 VG(vgcanvas_save) VG(vgcanvas_restore) VG(vgcanvas_begin_path) VG(vgcanvas_close_path) VG(vgcanvas_fill) VG(vgcanvas_stroke)
-int vgcanvas_translate(void *vg, float x, float y) { (void)vg; (void)x; (void)y; return 0; }
-int vgcanvas_move_to(void *vg, float x, float y) { (void)vg; (void)x; (void)y; return 0; }
-int vgcanvas_line_to(void *vg, float x, float y) { (void)vg; (void)x; (void)y; return 0; }
-int vgcanvas_arc(void *vg, float x, float y, float r, float a, float b, int ccw) { (void)vg; (void)x; (void)y; (void)r; (void)a; (void)b; (void)ccw; return 0; }
-int vgcanvas_set_fill_color(void *vg, unsigned c) { (void)vg; (void)c; return 0; }
-int vgcanvas_set_stroke_color(void *vg, unsigned c) { (void)vg; (void)c; return 0; }
-int vgcanvas_set_line_width(void *vg, float w) { (void)vg; (void)w; return 0; }
+int vgcanvas_translate(void *vg, float x, float y) { return 0; }
+int vgcanvas_move_to(void *vg, float x, float y) { return 0; }
+int vgcanvas_line_to(void *vg, float x, float y) { return 0; }
+int vgcanvas_arc(void *vg, float x, float y, float r, float a, float b, int ccw) { return 0; }
+int vgcanvas_set_fill_color(void *vg, unsigned c) { return 0; }
+int vgcanvas_set_stroke_color(void *vg, unsigned c) { return 0; }
+int vgcanvas_set_line_width(void *vg, float w) { return 0; }
 int vgcanvas_set_fill_linear_gradient(void *vg, float a, float b, float c, float d, unsigned e, unsigned f) {
-    (void)vg; (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; return 0;
+    return 0;
 }
 void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, unsigned px, unsigned color) {
-    (void)canvas;
     if (ntexts == 64) return;
     memcpy(texts[ntexts].r, r, sizeof texts[ntexts].r);
     texts[ntexts].px = px, texts[ntexts].color = color;
@@ -361,17 +359,16 @@ void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, un
 /* iPod builds' theme: Classic's Graphite light tone, or Minimal's fill. */
 static int shim_classic_on = 1;
 int ipod_classic(void) { return shim_classic_on; }
-unsigned accent_tone(int tone) { (void)tone; return shim_classic_on ? 0x6e6e6e : 0xeeeeec; }
+unsigned accent_tone(int tone) { return shim_classic_on ? 0x6e6e6e : 0xeeeeec; }
 void shim_classic(int on) { shim_classic_on = on; }
 int widget_set_prop_str(void *x, const char *k, const char *v) {
     if ((long)x == edit_widget && !strcmp(k, "keyboard")) snprintf(keyboard, sizeof(keyboard), "%s", v);
     return 0;
 }
-const unsigned *widget_get_text(void *x) {
-    static unsigned wide[160];
-    unsigned i = 0;
-    for (; w[(long)x].text[i]; ++i) wide[i] = (unsigned char)w[(long)x].text[i];
-    wide[i] = 0; return wide;
+int widget_get_text_utf8(void *x, char *s, unsigned size) {
+    s[0] = 0;
+    if (strlen(w[(long)x].text) < size) snprintf(s, size, "%s", w[(long)x].text);
+    return 0;
 }
 int widget_set_focused(void *x, int v) {
     if ((long)x == edit_widget && (focused = v) && w[edit_widget].focus) w[edit_widget].focus(0, 0);
@@ -381,7 +378,6 @@ int widget_set_focused(void *x, int v) {
 static char page[16];
 void *window_manager(void) { return (void *)3999L; }
 void *widget_lookup(void *x, const char *name, int recursive) {
-    (void)recursive;
     if ((long)x == 3999 && !strcmp(name, "kb_default_t9")) return (void *)4000L;
     return (long)x == 4000 && !strcmp(name, "panel") ? (void *)4001L : 0;
 }
@@ -396,11 +392,11 @@ void shim_type(const char *text) {
     snprintf(w[edit_widget].text, 160, "%s", text);
     w[edit_widget].change(0, 0); shim_run();
 }
-void *list_item_create(void *p, int x, int y, int ww, int h) { (void)x; (void)y; (void)ww; return make(p, h); }
-void *label_create(void *p, int x, int y, int ww, int h) { (void)x; (void)y; (void)ww; return make(p, h); }
-void *list_view_create(void *p, int x, int y, int ww, int h) { (void)x; (void)y; (void)ww; return make(p, h); }
-void *scroll_view_create(void *p, int x, int y, int ww, int h) { (void)x; (void)y; (void)ww; return make(p, h); }
-int widget_use_style(void *x, const char *s) { (void)x; (void)s; return 0; }
+void *list_item_create(void *p, int x, int y, int ww, int h) { return make(p, h); }
+void *label_create(void *p, int x, int y, int ww, int h) { return make(p, h); }
+void *list_view_create(void *p, int x, int y, int ww, int h) { return make(p, h); }
+void *scroll_view_create(void *p, int x, int y, int ww, int h) { return make(p, h); }
+int widget_use_style(void *x, const char *s) { return 0; }
 int widget_set_text_utf8(void *x, const char *s) { snprintf(w[(long)x].text, 160, "%s", s); return 0; }
 unsigned widget_on(void *x, unsigned type, handler f, void *ctx) {
     long i = (long)x;
@@ -423,14 +419,14 @@ int widget_set_prop_int(void *x, const char *k, int v) {
     if (!strcmp(k, "_ringnav_index")) selection = v;
     return 0;
 }
-int widget_destroy_children(void *x) { (void)x; count = 1; return 0; }
-int widget_resize(void *x, int ww, int h) { (void)ww; w[(long)x].h = h; return 0; }
-int scroll_view_set_offset(void *x, int a, int b) { (void)x; (void)a; offset = b; return 0; }
+int widget_destroy_children(void *x) { count = 1; return 0; }
+int widget_resize(void *x, int ww, int h) { w[(long)x].h = h; return 0; }
+int scroll_view_set_offset(void *x, int a, int b) { offset = b; return 0; }
 int shim_selection(void) { return selection; }
 int shim_offset(void) { return offset; }
-int widget_invalidate_force(void *x, void *y) { (void)x; (void)y; return 0; }
-unsigned timer_add(int (*f)(const void *), void *ctx, unsigned ms) { (void)ctx; (void)ms; timer_fn = f; return ++timers; }
-int timer_remove(unsigned id) { (void)id; timer_fn = 0; ++removed; return 0; }
+int widget_invalidate_force(void *x, void *y) { return 0; }
+unsigned timer_add(int (*f)(const void *), void *ctx, unsigned ms) { timer_fn = f; return ++timers; }
+int timer_remove(unsigned id) { timer_fn = 0; ++removed; return 0; }
 int navigator_back(void) { return ++backs; }
 static int eqflag = -1;
 int write_int_config(int v, const char *s, const char *k) { if (!strcmp(s, "PLAYSET") && !strcmp(k, "EQFLAG")) eqflag = v; return 0; }
@@ -475,10 +471,10 @@ static int child(int bar) {
 }
 void stop_timer(unsigned *t) { if (*t) timer_remove(*t); *t = 0; }
 int center_press(unsigned *timer, unsigned *at, int (*single)(const void *), int scrubbing) {
-    (void)timer; (void)at; (void)scrubbing; single(0); return 1;
+    single(0); return 1;
 }
-int on_wm_keyup_fun(void *a, void *b) { (void)a; (void)b; return ++screen_off; }
-int widget_to_local(void *x, void *xy) { (void)x; (void)xy; return 0; }
+int on_wm_keyup_fun(void *a, void *b) { return ++screen_off; }
+int widget_to_local(void *x, void *xy) { return 0; }
 int eq_key(void *top, unsigned key);
 int shim_e3_open(void) { return shim_open(); } /* the EQ page opens on Simple */
 int shim_e3_key(int k) { return eq_key((void *)1, (unsigned[]){KEY_PREV, KEY_NEXT, KEY_CENTER}[k]); }
@@ -640,6 +636,8 @@ def editor_check(lib, tmp):
     assert ui.shim_page() == b'symnum'  # on its number keys
     ui.shim_type(b'2500'); assert edit() == '2500'
     ui.shim_type(b'abc'); assert edit() == '2500'      # not a number: unchanged
+    ui.shim_type('\u0131'.encode()); assert edit() == '2500'  # low wchar byte is ASCII '1', still not a number
+    ui.shim_type(b'9'*16); assert edit() == '2500'    # stock conversion refuses a value that cannot fit
     ui.shim_type(b'99999'); assert edit() == '20000'   # clamped like Raise
     ui.shim_type(b'1000.5'); assert edit() == '1000'   # kept exactly, shown whole
     ui.shim_return(); assert title() == 'Band 1'
@@ -1036,6 +1034,26 @@ static void crossfade_check(void) {
     track(&a, 48000);
     for (n = 0; n < 10 * 48000;) assert(block(&a, buf, 1024, &n, 1, 48000) == 1024);
     a.uninit(&a);
+    /* A 10 s fade: the hold wraps the ring; odd block sizes; order and the equal-power gain hold. */
+    xfade_view(10000);
+    peq_length = 60;
+    static const unsigned sizes[] = {1024, 333, 17, 1000};
+    unsigned j = 0;
+    track(&a, 48000);
+    for (n = out = 0; n < 60 * 48000;) {
+        unsigned k = block(&a, buf, sizes[j++ % 4], &n, 1, 48000);
+        for (unsigned i = 0; i < k; ++i) assert(buf[2 * i] == (float)out++);
+    }
+    held = n - out;
+    a.uninit(&a);
+    track(&b, 48000);
+    for (m = mixed = 0; mixed < held;) {
+        unsigned k = block(&b, buf, sizes[j++ % 4], &m, 0, 48000);
+        for (unsigned i = 0; i < k && mixed < held; ++i, ++mixed)
+            assert(fabsf(buf[2 * i + 1] - cosf((mixed + 0.5f) / held * 1.5707963f)) < 1e-5f);
+    }
+    b.uninit(&b);
+    peq_length = 10;
     xfade_view(0);
     peq_pts = -1;
 }
@@ -1211,7 +1229,7 @@ def player_check(tmp):
     binary = tmp/'player_test'
     sources = [ROOT/'patch/peq_player.c', ROOT/'patch/peq.c', tmp/'player_test.c']
     subprocess.run(['cc', '-m32', '-DPEQ_HOST', f'-DPEQ_ROOT="{root}"', '-Dcalloc=test_calloc',
-                    '-O2', '-Wall', '-Wextra', '-Werror', '-I', str(ROOT/'patch'),
+                    '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-I', str(ROOT/'patch'),
                     *map(str, sources), '-Wl,--wrap=clock_gettime', '-lm', '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
     print('PEQ player: negotiation, pass-through, the visualizer tap, live updates, track changes, cleanup, crossfade and the Xing seek table passed.')
@@ -1292,7 +1310,6 @@ static const char *cfg[6]; /* TOKEN, USER, PASSWORD, API_KEY, API_SECRET, ALBUM_
 int toolsReadConfig(const char *path, const char *section, const char *key, char *out, const char *def) {
     static const char *const keys[] = { "TOKEN", "USER", "PASSWORD", "API_KEY", "API_SECRET", "ALBUM_ARTIST" };
     static const char *const sections[] = { "LISTENBRAINZ", "LASTFM", "LASTFM", "LASTFM", "LASTFM", "SCROBBLE" };
-    (void)def;
     assert(strstr(path, "/mnt/mmc/.scrobble.ini"));
     for (int i = 0; i < 6; i++)
         if (!strcmp(key, keys[i]) && !strcmp(section, sections[i]) && cfg[i]) { strcpy(out, cfg[i]); return 1; }
@@ -1332,7 +1349,6 @@ int curl_easy_setopt(void *c, int opt, ...) {
     return 0;
 }
 int curl_easy_perform(void *c) {
-    (void)c;
     int i = requests++;
     if (i == append_at) scrobble_append("New\tB\tListen\t\t100\tL\t1700009999\t\n", 33); /* a listen meanwhile */
     fprintf(dump, "%s\t", easy.url);
@@ -1448,7 +1464,7 @@ def scrobble_check(tmp):
     (tmp/'scrobble_test.c').write_text(SCROBBLE)
     binary = tmp/'scrobble_test'
     subprocess.run(['cc', '-pthread', '-DPEQ_HOST', f'-DPEQ_ROOT="{root}"', f'-DROOT="{root}"', '-D_GNU_SOURCE',
-                    '-O1', '-Wall', '-Wextra', '-Werror', '-I', str(ROOT/'patch'), '-include', str(tmp/'scrobble_shim.h'),
+                    '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-I', str(ROOT/'patch'), '-include', str(tmp/'scrobble_shim.h'),
                     str(ROOT/'patch/scrobble.c'), str(tmp/'scrobble_test.c'), '-lcrypto', '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
     requests = [line.split('\t', 3) for line in (root/'requests').read_text().splitlines()]
@@ -1536,6 +1552,9 @@ def books_check(tmp):
     want = '\n\n'.join(['Hello caf\u00e9'] * 50) + '\f\nSecond'
     for method in (zipfile.ZIP_DEFLATED, zipfile.ZIP_STORED):
         epub(tmp/'a.epub', files, method); assert run(tmp/'a.epub') == 1 and dst.read_text() == want
+    # ../ and ./ in an href resolve against the OPF's folder
+    epub(tmp/'r.epub', {**files, 'OEBPS/content.opf': opf.replace("'Text/one.xhtml'", "'../OEBPS/./Text/one.xhtml'")})
+    assert run(tmp/'r.epub') == 1 and dst.read_text() == want
     epub(tmp/'f.epub', {**files, 'META-INF/encryption.xml': '<CipherReference URI="OEBPS/Fonts/a.otf"/>'})
     assert run(tmp/'f.epub') == 1  # obfuscated fonts alone
     epub(tmp/'d.epub', {**files, 'META-INF/encryption.xml': '<CipherReference URI="OEBPS/Text/one.xhtml"/>'})
@@ -1666,15 +1685,17 @@ def audio_writer_check(tmp):
 extern void abort(void);
 #define CHECK(x) do { if (!(x)) abort(); } while (0)
 static int reads, calls, recoveries, sleeps, mode;
+static unsigned tail_out;
 static const short *base;
 int mock_read(int fd, void *b, unsigned n) {
-    (void)fd; CHECK(n==2048);
+    if (mode==3) return reads++ ? (reads==2 ? 1024 : 0) : 2048; /* 768 frames, then EOF */
+    CHECK(n==2048);
     if (reads++) return 0;
     for (unsigned i=0; i<n/2; ++i) ((short *)b)[i]=(short)i;
     return (int)n;
 }
 long mock_write(void *pcm, const void *b, unsigned long n) {
-    (void)pcm;
+    if (mode==3) return tail_out += n, (long)n;
     if (!calls) base=b;
     ++calls;
     if (mode==1) return -32;
@@ -1686,11 +1707,11 @@ long mock_write(void *pcm, const void *b, unsigned long n) {
     return 384;
 }
 int mock_recover(void *pcm, int err, int silent) {
-    (void)pcm; (void)silent; ++recoveries;
+    ++recoveries;
     return err==-19 ? err : 0;
 }
-int mock_delay(void *pcm, long *delay) { (void)pcm; *delay=0; return 0; }
-const char *snd_strerror(int err) { (void)err; return "mock error"; }
+int mock_delay(void *pcm, long *delay) { *delay=mode==3 ? 100 : 0; return 0; }
+const char *snd_strerror(int err) { return "mock error"; }
 int mock_sleep(unsigned n) { CHECK(n==1000); ++sleeps; return 0; }
 int main(void) {
     au.gain=65536;
@@ -1702,6 +1723,9 @@ int main(void) {
         CHECK(au.done && recoveries==1 && calls==(mode==1 ? 2 : 1));
         CHECK(au.error[0]);
     }
+    reads=0; au.done=0; mode=3;
+    writer(0);
+    CHECK(au.done && tail_out==768 && au.played==668); /* still behind the buffer at the end */
     return 0;
 }
 ''')
@@ -1709,7 +1733,7 @@ int main(void) {
     subprocess.run(['cc','-m32','-fno-builtin','-ffunction-sections','-fdata-sections',
                     '-I',str(ROOT/'patch'),str(source),'-Wl,--gc-sections','-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
-    print('Audio writer: partial frames retained, underrun retry, zero progress and output failures passed.')
+    print('Audio writer: partial frames retained, underrun retry, zero progress, output failures and end delay passed.')
 
 def radio_check(tmp):
     """Internet Radio (radio.c): .m3u and .pls favourites, radio-browser's m3u and CSV, URL escaping."""
@@ -1764,6 +1788,86 @@ def spotify_check(tmp):
     assert lib.spot_escape(b'abc', out, 3) == -1 and lib.spot_escape(b'%', out, 3) == -1 and lib.spot_escape(b'%', out, 4) == 3
     print('Spotify: Q2SPOT/1 replies, escapes and malformed input passed.')
 
+TIDAL_DL = r'''#include <assert.h>
+#include <dirent.h>
+#include <pthread.h>
+#include <stdarg.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#define tk_snprintf snprintf
+#define pthread_mutex_lock(m) pthread_mutex_lock((pthread_mutex_t *)(m))
+#define pthread_mutex_unlock(m) pthread_mutex_unlock((pthread_mutex_t *)(m))
+#define I(p, o) (*(int *)((char *)(p) + (o)))
+#define P(p, o) (*(void **)((char *)(p) + (o)))
+#define REC_TIDAL_ID 0
+#define REC_TITLE 0
+#define REC_ARTIST 0
+static int quality = 27; static void *queue;
+#define tidalStreamingLevelNow (&quality)
+#define mcl_pdeqplaylist (&queue)
+static _Atomic int status = 1, gate, performing, performs, ended;
+static _Atomic unsigned long long clk = 1000;
+static char last[64];
+static int mclGetPlayStatus(void) { return status; }
+static unsigned long long now_ms(void) { return clk; }
+static int deque_size(void *q) { return 0; }
+static void *deque_at(void *q, unsigned i) { return 0; }
+static void headset_manual(void) {}
+static int card_space(const char *d) { return 1; }
+static int stream_cache(int s) { return 2; }
+int stock_tidal_trampoline(const char *u) { return 0; }
+static int __xstat(int v, const char *p, unsigned *st) {
+    struct stat s; if (stat(p, &s)) return -1; st[12] = s.st_size, st[16] = s.st_mtime; return 0;
+}
+typedef unsigned (*sink_t)(const void *, unsigned, unsigned, void *);
+typedef int (*prog_t)(void *, long long, long long, long long, long long);
+static struct { sink_t sink; void *data; prog_t prog; void *pdata; const char *url; } h;
+static void *curl_easy_init(void) { return &h; }
+static int curl_easy_setopt(void *c, int o, ...) {
+    va_list ap; va_start(ap, o);
+    if (o == 10002) h.url = va_arg(ap, const char *);
+    if (o == 20011) h.sink = va_arg(ap, sink_t);
+    if (o == 10001) h.data = va_arg(ap, void *);
+    if (o == 20219) h.prog = va_arg(ap, prog_t);
+    if (o == 10057) h.pdata = va_arg(ap, void *);
+    va_end(ap); return 0;
+}
+static int curl_easy_perform(void *c) {
+    snprintf(last, sizeof last, "%s", h.url); ++performs; performing = 1;
+    while (gate) if (h.prog(h.pdata, 0, 0, 0, 0)) { performing = 0; return 42; } else usleep(1000);
+    h.sink("data", 1, 4, h.data); performing = 0; return 0;
+}
+static int curl_easy_getinfo(void *c, int i, long *code) { *code = 200; return 0; }
+static void curl_easy_cleanup(void *c) { }
+static int renamed(const char *a, const char *b) { int r = rename(a, b); ++ended; return r; }
+static int unlinked(const char *p) { int r = unlink(p); ++ended; return r; }
+#define rename renamed
+#define unlink unlinked
+TIDAL_SOURCE
+static void wait_for(_Atomic int *v, int want) { for (int i = 0; i < 3000 && *v != want; i++) usleep(1000); assert(*v == want); }
+static int has(const char *id) { char p[300]; snprintf(p, sizeof p, TIDAL_DIR "/%s-27.flac", id); return !access(p, 0); }
+static void play(const char *id) { char u[64]; snprintf(u, sizeof u, "https://x/%s.flac", id); tidal_play(u, id); }
+static void finish(int n) { usleep(20000); gate = 0; wait_for(&ended, n); usleep(20000); }
+int main(void) {
+    gate = 1; play("A"); wait_for(&performing, 1); /* stopped 2 s between tracks, then playing: kept */
+    clk += 2000; usleep(20000); status = 2; finish(1); assert(has("A"));
+    gate = 1; play("B"); wait_for(&performing, 1); /* stopped 3 s: Stop, dropped */
+    status = 1; usleep(20000); clk += 3001; wait_for(&ended, 2); assert(!has("B"));
+    status = 2; gate = 1; play("C"); wait_for(&performing, 1); /* the same id again: one transfer */
+    play("C"); finish(3); assert(has("C") && performs == 3);
+    gate = 1; play("D"); wait_for(&performing, 1); /* a skip: D dropped, the same worker takes E */
+    play("E"); wait_for(&ended, 4); wait_for(&performing, 1); assert(!strcmp(last, "https://x/E.flac"));
+    finish(5); assert(!has("D") && has("E"));
+    gate = 1; play("F"); wait_for(&performing, 1); /* G's job overtaken by a cached play: dropped */
+    play("G"); play("A"); finish(6); usleep(50000); assert(!has("F") && !has("G") && performs == 6);
+    return 0;
+}
+'''
+
 def tidal_check(tmp):
     """Tidal cache (tidal.c): the cached file's extension comes from the stream URL's path."""
     lib = compile_host(tmp, 'tidal.so', ROOT/'patch/tidal.c')
@@ -1787,32 +1891,43 @@ def tidal_check(tmp):
 #include <stdio.h>
 #include <string.h>
 #define TIDAL_DIR "/cache"
-#define TIDAL_CAP_MB 2048
 #define tk_snprintf snprintf
 struct dirent { char d_name[16]; };
-static int fail, left, cursor, attempts;
-static void *opendir(const char *p) { (void)p; cursor=0; return (void *)1; }
+static int fail, left, cursor, attempts, choice = 2;
+static int stream_cache(int spotify) { assert(!spotify); return choice; } /* 512 << choice MB */
+static void *opendir(const char *p) { cursor=0; return (void *)1; }
 static struct dirent *readdir(void *d) {
-    static struct dirent e; (void)d;
+    static struct dirent e;
     if (cursor == left) return 0;
     snprintf(e.d_name, sizeof e.d_name, "%d.flac", cursor++); return &e;
 }
-static int closedir(void *d) { (void)d; return 0; }
+static int closedir(void *d) { return 0; }
 static int __xstat(int v, const char *p, unsigned *s) {
-    (void)v; (void)p; s[12]=1200u<<20; s[16]=1; return 0;
+    s[12]=1200u<<20; s[16]=1; return 0;
 }
-static int unlink(const char *p) { (void)p; ++attempts; if (fail) return -1; --left; return 0; }
+static int unlink(const char *p) { ++attempts; if (fail) return -1; --left; return 0; }
 static void trim(void) {''' + trim + r'''
 int main(void) {
     left=3; trim(); assert(left==1 && attempts==2);
     fail=1; left=3; attempts=0; trim(); assert(left==3 && attempts==1);
+    fail=0; choice=3; attempts=0; trim(); assert(left==3 && !attempts); /* 4 GB holds 3600 MB */
+    choice=0; trim(); assert(left==0 && attempts==3); /* 512 MB holds none of 1200 */
     return 0;
 }
 ''')
     binary = tmp/'tidal_trim'
-    subprocess.run(['cc', '-Wall', '-Wextra', '-Werror', str(source), '-o', str(binary)], check=True)
+    subprocess.run(['cc', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=5)
-    print('Tidal cache: stream file extensions, eviction and failed deletion passed.')
+    import re
+    # The download worker on a real pthread, curl scripted: perform runs the progress callback while
+    # gate is open, then hands over a body (unless cancelled) and the worker renames or unlinks.
+    body = re.sub(r'^(#include|#ifndef PEQ_HOST|#endif|__asm__).*$', '', (ROOT/'patch/tidal.c').read_text(), flags=re.M)
+    (tmp/'tidal_dl.c').write_text(TIDAL_DL.replace('TIDAL_SOURCE', body))
+    binary = tmp/'tidal_dl'
+    subprocess.run(['cc', '-pthread', '-D_GNU_SOURCE', f'-DTIDAL_DIR="{tmp}/tidal"', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
+                    str(tmp/'tidal_dl.c'), '-o', str(binary)], check=True)
+    subprocess.run([str(binary)], check=True, timeout=30)
+    print('Tidal cache: stream file extensions, eviction at the chosen cap, failed deletion, Stop, re-fetch and skip downloads passed.')
 
 if __name__ == '__main__':
     import argparse

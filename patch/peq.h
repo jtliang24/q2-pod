@@ -17,10 +17,12 @@
 #include <string.h>
 #include <math.h>
 #include <unistd.h>
+#define child_exit _exit
 #else
 #include "peq_platform.h"
 #define PEQ_ROOT "" /* host tests pass a scratch directory */
 #include "m1plus_peq.h" /* stand-ins for routines V2.1 lacks (docs/m1plus-roadmap.md U1c) */
+void child_exit(int status) __attribute__((noreturn));
 #endif
 
 #define PEQ_BANDS 30 /* 10 per side plus 10 shared, as L/R APO files use */
@@ -70,7 +72,7 @@ void peq_reset(peq_dsp *d, int rate, int channels, const peq_preset *p);
 int peq_update(peq_dsp *d, const peq_preset *p);
 void peq_process(peq_dsp *d, float *audio, unsigned frames);
 
-/* The visualizer's PCM tap (docs/internals.md#visualizer): hciplayer's filter writes what plays, its
+/* The visualizer's PCM tap (docs/internals.md#visualizer-ipod): hciplayer's filter writes what plays, its
  * first two channels and above 48 kHz every rate / 44100th frame, to ring[seq % VIS_RING], then sets
  * rate (of the ring), stamp (CLOCK_MONOTONIC ns of that write) and seq, the frames written. demo
  * creates the file, sized, under another name and renames it, so it never maps a short one, and bumps
@@ -85,9 +87,10 @@ long long now_ns(void);
 /* librespot (spotify.c) and its restart loop, whose pid its launcher left, stopped: Spotify's idle
  * stop and Home's Rockbox row, which lets ALSA go too. A q2video sink ends with librespot's pipe. */
 #define SPOT_OUT "/tmp/q2-librespot.out" /* the output for the card's aplay.sh, none on the DAC */
+#define SPOT_DOWNLOAD "/tmp/q2-librespot.download" /* backend download progress, independent of playback */
 #define SPOT_KILL                                                                                  \
     "kill -9 $(cat /tmp/q2-librespot); killall -9 librespot aplay; "                               \
-    "rm -f /tmp/q2-librespot /tmp/q2-librespot.state " SPOT_OUT
+    "rm -f /tmp/q2-librespot /tmp/q2-librespot.state " SPOT_OUT " " SPOT_DOWNLOAD
 double decibels(double power); /* 10 log10 */
 
 /* Audited against hciplayer 9c3f8c6d… and MPlayer 1.3.0 libaf/af.h: the filter peq_player.c opens. */
@@ -135,6 +138,8 @@ int clip_within(void *canvas, int *old, int *clip, int x, int y, int w, int h);
 void play_folder(void *dq, int idx, int cls);
 int directory(void *path); /* playback.c: toolsLoadDirectory, for staged */
 #define TIDAL_DIR "/mnt/mmc/.tidal" /* tidal.c's cache, Tidal Downloads' list */
+#define SPOT_DIR "/mnt/mmc/.spotify" /* librespot and its launcher, spotify.c's */
+int stream_cache(int spotify); /* navigation.c: Streaming's Configuration, a cap of 512 << it MB */
 void album_memory(void *r);
 void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, unsigned px, unsigned color);
 unsigned accent_tone(int tone); /* iPod: the Accent's ACCENTS column (Minimal: MINIMAL_FILL) */
@@ -146,10 +151,14 @@ unsigned long long now_ms(void); /* CLOCK_MONOTONIC */
 void field(const char *raw, const char *key, char *out, unsigned n);
 unsigned long long number(const char *raw, const char *key);
 unsigned state_read(const char *path, char *raw, unsigned size);
+struct unix_addr { /* sockaddr_un */
+    unsigned short family;
+    char path[108];
+};
 void dgram_send(int *sock, const char *path, const char *c, unsigned n);
 int hex(char c); /* a hex digit's value, -1 for any other character; headset.c's too */
 void *label(void *parent, int x, int y, int w, int h, const char *style, int px, unsigned color);
-void spot_yield(void), radio_stop(void);
+void spot_yield(void), spot_stop(void), radio_stop(void);
 void headset_volume_reset(void);
 void headset_poll(void), headset_manual(void);
 int media_owner(void), media_playing(void), media_focused(void);
@@ -161,7 +170,7 @@ int spot_status(void), radio_status(void), video_status(void);
 unsigned spot_session(void), radio_session(void), video_session(void);
 void spot_set_playing(int playing), radio_set_playing(int playing), video_set_playing(int playing);
 int video_start(const char *file, int radio); /* books.c */
-void *edit_create(void *item, const char *input_type); /* peq_ui.c */
+void *edit_create(void *item, const char *input_type, int y, int h); /* peq_ui.c */
 const char *output_device(char *vol);         /* books.c */
 void dac_take(void);                          /* books.c */
 #if IPOD

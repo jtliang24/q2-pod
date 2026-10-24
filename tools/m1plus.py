@@ -5,7 +5,7 @@ build.py keeps upstream's Q2 code; its build() hands an M1 Plus input to build()
 (docs/m1plus-roadmap.md U1). The pipeline reuses build.py's helpers and tables where V2.1 matches V1.32,
 and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
-from build import (ROOT, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
+from build import (ROOT, EXTRA_TIMEZONES, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
                    REMOTE_HOOK, BLUEALSA, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, ICONS,
                    STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
@@ -71,8 +71,16 @@ CALL_SITES = {
         # slti loads the count into a0 in its delay slot (lw $2/$4, -0x3cac($fp)); the bnez after it, and
         # its delay slot's stop-flag load, stay.
         'SCAN_LIMIT': ((0x5c977c, 0x8fc2c354, 'ringnav_scan_room'), (0x5c9780, 0x28424e20, 0x8fc4c354)),
-        # check_mem_thd's "open failed, skip the write" beq becomes b: it never writes 3 to drop_caches.
-        'DROP_CACHES': ((0x5120a8, 0x12220006, 0x10000006),),
+        # check_mem_thd (platform_init's detached thread) returns at once: it never opens drop_caches,
+        # writes 3 to it or wakes each second. lui/addiu $gp -> jr $ra; move $v0,$zero.
+        'DROP_CACHES': ((0x512050, 0x3c1c0051, 0x03e00008), (0x512054, 0x279c4c70, 0x00001025)),
+        # player_parsecover_thd's jalr toolsGetExternCover (Now Playing's folder art, after its embedded
+        # art failed) becomes jal coverflow_player_cover, which gives ffmpeg what stock's decoder refuses.
+        'PLAYER_COVER': ((0x51301c, 0x0320f809, 'coverflow_player_cover'),),
+        # openBluetooth's first GPIO write: install callbacks before powering the radio.
+        'BT_POWER': ((0x4efcbc, 0x0320f809, 'headset_bt_power'),),
+        # toolsLoadAllFile's existing-song check, folder scans only.
+        'SCAN_REFRESH': ((0x5c981c, 0x0411fd88, 'ringnav_scan_refresh'),),
         # Now Playing's info page: its one fill (bal 0x52a508) goes through ringnav_np_info, which tidies
         # the lines.
         'NP_INFO_CALL': ((0x52baf4, 0x0411fa84, 'ringnav_np_info'),),
@@ -129,7 +137,8 @@ CALL_SITES = {
     'm1plus': {
         # mclNextSong's bal to the shuffle pick (0x5d03b0).
         'SHUFFLE_CALL': ((0x5d5a28, 0x0411ea61, 'ringnav_shuffle'),),
-        # check_cpumem's "open failed, skip the write" beq.
+        # check_cpumem's "open failed, skip the write" beq: 1.2.2's form. Upstream 1.2.9 returns from the
+        # Q2's thread at once instead (roadmap U3's batch).
         'DROP_CACHES': ((0x50b868, 0x12220006, 0x10000006),),
         # toolsLoadAllFile's count check, the count at -0x4f7c($fp).
         'SCAN_LIMIT': ((0x5efeb4, 0x8fc2b084, 'ringnav_scan_room'), (0x5efeb8, 0x28424e20, 0x8fc4b084)),
@@ -170,6 +179,9 @@ CALL_SITE_PURPOSES = {
     'BT_CONNECT_START': 'Bluetooth: Resume on connect',
     'SCAN_LIMIT': 'scan up to 65,000 songs',
     'DROP_CACHES': 'keep the page cache',
+    'PLAYER_COVER': 'Now Playing art through ffmpeg',
+    'BT_POWER': 'Bluetooth callbacks before radio power',
+    'SCAN_REFRESH': 'folder scan refreshes existing tags',
     'NP_INFO_CALL': "Now Playing's info lines",
     'LDAC_HQ': 'LDAC HQ sends 990 kbps',
     'WHEEL_TS_READ': 'wheel ticks',
@@ -210,8 +222,14 @@ M1PLUS_PORTS = {
     'player_play_pause': ('unported', "a manual Play/Pause isn't marked (headset_manual), so a headset's automatic "
                           "resume can undo it; V2.1's play_pause_music is unhooked"),
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
-    'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); "
-                          'MUSIC_INFO_ALBUM_ARTIST is M1_UNPORTED'),
+    'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); V2.1's "
+                          'info keeps it at +0x580 too'),
+    'select_timezone': ('unported', "the extra time zones (1.2.9); V2.1's select_timezone is 0x4d6b2c, its label "
+                        "table and patch_timezones' words not yet found (roadmap U3 batch)"),
+    'toolsQueryContentDbTable': ('unported', "an artist's albums tab's album-artist rewrite (1.2.9); V2.1 has no "
+                                 'toolsQueryContentDbTable'),
+    'player_start_queue': ('unported', "View Queue's and Up Next's rows in a shuffle's play order (1.2.9); V2.1's is "
+                           'start_playqueue (0x4e47d0), aliased for the payload\'s calls (roadmap U3 batch)'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -222,6 +240,10 @@ M1PLUS_PORTS = {
     'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
+    'PLAYER_COVER': ('unported', "Now Playing's art through ffmpeg when stock's decoder refuses it (1.2.9)"),
+    'BT_POWER': ('unported', "Bluetooth's callbacks before the radio powers on (1.2.9); V2.1's openBluetooth "
+                 'not checked yet'),
+    'SCAN_REFRESH': ('unported', 'a folder scan refreshes existing songs\' tags (1.2.9)'),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
@@ -255,6 +277,7 @@ M1PLUS_GLOBAL_ALIASES = {
     'g_navbar_status': 'navigation_status',
     'g_btvolume': 'btsource_volume',
     'g_rotate_mode': 'rotate_mode',
+    'g_time_zone': 'time_zone',
 }
 # V2.1 globals V1.32 lacks, read as GLOBALS are. Bluetooth keeps its own level, [PLAYSET] BTVOLUME:
 # the volume dialog (on_volume_tsup_fun), status bar and set_devicevolume use it while headset_output
@@ -318,6 +341,11 @@ M1PLUS_FUNCTION_ALIASES = {
     # The batch record (pvec_selectrecord): n rows unselected, then one row's selection toggled
     'batch_init_selectrecord': 'select_recordinit',
     'batch_set_selectitem': 'set_selectindex',
+    # delete_playqueue_file calls it where V1.32's calls player_start_queue (0x4e4a80): the queue row's play
+    'player_start_queue': 'start_playqueue',
+    # folder_back calls it where V1.32's calls folder_reset_variable (0x4dbf0c): a fresh Folder visit.
+    # V2.1's clears one enter-history deque where V1.32's clears two, and its flags are words.
+    'folder_reset_variable': 'clear_foldervariate',
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
@@ -713,6 +741,8 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     symbol_table = run('readelf', '-Ws', demo)
     syms = symbols(demo, symbol_table)
     header = [f'#define RING_STEP {RING_STEP}']
+    # navigation.c's ringnav_timezone names them; its hook, select_timezone, is unported (M1PLUS_PORTS)
+    header.append('#define EXTRA_TIMEZONE_NAMES {' + ','.join(json.dumps(zone) for _, zone in EXTRA_TIMEZONES) + '}')
     syms, stubs = m1plus_symbols(syms, symbol_table)
     stubbed = dict(stubs)
     for name in [*CONTEXT_DATA, *M1PLUS_CONTEXT_DATA]:

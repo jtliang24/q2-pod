@@ -33,4 +33,8 @@ int library_open(void *ctx, void *event) {
  * passes no song id, so tidal_play downloads nothing (docs/m1plus-roadmap.md U4). Named here so the
  * M1 compile takes the unused page; nothing calls it, so it isn't linked. */
 static void *const m1_unported_tidal_downloads __attribute__((unused)) = (void *)tidal_downloads;
+/* No Configuration row (navigation.c stream_config, Streaming's on the Q2, 1.2.9): Spotify's and
+ * Tidal's cache sizes and Stop Streaming Services. Its icon (stream_config.png) is the Q2's
+ * (docs/m1plus-roadmap.md U3's batch). Named as tidal_downloads is. */
+static void *const m1_unported_stream_config __attribute__((unused)) = (void *)stream_config;
 #endif

@@ -8,16 +8,17 @@ The port lives in [DiamondBond/q2-librespot](https://github.com/DiamondBond/q2-l
 
 - **Release:** [q2-librespot's releases](https://github.com/DiamondBond/q2-librespot/releases/latest) ship the prebuilt card files as `q2-librespot-*.zip`, unzipped to the card's root.
 - **On the card:** the binary, its launcher and its sink go in the card's `.spotify` folder, with the saved login in `.spotify/cache/`. Q2 Pod starts it; see the [user guide](https://github.com/DiamondBond/q2-pod/releases/latest/download/Q2-Pod-User-Guide.pdf) to install it.
-- **Build:** librespot is built **static and soft-float (musl)**, so the firmware's `-mfp64`, NaN-2008 and glibc 2.28 don't matter. The kernel still requires the `nan2008` ELF flag, so the build sets it.
+- **Build:** since `q2-v1.7`, librespot is built **hard-float** for the X2000's FPU, with the stock binaries' ABI (`-mfp64`, NaN-2008). It is linked dynamically against the Q2's own glibc 2.28 through `/lib/ld-linux-mipsn8.so.1`, the way Q2 Pod's helpers are. The libraries it links against come from the V1.32 firmware ZIP's rootfs. Earlier releases were static soft-float (musl).
 - **Audio:** goes through the stock `aplay` to `plughw:0,0`, the CS43131 headphone DAC, started only while librespot plays (its subprocess backend), so local music can open the DAC whenever Spotify is paused. With Bluetooth or a USB DAC as the output, Q2 Pod names the device and volume in `/tmp/q2-librespot.out` and `aplay.sh` runs Q2 Pod's `q2video -s` there instead, at hciplayer's soft volume ([internals](internals.md#spotify)).
 
-**It plays.** On the device, librespot appears in Spotify Connect, the phone's session authenticates, and audio comes out of the headphones at 160 kbit/s. Soft-float decoding keeps up, with no stutter heard.
+**It plays.** On the device, librespot appears in Spotify Connect, the phone's session authenticates, and audio comes out of the headphones at 160 kbit/s. Hard-float decoding takes about 3% of a core, against about 31% for the earlier soft-float build.
 
 ## Q2 Pod
 
-**Streaming → Spotify** opens a browser in both builds: Now Playing (the cover, title, artist and album, a moving progress bar and the play state, in Now Playing's layout), Liked Songs, Playlists, Albums, Artists, Search, Queue, Playback Settings (shuffle, repeat), Account (sign out) and Downloaded Tracks. It needs q2-librespot v1.4 or later, Spotify Premium and Wi-Fi for new tracks. Downloaded Tracks replays previously played, completely cached tracks without Wi-Fi. Without a saved login it asks for a one-time pairing: pick Q2 in the Spotify app on a phone on the same Wi-Fi, and the page turns into the menu. With an older add-on, Now Playing still works from the phone and the page asks for the update. Q2 Pod treats librespot as a source of its own playback, as it treats Videos' q2video:
+**Streaming → Spotify** opens a browser in both builds: Now Playing (the cover, title, artist and album, a moving progress bar and the play state, in Now Playing's layout), Liked Songs, Playlists, Albums, Artists, Search, Queue, Playback Settings (shuffle, repeat), Account (sign out), Downloaded Tracks and Downloads. It needs q2-librespot v1.4 or later, Spotify Premium and Wi-Fi for new tracks. Downloaded Tracks replays previously played, completely cached tracks without Wi-Fi. Without a saved login it asks for a one-time pairing: pick Q2 in the Spotify app on a phone on the same Wi-Fi, and the page turns into the menu. With an older add-on, Now Playing still works from the phone and the page asks for the update. Q2 Pod treats librespot as a source of its own playback, as it treats Videos' q2video:
 
-- **Start:** only from the row, once per boot; until then nothing Spotify runs or polls. Idle 30 s after playing with the browser shut, it stops; the row starts it again.
+- **Start:** only from the row, once per boot; until then nothing Spotify runs or polls. Idle 30 s after playing (2½ min if it never played) with the browser shut, or **Streaming → Configuration → Stop Streaming Services**, it stops; the row starts it again.
+- **Cache:** the launcher caps the audio cache at `.spotify/.cache-size` (`2048M`, written by Streaming → Configuration's Spotify Cache, 512 MB to 8 GB), read at each librespot start; `2G` when the file is missing or malformed.
 - **Power:** while it plays, standby, auto power-off and the DAC's power-off are held off; the screen still turns off.
 - **DAC:** set up as stock's AirPlay receiver sets it (`config_outputchannel`, as a headset insert does, then PCM mode, unmuted and the Q2's volume).
 - **Keys:** Play/Pause and the side buttons control Spotify while it was the last thing played; the wheel is the Q2's volume, which is Spotify's.
@@ -25,11 +26,13 @@ The port lives in [DiamondBond/q2-librespot](https://github.com/DiamondBond/q2-l
 
 The fork adds three options for this: `--status-file`, the player's state, track, position and cover for the page, `--control-socket`, the commands from the keys, and `--browse-socket`, the browser's requests (below). How they fit together is in [internals.md](internals.md#spotify).
 
+In a playlist, **Download Playlist** saves its tracks in the background without interrupting playback. **Downloads** on Spotify's menu shows progress; **Downloaded Tracks** plays completed tracks offline. These actions require q2-librespot v1.6 or later and the matching updated Q2 Pod firmware. Downloads use the selected cache limit, so a playlist larger than the cache may evict its earlier tracks. Keep the cache folder when updating. A saved login also opens the offline menu when the cache is empty.
+
 ## Browsing protocol (Q2SPOT/1)
 
 The fork's `--browse-socket /tmp/q2-librespot.browse.sock` serves Q2 Pod's Spotify browser. Older backends lack it; Q2 Pod then keeps the Connect Now Playing page and asks for the add-on to be updated.
 
-The browser integration uses q2-librespot `shanlingq2` (`q2-v1.4`, Q2SPOT/1). Card updates replace `.spotify/librespot`, `.spotify/run` and `.spotify/aplay.sh`; preserve `.spotify/cache` to keep the paired login and complete downloads. Signing out deletes that account's saved audio, keys and artwork.
+The browser integration uses q2-librespot `shanlingq2` (`q2-v1.6` or later, Q2SPOT/1). Card updates replace `.spotify/librespot`, `.spotify/run` and `.spotify/aplay.sh`; preserve `.spotify/cache` to keep the paired login and complete downloads, and `.spotify/.cache-size` to keep the chosen cache size. Signing out deletes that account's saved audio, keys and artwork.
 
 **Transport.** A Unix stream socket. One request per connection: the client writes the request and shuts down its write side; the backend answers and closes. Requests are at most 8 KiB, responses at most 64 KiB. The client gives up after 15 s.
 
@@ -45,7 +48,7 @@ Request, after the version line, one line:
     <kind>	<uri>	<title>	<subtitle>	<context>	<position>
     …
 
-The header is followed by 0 to 50 rows. `message` is empty on `ok`, and otherwise one line of English for the screen (at most 120 bytes). `cursor`, when not empty, fetches the next page when passed as the op's last argument; it is at most 1 KiB. A page may hold fewer than 50 rows to stay within 64 KiB; its cursor then continues after the last row sent. `title` and `subtitle` are display text, at most 255 bytes each, cut on a character boundary; URIs and cursors are never cut.
+The header is followed by 0 to 50 rows. `message` is one line of English for the screen (at most 120 bytes), usually empty on `ok`; capabilities and downloads use it for version or progress. `cursor`, when not empty, fetches the next page when passed as the op's last argument; it is at most 1 KiB. A page may hold fewer than 50 rows to stay within 64 KiB; its cursor then continues after the last row sent. `title` and `subtitle` are display text, at most 255 bytes each, cut on a character boundary; URIs and cursors are never cut.
 
 Row fields:
 
@@ -58,28 +61,32 @@ Statuses: `ok`; `login` (no saved login: pair from the phone); `offline` (Spotif
 
 Ops (`[cursor]` is optional):
 
-| Op             | Arguments                  | Rows                                                                                  |
-| -------------- | -------------------------- | ------------------------------------------------------------------------------------- |
-| `caps`         |                            | `op` rows, one per supported op; `message` is the backend's version, e.g. `q2-v1.3`   |
-| `account`      |                            | one `account` row: the user's URI, display name, `Premium`; or status `login`         |
-| `playlists`    | `[cursor]`                 | the user's `playlist` rows                                                            |
-| `playlist`     | `uri [cursor]`             | its `track` rows                                                                      |
-| `liked`        | `[cursor]`                 | Liked Songs' `track` rows                                                             |
-| `albums`       | `[cursor]`                 | saved `album` rows                                                                    |
-| `artists`      | `[cursor]`                 | followed `artist` rows                                                                |
-| `album`        | `uri [cursor]`             | its `track` rows                                                                      |
-| `artist`       | `uri`                      | its top `track` rows, then its `album` rows                                           |
-| `search`       | `category term [cursor]`   | `category` is `tracks`, `albums`, `artists` or `playlists`                            |
-| `play`         | `context [position [uri]]` | none: Q2 becomes the active device and plays                                          |
-| `queue`        |                            | the next `track` rows, `position` its index in this list                              |
-| `skip`         | `position uri`             | none: plays that queue row; `unavailable` if the queue changed                        |
-| `enqueue`      | `uri`                      | none: the track is added to the queue                                                 |
-| `settings`     |                            | `setting` rows `shuffle` (`on`/`off`) and `repeat` (`off`/`context`/`track`) as title |
-| `shuffle`      | `on\|off`                  | none                                                                                  |
-| `repeat`       | `off\|context\|track`      | none                                                                                  |
-| `signout`      |                            | none: playback stops, the saved login is removed, and the backend waits for pairing   |
-| `downloaded`   | `[cursor]`                 | complete cached `track` rows, most recently played first; works without Wi-Fi         |
-| `playdownload` | `uri`                      | none: starts that cached track without requesting its stream URL                      |
+| Op               | Arguments                  | Rows                                                                                  |
+| ---------------- | -------------------------- | ------------------------------------------------------------------------------------- |
+| `caps`           |                            | `op` rows, one per supported op; `message` is the backend's version, e.g. `q2-v1.3`   |
+| `account`        |                            | one `account` row: the user's URI, display name, `Premium`; or status `login`         |
+| `playlists`      | `[cursor]`                 | the user's `playlist` rows                                                            |
+| `playlist`       | `uri [cursor]`             | its `track` rows                                                                      |
+| `liked`          | `[cursor]`                 | Liked Songs' `track` rows                                                             |
+| `albums`         | `[cursor]`                 | saved `album` rows                                                                    |
+| `artists`        | `[cursor]`                 | followed `artist` rows                                                                |
+| `album`          | `uri [cursor]`             | its `track` rows                                                                      |
+| `artist`         | `uri`                      | its top `track` rows, then its `album` rows                                           |
+| `search`         | `category term [cursor]`   | `category` is `tracks`, `albums`, `artists` or `playlists`                            |
+| `play`           | `context [position [uri]]` | none: Q2 becomes the active device and plays                                          |
+| `queue`          |                            | the next `track` rows, `position` its index in this list                              |
+| `skip`           | `position uri`             | none: plays that queue row; `unavailable` if the queue changed                        |
+| `enqueue`        | `uri`                      | none: the track is added to the queue                                                 |
+| `settings`       |                            | `setting` rows `shuffle` (`on`/`off`) and `repeat` (`off`/`context`/`track`) as title |
+| `shuffle`        | `on\|off`                  | none                                                                                  |
+| `repeat`         | `off\|context\|track`      | none                                                                                  |
+| `signout`        |                            | none: playback stops, the saved login is removed, and the backend waits for pairing   |
+| `downloaded`     | `[cursor]`                 | complete cached `track` rows, most recently played first; works without Wi-Fi         |
+| `playdownload`   | `uri`                      | none: starts that cached track without requesting its stream URL                      |
+| `download`       | `uri`                      | none: starts one background playlist download; message reports acceptance or failure  |
+| `downloadstatus` |                            | none: message reports progress or the completed job's result                          |
+
+Playlist downloads publish `/tmp/q2-librespot.download` atomically, with `downloading=1` while active and `0` when finished. Q2 Pod keeps the service and power timers alive during the job, without claiming the audio output. Stop Streaming Services or signing out stops the job.
 
 Example, Liked Songs' first page:
 

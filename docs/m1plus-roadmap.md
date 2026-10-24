@@ -19,7 +19,8 @@ gap can't be left marked.
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 **Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
-one device pass. Done so far:
+one device pass. Step 1, 1.2.9, is merged and gated ([m1plus-progress.md](m1plus-progress.md) section
+40); 1.3.0 is next. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -196,6 +197,8 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `networkGetWifiSignal`;
     - `lockscreen_access` (the wallpaper fix, below);
     - the timezone page (`select_timezone`);
+    - View Queue's and Up Next's picks in a shuffle's play order (`player_start_queue`, V2.1's
+      `start_playqueue`, `0x4e47d0`, which the payload's own calls already reach by alias);
     - embedded lyrics (`mclLoadExLyric`);
     - chapters;
     - online cover and lyric search (`kugou_obtain*`);
@@ -219,13 +222,31 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - **Folder's roots without OTG** (`folder_load_top` → `ringnav_folder_top`). Without a drive, the
       Q2 lists the card alone. Check whether V2.1's Folder lists OTG at all before porting.
     - **A FLAC's ALBUM ARTIST** (`toolsGetMusicInfo` → `ringnav_music_info`, new in 1.2.2). The Q2 reads
-      foobar2000's spelling when stock's libtag finds no `ALBUMARTIST`. `MUSIC_INFO_ALBUM_ARTIST` is
-      `M1_UNPORTED`. V2.1's `ID3_*` offsets are V1.32's, so check its info struct's `+0x580` first.
+      foobar2000's spelling when stock's libtag finds no `ALBUMARTIST`. V2.1's `toolsGetMusicInfo`
+      keeps the album artist at `+0x580` too (`MUSIC_INFO_ALBUM_ARTIST`, pinned since the 1.2.9 step),
+      so only the hook is left.
     - **Tidal's cache and Tidal Downloads** (`tidal_play`, `tidal_downloads`, `REC_TIDAL_ID`). On M1
       `tidal_start` passes no song id, since V2.1's two callers (`0x500d5c`, `0x51c7b0`) keep none, so
       Tidal streams uncached and there is no Downloads row. V2.1's `get_tidal_trackurl` (`0x512ed0`) hands
       its URL thread (`0x51c288`) the queue row: the id is to be found there.
     - `NP_INFO_CALL` stays in section 7.
+  - **Found by the 1.2.9 step** (U3, Oct 23):
+    - **An artist's albums tab's album-artist rewrite** (`toolsQueryContentDbTable`): V2.1 has no such
+      function, so find what V2.1's `getAlbumByAlbumArtist` queries through first.
+    - **Now Playing's art through ffmpeg** (`PLAYER_COVER`), **Bluetooth's callbacks before the radio
+      powers on** (`BT_POWER`) and **a folder scan refreshing existing tags** (`SCAN_REFRESH`): call
+      sites, each to find in V2.1's `player_parsecover_thd`, `openBluetooth` and `toolsLoadAllFile`.
+    - **`check_mem_thd` returning at once** (`DROP_CACHES`' 1.2.9 form, a battery fix). The M1 keeps
+      1.2.2's: `check_cpumem`'s write branched over. Check what else V2.1's thread does first.
+    - **The MQA side chain** (`tools/peq.py`'s `MQA_GATE` and `MQA_PROBE`, a battery fix): the decoder
+      runs only on MQA streams, and the probe is sized to the detector. V2.1's `hciplayer` takes
+      `PLAYER_PROFILE`'s words, which don't have these yet.
+    - **Streaming's Configuration** (`stream_config`): the cache sizes and Stop Streaming Services. It
+      would be a Q2 Pod page row on M1, with an icon of V2.1's.
+    - **Test cases that need V1.32 code**: Folder Root's open and Back (V2.1 keeps one history stack,
+      `yoffset_rowsave`, and `m3ufile_path`), and Shuffle Songs being one-shot (V2.1 has no
+      `config_playmode` symbol to stand for the user's mode choice). Both features run on M1.
+    - Q2 only: Hold Return: Home (the M1 has no Return key) and Volume Guard (the touch wheel's).
   - **Found on the device** (dev 21, Oct 23):
     - **A touch hold on an album's tracks plays the track.** On Album's list the hold menu opens for the
       row held. On an album's track list (16 tracks), `load` counted 17 rows (`g_menu.rows`, read over
@@ -236,8 +257,8 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - **New pages:** games (`games.c`), chapters (`chapters.c`), Up Next (`upnext.c`), network update
       (`netupdate.c`, `systemset_fwupdate_page_init`), online match (`onlinematch.c`), Qobuz.
     - **Left for after U3, and why** (checked Oct 23 against 1.4.2 and V2.1's `demo` symbols):
-      - V2.1 has no `player_start_queue` (Up Next, queue play), `toolsQueryContentDbTable` or
-        `localmusic_playlistsmore_page_init`. Each needs a V2.1 stand-in found first.
+      - V2.1 has no `toolsQueryContentDbTable` or `localmusic_playlistsmore_page_init`. Each needs a
+        V2.1 stand-in found first. (`player_start_queue` is V2.1's `start_playqueue`: in the batch.)
       - Network update fetches DiamondBond's Q2 `update.tar`. It stays off on M1 until it points at
         the fork's M1 releases.
       - The card app host (`addon.c`, `usbmode_page_init`, 1.4.2) runs over librespot: it goes with

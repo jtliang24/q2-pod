@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://youtu.be/C5x05EwsPGI" title="Watch the Q2 Pod video on YouTube">
+  <a href="https://www.youtube.com/watch?v=cc581MRAtp0" title="Watch the Q2 Pod video on YouTube">
     <img src="assets/banner.png" alt="Q2 Pod: the iPod firmware mod for the Shanling Q2" width="100%">
   </a>
 </p>
@@ -10,10 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/DiamondBond/q2-pod/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/DiamondBond/q2-pod?style=flat-square&label=release&color=3D424B"></a>
+  <a href="https://github.com/DiamondBond/q2-pod/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/release-latest-3D424B?style=flat-square"></a>
   <a href="#features"><img alt="Devices: Shanling Q2 & M1 Plus" src="https://img.shields.io/badge/devices-Shanling%20Q2%20%7C%20M1%20Plus-B99AC8?style=flat-square"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-D77868?style=flat-square"></a>
-  <a href="https://youtu.be/C5x05EwsPGI"><img alt="Watch on YouTube" src="https://img.shields.io/badge/YouTube-video-FF0000?style=flat-square&logo=youtube&logoColor=white"></a>
+  <a href="https://www.youtube.com/watch?v=cc581MRAtp0"><img alt="Watch on YouTube" src="https://img.shields.io/badge/YouTube-video-FF0000?style=flat-square&logo=youtube&logoColor=white"></a>
   <a href="https://discord.gg/pgsQpXhSQ"><img alt="Join the Discord" src="https://img.shields.io/badge/Discord-join-5865F2?style=flat-square&logo=discord&logoColor=white"></a>
 </p>
 
@@ -29,11 +29,11 @@
 - **iPod UI:** Home, menus, Now Playing, Coverflow and four visualizers. Choose your accent colour, Home layout and battery display.
 - **Wheel navigation:** smooth scrolling, and menus remember your place.
 - **EQ:** Simple's Low, Mid and High sliders, or Advanced's parametric EQ with up to 30 bands and a live curve. Import AutoEQ and Equalizer APO presets.
-- **Streaming:** Spotify (Premium): browse your library, search and play on the Q2 after a one-time pairing from your phone; AirPlay from your iPhone, and Internet Radio.
+- **Streaming:** Spotify (Premium): browse your library, search, play and download playlists on the Q2 after a one-time pairing from your phone; AirPlay from your iPhone, and Internet Radio.
 - **Scrobbling:** send your listens to Last.fm or ListenBrainz over Wi-Fi.
 - **Ratings:** rate songs and albums 0–5 hearts, then browse Top Rated, Loved and rated albums.
 - **Browsing and playback:** favourites, playlists, Most Played, Long Songs, Crossfade, and shuffle by song, album or folder.
-- **Podcasts and audiobooks:** `.m4b` audiobooks (including ones split by a CUE sheet) and podcasts resume where you stopped, with per-folder playback speed.
+- **Podcasts and audiobooks:** `.m4b` audiobooks (including ones split by a CUE sheet) and podcasts resume where you stopped, with per-folder playback speed, and audiobooks stay out of Library shuffle.
 - **AirPods:** stem controls, ear detection and two-way volume sync.
 - **Battery:** an optional 80% charge limit and Low Power mode.
 
@@ -66,7 +66,7 @@
 
 ## Extras
 
-- **Spotify:** unzip `q2-librespot-*.zip` from [q2-librespot's latest release](https://github.com/DiamondBond/q2-librespot/releases/latest) (v1.3 or later to browse on the Q2) to the card's root. Then open **Streaming → Spotify** on the Q2 and, the first time, pick it in the Spotify app on your phone. [More](https://github.com/DiamondBond/q2-pod/releases/latest/download/Q2-Pod-User-Guide.pdf).
+- **Spotify:** unzip `q2-librespot-*.zip` from [q2-librespot's latest release](https://github.com/DiamondBond/q2-librespot/releases/latest) (v1.3 or later to browse on the Q2, v1.6 to download playlists) to the card's root. Then open **Streaming → Spotify** on the Q2 and, the first time, pick it in the Spotify app on your phone. [More](https://github.com/DiamondBond/q2-pod/releases/latest/download/Q2-Pod-User-Guide.pdf).
 - **Scrobbling:** connect Last.fm or ListenBrainz with the [user guide](https://github.com/DiamondBond/q2-pod/releases/latest/download/Q2-Pod-User-Guide.pdf).
 - **Lock screen:** six built-in wallpapers, a large clock, or your own images ([user guide](https://github.com/DiamondBond/q2-pod/releases/latest/download/Q2-Pod-User-Guide.pdf)).
 - **Boot logo:** put your own JPEG at `/Q2Pod/boot/boot-logo.jpg` on the card. It shows from the next power-on ([user guide](https://github.com/DiamondBond/q2-pod/releases/latest/download/Q2-Pod-User-Guide.pdf)).
@@ -79,7 +79,7 @@
 | **Wheel**           | Scroll. Spin faster to speed up. Adjust a slider when one is open.          |
 | **Centre**          | Open the selected item. Double-press to turn the screen off.                |
 | **Hold Play/Pause** | View the playing queue, or open track, playlist and shuffle/repeat options. |
-| **Hold Return**     | Jump to Now Playing; hold again to go back.                                 |
+| **Hold Return**     | Jump to Now Playing; hold again to go back. Display can make it go Home.    |
 
 The user guide covers every control, EQ, Coverflow and more tips.
 
@@ -87,7 +87,7 @@ The user guide covers every control, EQ, Coverflow and more tips.
 
 Copy your music to the card over USB-C, then run **Library → Update Local Music** on the Q2.
 
-These folders at the card's root each add their own Library entry: `Podcasts/`, `Audiobooks/`, `Photos/`, `Books/`, `Videos/`, and `EQ/` for EQ presets. See the user guide for supported formats.
+These folders at the card's root each add their own Library entry: `Podcasts/`, `Audiobooks/`, `Photos/`, `Books/` and `Videos/`; `EQ/` holds EQ presets to import. See the user guide for supported formats.
 
 Settings, play counts, ratings and resume points are stored on the Q2 itself, so they stay put when you swap cards.
 
