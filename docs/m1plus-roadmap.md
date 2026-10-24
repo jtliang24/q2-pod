@@ -19,9 +19,9 @@ gap can't be left marked.
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 **Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
-one device pass. Steps 1 to 4, 1.2.9, 1.3.0, 1.3.8 and 1.3.9, are merged and gated
-([m1plus-progress.md](m1plus-progress.md) sections 40 to 43); 1.2.9 (dev 29), 1.3.0 (dev 5) and 1.3.8
-(dev 1) passed on the device. Step 5, 1.4.2, is next. Done so far:
+one device pass. All five steps, 1.2.9, 1.3.0, 1.3.8, 1.3.9 and 1.4.2, are merged and gated
+([m1plus-progress.md](m1plus-progress.md) sections 40 to 44); 1.2.9 (dev 29), 1.3.0 (dev 5) and 1.3.8
+(dev 1) passed on the device. The batch of ports is next. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -312,7 +312,9 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       - Network update fetches DiamondBond's Q2 `update.tar`. It stays off on M1 until it points at
         the fork's M1 releases.
       - The card app host (`addon.c`, `usbmode_page_init`, 1.4.2) runs over librespot: it goes with
-        section 3.
+        section 3. So does System settings' **Apps** (1.4.0's Q2 Shelf, `netupdate.c`), which installs
+        the card apps, Rockbox and Spotify from their GitHub releases: its row is off on M1 (`!M1PLUS`
+        in `ringnav_systemset`). Whether what it downloads runs on the M1 is to be checked first.
       - Games changed again in 1.4.2 and use the Return key, which the M1 lacks. They need a touch
         design.
     - **Hooks:** lyric search and cover search (`kugou_obtainlyric`, `kugou_obtaincover`),

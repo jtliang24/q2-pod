@@ -1651,6 +1651,61 @@ New to the runbook:
 - a rule for V1.32 numbers in shared C, with the scan;
 - Screen Off set to Off for a device pass.
 
+## 44. U3 step 5: sync to upstream 1.4.2 (Oct 24)
+
+1.4.2 has 10 commits past 1.3.9, through 1.4.0 and 1.4.1:
+- EQ Advanced's Auto preamp cuts for the playing sample rate (`peq_auto`), and its row shows both cuts;
+- Audio and System settings wrap at their ends (`contexts.inc`'s `RING`);
+- a boot clears a Simple EQ comparison left on (`peq_boot`), and playback's checkpoint poll takes its
+  lock once every 5 s;
+- Audio settings' **MQA** row, off by default: hciplayer's start-of-track MQA probe broke gapless;
+- System settings' **Apps** (the Q2 Shelf) installs Rockbox, its themes, Spotify and the card apps
+  (Deezer, Soulseek, File Browser) from GitHub; the card app host (`addon.c`) runs them, with a
+  Streaming row each, and stops them before USB storage;
+- the iPod's games polished.
+
+| Commit | Change | Why |
+|---|---|---|
+| `b98d548` | Merge upstream 1.4.2 | 9 hunks in 4 files. In `build.py`, `VERSION` beside `Q2_TAR_SHA`, and `PAYLOAD_WINDOWS` takes the app host's pages beside `library_page`. In `navigation.c`, `reorder`'s 32 rows keep the M1 guard, the MQA and Apps rows join the `ICON_`/`VIEW_` names, and Streaming's new comment sits inside the M1's `#if !M1PLUS`. In `peq_ui.c`, `row_dim` returns its label, with `UI_W` and the `STYLE_` names. In `playback.c`, `peq_boot` goes inside `ringnav_bootmode`'s `#if !M1PLUS`, and `ringnav_mode`'s `mqa_sync` sits beside the M1's `BOOT_MODE_RET`. |
+| `019ea7d` | `addon.c` on M1, `usbmode_page_init` unported | `addon.c` in the M1's copy of `peq.py`'s list: the shared code calls its `addon_*` entry points, which do nothing with no card app running. The USB mode hook waits with the app host (U4). |
+| `5c39b84` | MQA's row on M1 | `ICON_DSDOUTPUT`: V2.1's theme names it `pset_dsdoutput`. V2.1's hciplayer takes the same `{mcl-mqadecodemode\N}`, and `MCL_FD` is V2.1's, so the row and `mqa_sync` work as on the Q2. |
+| `fab1e78` | No Apps row on M1 | `!M1PLUS` on `ringnav_systemset`'s Apps row: it opens the Q2 Shelf, which installs Q2 software and the card apps, all U4. |
+| `e2c67a5` | `peq_boot` on M1 | V2.1's `config_init` never calls `ringnav_bootmode` (`BOOT_MODE_CALL` is native), so `ringnav_mode` runs `peq_boot` on the call that returns to `BOOT_MODE_RET`: the same point in the boot. |
+| `c26f42f` | 1.4.2's test cases in the M1 suites | `suitemerge.py` merged `playback` cleanly and left 6 hunks of `patch`. The checkpoint poll's case writes V2.1's play status word (`PLAY_STATUS`), as the chapters case does. The M1's boot case checks `peq_boot` at `BOOT_MODE_RET` and MQA's mode at `config_mplayer`, as the Q2's does at `ringnav_bootmode` and `player_initconfig`; without the call, `peq_boot` isn't linked and the suite fails. MQA's cases take the M1's view and icon names, and V2.1's foreground rebuild now restores 9 rows. Spotify's browser opens from `streaming()`, through upstream's `add_on_row`. `boot_row` has no Apps row on M1. The card apps' cases and the Q2 Shelf's go behind `usbmode_page_init`, with a `not_ported` line each. |
+
+Checked by hand:
+- **`q2only.py 1.4.2`** lists 7 lines: Streaming's card app rows (U4, with the app host) and
+  `ringnav_bootmode`'s `peq_boot` (`e2c67a5`).
+- **V1.32 numbers in the tag's C:** colours, `MSG_NOSIGNAL` (0x4000, as on MIPS Linux), `music_records`
+  no longer taking My Fav (0xf00a), and `songs_open`'s 0xf001, which only the card apps reach.
+- **The settings wrap** reaches V2.1's pages as they are: their windows are named `playset_page` and
+  `sysset_page` too (`raw/ui/playset/playset_page.bin`, `raw/ui/systemset/sysset_page.bin`).
+
+Results:
+- **`test/q2compare.py 1.4.2 --suites`:** Legacy `71211893…` and iPod `bcd53392…` are byte-identical to
+  1.4.2's build, and all 22 suite runs pass (`patch` 1302 and 1731 scenarios). `coverflow`, `peq` and
+  `remote` differ in text from 1.4.2's, by the same fork seams as before.
+- **The M1** (`work/u3/1.4.2`, 1.4.2 dev 1, `V013s`, `update.bin` `0795d564…`): these pass:
+  - `build --build`;
+  - `patch`: 1087 scenarios, no `KNOWN GAP`, 34 `NOT PORTED`;
+  - `boot` and its two walks;
+  - `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa`.
+- **`test/m1plus/ports.py`:** 555 rows.
+- **`fndiff.py` from 1.3.8 dev 1**, the last build on the device: 62 changed, 53 added, 2 removed. For
+  the final device pass:
+  - section 43's list (Cover Flow's Go to Artist and covers, the hold menu's wrap and scroll, Albums'
+    wrap, Frequent and Recent titles, a folder's speed at a track's start);
+  - EQ Advanced's Auto preamp per rate (`peq_auto`, `autos`, `auto_text`, `peq_compile`);
+  - Audio and System settings wrapping at their ends (`context_id`, `ringnav`);
+  - MQA's row, its send on a connect, and a gapless album with it off (`mqa_*`, `ringnav_mode`);
+  - a Simple EQ comparison left on, cleared at boot (`peq_boot`);
+  - no Apps row in System settings (`ringnav_systemset`).
+
+  `addon.c` links (its entry points are called from shared code) and does nothing with no card app.
+  The playlist editor's changes (`ple_*`) don't run on M1.
+- **Footprint over 1.4.2's files:** +1,429/−287 over 30. The new seams are MQA's `ICON_DSDOUTPUT`, the
+  Apps row's `!M1PLUS` and `peq_boot`'s `#if M1PLUS`.
+
 ## How to check a build now
 
 ```sh
