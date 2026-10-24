@@ -36,8 +36,9 @@ void child_exit(int status) __attribute__((noreturn));
 /* Versioned disk representation: fixed-width fields, no pointers or implicit padding.
  * enabled: 0 off, 1 both channels, 2 left only, 3 right only (v1 files hold 0 or 1).
  * balance: dB, above 0 turns the left channel down, below 0 the right (v2 only).
- * automatic: the preamp is 1 Auto (the UI's headroom), 2 picked, 0 never picked (an import, or
- * saved before 1.3.6: PEQ_PRESET_V2 bytes), which the UI also takes as Auto. */
+ * automatic: the preamp is 1 Auto (the player cuts each rate's own peak; preamp holds the 48 kHz
+ * cut), 2 picked, 0 never picked (an import, or saved before 1.3.6: PEQ_PRESET_V2 bytes), which the
+ * UI and PEQ playback also take as Auto. */
 typedef struct { int enabled, type; double frequency, gain, q; } peq_band;
 typedef struct {
     int count, bypass;
@@ -76,7 +77,10 @@ void eq3_bands(peq_preset *p, const double gain[3]);
 int eq_load(eq_state *s); /* 0: no readable state, s holds the defaults */
 int eq_save(const eq_state *s);
 void eq_effective(const eq_state *s, peq_preset *out);
-int peq_compile(const peq_preset *p, int rate, peq_engine *out);
+int peq_compile(const peq_preset *p, int rate, peq_engine *out); /* the saved preamp, Auto or not */
+void peq_response(const peq_engine *e, int rate, double f, double *l, double *r);
+/* Auto's preamp at rate, dB: what the player plays */
+double peq_auto(const peq_preset *p, int rate);
 void peq_reset(peq_dsp *d, int rate, int channels, const peq_preset *p);
 int peq_update(peq_dsp *d, const peq_preset *p);
 void peq_process(peq_dsp *d, float *audio, unsigned frames);
@@ -146,6 +150,7 @@ int config_value(const char *section, const char *key, int n, int def); /* navig
 int image_show(void *img, const char *url, unsigned *size);
 int album_cmp(void *a, void *b);
 void peq_attach(void); /* peq_ui.c */
+void peq_boot(void); /* clear a previous session's Simple EQ comparison before restoring playback */
 extern int peq_chained; /* peq_ui.c: peq_stock_eq ran this boot */
 void peq_chain(void);   /* crossfade.c: peq_attach once a boot, while playing */
 int swap_on(void);
@@ -159,6 +164,24 @@ void play_folder(void *dq, int idx, int cls);
 int directory(void *path); /* playback.c: toolsLoadDirectory, for staged */
 #define TIDAL_DIR "/mnt/mmc/.tidal" /* tidal.c's cache, Tidal Downloads' list */
 #define SPOT_DIR "/mnt/mmc/.spotify" /* librespot and its launcher, spotify.c's */
+/* addon.c: card apps, each a card folder .<id> holding its manifest q2app, its
+ * launcher run and its binary q2-<id>. addon_scan finds them again (how many slots: a slot's index
+ * stays its app's), addon_name is one's while it is on the card (else 0), addon_open its Streaming
+ * row's click (ctx: the slot). addon_forget and addon_quit: the Apps page replaces or removes the
+ * files of the app in folder dir (".deezer"): forgotten on the UI thread, then asked to end and
+ * waited for on the Apps page's worker. */
+int addon_scan(void), addon_open(void *ctx, void *event), addon_hold(void *top);
+const char *addon_name(int a);
+void addon_poll(void), addon_stop(void), addon_paint(void *w, void *canvas), addon_card_away(void);
+void addon_forget(const char *dir), addon_quit(const char *dir);
+/* spotify.c's Q2SPOT/1 framing (docs/librespot.md), which the card apps speak too */
+int spot_escape(const char *s, char *out, unsigned size);
+int spot_reply(char *buf, unsigned len, char **f, int max);
+void spot_shut(int fd);
+/* navigation.c: a card folder's songs played from the card (a card app's local row): a folder
+ * opens its list, a file plays its folder from it; album, in track order (by name), else newest
+ * first. */
+int songs_open(const char *path, const char *title, int album);
 int stream_cache(int spotify); /* navigation.c: Streaming's Configuration, a cap of 512 << it MB */
 void album_memory(void *r);
 void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, unsigned px, unsigned color);
@@ -202,5 +225,9 @@ int ipod_classic(void); /* navigation.c: Theme: Classic */
 #define SPOT_GREY 0xffaaaaaau
 void radio_search(void);       /* radio.c */
 void toast(const char *text); /* navigation.c */
+int rockbox_available(void);  /* navigation.c: a regular Rockbox binary on the card */
+int page_keyup(void *ctx, void *event); /* navigation.c: Return leaves a payload page */
+int shelf_open(void *ctx, void *event); /* netupdate.c: System settings' Apps page */
+const char *shelf_busy(void);           /* netupdate.c: the app folder a job replaces */
 
 #endif

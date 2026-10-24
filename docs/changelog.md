@@ -1,5 +1,24 @@
 # Changelog
 
+- **1.4.2**:
+  - Gapless albums no longer have a short gap between FLAC and WAV tracks. The cause was the MQA check at the start of every track. **Audio settings → MQA**, after DSD Output, turns MQA decoding back on. It is off by default, and MQA files play as ordinary FLAC while it's off.
+  - System settings: **Apps** comes before **System Update**.
+  - Games: Solitaire's corner cards and Vortex's score, level and lives no longer hide under the screen's rounded corners.
+  - Games: Solitaire has rounded cards with a bordered back; Sudoku highlights every cell holding the selected digit, or the digit you're picking; Vortex's bricks flash as they break, the ball leaves a short trail, lives show as balls, and a record score says "New best!".
+  - **System settings → Apps** installs, updates and removes Deezer, Soulseek and File Browser, card apps from their own GitHub releases, keeping each one's saved settings. Once on the card each gets a row in **Streaming**; File Browser's opens a QR code to scan with a phone. Plugging in USB storage stops them and they start again after.
+
+- **1.4.1**:
+  - Home's **Shortcut** setting includes **Games**.
+  - Playback and System settings wrap from bottom to top and back after a pause at the end.
+  - Classic: grid highlights use the same rounded spacing as Minimal, keeping the selected accent.
+  - Audiobooks and podcasts appear in Favorites and Ratings when added or rated, while staying out of Library music lists and shuffle.
+  - Playback: check queue progress every five seconds between checkpoints, avoiding repeated audio-state locking on every UI pass.
+  - EQ Off: restart clears a temporary Simple EQ comparison level left by shutting down on its page.
+
+- **1.4.0**:
+  - **System settings → Apps** installs, updates and removes Rockbox, the Rockbox themes and Spotify over Wi-Fi from their GitHub releases, keeping Rockbox's settings and Spotify's login and cache. Removing Spotify keeps its login unless you also pick **Erase Spotify Data**.
+  - EQ: Advanced's **Auto** preamp cuts for the sample rate that is playing, instead of for the worst of every rate, so most presets play louder at 44.1 and 48 kHz. The Preamp row shows both cuts, e.g. **Auto (44.1: -9.2 / 48: -8.8)**. A picked preamp and Simple (3EQ) play as before.
+
 - **1.3.9**:
   - iPod: **Library → Games** with a controller icon and Sudoku, Vortex and Solitaire (Klondike, draw one), playable while music plays. Sudoku and Solitaire keep the game in progress and Vortex the best score across restarts.
   - Games: Vortex lets the screen dim and turn off while the ball is in play (which pauses it) and no longer redraws the screen when nothing moves, saving battery.
