@@ -423,7 +423,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert [h for h, _ in old_segs] == [h for h, _ in new_segs] and [p for _, p in old_segs[:-1]] == [p for _, p in new_segs[:-1]]
     assert old_segs[-1][1][0] == 0
     start = (len(stock) + 65535) & ~65535
-    assert new_segs[-1][1] == (1, start, BASE, BASE, len(payload), ps['__scratch_end'] - BASE, 7, 65536)
+    # mapped to the payload ELF's end, past __scratch_end: link.ld leaves orphan .bss after .scratch (m1plus.build)
+    payload_end = max(v + m for _, (t, _, v, _, _, m, _, _) in segments((directory/'patch.elf').read_bytes()) if t == 1)
+    assert payload_end >= ps['__scratch_end']
+    assert new_segs[-1][1] == (1, start, BASE, BASE, len(payload), payload_end - BASE, 7, 65536)
     assert demo[len(stock):start] == bytes(start - len(stock)) and demo[start:] == payload
     allowed.update(range(new_segs[-1][0], new_segs[-1][0] + 32))
     def stray(image):

@@ -833,7 +833,12 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     payload = (out/'patch.bin').read_bytes()
     check(len(payload) < SCRATCH-BASE, 'Payload overlaps its scratch page')
     check(ps['__scratch_start'] == SCRATCH, 'Scratch state moved')
-    check(ps['__scratch_end'] <= SCRATCH + 0x10000, 'Scratch state exceeds its page')
+    # The payload's writable state ends past __scratch_end: link.ld places only .scratch, and a static
+    # outside it (coverflow.c's stock_rows, 1.3.8's headroom cache in peq.c) is an orphan .bss after it.
+    # Upstream's Q2 maps to __scratch_end, which holds while the orphans stay in its last page; the M1's
+    # larger .scratch put 1.3.8's past it, onto the heap's first page. So map to the ELF's end.
+    payload_end = max(v + m for _, (t, _, v, _, _, m, _, _) in segments((out/'patch.elf').read_bytes()) if t == 1)
+    check(ps['__scratch_end'] <= payload_end <= SCRATCH + 0x10000, 'Scratch state exceeds its page')
     patched = bytearray(raw_demo)
     def jump(off, name): patched[off:off+8] = struct.pack('<II', 0x08000000 | (ps[name] >> 2), 0)
     for name, (address, replacement, _) in M1PLUS_HOOKS.items():
@@ -880,7 +885,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     check(re.search(r'\.pdr +PROGBITS +0+ +0*%x +0*%x ' % (pdr_off, pdr_size), run('readelf', '-SW', demo)) and
           all(p[1]+p[4] <= pdr_off for _,p in segments(patched) if p[0] == 1), '.pdr: not the audited section')
     patched[pdr_off:pdr_off+pdr_size] = bytes(pdr_size)
-    append_payload(patched, payload, BASE, ps['__scratch_end']-BASE, 'demo')
+    append_payload(patched, payload, BASE, payload_end-BASE, 'demo')
     (out/'demo').write_bytes(patched)
     # Pseudo-file round trip preserves every original inode's metadata and hardlinks.
     pseudo = out/'root.pseudo'
