@@ -81,6 +81,15 @@ CALL_SITES = {
         'BT_POWER': ((0x4efcbc, 0x0320f809, 'headset_bt_power'),),
         # toolsLoadAllFile's existing-song check, folder scans only.
         'SCAN_REFRESH': ((0x5c981c, 0x0411fd88, 'ringnav_scan_refresh'),),
+        # Folder row names are text, not printf formats ("99% Invisible" crashes stock's formatter):
+        # tk_snprintf becomes tk_strncpy of record->name, 511 bytes and the terminator.
+        'FOLDER_NAME': ((0x522384, 0x24050200, 0x240601ff), (0x522390, 0x8f99a7c8, 0x8f99b200),
+                        (0x522398, 0x8e260008, 0x8e250008)),
+        # player_get_id3info's jalr strcpy of the parsed path: a CUE track without sheet tags takes its file's.
+        'ID3_PATH': ((0x5148e8, 0x0320f809, 'ringnav_id3_path'),),
+        # parse_albumcovertask_thd's jalr toolsGetAlbumCover calls: Ogg pictures through ffmpeg.
+        'GRID_COVER': ((0x4edf1c, 0x0320f809, 'coverflow_album_cover'), (0x4ef018, 0x0320f809, 'coverflow_grid_cover'),
+                       (0x4ef0d4, 0x0320f809, 'coverflow_grid_cover')),
         # Now Playing's info page: its one fill (bal 0x52a508) goes through ringnav_np_info, which tidies
         # the lines.
         'NP_INFO_CALL': ((0x52baf4, 0x0411fa84, 'ringnav_np_info'),),
@@ -182,6 +191,9 @@ CALL_SITE_PURPOSES = {
     'PLAYER_COVER': 'Now Playing art through ffmpeg',
     'BT_POWER': 'Bluetooth callbacks before radio power',
     'SCAN_REFRESH': 'folder scan refreshes existing tags',
+    'FOLDER_NAME': 'folder names are literal text',
+    'ID3_PATH': "a CUE track's file tags",
+    'GRID_COVER': 'Ogg art in Albums and Folder view',
     'NP_INFO_CALL': "Now Playing's info lines",
     'LDAC_HQ': 'LDAC HQ sends 990 kbps',
     'WHEEL_TS_READ': 'wheel ticks',
@@ -228,6 +240,12 @@ M1PLUS_PORTS = {
                         "table and patch_timezones' words not yet found (roadmap U3 batch)"),
     'toolsQueryContentDbTable': ('unported', "an artist's albums tab's album-artist rewrite (1.2.9); V2.1 has no "
                                  'toolsQueryContentDbTable'),
+    'mclLoadExLyric': ('unported', "a track's LYRICS tag without a .lrc (1.3.0); MCL_LYRICS and the TagLib offsets "
+                       'are M1_UNPORTED, V2.1\'s libtag_c being another build (roadmap U3 batch)'),
+    'toolsIntoStandby': ('unported', "Standby Limit (1.3.0): the Power row is Q2 only until V2.1's standby is checked "
+                         '(roadmap U3 batch)'),
+    'networkGetWifiSignal': ('unported', "the Wi-Fi signal from the driver, keeping the radio's power save (1.3.0; "
+                             'roadmap U3 batch)'),
     'player_start_queue': ('unported', "View Queue's and Up Next's rows in a shuffle's play order (1.2.9); V2.1's is "
                            'start_playqueue (0x4e47d0), aliased for the payload\'s calls (roadmap U3 batch)'),
     # Call sites
@@ -244,6 +262,10 @@ M1PLUS_PORTS = {
     'BT_POWER': ('unported', "Bluetooth's callbacks before the radio powers on (1.2.9); V2.1's openBluetooth "
                  'not checked yet'),
     'SCAN_REFRESH': ('unported', 'a folder scan refreshes existing songs\' tags (1.2.9)'),
+    'FOLDER_NAME': ('unported', "a folder named with % no longer crashes Folder's rows (1.3.0); V2.1's "
+                    'folder_create_tablerow (0x5331fc) to check'),
+    'ID3_PATH': ('unported', "a CUE track without sheet tags takes its file's (1.3.0)"),
+    'GRID_COVER': ('unported', 'Ogg covers in the album grids and Folder (1.3.0)'),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {

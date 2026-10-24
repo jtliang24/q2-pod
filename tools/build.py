@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 ZIP_SHA = '154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00'
 DEMO_SHA = '2c5f06142850b4fc168f82b44a81550cce0a5b4b9fe1c179dced4a08a3049138'
 Q2_TAR_SHA = '0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1'  # the update.tar in the ZIP, alone
-VERSION = '1.2.9'  # major.minor.patch, single digits, shown as is (About, release tag and ZIPs)
+VERSION = '1.3.0'  # major.minor.patch, single digits, shown as is (About, release tag and ZIPs)
 # The updater's identity (firmware_v20.info and demo's version literal) must be 5 characters and
 # differ from the installed one, so it packs the digits: 1.0.1 is V101I. About shows the stock
 # firmware version and a CFW. Version row with VERSION and the edition instead (ringnav_about).
@@ -82,6 +82,8 @@ HOOKS = {
     'save_memoryplay_info': (0x516344, 'ringnav_savequeue', 'savequeue'),
     'mclLoadPlayList': (0x5aa8d4, 'ringnav_load', 'load'),
     'mclNextSong': (0x5adbbc, 'ringnav_next', 'next'),
+    # Lyrics: a local track without a .lrc takes its LYRICS tag (navigation.c ringnav_lyric)
+    'mclLoadExLyric': (0x5aac90, 'ringnav_lyric', 'lyric'),
     'mclPrevSong': (0x5ada98, 'ringnav_prev', 'prev'),
     'mclSetPlayMode': (0x5ab25c, 'ringnav_mode', 'mode'),
     'mclSetPlaySpeed': (0x5ab2ec, 'ringnav_speed', 'speed'),
@@ -91,6 +93,8 @@ HOOKS = {
     'mcl_preload': (0x5a8c1c, 'ringnav_preload', 'preload'),
     'memeory_startplayer': (0x5164e0, 'ringnav_memory', 'memory'),
     'systemset_powermanager_page_init': (0x4c72d0, 'ringnav_powermanager', 'power'),
+    # Standby limit: the suspend to RAM between the RTC wake alarm's set and clear
+    'toolsIntoStandby': (0x5be57c, 'ringnav_standby', 'standby'),
     'playset_playset_page_init': (0x4b98d8, 'ringnav_audioset', 'audioset'),
     # Bluetooth's list, rebuilt on every search and link change, gains Resume on connect
     'btmenu_rows': (0x4bee90, 'ringnav_btrows', 'btrows'),
@@ -103,6 +107,9 @@ HOOKS = {
     'mcl_tidalStartPlayer': (0x5ad240, 'tidal_start', 'tidal'),
     # Ratings (navigation.c rate_bind): Now Playing's heart, held, opens the picker
     'playing_page_init': (0x52ca88, 'ringnav_playing', 'playing'),
+    # The Wi-Fi signal (navigation.c ringnav_wifi_signal): the driver's rx_signal instead of an ioctl
+    # that takes the radio out of power save; the status bar and the network monitor (a bal) poll it
+    'networkGetWifiSignal': (0x5afb48, 'ringnav_wifi_signal', None),
 }
 # Hooked in iPod builds only, so Stock keeps these entry points stock.
 IPOD_HOOKS = {'playlist_rebuild': (0x4b2dac, 'ringnav_playlist', 'playlist'),
@@ -189,11 +196,20 @@ WATCHDOG = 'usr/bin/checkappprocess.sh'
 WATCHDOG_SLEEP = (b'\tsleep 2\n', b'\tsleep 10\n')
 # toolsSetRtcTime's command, with its padding; -u keeps the RTC in UTC. See docs/internals.md#clock.
 RTC_WRITE = (b'hwclock -w\0\0', b'hwclock -wu\0')
+# network_checkstatus's command once Wi-Fi connects (its digit at file offset 0x37133d): stock turns
+# the radio's power save (LPS) off for the whole connection; 2 restores the driver's own default,
+# PS_MODE_MAX. See docs/internals.md#battery.
+WIFI_LPS = (b'rtwpriv wlan0 pm_set lps=0\0', b'rtwpriv wlan0 pm_set lps=2\0')
 # The lock window's 12-hour clock format (after its 24-hour hh:mm, by clock_time): stock's HH:TT shows
 # "05:PM"; H:mm is the hour 1-12 unpadded and the minutes (tk_date_time_format_impl), "5:07".
 LOCK_CLOCK_12H = (b'hh:mm\0\0\0HH:TT\0', b'hh:mm\0\0\0H:mm\0\0')
 # Now Playing's info page: its one fill (0x52a508), a bal, becomes jal ringnav_np_info, which tidies the lines.
 NP_INFO_CALL = 0x52baf4
+# Folder row names are text, not printf formats ("99% Invisible" crashes stock's formatter).
+# tk_strncpy writes its terminator at n, so reserve the last byte of the 512-byte buffer.
+FOLDER_NAME = ((0x522384, 0x24050200, 0x240601ff),  # a2 = 511
+               (0x522390, 0x8f99a7c8, 0x8f99b200),  # tk_snprintf -> tk_strncpy
+               (0x522398, 0x8e260008, 0x8e250008))  # a1 = record->name
 # mclNextSong's shuffle pick; the payload calls the stock pick, then applies a pending Play next.
 SHUFFLE_CALL = (0x5addf0, 0x0411e8cb)  # bal mcl_shuffle_pick; its delay slot (a0=1) stays
 # Hold Return: only on_wm_keylong_fun's final Home call (bal) changes; all stock gates and its release
@@ -210,6 +226,14 @@ BT_POWER = (0x4efcbc, 0x0320f809)
 # player_parsecover_thd's jalr toolsGetExternCover (lw $t9 at 0x51300c; Now Playing's folder art, after its
 # embedded art failed) becomes jal coverflow_player_cover, which gives ffmpeg what stock's decoder refuses.
 PLAYER_COVER = (0x51301c, 0x0320f809)
+# player_get_id3info's jalr strcpy of the parsed path (lw $t9 at 0x5148e0), which every fresh parse reaches
+# before Now Playing's lines, becomes jal ringnav_id3_path: a CUE track without sheet tags takes its file's.
+ID3_PATH = (0x5148e8, 0x0320f809)
+# parse_albumcovertask_thd's jalr toolsGetAlbumCover (Albums grids; Folder view's folder and track rows),
+# each with its lw $t9, become jal coverflow_grid_cover, which gives ffmpeg the Ogg pictures stock skips;
+# the Albums grid's (first, before stock's toolsGetExternCover) jal coverflow_album_cover.
+GRID_COVER = ((0x4edf1c, 0x4edf18, 'coverflow_album_cover'), (0x4ef018, 0x4ef008, 'coverflow_grid_cover'),
+              (0x4ef0d4, 0x4ef0d0, 'coverflow_grid_cover'))
 # The bal toolsTrimLeft on each name copy in the two library name comparators (0x5b9d40, 0x5ba658, the
 # Chinese and other-language sorts); they become jal ringnav_sort_key, which also drops a leading article.
 SCAN_REFRESH = (0x5c981c, 0x0411fd88)  # toolsLoadAllFile's existing-song check, folder scans only
@@ -284,6 +308,139 @@ LABELS = tuple((k.encode(), o.encode(), n.encode()) for k, o, n in (
     ('list_baidu', 'Baidu Netdisk(BETA)', 'Baidu Netdisk'), ('msg_poweroff', 'Confirm Shutdown?', 'Shut Down?'),
     ('genre', 'Genres', 'Genre'), ('player_era', 'Era', 'Year'), ('batch_addplaylist', 'Add to playlist', 'Add to Playlist'),
     ('scan_startscan', 'Scanning', 'Scan')))  # Scan specified folders' button; wifi_scan keeps its "Scanning"
+
+# Wi-Fi transfer's web page (stock thttpd on :8888): in English, an Upload Folder button, and a folder,
+# picked or dropped, keeps its tree: each file's folders are made with stock's create (a plain mkdir) before
+# it goes, as stock's upload only moves a file into an existing folder. The formats Q2 Pod's pages read are allowed too.
+MKDIR_JS = r'''// Each folder of a folder upload is made once per batch, parents first; stock's create is a plain mkdir,
+// so a folder that exists fails harmlessly and a real failure shows as its files' upload error.
+// ponytail: the stock CGIs run mkdir and mv through system() in double quotes, so a name with " ` or $
+// can't be uploaded (plain files too); replacing the CGIs would lift it.
+var _made = {};
+function _mkdir(path, base) {
+  if (path == base)
+    return $.Deferred().resolve();
+  if (!_made[path]) {
+    var made = $.Deferred();
+    _mkdir(path.replace(/[^\/]*\/$/, ""), base).always(function() {
+      $.ajax({url: 'create', type: 'POST', data: {path: path.slice(0, -1)}, dataType: 'json'})
+        .always(function() { made.resolve(); });
+    });
+    _made[path] = made;
+  }
+  return _made[path];
+}
+
+function _showError('''
+WEB = {
+  'usr/share/web/index.html': [
+    ('山灵音乐', 'Shanling Q2'),
+    ('支持音频格式:ISO,DFF,DSF,APE,FLAC,AIF,AIFF,WAV,M4A,AAC,MP2,AC3,DTS,MP3,OGG,WMA,CUE,M3U,M3U8<br/>图片格式:PNG,JPG,JPEG<br/>歌词格式:LRC<br/>固件升级包:BIN',
+     'Audio: ISO, DFF, DSF, APE, FLAC, AIF, AIFF, WAV, M4A, M4B, AAC, MP2, AC3, DTS, MP3, OGG, WMA, CUE, M3U, M3U8<br/>'
+     'Pictures: PNG, JPG, JPEG<br/>Lyrics: LRC<br/>Videos: MP4, M4V, MKV, AVI, MOV, MPG<br/>Books: TXT, EPUB<br/>Firmware: BIN'),
+    ('''上传文件
+          <input id="fileupload" type="file" name="files[]" multiple>
+        </button>''', '''Upload Files
+          <input id="fileupload" type="file" name="files[]" multiple>
+        </button>
+        <button type="button" class="btn btn-primary fileinput-button" id="upload-folder">
+          <span class="glyphicon glyphicon-folder-open"></span> Upload Folder
+          <input id="folderupload" type="file" name="files[]" multiple webkitdirectory>
+        </button>'''),
+    ('创建文件夹', 'New Folder'), ('返回上一级', 'Up'), ('正在进行文件上传', 'Uploading'), ('新建文件夹', 'New Folder'),
+    ('请输入要创建的文件夹的名称:', 'Folder name:'), ('取消', 'Cancel'), ('移动项目', 'Move'), ('请输入此项的新位置:', 'New location:')],
+  'usr/share/web/js/index.js': [
+    ('"LRC","BIN"];', '"LRC","BIN","M4B","MP4","M4V","MKV","AVI","MOV","MPG","TXT","EPUB"];'),
+    ('function _showError(', MKDIR_JS),
+    ('''  $("#upload-file").click(function(event) {
+    $("#fileupload").click();
+  });
+''', '''  $("#upload-file").click(function(event) {
+    $("#fileupload").click();
+  });
+  $("#upload-folder").click(function(event) {
+    $("#folderupload").click();
+  });
+'''),
+    ('$("#fileupload").click(function(event) {', '$("#fileupload, #folderupload").click(function(event) {'),
+    ('    dropZone: $(document),', '    fileInput: $("#fileupload, #folderupload"),\n    dropZone: $(document),'),
+    ('''      $(".uploading").hide();''', '''      if (!$("#uploads").children().length) {  // rows still waiting on their folders keep it up
+        $(".uploading").hide();
+        _made = {};
+      }'''),
+    ('''      var file = data.files[0];
+      if(_isValidFileType(file.name)) {
+        data.formData = {
+          path: _path
+        };
+        data.context = $(tmpl("template-uploads", {
+          path: _path + file.name
+        })).appendTo("#uploads");
+        var jqXHR = data.submit();
+        data.context.find("button").click(function(event) {
+          jqXHR.abort();
+        });''', '''      var file = data.files[0];
+      // a dropped folder's files carry relativePath ("Album/CD1/"), a picked one's webkitRelativePath ("Album/CD1/01.flac")
+      var dir = _path + (file.relativePath || (file.webkitRelativePath || "").replace(/[^\\/]*$/, ""));
+      if (dir != _path && file.name.charAt(0) == ".")
+        return;  // .DS_Store, macOS's ._ copies
+      if(_isValidFileType(file.name)) {
+        data.formData = {
+          path: dir
+        };
+        data.context = $(tmpl("template-uploads", {
+          path: dir + file.name
+        })).appendTo("#uploads");
+        $(".uploading").show();  // before its upload starts: it may wait on its folders
+        var jqXHR = null;
+        _mkdir(dir, _path).always(function() {
+          if (data.context.parent().length)  // not cancelled while its folder was made
+            jqXHR = data.submit();
+        });
+        data.context.find("button").click(function(event) {
+          if (jqXHR) jqXHR.abort(); else data.context.remove();
+        });'''),
+    ('"无法获取列表内容 - \\""', '"Can\'t list \\""'),
+    ('"无法创建\\"" + name + "\\"到\\""', '"Can\'t create \\"" + name + "\\" in \\""'), ('"无法移动\\""', '"Can\'t move \\""'), ('"\\"到\\""', '"\\" to \\""'),
+    ('"无效的命名 - \'\'"', '"Invalid name - \'\'"'), ('"你确定要删除吗?"', '"Delete this item?"'),
+    ('"没有权限删除\\""', '"Not allowed to delete \\""'), ('"无法删除\\""', '"Can\'t delete \\""'),
+    ('"没有权限上传内容到\\""', '"Not allowed to upload to \\""'), ('"不支持上传此类型文件 - \\""', '"Unsupported file type - \\""'),
+    ('"上传文件失败 \\"" + file.name + "\\" to \\"" + _path', '"Can\'t upload \\"" + file.name + "\\" to \\"" + data.formData.path'),
+    ('"没有权限添加内容到\\""', '"Not allowed to add to \\""'), ('"新建文件夹"', '"New Folder"'),
+    ('"没有权限移动内容到此目录 - \\""', '"Not allowed to move to \\""'), ('"当前已是顶级目录"', '"Already at the top folder"'),
+    ('//去掉后面的/', '// drop the trailing /'), ('//得到上一级目录，/结束', '// the parent folder, ending in /')],
+  # A dropped folder's entries: Chromium's readEntries gives at most 100 a call, so read until it gives none.
+  'usr/share/web/js/jquery.fileupload.js': [
+    ('''                dirReader.readEntries(function (entries) {
+                    that._handleFileTreeEntries(
+                        entries,
+                        path + entry.name + '/'
+                    ).done(function (files) {
+                        dfd.resolve(files);
+                    }).fail(errorHandler);
+                }, errorHandler);''', '''                var all = [], readEntries = function () {
+                    dirReader.readEntries(function (entries) {
+                        if (entries.length) {
+                            all = all.concat(Array.prototype.slice.call(entries));
+                            return readEntries();
+                        }
+                        that._handleFileTreeEntries(
+                            all,
+                            path + entry.name + '/'
+                        ).done(function (files) {
+                            dfd.resolve(files);
+                        }).fail(errorHandler);
+                    }, errorHandler);
+                };
+                readEntries();''')]}
+
+def patch_web(path, data):
+    text = data.decode()
+    for old, new in WEB[path]:
+        check(old in text, f'Unexpected {path}: {old[:40]!r}')
+        text = text.replace(old, new)
+    check(not re.search('[　-鿿＀-￯]', text), f'Chinese left in {path}')
+    return text.encode()
 
 # The stock font (Arial merged with a CJK font) gives curly quotes the CJK em advance, a wide gap
 # inside words wherever a tag has one; its cmaps map them to the straight glyphs instead. Its hearts
@@ -654,6 +811,7 @@ FUNCTIONS = {
  'btctl_device_status_callback': ('void', 'void *, void *'),
  'btctl_set_a2dp_callback': ('void', 'void *, void *'),
  'btrecvA2dpFunc': ('int', 'int, void *, void *'),
+ 'mclGetCueFlag': ('int', 'void'),  # the playing record has a CUE start or end
  'mclGetPlayStatus': ('int', 'void'),  # 1 stopped, 2 playing, 3 paused (mclStop, mclSetResume, mclSetPause)
  'player_stop': ('int', 'void'),
  'player_save_start': ('int', 'int'),  # pause: mclStartPlayer at the saved seek, then paused if set
@@ -767,7 +925,7 @@ def compile_payload(out, ipod):
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *[f'--undefined={name}' for _, name, _ in hooks(ipod).values()], *[f'--undefined={IPOD_LEAF[2]}'] * ipod,
         f'--undefined={WM_PAINT_LEAF[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=ringnav_ts_read',
-        '--undefined=coverflow_player_cover', '--undefined=headset_bt_power',
+        '--undefined=coverflow_player_cover', '--undefined=coverflow_grid_cover', '--undefined=coverflow_album_cover', '--undefined=headset_bt_power',
         out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
     return symbols(out/'patch.elf')
@@ -985,6 +1143,13 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, 0x51300c))[0] == 0x8f99b6e4,
           'player cover: expected toolsGetExternCover import')
     patch_word(patched, *PLAYER_COVER, jal(ps['coverflow_player_cover']), 'Now Playing art through ffmpeg')
+    check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, 0x5148e0))[0] == 0x8f99f5bc,
+          'id3 path: expected strcpy import')
+    patch_word(patched, *ID3_PATH, jal(ps['ringnav_id3_path']), "a CUE track's file tags")
+    for call, load, fn in GRID_COVER:
+        check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, load))[0] == 0x8f99b6e0,
+              'grid cover: expected toolsGetAlbumCover import')
+        patch_word(patched, call, 0x0320f809, jal(ps[fn]), 'Ogg art in Albums and Folder view')
     patch_word(patched, *BT_CONNECT_START, jal(ps['ringnav_bt_connect_start']),
                'Bluetooth: Resume on connect')
     check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, BT_POWER[0] - 12))[0] == 0x8f99ad10,
@@ -996,6 +1161,8 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     patch_word(patched, scan + 4, limit, count, 'scan up to 65,000 songs')
     for address, old, new in DROP_CACHES:
         patch_word(patched, address, old, new, 'keep the page cache')
+    for word in FOLDER_NAME:
+        patch_word(patched, *word, 'folder names are literal text')
     patch_word(patched, NP_INFO_CALL, branch(0x04110000, NP_INFO_CALL, PRIVATE_FUNCTIONS['np_info']),
                jal(ps['ringnav_np_info']), "Now Playing's info lines")
     for address, old, new in LDAC_HQ:
@@ -1044,6 +1211,8 @@ def build(zip_path, out, logo, ipod=False, dev=False):
           'VERSION must be three single digits (x.y.z): the 5-character tag would shift every later file offset')
     patched = patched.replace(b'V1.32\0', version.encode()+b'\0')
     patched = patched.replace(*RTC_WRITE)
+    check(patched.count(WIFI_LPS[0]) == 1, 'Unexpected Wi-Fi power save command')
+    patched = patched.replace(*WIFI_LPS)
     check(patched.count(LOCK_CLOCK_12H[0]) == 1, 'Unexpected lock clock formats')
     patched = patched.replace(*LOCK_CLOCK_12H)
     check(re.search(r'\.pdr +PROGBITS +0+ +0*%x +0*%x ' % PDR, run('readelf', '-SW', demo)) and
@@ -1127,7 +1296,8 @@ def build(zip_path, out, logo, ipod=False, dev=False):
         removed.append(line.group().split()[:6])
         p = p[:line.start()]+p[line.end():]
     changed_assets = {}
-    for path, fix, name in ((TAG_C, patch_m4b_cover, 'libtag_c.so.2.0.1'), (FONT, font_quotes, 'default.ttf')):
+    for path, fix, name in ((TAG_C, patch_m4b_cover, 'libtag_c.so.2.0.1'), (FONT, font_quotes, 'default.ttf'),
+                            *((p, lambda d, p=p: patch_web(p, d), p.rsplit('/', 1)[-1]) for p in WEB)):
         original = cat(path)
         data = fix(original)
         (out/name).write_bytes(data)

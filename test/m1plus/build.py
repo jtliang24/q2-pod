@@ -2,7 +2,7 @@
 """JPEG and boot script checks; --build BUILD audits a build (Q2 or M1 Plus), and a stock firmware ZIP
 also tests packaging with a custom logo and quoted paths."""
 import io, sys; sys.path[1:1] = [sys.path[0] + '/..']; sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first: test/m1plus/build.py must import tools/build.py
-from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover
+from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web
 
 logo = (ROOT/'assets/boot-logo.jpg').read_bytes()
 assert jpeg_size(logo) == (320, 375)
@@ -323,6 +323,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
     assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
     assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
+    # ringnav_localclass scopes an artist's albums to music by CLASS_LOAD_ARTIST_ALBUMS: V2.1's loadAlbumList
+    # stores 0xff01 in classinfo_save (ori $v0, 0xff01; sw $v0, 0($s0)) and branches to loadLocalClassList.
+    assert words(0x4ee930, 1) == (0x3402ff01,) and words(0x4ee93c, 1) == (0xae020000,)
+    assert words(0x4ee9a8, 1)[0] == 0x10000000 | ((stock_syms['loadLocalClassList'] - 0x4ee9ac) >> 2) & 0xffff
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores
@@ -474,7 +478,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
 
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
-    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, PDR
+    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, PDR
     from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,

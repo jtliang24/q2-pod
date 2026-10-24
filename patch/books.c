@@ -553,7 +553,7 @@ static void info(void) {
                     bk.state == BAD ? "Can't open this book" : "Preparing\xe2\x80\xa6");
     else
         tk_snprintf(caption, sizeof caption, "%u%%  %s", pct, title(bk.path[bk.current], name));
-    if (tk_strcmp(widget_get_prop_str(bk.info, "text", ""), caption)) {
+    if (text_differs(bk.info, caption)) {
         widget_set_text_utf8(bk.info, caption);
         widget_set_prop_int(bk.info, "xoffset", 0); /* a long caption's scroll would shift this one left */
     }
@@ -575,9 +575,7 @@ static void marks_save(void) {
 
 /* The text file is ready: open it at the page last read. */
 static void load(void) {
-    void *f = fopen(bk.file, "rb");
-    long size = f && !fseek(f, 0, 2) ? ftell(f) : 0;
-    if (f) fclose(f);
+    long size = file_size(bk.file);
     bk.size = size > 0 ? (unsigned)size : 0;
     bk.state = bk.size ? READY : BAD;
     bk.pos = bk.end = bk.prev = bk.len = 0;
@@ -737,6 +735,7 @@ void books_paint(void *w, void *canvas) {
 #define VIDEO_SOCK "/tmp/q2video.sock" /* video.c Q2VIDEO_SOCK */
 #define VIDEO_PLACE "/tmp/q2video.place" /* video.c Q2VIDEO_PLACE: the second to start at, then left */
 #define VIDEO_QUIT_MS 3000 /* M1 Plus: a quit not done by then is forced */
+#define VIDEO_PAUSE_QUIT_MS 300000 /* a pause this long without a key quits, as Return, so the device can sleep */
 static struct {
     int paused, volume, gain, pid, sock, seek; /* seek: the wheel seeks, since seek_at (time_now_ms) */
     unsigned polled, control_at, seek_at, key, at; /* key: the video's in BOOK_MARKS, at its second there */
@@ -744,6 +743,7 @@ static struct {
     int back;        /* a press in the back chevron's square, not yet lifted or moved out */
     unsigned quit_at; /* when Return (the chevron) asked q2video to quit */
 #endif
+    unsigned paused_at; /* time_now_ms when the pause began, 0 playing */
 } vid __attribute__((section(".scratch")));
 
 int video_on(void) { return vid.pid; }
@@ -821,6 +821,7 @@ static int play_video(void *ctx, void *event) {
 #if M1PLUS
     vid.quit_at = 0;
 #endif
+    vid.paused_at = 0;
     vid.volume = g_volume; /* the helper starts at output_device's level: nothing to send, no bar */
     vid.gain = headset_gain();
     unlink("/tmp/q2video.state");
@@ -828,8 +829,20 @@ static int play_video(void *ctx, void *event) {
     return 0;
 }
 
+/* the helper's soft volume and gain (its bar), and what it was last sent */
+static void video_sync(void) {
+    char v[4] = { 'v', (char)g_volume, 'g', (char)headset_gain() };
+    dgram_send(&vid.sock, VIDEO_SOCK, v, 2);
+    dgram_send(&vid.sock, VIDEO_SOCK, v + 2, 2);
+    vid.volume = g_volume;
+    vid.gain = headset_gain();
+}
+
 /* ringnav_sleep, every UI loop pass: the helper's end, and meanwhile no screen, standby or DAC
- * power-off timeout (on_wm_idle_status, check_dacoff_state). */
+ * power-off timeout (on_wm_idle_status, check_dacoff_state). A pause of VIDEO_PAUSE_QUIT_MS quits
+ * as Return does (the place kept), so a pause from a dropped headset can't hold them forever.
+ * ponytail: input goes to the helper, so the pause can't just let the screen time out under it;
+ * a hold that lets a paused video go dark needs the wake path to reach stock while q2video runs. */
 void video_poll(void) {
     int status;
     if (!vid.pid) return;
@@ -840,14 +853,11 @@ void video_poll(void) {
             if (time_now_ms() - vid.control_at >= 1000 &&
                 BLOB_IO("/tmp/q2video.state", paused, 0) && (paused == 0 || paused == 1))
                 vid.paused = paused;
-            if (vid.volume != g_volume || vid.gain != headset_gain()) {
-                char v[2] = { 'v', (char)g_volume };
-                dgram_send(&vid.sock, VIDEO_SOCK, v, 2);
-                char g[2] = { 'g', (char)headset_gain() };
-                dgram_send(&vid.sock, VIDEO_SOCK, g, 2);
-                vid.volume = g_volume;
-                vid.gain = headset_gain();
-            }
+            if (vid.volume != g_volume || vid.gain != headset_gain()) video_sync();
+            if (!vid.paused) vid.paused_at = 0;
+            else if (!vid.paused_at) vid.paused_at = vid.polled ?: 1;
+            else if (vid.polled - vid.paused_at >= VIDEO_PAUSE_QUIT_MS)
+                dgram_send(&vid.sock, VIDEO_SOCK, "q", 1); /* again each poll until it ends */
         }
         reset_poweroptions_timer(1, 1, 1);
         if (I(g_dacoff_time, 0) > 0) I(g_dacoff_time, 0) = 0;
@@ -879,6 +889,7 @@ void video_key(unsigned key) {
 #if M1PLUS /* the knob is the wheel */
     if (key == KEY_VOLUMEUP || key == KEY_VOLUMEDOWN) key = key == KEY_VOLUMEUP ? KEY_NEXT : KEY_PREV;
 #endif
+    vid.paused_at = 0; /* a key restarts a pause's VIDEO_PAUSE_QUIT_MS */
     if (key == KEY_PLAY || key == KEY_FWD_BTN || key == KEY_BACK_BTN || key == KEY_RETURN)
         headset_manual();
     int wheel = key == KEY_NEXT || key == KEY_PREV, v = g_volume + (key == KEY_NEXT ? 1 : -1);
@@ -889,27 +900,21 @@ void video_key(unsigned key) {
         device_set_volume(v, 1);
         write_int_config(v, "PLAYSET", "VOLUME");
     }
-    char c[2] = { key == KEY_RETURN                                      ? 'q'
-                  : key == KEY_PLAY                                      ? 'p'
-                  : key == KEY_FWD_BTN || (key == KEY_NEXT && vid.seek)  ? 'f'
-                  : key == KEY_BACK_BTN || (key == KEY_PREV && vid.seek) ? 'b'
-                  : key == KEY_CENTER && vid.seek                        ? 's'
-                  : wheel || key == KEY_CENTER                           ? 'v'
-                                                                         : 0,
-                  (char)g_volume };
-    if (c[0]) dgram_send(&vid.sock, VIDEO_SOCK, c, c[0] == 'v' ? 2 : 1);
+    char c = key == KEY_RETURN                                      ? 'q'
+             : key == KEY_PLAY                                      ? 'p'
+             : key == KEY_FWD_BTN || (key == KEY_NEXT && vid.seek)  ? 'f'
+             : key == KEY_BACK_BTN || (key == KEY_PREV && vid.seek) ? 'b'
+             : key == KEY_CENTER && vid.seek                        ? 's'
+             : wheel || key == KEY_CENTER                           ? 'v'
+                                                                    : 0;
+    if (c == 'v') video_sync();
+    else if (c) dgram_send(&vid.sock, VIDEO_SOCK, &c, 1);
 #if M1PLUS
-    if (c[0] == 'q' && !vid.quit_at) vid.quit_at = time_now_ms() | 1;
+    if (c == 'q' && !vid.quit_at) vid.quit_at = time_now_ms() | 1;
 #endif
-    if (c[0] == 'p') {
+    if (c == 'p') {
         vid.paused = !vid.paused;
         vid.control_at = time_now_ms();
-    }
-    if (c[0] == 'v') {
-        char g[2] = { 'g', (char)headset_gain() };
-        dgram_send(&vid.sock, VIDEO_SOCK, g, 2);
-        vid.volume = g_volume;
-        vid.gain = headset_gain();
     }
 }
 

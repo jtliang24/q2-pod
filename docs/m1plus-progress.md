@@ -1461,6 +1461,36 @@ Over q2remote:
   button is V2.1's (`on_back_onclick`), which closes the page and the picker with it, saving nothing,
   where Return would close the picker alone (`rate_key`).
 
+## 41. U3 step 2: sync to upstream 1.3.0 (Oct 23)
+
+1.3.0, 32 commits past 1.2.9: Mono Audio, Resume Songs' length, Standby Limit, the Wi-Fi signal without
+leaving power save, lyrics from tags, Ogg covers, podcasts kept out of the library, and the Wi-Fi
+transfer page in English.
+
+| Commit | Change | Why |
+|---|---|---|
+| `e10130e` | Merge upstream 1.3.0 | 23 hunks in 9 files. Standby Limit's pod row goes before the M1's Knob rows, and its Power row is Q2 only for now, beside Volume Guard. `ringnav_artist_list` is upstream's `library_music` wrapper on the Q2, the M1 keeping its own. In `video.c` upstream forks ffmpeg through `ffmpeg()`; the M1's sound is its own ffmpeg's, so the M1 passes no sound pipe, in the `#else` of the Q2-only branch (the helper has no `M1PLUS` name to test). |
+| `8421512` | 1.3.0's names at their M1 values | Tunables copied. The lyrics names are `M1_UNPORTED`; the two read through `I()`/`P()` are a new `M1_UNPORTED_ADDR`, 4, since 0 there is arithmetic on a null pointer. The logo reads with `read_all`. |
+| `016b7e4` | Resume Songs' and Mono Audio's icons by name | The rows are shared code the M1 runs, named by V1.32's strings: V2.1's are `pset_memplay` and `pset_balance`. |
+| `6469c61` | An artist's albums scoped to music on V2.1 | Upstream's podcast fix tests V1.32's load class `0xff11`; V2.1's `loadAlbumList` loads `0xff01`. Neither `q2only.py` nor a conflict shows such a line: the M1 test's `library_music` check did. |
+| `5f99009` | 1.3.0's unported hooks and sites | Lyrics, Standby Limit, the Wi-Fi signal, `FOLDER_NAME`, `ID3_PATH`, `GRID_COVER`. |
+| `1337919` | 1.3.0's test cases in the M1 suites | 5 new `NOT PORTED` lines. Mono Audio, Resume Songs (its row and V2.1's Boot volume page) and Bluetooth volume's slow read-back run on M1. |
+
+Results:
+- `TMPDIR=/tmp test/q2compare.py 1.3.0 --suites`: Legacy `a89b5587…` and iPod `3aa1e288…` are
+  byte-identical to 1.3.0's build, and its 21 suite runs pass (`patch` 1116 and 1498 scenarios).
+- The M1 (`work/u3/1.3.0`): `build --build`, `patch` (1042 scenarios, no `KNOWN GAP`, 21 `NOT PORTED`),
+  `boot` and its two walks, `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa` pass.
+- `test/m1plus/ports.py`: 543 rows, 23 `NOT PORTED`.
+- `test/m1plus/q2only.py`: 40 lines, each handled (the artist list, the logo, `video.c`).
+- `fndiff.py` from dev 29: 145 changed, 21 added, 2 removed, among them Mono Audio, Resume Songs, the
+  video's pause timeout, and Folder rows.
+- Footprint over 1.3.0's files: +1,420/−286 over 30.
+
+New to the runbook's checks: none; this step used them as they stand. Its one miss the gates didn't
+name directly, the artist albums' class, came from a V1.32 literal in shared code.
+
+
 ## How to check a build now
 
 ```sh

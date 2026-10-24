@@ -126,19 +126,43 @@ static int art_exists(const char *url) { return !access(url + 7, 0); }
 #define ART_FFMPEG "/usr/bin/ffmpeg"
 #endif
 
+/* path's size, -1 when it can't be opened */
+long file_size(const char *path) {
+    void *f = fopen(path, "rb");
+    long size = f && !fseek(f, 0, 2) ? ftell(f) : -1;
+    if (f) fclose(f);
+    return size;
+}
+
 /* Stock ffmpeg's first picture of src (an image, or an audio file's embedded one) fitted into w x h
  * as a JPEG at dst: what stock's decoder refuses (WebP, a PNG over 1 MB, a JPEG over 6 MB). Uses no
- * shared file, so no lock. ponytail: a process per cover; a resident decoder if first builds drag. */
-static int ff_thumb(const char *src, const char *dst, int w, int h) {
-    char vf[80];
+ * lock: it writes only dst.ff, then renames it onto dst. ffmpeg creates its output before decoding,
+ * so a picture it can't decode leaves an empty file, even on exit 0, and a killed run a partial
+ * one; either is removed and dst is left alone, as stock's caches take any file for art.
+ * -xerror stops at a picture's first decode error rather than demuxing the rest of the file.
+ * *exited: ffmpeg ran to its own exit (no refused fork, no kill), so a failure is the picture's.
+ * ponytail: a process per cover; a resident decoder if first builds drag. */
+static int ff_run(const char *src, const char *dst, int w, int h, int *exited) {
+    char vf[80], tmp[1040];
     tk_snprintf(vf, sizeof(vf), "scale=%d:%d:force_original_aspect_ratio=decrease", w, h);
-    int status, pid = fork();
+    tk_snprintf(tmp, sizeof(tmp), "%s.ff", dst);
+    int status = -1, pid = fork();
     if (!pid) {
-        execl(ART_FFMPEG, ART_FFMPEG, "-nostdin", "-v", "quiet", "-i", src, "-frames:v", "1", "-vf",
-              vf, "-pix_fmt", "yuvj420p", "-q:v", "3", "-f", "mjpeg", "-y", dst, (char *)0);
+        execl(ART_FFMPEG, ART_FFMPEG, "-nostdin", "-v", "quiet", "-xerror", "-i", src, "-frames:v", "1",
+              "-vf", vf, "-pix_fmt", "yuvj420p", "-q:v", "3", "-f", "mjpeg", "-y", tmp, (char *)0);
         child_exit(127);
     }
-    return pid > 0 && waitpid(pid, &status, 0) == pid && !status;
+    while (pid > 0 && waitpid(pid, &status, 0) < 0 && *__errno_location() == 4) { /* EINTR: reap it */
+    }
+    *exited = !(status & 0x7f); /* WIFEXITED; not for -1 */
+    if (!status && file_size(tmp) > 0 && !rename(tmp, dst)) return 1;
+    unlink(tmp);
+    return 0;
+}
+
+static int ff_thumb(const char *src, const char *dst, int w, int h) {
+    int exited;
+    return ff_run(src, dst, w, h, &exited);
 }
 
 /* stock's thumbnailer, under the lock every stock caller holds, else ffmpeg; shared with photos.c */
@@ -183,10 +207,7 @@ static int marked_empty(const char *track) {
     const char *id3 = (const char *)g_play_id3_info;
     if (tk_strcmp(id3, track)) return 0;
     char art[512];
-    void *f = fopen(art_path(art, tags_key(id3 + ID3_ARTIST, id3 + ID3_ALBUM), ""), "rb");
-    long size = f && !fseek(f, 0, 2) ? ftell(f) : -1;
-    if (f) fclose(f);
-    return !size;
+    return !file_size(art_path(art, tags_key(id3 + ID3_ARTIST, id3 + ID3_ALBUM), ""));
 }
 
 /* player_parsecover_thd's folder-image call, after its embedded art failed, under
@@ -200,6 +221,41 @@ static int marked_empty(const char *track) {
 int coverflow_player_cover(const char *track, const char *dst, int w, int h) {
     return toolsGetExternCover(track, dst, w, h) == 1 || beside_art(track, dst, w, h, 0, ff_thumb) ||
            (!marked_empty(track) && ff_thumb(track, dst, w, h));
+}
+
+/* parse_albumcovertask_thd's embedded-art calls (Albums grids; Folder view's folder and track rows),
+ * made on stock's one cover thread under parse_cover_mutex: stock reads no Ogg picture, so an .opus
+ * or .ogg track's goes to ffmpeg. The lock is dropped for ffmpeg, as the UI thread takes it for
+ * Library's online thumbnails and Spotify's art: the call's paths are the thread's own, and stock's
+ * fallback after it runs with the lock held again. The Albums grid's call (album) reads the folder
+ * image first, which stock would only after it, so an Ogg album whose art is a cover.jpg costs no
+ * process; that also orders Ogg art as Coverflow does. Stock caches only a hit, so a track ffmpeg
+ * found no picture in is remembered (not one gone with the card, nor a refused fork or a killed
+ * ffmpeg). ponytail: 1024 misses until a
+ * reboot, oldest overwritten; a picture since added to a track shows after a reboot. */
+static int grid_cover(const char *track, const char *dst, int w, int h, int album) {
+    static unsigned *miss __attribute__((section(".scratch"))), n __attribute__((section(".scratch")));
+    const char *dot = strrchr(track, '.');
+    if (toolsGetAlbumCover(track, dst, w, h) == 1) return 1;
+    if (!dot || (strcasecmp(dot, ".opus") && strcasecmp(dot, ".ogg"))) return 0;
+    unsigned key = fnv(FNV_SEED, (const unsigned char *)track);
+    if (!miss) miss = calloc(1024, sizeof(*miss)); /* heap, as the scratch page is nearly full */
+    for (unsigned i = 0; miss && i < n && i < 1024; ++i)
+        if (miss[i] == key) return 0;
+    if (album && toolsGetExternCover(track, dst, w, h) == 1) return 1;
+    pthread_mutex_unlock((void *)parse_cover_mutex);
+    int exited, ok = ff_run(track, dst, w, h, &exited);
+    pthread_mutex_lock((void *)parse_cover_mutex);
+    if (!ok && exited && miss && !access(track, 4)) miss[n++ % 1024] = key;
+    return ok;
+}
+
+int coverflow_grid_cover(const char *track, const char *dst, int w, int h) {
+    return grid_cover(track, dst, w, h, 0);
+}
+
+int coverflow_album_cover(const char *track, const char *dst, int w, int h) {
+    return grid_cover(track, dst, w, h, 1);
 }
 
 /* One album: embedded art, then beside_art, then ffmpeg's read of the embedded art, last as it
@@ -1718,9 +1774,10 @@ const char *track_name(char *buf, unsigned size, void *t) {
     return buf;
 }
 
+extern void *staged_music(int (*query)(void *), void *arg, int *count);
 void *coverflow_album_tracks(void *r) {
     int n;
-    return in_order(staged(albums, r, &n), r);
+    return in_order(staged_music(albums, r, &n), r);
 }
 
 static int to_tracks(const void *unused) {

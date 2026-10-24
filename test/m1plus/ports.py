@@ -9,6 +9,7 @@ from build import ROOT, HOOKS, IPOD_HOOKS
 from m1plus import CALL_SITES, M1PLUS_HOOKS, M1PLUS_PORTS
 
 STATUSES = ('ported', 'native', 'q2only', 'unported')
+UNPORTED = ('M1_UNPORTED', 'M1_UNPORTED_ADDR')  # patch/m1plus_offsets.inc's values for an unported name
 DEFINE = re.compile(r'^\s*#\s*define\s+(\w+)\b\s*(.*)$', re.M)
 
 
@@ -48,10 +49,10 @@ def report():
     m1 = defines((ROOT/'patch/m1plus_offsets.inc').read_text())
     for name in q2:
         if name not in m1: rows.append(('name', name, 'q2only', 'used only by Q2 code'))
-        elif m1[name] == 'M1_UNPORTED': rows.append(('name', name, 'unported', 'its code is unreachable on M1'))
+        elif m1[name] in UNPORTED: rows.append(('name', name, 'unported', 'its code is unreachable on M1'))
         else: rows.append(('name', name, 'ported', ''))
     problems += [f'name {name}: M1_UNPORTED, but the Q2 has no such name'
-                 for name, value in m1.items() if value == 'M1_UNPORTED' and name not in q2]
+                 for name, value in m1.items() if value in UNPORTED and name not in q2]
     # CALL_SITES['q2'] mirrors build.py's call-site constants; one build() patches that the mirror lacks
     # (a sync's new site) fails, so the report sees it.
     problems += [f'site {name}: tools/build.py patches it, but CALL_SITES["q2"] has no entry; mirror it there'

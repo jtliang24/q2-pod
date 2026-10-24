@@ -5,6 +5,6 @@
     if (access(LOGO_SRC, 0))
         unlink(LOGO_DST), err = 0;
     else
-        b = logo_read(LOGO_SRC, &n);
+        b = read_all(LOGO_SRC, LOGO_MAX, &n);
     if (b && jpeg_size(b, n) == (320u << 16 | 480)) {
 #endif

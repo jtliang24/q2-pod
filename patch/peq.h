@@ -84,6 +84,9 @@ long long now_ns(void);
 /* Crossfade (docs/internals.md#crossfade): demo writes the next track change's fade, an int in ms,
  * 0 for none; hciplayer's filter maps the file read-only and holds the outgoing track's tail for it. */
 #define XFADE_FILE PEQ_ROOT "/tmp/q2xfade"
+/* Mono Audio: demo writes an int, 1 to mix both channels into each; hciplayer's filter and q2video map
+ * it read-only (video.c keeps its own copy of the path). */
+#define MONO_FILE PEQ_ROOT "/tmp/q2mono"
 /* librespot (spotify.c) and its restart loop, whose pid its launcher left, stopped: Spotify's idle
  * stop and Home's Rockbox row, which lets ALSA go too. A q2video sink ends with librespot's pipe. */
 #define SPOT_OUT "/tmp/q2-librespot.out" /* the output for the card's aplay.sh, none on the DAC */
@@ -117,6 +120,9 @@ void *page_row_detail(void *view, int index, const char *caption, const char *de
                       int (*click)(void *, void *));
 void page_row_into(void *view, int index, const char *caption, int (*click)(void *, void *));
 void *bottom_caption(void *parent, int h);
+int text_differs(void *w, const char *s);
+long file_size(const char *path); /* coverflow.c: -1 when it can't be opened */
+void *read_all(const char *path, unsigned max, unsigned *size); /* scrobble.c */
 int visual(void *s, int n, int *c, int *frac);
 int thumb(const char *src, const char *dst, int w, int h);
 int card_space(const char *dir);
@@ -126,10 +132,13 @@ unsigned fnv(unsigned h, const unsigned char *s);
 void stop_timer(unsigned *timer), rearm(unsigned *timer, int (*fn)(const void *), unsigned ms);
 int return_key(void *event, unsigned *timer, int (*leave)(const void *)); /* a page's keyup: Return */
 int center_press(unsigned *timer, unsigned *at, int (*single)(const void *), int scrubbing);
-int config_value(const char *section, const char *key, int n); /* navigation.c: Q2POD and IPOD digits */
+int config_value(const char *section, const char *key, int n, int def); /* navigation.c: a config.ini digit */
 int image_show(void *img, const char *url, unsigned *size);
 int album_cmp(void *a, void *b);
 void peq_attach(void); /* peq_ui.c */
+extern int peq_chained; /* peq_ui.c: peq_stock_eq ran this boot */
+void peq_chain(void);   /* crossfade.c: peq_attach once a boot, while playing */
+int mono_on(void);      /* crossfade.c: Mono Audio's setting */
 int worker_stop(unsigned long thread, int *running, volatile int *cancel, unsigned *timer);
 void ringnav_select(void *w, int id, int rows);
 int blob_io(const char *path, const char *tmp, void *buf, unsigned size, int write);

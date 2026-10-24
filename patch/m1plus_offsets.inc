@@ -7,6 +7,9 @@
  * (M1PLUS_PORTS 'unported'): #define NAME M1_UNPORTED. test/m1plus/ports.py lists each. A name that
  * code the M1 runs uses gets its V2.1 value instead. */
 #define M1_UNPORTED 0
+/* The same for an address code reads through I() or P(): 0 there would be arithmetic on a null pointer,
+ * a GNU extension -Werror refuses. Low memory is unmapped, so a read faults as one at 0 would. */
+#define M1_UNPORTED_ADDR 4
 
 #define UI_W 320
 #define UI_H 480
@@ -86,6 +89,8 @@
 #define ICON_DISPLAY "sset_display"
 #define ICON_COVERMODE "pset_covermode"
 #define ICON_FOLDERJUMP "pset_jumpfolder"
+#define ICON_MEMPLAY "pset_memplay" /* Resume Songs' row */
+#define ICON_BALANCE "pset_balance" /* Mono Audio's row */
 #define ICON_GAPLESS "pset_gapless"
 /* The payload's own widgets' styles: V1.32's, or V2.1's nearest of the same widget type, colour,
  * size and alignment (V2.1 has no centred 18 px label, no right-aligned 20 px scrolling label: their
@@ -377,6 +382,10 @@ static inline int arc_out(int r, int y) {
  * second, so a Q2 left dark without Standby stops waking the CPU for nothing. The first key waits
  * at most that; Wake's second press is timed at the screen-off pace. */
 #define DARK_IDLE_SLEEP_MS 250
+/* Bluetooth absolute volume is read back this often with the screen off and no volume limit to
+ * hold, or after the headset refused it (bt_volume_poll); 400 ms otherwise. A headset's own volume
+ * keys show on the M1 that late. */
+#define BT_VOLUME_SLOW_MS 2000
 /* Screen on, once IDLE_MS pass without input or a window animation, each turn idles IDLE_SLEEP_MS
  * (about 30 passes a second; the first input after waits at most that). */
 #define IDLE_MS 2000
@@ -386,11 +395,18 @@ static inline int arc_out(int r, int y) {
 #define CHARGE_STOP 80
 #define CHARGE_RESUME 75
 #define CHARGE_POLL_MS 5000
-/* Resume (docs/internals.md#resume): tracks of RESUME_MIN_S or longer keep their place in the
- * RESUME_SLOTS most recent; a place within RESUME_EDGE_S of either end is forgotten. Saved on a
- * track change, a pause and every RESUME_SAVE_S of play; restored if the track has played less
- * than RESUME_START_S when first seen playing. */
-#define RESUME_MIN_S 1200
+/* Standby limit (docs/internals.md#standby-limit): its three choices after Off, in hours of one
+ * Standby, after which the Q2 powers off. On M1 the row is off: toolsIntoStandby isn't hooked. */
+#define STANDBY_LIMIT_1 1
+#define STANDBY_LIMIT_2 8
+#define STANDBY_LIMIT_3 24
+/* The Wi-Fi signal (ringnav_wifi_signal) is read from the driver again at most every
+ * WIFI_SIGNAL_MS; its two pollers each ask about once a second. */
+#define WIFI_SIGNAL_MS 1000
+/* Resume (docs/internals.md#resume): tracks of Q2POD RESUMEMIN minutes or longer (crossfade.c
+ * resume_min) keep their place in the RESUME_SLOTS most recent; a place within RESUME_EDGE_S of
+ * either end is forgotten. Saved on a track change, a pause and every RESUME_SAVE_S of play;
+ * restored if the track has played less than RESUME_START_S when first seen playing. */
 #define RESUME_SLOTS 512
 #define RESUME_EDGE_S 30
 #define RESUME_SAVE_S 60
@@ -526,10 +542,21 @@ static inline int arc_out(int r, int y) {
 /* toolsGetMusicInfo's info (ID3_ALBUM's base): abmartist, its id3 field 6, copied to +0x580 @0x5ecbc4 as
  * V1.32 does. ringnav_music_info isn't hooked on M1 (toolsGetMusicInfo, roadmap U4); now_tag reads it. */
 #define MUSIC_INFO_ALBUM_ARTIST 0x580
-#define ID3_ALBUM_ARTIST (ID3_ALBUM + MUSIC_INFO_ALBUM_ARTIST) /* empty for CUE tracks, copied from the record */
+#define ID3_ALBUM_ARTIST (ID3_ALBUM + MUSIC_INFO_ALBUM_ARTIST) /* a CUE track's, from its file (ringnav_id3_path) */
+/* Lyrics from tags (ringnav_lyric): mclLoadExLyric isn't hooked on M1 (roadmap U3's batch), and the
+ * M1's libtag_c.so.2.0.1 is another build than the Q2's, so its offsets are to be found too. */
+#define MCL_LYRICS M1_UNPORTED_ADDR
+#define MCL_LYRIC_LOCK M1_UNPORTED
+#define TAGLIB_NEW_GOT M1_UNPORTED_ADDR
+#define TAGLIB_FILE_NEW M1_UNPORTED
+#define TAGLIB_PROPERTY_GET M1_UNPORTED
+#define TAGLIB_PROPERTY_FREE M1_UNPORTED
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
-#define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '%.m4b'"
+#define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
+/* V2.1 loads an artist's albums with this class too: loadAlbumList stores 0xff01 in classinfo_save, then
+ * branches to loadLocalClassList (0x4ee930, 0x4ee9a8), where V1.32 loads 0xff11. */
+#define CLASS_LOAD_ARTIST_ALBUMS CLASS_ARTIST_ALBUMS
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
