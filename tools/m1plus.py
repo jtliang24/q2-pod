@@ -277,6 +277,8 @@ M1PLUS_PORTS = {
                           '(roadmap U3 batch)'),
     'kugou_obtaincover': ('unported', "MusicBrainz and iTunes covers before stock's Kugou search (1.3.8); V2.1's is "
                           '0x50aa78 (roadmap U3 batch)'),
+    'usbmode_page_init': ('unported', "card apps end before USB storage unmounts the card (1.4.2); the card app "
+                          'host (addon.c) waits for U4, with Apps'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -637,7 +639,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=0', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
