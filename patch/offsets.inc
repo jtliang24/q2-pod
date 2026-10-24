@@ -296,6 +296,10 @@ static inline int arc_out(int r, int y) {
  * second, so a Q2 left dark without Standby stops waking the CPU for nothing. The first key waits
  * at most that; Wake's second press is timed at the screen-off pace. */
 #define DARK_IDLE_SLEEP_MS 250
+/* Bluetooth absolute volume is read back this often with the screen off and no volume limit to
+ * hold, or after the headset refused it (bt_volume_poll); 400 ms otherwise. A headset's own volume
+ * keys show on the Q2 that late. */
+#define BT_VOLUME_SLOW_MS 2000
 /* Screen on, once IDLE_MS pass without input or a window animation, each turn idles IDLE_SLEEP_MS
  * (about 30 passes a second; the first input after waits at most that). */
 #define IDLE_MS 2000
@@ -305,11 +309,18 @@ static inline int arc_out(int r, int y) {
 #define CHARGE_STOP 80
 #define CHARGE_RESUME 75
 #define CHARGE_POLL_MS 5000
-/* Resume (docs/internals.md#resume): tracks of RESUME_MIN_S or longer keep their place in the
- * RESUME_SLOTS most recent; a place within RESUME_EDGE_S of either end is forgotten. Saved on a
- * track change, a pause and every RESUME_SAVE_S of play; restored if the track has played less
- * than RESUME_START_S when first seen playing. */
-#define RESUME_MIN_S 1200
+/* Standby limit (docs/internals.md#standby-limit): its three choices after Off, in hours of one
+ * Standby, after which the Q2 powers off. */
+#define STANDBY_LIMIT_1 1
+#define STANDBY_LIMIT_2 8
+#define STANDBY_LIMIT_3 24
+/* The Wi-Fi signal (ringnav_wifi_signal) is read from the driver again at most every
+ * WIFI_SIGNAL_MS; its two pollers each ask about once a second. */
+#define WIFI_SIGNAL_MS 1000
+/* Resume (docs/internals.md#resume): tracks of Q2POD RESUMEMIN minutes or longer (crossfade.c
+ * resume_min) keep their place in the RESUME_SLOTS most recent; a place within RESUME_EDGE_S of
+ * either end is forgotten. Saved on a track change, a pause and every RESUME_SAVE_S of play;
+ * restored if the track has played less than RESUME_START_S when first seen playing. */
 #define RESUME_SLOTS 512
 #define RESUME_EDGE_S 30
 #define RESUME_SAVE_S 60
@@ -412,13 +423,23 @@ static inline int arc_out(int r, int y) {
 #define ID3_ARTIST 0x504
 #define ID3_TITLE 0x684
 #define MUSIC_INFO_ALBUM_ARTIST 0x580 /* toolsGetMusicInfo's info (ID3_ALBUM's base): abmartist, the scan's albumsonger */
-#define ID3_ALBUM_ARTIST (ID3_ALBUM + MUSIC_INFO_ALBUM_ARTIST) /* empty for CUE tracks, copied from the record */
+#define ID3_ALBUM_ARTIST (ID3_ALBUM + MUSIC_INFO_ALBUM_ARTIST) /* a CUE track's, from its file (ringnav_id3_path) */
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
-#define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '%.m4b'"
+#define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
 #define ALBUMINFO_ROW 0xa27200  /* the albums row localmusic_albuminfo_page_init opened (0x4a7ab4) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
 #define MCL_POOL 0xa3bdb0       /* deque_t * of int: unplayed shuffle indices */
+/* The playing track's lyrics (mclGetLyricSize @0x5aac20): a deque_t * of stLyricInfo { int time;
+ * char *text; }, whose copy duplicates the text, and the mutex every reader and the loader hold. */
+#define MCL_LYRICS 0xa3bdac
+#define MCL_LYRIC_LOCK 0xa3bdb8
+/* demo's GOT entry for taglib_file_new, libtag_c's own address once a call has bound it, and the
+ * pinned libtag_c.so.2.0.1's (build.py TAG_C_SHA) offsets of it and the property calls demo lacks. */
+#define TAGLIB_NEW_GOT 0xa2662c
+#define TAGLIB_FILE_NEW 0x98e0
+#define TAGLIB_PROPERTY_GET 0xb4dc
+#define TAGLIB_PROPERTY_FREE 0xb700
 #define MCL_LASTPOS 0xa3be90    /* shuffle "previous" index, -1 none */
 #define MCL_PREPOS 0xa3be94
 #define MCL_PRELOAD 0xa3be98    /* 1 preloaded, 0 none, -1 closed for this track */

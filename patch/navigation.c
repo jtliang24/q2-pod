@@ -76,7 +76,7 @@ extern int stock_keyup_trampoline(void *, void *), stock_touch_trampoline(void *
     stock_power_trampoline(void *, void *), stock_systemset_trampoline(void *, void *),
     stock_audioset_trampoline(void *, void *), stock_btrows_trampoline(void *, void *),
     stock_playlist_trampoline(void *), stock_stream_trampoline(void *, void *),
-    stock_start_player_trampoline(void);
+    stock_start_player_trampoline(void), stock_standby_trampoline(void);
 extern void *coverflow_tracks(void *page);
 extern int coverflow_jump(void *w, int from, int dir, unsigned *letter), coverflow_bounded(void *w);
 extern void *coverflow_album(void *page), *coverflow_album_tracks(void *r);
@@ -94,8 +94,10 @@ extern void spot_poll(void), spot_yield(void), spot_paint(void *w, void *canvas)
 extern int spot_media(unsigned key), spot_key(void *top, unsigned key),
     spot_open(void *ctx, void *event), spot_hold(void *top);
 extern void radio_poll(void);
-extern void xfade_row(void *label), wheel_row(void *label);
-extern int xfade_open(void *ctx, void *event), xfade_key(void *top, unsigned key);
+extern void xfade_row(void *label), wheel_row(void *label), resume_row(void *label),
+    mono_row(void *label);
+extern int mono_click(void *ctx, void *event);
+extern int xfade_open(void *ctx, void *event), xfade_key(void *top, unsigned key), resume_min(void);
 extern int eq_key(void *top, unsigned key); /* peq_ui.c */
 extern int radio_media(unsigned key), radio_open(void *ctx, void *event);
 extern const char *radio_hold(void *top);
@@ -107,6 +109,15 @@ extern int scrobble_ready(void), scrobble_start(void), scrobble_poll(int *sent),
     scrobble_album_artist(void);
 extern void scrobble_append(const char *line, unsigned n);
 extern void *staged(int (*query)(void *), void *arg, int *count);
+/* Scope music detail loads too: spoken tracks can share all their tags with music. */
+void *staged_music(int (*query)(void *), void *arg, int *count) {
+    int saved = library_music;
+    library_music = 1;
+    void *out = staged(query, arg, count);
+    library_music = saved;
+    return out;
+}
+
 extern int album_only(void *, void *, int), coverflow_split(void *);
 extern unsigned album_id(void *r);
 extern unsigned album_dir(const char *, int);
@@ -156,6 +167,7 @@ enum {
     POD_ARTIST_AZ,
     POD_VOL_GUARD,
     POD_HOLD_HOME,
+    POD_STANDBY,
 #if M1PLUS
     POD_KNOB, /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
     POD_KNOB_DIR, /* Navigation's volume-up turn: 0 up the list, 1 down */
@@ -235,6 +247,7 @@ typedef struct {
      * and the list it opened, with its tracks. */
     unsigned *rates, *album_rates;
     void *rate_win, *rate_fav, *rate_ctx, *rate_badge, *rate_on;
+    int rate_shown; /* the badge's hearts plus 1, 0 for a new badge */
     int empty_kind; /* the empty Library list empty_toast names */
     int rate_pick, rate_held;
     unsigned rate_hold, rate_tick, rate_album;
@@ -245,11 +258,12 @@ typedef struct {
      * offline (cpu_off), this boot's first offline is done (cpu_marked), and cpu_bad is 0 before
      * the check, 1 usable, 2 refused by an earlier boot's stall, 3 refused by the kernel;
      * last_input times the screen-on idle. year_old: Year order, oldest first. resume:
-     * Bluetooth's Resume on connect on. hold_home: Hold Return goes Home. */
+     * Bluetooth's Resume on connect on. hold_home: Hold Return goes Home. standby_limit: Standby
+     * limit's choice; standby_off: its alarm ended a Standby, so the next pass powers off. */
     int pod_read, charge_limit, low_power, wake_double, wake_pass, wake_eat,
         wake_down, /* 1: the held Centre press passes; 2: it is dropped */
         charge_held, cpu_off, cpu_bad, cpu_marked, artist_cf, year_old, resume, lock_clock,
-        artist_az, hold_home;
+        artist_az, hold_home, standby_limit, standby_off;
     void *pod_label[POD_COUNT];
 #if M1PLUS
     int knob_mode;    /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
@@ -1371,13 +1385,10 @@ static void pull_begin(void *event) {
 
 /* A one-digit setting under section in the stock config.ini, 0 to n - 1, else def (a missing key
  * too): toolsReadConfig(path, section, key, out, default) copies the value, or the default. */
-static int config_or(const char *section, const char *key, int n, int def) {
+int config_value(const char *section, const char *key, int n, int def) {
     char s[256] = "", d[2] = { (char)('0' + def), 0 };
     toolsReadConfig("/mnt/data/config.ini", section, key, s, d);
     return s[0] >= '0' && s[0] < '0' + n && !s[1] ? s[0] - '0' : def;
-}
-int config_value(const char *section, const char *key, int n) {
-    return config_or(section, key, n, 0);
 }
 
 #define ROCKBOX_BIN "/mnt/mmc/.rockbox/rockbox"
@@ -1409,9 +1420,6 @@ static const unsigned accents[][5] = { ACCENTS };
 static const char *const accent_names[] = { "Accent: Graphite", "Accent: Crimson", "Accent: Tidal",
                                             "Accent: Champagne" };
 _Static_assert(sizeof accent_names / sizeof *accent_names == ACCENT_N, "one name per ACCENTS row");
-int config_digit(const char *key, int n) {
-    return config_value("IPOD", key, n);
-} /* and visualizer.c's */
 /* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme. */
 static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT" };
 static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 6 };
@@ -1420,8 +1428,8 @@ static int *const setting_values[] = { &st.accent, &st.home_full, &st.battery, &
 static int accent(void) {
     if (!st.settings_read) {
         for (int i = 0; i < 4; ++i)
-            *setting_values[i] = config_digit(setting_keys[i], setting_counts[i]);
-        st.shortcut = config_or("IPOD", "SHORTCUT", 6, 6); /* 6: no key, see shortcut() */
+            *setting_values[i] = config_value("IPOD", setting_keys[i], setting_counts[i], 0);
+        st.shortcut = config_value("IPOD", "SHORTCUT", 6, 6); /* 6: no key, see shortcut() */
         st.settings_read = 1;
     }
     return st.classic ? st.accent : 0; /* Graphite */
@@ -2051,13 +2059,14 @@ int ringnav_quick_settings(void *win, void *ctx) {
  * holds playback; docs/internals.md#resume-on-connect), and the Lock screen's Clock (LOCKCLOCK,
  * lockscreen.c; docs/internals.md#lock-screen), and Playback's Artist album order (ARTISTAZ), and
  * Power's Volume guard (VOLGUARD, playback.c's wheel_guard; docs/internals.md#volume-guard), and
- * Display's Hold Return (HOLDRETURN, compact_now_playing; docs/ipod.md#hold-return). */
+ * Display's Hold Return (HOLDRETURN, compact_now_playing; docs/ipod.md#hold-return), and Power's
+ * Standby limit (STANDBYLIMIT, ringnav_standby; docs/internals.md#standby-limit). */
 #define STR_(x) #x
 #define STR(x) STR_(x)
 static int *const pod_values[] = { &st.charge_limit, &st.low_power,  &st.wake_double,
                                    &st.artist_cf,    &st.year_old,   0,
                                    &st.resume,       &st.lock_clock, &st.artist_az,
-                                   &wheel_guard,     &st.hold_home,
+                                   &wheel_guard,     &st.hold_home,  &st.standby_limit,
 #if M1PLUS
                                    &st.knob_mode,    &st.knob_reverse,
 #endif
@@ -2066,18 +2075,19 @@ _Static_assert(POD_LOCKCLOCK == 7, "lockscreen.c passes pod_rows 7");
 _Static_assert(sizeof pod_values / sizeof *pod_values == POD_COUNT, "a pod_values per row");
 static const char *const pod_keys[] = { "CHARGELIMIT", "LOWPOWER", "WAKEDOUBLE", "ARTISTCF",
                                         "YEAROLD",     0,          "RESUME",     "LOCKCLOCK",
-                                        "ARTISTAZ",    "VOLGUARD", "HOLDRETURN",
+                                        "ARTISTAZ",    "VOLGUARD", "HOLDRETURN", "STANDBYLIMIT",
 #if M1PLUS
                                         "KNOB",        "KNOBDIR",
 #endif
 };
 _Static_assert(sizeof pod_keys / sizeof *pod_keys == POD_COUNT, "a pod_keys entry per row");
+/* a row's choices: Artist albums three, Standby limit four, every other row off and on */
+static int pod_choices(unsigned i) { return i == POD_ARTIST_CF ? 3 : i == POD_STANDBY ? 4 : 2; }
 static void pod_settings(void) {
     if (st.pod_read) return;
     for (unsigned i = 0; i < sizeof pod_keys / sizeof *pod_keys; ++i)
         if (pod_keys[i]) /* Artist albums defaults to Coverflow */
-            *pod_values[i] =
-                config_or("Q2POD", pod_keys[i], i == POD_ARTIST_CF ? 3 : 2, i == POD_ARTIST_CF);
+            *pod_values[i] = config_value("Q2POD", pod_keys[i], pod_choices(i), i == POD_ARTIST_CF);
     st.pod_read = 1;
 }
 int ringnav_year_old(void) {
@@ -2103,7 +2113,9 @@ int ringnav_bt_resume(void) {
 /* read_artistype_value (a Library list's or artist page's init) and boot (playback.c
  * ringnav_bootmode): Artists as stock reads it, PLAYSET ARTISTTYPE, but Album Artist when no choice
  * is saved; stock writes the key only when Artists or the artist page's switch toggles. */
-void ringnav_read_artistype(void) { I(artist_type, 0) = config_or("PLAYSET", "ARTISTTYPE", 2, 1); }
+void ringnav_read_artistype(void) {
+    I(artist_type, 0) = config_value("PLAYSET", "ARTISTTYPE", 2, 1);
+}
 static unsigned le32(const unsigned char *p) {
     return p[0] | p[1] << 8 | p[2] << 16 | (unsigned)p[3] << 24;
 }
@@ -2155,6 +2167,26 @@ int ringnav_music_info(int a, char *info, const char *path) {
     if (path && !info[MUSIC_INFO_ALBUM_ARTIST])
         flac_album_artist(path, info + MUSIC_INFO_ALBUM_ARTIST);
     return r;
+}
+/* player_get_id3info's copy of the parsed path (ID3_PATH in tools/build.py), after the tags and
+ * before Now Playing's lines. A CUE track's tags are its record's, the stock parser's TITLE and
+ * PERFORMER (the track's, else the sheet's); a sheet without them takes the file's (issue #59).
+ * ponytail: the playing track only; the database keeps the sheet's empty fields for Library. */
+char *ringnav_id3_path(char *id3, const char *path) {
+    static const int fields[] = { ID3_ALBUM, ID3_ARTIST, ID3_ALBUM_ARTIST };
+    if (mclGetCueFlag() && (!id3[ID3_ALBUM] || !id3[ID3_ARTIST] || !id3[ID3_ALBUM_ARTIST])) {
+        char info[0x698] = { 0 };
+        if (toolsGetMusicInfo(0, info, path) == 1)
+            for (unsigned i = 0; i < sizeof fields / sizeof *fields; i++) {
+                char *f = id3 + fields[i];
+                if (*f) continue;
+                tk_snprintf(f, 0x100, "%s", info + fields[i] - ID3_ALBUM);
+                toolsTrimLeft(f); /* as stock did to its fields before this copy */
+            }
+    }
+    /* last: now_tag and marked_empty read a matching path as the tags being complete */
+    tk_snprintf(id3, 0x400, "%s", path); /* +0x400: the CUE start */
+    return id3;
 }
 /* Quote bounded scanner paths/tags into one UPDATE; never execute a truncated statement. */
 static int scan_quote(char *sql, unsigned cap, unsigned *n, const char *s) {
@@ -2234,7 +2266,7 @@ int ringnav_bt_connect_start(int pause) {
     return saved == 2 || saved == 3 ? player_save_start(saved == 3) : 0;
 }
 static void pod_text(int i) {
-    static const char *const names[][3] = {
+    static const char *const names[][4] = {
         { "Charge Limit: Off", "Charge Limit: " STR(CHARGE_STOP) "%" },
         { "Low Power: Off", "Low Power: On" },
         { "Wake: Single Press", "Wake: Double Press" },
@@ -2246,6 +2278,9 @@ static void pod_text(int i) {
         { "Artist Album Order: Year", "Artist Album Order: A–Z" },
         { "Volume Guard: Off", "Volume Guard: On" },
         { "Hold Return: Recent", "Hold Return: Home" },
+        { "Standby Limit: Off", "Standby Limit: " STR(STANDBY_LIMIT_1) " h",
+          "Standby Limit: " STR(STANDBY_LIMIT_2) " h",
+          "Standby Limit: " STR(STANDBY_LIMIT_3) " h" },
 #if M1PLUS
         { "Knob: Volume", "Knob: Navigation" },
         { "Knob Up: List Up", "Knob Up: List Down" },
@@ -2256,7 +2291,8 @@ static void pod_text(int i) {
     widget_set_text_utf8(st.pod_label[i], names[i][v]);
 }
 /* Centre or tap toggles and saves. Charge limit and Low power take effect on the next UI loop pass
- * (power_poll); Artists on the next load of an artist list, as the artist page's switch does. */
+ * (power_poll); Artists on the next load of an artist list, as the artist page's switch does;
+ * Standby limit at the next Standby. */
 static int pod_click(void *ctx, void *event) {
     int i = (int)(long)ctx;
     pod_settings();
@@ -2266,7 +2302,7 @@ static int pod_click(void *ctx, void *event) {
         write_int_config(v, "PLAYSET", "ARTISTTYPE");
     } else {
         int *value = pod_values[i];
-        *value = (*value + 1) % (i == POD_ARTIST_CF ? 3 : 2);
+        *value = (*value + 1) % pod_choices(i);
         write_int_config(*value, "Q2POD", pod_keys[i]);
         st.charge_at = 0;
     }
@@ -2293,8 +2329,9 @@ int ringnav_powermanager(void *win, void *ctx) {
     int result = stock_power_trampoline(win, ctx);
     /* M1 Plus: no Wake row. V2.1 has its own (Double wake), and the knob's press is not Centre. */
     pod_rows(win, VIEW_POWER, POD_CHARGE, M1PLUS ? 2 : 3, icons);
-#if !M1PLUS /* the touch wheel's guard; M1 Plus has a knob */
+#if !M1PLUS /* the touch wheel's guard (M1 Plus has a knob), and Standby Limit: toolsIntoStandby isn't hooked on M1 */
     pod_rows(win, VIEW_POWER, POD_VOL_GUARD, 1, icons + 2);
+    pod_rows(win, VIEW_POWER, POD_STANDBY, 1, icons + 1);
 #endif
     return result;
 }
@@ -2331,16 +2368,12 @@ static void reorder(void *view, const unsigned char *order, unsigned n) {
 
 /* Playback Setting: what is changed while listening first, then library behaviour, then output. */
 static const unsigned char playset_order[] = {
-    3 /* Play Mode */,    2 /* EQ */,
-    0 /* Gain */,         10 /* ReplayGain */,
-    18 /* Crossfade */,   9 /* Gapless */,
-    4 /* Max Volume */,   5 /* Default Vol */,
-    11 /* Balance */,     1 /* Filters */,
-    8 /* Memory play */,  16 /* Artists */,
-    15 /* Year order */,  17 /* Artist album order */,
-    13 /* Folder art */,  14 /* Folder skip */,
-    19 /* Folder Root */, 12 /* Enlarged art */,
-    6 /* DSD Output */,   7 /* USB Audio */,
+    3 /* Play Mode */,     2 /* EQ */,           0 /* Gain */,         10 /* ReplayGain */,
+    18 /* Crossfade */,    9 /* Gapless */,      4 /* Max Volume */,   5 /* Default Vol */,
+    11 /* Balance */,      21 /* Mono Audio */,  1 /* Filters */,      8 /* Memory play */,
+    20 /* Resume Songs */, 16 /* Artists */,     15 /* Year order */,  17 /* Artist album order */,
+    13 /* Folder art */,   14 /* Folder skip */, 19 /* Folder Root */, 12 /* Enlarged art */,
+    6 /* DSD Output */,    7 /* USB Audio */,
 };
 /* System Setting: connections and display first, boot/update/reset/about last. */
 static const unsigned char sysset_order[] = {
@@ -2419,6 +2452,8 @@ int ringnav_audioset(void *win, void *ctx) {
         root_read(name);
         st.root_label = list_row(view, ICON_FOLDERJUMP, root_click, 0);
         root_text(name);
+        resume_row(list_row(view, "playset_memplay", xfade_open, (void *)2)); /* crossfade.c */
+        mono_row(list_row(view, "playset_balance", mono_click, 0));
     }
     reorder(view, playset_order, sizeof playset_order);
 #if !M1PLUS
@@ -2451,6 +2486,57 @@ static void keep_selected(void *target) {
     }
     select(&g_menu, g_menu.id[i]);
     widget_invalidate_force(w, (void *)0);
+}
+
+/* Lyrics from tags: stock reads a local track's lyrics only from a .lrc beside it. Without one,
+ * the track's LYRICS tag (else UNSYNCEDLYRICS) fills stock's list a line each, at a time no track
+ * reaches, so the page stays at its top as before a .lrc's first stamp. libtag_c's property calls
+ * are found from taglib_file_new's address, which that call binds in demo's GOT.
+ * ponytail: unsynced text only (no SYLT frame, any [mm:ss] in the text shown as is), and lines
+ * starting in its first LYRIC_TAG_MAX bytes; parse stamps here for synced tags. */
+#define LYRIC_TAG_MAX 65536
+extern int stock_lyric_trampoline(void);
+int ringnav_lyric(void) {
+    int ret = stock_lyric_trampoline();
+    void *q = P(mcl_pdeqplaylist, 0), *r;
+    unsigned pos = (unsigned)I(MCL_POS, 0);
+    if (mclGetLyricSize() > 0 || (unsigned)(I(MCL_TYPE, 0) - 0xf1) < 2 || !q ||
+        pos >= deque_size(q) || !(r = deque_at(q, pos)) || I(r, REC_TYPE) != 8 || !P(r, REC_PATH) ||
+        *(char *)P(r, REC_PATH) != '/')
+        return ret;
+    void *f = taglib_file_new(P(r, REC_PATH));
+    if (!f) return ret;
+    unsigned at = (unsigned)I(TAGLIB_NEW_GOT, 0), lib = at - TAGLIB_FILE_NEW;
+    char **(*get)(void *, const char *) =
+        (char **(*)(void *, const char *))(lib + TAGLIB_PROPERTY_GET);
+    char **v = 0; /* an unbound entry still holds demo's stub */
+    if (at != (unsigned)taglib_file_new) {
+        v = get(f, "LYRICS");
+        if (!v || !*v || !**v) {
+            if (v) ((void (*)(char **))(lib + TAGLIB_PROPERTY_FREE))(v);
+            v = get(f, "UNSYNCEDLYRICS");
+        }
+    }
+    if (v && *v && **v) {
+        struct {
+            int time;
+            const char *text;
+        } line = { 0x7fffffff, 0 };
+        pthread_mutex_lock((void *)MCL_LYRIC_LOCK);
+        for (char *s = *v; *s && s - *v < LYRIC_TAG_MAX;) {
+            char *e = s, c;
+            while (*e && *e != '\n' && *e != '\r') ++e;
+            c = *e, *e = 0;
+            line.text = *s ? s : " "; /* stock's text for a stamp alone */
+            _deque_push_back(P(MCL_LYRICS, 0), &line);
+            s = e + (c != 0) + (c == '\r' && e[1] == '\n');
+        }
+        pthread_mutex_unlock((void *)MCL_LYRIC_LOCK);
+        ret = 1;
+    }
+    if (v) ((void (*)(char **))(lib + TAGLIB_PROPERTY_FREE))(v);
+    taglib_file_free(f);
+    return ret;
 }
 
 #if IPOD
@@ -2570,10 +2656,7 @@ static void bar_sync(void *bar) {
     const unsigned *t = widget_get_text(st.bar_pct);
     int level = 0;
     while (t && *t >= '0' && *t <= '9') level = level * 10 + (int)(*t++ - '0');
-    unsigned key = (unsigned)(level < 0     ? 0
-                              : level > 100 ? 100
-                                            : level)
-                       << 2 |
+    unsigned key = (unsigned)(level > 100 ? 100 : level) << 2 |
                    (unsigned)(icon && !tk_strcmp(icon, "bar_charge")) << 1 |
                    (unsigned)(icon && !tk_strcmp(icon, "bar_lowcharge"));
     int pct = pct_width(key >> 2);
@@ -4168,7 +4251,7 @@ static int artist_songs(void *unused) {
 /* Split artwork keys use the whole library; the layout uses only this artist's albums. */
 static void *artist_albums(void *all) {
     int n;
-    void *songs = staged(artist_songs, 0, &n), *out = _create_deque("stSongInfo");
+    void *songs = staged_music(artist_songs, 0, &n), *out = _create_deque("stSongInfo");
     deque_init(out);
     for (unsigned i = 0; i < deque_size(all); ++i) {
         void *a = deque_at(all, i);
@@ -4235,7 +4318,7 @@ static int artist_cf_open(const void *unused) {
  * year or A-Z, with each row's art key and album_id. V2.1 loads them in ringnav_localclass too. */
 static int artist_tab(int tab, int n) {
 #else
-int ringnav_artist_list(int tab) {
+static int artist_list(int tab) {
     int n = stock_artist_trampoline(tab);
 #endif
     void *list = P(p_deque_showlist, 0), *all;
@@ -4277,6 +4360,14 @@ int ringnav_artist_list(int tab) {
 }
 #if M1PLUS
 int ringnav_artist_list(int tab) { return artist_tab(tab, stock_artist_trampoline(tab)); }
+#else
+int ringnav_artist_list(int tab) {
+    int saved = library_music;
+    library_music = 1;
+    int n = artist_list(tab);
+    library_music = saved;
+    return n;
+}
 #endif
 static const char *artist_key(char *buf, void *list, unsigned i) {
     return st.art_keys && list == P(p_deque_showlist, 0) && st.art_n == deque_size(list) &&
@@ -4362,7 +4453,7 @@ static void fav_titles(void *list, int n) {
 }
 int ringnav_localclass(int cls) {
     I(g_artist_type, 0) = I(artist_type, 0) == 1;
-    library_music = cls == CLASS_ALBUMS || cls == 0xf004;
+    library_music = cls == CLASS_ALBUMS || cls == 0xf004 || cls == 0xff10 || cls == 0xff11;
     int n = stock_localclass_trampoline(cls);
     void *list = P(p_deque_showlist, 0), *dir = P(tools_pdeq_directory, 0), *a = album_opened();
     if (n > 0 && cls == 0xff10 && a) album_only(list, a, 0), n = (int)deque_size(list);
@@ -4383,7 +4474,10 @@ int ringnav_localclass(int cls) {
                 continue;
             free(*title), *title = t;
         }
-    if (cls < CLASS_ALBUMS || cls > 0xf006) return n;
+    if (cls < CLASS_ALBUMS || cls > 0xf006) {
+        library_music = 0;
+        return n;
+    }
     if (n > 0 && I(deque_at(list, (unsigned)n - 1), REC_ID) == -1) {
         class_query((unsigned)cls, deque_at(list, (unsigned)n - 1));
         int empty = !deque_size(dir);
@@ -4401,7 +4495,8 @@ int ringnav_localclass(int cls) {
 /* The tracks stock would play for that row, in its order. */
 static void qm_tracks(void *r, void *add) {
     int n;
-    void *rows = staged(qm_query, r, &n);
+    void *rows = (st.qm_cls == 0xf004 || st.qm_cls == CLASS_ARTIST_ALBUMS ? staged_music : staged)(
+        qm_query, r, &n);
     for (unsigned i = 0; i < deque_size(rows); ++i) {
         void *t = deque_at(rows, i);
         if (I(t, REC_TYPE) == 8) _deque_push_back(add, t);
@@ -4489,7 +4584,8 @@ void toast(const char *text) {
 static int all_songs(void *unused) { return getAllMusic(0); }
 
 /* Shuffle does not need the expensive pinyin title sort; groups order their tracks themselves.
- * Non-zero music leaves audiobooks out, as the Library's Artists and Albums (MUSIC_WHERE). */
+ * Non-zero music leaves audiobooks and podcasts out, as the Library's Artists and Albums
+ * (MUSIC_WHERE). */
 static int songs_unsorted(void *music) {
     library_music = music != 0;
     int n = getAllMusic(3);
@@ -4918,6 +5014,10 @@ static void rate_badge(void) {
 #else
     if (n && !tk_strcmp(widget_get_prop_str(st.rate_fav, "image", ""), ICON_FAV)) n = 0;
 #endif
+    /* each set repaints the badge, and this runs every 500 ms: only a change (AWTK's "text" is
+     * a wide string widget_get_prop_str doesn't read) */
+    if (st.rate_shown == n + 1) return;
+    st.rate_shown = n + 1;
     char s[4] = { (char)('0' + n) };
     widget_set_text_utf8(st.rate_badge, s);
     widget_set_visible(st.rate_badge, n != 0, 0);
@@ -5105,6 +5205,7 @@ static void rate_bind(void *win) {
     st.rate_badge = label(P(fav, W_PARENT), I(fav, W_X) + I(fav, W_W) - 18, I(fav, W_Y) + 6, 16, 16,
                           STYLE_SCRLABEL_WHITE20C, 12, 0xffffffffu);
     widget_set_sensitive(st.rate_badge, 0); /* the heart's corner stays the heart's */
+    st.rate_shown = 0;
     widget_on(win, EVT_DESTROY, rate_gone, win);
     st.rate_tick = timer_add(rate_tick, (void *)0, 500);
     rate_badge();
@@ -5217,19 +5318,13 @@ static struct {
 
 static void lengths_read(void) {
     if (ls.read) return;
-    ls.read = 1;
-    void *f = fopen(LENGTHS_FILE, "rb");
-    long size = f && !fseek(f, 0, 2) ? ftell(f) : -1;
-    unsigned n = size > 0 ? (unsigned)size / sizeof(length_t) : 0;
-    if (n && !fseek(f, 0, 0) && (ls.tab = calloc(n, sizeof(length_t))) &&
-        fread(ls.tab, sizeof(length_t), n, f) == n)
-        ls.n = n;
-    else if (n) { /* unread, not empty: not saved over, read again next time */
-        free(ls.tab);
-        ls.tab = 0;
-        ls.read = 0;
-    }
-    if (f) fclose(f);
+    unsigned size;
+    length_t *tab = read_all(LENGTHS_FILE, ~0u, &size);
+    ls.read = tab || file_size(LENGTHS_FILE) <=
+                         0; /* unread, not empty: not saved over, read again next time */
+    ls.n = size / sizeof(length_t);
+    if (!ls.n) free(tab), tab = 0;
+    ls.tab = tab;
 }
 
 /* key's seconds, -1 when never probed. */
@@ -6273,7 +6368,8 @@ static void resume_poll(void) {
         st.rs_cue = I(r, REC_CUE_START);
         st.rs_end = I(r, REC_CUE_END);
         int book = st.rs_cue || st.rs_end; /* music CUE images are left alone */
-        st.rs_long = book ? st.rs_spoken : total >= RESUME_MIN_S || st.rs_spoken;
+        int min = resume_min();            /* Q2POD RESUMEMIN, 0 for Off */
+        st.rs_long = book ? st.rs_spoken : (min && total >= min * 60) || st.rs_spoken;
         int saved = st.rs_long ? spot_at(st.rs_file) : 0; /* reads the ring spot_keep writes */
         st.rs_pending = book ? 0 : saved;
         if (playback_resumed(r)) st.rs_pending = 0;
@@ -6348,6 +6444,36 @@ static void charge_poll(void) {
     st.charge_held = hold;
 }
 
+/* The Wi-Fi signal (docs/internals.md#battery), for networkGetWifiSignal's two pollers: the status
+ * bar's bars (get_wifisignal) and the network monitor thread's connect status, each about once a
+ * second. Stock asks with SIOCGIWSTATS, which the driver answers through get_station, whose TX
+ * report takes the radio out of power save (LPS) every time. The driver keeps the same signal in
+ * rx_signal, a percentage that get_station reports less 100 as dBm, and reading it touches no
+ * hardware. Unreadable, it is 0, as stock's failed ioctl. Stock's unsigned level wraps the one
+ * value 0 dBm (100%) to -256, one bar; here it is 0, four. */
+#define WIFI_SIGNAL "/proc/net/rtl8733bs/wlan0/rx_signal"
+static struct {
+    unsigned at;
+    int dbm;
+} wifi __attribute__((section(".scratch")));
+
+int ringnav_wifi_signal(void) {
+    unsigned now = time_now_ms();
+    if (wifi.at && now - wifi.at < WIFI_SIGNAL_MS) return wifi.dbm;
+    char text[512];
+    int fd = open(WIFI_SIGNAL, 0x80000); /* O_RDONLY | O_CLOEXEC, MIPS */
+    int n = fd < 0 ? 0 : read(fd, text, sizeof text - 1);
+    if (fd >= 0) close(fd);
+    text[n > 0 ? n : 0] = 0;
+    const char *s = strstr(text, "signal_strength:");
+    int pct = 0;
+    if (s)
+        for (s += 16; *s >= '0' && *s <= '9'; ++s) pct = pct * 10 + *s - '0';
+    wifi.dbm = s ? pct - 100 : 0;
+    wifi.at = now | !now; /* never 0, not read yet */
+    return wifi.dbm;
+}
+
 /* Low power's second core (docs/internals.md#low-power): CPU1 is offline while the screen is off
  * and no video plays, so the player decodes on one core and the UI, Coverflow and videos keep both.
  * The first offline of a boot is bracketed by CPU1_PENDING, synced to flash: if a kernel stalled on
@@ -6404,6 +6530,51 @@ static void cpu_poll(void) {
     }
     if (!st.cpu_off) st.cpu_bad = 3;
 }
+/* Standby limit (docs/internals.md#standby-limit): device_standby puts the radios, the card and the
+ * DAC down, then toolsIntoStandby suspends to RAM ("mem" to /sys/power/state) and returns once
+ * something resumes it. With a limit, the RTC's wake alarm is set that far ahead first and cleared
+ * after. A resume at or past the alarm is the alarm's, and the next UI loop pass powers off as
+ * stock's Auto power-off does (poweroff_page), unless a cable is in or the music plays. A key or
+ * anything else that resumes it sooner leaves it on, and the next Standby counts from zero.
+ * Without the RTC's time, or with an alarm it refuses, Standby is stock's. */
+#define RTC_NOW "/sys/class/rtc/rtc0/since_epoch"
+#define RTC_ALARM "/sys/class/rtc/rtc0/wakealarm"
+static unsigned rtc_now(void) { /* the RTC's seconds since 1970 (UTC, RTC_WRITE); 0 unreadable */
+    char s[16];
+    void *f = fopen(RTC_NOW, "rb");
+    if (!f) return 0;
+    unsigned n = fread(s, 1, sizeof s, f), t = 0;
+    fclose(f);
+    for (unsigned i = 0; i < n && s[i] >= '0' && s[i] <= '9'; ++i) t = t * 10 + s[i] - '0';
+    return t;
+}
+static int rtc_alarm(unsigned at) { /* 0 clears it; one already set refuses another (EBUSY) */
+    char s[16];
+    void *f = fopen(RTC_ALARM, "w");
+    if (!f) return 0;
+    unsigned n = (unsigned)tk_snprintf(s, sizeof s, "%u", at);
+    int ok = fwrite(s, 1, n, f) == n;
+    return !fclose(f) && ok;
+}
+int ringnav_standby(void) {
+    static const unsigned hours[] = { 0, STANDBY_LIMIT_1, STANDBY_LIMIT_2, STANDBY_LIMIT_3 };
+    pod_settings();
+    unsigned start = st.standby_limit ? rtc_now() : 0;
+    unsigned alarm = start + hours[st.standby_limit] * 3600;
+    int armed = start && rtc_alarm(0) && rtc_alarm(alarm);
+    int result = stock_standby_trampoline();
+    if (armed) {
+        unsigned now = rtc_now();
+        rtc_alarm(0);
+        st.standby_off = now >= alarm;
+    }
+    return result;
+}
+static void standby_poll(void) {
+    if (!st.standby_off) return;
+    st.standby_off = 0;
+    if (!g_usbdet_value && mclGetPlayStatus() != 2) navigator_to("poweroff_page");
+}
 /* User boot logo (docs/boot.md): the card's LOGO_SRC is kept as LOGO_DST, which the splash shows at
  * power-on, each time the card is mounted (boot, the end of USB storage). A 375x320 one is turned
  * upright by stock ffmpeg; anything but a 320x375 baseline JPEG is refused and LOGO_DST kept. No
@@ -6437,18 +6608,6 @@ static unsigned jpeg_size(const unsigned char *b, unsigned n) {
     }
     return 0;
 }
-/* path whole, if it is 1..LOGO_MAX bytes; the caller frees it */
-static unsigned char *logo_read(const char *path, unsigned *n) {
-    void *f = fopen(path, "rb");
-    unsigned char *b = 0;
-    long size = !f || fseek(f, 0, 2) ? -1 : ftell(f);
-    if (size > 0 && size <= LOGO_MAX && !fseek(f, 0, 0) && (b = calloc(1, (unsigned)size)) &&
-        fread(b, (unsigned)size, 1, f) != 1)
-        free(b), b = 0;
-    if (f) fclose(f);
-    *n = b ? (unsigned)size : 0;
-    return b;
-}
 static void *logo_sync(void *unused) {
     unsigned n = 0, old_n;
     unsigned char *b = 0, *old = 0;
@@ -6457,7 +6616,7 @@ static void *logo_sync(void *unused) {
     const char *err = "Boot logo must be a 320x375 JPEG";
     if (access(LOGO_SRC, 0))
         unlink(LOGO_DST), err = 0;
-    else if ((b = logo_read(LOGO_SRC, &n)) && jpeg_size(b, n) == (375u << 16 | 320)) {
+    else if ((b = read_all(LOGO_SRC, LOGO_MAX, &n)) && jpeg_size(b, n) == (375u << 16 | 320)) {
         free(b),
             b = 0; /* landscape: ffmpeg turns it a quarter clockwise (coverflow.c's ff_thumb) */
         int status, pid = fork();
@@ -6467,12 +6626,13 @@ static void *logo_sync(void *unused) {
                   LOGO_ROT, (char *)0);
             child_exit(127);
         }
-        if (pid > 0 && waitpid(pid, &status, 0) == pid && !status) b = logo_read(LOGO_ROT, &n);
+        if (pid > 0 && waitpid(pid, &status, 0) == pid && !status)
+            b = read_all(LOGO_ROT, LOGO_MAX, &n);
         unlink(LOGO_ROT);
     }
     if (b && jpeg_size(b, n) == (320u << 16 | 375)) {
 #endif
-        old = logo_read(LOGO_DST, &old_n);
+        old = read_all(LOGO_DST, LOGO_MAX, &old_n);
         if ((old && old_n == n && !memcmp(old, b, n)) ||
             blob_io(LOGO_DST, LOGO_DST ".tmp", b, n, 1))
             err = 0; /* the same bytes are not written again each boot */
@@ -6513,6 +6673,7 @@ static void power_poll(void) {
     pod_settings();
     charge_poll();
     cpu_poll();
+    standby_poll();
     logo_poll();
 }
 
@@ -6576,7 +6737,7 @@ static int bt_audio_ready(void) {
 
 static struct {
     unsigned checked;
-    int ready, last;
+    int ready, last, failed; /* failed: the headset refused the last absolute volume */
 } btvol __attribute__((section(".scratch")));
 
 void headset_volume_reset(void) { btvol.ready = 0; }
@@ -6590,10 +6751,11 @@ static int bt_sync_volume(int left, int right) {
      * hold */
     if ((int)(cur * 100 + 63) / 127 != v) {
         unsigned want = (v * 127 + 50) / 100;
-        if (btctl_transport_set_volume(want)) return 0;
+        if (btctl_transport_set_volume(want)) return btvol.failed = 1, 0;
         cur = want;
     }
     btvol.last = cur;
+    btvol.failed = 0;
     return 1;
 }
 
@@ -6616,12 +6778,16 @@ int ringnav_btvol(int left, int right) {
     return stock_btvol_trampoline(left, right);
 }
 
+/* Every 400 ms lit, or while a volume limit has to be held on the headset's own keys; else every
+ * BT_VOLUME_SLOW_MS dark, or while the headset refuses absolute volume, so a long dark session
+ * doesn't wake libbtctl 2.5 times a second for a volume nobody sees. */
 static void bt_volume_poll(void) {
     unsigned now = time_now_ms();
-    if (now - btvol.checked < 400) return;
+    int fast = (g_backlight_status || (btvol.ready && g_maxvolume < 100)) && !btvol.failed;
+    if (now - btvol.checked < (fast ? 400u : BT_VOLUME_SLOW_MS)) return;
     btvol.checked = now;
     if (!bt_audio_ready()) {
-        btvol.ready = 0;
+        btvol.ready = btvol.failed = 0;
         return;
     }
     if (!btvol.ready) {
