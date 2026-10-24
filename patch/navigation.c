@@ -2603,7 +2603,7 @@ int ringnav_audioset(void *win, void *ctx) {
         resume_row(list_row(view, ICON_MEMPLAY, xfade_open, (void *)2)); /* crossfade.c */
         mono_row(list_row(view, ICON_BALANCE, mono_click, 0));
         swap_row(list_row(view, ICON_BALANCE, swap_click, 0));
-        mqa_row(list_row(view, "playset_dsdoutput", mqa_click, 0)); /* crossfade.c */
+        mqa_row(list_row(view, ICON_DSDOUTPUT, mqa_click, 0)); /* crossfade.c */
     }
     reorder(view, playset_order, sizeof playset_order);
 #if !M1PLUS
