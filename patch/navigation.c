@@ -3844,7 +3844,8 @@ static int boot_click(void *label, void *event) {
 int ringnav_systemset(void *win, void *ctx) {
     int result = stock_systemset_trampoline(win, ctx);
     void *view = win ? widget_lookup(win, VIEW_SYSSET, 1) : (void *)0;
-    if (view) widget_set_text_utf8(list_row(view, "system_update", shelf_open, 0), "Apps");
+    if (view && !M1PLUS) /* the card app host waits for U4 on M1 */
+        widget_set_text_utf8(list_row(view, "system_update", shelf_open, 0), "Apps");
     if (view && rockbox_available()) {
         char value[16];
         void *f = fopen(BOOT_TARGET, "rb");
