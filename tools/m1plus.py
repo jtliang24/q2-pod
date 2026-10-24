@@ -7,7 +7,7 @@ and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
 from build import (ROOT, EXTRA_TIMEZONES, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
-                   REMOTE_HOOK, BLUEALSA, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, ICONS,
+                   REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, ICONS,
                    STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
                    run, segments, sha, source_sha256, symbols)
 
@@ -868,6 +868,10 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     check(sha(cat(BLUEALSA)) == BLUEALSA_SHA, 'Unexpected bluealsa')
     bluealsa = patch_bluealsa(cat(BLUEALSA))
     (out/'bluealsa').write_bytes(bluealsa)
+    # A2DP's transport stays open 5 s between songs (1.3.8): V2.1's bluealsa2 starts the Q2's bluealsa
+    bluealsa2 = cat(BLUEALSA2)
+    check(bluealsa2.count(BT_KEEPALIVE[0]) == 1, 'Unexpected bluealsa2')
+    (out/'bluealsa2').write_bytes(bluealsa2.replace(*BT_KEEPALIVE))
     (out/'watchdog').write_bytes(cat(WATCHDOG).replace(*WATCHDOG_SLEEP))
     for name, address, old, new in call_site_words(True, ps):
         patch_word(patched, address, old, new, CALL_SITE_PURPOSES[name])
@@ -920,8 +924,8 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     logo_target = out/'logo.jpg'
     logo_target.write_bytes(logo_data)
     for path, src in ((b'release/bin/demo', out/'demo'), (b'usr/bin/hciplayer', out/'peq/hciplayer'),
-                      (BLUEALSA.encode(), out/'bluealsa'), (WATCHDOG.encode(), out/'watchdog'),
-                      (S90PLAY.encode(), out/'S90play'), (S11LOGO.encode(), out/'S11logo'),
+                      (BLUEALSA.encode(), out/'bluealsa'), (BLUEALSA2.encode(), out/'bluealsa2'),
+                      (WATCHDOG.encode(), out/'watchdog'), (S90PLAY.encode(), out/'S90play'), (S11LOGO.encode(), out/'S11logo'),
                       (b'release/assets/default/raw/images/xx/logo.jpg', logo_target)):
         p = swap_inode(p, path, src)
     # New inodes, each with its stock image's metadata, as build.py adds them: the Coverflow icons, the Q2 Pod
