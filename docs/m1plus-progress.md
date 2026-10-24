@@ -1490,6 +1490,26 @@ Results:
 New to the runbook's checks: none; this step used them as they stand. Its one miss the gates didn't
 name directly, the artist albums' class, came from a V1.32 literal in shared code.
 
+**On the device (dev 5 of 1.3.0, `V00Zs`, Oct 24).** Not in U3's plan, which flashed 1.2.9 and 1.3.8: the
+user chose to flash it too, so 1.3.8's checklist covers 1.3.8 alone and a regression bisects in halves.
+The gated build in `work/u3/1.3.0` matched the tree's `source_sha256`; q2remote put its `update.bin`
+(`439d1184…`) on the card over dev 29's, and the user flashed it. About shows CFW 1.3.0 dev 5 (the
+per-version count includes the gate builds), and the running `demo` hashes as built. Over q2remote:
+- **Resume Songs:** Playback Setting's row reads *Resume Songs: 30 min* with V2.1's `pset_memplay`;
+  it opens V2.1's Boot volume page re-dressed, and + and − step by five, saved as `RESUMEMIN` (35, back
+  to 30).
+- **Mono Audio:** the row (`pset_balance`) toggles, saved as `[Q2POD] MONO`, with `/tmp/q2mono` set
+  for the player's filter. The user heard it mono, and set it back to Off.
+- **An artist's albums:** Taylor Swift's lists her five albums and All Songs (V2.1's `0xff01` class).
+  The card has no podcasts or audiobooks, so their exclusion wasn't seen.
+- **Video:** the card's MP4 plays, `q2video` owning the PCM with ffmpeg's audio on its pipe, so the M1
+  path without upstream's sound pipe works. Paused, `q2video` takes no CPU (1.3.0's key wait), the PCM
+  runs dry as upstream's writer is meant to, and Play resumes it; Back ends `q2video`.
+- **Off on M1, as meant:** no Standby Limit row (Idle's second page keeps Charge Limit and Low Power);
+  the status bar's Wi-Fi icon is stock's.
+- **Bluetooth volume:** the user's headset follows volume changes.
+- Not checked: Folder's rows (this Home menu has no Folder card).
+
 
 ## How to check a build now
 
