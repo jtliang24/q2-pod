@@ -98,6 +98,7 @@ class Machine:
                   'fflush@GLIBC_2.0','fsync@GLIBC_2.0','fileno@GLIBC_2.0',  # blob_io's sync before rename
                   'fopen@GLIBC_2.2')  # no /proc/mounts: the boot logo's poll sees no card
         self.present=set()  # paths access finds (the UI loop's Spotify poll asks for its login)
+        self.stats={}  # paths stat finds, with their mtime (songs on the card: a card app's)
         self.image_size=(50,50)  # what widget_load_image decodes
         self.clock=(18,14)  # local (hour, minute) for time/localtime, or the one of them that fails
         self.rockbox_mode=0o100755
@@ -249,6 +250,7 @@ class Machine:
         elif name=='rockbox_stat':
             assert a==3
             if self.text(b) in ['/mnt/mmc/'+n for n,t in self.card if t==4] or self.text(b) in self.dirs: self.word(c+20,0o40755); ret=0  # a card folder
+            elif self.text(b) in self.stats: self.word(c+64,self.stats[self.text(b)]); ret=0  # its mtime: info[16]
             elif self.text(b)!='/mnt/mmc/.rockbox/rockbox': ret=-1  # Tidal Downloads' rows: no such files here
             else: self.word(c+20,self.rockbox_mode); ret=0 if self.rockbox_mode else -1
         elif name=='strlen@GLIBC_2.0': ret=len(self.raw(a))  # bytes: stock strips a path's UTF-8 name byte by byte
@@ -743,20 +745,22 @@ else:
     k=Machine(); k.config['THEME']='1'; kw,_=k.page_list(5,extent=1000); k.paint(kw)
     assert len(k.bands)==49 and [k.bands[i][4] for i in (0,47,48)]==[color_t(ACCENTS[0][i]) for i in (0,1,4)]; passed()
     # Cards stay two pixels inside all three columns, including scrolled first/last rows.
-    for offset in (0, 24):
-        for selected in range(6):
-            g=Machine(); gw=g.page('album_page'); tiles=[g.entry(gw,(i//3)*48) for i in range(6)]
-            g.nodes[gw]['children']=tiles
-            for i,t in enumerate(tiles): g.word(t+O['W_X'],80*(i%3)); g.word(t+O['W_W'],80)
-            g.word(gw+O['W_H'],96); g.word(gw+O['SCROLL_Y'],offset)
-            g.paint(gw)
-            g.nodes[gw]['_ringnav_index']=selected
-            g.paint(gw)
-            x,y,width,height=g.rounded[-1]['rect']
-            assert g.selected(gw)==selected, (offset,selected,g.selected(gw),g.rounded)
-            assert (x,width,height)==(80*(selected%3)+2,76,44)
-            assert y==48*(selected//3)-g.get(gw+O['SCROLL_Y'])+2
-            assert g.rounded[-1]['radius']==O['SEL_RADIUS']; passed()
+    for classic in (0,1):
+        for offset in (0, 24):
+            for selected in range(6):
+                g=Machine(); g.config.update(THEME=str(classic),ACCENT='2'); gw=g.page('album_page'); tiles=[g.entry(gw,(i//3)*48) for i in range(6)]
+                g.nodes[gw]['children']=tiles
+                for i,t in enumerate(tiles): g.word(t+O['W_X'],80*(i%3)); g.word(t+O['W_W'],80)
+                g.word(gw+O['W_H'],96); g.word(gw+O['SCROLL_Y'],offset)
+                g.paint(gw)
+                g.nodes[gw]['_ringnav_index']=selected
+                g.paint(gw)
+                x,y,width,height=g.rounded[-1]['rect']
+                assert g.selected(gw)==selected, (offset,selected,g.selected(gw),g.rounded)
+                assert (x,width,height)==(80*(selected%3)+2,76,44)
+                assert y==48*(selected//3)-g.get(gw+O['SCROLL_Y'])+2
+                assert g.rounded[-1]['radius']==O['SEL_RADIUS']
+                assert g.rounded[-1]['color']==color_t(ACCENTS[2][0] if classic else O['MINIMAL_FILL']); passed()
     # Touch mode draws nothing; the wheel brings the bar back.
     c=Machine(); cw,_=c.page_list(5,extent=1000); c.paint(cw)
     c.touch(); c.paint(cw); assert not c.drawn() and c.clip==(0,0,240,240)
@@ -2684,15 +2688,15 @@ for cls,wraps in ((0xf003,True),(0xff10,False)):
     else:
         assert m.call(gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==5,(cls,m.selected(w))
     passed()
-# Settings menus, dynamic pages and other grids keep hard ends; one-row lists never wrap.
-for name in ('sysset_page','playerqueue_page'):
+# Other settings, dynamic pages and other grids keep hard ends; one-row lists never wrap.
+for name in ('display_page','playerqueue_page'):
     m,w,es=walk(6,5,height=96,extent=288,name=name)
     assert m.call(gap=100)==11 and m.selected(w)==5
     m.paint(w,gap=0); assert m.sel()==(0,48,240,48)
     assert m.call(gap=100)==11 and m.selected(w)==5
     passed()
 # The hold menu and Now Playing's More page carry over as Library lists do.
-for name in ('playermore_page','sortselect_dialog'):
+for name in ('playermore_page','sortselect_dialog','playset_page','sysset_page'):
     m,w,es=walk(6,5,height=96,extent=288,name=name)
     assert m.call(gap=100)==11 and m.selected(w)==5
     assert m.call(gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==0,(name,m.selected(w))
@@ -4049,7 +4053,7 @@ for cls in (0xf00a,0xff20):
         stored=m.deque(m.items(m.get(syms['p_deque_showlist'])))
         before=[bytes(m.u.mem_read(r,0x60)) for r in m.items(stored)]
         n=m.call(address=HOOKS['load_localclass_list'][0],args=(cls,0,0,0),gap=0)
-        want=[f'Row {i}' for i,path in enumerate(selected) if path in paths[1:2]+paths[4:]]
+        want=[f'Row {i}' for i,path in enumerate(selected) if cls==0xf00a or path in paths[1:2]+paths[4:]]
         assert m.names(m.get(syms['p_deque_showlist']))==want and n==len(want)
         assert [bytes(m.u.mem_read(r,0x60)) for r in m.items(stored)]==before
 # A playlist container remains even when its name/path looks like spoken audio.
@@ -4180,7 +4184,7 @@ class MusicLoadMachine(QueueMachine):
         if address!=syms['getAllMusic']: return super().hook(u,address,size,unused)
         assert self.get(payload_syms['library_music'])==1
         self.returns(self.result)
-for loader,args in (('all_songs',(0,)),('songs_unsorted',(1,))):
+for loader,args in (('all_songs',(1,)),('songs_unsorted',(1,))):
     for scoped in (0,1):
         for result in (-1,0,2):
             ms=MusicLoadMachine(); ms.result=result; ms.word(payload_syms['library_music'],scoped)
@@ -6509,7 +6513,7 @@ if variant=='ipod':
     passed()
 
     m=Machine(); style_color(m,red)
-    assert m.config_reads==[('/mnt/data/config.ini','IPOD',key,'0') for key in ('ACCENT','HOME','BATTERY','THEME')]+[('/mnt/data/config.ini','IPOD','SHORTCUT','6')]; passed()
+    assert m.config_reads==[('/mnt/data/config.ini','IPOD',key,'0') for key in ('ACCENT','HOME','BATTERY','THEME')]+[('/mnt/data/config.ini','IPOD','SHORTCUT','7')]; passed()
 
     # Gradients: the leaf's null checks, then the caller's stops mapped (nr @8, stops @0xc).
     def gradient(config,stops,same_out=True,vt_get=True,style=True):
@@ -6800,7 +6804,7 @@ if variant=='ipod':
         assert tuple(signed(m.get(art+O[k])) for k in ('W_X','W_Y','W_W','W_H'))==(split,0,375-split,290)
     shortcut_button=m.nodes[shortcut]['children'][0]
     sf,sc=m.handler(shortcut_button,O['EVT_CLICK'])
-    for label in ('Favorites','Shuffle','Rated Albums','Artists','Albums','Rockbox'):
+    for label in ('Favorites','Shuffle','Rated Albums','Artists','Albums','Games','Rockbox'):
         m.call(address=sf,args=(sc,m.event,0,0),gap=0)
         assert m.nodes[named(m,home,'label_rockbox')]['text']==label
     home_bounds(False)
@@ -6919,7 +6923,7 @@ if variant=='ipod':
         for n in syms:  # string helpers the builders format their names with
             if n.endswith('@GLIBC_2.0') and syms[n] not in m.handlers: m.handlers[syms[n]]=n
         m.handlers[O['LIST_VIEW_LAYOUT']]='stock_list_layout'
-        view=m.node('scroll_view'); lst=m.node('list_view','list_view',[view]); m.top=m.node('window','sysset_page',[lst])
+        view=m.node('scroll_view'); lst=m.node('list_view','list_view',[view]); m.top=m.node('window','display_page' if builder=='display' else 'sysset_page',[lst])
         m.word(view+O['W_PARENT'],lst); m.word(lst+O['W_PARENT'],m.top); m.word(m.top+O['W_PARENT'],m.wm)
         m.word(lst+O['ROW_HEIGHT'],0); m.word(lst+O['LIST_DEFAULT_ITEM_HEIGHT'],default)
         m.word(lst+O['W_Y'],SET['TOP']); m.word(lst+O['W_H'],SET['ROWS']*SET['ROW'])
@@ -7011,13 +7015,13 @@ if variant=='ipod':
     for k,v in (('W_X',8),('W_Y',0),('W_W',359),('W_H',70)): m.word(other+O[k],v)
     m.nodes[view]['children'].append(odd); lay(m,view)
     assert geometry(m,odd)[3]==78 and geometry(m,other)==(8,0,359,70); passed()
-    # The wheel walks the laid-out rows with hard ends, the bar spans the whole 68px row, the list
+    # The wheel walks the laid-out rows, the bar spans the whole 68px row, the list
     # scrolls to keep the row in view, and Centre and a tap reach the same button.
     m,view=settings(0x4cbcc4); lay(m,view); items=m.nodes[view]['children']
     buttons=[m.nodes[i]['children'][0] for i in items]
     m.paint(view); assert m.selected(view)==0
-    for k in range(1,len(items)+2):
-        m.call(); m.paint(view); i=min(k,len(items)-1); assert m.selected(view)==i
+    for k in range(1,len(items)):
+        m.call(); m.paint(view); i=k; assert m.selected(view)==i
         y=geometry(m,items[i])[1]-signed(m.get(view+O['SCROLL_Y']))
         assert 0<=y and y+SET['ROW']<=SET['ROWS']*SET['ROW'], (k,y)
         assert not m.bands and m.sel()[2:]==(375,SET['ROW'])
@@ -7143,7 +7147,7 @@ if variant=='ipod':
     m.paint(w,gap=0); assert m.sel()==(0,6,240,48)   # bumped down at the top, on the first tick
     assert m.call(PREV,gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==5; passed()
     # Settings keep hard ends: no bump and no wrap, however long the pause.
-    m,w,es=ring('sysset_page')
+    m,w,es=ring('display_page')
     for gap in (100,O['EDGE_PAUSE_MS'],1000):
         assert m.call(gap=gap)==11 and m.selected(w)==5
         m.paint(w,gap=0); assert m.sel()==(0,48,240,48)
@@ -7289,7 +7293,7 @@ if variant=='ipod':
 else:
     # Outside Coverflow, Stock's key-down hook keeps every press clicking as the stock binary
     # does whether or not the row moves; release adds nothing, every tick steps a row, no setting is read.
-    m=audible(Machine()); w,es=m.page_list(3); m.paint(w)
+    m=audible(Machine()); w,es=m.page_list(3,name='display_page'); m.paint(w)
     s=audible(Machine(patched=False)); got=[]
     for _ in range(4):
         got.append((press(m),lift(m),m.selected(w)))
@@ -7663,8 +7667,10 @@ m2.word(O['MCL_POS'],1); m2.handlers[syms['navigator_to']]='q:navigator_to'; m2.
 assert m2.hold()==11 and m2.labels()[-2:]==['Group by: Album','Rate  ♥♥♡♡♡'] and m2.release()==0
 m2.pick(len(m2.labels())-1); m2.advance(0); m2.top=m2.np; assert m2.caption()=='2 of 5' and m2.call(O['KEY_RETURN'])==11; passed()
 # Ratings: Top Rated (4-5), Loved (5), All Rated and Disliked (1), most hearts first, then title order.
-m=RateMachine(b''.join(struct.pack('<I',(key_of(n)&~7)|h) for n,h in (('A',1),('C',4),('E',2))).ljust(4*O['RATE_SLOTS'],b'\0'))
+m=RateMachine(b''.join(struct.pack('<I',(fnv(path)&~7)|h) for path,h in (('/p/A',1),('/mnt/mmc/Audiobooks/C.m4b',4),('/mnt/mmc/Podcasts/E.mp3',2))).ljust(4*O['RATE_SLOTS'],b'\0'))
 m.found=[m.song(n) for n in ('A','B','C','D','E')]; m.fav_songs=[m.song('D')]
+m.word(m.found[2]+O['REC_PATH'],m.string('/mnt/mmc/Audiobooks/C.m4b'))
+m.word(m.found[4]+O['REC_PATH'],m.string('/mnt/mmc/Podcasts/E.mp3'))
 m.top=m.node('window','localmusic_page'); view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
 m.nodes[m.top]['children']=[view]; m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0)
 f,ctx=m.handler(m.nodes[m.nodes[view]['children'][6]]['children'][0],O['EVT_CLICK'])
@@ -7676,6 +7682,7 @@ for i,names in want.items():
     row=m.nodes[m.find('scroll_view',menu)]['children'][i+(i>=2)]; g,c=m.handler(row,O['EVT_CLICK'])  # Albums aside
     assert m.call(address=g,args=(c,m.event,0,0),gap=0,count=50_000_000)==0; m.page=m.top
     assert m.nodes[m.page]['name']=='rated_page'
+    assert [c for c in m.calls if c[0]=='getAllMusic'][-1][1:]==(0,0)
     assert m.texts()==[('Top Rated','Loved','All Rated','Disliked')[i]]+[x for n in names for x in (n,hearts[n]+' · Artist')],m.texts()
     if i==2:  # a row plays the list from there, as a library queue
         r=m.nodes[m.find('scroll_view')]['children'][1]; g,c=m.handler(r,O['EVT_CLICK'])
@@ -8125,6 +8132,10 @@ class BooksMachine(DepthMachine):
         name=self.handlers.get(address,'')
         a,b,c,d=[u.reg_read(r) for r in REGS]; ret=0
         if name=='c:calloc@GLIBC_2.0': ret=self.alloc((a*b+7)&~3) if a*b<=0x10000 else self.big_alloc(a*b)  # word-aligned
+        elif name=='b:qsort@GLIBC_2.0' and c!=4:  # not names (Tidal's and a card app's songs): the payload's comparator
+            self.handlers[address]='c:qsort@GLIBC_2.0'
+            try: return super().hook(u,address,size,unused)
+            finally: self.handlers[address]=name
         elif not name.startswith('b:'): return super().hook(u,address,size,unused)
         name=name[2:].split('@')[0]
         if name=='opendir':
@@ -8248,7 +8259,8 @@ m.close(); passed()
 # Library. Vortex's frame timer and raw wheel run only while it plays: Play/Pause, the screen going
 # off and leaving each stop them, and closing frees the state.
 if variant=='ipod':
-    m=BooksMachine({},{}); G_SCREEN,G_PICKING,G_PAUSED,G_CELL,G_CUR,G_VX=36,44,56,76,157,164
+    CONFIG['SHORTCUT']='6'; m=BooksMachine({},{}); del CONFIG['SHORTCUT']
+    G_SCREEN,G_PICKING,G_PAUSED,G_CELL,G_CUR,G_VX=36,44,56,76,157,164
     def games_open():
         view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
         assert m.call(address=HOOKS['localmusic_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
@@ -8258,6 +8270,10 @@ if variant=='ipod':
         f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
         m.page=m.top; assert m.nodes[m.page]['name']=='games_page' and m.nodes[m.page]['style:normal:bg_color']==-0x1000000
         return m.nodes[m.page]['children']
+    assert m.text(m.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))=='Games'
+    assert m.call(address=payload_syms['home_shortcut_open'],args=(0,m.event,0,0),gap=0,count=5_000_000)==0
+    m.page=m.top; assert m.nodes[m.page]['name']=='games_page'
+    m.close()
     chooser,sheet=games_open(); G=m.get(payload_syms['g'])
     assert labels(chooser)==['Games','Sudoku','Vortex','Solitaire'] and not m.nodes[sheet]['visible']
     rows=m.nodes[m.find('scroll_view',chooser)]['children']
@@ -8490,6 +8506,14 @@ for index, name in [(22,'Asia/Shanghai'), *[(27+i,name) for i,(_,name) in enumer
     zones.call(address=HOOKS['select_timezone'][0],args=(0,0,0,0),gap=0)
     assert [zones.text(c[1]) for c in zones.calls if c[0]=='toolsSetTimeZone']==[name]
 passed()
+def stream_rows(m):
+    """Streaming's page over stock's one Tidal row: the hook's rows' buttons by their labels, in order."""
+    view=m.node('scroll_view','scroll_view_streamsset',[m.node('list_item')]); m.top=m.node('window','stream_page',[view])
+    assert m.call(address=HOOKS['stream_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
+    rows={}
+    for r in m.nodes[view]['children'][1:]:
+        b=m.nodes[r]['children'][0]; rows[m.nodes[m.nodes[b]['children'][1]]['text']]=b
+    return rows
 def stream_page(m):
     """Stock Streaming's one Tidal row, then the hook's Spotify, Tidal Downloads, Internet Radio and AirPlay
     rows; returns Spotify's button."""
@@ -8873,9 +8897,11 @@ m.back(); m.calls=[]; m.back(); assert 'navigator_back' in [c[0] for c in m.call
 BROWSE='/tmp/q2-librespot.browse.sock'
 class BrowseMachine(RadioMachine):
     """RadioMachine's helpers, librespot on the card and a fake backend on its browse socket: serve(op,
-    args) answers (status, message, cursor, rows), or raw bytes; no serve, no socket."""
+    args) answers (status, message, cursor, rows), or raw bytes; no serve, no socket. A subclass names
+    another app: its socket, its Streaming row and the page it opens."""
+    browse,bin,page_name=BROWSE,BIN,'spotbrowse_page'
     def __init__(self,files=None):
-        super().__init__({BIN:bytearray(),**(files or {})})
+        super().__init__({self.bin:bytearray(),**(files or {})})
         for n in ('socket@GLIBC_2.0','connect@GLIBC_2.0','send@GLIBC_2.0','select@GLIBC_2.0','recv@GLIBC_2.0','fcntl@GLIBC_2.28'):
             self.handlers[syms[n]]='x:'+n
         shut=payload_syms['spot_shut']; self.handlers[shut]='x:spot_shut'; self.u.hook_add(UC_HOOK_CODE,self.hook,begin=shut,end=shut)  # fast(): payload hooks are per address
@@ -8890,7 +8916,7 @@ class BrowseMachine(RadioMachine):
             assert a==1 and b in (1,2); ret=9 if b==2 else 7
             if b==2: self.out=b''; self.pending=b''
         elif name=='connect' and a!=9: assert self.text(b+2)==SOCK; ret=0 if self.alive else -1  # spot_alive's
-        elif name=='connect': assert self.text(b+2)==BROWSE; ret=0 if self.serve else -1
+        elif name=='connect': assert self.text(b+2)==self.browse; ret=0 if self.serve else -1
         elif name=='fcntl': assert (a,b,c)==(9,4,0x80)  # nonblocking before connect
         elif name=='send':
             if a==9: self.out+=bytes(u.mem_read(b,c))
@@ -8911,12 +8937,12 @@ class BrowseMachine(RadioMachine):
         elif name=='recv': chunk=self.pending[:min(c,1000)]; self.pending=self.pending[len(chunk):]; u.mem_write(b,chunk); ret=len(chunk)
         self.calls.append((name,a,b,c))
         self.returns(ret,clobber=True)
+    def add_on_row(self):
+        """Its Streaming row, as RadioMachine.stream: Spotify's."""
+        return stream_rows(self)['Spotify']
     def open(self):
-        if not getattr(self,'button',0):  # Streaming, as RadioMachine.stream: Spotify's row
-            view=self.node('scroll_view','scroll_view_streamsset',[self.node('list_item')]); self.top=self.node('window','stream_page',[view])
-            assert self.call(address=HOOKS['stream_page_init'][0],args=(self.top,5,0,0),gap=0,count=5_000_000)==0
-            self.button=self.nodes[self.nodes[view]['children'][1]]['children'][0]
-        self.click(self.button); self.page=self.top; assert self.nodes[self.page]['name']=='spotbrowse_page'
+        if not getattr(self,'button',0): self.button=self.add_on_row()
+        self.click(self.button); self.page=self.top; assert self.nodes[self.page]['name']==self.page_name
     def asked(self):
         """The request the worker is about to send (spotify.c's wk: buf at 32, len at 28), split."""
         wk=payload_syms['wk']; head,line,_=bytes(self.u.mem_read(self.get(wk+32),self.get(wk+28))).decode().split('\n')
@@ -9164,6 +9190,228 @@ m.call(address=payload_syms['spot_np'],args=(0,0,0,0),gap=0,count=5_000_000)
 info,msg=m.nodes[m.top]['children']; assert texts(msg)==['Open Spotify on your phone','and choose Q2']
 passed()
 
+def run(m,name,*args): return m.call(address=payload_syms[name],args=(*args,0,0,0,0)[:4],gap=0,clear=False)
+
+# Card apps (patch/addon.c): programs on the card Q2 Pod knows only by their folder, .<id> holding its
+# manifest q2app, its launcher run and its binary q2-<id>; Streaming lists them after Spotify, by name,
+# and a row's page is the app's list over Q2SPOT/1 on its own socket, each row's kind saying what a
+# press does.
+def card_app(m,app,manifest):
+    """App `app` on the card: its folder in the card's listing, its manifest and its binary."""
+    m.tree.setdefault('/mnt/mmc',[]).append(('.'+app,4))
+    m.files[f'/mnt/mmc/.{app}/q2app']=bytearray(manifest.encode()); m.files[f'/mnt/mmc/.{app}/q2-{app}']=bytearray()
+class AppMachine(BrowseMachine):
+    """BrowseMachine with a card app in Spotify's place: on the card, its socket, its row, its page."""
+    app,manifest,page_name='soulseek','name=Soulseek\nsearch=Search Soulseek\nqr=0\n','addon_page'
+    def __init__(self,files=None):
+        self.bin,self.browse=f'/mnt/mmc/.{self.app}/q2-{self.app}',f'/tmp/q2-{self.app}.browse.sock'
+        super().__init__(files); card_app(self,self.app,self.manifest)
+        self.row_text=re.search(r'name=(.*)',self.manifest)[1]
+    def add_on_row(self): return stream_rows(self)[self.row_text]
+    def gone(self):
+        """Its row, then its binary gone from the card before the press."""
+        self.button=self.add_on_row(); self.files.pop(self.bin)
+# Streaming: the card apps after Spotify, by name, each with the shared icon and no name (stock's row
+# click never sees it); a folder without its binary or its manifest, or an id that can't be one (it
+# goes into shell commands), is no app.
+m=AppMachine(); card_app(m,'filebrowser','name=File Browser\nqr=1\n'); card_app(m,'deezer','name=Deezer\n')
+card_app(m,'gone','name=Gone\n'); m.files.pop('/mnt/mmc/.gone/q2-gone'); card_app(m,'Bad_Id','name=Bad\n')
+m.tree['/mnt/mmc']+=[('.spotify',4),('Music',4)]; m.files['/mnt/mmc/.spotify/librespot']=bytearray()
+rows=stream_rows(m)
+assert list(rows)==['Spotify','Deezer','File Browser','Soulseek','Tidal Downloads','Internet Radio','AirPlay','Configuration'],list(rows)
+for t in ('Deezer','File Browser','Soulseek'):
+    icon=m.nodes[rows[t]]['children'][0]; assert m.nodes[icon]['image']=='stream_app' and not m.nodes[rows[t]].get('name')
+passed()
+# Soulseek: q2-soulseek from the card's .soulseek folder.
+SBIN,SBROWSE,SSTATE,SPID='/mnt/mmc/.soulseek/q2-soulseek','/tmp/q2-soulseek.browse.sock','/tmp/q2-soulseek.state','/tmp/q2-soulseek'
+class SlskMachine(AppMachine): pass
+SMENU=[('remote','','Phone Remote','192.168.1.23:8080','',''),('search','','Search','Online as alice','',''),
+       ('list','downloads','Downloads','None yet','',''),('action','set','Sharing: Off','Nothing is shared','sharing',''),
+       ('action','stop','Stop Soulseek','','','')]
+SLABELS=['Soulseek','Phone Remote','192.168.1.23:8080','Search','Online as alice','Downloads','None yet','Sharing: Off',
+         'Nothing is shared','Stop Soulseek','']
+# Gone from the card since Streaming listed it: the page says so and nothing starts.
+m=SlskMachine(); m.gone(); m.open()
+assert m.labels()==["Soulseek isn't on the card",'Install it again in System settings → Apps'] and not m.systems and not m.threads
+m.row(0); assert not m.threads; m.poll(); assert not m.systems; m.close(); passed()
+# With it: started, the menu asked; no socket yet is the add-on starting, asked again; its rows.
+m=SlskMachine(); m.open(); assert m.systems==['/bin/sh /mnt/mmc/.soulseek/run'] and m.labels()==['Loading…']
+m.worker(); assert m.labels()==['Starting Soulseek…']; m.advance(500)
+m.answer('ok','refresh','',SMENU); assert m.requests[-1]==('menu',) and m.labels()==SLABELS; passed()
+# A live level is asked again every 2 s while on top; the same rows aren't rebuilt, changed ones are,
+# their selected row kept.
+rows=m.rows(); m.nodes[m.find('scroll_view')]['_ringnav_index']=2; m.advance(2000); m.worker()
+assert len(m.requests)==2 and m.requests[-1]==("menu",) and m.rows()==rows
+changed=[*SMENU[:2],('list','downloads','Downloads','1 downloading','',''),*SMENU[3:]]
+m.advance(2000); m.answer('ok','refresh','',changed)
+assert m.rows()!=rows and m.labels()[6]=='1 downloading' and m.nodes[m.find('scroll_view')]['_ringnav_index']==2,(m.labels(),m.nodes[m.find('scroll_view')].get('_ringnav_index')); passed()
+# A list row opens its level; Back asks for the menu again, the row kept.
+m.pick(2); m.answer('ok','refresh','',[('info','','No downloads yet','Search, then press a file','','')])
+assert m.requests[-1]==('downloads',) and m.labels()==['Downloads','No downloads yet','Search, then press a file']; asked=len(m.threads); m.row(0); assert len(m.threads)==asked
+m.back(); m.answer('ok','refresh','',changed)
+assert m.requests[-1]==('menu',) and m.nodes[m.find('scroll_view')]['_ringnav_index']==2,(m.requests[-1],m.nodes[m.find('scroll_view')].get('_ringnav_index'))
+# An action row sends its op with its context, toasts the reply's message and asks for the level again.
+m.pick(3); m.answer('ok','Sharing: While charging','',[])
+assert m.requests[-1]==('set','sharing') and m.toasts[-1][3]=='Sharing: While charging',(m.requests[-1],m.toasts[-1:])
+m.answer('ok','refresh','',SMENU); assert m.requests[-1]==('menu',) and m.labels()==SLABELS; passed()
+# Search: the T9 box, its OK opening "search" for the text, escaped.
+m.pick(1); edit=m.find('edit'); assert m.nodes[edit]['tips']=='Search Soulseek'
+m.nodes[edit]['text']='aphex\ttwin'; f,ctx=m.handler(edit,O['EVT_VALUE_CHANGED'])
+assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0; m.advance(0,clear=False)
+m.answer('ok','refresh','50',[('action','download','01 Xtal.flac','bob · FLAC 16/44.1 · 31 MB · free','12.3','downloadfolder')])
+assert m.wire[-1].endswith(b'\tsearch\taphex%09twin\n'),m.wire[-1]
+assert m.labels()==['aphex\ttwin','01 Xtal.flac','bob · FLAC 16/44.1 · 31 MB · free','More…'],m.labels()
+# A press downloads the file; Play/Pause held, the hold op (its whole folder); More… the next page.
+m.pick(0); m.answer('ok','Downloading 01 Xtal.flac','',[]); assert m.requests[-1]==('download','12.3') and m.toasts[-1][3]=='Downloading 01 Xtal.flac'
+m.answer('ok','refresh','50',[('action','download','01 Xtal.flac','bob','12.3','downloadfolder')])
+m.top=m.page; m.status=m.alloc(0x200); m.nodes[m.find('scroll_view')]['_ringnav_index']=0; m.press(80)
+assert m.hold()==11; m.answer('ok','Downloading the folder','',[]); assert m.requests[-1]==('downloadfolder','12.3') and m.toasts[-1][3]=='Downloading the folder'
+m.answer('ok','refresh','50',[('action','download','01 Xtal.flac','bob','12.3','downloadfolder')])
+m.pick(1); m.answer('ok','','',[]); assert m.requests[-1]==('search','aphex%09twin','50'),m.requests[-1]; passed()
+# Back twice to the menu; Phone Remote shows the QR code page from the add-on's status file.
+m.back(); m.answer('ok','refresh','50',[]); m.back(); m.answer('ok','refresh','',SMENU); assert m.labels()==SLABELS
+code=[[(x*7+y*3)%5<2 for x in range(21)] for y in range(21)]
+hexed=''.join(''.join('%x'%sum(8>>b for b in range(4) if d*4+b<21 and row[d*4+b]) for d in range(6)) for row in code)
+m.files[SSTATE]=bytearray(f'addr=192.168.1.23:8080\ndl=0\nhold=0\nnote=Online as alice\npin=548001\nqr={hexed}\nqrsize=21\n'.encode())
+m.pick(0); qp=m.top; assert m.nodes[qp]['name']=='qrcode_page'
+assert {'Soulseek','192.168.1.23:8080','548 001','Online as alice','Scan with your',"phone's camera"}<=set(texts(qp)),texts(qp)
+qr=next(w for w in m.nodes if m.nodes[w]['type']=='view' and m.get(w+O['W_PARENT'])==qp and cf_geometry(m,w)==(16,40,186,186))
+m.bands.clear(); m.rounded.clear(); m.call(address=HOOKS['widget_on_paint_border'][0],args=(qr,m.canvas,0,0))
+mod,off=186//25,(186-186//25*21)//2; want=[]
+for y,row in enumerate(code):
+    x=0
+    while x<21:
+        r=0
+        while x+r<21 and row[x+r]: r+=1
+        if r: want.append((off+x*mod,off+y*mod,r*mod,mod))
+        x+=r or 1
+assert [b[:4] for b in m.bands]==want and {b[4] for b in m.bands}=={color_t(0)} and m.rounded[0]['rect']==(0,0,186,186),(m.bands[:3],want[:3],m.rounded[:1]); passed()
+# No address (no Wi-Fi): the code hides and the page says so; a second later it follows the file.
+m.files[SSTATE]=bytearray(b'dl=0\nhold=0\nnote=Connect the Q2 to Wi-Fi\npin=548001\nqr=\nqrsize=0\n'); m.advance(1000)
+assert not m.nodes[qr]['visible'] and 'Connect the Q2 to Wi-Fi' in texts(qp),texts(qp); m.destroy(qp); m.top=m.page; passed()
+# Holding standby off: while the add-on asks (hold=1), each poll resets standby and auto power-off
+# (not the screen's); once it stops by itself (its loop's pid gone), it is let go.
+m.files[SSTATE]=bytearray(b'addr=x\ndl=1\nhold=1\n'); names=m.poll()
+assert ('reset_poweroptions_timer',1,1,0) in [c[:4] for c in m.calls]
+m.files[SSTATE]=bytearray(b'addr=x\ndl=0\nhold=0\n'); m.poll(); assert 'reset_poweroptions_timer' not in [c[0] for c in m.calls]
+m.files[SPID]=bytearray(b'123'); m.poll(11000); m.files[SSTATE]=bytearray(b'hold=1\n'); m.files.pop(SPID); m.poll(); m.poll()
+assert 'reset_poweroptions_timer' not in [c[0] for c in m.calls]; passed()
+# USB mode, before stock unmounts the card: the add-on asked to end and waited for (its loop's pid
+# file gone), then stock's page; started again once USB mode is over and the card is back.
+m=SlskMachine(); m.open(); m.answer('ok','refresh','',SMENU); m.destroy(m.page); m.files[SPID]=bytearray(b'123')
+m.on_sleep=lambda: m.files.pop(SPID,None) if m.now>=t0+300 else None; t0=m.now; m.systems=[]
+tramp=int(manifest['patch_symbols']['stock_usbmode_trampoline'],16); m.handlers[tramp]='stock_usbmode'; m.u.hook_add(UC_HOOK_CODE,m.hook,begin=tramp,end=tramp)
+m.call(address=HOOKS['usbmode_page_init'][0],args=(0x55,0x66,0,0),gap=0,count=5_000_000); m.on_sleep=None
+names=[c[0] for c in m.calls]
+assert m.systems==['kill $(cat /tmp/q2-soulseek) 2>/dev/null || rm -f /tmp/q2-soulseek'] and names.index('stock_usbmode')>names.index('sleep_ms') and SPID not in m.files,(m.systems,names[-12:])
+m.open_pages={'usbmode_page'}; m.poll(); assert m.systems==['kill $(cat /tmp/q2-soulseek) 2>/dev/null || rm -f /tmp/q2-soulseek']
+m.open_pages=set(); m.poll(); assert m.systems[-1]=='/bin/sh /mnt/mmc/.soulseek/run'; passed()
+# Stop Streaming Services stops it too.
+m.systems=[]; run(m,'addon_stop'); assert m.systems==['kill $(cat /tmp/q2-soulseek) 2>/dev/null || rm -f /tmp/q2-soulseek']; passed()
+
+# File Browser: q2-filebrowser from the card's .filebrowser folder, the same page on its own socket.
+# Its manifest's qr=1: turned on by its row, its QR code page opens once it answers, the menu behind
+# it; opened again while it runs, the menu alone.
+FBIN,FBROWSE,FSTATE,FPID='/mnt/mmc/.filebrowser/q2-filebrowser','/tmp/q2-filebrowser.browse.sock','/tmp/q2-filebrowser.state','/tmp/q2-filebrowser'
+class FileBrowserMachine(AppMachine):
+    app,manifest='filebrowser','name=File Browser\nsearch=Search\nqr=1\n'
+FMENU=[('remote','','Open on Your Phone','http://192.168.1.23:8000 · PIN 548 001','',''),('info','','Card: 12.3 GB free','of 59.4 GB','',''),
+       ('action','readonly','Read Only: Off','The phone can upload, rename, move and delete','',''),
+       ('action','stop','Turn Off File Browser','It also turns off after 15 minutes unused','','')]
+FLABELS=['File Browser','Open on Your Phone','http://192.168.1.23:8000 · PIN 548 001','Card: 12.3 GB free','of 59.4 GB','Read Only: Off',
+         'The phone can upload, rename, move and delete','Turn Off File Browser','It also turns off after 15 minutes unused']
+m=FileBrowserMachine(); m.gone(); m.open()
+assert m.labels()==["File Browser isn't on the card",'Install it again in System settings → Apps'] and not m.systems; m.close(); passed()
+m=FileBrowserMachine(); m.open(); assert m.systems==['/bin/sh /mnt/mmc/.filebrowser/run'] and m.labels()==['Loading…']
+m.worker(); assert m.labels()==['Starting File Browser…']; m.advance(500)
+m.files[FSTATE]=bytearray(f"addr=192.168.1.23:8000\nhold=0\nnote=Manage the card's files there\npin=548001\nqr={hexed}\nqrsize=21\nversion=q2f-v1.0\n".encode())
+m.answer('ok','refresh','',FMENU); assert m.requests[-1]==('menu',) and m.labels()==FLABELS
+qp=m.top; assert m.nodes[qp]['name']=='qrcode_page'
+assert {'File Browser','192.168.1.23:8000','548 001',"Manage the card's files there",'Scan with your'}<=set(texts(qp)),texts(qp)
+m.destroy(qp); m.top=m.page
+# Asked again while on top: the same rows, and no second code page.
+m.advance(2000); m.worker(); assert m.requests[-1]==('menu',) and m.top==m.page and m.labels()==FLABELS; passed()
+# Read Only from the Q2; Open on Your Phone shows the code again.
+m.pick(2); m.answer('ok','Read only','',[]); assert m.requests[-1]==('readonly',) and m.toasts[-1][3]=='Read only'
+m.answer('ok','refresh','',FMENU); m.pick(0); assert m.nodes[m.top]['name']=='qrcode_page'; m.destroy(m.top); m.top=m.page; passed()
+# Opened again while it runs (its loop's pid there): nothing started, the menu alone.
+m.close(); m.systems=[]; m.files[FPID]=bytearray(b'9'); m.open(); assert not m.systems
+m.answer('ok','refresh','',FMENU); assert m.top==m.page and m.labels()==FLABELS; passed()
+# Turn Off: its reply toasted, the page left.
+m.calls=[]; m.pick(3); m.answer('ok','File Browser off','',[])
+assert m.requests[-1]==('stop',) and m.toasts[-1][3]=='File Browser off' and 'navigator_back' in [c[0] for c in m.calls]; m.close()
+# Stop Streaming Services stops it too.
+m.systems=[]; run(m,'addon_stop'); assert m.systems==['kill $(cat /tmp/q2-filebrowser) 2>/dev/null || rm -f /tmp/q2-filebrowser']; passed()
+
+# Deezer: q2-deezer from the card's .deezer folder. Nothing streams: a press downloads, to Deezer/ on
+# the card, and a song on the card, a local row, plays from it as local music (navigation.c songs_open).
+DZBIN,DZBROWSE,DZSTATE,DZPID='/mnt/mmc/.deezer/q2-deezer','/tmp/q2-deezer.browse.sock','/tmp/q2-deezer.state','/tmp/q2-deezer'
+class DeezerMachine(AppMachine):
+    app,manifest='deezer','name=Deezer\nsearch=Search Deezer\nqr=0\n'
+m=DeezerMachine(); m.gone(); m.open()
+assert m.labels()==["Deezer isn't on the card",'Install it again in System settings → Apps'] and not m.systems; m.close(); passed()
+# Started, the menu asked; signed out, its sign-in row opens the code over its status file (and only
+# then: Deezer's row doesn't open it by itself).
+m=DeezerMachine(); m.open(); assert m.systems==['/bin/sh /mnt/mmc/.deezer/run'] and m.labels()==['Loading…']
+m.worker(); assert m.labels()==['Starting Deezer…']; m.advance(500)
+DZOUT=[('remote','','Sign In from Your Phone','Press to show the code','',''),('action','stop','Stop Deezer','Downloads carry on next time','','')]
+m.files[DZSTATE]=bytearray(f"addr=192.168.1.23:8090\nhold=0\nnote=Paste your Deezer ARL there\npin=135790\nqr={hexed}\nqrsize=21\n".encode())
+m.answer('ok','refresh','',DZOUT); assert m.requests[-1]==('menu',) and m.top==m.page
+assert m.labels()==['Deezer','Sign In from Your Phone','Press to show the code','Stop Deezer','Downloads carry on next time']
+m.pick(0); qp=m.top; assert m.nodes[qp]['name']=='qrcode_page'
+assert {'Deezer','192.168.1.23:8090','135 790','Paste your Deezer ARL there'}<=set(texts(qp)),texts(qp); m.destroy(qp); m.top=m.page; passed()
+# Signed in: Play/Pause held on a list downloads all of it; a list's song row, pressed, downloads it.
+SONGS='/mnt/mmc/Deezer'
+DZMENU=[('local',SONGS+'/','Downloaded Songs','2 songs on the card','',''),('list','tracks','Liked Songs','','liked','download'),
+        ('search','','Search Deezer','','',''),('action','stop','Stop Deezer','Downloads carry on next time','','')]
+m.advance(2000); m.answer('ok','refresh','',DZMENU)
+assert m.labels()==['Deezer','Downloaded Songs','2 songs on the card','Liked Songs','','Search Deezer','','Stop Deezer','Downloads carry on next time'],m.labels()
+m.top=m.page; m.status=m.alloc(0x200); m.nodes[m.find('scroll_view')]['_ringnav_index']=1; m.press(80)
+assert m.hold()==11; m.answer('ok','Downloading 12 songs','',[])
+assert m.requests[-1]==('download','liked') and m.toasts[-1][3]=='Downloading 12 songs'
+m.answer('ok','refresh','',DZMENU); m.pick(2); assert m.nodes[m.find('edit')]['tips']=='Search Deezer'
+f,ctx=m.handler(m.find('edit'),O['EVT_BLUR']); m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000); m.advance(0,clear=False)
+LIKED=[('action','download','Download All','12 songs','liked',''),('action','download','Valerie','Broadcast','liked#5','download'),
+       ('local',SONGS+'/Corporeal - Broadcast [6].flac','Corporeal','Broadcast · on the card','','')]
+m.pick(1); m.answer('ok','refresh','',LIKED); assert m.requests[-1]==('tracks','liked') and m.labels()[:3]==['Liked Songs','Download All','12 songs'],m.labels()
+m.pick(1); m.answer('ok','Downloading','',[]); assert m.requests[-1]==('download','liked#5') and m.toasts[-1][3]=='Downloading'
+m.answer('ok','refresh','',LIKED); passed()
+# A song on the card plays its folder from it, newest first, as local music: the card's songs only.
+names=('Valerie - Broadcast [5].flac','Corporeal - Broadcast [6].flac','.Valerie - Broadcast [5]-1.flac.part')
+recs=[m.song(n) for n in names]
+for r,n,t in zip(recs,names,(100,200,300)):
+    m.word(r+O['REC_PATH'],m.string(f'{SONGS}/{n}')); m.files[f'{SONGS}/{n}']=bytearray(); m.stats[f'{SONGS}/{n}']=t
+m.word(recs[2]+O['REC_TYPE'],0)  # a download's .part isn't a song
+m.found=recs; m.plays=[]; m.pick(2)
+assert [p[2:4] for p in m.plays]==[(0,0xf001)] and m.play_names==['Corporeal - Broadcast [6].flac','Valerie - Broadcast [5].flac'],(m.plays,m.play_names)
+assert [m.text(c[1]) for c in m.calls if c[0]=='toolsLoadDirectory'][-1]==SONGS; passed()
+# Downloaded Songs (its uri a folder) lists them, newest first, labelled as OpenDeezer names them,
+# and a row plays from it; a song gone from the card says so.
+m.back(); m.answer('ok','refresh','',DZMENU); m.plays=[]; m.pick(0); songs=m.top
+assert m.nodes[songs]['name']=='app_songs' and [l for l in m.labels(songs) if l]==['Downloaded Songs','Corporeal - Broadcast','Valerie - Broadcast'],m.labels(songs)
+m.click(m.nodes[m.find('scroll_view',songs)]['children'][1])
+assert [p[2:4] for p in m.plays]==[(1,0xf001)] and m.play_names==['Corporeal - Broadcast [6].flac','Valerie - Broadcast [5].flac'],(m.plays,m.play_names)
+m.destroy(songs); m.top=m.page; m.found=recs[:1]; m.advance(2000); m.answer('ok','refresh','',DZMENU)
+m.pick(1); m.answer('ok','refresh','',LIKED); n=len(m.toasts); m.pick(2)
+assert m.toasts[n:] and m.toasts[-1][3]=="It isn't on the card any more",m.toasts[n:]; passed()
+# An album's folder (Organize Files: Artist/Album/07 - Title [id].flac), its row's context "album":
+# its songs listed and played in track order, by name, whatever their dates.
+ALBUM=SONGS+'/Broadcast/Tender Buttons'
+names=('02 - Valerie [5].flac','01 - Tears in the Typing Pool [4].flac','03 - Corporeal [6].flac')
+recs=[m.song(n) for n in names]
+for r,n,t in zip(recs,names,(300,200,100)):
+    m.word(r+O['REC_PATH'],m.string(f'{ALBUM}/{n}')); m.files[f'{ALBUM}/{n}']=bytearray(); m.stats[f'{ALBUM}/{n}']=t
+m.found=recs; m.back(); m.answer('ok','refresh','',[('local',ALBUM+'/','Tender Buttons','3 songs','album','')])
+m.plays=[]; m.pick(0); songs=m.top
+assert m.nodes[songs]['name']=='app_songs' and [l for l in m.labels(songs) if l]==['Tender Buttons','01 - Tears in the Typing Pool','02 - Valerie','03 - Corporeal'],m.labels(songs)
+m.click(m.nodes[m.find('scroll_view',songs)]['children'][1])
+assert [p[2:4] for p in m.plays]==[(1,0xf001)] and m.play_names==list(sorted(names)),(m.plays,m.play_names)
+m.destroy(songs); m.top=m.page; m.advance(2000); m.answer('ok','refresh','',[('local',f'{ALBUM}/{names[0]}','Valerie','Broadcast · on the card','album','')])
+m.plays=[]; m.pick(0); assert [p[2:4] for p in m.plays]==[(1,0xf001)] and m.play_names==list(sorted(names)),(m.plays,m.play_names); passed()
+# Stop Streaming Services, USB storage and Rockbox stop it as the other apps (it writes to the card).
+m.close(); m.files[DZPID]=bytearray(b'7'); m.systems=[]; run(m,'addon_stop')
+assert 'kill $(cat /tmp/q2-deezer) 2>/dev/null || rm -f /tmp/q2-deezer' in m.systems,m.systems; passed()
+
 # About: FW. Version shows the stock firmware's version again, not the updater tag in demo's
 # literal, and a CFW. Version row follows it. Stock's own row builder (0x4bc274) builds Model and FW.
 # Version, so the added row is checked against the real stock widgets, geometry and styles.
@@ -9234,6 +9482,85 @@ f,ctx=m.handler(label,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0)
 worker,arg=m.threads[-1]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,count=5_000_000)==0
 m.advance(500,clear=False); assert m.toasts[-1][3]=='Download cancelled' and m.files[UPDATE]==b'old'
 assert 'fwupdate_tf' not in [c[0] for c in m.calls]; passed()
+
+# Q2 Shelf (netupdate.c, docs/internals.md#q2-shelf): System settings' Apps page, a row per app with
+# its state from .q2/apps/<id>.tag, a manual install's binary and, with Wi-Fi, a check of GitHub's
+# latest releases on opening, kept SH_STALE_MS. Install and Update start a worker at once; Remove, Erase
+# and Rockbox's first Install (the power-on default) want a second press. A press on the running
+# install cancels it; one during the opening check stops the check.
+SPOT_TAG,SPOT_FILES='/mnt/mmc/.q2/apps/spotify.tag','/mnt/mmc/.q2/apps/spotify.files'
+class ShelfMachine(RadioMachine):
+    """RadioMachine with busybox's side scripted: unzip -l prints listing, unzip -o stages staged
+    ((path, bytes), in find's order), find lists them; statfs has free bytes; renames kept in order."""
+    def __init__(self,files=None):
+        super().__init__(files); self.free=1<<32; self.moves=[]; self.listing=''; self.staged=[]
+        self.mock('rmdir@GLIBC_2.0')
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if name=='c:statfs@GLIBC_2.0':
+            b=u.reg_read(UC_MIPS_REG_A1); self.word(b+4,4096); self.word(b+28,self.free>>12); self.returns(0,clobber=True); return
+        if name=='b:rename@GLIBC_2.0': self.moves.append(self.text(u.reg_read(UC_MIPS_REG_A1)))
+        if name=='s:system@GLIBC_2.0':
+            cmd=self.text(u.reg_read(UC_MIPS_REG_A0)); out=cmd.split(' > ')[-1]
+            if 'unzip -l' in cmd: self.files[out]=bytearray(self.listing.encode())
+            elif 'unzip -o' in cmd:
+                for path,data in self.staged: self.files[cmd.split('-d ')[1].split(' ')[0]+'/'+path]=bytearray(data)
+            elif ' find ' in cmd: self.files[out]=bytearray(''.join(path+'\n' for path,_ in self.staged).encode())
+            elif cmd.startswith('rm -rf /mnt/mmc/.q2/staging'):
+                for f in [f for f in self.files if f.startswith('/mnt/mmc/.q2/staging')]: del self.files[f]
+        return super().hook(u,address,size,unused)
+def apps_open(m):
+    assert m.call(address=payload_syms['shelf_open'],args=(0,m.event,0,0),gap=0,count=5_000_000)==0
+    m.advance(0,clear=False); m.page=m.top; assert m.nodes[m.page]['name']=='apps_page'
+def shelf_job(m,ms=500):
+    worker,arg=m.threads[-1]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,count=50_000_000)==0; m.advance(ms,clear=False)
+KILL='killall -9 librespot aplay'
+m=ShelfMachine({SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
+                '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
+m.rockbox_mode=0; m.wifi=-1; apps_open(m)
+assert m.labels()==['Apps','Rockbox','Install','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install'] and not m.threads; passed()  # no themes without Rockbox; the card apps last
+m.close(); m.wifi=3; m.rockbox_mode=0o100755; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
+assert m.labels()==['Apps','Rockbox','Update','Rockbox Themes','Install','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install']
+m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
+assert m.opts[10002]=='https://api.github.com/repos/group-a-study/q2-filebrowser/releases/latest' and m.opts[10018]=='Q2Pod'  # the last of six
+assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.opts[64]==1 and m.opts[81]==2
+assert m.labels()[6]=='Update' and '/tmp/q2-shelf.json' not in m.files; passed()  # q2-v1.8 against the latest q2-v1.9
+m.close(); m.now+=9*60*1000; apps_open(m); assert len(m.threads)==1 and m.labels()[6]=='Update'; passed()  # still fresh: no requests
+m.row(2); assert m.labels()[6]=='Checking…' and len(m.threads)==2 and KILL in m.systems[-1]; m.row(2); assert m.labels()[6]=='Cancelling…'
+shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[6]=='Update'; passed()
+m.wifi=-1; m.row(2); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and len(m.threads)==2; m.wifi=3; passed()
+m.codes=[403]; m.row(2); shelf_job(m); assert m.toasts[-1][3]=='GitHub is busy, try later'; passed()  # the API's rate limit
+m.files[SPOT_TAG]=bytearray(b'q2-v1.9'); m.close(); m.wifi=-1; apps_open(m); assert m.labels()[6]=='Installed' and len(m.threads)==3
+m.row(2); assert m.labels()[6]=='Press again to remove' and len(m.threads)==3
+m.row(3); assert m.labels()[6]=='Installed' and m.labels()[8]=='Press again to erase the login and cache'  # one row armed at a time
+m.row(2); m.row(2); assert m.labels()[6]=='Removing…' and m.labels()[8]=='Login and cache'; shelf_job(m)
+assert m.toasts[-1][3]=='Spotify removed' and KILL in m.systems[-3] and m.systems[-2]=='sync' and KILL in m.systems[-1]  # spot_stop: before and after
+assert not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/run','/mnt/mmc/.spotify/librespot'}&set(m.files) and m.labels()[6]=='Install'; passed()
+m.row(3); assert m.labels()[8]=='Press again to erase the login and cache'; m.row(3)
+assert m.labels()[6]=='Install' and m.labels()[8]=='Erasing…'; shelf_job(m)
+assert 'rm -rf /mnt/mmc/.spotify/cache /mnt/mmc/.spotify/.cache-size' in m.systems and m.toasts[-1][3]=="Spotify's login and cache erased"; passed()
+# A stale check, stopped by a press (it needs no answer); then Rockbox from its release to "ready".
+m.close(); m.wifi=3; m.now+=11*60*1000; apps_open(m); assert len(m.threads)==6
+m.row(1); assert m.toasts[-1][3]=='Stopped checking for updates'; shelf_job(m); assert len(m.threads)==6; passed()
+m.close(); m.rockbox_mode=0; m.dirs.pop('/mnt/mmc/.spotify'); m.reply=(ROOT/'test/shelf/q2-rockbox.json').read_bytes()
+apps_open(m); shelf_job(m); assert m.labels()==['Apps','Rockbox','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install']  # not stopped: checked again
+m.row(0); assert m.labels()[2]=='Starts at power-on; Boot to changes that. Press again to install' and len(m.threads)==7
+m.row(0); assert len(m.threads)==8 and m.labels()[2]=='Checking…'; m.row(0); shelf_job(m); assert m.toasts[-1][3]=='Download cancelled'
+m.free=10<<20; m.row(0); m.row(0); shelf_job(m)  # the zip (13018581 bytes) and 64 MB left over
+assert m.toasts[-1][3]==f'Needs {(13018581+(54<<20)+(1<<20)-1)>>20} MB more space' and not [f for f in m.files if '.q2/staging/' in f]; passed()
+m.free=1<<32; m.staged=[('.rockbox/rockbox',b'ELF3.2'),('.rockbox/codecs/flac.codec',b'c'),('.rockbox/fonts/a b.fnt',b'f')]
+m.listing=''.join(f'{len(d):9}  10-06-2026 13:18   {f}\n' for f,d in m.staged)
+m.row(0); m.row(0); m.rockbox_mode=0o100755; m.moves=[]; shelf_job(m)  # Rockbox on the card by the end
+assert m.toasts[-1][3]==('Rockbox is ready. Find it on Home' if variant=='ipod' else 'Rockbox is ready. It starts at power-on')
+assert [x for x in m.moves if x.startswith('/mnt/mmc/.rockbox/')][-1]=='/mnt/mmc/.rockbox/rockbox'  # the binary last
+assert m.moves[-2:]==['/mnt/mmc/.q2/apps/rockbox.files','/mnt/mmc/.q2/apps/rockbox.tag'] and m.files['/mnt/mmc/.q2/apps/rockbox.tag']==b'v3.2'
+assert m.files['/mnt/mmc/.rockbox/rockbox']==b'ELF3.2' and m.files['/mnt/mmc/.rockbox/fonts/a b.fnt']==b'f'
+assert m.files['/mnt/mmc/.q2/apps/rockbox.files']==b'.rockbox/rockbox\n.rockbox/codecs/flac.codec\n.rockbox/fonts/a b.fnt\n'
+assert not [f for f in m.files if '.q2/staging' in f] and 'sync' in m.systems; passed()
+assert m.labels()==['Apps','Rockbox','Installed','Rockbox Themes','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install']; passed()  # the rows built again
+m.listing='        1  10-06-2026 13:18   .rockbox/../../x\n'; m.files.pop('/mnt/mmc/.q2/apps/rockbox.tag'); m.row(0); shelf_job(m)
+assert m.toasts[-1][3]=='The download is not a usable app' and m.files['/mnt/mmc/.rockbox/rockbox']==b'ELF3.2'; passed()
+m.close(); passed()
 
 # Resume: once a second the UI loop polls the playing track; one of Q2POD RESUMEMIN minutes (30) or
 # longer keeps its place in a ring written whole to /mnt/data (a .tmp, renamed), every RESUME_SAVE_S
@@ -9495,7 +9822,9 @@ for radio,page in (('wifi','systemset/wifi_page'),('bt','systemset/bluetooth_pag
 # and styles; Centre or tap toggles and saves each. Artists is stock's own PLAYSET ARTISTTYPE.
 def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False,cls=QueueMachine):
     m=cls(); m.config.update(config); m.restack=True
-    if boot: m.call(address=payload_syms['ringnav_bootmode'],args=(3,0,0,0),gap=0)  # config_init's play mode
+    if boot:
+        m.handlers[payload_syms['peq_boot']]='stock_peq_boot'  # FP64 storage checked by test/peq.py
+        m.call(address=payload_syms['ringnav_bootmode'],args=(3,0,0,0),gap=0)  # config_init's play mode
     if hook=='btrows': m.byte(syms['g_bluetoothflag'],bt)
     m.handlers[int(manifest['patch_symbols'][f'stock_{hook}_trampoline'],16)]='stock_'+hook
     entries=[m.entry(0) for _ in range(stock_rows)]
@@ -9655,8 +9984,8 @@ assert m.get(payload_syms['wheel_guard'])==1; passed()
 m,rows,texts,*_=settings_page('power','scroll_view_powermanager',{'STANDBYLIMIT':'4'})
 assert texts()[4]=='Standby Limit: Off'; passed()  # out of range: Off
 m,rows,texts,icons,click=settings_page('audioset','scroll_view_playset',stock_rows=15)
-assert len(rows)==8 and icons==['playset_covermode','playset_folderjump','playset_covermode','playset_gapless','playset_folderjump','playset_memplay','playset_balance','playset_balance']
-assert texts()==['Year Order: Newest First','Artists: Artist','Artist Album Order: Year','Crossfade: Off','Folder Root: Card','Resume Songs: 30 min','Mono Audio: Off','Swap L/R: Off']
+assert len(rows)==9 and icons==['playset_covermode','playset_folderjump','playset_covermode','playset_gapless','playset_folderjump','playset_memplay','playset_balance','playset_balance','playset_dsdoutput']
+assert texts()==['Year Order: Newest First','Artists: Artist','Artist Album Order: Year','Crossfade: Off','Folder Root: Card','Resume Songs: 30 min','Mono Audio: Off','Swap L/R: Off','MQA: Off']
 assert click(2)==[(1,'Q2POD','ARTISTAZ')] and texts()[2]=='Artist Album Order: A–Z'
 assert click(2)==[(0,'Q2POD','ARTISTAZ')] and texts()[2]=='Artist Album Order: Year'
 assert click(0)==[(1,'Q2POD','YEAROLD')] and texts()[0]=='Year Order: Oldest First'
@@ -9746,7 +10075,7 @@ m.call(address=payload_syms['mono_sync'],args=(0,0,0,0),gap=0)
 assert 'mono:peq_attach' not in [c[0] for c in m.calls]; passed()
 # Playback Setting restacks by use (navigation.c playset_order): stock's rows by id, then ours.
 def stacked(m,view_name): return [(m.entries+rows).index(c) for c in m.nodes[named(m,m.top,view_name)]['children']]
-assert stacked(m,'scroll_view_playset')==[3,2,0,18,9,10,4,5,11,21,22,1,8,20,16,15,17,13,14,19,12,6,7]; passed()
+assert stacked(m,'scroll_view_playset')==[3,2,0,18,9,10,4,5,11,21,22,1,8,20,16,15,17,13,14,19,12,6,23,7]; passed()
 # Swap L/R uses its own persistent flag, immediately below Mono Audio.
 m,rows,texts,icons,click=settings_page('audioset','scroll_view_playset',stock_rows=15,cls=MonoMachine)
 assert texts()[7]=='Swap L/R: Off'
@@ -9754,6 +10083,17 @@ assert click(7)==[(1,'Q2POD','SWAPLR')] and texts()[7]=='Swap L/R: On' and m.get
 assert click(7)==[(0,'Q2POD','SWAPLR')] and texts()[7]=='Swap L/R: Off' and m.get(m.flag)==0
 m,rows,texts,*_=settings_page('audioset','scroll_view_playset',{'SWAPLR':'1'},stock_rows=15)
 assert texts()[7]=='Swap L/R: On'; passed()
+# MQA (crossfade.c mqa_click): off by default, saved as Q2POD MQA, and sent to a connected hciplayer
+# at once: 2 skips its start-of-track probe, 0 is its default. No player socket, nothing sent.
+m,rows,texts,icons,click=settings_page('audioset','scroll_view_playset',stock_rows=15)
+assert texts()[8]=='MQA: Off' and icons[8]=='playset_dsdoutput'
+m.word(O['MCL_FD'],9)
+assert click(8)==[(1,'Q2POD','MQA')] and texts()[8]=='MQA: On' and m.sent[-1]==(9,b'{mcl-mqadecodemode\\0}',21,0)
+assert click(8)==[(0,'Q2POD','MQA')] and texts()[8]=='MQA: Off' and m.sent[-1]==(9,b'{mcl-mqadecodemode\\2}',21,0)
+m.word(O['MCL_FD'],-1); sent=len(m.sent)
+assert click(8)==[(1,'Q2POD','MQA')] and len(m.sent)==sent
+m,rows,texts,*_=settings_page('audioset','scroll_view_playset',{'MQA':'1'},stock_rows=15)
+assert texts()[8]=='MQA: On'; passed()
 # Folder Root (#49): the row cycles the card's top-level folders, case aside, then the card, saving Q2POD
 # FOLDERROOT each time. Not offered: files, dot-folders, names with an edge space or over 200 bytes (a
 # config.ini line can't keep them). A saved folder gone moves on to the next name after it.
@@ -10246,12 +10586,14 @@ def boot_row(value=None,mode=0o100755):
     m.top=m.node('window','sysset_page',[m.node('list_view','list_view_sysset',[view])])
     assert m.call(address=HOOKS['systemset_sysset_page_init'][0],args=(m.top,5,0,0),gap=0)==0
     assert m.calls[0][:3]==('stock_systemset',m.top,5)
-    if mode!=0o100755:
-        assert m.nodes[view]['children']==[entries[i] for i in (1,3,4,5,8,7,2,0,6,9,11,10)]
-        return m,None,None
     kids=m.nodes[view]['children']
-    assert len(kids)==13
-    assert kids[:9]+kids[10:]==[entries[i] for i in (1,3,4,5,8,7,2,0,6,9,11,10)]
+    if mode!=0o100755:  # Apps (System Update's icon, netupdate.c's page) before Update; no Boot to
+        assert kids[:9]+kids[10:]==[entries[i] for i in (1,3,4,5,8,7,2,0,6,9,11,10)]
+        apps=m.nodes[kids[9]]['children'][0]; icon,label=m.nodes[apps]['children'][:2]
+        assert m.nodes[icon]['image']=='system_update' and m.nodes[label]['text']=='Apps' and m.handler(apps,O['EVT_CLICK'])[0]==payload_syms['shelf_open']
+        return m,None,None
+    assert len(kids)==14
+    assert kids[:9]+kids[11:]==[entries[i] for i in (1,3,4,5,8,7,2,0,6,9,11,10)]
     button=m.nodes[kids[9]]['children'][0]
     label=m.nodes[button]['children'][1]
     return m,button,label
@@ -10433,9 +10775,9 @@ assert 'killall -9 librespot aplay' in m.systems[-1] and 'player_stop' in [c[0] 
 assert [m.text(c[2]+8) for c in m.calls if c[0]=='navigator_to_with_context']==['Streaming stopped']
 assert endpoint(m,'radio_status')==0 and endpoint(m,'spot_status')==0 and m.key(O['KEY_PLAY'])!=11; m.close(); passed()
 # The wheel drives only allowlisted windows (patch/contexts.inc), so every runtime list page needs an
-# entry; the two streaming Now Playing pages handle their own keys.
+# entry; the two streaming Now Playing pages and a card app's QR code page (no list) handle their own keys.
 pages=set(re.findall(r'page_open\("(\w+)"',''.join(p.read_text() for p in (ROOT/'patch').glob('*.c'))))
-assert pages-set(re.findall(r'"(\w+)"',(ROOT/'patch/contexts.inc').read_text()))=={'radionp_page','spotify_page'}; passed()
+assert pages-set(re.findall(r'"(\w+)"',(ROOT/'patch/contexts.inc').read_text()))=={'radionp_page','spotify_page','qrcode_page'}; passed()
 m=BooksMachine({},{}); vid=payload_syms['vid']; m.word(vid+12,4242); m.word(vid+16,7)
 for playing,command in ((0,'a'),(1,'r')):
     m.sent=[]; endpoint(m,'video_set_playing',playing); endpoint(m,'video_set_playing',playing)

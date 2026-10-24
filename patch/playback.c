@@ -37,6 +37,7 @@ typedef struct {
     unsigned resume_key, resume_pos;
     entry *order, *cycle;
     unsigned *groups, *seen, *history;
+    unsigned poll_stamp;
 } playback;
 static playback s __attribute__((section(".scratch")));
 /* Stock Shuffle's Previous plays the last track, but the track it left stays unplayed in the pool,
@@ -643,6 +644,7 @@ extern void ringnav_read_artistype(void);
  * here too, as stock reads it only when a Library list or artist page opens. */
 int ringnav_bootmode(int mode, int notify) {
 #if !M1PLUS
+    peq_boot();
     ringnav_read_artistype();
     s.restoring = 1;
     int result = config_playmode(mode, notify);
@@ -662,9 +664,15 @@ void playback_clear(void) {
 }
 int ringnav_mode(int mode) {
     /* player_initconfig re-applies the saved mode each time hciplayer connects, after a boot
-     * resume too: not a choice, so advanced play stays. V2.1's config_init applies it at boot
-     * itself, before memory play reads the queue (V1.32's goes through ringnav_bootmode). */
-    if (s.restoring || __builtin_return_address(0) == (void *)INITCONFIG_MODE_RET
+     * resume too: not a choice, so advanced play stays. The new hciplayer gets MQA's too. V2.1's
+     * config_init applies it at boot itself, before memory play reads the queue (V1.32's goes
+     * through ringnav_bootmode). */
+    int initconfig = __builtin_return_address(0) == (void *)INITCONFIG_MODE_RET;
+    if (initconfig) mqa_sync();
+#if M1PLUS /* V1.32's comes through ringnav_bootmode */
+    if (__builtin_return_address(0) == (void *)BOOT_MODE_RET) peq_boot();
+#endif
+    if (s.restoring || initconfig
 #if M1PLUS
         || __builtin_return_address(0) == (void *)BOOT_MODE_RET
 #endif
@@ -1232,7 +1240,8 @@ void playback_poll(void) {
      * pause, a seek or a failed write go within 5 s, and power-off saves exactly
      * (ringnav_savequeue). */
     if (!(s.dirty && !s.save_failed)) {
-        if (now - s.stamp < 5000) return;
+        if (now - s.stamp < 5000 || now - s.poll_stamp < 5000) return;
+        s.poll_stamp = now;
         int sec = 0, total = 0;
         mclGetPlayTime(&sec, &total);
         if (now - s.stamp < 30000 && !s.save_failed && mclGetPlayStatus() == 2 &&

@@ -181,3 +181,4 @@ stay flat or fall.
 | U3 step 2: sync to 1.3.0 (Oct 23) | 1.3.0 (`92112b8`) | +1,420/−286 over 30 files |
 | U3 step 3: sync to 1.3.8 (Oct 24) | 1.3.8 (`3744dac`) | +1,418/−285 over 30 files: `ringnav_input` and `library_music` lost a seam each |
 | U3 step 4: sync to 1.3.9 (Oct 24) | 1.3.9 (`41844cc`) | +1,421/−285 over 30 files: the hold menu's `yslidable` (3 lines, `qm_open`) |
+| U3 step 5: sync to 1.4.2 (Oct 24) | 1.4.2 (`7efbff5`) | +1,429/−287 over 30 files: MQA's icon name, the Apps row's `!M1PLUS`, `peq_boot` at `BOOT_MODE_RET` |

@@ -37,6 +37,7 @@
 #define ICON_MEMPLAY "playset_memplay" /* Resume Songs' row */
 #define ICON_BALANCE "playset_balance" /* Mono Audio's row */
 #define ICON_GAPLESS "playset_gapless"
+#define ICON_DSDOUTPUT "playset_dsdoutput" /* MQA's row */
 /* The payload's own widgets' styles: V1.32's, or V2.1's nearest of the same widget type, colour,
  * size and alignment (V2.1 has no centred 18 px label, no right-aligned 20 px scrolling label: their
  * nearest are 20 px and 16 px). */

@@ -61,8 +61,10 @@ def library(tmp):
         'eq3_bands': [C.POINTER(Preset), C.POINTER(C.c_double * 3)],
         'eq_load': [C.POINTER(State)], 'eq_save': [C.POINTER(State)],
         'eq_effective': [C.POINTER(State), C.POINTER(Preset)], 'peq_load_active': [C.POINTER(Preset)],
+        'peq_auto': [C.POINTER(Preset), C.c_int],
     }
     for name, args in signatures.items(): getattr(lib, name).argtypes = args
+    lib.peq_auto.restype = C.c_double
     return lib
 
 def parse(lib, text):
@@ -335,7 +337,8 @@ Filter 10: ON PK Fc 13560 Hz Gain -0.62 dB Q 2.940
 """
 
 def headroom_check(lib, ui):
-    """The reported preset stays linear; Auto covers rate-dependent peaks without changing manual gain."""
+    """The reported preset stays linear; PEQ's Auto plays each rate's own cut, and 3EQ's saved headroom covers every
+    standard rate, neither changing a set gain or the filters."""
     p = parse(lib, REPORTED_PRESET)
     before = bytes(p)
     assert p.count == 26 and p.preamp == -8.5 and p.balance == 0
@@ -350,9 +353,35 @@ def headroom_check(lib, ui):
             assert max(abs(x/16-y) for x, y in zip(loud, quiet)) < 2e-7, (rate, f)
             if f == 9840 and rate in (44100, 48000):
                 assert max(loud[::2]) > 1 and min(loud[::2]) < -1 and max(map(abs, loud[1::2])) < 1
+    # PEQ's Auto as the player prepares it (peq_reset, peq_update): the rate's own response, against a
+    # denser scan than the engine's 1024 points (8192, with DC, Nyquist and the band centres): within 0.005 dB, the
+    # grid's sampling error here (0.003 dB at 44.1 kHz). A steady-state peak, not a transient or intersample bound.
+    p.automatic = 1
+    for rate, want in ((32000, -12.3492), (44100, -9.2466), (48000, -8.8120), (96000, -7.8743)):
+        assert abs(lib.peq_auto(C.byref(p), rate) - want) < 0.005, (rate, lib.peq_auto(C.byref(p), rate))
+    assert '%.1f %.1f' % (lib.peq_auto(C.byref(p), 44100), lib.peq_auto(C.byref(p), 48000)) == '-9.2 -8.8'
+    for rate in (8000, 32000, 44100, 48000, 50000, 96000, 384000):
+        cut = lib.peq_auto(C.byref(p), rate)
+        manual = Preset.from_buffer_copy(p); manual.automatic, manual.preamp = 2, cut
+        a, b = DSP(), DSP()
+        lib.peq_reset(C.byref(a), rate, 2, C.byref(p)); lib.peq_reset(C.byref(b), rate, 2, C.byref(manual))
+        e = a.current
+        assert bytes(e.c) == bytes(b.current.c) and bytes(e.only) == bytes(b.current.only) and e.used == b.current.used
+        assert all(abs(e.gain[ch] - 10**(cut/20)) < 1e-12 and abs(e.gain[ch] - b.current.gain[ch]) < 1e-12 for ch in range(8))
+        nyquist = rate / 2
+        grid = [0, nyquist] + [nyquist**(i/8191) for i in range(8192)] + [b.frequency for b in p.bands[:p.count]]
+        peak = max(response(e, rate, f, ch) for f in grid if f <= nyquist for ch in range(2))**2
+        assert 10*math.log10(peak) < 0.005, (rate, peak)
+        signal = [0.5*math.sin(i*0.37) for i in range(2048)]
+        assert max(abs(x-y) for x, y in zip(process(lib, a, signal, 2), process(lib, b, signal, 2))) < 1e-6, rate
+        # A set preamp plays as set at every rate, though it is the saved preset's -8.5 dB.
+        manual.preamp = -8.5; lib.peq_reset(C.byref(b), rate, 2, C.byref(manual))
+        assert all(b.current.gain[ch] == 10**(-8.5/20) for ch in range(2)) and bytes(b.current.c) == bytes(e.c)
+    p.automatic = 0  # as imported
+    assert bytes(p) == before
     ui.check_headroom.argtypes = [C.POINTER(Preset)]
     ui.check_headroom.restype = C.c_double
-    auto = ui.check_headroom(C.byref(p))
+    auto = ui.check_headroom(C.byref(p))  # 3EQ's: the loudest standard rate's
     assert -12.37 < auto < -12.34, auto  # strongest response is at 32 kHz, not the old 48 kHz estimate
     assert bytes(p) == before and ui.check_headroom(C.byref(p)) == auto
     p.preamp = auto
@@ -370,7 +399,7 @@ def headroom_check(lib, ui):
         p = parse(lib, source); actual = ui.check_headroom(C.byref(p))
         assert abs(actual-want) < .0001, (source, actual)
         if not want: assert math.copysign(1, actual) == 1
-    print('PEQ headroom: reported 26-band preset, unclipped float output and Auto across standard PCM rates passed.')
+    print('PEQ headroom: reported 26-band preset, unclipped float output, per-rate Auto and 3EQ across standard PCM rates passed.')
 
 # Host stand-ins for the stock services peq_platform.h maps on the device.
 SHIM_H = r"""
@@ -622,6 +651,8 @@ def editor_check(lib, tmp):
         p = Preset(); assert lib.peq_load_active(C.byref(p)); return p
     def click(text): assert ui.shim_click(text.encode(), 1), (text, ui.shim_title())
     title = lambda: ui.shim_title().decode()
+    def auto(p):  # the Preamp row's and picker's Auto: the 44.1 and 48 kHz cuts
+        return 'Auto (44.1: %.1f / 48: %.1f)' % (lib.peq_auto(C.byref(p), 44100), lib.peq_auto(C.byref(p), 48000))
     def advanced():  # the EQ page opens on Simple; its tab bar's right half is Advanced
         r = ui.shim_open(); assert ui.shim_tab_touch(300); return r
     named = lambda name: ui.shim_click(b'Presets ' + name.encode(), 2)  # the draft's preset, on its row
@@ -693,8 +724,9 @@ def editor_check(lib, tmp):
     ui.shim_close(); advanced(); click('1  '); click('Gain +6.0 dB'); click('+6.5 dB'); ui.shim_return(); click('Apply changes')
     assert read().preamp == -1, read().preamp  # a picked preamp sticks through band edits
     click('Preamp -1.0 dB'); assert title() == 'Preamp' and ui.shim_selection() == 27  # opens on -1.0
-    click('Auto (-12.5 dB)'); click('Apply changes')
-    assert abs(read().preamp + 12.5) < 0.05, read().preamp
+    assert auto(read()) == 'Auto (44.1: -12.5 / 48: -12.5)'
+    click(auto(read())); click('Apply changes')
+    assert abs(read().preamp + 12.5) < 0.05 and read().automatic == 1, read().preamp
     click('1  '); click('Band On'); ui.shim_return(); click('2  '); click('Band On'); ui.shim_return(); click('Apply changes')
     assert math.copysign(1, read().preamp) == 1 and read().preamp == 0, read().preamp  # +0: shown as 0.0
     # Channels cycle on enabled bands; headroom takes the louder side, balance only turns one down.
@@ -737,7 +769,7 @@ def editor_check(lib, tmp):
     before = active.read_bytes()
     click('Reset to defaults')
     assert title() == 'Reset; choose Apply to activate' and active.read_bytes() == before
-    assert ui.shim_click(b'Preamp 0.0 dB (Auto)', 2) and ui.shim_click(b'Balance Centre', 2)
+    assert ui.shim_click(b'Preamp Auto (44.1: 0.0 / 48: 0.0)', 2) and ui.shim_click(b'Balance Centre', 2)
     assert not ui.shim_click(b'Presets ', 2)  # the draft is no longer a named preset
     click('Apply changes')
     r = read()
@@ -753,35 +785,45 @@ def editor_check(lib, tmp):
     r = read()
     assert (r.count, r.preamp, r.balance, r.bypass) == (10, 0, 0, 1)
     s = State(); assert lib.eq_load(C.byref(s)) and s.mode == EQ_OFF
-    # Auto is saved (automatic), so it survives a restart and a headroom change; a set preamp stays set.
-    p = preset(enabled=1, gain=6.0); want = ui.check_headroom(C.byref(p)); assert want < -5
-    shown = lambda auto: ui.shim_click(f'Preamp {want:.1f} dB{" (Auto)" if auto else ""}'.encode(), 2)
+    # Auto is saved (automatic), so it survives a restart; the player works out each rate's cut, so the
+    # number saved with it (the 48 kHz cut, or another version's) is never applied again. A set preamp stays set.
+    p = preset(enabled=1, gain=6.0); want = lib.peq_auto(C.byref(p), 48000); assert want < -5
+    shown = lambda a: ui.shim_click(f'Preamp {auto(p) if a else f"{want:.1f} dB"}'.encode(), 2)
     def reopen(preamp, automatic, v2=False):
         p.preamp, p.automatic, s.peq, s.mode = preamp, automatic, p, EQ_PEQ; assert lib.eq_save(C.byref(s))
         if v2: active.write_bytes(b'Q2PEQ03\0' + bytes(s)[:8] + bytes(s.peq)[:V2] + bytes(s.eq3)[:V2])  # 1.3.5's
         ui.shim_close(); advanced()
-    reopen(-1, 1)  # Auto under an older headroom: the current one, to apply
-    assert shown(True) and ui.shim_click(b'Apply changes', 2)
-    click('Apply changes'); reopen(read().preamp, 1)
-    assert shown(True) and ui.shim_click(b'Nothing to apply', 2)
-    t = State(); assert lib.eq_load(C.byref(t)) and t.peq.automatic == 1 and t.peq.preamp == want
+    reopen(-1, 1)  # Auto saved with another number: Auto, plays as Auto, and opening writes nothing
+    before = active.read_bytes()
+    assert shown(True) and ui.shim_click(b'Nothing to apply', 2) and active.read_bytes() == before
+    assert read().automatic == 1 and read().preamp == -1
     assert lib.peq_save(bytes(saved/'Auto.peq'), C.byref(p), 1) == 1  # presets carry it too
     reopen(0, 2); click('Presets'); click('Auto.peq'); assert shown(True)
-    reopen(want, 2)  # set to exactly the headroom: still set, through a band edit
+    click('Apply changes')  # Auto saves its 48 kHz cut
+    t = State(); assert lib.eq_load(C.byref(t)) and t.peq.automatic == 1 and t.peq.preamp == want
+    reopen(want, 2)  # set to exactly the 48 kHz cut: still set, through a band edit
     assert shown(False) and not shown(True)
     click('1  '); click('Gain +6.0 dB'); click('+7.0 dB'); ui.shim_return(); click('Apply changes')
-    assert read().preamp == want and lib.eq_load(C.byref(t)) and t.peq.automatic == 2
-    reopen(-1, 0, v2=True)  # 1.3.5's state loads; never picked, so Auto, playing -1 until Apply
+    assert read().preamp == want and read().automatic == 2 and lib.eq_load(C.byref(t)) and t.peq.automatic == 2
+    reopen(-1, 0, v2=True)  # 1.3.5's state loads; never picked, so Auto, in the editor and playing
     assert lib.eq_load(C.byref(t)) and t.peq.automatic == 0 and bytes(t.eq3) == bytes(s.eq3) and shown(True)
-    assert ui.shim_click(b'Apply changes', 2)
+    assert ui.shim_click(b'Nothing to apply', 2) and read().automatic == 1
     # An import's own preamp gives way to Auto; picking a preamp afterwards sticks across a restart.
     (tmp/'root/mnt/mmc/EQ').mkdir(parents=True, exist_ok=True)
     (tmp/'root/mnt/mmc/EQ/Imp.txt').write_text('Preamp: -2 dB\nFilter 1: ON PK Fc 1000 Hz Gain 6 dB Q 1.41\n')
     click('Presets'); click('Import from SD /EQ'); click('Imp.txt'); ui.shim_close(); advanced()
     click('Presets'); click('Imp.peq'); assert shown(True)
-    click(f'Preamp {want:.1f} dB (Auto)'); click('-3.0 dB'); click('Apply changes')
+    click(f'Preamp {auto(p)}'); click('-3.0 dB'); click('Apply changes')
     ui.shim_close(); advanced(); assert ui.shim_click(b'Preamp -3.0 dB', 2) and not shown(True)
     (tmp/'root/mnt/mmc/EQ/Imp.txt').unlink(); (saved/'Imp.peq').unlink()
+    # The reported preset: the Preamp row and its picker label the 44.1 and 48 kHz cuts; an edit refreshes them.
+    rep = parse(lib, REPORTED_PRESET); assert lib.peq_save(bytes(saved/'Rep.peq'), C.byref(rep), 1) == 1
+    click('Presets'); click('Rep.peq'); assert ui.shim_click(b'Preamp Auto (44.1: -9.2 / 48: -8.8)', 2)
+    click('Preamp Auto'); assert ui.shim_selection() == 0 and ui.shim_click(b'Auto (44.1: -9.2 / 48: -8.8)', 2)
+    ui.shim_return(); click('7  Peaking 10160 Hz L'); click('Band On'); ui.shim_return()
+    rep.bands[6].enabled = 0; assert auto(rep) != 'Auto (44.1: -9.2 / 48: -8.8)'
+    assert ui.shim_click(f'Preamp {auto(rep)}'.encode(), 2)
+    (saved/'Rep.peq').unlink()
     print('EQ Advanced tab: bypass, apply, auto preamp, channels, balance, frequency and Q, load, failed saves, delete, reset and close passed.')
     # A full pack stays sorted and reachable, with bounded widget counts and page-local action IDs.
     imports = tmp/'root/mnt/mmc/EQ'
@@ -1027,6 +1069,21 @@ def eq3_editor_check(lib, ui, tmp):
     keys(NEXT, CENTRE); assert state().mode == EQ_OFF; keys(CENTRE)  # the switch, from the bar
     assert active.read_bytes() == before and state().mode == EQ_3
     ui.shim_e3_close()
+    # Restarting with the Simple page still open must not keep its temporary Off attenuation.
+    before = active.read_bytes(); ui.peq_boot(); assert active.read_bytes() == before  # 3EQ stays on
+    ui.shim_e3_open(); ui.shim_e3_touch(0x100, 50, 70)
+    s = state(); assert (s.mode, s.hold) == (EQ_OFF, 1) and s.eq3.preamp < 0
+    ui.peq_stock_eq(1); assert state().hold == 1  # live player updates keep the comparison
+    before = active.read_bytes(); (active.parent/'peq-active.tmp').mkdir()
+    ui.peq_boot(); assert active.read_bytes() == before  # a failed reset preserves the good state
+    (active.parent/'peq-active.tmp').rmdir()
+    ui.peq_boot(); after = state()
+    assert (after.mode, after.hold) == (EQ_OFF, 0)
+    assert bytes(after.peq) == bytes(s.peq) and bytes(after.eq3) == bytes(s.eq3)
+    assert lib.peq_load_active(C.byref(e)) and e.bypass == 1
+    ui.shim_e3_close()
+    after.mode = EQ_PEQ; assert lib.eq_save(C.byref(after))
+    before = active.read_bytes(); ui.peq_boot(); assert active.read_bytes() == before  # PEQ stays on
     print('EQ Simple tab: entry without change, tabs, wheel and touch adjustment, coalesced saves, switch, held Off, reset, failed save and indicator passed.')
 
 # Drives patch/peq_player.c the way hciplayer's af chain does. Built 32-bit like the device,
@@ -1057,6 +1114,7 @@ static peq_preset active(double preamp, double gain) {
     peq_preset p;
     peq_default(&p);
     p.bypass = 0; p.preamp = preamp; p.count = 1;
+    p.automatic = 2; /* a set preamp: these check the gain as saved */
     p.bands[0] = (peq_band){1, 0, 1000, gain, 1};
     assert(peq_save(PEQ_ACTIVE, &p, 1) == 1);
     return p;
@@ -1364,6 +1422,41 @@ int main(void) {
     memcpy(a, keep, sizeof(a));
     af_data old = {a, 256, 48000, 2, 0x1d, 4};
     assert(af.play(&af, &old) == &old && !memcmp(a, keep, sizeof(a)));
+    /* Auto (1, or never picked: 0) plays each rate's own cut, worked out as a track negotiates, the
+     * editor never opened, whatever number was saved with it; a picked preamp (2) plays as set at
+     * every rate. 50 kHz: not a standard rate, its own response all the same. */
+    peq_preset hi;
+    peq_default(&hi);
+    hi.bypass = 0, hi.count = 2, hi.preamp = -1;
+    hi.bands[0] = (peq_band){1, 2, 9000, 6, 0.707};
+    hi.bands[1] = (peq_band){1, 0, 15000, 6, 2};
+    static const int modes[] = {2, 0, 1}, rates[] = {32000, 44100, 48000, 96000, 50000};
+    for (int m = 0; m < 3; ++m)
+        for (unsigned i = 0; i < 5; ++i) {
+            hi.automatic = modes[m];
+            assert(peq_save(PEQ_ACTIVE, &hi, 1) == 1);
+            in = (af_data){0, 0, rates[i], 2, 0x1d, 4};
+            assert(negotiate(&af, &in) == 1 && s->preset.automatic == (modes[m] == 2 ? 2 : 1));
+            double want = modes[m] == 2 ? -1 : peq_auto(&hi, rates[i]);
+            assert(fabs(s->dsp.current.gain[0] - pow(10, want / 20)) < 1e-12 && s->dsp.current.gain[1] == s->dsp.current.gain[0]);
+            /* Only the gain moves: the filters are the saved preamp's, and nothing is written back. */
+            peq_engine e;
+            peq_preset saved;
+            assert(peq_compile(&hi, rates[i], &e) && !memcmp(e.c, s->dsp.current.c, sizeof(e.c)));
+            assert(!memcmp(e.only, s->dsp.current.only, sizeof(e.only)) && e.used == s->dsp.current.used);
+            assert(peq_load(PEQ_ACTIVE, &saved) && !memcmp(&saved, &hi, sizeof(hi)));
+        }
+    assert(peq_auto(&hi, 32000) < peq_auto(&hi, 96000) - 0.5); /* -12.0 against -11.4 dB */
+    /* An applied edit: the new cut at the playing rate, through the update ramp. */
+    peq_reset(&ref, 50000, 2, &s->preset);
+    same(&af, &ref, 50000, 2);
+    hi.bands[1].gain = 9;
+    ext.gain = gains, ext.channel = 0;
+    assert(peq_save(PEQ_ACTIVE, &hi, 1) == 1 && af.control(&af, 0x40001d00, &ext) == 1 && s->dsp.waiting);
+    assert(fabs(s->dsp.pending.gain[0] - pow(10, peq_auto(&hi, 50000) / 20)) < 1e-12);
+    assert(peq_update(&ref, &s->preset));
+    for (int i = 0; i < 4; ++i) same(&af, &ref, 50000, 2);
+    in = (af_data){0, 0, 96000, 1, 0x1d, 4};
     /* A 3EQ state record: the live update plays the 3EQ, then Off's held preamp alone, then nothing. */
     eq_state st;
     double g[3] = {3, -2, 1};
@@ -1372,9 +1465,12 @@ int main(void) {
     st.eq3.preamp = -3, st.mode = EQ_3;
     ext.gain = gains;
     assert(eq_save(&st) && af.control(&af, 0x40001d00, &ext) == 1 && !memcmp(&s->preset, &st.eq3, sizeof(st.eq3)));
+    assert(fabs(s->dsp.pending.gain[0] - pow(10, -3 / 20.0)) < 1e-12); /* 3EQ keeps its saved preamp */
+    /* The hold keeps 3EQ's preamp though the PEQ beside it is on Auto, whose cut for no bands is 0 dB. */
     st.mode = EQ_OFF, st.hold = 1;
-    assert(eq_save(&st) && af.control(&af, 0x40001d00, &ext) == 1);
+    assert(st.peq.automatic == 1 && eq_save(&st) && af.control(&af, 0x40001d00, &ext) == 1);
     assert(!s->preset.bypass && !s->preset.count && s->preset.preamp == -3);
+    assert(fabs(s->dsp.pending.gain[0] - pow(10, -3 / 20.0)) < 1e-12);
     st.hold = 0;
     assert(eq_save(&st) && af.control(&af, 0x40001d00, &ext) == 1 && s->preset.bypass);
     /* Without an active file a track starts on the defaults. */
@@ -2260,15 +2356,144 @@ int main(void) {
 }
 '''
 
+SHELF_SHIM = r"""
+#include <stdio.h>
+#include <stdlib.h>
+void *read_all(const char *path, unsigned max, unsigned *size) { /* scrobble.c's */
+    FILE *f = fopen(path, "rb");
+    char *p = 0;
+    long n = f && !fseek(f, 0, 2) ? ftell(f) : -1;
+    if (n >= 0 && (unsigned long)n <= max && !fseek(f, 0, 0) && (p = calloc(1, n + 1)) && fread(p, 1, n, f) != (size_t)n)
+        free(p), p = 0;
+    if (f) fclose(f);
+    *size = p ? n : 0;
+    return p;
+}
+"""
+
+
 def netupdate_check(tmp):
     """Network Update (netupdate.c): the latest tag from GitHub's releases/latest redirect."""
-    lib = compile_host(tmp, 'netupdate.so', ROOT/'patch/netupdate.c')
+    (tmp/'shelf_shim.c').write_text(SHELF_SHIM)
+    lib = compile_host(tmp, 'netupdate.so', ROOT/'patch/netupdate.c', tmp/'shelf_shim.c')
     lib.netupdate_tag.restype = C.c_char_p
     tag = lib.netupdate_tag
     assert tag(b'https://github.com/DiamondBond/q2-pod/releases/tag/1.3.5') == b'1.3.5'
     for bad in (None, b'', b'https://github.com/DiamondBond/q2-pod/releases', b'https://github.com/login',
                 b'https://github.com/DiamondBond/q2-pod/releases/tag/'):
         assert tag(bad) is None, bad
+    return lib
+
+
+def shelf_check(tmp, lib):
+    """Q2 Shelf (netupdate.c): GitHub's release JSON, the unzip listing's checks, and an install and
+    remove of Rockbox, its themes, Spotify and the card apps on a scratch card, host unzip (Info-ZIP)
+    for busybox's."""
+    import shutil, zipfile
+    def release(json):
+        tag, url, size = C.create_string_buffer(32), C.create_string_buffer(256), C.c_uint()
+        ok = lib.shelf_release(json, tag, 32, url, 256, C.byref(size))
+        return (tag.value.decode(), url.value.decode(), size.value) if ok else None
+    gh = 'https://github.com/DiamondBond/'
+    assert release((ROOT/'test/shelf/q2-rockbox.json').read_bytes()) == ('v3.2', gh + 'q2-rockbox/releases/download/v3.2/rockbox.zip', 13018581)
+    assert release((ROOT/'test/shelf/q2-rockbox-themes.json').read_bytes()) == \
+        ('v1.3', gh + 'q2-rockbox-themes/releases/download/v1.3/q2-rockbox-themes-1.3.zip', 44591509)
+    spot = (ROOT/'test/shelf/q2-librespot.json').read_bytes()
+    assert release(spot) == ('q2-v1.9', gh + 'q2-librespot/releases/download/q2-v1.9/q2-librespot-v1.9-2ea4406.zip', 7108981)
+    pretty = b'{"tag_name" : "1.0", "assets" : [ {"name": "SHA256SUMS", "size": 9, "browser_download_url": "x"},\n' \
+             b'  {"name": "a.zip", "size": 5, "browser_download_url": "https://h/a.zip"} ] }'
+    assert release(pretty) == ('1.0', 'https://h/a.zip', 5)
+    for bad in (b'', b'{}', spot.replace(b'.zip"', b'.tar"'), spot.replace(b'"tag_name"', b'"tag"'),
+                pretty.replace(b'"size": 5', b'"size": 0'), b'{"tag_name":"a\\"b","assets":[]}'):
+        assert release(bad) is None, bad[:40]
+    def unpacked(text, cap=1 << 30):
+        total = C.c_uint(); n = lib.shelf_unpacked(text.encode(), cap, C.byref(total))
+        return (n, total.value) if n >= 0 else None
+    head = '  Length      Date    Time    Name\n---------  ---------- -----   ----\n'
+    row = lambda size, name: f'{size:9}  10-06-2026 13:18   {name}\n'
+    foot = '---------                     -------\n 19786468                     3 files\n'
+    assert unpacked(head + row(19783496, '.spotify/librespot') + row(2149, '.spotify/my run') + row(0, '.spotify/') + foot) == (3, 19785645)
+    assert unpacked(head + foot) == (0, 0) and unpacked('') == (0, 0)
+    assert unpacked(row(1000000000, '.rockbox/big') + row(4000000000, '.rockbox/huge')) is None  # past the cap
+    assert unpacked(row(1, '.rockbox/a') + row(2, '.rockbox/b'), 2) is None and unpacked(row(1, '.rockbox/..a'), 2) == (1, 1)
+    for evil in ('/etc/passwd', '.rockbox/../../x', '..', '.rockbox/..', '../x'):
+        assert unpacked(head + row(1, '.rockbox/ok') + row(1, evil) + foot) is None, evil
+    listed = lambda text, path: lib.shelf_listed(text, len(text or b''), path)
+    assert listed(b'.rockbox/a\0.rockbox/fonts/b\0', b'.rockbox/fonts/b') and not listed(b'.rockbox/a\0', b'.rockbox/') and not listed(None, b'x')
+
+    # Install and remove on a scratch card, from zips laid out as the releases are.
+    card = tmp/'root/mnt/mmc'; staging = card/'.q2/staging'
+    def zip_of(path, entries):
+        with zipfile.ZipFile(path, 'w') as z:
+            for name, data in entries: z.writestr(name, data)
+        return path
+    font = '.rockbox/fonts/15-Adobe-Helvetica.fnt'
+    synthetic = {0: zip_of(tmp/'rockbox.zip', [('.rockbox/', b''), ('.rockbox/rockbox', b'ELF3.2'), (font, b'rb'),
+                                                ('.rockbox/codecs/flac.codec', b'c'), ('.rockbox/config.cfg', b'release')]),
+                 1: zip_of(tmp/'themes.zip', [('INSTALL.txt', b'readme'), ('.rockbox/._fonts', b'mac'), (font, b'th'),
+                                              ('.rockbox/wps/Big Theme.wps', b'w'), ('.rockbox/themes/._x.cfg', b'mac'),
+                                              ('__MACOSX/.rockbox/._wps', b'mac')]),
+                 2: zip_of(tmp/'spotify.zip', [('.spotify/run', b'#!/bin/sh'), ('.spotify/librespot', b'ELF'),
+                                               ('.spotify/cache/credentials.json', b'theirs'), ('.spotify/.cache-size', b'1M')])}
+    ids = ('rockbox', 'themes', 'spotify', 'deezer', 'soulseek', 'filebrowser')  # netupdate.c's apps
+    def install(i, zip_path):
+        shutil.rmtree(staging, ignore_errors=True); staging.mkdir(parents=True); (card/'.q2/apps').mkdir(exist_ok=True)
+        shutil.copy(zip_path, staging/f'{ids[i]}.part')
+        total = C.c_uint(); r = lib.shelf_list(i, C.byref(total))
+        if r: return r
+        assert total.value > 0 and lib.shelf_unpack(i) == 0
+        r = lib.shelf_place(i); shutil.rmtree(staging); return r
+    def tree():
+        return sorted(str(f.relative_to(card)) for f in card.rglob('*') if f.is_file() and '.q2' not in f.parts)
+    def files(i): return (card/f'.q2/apps/{ids[i]}.files').read_text().split('\n')[:-1]
+    shutil.rmtree(card, ignore_errors=True); (card/'.rockbox').mkdir(parents=True); (card/'.spotify/cache').mkdir(parents=True)
+    (card/'.rockbox/config.cfg').write_bytes(b'mine'); (card/'.spotify/cache/credentials.json').write_bytes(b'login')
+    (card/'.spotify/.cache-size').write_bytes(b'4096M'); (card/'Music').mkdir(); (card/'Music/a.flac').write_bytes(b'song')
+    for i in range(3): assert install(i, synthetic[i]) == 0, i
+    have = tree()
+    assert '.rockbox/rockbox' in have and '.spotify/librespot' in have and font in have and 'INSTALL.txt' not in have
+    assert not [f for f in have if '/._' in f or f.startswith('__MACOSX')] and not list(staging.parent.glob('staging'))
+    assert (card/'.rockbox/config.cfg').read_bytes() == b'mine' and (card/'.spotify/cache/credentials.json').read_bytes() == b'login'
+    assert (card/'.spotify/.cache-size').read_bytes() == b'4096M' and not [f for f in files(2) if 'cache' in f]
+    assert set(files(0)) | set(files(1)) | set(files(2)) == set(have) - {'.rockbox/config.cfg', '.spotify/cache/credentials.json', '.spotify/.cache-size', 'Music/a.flac'}
+    assert font in files(0) and font in files(1)
+    assert install(0, synthetic[0]) == 0 and tree() == have  # an update: the same files again
+    lib.shelf_remove(1)  # the themes: the font Rockbox lists stays, and so does Rockbox
+    assert font in tree() and '.rockbox/rockbox' in tree() and not set(files(1) if (card/'.q2/apps/themes.files').exists() else []) and \
+        not [f for f in tree() if f in set(have) - set(files(0)) and f.startswith('.rockbox/') and f != '.rockbox/config.cfg']
+    lib.shelf_remove(0); lib.shelf_remove(2)
+    assert tree() == ['.rockbox/config.cfg', '.spotify/.cache-size', '.spotify/cache/credentials.json', 'Music/a.flac']
+    assert [d.name for d in (card/'.rockbox').iterdir()] == ['config.cfg'] and not list((card/'.q2/apps').iterdir())
+    # A failed codec replacement must leave the old binary and installed file list intact.
+    (card/'.rockbox/rockbox').write_bytes(b'old')
+    (card/'.rockbox/codecs').mkdir(); (card/'.rockbox/codecs/flac.codec').mkdir()
+    (card/'.q2/apps/rockbox.files').write_bytes(b'old list')
+    assert install(0, synthetic[0]) == 3  # SH_CARD: a directory blocks the codec's rename
+    assert (card/'.rockbox/rockbox').read_bytes() == b'old'
+    assert (card/'.q2/apps/rockbox.files').read_bytes() == b'old list'
+    evil = zip_of(tmp/'evil.zip', [('.rockbox/ok', b'x'), ('.rockbox/../../../escaped', b'x')])
+    assert install(0, evil) == 5 and not (tmp/'escaped').exists() and not (card.parent/'escaped').exists()  # SH_BAD, nothing unpacked
+    assert install(1, zip_of(tmp/'empty.zip', [('INSTALL.txt', b'readme')])) == 5  # nothing for the app's folder
+
+    # The card apps (patch/addon.c), zipped as their releases are: the app, its launcher and manifest.
+    # What each saved (Deezer's sign-in, settings and queue; Soulseek's settings, transfers and
+    # share index; File Browser's settings) survives an install over it, an update and a remove.
+    saved = {3: ['.deezer/arl', '.deezer/quality', '.deezer/organize', '.deezer/queue.json'],
+             4: ['.soulseek/config.json', '.soulseek/downloads.json', '.soulseek/shares.cache'],
+             5: ['.filebrowser/config.json']}
+    shutil.rmtree(card); card.mkdir(parents=True)
+    for i, kept in saved.items():
+        d = '.' + ids[i]
+        for f in kept: (card/f).parent.mkdir(exist_ok=True); (card/f).write_bytes(b'mine')
+        z = zip_of(tmp/f'{ids[i]}.zip', [(f'{d}/q2-{ids[i]}', b'ELF'), (f'{d}/run', b'#!/bin/sh'),
+                                         (f'{d}/q2app', b'name=x\n'), (f'{d}/README.txt', b'r'),
+                                         *[(f, b'release') for f in kept]])  # a careless release's
+        assert install(i, z) == 0 and install(i, z) == 0, i
+        assert sorted(files(i)) == sorted(f'{d}/{n}' for n in (f'q2-{ids[i]}', 'run', 'q2app', 'README.txt'))
+        assert all((card/f).read_bytes() == b'mine' for f in kept), i
+        lib.shelf_remove(i)
+        assert sorted(str(f.relative_to(card)) for f in (card/d).rglob('*')) == sorted(kept), i
+    print("Q2 Shelf: release JSON, unzip listing checks, install, update, failed move, remove and card apps passed.")
 
 
 def online_check(tmp):
@@ -2384,7 +2609,7 @@ if __name__ == '__main__':
         radio_check(tmp)
         spotify_check(tmp)
         tidal_check(tmp)
-        netupdate_check(tmp)
+        shelf_check(tmp, netupdate_check(tmp))
         online_check(tmp)
         if args.captures:
             args.captures.mkdir(parents=True, exist_ok=True)
