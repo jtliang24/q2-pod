@@ -74,4 +74,9 @@ static void lp_input(void *e) {
     } else if (type == EVT_POINTER_UP)
         stop_timer(&st.lp_timer);
 }
+
+/* playback.c's Volume guard is the Q2 touch wheel's (#if !M1PLUS there): the M1 Plus turns a knob,
+ * and Power has no Volume Guard row. pod_values and ringnav_sleep still name these. */
+int wheel_guard __attribute__((section(".scratch")));
+void wheel_guard_reset(void) {}
 #endif
