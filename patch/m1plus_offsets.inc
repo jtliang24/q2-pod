@@ -141,6 +141,7 @@
 #define EVT_CLICK 0x10c
 #define EVT_FOCUS 0x10d
 #define EVT_BLUR 0x10e
+#define EVT_IM_ACTION 0x13c /* the keyboard's OK, input_method_dispatch_action @0x656a0c (V1.32's 0x13a) */
 #define EVT_SCROLL 0x14e /* stock scroll_view on_scroll @0x5efa40; table setter emits this too */
 #define EVT_SCROLL_END 0x14f /* stock lists queue their visible covers on this (album page registers @0x4a43d0) */
 #define VIEW_ON_SCROLL 0x100 /* scroll_view callback installed by list_view, called by touch @0x5efa5c */
@@ -390,7 +391,7 @@ static inline int arc_out(int r, int y) {
  * track change, a pause and every RESUME_SAVE_S of play; restored if the track has played less
  * than RESUME_START_S when first seen playing. */
 #define RESUME_MIN_S 1200
-#define RESUME_SLOTS 32
+#define RESUME_SLOTS 512
 #define RESUME_EDGE_S 30
 #define RESUME_SAVE_S 60
 #define RESUME_START_S 5
@@ -519,7 +520,10 @@ static inline int arc_out(int r, int y) {
 #define ID3_ALBUM 0x404
 #define ID3_ARTIST 0x504
 #define ID3_TITLE 0x684
-#define MUSIC_INFO_ALBUM_ARTIST M1_UNPORTED /* ringnav_music_info's only: toolsGetMusicInfo isn't hooked on M1 */
+/* toolsGetMusicInfo's info (ID3_ALBUM's base): abmartist, its id3 field 6, copied to +0x580 @0x5ecbc4 as
+ * V1.32 does. ringnav_music_info isn't hooked on M1 (toolsGetMusicInfo, roadmap U4); now_tag reads it. */
+#define MUSIC_INFO_ALBUM_ARTIST 0x580
+#define ID3_ALBUM_ARTIST (ID3_ALBUM + MUSIC_INFO_ALBUM_ARTIST) /* empty for CUE tracks, copied from the record */
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */

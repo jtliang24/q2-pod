@@ -311,6 +311,18 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert all(stock_syms['parse_albumcovertask_thd'] <= c < stock_syms['parseplaycover_thd'] for c in calls[:3])
     assert words(0x4df1c4, 3) == (0x8f99f8b4, 0x8f84b878, 0x0320f809) and got(0x4df1c8) == stock_syms['parse_cover_mutex']
     assert got(0x4df1c4) == stock_syms['pthread_mutex_lock@GLIBC_2.0'] and stock_syms['parseplaycover_thd'] < 0x4df1c4 < 0x4df1e8
+    # now_tag's ID3_ALBUM_ARTIST (coverflow.c): toolsGetMusicInfo fixes id3 field 6 (li $v1, 6) and
+    # copies it to info+0x580 (addiu $a0, $s2, 0x580), MUSIC_INFO_ALBUM_ARTIST, as V1.32 does.
+    assert stock_syms['toolsGetMusicInfo'] < 0x5ecba0 and words(0x5ecba0, 1) == (0x24030006,) and words(0x5ecbc4, 1) == (0x26440580,)
+    # radio.c's and spotify.c's Search take the keyboard's OK as EVT_IM_ACTION: V2.1's
+    # input_method_dispatch_action dispatches 0x13c (li $a1), V1.32's 0x13a.
+    assert words(stock_syms['input_method_dispatch_action'] + 0x14, 1) == (0x2405013c,)
+    # V2.1's names for two V1.32 routines (M1PLUS_FUNCTION_ALIASES), each called where V1.32 calls its
+    # twin: folder_back's bal clear_foldervariate (folder_reset_variable) and delete_playqueue_file's
+    # bal start_playqueue (player_start_queue).
+    def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
+    assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
+    assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores

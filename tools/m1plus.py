@@ -255,6 +255,7 @@ M1PLUS_GLOBAL_ALIASES = {
     'g_navbar_status': 'navigation_status',
     'g_btvolume': 'btsource_volume',
     'g_rotate_mode': 'rotate_mode',
+    'g_time_zone': 'time_zone',
 }
 # V2.1 globals V1.32 lacks, read as GLOBALS are. Bluetooth keeps its own level, [PLAYSET] BTVOLUME:
 # the volume dialog (on_volume_tsup_fun), status bar and set_devicevolume use it while headset_output
@@ -318,6 +319,11 @@ M1PLUS_FUNCTION_ALIASES = {
     # The batch record (pvec_selectrecord): n rows unselected, then one row's selection toggled
     'batch_init_selectrecord': 'select_recordinit',
     'batch_set_selectitem': 'set_selectindex',
+    # delete_playqueue_file calls it where V1.32's calls player_start_queue (0x4e4a80): the queue row's play
+    'player_start_queue': 'start_playqueue',
+    # folder_back calls it where V1.32's calls folder_reset_variable (0x4dbf0c): a fresh Folder visit.
+    # V2.1's clears one enter-history deque where V1.32's clears two, and its flags are words.
+    'folder_reset_variable': 'clear_foldervariate',
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
