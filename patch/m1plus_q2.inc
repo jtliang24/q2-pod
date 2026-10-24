@@ -36,8 +36,6 @@
 #define ICON_FOLDERJUMP "playset_folderjump"
 #define ICON_MEMPLAY "playset_memplay" /* Resume Songs' row */
 #define ICON_BALANCE "playset_balance" /* Mono Audio's row */
-/* The class load_localclass_list loads an artist's albums with (ringnav_localclass's library_music) */
-#define CLASS_LOAD_ARTIST_ALBUMS 0xff11
 #define ICON_GAPLESS "playset_gapless"
 /* The payload's own widgets' styles: V1.32's, or V2.1's nearest of the same widget type, colour,
  * size and alignment (V2.1 has no centred 18 px label, no right-aligned 20 px scrolling label: their

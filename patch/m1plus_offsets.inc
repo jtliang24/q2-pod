@@ -552,10 +552,10 @@ static inline int arc_out(int r, int y) {
 #define TAGLIB_PROPERTY_FREE M1_UNPORTED
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
-#define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
-/* V2.1 loads an artist's albums with this class too: loadAlbumList stores 0xff01 in classinfo_save, then
- * branches to loadLocalClassList (0x4ee930, 0x4ee9a8), where V1.32 loads 0xff11. */
-#define CLASS_LOAD_ARTIST_ALBUMS CLASS_ARTIST_ALBUMS
+/* An artist's albums. V2.1 loads them with this class too: loadAlbumList stores 0xff01 in classinfo_save,
+ * then branches to loadLocalClassList (0x4ee930, 0x4ee9a8), where V1.32 loads 0xff11 (ringnav_localclass's
+ * artist_tab). */
+#define CLASS_ARTIST_ALBUMS 0xff01
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
