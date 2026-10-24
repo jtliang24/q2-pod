@@ -347,6 +347,12 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'btmenu_rows': 0x4a3734,  # the Bluetooth page's list: switch, name, quality, volume, search, devices
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
 }
+# V1.32 routines V2.1 has no twin of yet, called only from a Q2 hook the M1 leaves unported: declared
+# with no address, so the page compiles and --gc-sections drops it. The link fails if live code
+# reaches one. Each goes with its hook's U4 row.
+M1PLUS_UNRESOLVED = {
+    'fwupdate_tf': 'Network Update (netupdate.c): stock\'s TF card update, systemset_fwupdate_page_init unported',
+}
 M1PLUS_FUNCTION_ALIASES = {
     'device_set_volume': 'set_devicevolume',
     'config_outputchannel': 'set_outputchannel',
@@ -562,7 +568,7 @@ def compile_common(out, binary, player=False):
                 f'peq_lib_{name}:', f'lui $gp, {gp >> 16}', f'ori $gp, $gp, {gp & 65535}',
                 f'lui $t8, {address >> 16}', f'ori $t8, $t8, {address & 65535}',
                 'lw $t9, 0($t8)', 'jr $t9', 'nop']
-        if name in ('memcpy', 'memset'):
+        if name in ('memcpy', 'memset', '__udivdi3'):
             asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
     if player:  # peq_player.c's stock addresses, V1.32's by default
         header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}u' for macro, key in (
@@ -582,6 +588,8 @@ def compile_common(out, binary, player=False):
                            f'#define {name} stock_{resumed[name]}_trampoline']
             elif name in syms and syms[name]:
                 header.append(f'#define {name} (({ret} (*)({args}))0x{syms[name]:x}u)')
+            elif name in M1PLUS_UNRESOLVED:
+                header.append(f'extern {ret} {name}({args});')
         # build.py has already checked each is a one-byte global (or, on V2.1, a byte or word).
         stubbed = dict(stubs)
         for name in GLOBALS + M1PLUS_GLOBALS:
@@ -594,7 +602,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=0', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'spotify.c', 'radio.c', 'tidal.c', 'crossfade.c', 'headset.c', 'lockscreen.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -786,7 +794,10 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     header.append(f'#define SETTINGS_ICON_NAMES "{names}"')
     header.append(f'#define ROCKBOX_FLAG "{ROCKBOX_FLAG}"')  # Home's Rockbox row, for S90play
     # About: the stock firmware's version on its own row, and this build's on the CFW. Version row.
-    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{m1_release[0] if m1_release else VERSION}{f" dev {dev_count}" if dev else ""}"']
+    release = m1_release[0] if m1_release else VERSION
+    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{release}{f" dev {dev_count}" if dev else ""}"',
+               f'#define Q2POD_TAG "{"" if dev else release}"',  # netupdate.c (unported on M1): the release tag, none when --dev
+               f'#define Q2POD_UA "Q2Pod/{release} (https://github.com/jtliang24/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
     (out/'stock.h').write_text('\n'.join(header)+'\n')
     ps = compile_payload(out)
     payload = (out/'patch.bin').read_bytes()
