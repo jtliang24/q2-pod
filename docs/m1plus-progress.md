@@ -1550,6 +1550,48 @@ Results:
 New to the runbook: `suitemerge.py`; `M1PLUS_UNRESOLVED`; the payload source list and rootfs swaps
 `m1plus.py` copies; `TMPDIR` set inside `nix develop`; `chapters.py` under bubblewrap.
 
+**On the device (dev 1 of 1.3.8, `V010s`, Oct 24).** q2remote put the gated build's `update.bin`
+(`68a606ae…`) on the card, and the user flashed it. The running `demo`'s payload hashes as built (peek
+reads it). The user checked by ear and by hand:
+- Mono Audio still works.
+- Swap L/R, the new eighth row of Playback Setting, swaps the channels.
+- Bluetooth keeps its own level on reconnect and holds the stream between songs.
+- In receiver mode, the knob keeps the volume.
+
+Over q2remote, with Screen Off set to Off for the pass and back to 30s after:
+- **Coverflow** (the payload's `.bss` fix): it opens, swipes and turns with the knob, and opens an
+  album's track list. `demo` kept its pid throughout.
+- **EQ:** the Simple tab's switch reads *Enabled: Off*. Advanced has the *Reset to defaults* row, and
+  Preamp reads *−3.2 dB (Auto)*. Reset wasn't pressed, as it would clear the user's curve.
+- **View Queue on a shuffle** (a 1989 folder shuffle, 22 tracks): it lists the shuffle's order, not
+  the folder's (07, 04, 15, 01, 12). A Play/Pause hold on the knob-selected third row says *Playing
+  Next* and lists it first, and Next then plays it (15/22).
+- **Go to Folder:** it opens the playing song's folder. Back walks up the folder tree to the Now
+  Playing below it.
+- **An artist's page:** Carly Rae Jepsen's albums, newest first (*Artist Album Order: Year*), and one
+  album's tracks.
+- **Not checked:** Chapters (the card has no M4B).
+- **Not on the M1:** Percent Inside (the iPod theme's Battery row), and the lyrics and full-screen-art
+  changes (`LYRIC_FOLLOW` unported).
+
+The pass found three M1 gaps, all older than 1.3.8:
+- **The hold menu didn't scroll past its fifth row.** V2.1's `sortselect_dialog` view, which the menu
+  reuses (`f97348e`), isn't `yslidable`, since V2.1's own sort rows fit. So neither a drag nor the knob
+  (a list is the knob's only when it slides: navigation.c's `kind`) reached the rows past the fifth:
+  Go to Album, Go to Artist, Go to Folder, Shuffle, Repeat and Group by. Read from `demo`'s memory: the
+  view held 12 rows and a 600 px content height, with byte 0x91 clear. With the byte set by hand, the
+  menu scrolled, and Go to Folder was checked that way. Fixed: `qm_open` sets `yslidable` on M1
+  (pinned in `test/m1plus/patch.py`). Gated on a fresh build (`work/u3/1.3.8-fix`): `build.py
+  --build`, `patch.py` (1079 scenarios), `boot.py` in all three modes, `playback.py` and `ports.py`
+  pass, and Q2's `update.tar` files are still byte-identical to 1.3.8's. It reaches the device with
+  the next flash.
+- **Quick Settings' knob stays volume.** `knob_nav_active` leaves the pull-down to stock, so 1.3.8's
+  Play/Pause hold there (wheel to brightness or volume, `QSVOLUME`) has nothing to switch. The touch
+  slider sets brightness. Roadmap U4.
+- **A Now Playing under a folder play doesn't refresh.** Go to Folder from Now Playing, then a play
+  from the folder, opens a second Now Playing. Back past the folders reaches the first, which still
+  shows the old track and position (*402/417*) beside the new track's time. Roadmap U4.
+
 ## How to check a build now
 
 ```sh

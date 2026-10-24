@@ -280,6 +280,14 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       V1.32's (1, 2 sliding, 3 open) before it is aliased.
     - Q2 only: Return closing a search's keyboard (`search_key`), and `ringnav_input`'s USB prompt keys and
       Now Playing's transition volume ticks (the wheel's). The M1's input include hands a key to stock first.
+  - **Found on the device** (1.3.8 dev 1, Oct 24; progress section 42):
+    - **Quick Settings' knob stays volume.** `knob_nav_active` leaves the pull-down to stock, so 1.3.8's
+      Play/Pause hold there (the wheel's brightness or volume, `QSVOLUME`) changes nothing on the M1.
+      Either take the knob in Quick Settings when Knob: Navigation is on, or mark the hold Q2 only.
+    - **A Now Playing under a folder play doesn't refresh.** Go to Folder from Now Playing, then a play
+      from the folder, opens a second Now Playing. Back past the folders reaches the first, which still
+      shows the old track and position beside the new track's time. Check whether V2.1's own playing_page
+      refreshes when another one is on top, or close the lower one on a new play.
   - **Found on the device** (dev 29, Oct 23):
     - **The rating picker has no way out but a rating.** A tap outside leaves it up, the knob's press
       (Volume mode) locks the screen, and Now Playing's back button is V2.1's, which closes the page with
