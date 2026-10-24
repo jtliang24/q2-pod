@@ -311,7 +311,7 @@ The payload is mapped through the player's final `PT_NULL` header, as the demo's
 
 ## 7. Status
 
-The port runs Q2 Pod at `UPSTREAM_BASE` on the M1 Plus: the M1 gates and their counts are in [m1plus-integration.md](m1plus-integration.md#current-status-measured-2026-10-23-at-upstream-122-after-u2), what remains to port is the roadmap's U4 ([m1plus-roadmap.md](m1plus-roadmap.md)), and what was done, when and why is the log, [m1plus-progress.md](m1plus-progress.md).
+The port runs Q2 Pod at `UPSTREAM_BASE` on the M1 Plus: the M1 gates and their counts are in [m1plus-integration.md](m1plus-integration.md#current-status-measured-2026-10-23-at-upstream-129-u3-step-1), what remains to port is the roadmap's U4 ([m1plus-roadmap.md](m1plus-roadmap.md)), and what was done, when and why is the log, [m1plus-progress.md](m1plus-progress.md).
 
 ## 8. Notes on the shared code
 

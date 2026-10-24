@@ -1408,6 +1408,43 @@ On Internet Radio's Now Playing, Play stopped a station and Play again restarted
 its ffmpeg back) where dev 21's key-up, which didn't check `media_focused()`, hands a stopped station's Play to
 stock (read from the code, not tried on dev 21). `/dev/shanling_dac` exists on V2.1, as `q2video` expects.
 
+## 40. U3 step 1: sync to upstream 1.2.9 (Oct 23)
+
+Roadmap U3's first step: 1.2.9, 113 commits past 1.2.2, merged by the runbook. U3 merges 1.4.2 in steps
+(1.2.9, 1.3.0, 1.3.8, 1.3.9, 1.4.2), each gated, then ports the features finished by then in one batch,
+then one device pass (the user's plan, Oct 23).
+
+| Commit | Change | Why |
+|---|---|---|
+| `634c702` | Merge upstream 1.2.9 | 26 hunks in 11 files, 14 in `navigation.c`. The pod rows' enum moved up and counts `POD_COUNT`, with the M1's Knob rows behind `M1PLUS` before it. Volume Guard (Power) and Hold Return (Display) are Q2 only, behind `#if !M1PLUS`: the M1 has a knob, and no Return key. Folder Root's row takes `ICON_FOLDERJUMP`. The rest are a seam beside upstream's change (`edit_create`'s width as `UI_W - 24`, `WM_KEY_SLEEP`, `PAYLOAD_WINDOWS`' `library_page`). Docs take upstream's text with the M1's additions. |
+| `837116b` | 1.2.9's names and routines at their V2.1 values | `EVT_IM_ACTION` is `0x13c` on V2.1 (`0x13a` on V1.32). V2.1's `toolsGetMusicInfo` keeps the album artist at `+0x580`, as V1.32's does, so `MUSIC_INFO_ALBUM_ARTIST` has a value now. `player_start_queue` and `folder_reset_variable` are V2.1's `start_playqueue` and `clear_foldervariate`, found where V1.32 calls its twin. Each is pinned. |
+| `c0c6e29` | 1.2.9's Q2-only and unported features off on M1 | `wheel_guard` stands in on M1; `stream_config` is named from `m1plus_nav_library.c`; `EXTRA_TIMEZONE_NAMES` in the M1 header; port rows for 3 hooks and 3 sites; `CALL_SITES['q2']` mirrors the new sites. |
+| `458a440` | `tidal_start`'s register as a name, `TIDAL_ID_REG` | Upstream's new host test strips `tidal.c`'s `#endif`s, which left the M1's `#if`/`#else` open, so the Q2 `peq` suite failed. |
+| `676406c` | 1.2.9's test cases in the M1 suites | Three-way merges (`git merge-file`). 9 new `NOT PORTED` lines; V2.1's play status word (`0xa0abe4`) and paint slot (`0x88`); an artist's covers now end in an All albums card; Folder Root is a fifth Playback row on M1 too. |
+| `45dd91c` | The port report sees a site the Q2 copy lacks | It read `CALL_SITES['q2']` alone, and missed 1.2.9's three. |
+| `5bafba7` | `test/m1plus/fndiff.py` | The payload functions two M1 builds differ in, for the device checklist. Dev 21 to dev 22: `to_tracks`, the key-up and About. |
+
+Results:
+- `TMPDIR=/tmp test/q2compare.py 1.2.9 --suites`: Legacy `3b4170a6…` and iPod `36589b78…` are
+  byte-identical to 1.2.9's build, and its 21 suite runs pass (`patch` 1071 and 1453 scenarios).
+  Under `nix develop`'s long `TMPDIR`, `test/peq.py` fails its Tidal check on `-Wformat-truncation`;
+  upstream's own 1.2.9 tree does too.
+- The M1, on a fresh `--dev` build (`work/u3/1.2.9`): `build --build`, `patch` (1032 scenarios, no
+  `KNOWN GAP`, 16 `NOT PORTED`), `boot` and its `--home-menu` and `--media` walks, `playback`, `id3`,
+  `m4b`, `headset_io`, `ldac` and `bluealsa` pass.
+- `test/m1plus/ports.py`: 524 rows, 11 `NOT PORTED` (roadmap U4).
+- `test/m1plus/q2only.py`: 67 lines, each Q2 only or handled: the Q2 row constructor, Streaming's rows,
+  the touch wheel's guard, and `offsets.inc`'s Q2 values.
+- `fndiff.py` from dev 22: 157 payload functions changed, 25 added, 1 removed (Coverflow's sorted
+  album lookup and All albums card, Up Next's play order, the rating picker, Folder Root, Tidal's
+  cache, Spotify's stop, crossfade and video).
+- Footprint over 1.2.9's files: +1,417/−283 over 30, from +1,417/−279.
+
+What the runbook needed ([m1plus-sync.md](m1plus-sync.md)): new `FUNCTIONS` and `GLOBALS` names found
+in V2.1 by their callers and aliased; `tools/peq.py`'s changes and changed tunables in `offsets.inc`
+reviewed as `build()`'s are; seams in files upstream's host tests cut as names, not `#if`s; the test
+copies merged three ways; `TMPDIR=/tmp` for the Q2 suites; and `fndiff.py` for the checklist.
+
 ## How to check a build now
 
 ```sh
