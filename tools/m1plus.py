@@ -77,8 +77,14 @@ CALL_SITES = {
         # player_parsecover_thd's jalr toolsGetExternCover (Now Playing's folder art, after its embedded
         # art failed) becomes jal coverflow_player_cover, which gives ffmpeg what stock's decoder refuses.
         'PLAYER_COVER': ((0x51301c, 0x0320f809, 'coverflow_player_cover'),),
-        # openBluetooth's first GPIO write: install callbacks before powering the radio.
-        'BT_POWER': ((0x4efcbc, 0x0320f809, 'headset_bt_power'),),
+        # platform_init's control thread start: install callbacks before it discovers boot connections,
+        # and config_bt_init's reset moves before it too (1.3.8, in place of 1.2.9's BT_POWER).
+        'BT_INIT': ((0x512598, 0x0320f809, 'headset_bt_init'),),
+        'BT_PARAMS': ((0x4f3ab4, 0x0411f5ef, 0),),
+        # openBluetooth's jalr btctl_device_status_callback registers headset_bt_status instead, and
+        # autoLinkBluetooth's bal checkPairDev also skips while the link list holds a connected link.
+        'BT_STATUS': ((0x4effe0, 0x0320f809, 'headset_status_register'),),
+        'BT_AUTOLINK': ((0x4f17fc, 0x0411fd04, 'headset_bt_autolink'),),
         # toolsLoadAllFile's existing-song check, folder scans only.
         'SCAN_REFRESH': ((0x5c981c, 0x0411fd88, 'ringnav_scan_refresh'),),
         # Folder row names are text, not printf formats ("99% Invisible" crashes stock's formatter):
@@ -87,6 +93,8 @@ CALL_SITES = {
                         (0x522398, 0x8e260008, 0x8e250008)),
         # player_get_id3info's jalr strcpy of the parsed path: a CUE track without sheet tags takes its file's.
         'ID3_PATH': ((0x5148e8, 0x0320f809, 'ringnav_id3_path'),),
+        # The Now Playing timer's jalr scroll_view_scroll_to, its lyric follow: whole rows at the top.
+        'LYRIC_FOLLOW': ((0x52bed0, 0x0320f809, 'ringnav_lyric_follow'),),
         # parse_albumcovertask_thd's jalr toolsGetAlbumCover calls: Ogg pictures through ffmpeg.
         'GRID_COVER': ((0x4edf1c, 0x0320f809, 'coverflow_album_cover'), (0x4ef018, 0x0320f809, 'coverflow_grid_cover'),
                        (0x4ef0d4, 0x0320f809, 'coverflow_grid_cover')),
@@ -189,10 +197,14 @@ CALL_SITE_PURPOSES = {
     'SCAN_LIMIT': 'scan up to 65,000 songs',
     'DROP_CACHES': 'keep the page cache',
     'PLAYER_COVER': 'Now Playing art through ffmpeg',
-    'BT_POWER': 'Bluetooth callbacks before radio power',
+    'BT_INIT': 'Bluetooth callbacks before control thread',
+    'BT_PARAMS': 'Bluetooth state initialized before control thread',
+    'BT_STATUS': 'Bluetooth: incoming link during a connect',
+    'BT_AUTOLINK': 'Bluetooth: auto-link keeps an incoming link',
     'SCAN_REFRESH': 'folder scan refreshes existing tags',
     'FOLDER_NAME': 'folder names are literal text',
     'ID3_PATH': "a CUE track's file tags",
+    'LYRIC_FOLLOW': 'lyric rows whole at the top',
     'GRID_COVER': 'Ogg art in Albums and Folder view',
     'NP_INFO_CALL': "Now Playing's info lines",
     'LDAC_HQ': 'LDAC HQ sends 990 kbps',
@@ -248,6 +260,20 @@ M1PLUS_PORTS = {
                              'roadmap U3 batch)'),
     'player_start_queue': ('unported', "View Queue's and Up Next's rows in a shuffle's play order (1.2.9); V2.1's is "
                            'start_playqueue (0x4e47d0), aliased for the payload\'s calls (roadmap U3 batch)'),
+    'write_int_config': ('native', "Bluetooth's own saved level (1.3.8); V2.1 keeps it apart, [PLAYSET] BTVOLUME, "
+                         '(m1plus_nav_btvol.c)'),
+    'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
+                        "btsource_volume while the output is Bluetooth"),
+    'toolsQueryDbTableAndSort': ('unported', 'spoken audio kept out of the sorted library queries (1.3.8, #67); '
+                                 "V2.1's is 0x5ee9ac (roadmap U3 batch)"),
+    'localmusic_playlistsmore_page_init': ('unported', "a playlist's More page: editing, song search, a row hold "
+                                           "(1.3.8); V2.1 has no playlistsmore_page"),
+    'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
+                                     "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
+    'kugou_obtainlyric': ('unported', "LRCLIB lyrics before stock's Kugou search (1.3.8); V2.1's is 0x509ee4 "
+                          '(roadmap U3 batch)'),
+    'kugou_obtaincover': ('unported', "MusicBrainz and iTunes covers before stock's Kugou search (1.3.8); V2.1's is "
+                          '0x50aa78 (roadmap U3 batch)'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -259,8 +285,12 @@ M1PLUS_PORTS = {
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
     'PLAYER_COVER': ('unported', "Now Playing's art through ffmpeg when stock's decoder refuses it (1.2.9)"),
-    'BT_POWER': ('unported', "Bluetooth's callbacks before the radio powers on (1.2.9); V2.1's openBluetooth "
-                 'not checked yet'),
+    'BT_INIT': ('unported', "Bluetooth's callbacks before the control thread discovers boot links (1.3.8, "
+                "1.2.9's BT_POWER); V2.1's platform_init and openBluetooth not checked yet"),
+    'BT_PARAMS': ('unported', "config_bt_init's reset before the control thread (1.3.8), with BT_INIT"),
+    'BT_STATUS': ('unported', 'a headset that connects during the reconnect to the last device is kept (1.3.8)'),
+    'BT_AUTOLINK': ('unported', "auto-link skips while a link is connected (1.3.8), with BT_STATUS"),
+    'LYRIC_FOLLOW': ('unported', "the lyrics' top row never shows cut (1.3.8); V2.1's Now Playing timer to check"),
     'SCAN_REFRESH': ('unported', 'a folder scan refreshes existing songs\' tags (1.2.9)'),
     'FOLDER_NAME': ('unported', "a folder named with % no longer crashes Folder's rows (1.3.0); V2.1's "
                     'folder_create_tablerow (0x5331fc) to check'),
