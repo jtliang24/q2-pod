@@ -95,6 +95,8 @@ CALL_SITES = {
         'ID3_PATH': ((0x5148e8, 0x0320f809, 'ringnav_id3_path'),),
         # The Now Playing timer's jalr scroll_view_scroll_to, its lyric follow: whole rows at the top.
         'LYRIC_FOLLOW': ((0x52bed0, 0x0320f809, 'ringnav_lyric_follow'),),
+        # The page refresh's bal to the lyric row builder: the lyrics keep their place on a refresh.
+        'LYRIC_ROWS': ((0x52b8f8, 0x0411f984, 'ringnav_lyric_rows'),),
         # parse_albumcovertask_thd's jalr toolsGetAlbumCover calls: Ogg pictures through ffmpeg.
         'GRID_COVER': ((0x4edf1c, 0x0320f809, 'coverflow_album_cover'), (0x4ef018, 0x0320f809, 'coverflow_grid_cover'),
                        (0x4ef0d4, 0x0320f809, 'coverflow_grid_cover')),
@@ -205,6 +207,7 @@ CALL_SITE_PURPOSES = {
     'FOLDER_NAME': 'folder names are literal text',
     'ID3_PATH': "a CUE track's file tags",
     'LYRIC_FOLLOW': 'lyric rows whole at the top',
+    'LYRIC_ROWS': 'lyrics keep their place on a refresh',
     'GRID_COVER': 'Ogg art in Albums and Folder view',
     'NP_INFO_CALL': "Now Playing's info lines",
     'LDAC_HQ': 'LDAC HQ sends 990 kbps',
@@ -291,6 +294,8 @@ M1PLUS_PORTS = {
     'BT_STATUS': ('unported', 'a headset that connects during the reconnect to the last device is kept (1.3.8)'),
     'BT_AUTOLINK': ('unported', "auto-link skips while a link is connected (1.3.8), with BT_STATUS"),
     'LYRIC_FOLLOW': ('unported', "the lyrics' top row never shows cut (1.3.8); V2.1's Now Playing timer to check"),
+    'LYRIC_ROWS': ('unported', "Play/Pause no longer flicks the lyrics to the top (1.3.9); V2.1's page refresh to "
+                   'check, with LYRIC_FOLLOW'),
     'SCAN_REFRESH': ('unported', 'a folder scan refreshes existing songs\' tags (1.2.9)'),
     'FOLDER_NAME': ('unported', "a folder named with % no longer crashes Folder's rows (1.3.0); V2.1's "
                     'folder_create_tablerow (0x5331fc) to check'),
