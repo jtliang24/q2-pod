@@ -3851,9 +3851,11 @@ if is_m1plus:
     # v21_sortselect), which leaves to_modal set: V2.1's navigator would then run it in its own loop
     # and navigator_to would return only once it had gone, so the hook clears it for the menu's open
     # alone. The menu's rows replace V2.1's five, in V2.1's row style and sizes and its 260 px popup;
-    # the title is V2.1's hscroll_label. A sort dialog V2.1 opens itself stays modal.
+    # the title is V2.1's hscroll_label. V2.1's view doesn't slide, as its five rows fit: the menu's
+    # sets yslidable, for a drag and the knob past its fifth row. A sort dialog V2.1 opens itself stays modal.
     m=QueueMachine(); m.press(5); assert m.hold()==11
     assert m.opened==[('dialog/sortselect_dialog',None)] and m.top==m.stack[-1] and m.nodes[m.top]['to_modal']==0
+    assert m.nodes[m.view].get('yslidable')==1
     assert m.v21_rows==['srlabel_leftwhite20_style']*5  # V2.1's own, before the menu's
     rows=m.nodes[m.view]['children']; label=lambda i:m.nodes[i]['children'][0]
     assert len(rows)==len(SONG_MENU) and m.nodes[m.title]['text']=='Row 0' and m.labels()==SONG_MENU

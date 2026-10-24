@@ -6644,6 +6644,9 @@ static int qm_open(const void *unused) {
         window_close(dialog);
         return 0;
     }
+    /* V2.1's view doesn't slide (its own sort rows fit): the menu's rows past the fifth need a
+     * drag, and the knob moves only a sliding list (kind) */
+    widget_set_prop_int(view, "yslidable", 1);
 #else
     widget_off_by_func(dialog, EVT_KEY_UP, (void *)SORTSELECT_KEYUP, dialog);
 #endif
