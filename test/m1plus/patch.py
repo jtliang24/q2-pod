@@ -8958,7 +8958,7 @@ else:  # M1 Plus: V2.1's About rows are in its asset; its init's widget_foreach 
         return (n['type'],[m.get(w+O[k]) for k in ('W_X','W_Y','W_W','W_H')],n.get('style'),[tree(c) for c in n['children']])
     item=kids[2]; label,=m.nodes[item]['children']
     assert tree(item)==tree(rows[1]) and m.nodes[item]['style']==NAMES['ROW_STYLE']  # stock's row and label alike
-    assert m.nodes[label]['text']==f"CFW. Version:{manifest.get('release', VERSION)}{f" dev {manifest['dev']}" if manifest['dev'] else ''}"
+    assert m.nodes[label]['text']==f"CFW. Version:{manifest.get('release', VERSION)}{f" dev {manifest['dev_count']}" if manifest['dev'] else ''}"
     assert not m.nodes[item].get('handlers') and not m.nodes[item].get('name'); passed()
 
 # Resume: once a second the UI loop polls the playing track; one of RESUME_MIN_S or longer keeps its

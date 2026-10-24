@@ -699,11 +699,19 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     variant = 'stock'
     version = VERSIONS[variant]
     out.mkdir(parents=True, exist_ok=True)
+    dev_count = 0
     if dev:  # the next number in the untracked .build-number
         counter = ROOT/'.build-number'
         dev = int(counter.read_text()) + 1 if counter.exists() else 1
         counter.write_text(f'{dev}\n')
         version = dev_tag(dev, version[-1])
+        # About's "dev N" counts from 1 for each upstream VERSION; the tag keeps the global number, so
+        # the updater, which refuses the installed tag, still takes each dev build over any other.
+        per = ROOT/'work/dev-count'
+        last = per.read_text().split() if per.exists() else []
+        dev_count = int(last[1]) + 1 if last[:1] == [VERSION] else 1
+        per.parent.mkdir(exist_ok=True)
+        per.write_text(f'{VERSION} {dev_count}\n')
     source = source_sha256()
     raw = target_path.read_bytes()
     input_sha = sha(raw)
@@ -756,7 +764,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     header.append(f'#define SETTINGS_ICON_NAMES "{names}"')
     header.append(f'#define ROCKBOX_FLAG "{ROCKBOX_FLAG}"')  # Home's Rockbox row, for S90play
     # About: the stock firmware's version on its own row, and this build's on the CFW. Version row.
-    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{m1_release[0] if m1_release else VERSION}{f" dev {dev}" if dev else ""}"']
+    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{m1_release[0] if m1_release else VERSION}{f" dev {dev_count}" if dev else ""}"']
     (out/'stock.h').write_text('\n'.join(header)+'\n')
     ps = compile_payload(out)
     payload = (out/'patch.bin').read_bytes()
@@ -939,7 +947,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
         update_sha256=sha(out_archive.read_bytes()), rootfs_sha256=sha(newsq.read_bytes()),
         kernel_sha256=sha(blobs['recovery-update/xImage']), patch_bytes=len(payload), ring_step_pixels=RING_STEP,
         audio_extension_calls=[dict(address=hex(a), original=f'{o:#010x}', replacement=hex(n)) for name, a, o, n in call_site_words(True, ps) if name == 'AUDIO_EXTENSION_CALLS' and n != o],
-        version=version, **({'release': m1_release[0]} if m1_release else {}), variant=variant, dev=dev, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=[], changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
+        version=version, **({'release': m1_release[0]} if m1_release else {}), variant=variant, dev=dev, **({'dev_count': dev_count} if dev else {}), peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=[], changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
         patch_symbols={n:hex(v) for n,v in ps.items() if n.startswith('stock_')},
         tools={t:run(t,'--version').splitlines()[0] for t in ['clang','ld.lld','llvm-objcopy']} |
               {'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]})
