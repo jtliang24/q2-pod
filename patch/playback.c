@@ -669,6 +669,9 @@ int ringnav_mode(int mode) {
      * through ringnav_bootmode). */
     int initconfig = __builtin_return_address(0) == (void *)INITCONFIG_MODE_RET;
     if (initconfig) mqa_sync();
+#if M1PLUS /* V1.32's comes through ringnav_bootmode */
+    if (__builtin_return_address(0) == (void *)BOOT_MODE_RET) peq_boot();
+#endif
     if (s.restoring || initconfig
 #if M1PLUS
         || __builtin_return_address(0) == (void *)BOOT_MODE_RET
