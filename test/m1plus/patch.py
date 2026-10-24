@@ -156,7 +156,7 @@ class Machine:
         self.top=0; self.wm=0x1000000; self.event=0x1000400
         self.strokes=[]; self.rounded=[]; self.bands=[]; self.icons=[]; self.letters=[]; self.font=None; self.vg_calls=[]; self.fake_vg=0; self.global_alpha=0
         self.rounded_fail=False; self.count=self.budget  # call()'s instruction limit, which nested() shares
-        self.allocs={}; self.config=dict(CONFIG); self.config_reads=[]; self.card=()  # /mnt/mmc's (name, d_type) entries
+        self.allocs={}; self.config=dict(CONFIG); self.config_reads=[]; self.card=(); self.dirs=set()  # /mnt/mmc's (name, d_type) entries; deeper folders
         self.rebind=None; self.on_click=None; self.glide=True
         self.timers={}; self.next_timer=1; self.timer_fail=False; self.clicks=[]; self.started=[]
         self.screens=[]
@@ -183,6 +183,7 @@ class Machine:
         self.mock('reset_poweroptions_timer','screen_action','enable_fb','usleep@GLIBC_2.0','sprintf@GLIBC_2.0',
                   'airplayGetFlag','playpause_quick_click','time@GLIBC_2.0','localtime@GLIBC_2.0',
                   'strlen@GLIBC_2.0','strncpy@GLIBC_2.0','strrchr@GLIBC_2.0','strcasecmp@GLIBC_2.0','strncasecmp@GLIBC_2.0',
+                  'strcasestr@GLIBC_2.2',
                   'unlink@GLIBC_2.0','atoi@GLIBC_2.0','memcmp@GLIBC_2.0','access@GLIBC_2.0',
                   'fflush@GLIBC_2.0','fsync@GLIBC_2.0','fileno@GLIBC_2.0',  # blob_io's sync before rename
                   'fopen@GLIBC_2.2')  # no /proc/mounts: the boot logo's poll sees no card
@@ -323,6 +324,8 @@ class Machine:
         elif name=='widget_remove_child': n['children'].remove(b); ret=0  # not destroyed
         elif name=='widget_add_child': n['children'].append(b); self.word(b+O['W_PARENT'],a); ret=0
         elif name=='widget_set_enable': n['enable']=b; ret=0
+        elif name=='widget_set_self_layout_params':
+            n['self_layout']=tuple(self.text(x) for x in (b,c,d,self.get(u.reg_read(UC_MIPS_REG_SP)+16))); ret=0
         elif name=='widget_on': n.setdefault('handlers',[]).append((b,c,d)); ret=len(n['handlers'])
         elif name=='widget_to_local':
             x,y=signed(self.get(b)),signed(self.get(b+4))
@@ -348,7 +351,7 @@ class Machine:
         elif name=='deque_at': ret=self.row_record
         elif name=='deque_size': ret=1
         elif name in ('tk_snprintf','snprintf@GLIBC_2.0'):
-            fmt=self.text(c); values=iter([d]+[self.get(u.reg_read(UC_MIPS_REG_SP)+off) for off in (16,20,24,28)])
+            fmt=self.text(c); values=iter([d]+[self.get(u.reg_read(UC_MIPS_REG_SP)+off) for off in range(16,80,4)])
             params=[]  # %.*s takes a length, then the string (its bytes)
             for star,kind in re.findall(r'%(\.\*)?\d*([sdxXu])',fmt):
                 if star: n=next(values); params.append(bytes(self.u.mem_read(next(values),n)).split(b'\0')[0].decode())
@@ -358,7 +361,7 @@ class Machine:
         elif name=='access@GLIBC_2.0': ret=0 if self.text(a) in self.present else -1
         elif name=='rockbox_stat':
             assert a==3
-            if self.text(b) in ['/mnt/mmc/'+n for n,t in self.card if t==4]: self.word(c+20,0o40755); ret=0  # a card folder
+            if self.text(b) in ['/mnt/mmc/'+n for n,t in self.card if t==4] or self.text(b) in self.dirs: self.word(c+20,0o40755); ret=0  # a card folder
             elif self.text(b)!='/mnt/mmc/.rockbox/rockbox': ret=-1  # Tidal Downloads' rows: no such files here
             else: self.word(c+20,self.rockbox_mode); ret=0 if self.rockbox_mode else -1
         elif name=='strlen@GLIBC_2.0': ret=len(self.raw(a))  # bytes: stock strips a path's UTF-8 name byte by byte
@@ -406,6 +409,7 @@ class Machine:
         elif name=='tk_str_start_with': ret=self.text(a).startswith(self.text(b))
         elif name=='strtol@GLIBC_2.0': t=re.match(r'\s*[-+]?\d+',self.text(a)); ret=int(t[0]) if t else 0
         elif name=='strstr@GLIBC_2.0': i=self.text(a).find(self.text(b)); ret=a+i if i>=0 else 0
+        elif name=='strcasestr@GLIBC_2.2': i=self.raw(a).lower().find(self.raw(b).lower()); ret=a+i if i>=0 else 0
         elif name=='bitmap_get_line_length': ret=self.get(a+8)
         elif name=='bitmap_lock_buffer_for_write': ret=self.get(a+0x14)  # a test bitmap keeps its pixels' address there
         elif name=='image_manager': ret=0x1000500
@@ -523,6 +527,9 @@ class Machine:
             assert self.get(a+O['VIEW_ANIMATOR'])==0
             self.word(a+O['SCROLL_X'],b); self.word(a+O['SCROLL_Y'],c)
             ret=0
+        elif name=='scroll_view_scroll_to':  # stock's clamps the end to the content (0x5f0178)
+            end=signed(self.get(a+O['VIEW_CONTENT_H']))-signed(self.get(a+O['W_H']))
+            self.word(a+O['SCROLL_X'],b); self.word(a+O['SCROLL_Y'],max(0,min(signed(c),end))); ret=0
         elif name=='table_client_scroll_to':
             if self.glide:
                 self.word(a+O['TABLE_TOP'],b)
@@ -824,9 +831,18 @@ for t,off in [('scroll_view',O['SCROLL_Y']),('table_client',O['TABLE_TOP'])]:
 for name in ['playing_page','volume_dialog','saverscreen_page','usbmode_page','unknown_page']:
     m=Machine(); m.page(name); assert m.call()==0 and not m.moved(); passed()
 GATES=[('g_backlight_status',0),('g_lockscreen_pageflag',1),('g_testmode_flag',1),
-       ('g_guideflag',1),('g_poweroff_state',2),('g_usblink_status',2),('bt__recv_pageflag',1)]
+       ('g_guideflag',1),('g_poweroff_state',2),('g_usblink_status',2)]
 for flag,value in GATES:
     m=Machine(); m.page(); m.byte(syms[flag],value); assert m.call()==0 and not m.moved(); passed()
+# The Bluetooth receiver's gear opens Audio settings: its wheel navigates, while the player
+# and its volume dialog still pass wheel input to stock volume handling.
+for flag in (1,2):
+    m=Machine(); m.page('audiosetting_page'); m.byte(syms['bt__recv_pageflag'],flag)
+    assert m.call()==11 and m.moved()
+    assert m.call(O['KEY_PREV'])==11 and m.moved(); passed()
+    for name in ('bluetoothrecv_page','volume_dialog'):
+        m=Machine(); m.page(name); m.byte(syms['bt__recv_pageflag'],flag)
+        assert m.call()==0 and not m.moved(); passed()
 for field in ['animating','pressed']:
     m=Machine(); m.page(); setattr(m,field,1); assert m.call()==11 and not m.moved(); passed()
 
@@ -1054,19 +1070,23 @@ else:
                     b.nodes[w['img_battery']]['image']=image
                     b.nodes[w['label_battery']]['text']=f'{value}%'
                     paint(); before=lcd(); bands,letters=slot()
-                    bw,bh,nh=O['BATT_INSIDE_W'],O['BATT_INSIDE_H'],O['BATT_INSIDE_NUB_H']; y=(30+1-bh)//2
+                    bw,bh,nh=O['BATT_INSIDE_W'],O['BATT_INSIDE_H'],O['BATT_NUB_H']; y=(30+1-bh)//2
                     assert b.get(w['view_battery']+O['W_W'])==bw+O['BATT_NUB_W']
                     assert [x[:5] for x in bands]==[(bw,y+(bh-nh)//2,O['BATT_NUB_W'],nh,color_t(rgb))]
                     assert [(r['kind'],r['rect'],r['color'],r['radius']) for r in b.rounded]==[('fill',(0,y,bw,bh),color_t(rgb),3)]
                     assert [(l['text'],l['rect'],l['color'],l['font'],l['align']) for l in letters]==[(str(value),(2,y+O['BATT_INSIDE_TEXT_DY'],bw-4,bh),color_t(0),('default',O['BATT_INSIDE_PX']),(1,1))]
-        # A crowded codec temporarily uses the small icon and recovers without a level change.
+        # Percent Inside fits beside the widest codec and Wi-Fi.
         b,bar,w,paint=battery_bar(3); b.nodes[w['label_battery']]['text']='100%'
+        b.nodes[w['img_bt']]['image']='bar_aptxhd'
+        paint(); assert b.get(w['view_battery']+O['W_W'])==O['BATT_INSIDE_W']+O['BATT_NUB_W']
+        # A crowded codec temporarily uses the small icon and recovers without a level change.
+        b,bar,w,paint=battery_bar(2); b.nodes[w['label_battery']]['text']='100%'
         b.nodes[w['img_bt']]['image']='bar_aptxhd'
         paint(); assert b.get(w['view_battery']+O['W_W'])==O['BATT_BODY_W']+O['BATT_NUB_W']
         b.advance(O['CODEC_MS'])
         for _ in range(O['CODEC_STEPS']): b.advance(O['CODEC_STEP_MS'])
         b.calls=[]; paint()
-        assert b.get(w['view_battery']+O['W_W'])==O['BATT_INSIDE_W']+O['BATT_NUB_W']
+        assert b.get(w['view_battery']+O['W_W'])>O['BATT_BODY_W']+O['BATT_NUB_W']+O['BATT_GAP']
         assert ('widget_invalidate_force',w['view_battery']) in [c[:2] for c in b.calls]
         for invalid in ('4','9','-1','33','bad',''):
             b,bar,w,paint=battery_bar(invalid); paint()
@@ -1183,7 +1203,8 @@ def check_title_bounds(m, button, drill=False):
                     after=children[children.index(text)+1:]
                     left=margin+sum(widths[c]+gap for c in before if m.nodes[c]['visible'])
                     # A drill row lays out as if a stock img_into (CHEVRON_W with the margin) came last.
-                    edge=O['CHEVRON_W']+gap if drill and variant=='ipod' else margin
+                    more=any(m.nodes[c]['name'].startswith('img_more') and m.nodes[c]['visible'] for c in children)
+                    edge=O['CHEVRON_W']+gap if drill and not more and variant=='ipod' else margin
                     right=m.get(button+O['W_W'])-edge-sum(widths[c]+gap for c in after if m.nodes[c]['visible'])
                     assert m.get(text+O['W_X'])==left
                     if variant=='ipod':
@@ -1333,6 +1354,12 @@ if not is_m1plus:
             buttons=[n for n,v in m.nodes.items() if v['type']=='button']
             assert len(buttons)==1
             check_title_bounds(m,buttons[0],drill=page=='playlist_page')
+            if variant=='ipod' and address==0x4b2864:
+                button=buttons[0]
+                more=next(c for c in m.nodes[button]['children'] if m.nodes[c]['name'].startswith('img_more'))
+                native_row_layout(m,button)
+                # Stock opens More for pointer x >= 286: the dots must keep that trailing position.
+                assert m.get(button+O['W_X'])+m.get(more+O['W_X'])>=286
     passed()
 # (Not on M1 Plus: the payload's part here is the iPod UI's, compact_row_layout and the ARTWORK
 # insets; in the Stock UI it runs V1.32's builders untouched, as a control. M1 Plus has no iPod UI.)
@@ -1703,6 +1730,53 @@ for name in ('search_dialog','tidal_search_dialog'):
 for name in ('searchbox_dialog','tidal_searchbox_dialog'):
     m=Machine(); m.top=m.node('window',name,[m.node('view')])
     assert m.call()==0 and not m.moved(); passed()
+# Return closes a search's keyboard first (navigation.c search_key, 1.3.8). Q2 only: the M1 has no
+# Return key, and V2.1's search dialog closes by its back button.
+if not is_m1plus:
+    # The keyboard is a separate top window. Use the input method's owner, not that window's
+    # focus chain. Run stock input_method_request, mocking only its backend close operation.
+    class SearchMachine(Machine):
+        def __init__(self,name='search_dialog',keyboard=True):
+            super().__init__()
+            self.dialog=self.node('dialog',name); self.edit=self.node('edit',name='search_edit')
+            self.nodes[self.dialog]['children']=[self.edit]; self.word(self.edit+O['W_PARENT'],self.dialog)
+            self.nodes[self.edit]['focused']=1
+            self.top=self.node('keyboard','keyboard') if keyboard else self.dialog
+            self.im=self.alloc(0x90); self.word(self.im+O['IM_WIDGET'],self.edit)
+            self.word(self.im+0x7c,0x1000800); self.handlers[0x1000800]='search:close'
+            self.handlers.pop(syms['input_method_request'],None)
+            self.mock('input_method',prefix='search:')
+            self.mock('widget_dispatch_simple_event')
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if name=='search:input_method':
+                self.calls.append((name,)); self.returns(self.im)
+            elif name=='search:close':
+                a,b=[u.reg_read(r) for r in REGS[:2]]
+                assert a==self.im and b==0
+                self.calls.append((name,a,b)); self.word(self.im+O['IM_WIDGET'],0); self.top=self.dialog
+                self.returns(0)
+            else: super().hook(u,address,size,unused)
+
+    for name in ('search_dialog','tidal_search_dialog','searchbox_dialog','tidal_searchbox_dialog'):
+        for keyboard in (False,True):
+            m=SearchMachine(name,keyboard)
+            assert m.call(O['KEY_RETURN'],gap=0)==11 and m.nodes[m.edit]['focused']==0
+            assert m.top==m.dialog and m.get(m.im+O['IM_WIDGET'])==0
+            assert len([c for c in m.calls if c[0]=='search:close'])==1
+            assert m.call(O['KEY_RETURN'],gap=0)==0 and not [c for c in m.calls if c[0]=='search:close']
+            passed()
+    # An idle input method, a different editor and unrelated keys leave the keyboard alone.
+    for case in ('idle','other','key','missing'):
+        m=SearchMachine()
+        if case=='idle': m.word(m.im+O['IM_WIDGET'],0)
+        elif case=='other': m.nodes[m.edit]['name']='password'
+        elif case=='missing': m.im=0
+        key=O['KEY_NEXT'] if case=='key' else O['KEY_RETURN']
+        assert m.call(key,gap=0)==0 and m.nodes[m.edit]['focused']==1
+        assert not [c for c in m.calls if c[0]=='search:close']; passed()
+else:
+    not_ported('Return closes the search keyboard first (search_key: the M1 has no Return key)')
 
 # iPod: a confirm dialog's buttons are its rows (contexts.inc BUTTONS). The wheel moves between the
 # side-by-side buttons without scrolling anything, the bar is the button's own tile, the ends are
@@ -1744,7 +1818,42 @@ for cable in (0,1):
     m=Machine(); d=m.node('dialog','confirminfo_dialog',[]); m.word(d+O['W_PARENT'],m.wm); m.top=d
     m.nodes[d]['children']=[m.entry(d,220) for _ in range(2)]
     m.byte(syms['g_usblink_status'],2); m.byte(syms['g_usbdet_value'],cable)
-    assert m.call()==(11 if variant=='ipod' and not cable else 0); passed()
+    assert m.call()==(11 if not cable else 0); passed()
+
+# Q2 only (1.3.8): on M1 Plus, ringnav_input gives a key to stock before these (m1plus_nav_input.inc);
+# the USB prompt and Now Playing's ticks are the wheel's.
+if not is_m1plus:
+    # The real input entry handles USB confirmation before native USB/volume routing.
+    m=Machine(); d=m.node('dialog','confirminfo_dialog',[]); m.word(d+O['W_PARENT'],m.wm); m.top=d
+    m.nodes[d]['children']=[m.entry(d,220) for _ in range(2)]
+    m.byte(syms['g_usblink_status'],2); m.byte(syms['g_usbdet_value'],0)
+    m.handlers[payload_syms['stock_input_trampoline']]='stock_input'
+    assert m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),gap=0)==0
+    assert m.selected(d)==1 and not any(c[0]=='stock_input' for c in m.calls)
+    assert any(c[0]=='reset_poweroptions_timer' for c in m.calls)
+    m.call(O['KEY_NEXT'],address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=O['EVT_POINTER_DOWN'],gap=0)
+    assert any(c[0]=='stock_input' for c in m.calls)
+    m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),gap=1000)
+    assert m.selected(d)==1
+    m.byte(syms['g_usbdet_value'],1)
+    m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),gap=0)
+    assert any(c[0]=='stock_input' for c in m.calls); passed()
+    # Transition-time volume applies once, without a queued overlay; fresh input stays native.
+    m=Machine(); m.top=m.node('window','playing_page'); m.animating=1
+    m.byte(syms['g_volume'],20); m.byte(syms['g_maxvolume'],21)
+    m.handlers[payload_syms['stock_input_trampoline']]='stock_input'
+    for key,want in ((O['KEY_NEXT'],21),(O['KEY_NEXT'],21),(O['KEY_PREV'],20)):
+        m.call(key,address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),gap=0)
+        assert m.u.mem_read(syms['g_volume'],1)[0]==want
+        assert not any(c[0] in ('stock_input','navigator_to') for c in m.calls)
+    m.byte(syms['g_volume'],100); m.byte(syms['g_maxvolume'],200)
+    m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),gap=0)
+    assert m.u.mem_read(syms['g_volume'],1)[0]==100
+    m.animating=0
+    m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),gap=0)
+    assert any(c[0]=='stock_input' for c in m.calls) and not any(c[0]=='device_set_volume' for c in m.calls); passed()
+else:
+    not_ported("ringnav_input's USB prompt keys and Now Playing's transition volume ticks (the Q2's wheel)")
 
 # Slider settings: the wheel presses the page's own +/-, Centre goes back once the double-press
 # window has passed, and a double Centre is stock's screen toggle instead.
@@ -1753,6 +1862,9 @@ for name in ('backlight_page','maxvol_page','bootvol_page','balance_page'):
     m.top=m.node('window',name,[m.node('view','view_body',[dec,add])]); m.mock('on_wm_keyup_fun')
     assert m.call()==11 and m.clicks==[add]
     assert m.call(O['KEY_PREV'])==11 and m.clicks==[add,dec]
+    m.byte(syms['bt__recv_pageflag'],2)
+    assert m.call()==11 and m.call(O['KEY_PREV'])==11 and m.clicks==[add,dec,add,dec]
+    m.byte(syms['bt__recv_pageflag'],0)
     assert m.confirm()==11 and [c[0] for c in m.calls].count('navigator_back')==1
     assert m.call(O['KEY_CENTER'])==11 and m.call(O['KEY_CENTER'],gap=50)==11
     m.advance(300,clear=False); names=[c[0] for c in m.calls]
@@ -1767,6 +1879,37 @@ assert m.call(O['KEY_PREV'])==11 and m.nodes[bright]['value']==99
 for key in ('KEY_CENTER','KEY_RETURN')*(variant=='ipod'):  # Legacy keeps stock's keys
     assert m.call(O[key])==11 and [c[1:3] for c in m.calls if c[0]=='dialog_quit']==[(m.top,0)]
 passed()
+# A held Play/Pause there switches its wheel to stock's volume and back, kept as Q2POD QSVOLUME.
+m=Machine(); bright=m.node('slider','slider_backlight',value=50)
+m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])])
+hold=lambda: m.call(O['KEY_PLAY'],address=syms['on_wm_keylong_fun'],event_type=O['EVT_KEY_LONG'],gap=0)
+saved=lambda: [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
+assert hold()==11 and saved()==[(1,'Q2POD','QSVOLUME')]
+assert m.call()!=11 and m.nodes[bright]['value']==50  # stock's volume takes the tick
+assert hold()==11 and saved()==[(0,'Q2POD','QSVOLUME')]
+assert m.call()==11 and m.nodes[bright]['value']==51
+m=Machine(); m.config['QSVOLUME']='1'; bright=m.node('slider','slider_backlight',value=50)
+m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])])
+assert m.call()!=11 and m.nodes[bright]['value']==50; passed()
+if 'g_dropdown_menu_state' in syms:  # M1 Plus: a stub until V2.1's dropdown_menu_state is checked (roadmap U4)
+    # A swipe up that closes it (stock g_dropdown_menu_state 1, 2) may start on the brightness slider: its
+    # moves and release abort the slider's press and put back the value from pointer-down. Open and
+    # still (3), a drag keeps the value it set.
+    for state,kept in ((1,False),(2,False),(3,True)):
+        m=Machine(); bright=m.node('slider','slider_backlight',value=50)
+        m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])])
+        m.word(syms['g_dropdown_menu_state'],3)
+        touch=lambda kind: m.call(address=HOOKS['widget_dispatch'][0],args=(bright,m.event,0,0),event_type=kind,gap=0)
+        touch(O['EVT_POINTER_DOWN']-1); m.nodes[bright]['value']=80  # the slider takes the press
+        m.word(syms['g_dropdown_menu_state'],state)
+        for kind in (O['EVT_POINTER_MOVE_BEFORE']-1,O['EVT_POINTER_UP_BEFORE']-1):
+            touch(kind); aborts=[c for c in m.dispatched() if m.get(c[2])==O['EVT_POINTER_ABORT']]
+            assert m.nodes[bright]['value']==(80 if kept else 50) and [c[1] for c in aborts]==[bright]*(not kept),(state,kind)
+        # a later touch's down-before, ahead of its down, must not put back the earlier touch's value
+        if kept: m.word(syms['g_dropdown_menu_state'],1); touch(O['EVT_POINTER_DOWN']); assert m.nodes[bright]['value']==80
+    passed()
+else:
+    not_ported("Quick settings' brightness kept through a swipe up (g_dropdown_menu_state: V2.1's dropdown_menu_state unchecked)")
 
 # Set date and time: the wheel turns the outlined field, Centre moves on (to the time page after
 # the day) and then to OK, which Centre presses; a turn on OK goes back to the fields.
@@ -1805,13 +1948,17 @@ m.paint(w); assert m.selected(w)==2; passed()
 # iPod Minimal: the selected row's white radio is drawn again dark on the off-white card: a ring,
 # and its dot when checked. Other rows keep stock's.
 if variant=='ipod':
-    for row,image,fills in ((2,'select',3),(0,'unselect',0)):
+    for row,image,fills in ((2,'select',3),(0,'unselect',0),(2,'more',4),(0,'more',0)):
         m=Machine(); w,es=m.page_list(4,name='playmode_page')
         radio=m.node('image',image=image); m.nodes[es[row]]['children']=[radio]
-        m.word(radio+O['W_PARENT'],es[row]); m.word(radio+O['W_W'],26); m.word(radio+O['W_H'],70)
+        if image=='more':
+            m.nodes[radio]['name']='img_more0'
+            if row==2: m.nodes[es[row]]['children'].append(m.node('image',image='select'))
+        m.word(radio+O['W_PARENT'],es[row]); m.word(radio+O['W_W'],50 if image=='more' else 26); m.word(radio+O['W_H'],70)
         if row==0: m.nodes[es[2]]['children']=[m.node('image',image='select')]
         m.paint(w); m.paint(radio)
-        assert [r['rect'] for r in m.rounded]==[(0,22,26,26),(2,24,22,22),(7,29,12,12)][:fills] and m.lcd_colors()==LCD_COLORS
+        expected=[(12,31,26,8),(14,33,4,4),(21,33,4,4),(28,33,4,4)] if image=='more' else [(0,22,26,26),(2,24,22,22),(7,29,12,12)]
+        assert [r['rect'] for r in m.rounded]==expected[:fills] and m.lcd_colors()==LCD_COLORS, (image,m.rounded,m.lcd_colors())
         passed()
 
 # iPod: a playlist's More page (Rename, Delete) is a BUTTONS page: the wheel moves between them.
@@ -3247,6 +3394,7 @@ class QueueMachine(Machine):
             if page=='dialog/msginfo_dialog': self.toasts.append((page,self.get(b),self.get(b+4),self.text(b+8)))
             elif page=='playing_page': self.opened.append((page,self.names(self.get(b)),self.get(b+4),self.get(b+8),self.get(b+12)))
             elif page=='localmusic/playlist_page': self.opened.append((page,b))
+            elif page=='localmusic/playlistsmore_page': self.opened.append((page,b))
             else: self.opened.append((page,self.get(b),self.get(b+4))); self.top=self.node('window',page); self.stack.append(self.top)
         elif name=='checkFavExist': ret=self.text(self.get(a+O['REC_NAME'])) in self.favs
         elif name=='navigator_window_is_exist': ret=self.text(a) in self.open_pages
@@ -3471,6 +3619,7 @@ if not is_m1plus:
             data=(B/'stock-demo').read_bytes()
             from build import fileoff, GP
             self.mode=struct.unpack_from('<I',data,fileoff(data,GP-0x5810))[0]+0x7894
+            assert self.mode==O['PLAYLIST_ADD_MODE']
             self.word(self.mode,mode)
             self.view=self.node('scroll_view','scroll_view')
             self.top=self.node('window','playlist_page',[self.view])
@@ -3582,6 +3731,33 @@ for cls,artist_type,query in ((0xf004,0,('getMusicBySonger','Artist',None)),(0xf
     m.word(m.row(0)+0x20,m.string('Comp')); m.word(m.row(0)+0x1c,m.string('Pop'))
     assert m.run(1)=='Added to Queue' and m.names()==['A','B','C','T1','T2'] and m.query[:3]==query, m.query
     assert m.query[3]==0 or cls<0xff00; passed()
+# Queue category expansion uses music scope; folder expansion still includes spoken tracks.
+class ScopedQueueMachine(QueueMachine):
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if name.startswith('q:getMusic') or name=='q:toolsLoadDirectory':
+            scope=self.get(payload_syms['library_music'])
+            assert scope==int(name!='q:toolsLoadDirectory')
+            found=self.found
+            if scope: self.found=found[:1]  # the SQL hook's music-only result, checked against SQLite below
+            super().hook(u,address,size,unused)
+            self.found=found
+            return
+        return super().hook(u,address,size,unused)
+for cls in (0xf004,0xf005,0xf006,0xff01,0xff02,0xff03,1):
+    for action in (0,1):
+        m=ScopedQueueMachine(page='folder_page' if cls==1 else 'localclass_page',cls=cls)
+        m.found=[m.song('Music'),m.song('Episode'),m.song('Book')]
+        for r,path in zip(m.found,('/mnt/mmc/Music/song.flac','/mnt/mmc/pOdCaStS/episode.mp3','/mnt/mmc/elsewhere/BOOK.M4B')):
+            m.word(r+O['REC_PATH'],m.string(path))
+        m.word(m.row(0)+0x20,m.string('Comp')); m.word(m.row(0)+0x1c,m.string('Pop'))
+        if cls==1: m.word(m.row(0)+O['REC_TYPE'],4)
+        assert m.run(action)==('Playing Next' if action==0 else 'Added to Queue')
+        added=['Music','Episode','Book'] if cls==1 else ['Music']
+        assert m.names()==(['A']+added+['B','C'] if action==0 else ['A','B','C']+added)
+        assert m.get(payload_syms['library_music'])==0
+        assert m.names(m.get(syms['tools_pdeq_directory']))==['staged']
+passed()
 # An Unknown row (id -1) queries the empty name; an artist's All songs row (-2) sets the flag.
 m=QueueMachine(page='localclass_page',cls=0xf004); m.word(m.row(0)+O['REC_ID'],-1); m.run(1)
 assert m.query[:2]==('getMusicBySonger',None); passed()
@@ -3746,32 +3922,131 @@ if 'LDAC_HQ' in SITES:
         passed()
 else:
     not_ported('LDAC HQ sends 990 kbps (LDAC_HQ not patched in V2.1)')
-if 'BT_POWER' in SITES:
-    # A boot reconnect can arrive at radio power-up, before stock's late callback registration.
-    from build import BT_POWER
-    assert struct.unpack_from('<I',demo,fileoff(demo,BT_POWER[0]))[0]==jal(payload_syms['headset_bt_power'])
-    class BtPowerMachine(Machine):
+if 'BT_INIT' in SITES:  # with BT_PARAMS, BT_STATUS and BT_AUTOLINK
+    # A boot reconnect can arrive as the control thread starts, before openBluetooth's GPIO write.
+    from build import BT_INIT, BT_PARAMS
+    assert struct.unpack_from('<I',demo,fileoff(demo,BT_INIT[0]))[0]==jal(payload_syms['headset_bt_init'])
+    assert struct.unpack_from('<I',demo,fileoff(demo,BT_PARAMS[0]))[0]==0
+    # The old radio-power hook is gone: startup owns registration, and stock retains its toggle path.
+    assert struct.unpack_from('<I',demo,fileoff(demo,0x4efcbc))[0]==0x0320f809
+    class BtInitMachine(Machine):
         def hook(self,u,addr,size,_):
-            if self.handlers.get(addr)=='toolsGpioSetValue':
-                self.calls.append(('toolsGpioSetValue',*[u.reg_read(r) for r in REGS]))
-                self.returns(-7,clobber=True)
+            if self.handlers.get(addr)=='btctl_create_daemon_thread':
+                self.calls.append(('btctl_create_daemon_thread',u.reg_read(REGS[0]),0))
+                self.word(u.reg_read(REGS[0]),0x12345678)
+                self.returns(self.result,clobber=True)
                 return
             super().hook(u,addr,size,_)
-    bt_power=BtPowerMachine(); gpio=bt_power.string('bt_power')
-    assert bt_power.call(address=payload_syms['headset_bt_power'],args=(gpio,1,0,0),gap=0)==-7
-    assert [c[:3] for c in bt_power.calls]==[
-        ('btctl_set_prompt_callback',0x4ef600,0),
-        ('btctl_device_status_callback',0x4f1a50,0),
-        ('btctl_set_a2dp_callback',syms['btrecvA2dpFunc'],0x01020304),
-        ('toolsGpioSetValue',gpio,1)]
-    passed()
+    for result in (0,-7):
+        bt_init=BtInitMachine(); bt_init.result=result; thread=bt_init.alloc(4)
+        assert bt_init.call(address=payload_syms['headset_bt_init'],args=(thread,0,0,0),gap=0)==result
+        assert bt_init.calls[0][0]=='initBluetoothParam'
+        assert [c[:3] for c in bt_init.calls[1:]]==[
+            ('btctl_set_prompt_callback',0x4ef600,0),
+            ('btctl_device_status_callback',payload_syms['headset_bt_status'],0),
+            ('btctl_set_a2dp_callback',syms['btrecvA2dpFunc'],0x01020304),
+            ('btctl_create_daemon_thread',thread,0)]
+        assert bt_init.get(thread)==0x12345678
+        passed()
+    # An incoming link while a link thread waits for the saved device (BT_STATUS) is adopted; auto-link
+    # skips while a listed one is connected (BT_AUTOLINK).
+    from build import BT_STATUS, BT_AUTOLINK
+    assert struct.unpack_from('<I',demo,fileoff(demo,BT_STATUS[0]))[0]==jal(payload_syms['headset_status_register'])
+    assert struct.unpack_from('<I',demo,fileoff(demo,BT_AUTOLINK[0]))[0]==jal(payload_syms['headset_bt_autolink'])
+    class BtLinkMachine(Machine):
+        def __init__(self,links,paired=True,connecting=1,saved='AA:AA:AA:AA:AA:AA'):
+            super().__init__(); self.links=[list(x) for x in links]; self.paired=paired
+            self.u.mem_write(0xa38168,saved.encode()+b'\0')  # BTLINKMAC
+            self.word(syms['bt_connectstatus'],connecting); self.handlers[0x4f1a50]='device_status'
+        def hook(self,u,addr,size,_):
+            name=self.handlers.get(addr)
+            if name not in ('getBtLinkStatus','getBtLinkSize','getBtLinkItem','addBtLinkItem','updateBtLinkStatus','checkPairDev','device_status'):
+                return super().hook(u,addr,size,_)
+            assert u.reg_read(UC_MIPS_REG_T9)==addr, (name,'PIC call missing t9')
+            a,b,c,d=[u.reg_read(r) for r in REGS]; self.calls.append((name,a,b,c,d)); ret=0
+            if name=='getBtLinkStatus': ret=next((st for x,st in self.links if x==self.text(a)),0)
+            elif name=='getBtLinkSize': ret=len(self.links)
+            elif name=='getBtLinkItem' and 0<=signed(a)<len(self.links):
+                self.word(b,self.links[a][1]); self.u.mem_write(c,self.links[a][0].encode()+b'\0')
+            elif name=='addBtLinkItem': self.links.append([self.text(a),b])
+            elif name=='updateBtLinkStatus':
+                for x in self.links:
+                    if x[0]==self.text(b): x[1]=a; ret=1
+            elif name=='checkPairDev': ret=self.paired
+            self.returns(ret,clobber=True)
+    a_mac,b_mac='AA:AA:AA:AA:AA:AA','BB:BB:BB:BB:BB:BB'
+    link=BtLinkMachine([]); link.call(address=payload_syms['headset_status_register'],args=(0,0,0,0),gap=0)
+    assert [c[:3] for c in link.calls]==[('btctl_device_status_callback',payload_syms['headset_bt_status'],0)]
+    link=BtLinkMachine([(a_mac,5)])  # 5 while the thread's Connect runs
+    link.call(address=payload_syms['headset_bt_status'],args=(3,link.string(b_mac),0,0),gap=0)
+    assert link.links==[[a_mac,4],[b_mac,3]] and 'device_status' not in [c[0] for c in link.calls]; passed()
+    # Otherwise stock's callback gets the event as libbtctl sent it: not connecting, thread ended or judged,
+    # already listed, unpaired, empty list, target connected or not yet taken by the thread (1), a thread
+    # for another device, other events.
+    for event,links,paired,connecting,saved in ((3,[(a_mac,5)],True,0,a_mac),(3,[(a_mac,5)],True,2,a_mac),
+            (3,[(a_mac,5)],True,3,a_mac),(3,[(a_mac,5),(b_mac,1)],True,1,a_mac),(3,[(a_mac,5)],False,1,a_mac),
+            (3,[],True,1,''),(3,[(a_mac,3)],True,1,a_mac),(3,[(a_mac,1)],True,1,a_mac),(3,[(a_mac,5)],True,1,'CC:CC:CC:CC:CC:CC'),
+            (4,[(a_mac,5)],True,1,a_mac)):
+        link=BtLinkMachine(links,paired,connecting,saved); addr=link.string(b_mac)
+        link.call(address=payload_syms['headset_bt_status'],args=(event,addr,0x1234,0x5678),gap=0)
+        assert link.links==[list(x) for x in links] and link.calls[-1]==('device_status',event,addr,0x1234,0x5678)
+        passed()
+    for links,paired,want in (([],True,1),([],False,0),([(b_mac,3)],True,0),([(b_mac,4)],True,1),
+                              ([(b_mac,5)],True,1),([(b_mac,3),(a_mac,5)],True,0)):
+        link=BtLinkMachine(links,paired)
+        assert link.call(address=payload_syms['headset_bt_autolink'],args=(link.string(a_mac),0,0,0),gap=0)==want
+        passed()
 else:
-    not_ported('Bluetooth callbacks before radio power (BT_POWER not patched in V2.1)')
+    not_ported('Bluetooth callbacks before the control thread, and a link that comes in during a connect (BT_INIT, BT_STATUS not patched in V2.1)')
 # Bluetooth volume runs through the shared hook in both variants and on M1 Plus, where V2.1's
 # mclSetVol sets the DAC and Bluetooth's gain in one (HOOKS['mclSetBtVol'] is that entry). Mock only
 # headset I/O and stock gain; device_set_volume itself executes its native output routing.
 # V2.1 keeps Bluetooth's level apart from the jacks' g_volume (test/m1plus/build.py pins it).
 BTVOL='g_btvolume' if is_m1plus else 'g_volume'
+if 'mclSetOutputWay' in HOOKS:  # with write_int_config
+    class OutputVolumeMachine(Machine):
+        def __init__(self,config=()):
+            super().__init__(); self.way=0; self.config.update(config)
+            self.byte(syms['g_volume'],20); self.byte(syms['g_maxvolume'],100)
+            self.handlers.pop(syms['write_int_config'])
+            for name,label in (('mclSetOutputWay','output'),('write_int_config','write_config')):
+                self.handlers[HOOKS[name][0]+12]='stock_'+label
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if name not in ('mclGetOutputWay','stock_output','stock_write_config'):
+                return super().hook(u,address,size,unused)
+            a,b,c=[u.reg_read(r) for r in REGS[:3]]
+            self.calls.append((name,a,b,c))
+            if name=='stock_output': self.way=a; ret=1
+            elif name=='stock_write_config': self.config[self.text(c)]=str(a); ret=0
+            else: ret=self.way
+            self.returns(ret)
+        def output(self,way):
+            changed=(self.way==1)!=(way==1)
+            assert self.call(address=syms['mclSetOutputWay'],args=(way,0,0,0),gap=0)==1
+            volume=self.u.mem_read(syms['g_volume'],1)[0]
+            assert [c[1:3] for c in self.calls if c[0]=='device_set_volume']==([(volume,1)] if changed else [])
+            return volume
+        def save(self,volume,section='PLAYSET',key='VOLUME'):
+            self.byte(syms['g_volume'],volume)
+            return self.call(address=syms['write_int_config'],args=(volume,self.string(section),self.string(key),0),gap=0)
+
+    ov=OutputVolumeMachine(); assert ov.output(1)==20  # first connection inherits the current level
+    ov.save(65); assert ov.config=={'VOLUME':'20','BT_VOLUME':'65'}
+    assert ov.output(0)==20; ov.save(13)
+    assert ov.output(1)==65 and ov.output(1)==65 and ov.output(2)==13
+    assert ov.output(0)==13 and ov.output(1)==65; passed()
+    # A fresh boot uses wired VOLUME; reconnect restores Bluetooth, including muted and capped levels.
+    for value,limit,want in (('0',100,0),('100',40,40),('37',100,37)):
+        ov=OutputVolumeMachine({'VOLUME':'13','BT_VOLUME':value}); ov.byte(syms['g_volume'],13)
+        ov.byte(syms['g_maxvolume'],limit)
+        assert ov.output(1)==want and ov.output(0)==13; passed()
+    for value in ('','-1','101','999999999999999999','20junk',' 20'):
+        ov=OutputVolumeMachine({'BT_VOLUME':value}); assert ov.output(1)==20; passed()
+    ov=OutputVolumeMachine(); ov.output(1); ov.save(7,'OTHER','VOLUME'); ov.save(8,'PLAYSET','OTHER')
+    assert ov.config=={'VOLUME':'7','OTHER':'8'}; passed()  # other writes keep their section/key
+# M1 Plus: native, V2.1 keeps Bluetooth's level apart ([PLAYSET] BTVOLUME, btsource_volume), above.
+
 class BtVolumeMachine(Machine):
     def __init__(self):
         super().__init__()
@@ -3781,6 +4056,7 @@ class BtVolumeMachine(Machine):
         self.byte(syms['g_maxvolume'],100); self.handlers[HOOKS['mclSetBtVol'][0]+12]='stock_btvol'
         self.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
         self.mock('dmrSendVolume' if is_m1plus else 'mclSetLocalVol','mclUsbAudioSetVol','notifyVolume','airplaySendVol')
+        self.handlers.pop(syms['device_set_volume'],None)
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')
         if name not in ('btctl_transport_get_volume','btctl_transport_set_volume','mclGetOutputWay'):
@@ -3799,9 +4075,9 @@ class BtVolumeMachine(Machine):
     def poll(self,gap=400):
         self.call(address=HOOKS['main_loop_sleep_default'][0],args=(self.wm,0,0,0),gap=gap)
 
-for left,right,want in ((0,0,0),(1,1,1),(20,20,25),(40,30,51),(50,50,64),(100,100,127),
+for left,right,want in ((0,0,0),(0,20,25),(20,0,25),(1,1,1),(20,20,25),(40,30,51),(50,50,64),(100,100,127),
                         (-5,-1,0),*(() if is_m1plus else ((101,200,127),))):
-    gain=(100,100) if want else (left,right)  # AVRCP 0 isn't silent on every headset: keep stock's mute
+    gain=(max(0,left)*100//max(left,right),max(0,right)*100//max(left,right)) if want else (left,right)  # AVRCP 0 isn't silent on every headset: keep stock's mute
     b=BtVolumeMachine(); assert b.volume(left,right)==[gain] and b.writes()==[want]
     assert b.volume(left,right)==[gain] and not b.writes(); passed()
 if is_m1plus:
@@ -3836,7 +4112,7 @@ b.byte(syms['bt_linkstatus'],0); b.poll(); assert not b.writes()
 b.byte(syms['bt_linkstatus'],1); b.word(syms['bt_showcoding'],0); b.poll(); assert not b.writes()
 b.word(syms['bt_showcoding'],1); b.poll(); assert not b.writes(); passed()
 b=BtVolumeMachine(); b.write_result=-1; b.poll()
-assert b.writes()==[25] and not any(c[0]=='stock_btvol' for c in b.calls)
+assert b.writes()==[25] and [c[1:3] for c in b.calls if c[0]=='stock_btvol']==[(20,20)]
 b.write_result=0; b.poll(); assert not b.writes()  # a refusal retries at the slow pace
 b.poll(O['BT_VOLUME_SLOW_MS']-400); assert b.writes()==[25]; passed()
 # Dark, the read-back slows down.
@@ -3852,7 +4128,7 @@ b.poll(); assert b.writes()==[76] and b.u.mem_read(syms[BTVOL],1)[0]==60; passed
 # in one), USB's own setter for USB. g_output_way=0 avoids stock's fixed line-out branch; notify
 # is covered too.
 for way,soft in ((0,0),(1,0),(2,0),(2,1)):
-    b=BtVolumeMachine(); b.handlers.pop(syms['device_set_volume'])
+    b=BtVolumeMachine(); b.handlers.pop(syms['device_set_volume'],None)
     b.byte(syms['g_output_way'],0); b.way=way; b.byte(syms['g_usbvol_mode'],soft)
     b.call(address=syms['device_set_volume'],args=(20,1,0,0),gap=0)
     gains=[c[1:3] for c in b.calls if c[0]=='stock_btvol']
@@ -4049,7 +4325,7 @@ class ClassMachine(QueueMachine):
             a=u.reg_read(REGS[0]); self.returns(self.string(self.text(a)) if libc[address]=='strdup' else 0); return
         if address!=self.tramp: return super().hook(u,address,size,unused)
         self.calls.append(('stock_localclass',u.reg_read(REGS[0]),0,0))
-        assert self.get(payload_syms['library_music']) == int(self.tramp == int(manifest['patch_symbols']['stock_artist_trampoline'],16) or u.reg_read(REGS[0]) in (0xf003,0xf004,0xff10,0xff01 if is_m1plus else 0xff11))  # CLASS_LOAD_ARTIST_ALBUMS
+        assert self.get(payload_syms['library_music']) == 1
         self.returns(len(self.items(self.get(syms['p_deque_showlist']))))
 def unknown(cls,found,last=-1,artist=0,rows=3):
     m=ClassMachine(page='localclass_page',cls=0xf001,rows=rows); m.found=[m.song('T1')]*found; m.query=None
@@ -4073,6 +4349,39 @@ for cls,last,rows in ((0xf004,1,3),(0xff01,-1,3),(0xff10,-1,3),(0xff11,-1,3),(0x
     # V2.1's artist albums query their artist's songs to order them (below), not an Unknown row's
     m1_order=is_m1plus and cls==0xff01 and q is not None and q[:2]==('getMusicBySonger','')
     assert len(shown)==rows and (q is None or m1_order), (cls,last,rows,q); passed()
+# Every Library class and detail load scopes SQL, including empty results and failures, and
+# restores an already-scoped caller. The trampoline supplies stock's displayed copies.
+class ScopedClassMachine(ClassMachine):
+    def hook(self,u,address,size,unused):
+        super().hook(u,address,size,unused)
+        if address==self.tramp and getattr(self,'failed',False): self.returns(-1)
+for cls in (*range(0xf001,0xf00c),*range(0xff01,0xff15),0xff20):
+    for scoped,rows,failed in ((0,1,False),(1,0,False),(1,0,True),(0,0,True)):
+        m=ScopedClassMachine(rows=rows); m.failed=failed
+        m.word(payload_syms['library_music'],scoped)
+        m.call(address=HOOKS['load_localclass_list'][0],args=(cls,0,0,0),gap=0)
+        assert m.get(payload_syms['library_music'])==scoped
+# Saved Favourites and playlist entries stay stored, in order, including spoken-only lists.
+paths=['/mnt/mmc/pOdCaStS/Show/episode.mp3','/mnt/mmc/Music/song.flac',
+       '/mnt/mmc/AUDIOBOOKS/chapter.mp3','/mnt/mmc/elsewhere/BOOK.M4B',
+       '/mnt/mmc/Podcasts Extra/song.mp3','/mnt/mmc/Music/Podcasts/song.mp3']
+for cls in (0xf00a,0xff20):
+    for selected in (paths,[paths[0],paths[2],paths[3]]):
+        m=ClassMachine(rows=len(selected))
+        for i,path in enumerate(selected):
+            m.word(m.row(i)+O['REC_PATH'],m.string(path))
+            m.word(m.row(i)+O['REC_TITLE'],m.string('Tagged'))
+        stored=m.deque(m.items(m.get(syms['p_deque_showlist'])))
+        before=[bytes(m.u.mem_read(r,0x60)) for r in m.items(stored)]
+        n=m.call(address=HOOKS['load_localclass_list'][0],args=(cls,0,0,0),gap=0)
+        want=[f'Row {i}' for i,path in enumerate(selected) if path in paths[1:2]+paths[4:]]
+        assert m.names(m.get(syms['p_deque_showlist']))==want and n==len(want)
+        assert [bytes(m.u.mem_read(r,0x60)) for r in m.items(stored)]==before
+# A playlist container remains even when its name/path looks like spoken audio.
+m=ClassMachine(rows=1); m.word(m.row(0)+O['REC_TYPE'],4)
+m.word(m.row(0)+O['REC_PATH'],m.string(paths[0]))
+assert m.call(address=HOOKS['load_localclass_list'][0],args=(0xf00b,0,0,0),gap=0)==1
+passed()
 # iPod song rows: an untagged song's title is its file name without the extension; a tag stays.
 m=ClassMachine(page='localclass_page',cls=0xf001,rows=2); m.word(m.row(1)+O['REC_TITLE'],m.string('Tagged'))
 m.word(m.row(0)+O['REC_NAME'],m.string('a.flac')); m.word(m.row(0)+O['REC_PATH'],m.string('/p/a.flac'))
@@ -4111,7 +4420,7 @@ class LibraryQueryMachine(Machine):
             (5,'Podcast','Host','Host','/mnt/mmc/Podcasts/show/episode.mp3'),
             (6,'','','','/mnt/mmc/Audiobooks/untagged.mp3'),
         ])
-    tramps={int(manifest['patch_symbols'][f'stock_{x}_trampoline'],16):x for x in ('dbquery','content_query')}
+    tramps={int(manifest['patch_symbols'][f'stock_{x}_trampoline'],16):x for x in ('dbquery','content_query','sorted_query')}
     def hook(self,u,address,size,unused):
         if address in (syms['strcpy@GLIBC_2.0'],syms['sprintf@GLIBC_2.0']):  # getAlbumByAlbumArtist's SQL: %s only
             a,b,*v=[u.reg_read(r) for r in REGS]; v=iter(v)
@@ -4120,7 +4429,7 @@ class LibraryQueryMachine(Machine):
         if address not in self.tramps: return super().hook(u,address,size,unused)
         a,b,c,d=[u.reg_read(r) for r in REGS]; self.sql=self.text(b)
         if self.tramps[address]=='content_query': self.content=(c,self.text(d),self.get(u.reg_read(UC_MIPS_REG_SP)+16))
-        else: assert self.text(a)=='/mnt/data/database.db' and (c,d)==(123,1)
+        elif self.tramps[address]=='dbquery': assert self.text(a)=='/mnt/data/database.db' and (c,d)==(123,1)
         self.results=self.db.execute(self.sql).fetchall()
         if self.tramps[address]=='content_query': raise QueryDone  # stock's row handling after it isn't emulated
         self.returns(len(self.results))
@@ -4136,6 +4445,14 @@ for query in ('select id,songer from songtable group by songer COLLATE NOCASE',
         assert (lm.sql==(query.replace('albumsonger',AA) if 'by albumsonger' in query else query)) == (not scoped)
         assert {r[0] for r in lm.results} == ({2} if scoped and 'group by' in query else set() if scoped else
                                              {1,3,4,5,6} if 'group by' in query else {6}),lm.results
+# The stock Songs title sorter uses the separate AndSort helper.
+if 'toolsQueryDbTableAndSort' in HOOKS:
+    lm.word(payload_syms['library_music'],1)
+    lm.call(address=syms['sort_first_alphabet'],args=(0,0,0,0),gap=0)
+    assert [r[0] for r in lm.results]==[2] and 'where '+ 'fileurl' in lm.sql
+else:
+    not_ported('Spoken audio out of the Songs title sort (toolsQueryDbTableAndSort not hooked on M1 Plus)')
+passed()
 # Podcast paths are case insensitive and bounded by the top-level folder. Shared tags must use
 # the music row for artwork, and untagged episodes must not create Unknown Artist/Album rows.
 lm.db.executemany('insert into songtable values(?,?,?,?,?)',[
@@ -4153,6 +4470,23 @@ for scoped in (1,0):
             assert {r[0] for r in lm.results} == ({2,12,13} if column=='album' else {2,12}),lm.results
         else:
             assert any(r[0]==5 for r in lm.results) and any(not r[1] for r in lm.results)
+# Genre/composer lists, their albums and song detail queries use the same pre-group scope.
+for column in ('genre','composer'):
+    lm.db.execute(f'alter table songtable add column {column}')
+    lm.db.execute(f"update songtable set {column}=case when id in (6,11) then '' else album end")
+    for query,want in ((f'select id,{column},fileurl from songtable group by {column} COLLATE NOCASE',{2,12,13}),
+                       (f"select id,album,fileurl from songtable where {column}='Shared' group by album COLLATE NOCASE",{2}),
+                       (f"select id,fileurl from songtable where {column}='Shared' and album='Shared'",{2}),
+                       (f"select id,fileurl from songtable where ifnull({column},'')=''",set())):
+        lm.word(payload_syms['library_music'],1)
+        lm.call(address=HOOKS['toolsQueryDbTable'][0],args=(lm.string('/mnt/data/database.db'),lm.string(query),123,1),gap=0)
+        assert {r[0] for r in lm.results}==want,(query,lm.results)
+# Direct song/history/Hi-Res loads retain only the music rows, in the requested order.
+for order in ('id','id desc'):
+    query=f'select id,fileurl from songtable order by {order}'
+    lm.call(address=HOOKS['toolsQueryDbTable'][0],args=(lm.string('/mnt/data/database.db'),lm.string(query),123,1),gap=0)
+    assert [r[0] for r in lm.results]==sorted([2,12,13],reverse=order.endswith('desc'))
+for column in ('genre','composer'): lm.db.execute(f'alter table songtable drop column {column}')
 lm.db.execute('delete from songtable where id >= 10')
 # Music staging applies the scope for stock queries and restores either caller state.
 class MusicStageMachine(QueueMachine):
@@ -4164,6 +4498,20 @@ for scoped in (0,1):
     ms=MusicStageMachine(); ms.word(payload_syms['library_music'],scoped)
     rows=ms.call(address=payload_syms['staged_music'],args=(syms['getMusicByAlbum'],ms.string('Album'),ms.alloc(4),0),gap=0)
     assert ms.get(payload_syms['library_music'])==scoped and ms.query[:2]==('getMusicByAlbum','Album')
+class MusicLoadMachine(QueueMachine):
+    def __init__(self):
+        super().__init__(); self.handlers[syms['getAllMusic']]='music_load'
+    def hook(self,u,address,size,unused):
+        if address!=syms['getAllMusic']: return super().hook(u,address,size,unused)
+        assert self.get(payload_syms['library_music'])==1
+        self.returns(self.result)
+for loader,args in (('all_songs',(0,)),('songs_unsorted',(1,))):
+    for scoped in (0,1):
+        for result in (-1,0,2):
+            ms=MusicLoadMachine(); ms.result=result; ms.word(payload_syms['library_music'],scoped)
+            assert ms.call(address=payload_syms[loader],args=args,gap=0)==result
+            assert ms.get(payload_syms['library_music'])==scoped
+passed()
 # Album Artist: an album without the tag lists under its artist (stock's albumsonger queries), a
 # tagged one under its album artist; Coverflow's own grouping keeps the tag as it is.
 lm.db.executemany('insert into songtable values(?,?,?,?,?)',[(7,'Disintegration','The Cure','','/mnt/mmc/Music/D/CD1/1.flac'),
@@ -4287,6 +4635,24 @@ if 'ALBUM_ART' in SITES:  # with COVER_DONE, COVER_PAUSE and ARTIST_COVER_ROW, a
                 # The page gone, another at the same address gets Coverflow again.
                 f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
                 m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0); m.advance(0); assert len(m.handed)==2
+            passed()
+        # Artist albums: Grid shows the artist page's hidden stock toolbar (its multi-select) on either
+        # tab, the tabs moved down under it; other modes, pages or a toolbar already up stay as they are.
+        for on,tab,page,up in ((0,1,'artistinfo_page',0),(0,0,'artistinfo_page',0),(1,1,'artistinfo_page',0),
+                               (2,1,'artistinfo_page',0),(0,1,'localclass_page',0),(0,1,'artistinfo_page',1)):
+            m=ArtistCoverflow(page='localclass_page',cls=0xff01,rows=1); m.handed=[]; m.found=[]
+            m.config['ARTISTCF']=str(on); m.artist_page(page)
+            album=m.node('list_view','list_view_album'); pages=m.node('pages','pages',[album])
+            bar=m.node('tab_control','tab_control',[pages]); nav=m.node('view','view_navbar',visible=up)
+            m.nodes[nav]['enable']=up; m.nodes[m.top]['children']+=[nav,bar]
+            geo=lambda w:[m.get(w+O[o]) for o in ('W_X','W_Y','W_W','W_H')]
+            for w,g in ((nav,(0,0,375,50)),(bar,(0,0,375,290)),(pages,(0,40,375,250)),(album,(0,0,375,250))):
+                for o,v in zip(('W_X','W_Y','W_W','W_H'),g): m.word(w+O[o],v)
+            m.call(address=HOOKS['load_localartist_list'][0],args=(tab,0,0,0),gap=0)
+            want=not on and page=='artistinfo_page' and not up
+            assert bool(m.nodes[nav]['visible'])==bool(want or up) and bool(m.nodes[nav]['enable'])==bool(want or up),(on,tab,page,up)
+            assert geo(bar)==([0,50,375,240] if want else [0,0,375,290]) and geo(album)[3]==(200 if want else 250),(on,tab,page,up)
+            assert m.nodes[pages].get('self_layout')==(('0','40','100%','200') if want else None),(on,tab,page,up)
             passed()
         # Same-named albums by other artists stay out, in both artist modes. Membership follows
         # the artist's songs, so a guest artist and multiple albums of one name work too.
@@ -4854,6 +5220,276 @@ def finger(m,view,points,ms=400,kinds=None):
         m.word(ev,k); m.word(ev+O['EVENT_X'],x); m.word(ev+O['EVENT_Y'],y)
         f,ctx=m.handler(view,k); assert m.call(address=f,args=(ctx,ev,0,0),gap=0,clear=False)==0
 
+if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playlistsmore_page (roadmap U4)
+    # Local playlist editor: real MIPS UI/control code and real SQLite transactions at its ABI boundary.
+    class PlaylistEditMachine(CoverflowMachine):
+        def __init__(self,count=3):
+            super().__init__()
+            self.db=sqlite3.connect(':memory:',isolation_level=None)
+            self.db.execute('create table playlist(id integer primary key,cd_num,fileurl,time,time_end,filename)')
+            self.db.execute("insert into playlist values(0,0,'',0,0,'Mix')")
+            self.db.executemany('insert into playlist values(?,?,?,?,?,?)',[(101+i,0,'/p/'+x,0,0,x) for i,x in enumerate('ABC'[:count])])
+            self.db.execute("insert into playlist values(200,1,'/p/other',0,0,'Other')")
+            self.fail=''; self.sql=[]; self.closed_db=0
+            for n in ('sqlite3_open','sqlite3_close','sqlite3_exec','getMusicByPlayList','getAllMusic','checkPlayListExist','batch_add_file','navigator_back','_create_vector','vector_init','_vector_push_back'):
+                self.handlers[syms[n]]='edit:'+n
+            self.handlers[int(manifest['patch_symbols']['stock_playlistsmore_trampoline'],16)]='edit:more'
+            r=self.song('Mix',4); self.word(r+O['REC_TITLE'],self.string('Mix')); self.word(r+O['REC_DISC'],0)
+            self.word(syms['p_deque_playlist'],self.deque([r]))
+            self.before_queue=self.names()
+        def record(self,row):
+            ident,dest,path,start,end,name=row
+            r=self.song(name); self.word(r+O['REC_ID'],ident); self.word(r+O['REC_DISC'],dest)
+            self.word(r+O['REC_PATH'],self.string(path)); self.word(r+O['REC_CUE_START'],start); self.word(r+O['REC_CUE_END'],end)
+            return r
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if not name.startswith('edit:'): return super().hook(u,address,size,unused)
+            a,b,c,d=[u.reg_read(r) for r in REGS]; name=name[5:]; ret=0
+            if name=='sqlite3_open': self.word(b,123); ret=1 if self.fail=='open' else 0
+            elif name=='sqlite3_close': self.closed_db+=1
+            elif name=='sqlite3_exec':
+                assert a==123
+                try:
+                    for sql in self.text(b).split(';'):
+                        self.sql.append(sql)
+                        if self.fail and sql.startswith(self.fail): raise sqlite3.OperationalError('injected write failure')
+                        cur=self.db.execute(sql)
+                        if cur.description and c:
+                            for row in cur.fetchall():
+                                values=self.alloc(4*len(row)); names=self.alloc(4*len(row))
+                                for i,v in enumerate(row): self.word(values+4*i,0 if v is None else self.string(str(v)))
+                                if self.nested(c,d,len(row),values,names): raise sqlite3.OperationalError('callback aborted')
+                except sqlite3.Error: ret=1
+            elif name=='_create_vector': assert self.text(a)=='int'; ret=self.alloc(64)
+            elif name=='_vector_push_back': self.word(a,b)
+            elif name=='vector_init': pass
+            elif name=='getAllMusic':
+                self.deqs[self.get(syms['tools_pdeq_directory'])][1]=[self.copy('stSongInfo',r) for r in self.found]; ret=len(self.found)
+            elif name=='getMusicByPlayList':
+                rows=self.db.execute('select * from playlist where id>100 and cd_num=? order by id',(a,)).fetchall()
+                self.deqs[self.get(syms['tools_pdeq_directory'])][1]=[self.record(row) for row in rows]; ret=len(rows)
+            elif name=='checkPlayListExist':
+                ret=self.db.execute('select count(*) from playlist where id>100 and cd_num=? and fileurl=? and time=?',
+                                    (b,self.text(self.get(a+O['REC_PATH'])),self.get(a+O['REC_CUE_START']))).fetchone()[0]
+            elif name=='batch_add_file':
+                assert (a,b)==(0xf001,0xf00b) and d!=self.get(syms['p_vector_select_record']) and self.get(d)==1
+                dest=self.get(u.reg_read(UC_MIPS_REG_SP)+16); r=self.items(c)[0]
+                if not self.fail:
+                    ident=self.db.execute('select max(id)+1 from playlist').fetchone()[0]
+                    self.db.execute('insert into playlist values(?,?,?,?,?,?)',(ident,dest,self.text(self.get(r+O['REC_PATH'])),
+                                    self.get(r+O['REC_CUE_START']),self.get(r+O['REC_CUE_END']),self.text(self.get(r+O['REC_NAME']))))
+                ret=1
+            elif name=='navigator_back':
+                self.nested(*self.handler(self.page,O['EVT_DESTROY']),self.event)
+                self.stack.remove(self.page); self.top=self.stack[-1]
+            self.returns(ret,clobber=True)
+        def open_editor(self):
+            more=self.node('window','playlistsmore_page'); self.word(more+O['W_PARENT'],self.wm)
+            self.top=more; self.stack.append(more)
+            deleted=self.node('hscroll_label',name='label_del')
+            self.word(deleted+O['W_PARENT'],more); self.nodes[more]['children'].append(deleted)
+            self.call(address=HOOKS['localmusic_playlistsmore_page_init'][0],args=(more,0,0,0),gap=0)
+            assert self.nodes[deleted]['text']=='Delete Playlist'
+            row=self.nodes[more]['children'][-1]; button=self.nodes[row]['children'][0]
+            image,label=self.nodes[button]['children']
+            h,inner,y=(72,68,154) if variant=='ipod' else (78,70,216)
+            assert [self.get(row+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[0,y,375,h]
+            assert self.nodes[row]['style']=='s_listitem_black'
+            assert [self.get(button+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,inner]
+            assert self.nodes[button]['style']=='s_btn_listitem'
+            assert [self.get(image+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[10,0,52,inner]
+            assert self.nodes[image]['image']=='rename' and self.nodes[image]['draw_type']==O['IMAGE_DRAW_CENTER']
+            assert [self.get(label+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[72,0,253,inner]
+            assert self.nodes[label]['style']=='s_scrlabel_white20l' and self.nodes[label]['text']=='Edit Playlist'
+            f,ctx=self.handler(button,O['EVT_CLICK'])
+            self.call(address=f,args=(ctx,self.event,0,0),gap=0)
+            self.page=self.top; self.view=self.find('scroll_view'); self.paint(self.view)
+            assert self.nodes[self.page]['name']=='playlistedit_page'
+        def showlabels(self):
+            self.view=self.find('scroll_view'); return self.labels()
+        def choose(self,i):
+            self.view=self.find('scroll_view'); self.pick(i); self.advance(0)
+            self.view=self.find('scroll_view')
+        def move(self,key=O['KEY_FWD_BTN']):
+            assert self.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+            assert self.call(key,gap=0)==11
+            self.view=self.find('scroll_view')
+        def order(self,dest=0): return [r[0] for r in self.db.execute('select filename from playlist where id>100 and cd_num=? order by id',(dest,))]
+        def mutate(self,a=101,b=102,dest=0):
+            records=[self.record(self.db.execute('select * from playlist where id=?',(i,)).fetchone()) if i else 0 for i in (a,b)]
+            return self.call(address=payload_syms['ple_mutate'],args=(dest,*records,0),gap=0)
+
+    # iPod: the wheel reaches Edit Playlist below stock's Rename and Delete, and Centre opens the editor.
+    if variant=='ipod':
+        m=PlaylistEditMachine(); more=m.node('window','playlistsmore_page'); m.word(more+O['W_PARENT'],m.wm)
+        m.word(more+O['W_W'],375); m.word(more+O['W_H'],290); m.top=more; m.stack.append(more)
+        for i,name in enumerate(('label_rename','label_del')):
+            row=m.node('list_item',children=[m.entry(0)]); m.word(row+O['W_Y'],10+i*72); m.word(row+O['W_PARENT'],more)
+            m.word(m.nodes[row]['children'][0]+O['W_PARENT'],row); m.nodes[more]['children'].append(row)
+        m.call(address=HOOKS['localmusic_playlistsmore_page_init'][0],args=(more,0,0,0),gap=0)
+        m.on_click=lambda w,e: m.nested(*m.handler(w,O['EVT_CLICK']),e)
+        assert m.call()==11 and m.call()==11 and m.selected(more)==2
+        assert m.confirm()==11 and m.nodes[m.top]['name']=='playlistedit_page'; passed()
+
+    m=PlaylistEditMachine(); m.open_editor()
+    # The wheel still selects rows and Centre opens the selected song's actions.
+    m.on_click=lambda w,e: m.nested(*m.handler(w,O['EVT_CLICK']),e)
+    assert m.call()==11 and m.selected(m.view)==3
+    assert m.confirm()==11 and m.showlabels()==['Move Up','Move Down','Remove from Playlist']
+    assert m.key()==11 and m.selected(m.find('scroll_view'))==3
+    m.close()
+    m=PlaylistEditMachine(); m.open_editor()
+    assert m.showlabels()==['Add Songs','Done','A','B','C']
+    assert m.nodes[m.nodes[m.page]['children'][0]]['text']=='Editing: Mix'
+    # A repeat and long press cannot move again, and releases never reach playback.
+    for key,want in ((O['KEY_FWD_BTN'],['B','A','C']),(O['KEY_FWD_BTN'],['B','C','A']),(O['KEY_BACK_BTN'],['B','A','C'])):
+        assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+        for _ in range(2):
+            assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+            assert m.call(key,address=HOOKS['on_wm_keylong_fun'][0],event_type=O['EVT_KEY_LONG'],gap=0)==11
+        assert m.order()==want
+        assert m.call(key,gap=0)==11
+        m.view=m.find('scroll_view'); assert m.selected(m.view)==want.index('A')+2
+    assert m.names()==m.before_queue and not m.playback(); passed()
+    # Touch actions and confirmation; cancel and Back leave the entry intact.
+    m.choose(3); assert m.showlabels()==['Move Up','Move Down','Remove from Playlist']
+    m.choose(2); assert m.showlabels()==['Remove from Playlist','Cancel']; m.choose(1)
+    assert m.order()==['B','A','C']; m.choose(3); m.choose(0); assert m.order()==['A','B','C']
+    m.choose(2); m.choose(1); assert m.order()==['B','A','C']
+    m.choose(3); m.choose(2); m.choose(0); assert m.order()==['B','C'] and m.selected(m.view)==3
+    assert m.order(1)==['Other']; passed()
+    # The fixed destination picker stays open; failed writes never report success.
+    saved=m.alloc(16); m.word(saved,0x12345678); m.word(syms['p_vector_select_record'],saved)
+    m.choose(0); assert m.showlabels()==['Search','T1','T2']; m.choose(1)
+    assert m.get(syms['p_vector_select_record'])==saved and m.get(saved)==0x12345678
+    assert not any(c[0].startswith('batch_') for c in m.calls)
+    assert m.toasts[-1][3]=='Added to Playlist' and m.showlabels()==['Search','T1','T2']
+    m.choose(1); assert m.toasts[-1][3]=='Already in playlist'
+    m.fail='write'; m.choose(2); assert m.toasts[-1][3]=='Could not save playlist'; m.fail=''
+    assert m.key()==11 and m.showlabels()==['Add Songs','Done','B','C','T1']
+    m.choose(1); assert m.top!=m.page and not m.get(payload_syms['ple'])
+    assert m.names()==m.before_queue; passed()
+    # Add Songs' Search row filters by tagged title, artist or album, case-insensitively; the query
+    # stays for adding several and an empty one restores the whole picker.
+    def ple_search(m,text,event='EVT_IM_ACTION'):
+        m.choose(0)
+        edit=m.find('edit'); assert m.nodes[edit]['name']=='search_edit' and m.nodes[edit]['focused']==1
+        assert m.get(edit+O['W_Y'])+m.get(edit+O['W_H'])<=30 and not m.find('scroll_view')
+        m.nodes[edit]['text']=text; f,ctx=m.handler(edit,O[event])
+        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; m.advance(0)
+        m.view=m.find('scroll_view')
+    m=PlaylistEditMachine(); m.word(m.found[0]+O['REC_ARTIST'],m.string('Beatles'))
+    m.word(m.found[1]+O['REC_ALBUM'],m.string('Zebra')); m.open_editor(); m.choose(0)
+    assert m.showlabels()==['Search','T1','T2']
+    ple_search(m,'T2'); assert m.showlabels()==['Search: T2','T2'] and not m.find('edit')
+    m.choose(0); assert m.nodes[m.find('edit')]['text']=='T2'  # prefilled for editing
+    m.nodes[m.find('edit')]['text']='beat'; f,ctx=m.handler(m.find('edit'),O['EVT_IM_ACTION'])
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; m.advance(0); m.view=m.find('scroll_view')
+    assert m.showlabels()==['Search: beat','T1']
+    m.choose(1); assert m.toasts[-1][3]=='Added to Playlist' and m.showlabels()==['Search: beat','T1']
+    ple_search(m,'zeb'); assert m.showlabels()==['Search: zeb','T2']
+    ple_search(m,''); assert m.showlabels()==['Search','T1','T2']
+    ple_search(m,'zzz'); assert m.showlabels()==['Search: zzz','No songs match']
+    # Return from the box applies its text, and a filtered pick can close the page cleanly.
+    m.choose(0); m.nodes[m.find('edit')]['text']='t1'; assert m.key()==11
+    assert m.showlabels()==['Search: t1','T1']; m.close(); passed()
+    # Holding Play/Pause on a playlist row opens the same More page as its trailing dots.
+    # The Add to Playlist picker shares playlist_page's name and keeps stock's hold.
+    # Its context is the playlist index from the dots' name: row positions also count Import/Export.
+    m=QueueMachine(page='playlist_page',rows=3); m.word(O['PLAYLIST_ADD_MODE'],0)
+    for i,e in enumerate(m.nodes[r]['children'][0] for r in m.nodes[m.surface]['children']):
+        if i: dots=m.node('image',f'img_more{i-1}'); m.word(dots+O['W_PARENT'],e); m.nodes[e]['children'].append(dots)
+    m.paint(m.surface)
+    m.press(7000); assert m.hold()!=11 and not m.opened  # Import: no dots, stock keeps the hold
+    m.paint(m.surface); m.call(); m.paint(m.surface)
+    m.press(7100); assert m.hold()==11 and m.opened[-1][:2]==('localmusic/playlistsmore_page',0)
+    assert m.release()==0  # the locked hold's release never toggles playback
+    m.opened=[]; m.word(O['PLAYLIST_ADD_MODE'],1); m.press(7300)
+    m.hold(); assert not [o for o in m.opened if o[0]=='localmusic/playlistsmore_page']; passed()
+    for count in (0,1):
+        m=PlaylistEditMachine(count); m.open_editor(); before=m.order()
+        m.move(O['KEY_BACK_BTN']); m.move(); assert m.order()==before
+        assert m.key()==11 and not m.get(payload_syms['ple']); passed()
+    # Roll back failed statements/commits, stale IDs, wrong playlist, CUE/path changes and ignored writes.
+    for failure in ('open','begin','update','commit'):
+        m=PlaylistEditMachine(); m.fail=failure
+        assert m.mutate()==0 and m.order()==list('ABC') and not m.db.in_transaction
+        assert m.closed_db==1; passed()
+    m=PlaylistEditMachine(); m.db.execute("create trigger no_move before update on playlist begin select raise(ignore); end")
+    assert m.mutate()==0 and m.order()==list('ABC'); passed()
+    for change in ("delete from playlist where id=101", "update playlist set cd_num=1 where id=101",
+                   "update playlist set fileurl='/new' where id=101", "update playlist set time=30 where id=101"):
+        m=PlaylistEditMachine(); a=m.record(m.db.execute('select * from playlist where id=101').fetchone()); b=m.record(m.db.execute('select * from playlist where id=102').fetchone())
+        m.db.execute(change); before=m.db.execute('select * from playlist order by id').fetchall()
+        assert m.call(address=payload_syms['ple_mutate'],args=(0,a,b,0),gap=0)==0
+        assert m.db.execute('select * from playlist order by id').fetchall()==before; passed()
+    # Duplicate paths and CUE segments are removed by entry ID; hidden records keep their positions.
+    m=PlaylistEditMachine(); m.db.execute("update playlist set fileurl='/same',time=id,time_end=id+1 where cd_num=0 and id>100")
+    m.db.execute("insert into playlist values(150,0,'/hidden',0,0,'Hidden')")
+    assert m.mutate(101,103)==1 and m.order()==['C','B','A','Hidden']
+    assert m.mutate(102,0)==1 and m.order()==['C','A','Hidden'] and m.order(1)==['Other']
+    # Reopening uses the database order and leaves the live queue unchanged.
+    m.open_editor(); assert m.showlabels()==['Add Songs','Done','C','A','Hidden'] and m.names()==m.before_queue
+    assert m.mutate(101,200,0)==0
+    m.db.execute('update playlist set id=2147483647 where id=200'); assert m.mutate(101,103)==0
+    passed()
+    # Back cancels a deferred confirmation before returning to the editor.
+    m=PlaylistEditMachine(); m.open_editor(); m.choose(2); m.choose(2)
+    m.pick(0); assert m.key()==11 and m.order()==list('ABC')
+    assert m.showlabels()==['Add Songs','Done','A','B','C']; passed()
+    # A side press during a deferred click cannot change the row that click refers to.
+    m.choose(2); assert m.key()==11
+    m.view=m.find('scroll_view')
+    m.pick(3); m.move(); m.advance(0)
+    assert m.order()==list('ABC') and m.showlabels()==['Move Up','Move Down','Remove from Playlist']; passed()
+    # Simultaneous side-button presses retain independent repeat/release latches.
+    m=PlaylistEditMachine(); m.open_editor()
+    for key in (O['KEY_FWD_BTN'],O['KEY_BACK_BTN']):
+        assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+    assert m.order()==list('ABC')
+    assert m.call(O['KEY_BACK_BTN'],gap=0)==11
+    assert m.call(O['KEY_FWD_BTN'],address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+    assert m.order()==list('ABC') and m.call(O['KEY_FWD_BTN'],gap=0)==11; passed()
+    # Failed removal and identical occurrences still target one entry only.
+    for failure in ('delete','commit'):
+        m=PlaylistEditMachine(); m.fail=failure
+        assert m.mutate(101,0)==0 and m.order()==list('ABC') and not m.db.in_transaction; passed()
+    m=PlaylistEditMachine(); m.db.execute("update playlist set fileurl='/same',time=0,time_end=0 where id in (101,102)")
+    assert m.mutate(102,0)==1 and m.order()==['A','C']; passed()
+    # Native delivery is consumed too; closing during a press consumes its remaining release.
+    m=PlaylistEditMachine(); m.open_editor(); key=O['KEY_FWD_BTN']
+    assert m.call(key,address=HOOKS['widget_dispatch'][0],args=(m.view,m.event,0,0),event_type=O['EVT_KEY_LONG'],gap=0)==11
+    assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+    m.close(); assert m.call(key,gap=0)==11
+    assert m.call(address=payload_syms['ple_key'],args=(key,3,0,0),gap=0)==0
+    assert not m.playback(); passed()
+    # Reopen an on-disk database, independently of the editor's record cache.
+    import tempfile
+    with tempfile.TemporaryDirectory() as directory:
+        path=str(pathlib.Path(directory)/'database.db'); disk=sqlite3.connect(path)
+        m.db.backup(disk); disk.close(); disk=sqlite3.connect(path)
+        assert [r[0] for r in disk.execute('select filename from playlist where cd_num=0 and id>100 order by id')]==['B','A','C']
+        disk.close()
+    passed()
+    # A success/error toast covering the editor also consumes media keys, without moving songs.
+    m=PlaylistEditMachine(); m.open_editor(); page=m.top; m.top=m.node('dialog','msginfo_dialog')
+    m.move(); assert m.order()==list('ABC') and not m.playback()
+    m.top=page; m.move(); assert m.order()==['B','A','C']; passed()
+    # A subsequent stock playback load takes the saved order; editing itself left the queue alone.
+    m=PlaylistEditMachine(); assert m.mutate()==1; m.open_editor()
+    assert m.names()==m.before_queue
+    songs=m.get(payload_syms['ple']+8)
+    m.call(address=syms['mclLoadPlayList'],args=(songs,0,0xff13,0),gap=0)
+    assert m.names()==['B','A','C']; passed()
+else:
+    not_ported('The playlist editor and a playlist row\'s hold (localmusic_playlistsmore_page_init: V2.1 has no playlistsmore_page)')
+# Explicit stock loading order also reaches export and later playback loads through the shared query hook.
+m=LibraryQueryMachine(); m.db.execute('create table playlist(id,cd_num)')
+m.db.executemany('insert into playlist values(?,?)',[(103,0),(101,0),(102,0),(100,0),(104,1)])
+m.call(address=HOOKS['toolsQueryDbTable'][0],args=(m.string('/mnt/data/database.db'),m.string('select * from playlist where id > 100 and cd_num=0'),123,1),gap=0)
+assert m.sql.endswith('order by id asc') and m.results==[(101,0),(102,0),(103,0)]; passed()
+
 if variant=='ipod':
     # Both themes: the art itself follows the playing track, when Home or the status bar paints, in
     # the right panel beside the Split list: the Coverflow thumbnail until the player has parsed this
@@ -5021,6 +5657,12 @@ if variant=='ipod':
     for _ in range(O['BC_STEPS']):
         b.advance(O['BC_STEP_MS'] if steps else 1); steps.append(alpha()[0]); assert alpha()[0]==alpha()[1]
     n=O['BC_STEPS']; assert steps==[255*(n-k)//n for k in range(1,n+1)] and not b.timers,steps; passed()
+    # A new song while it is open shows its name again and restarts the fade; the same song does not.
+    b.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
+    tick=lambda: b.call(address=HOOKS['main_loop_sleep_default'][0],args=(0x1234,0,0,0),gap=0,clear=False)
+    tick(); assert alpha()==[0,0] and not b.timers
+    b.word(O['MCL_POS'],2); tick(); assert alpha()==[255,255] and len(b.timers)==1
+    b.advance(O['BC_MS']-1); tick(); assert alpha()==[255,255] and len(b.timers)==1; passed()
     b,bw,alpha=bigcover(); b.advance(O['BC_MS']+O['BC_STEP_MS'])
     f,ctx=b.handler(bw,O['EVT_DESTROY']); b.call(address=f,args=(ctx,b.event,0,0),gap=0)
     assert not b.timers; passed()
@@ -5217,13 +5859,17 @@ if variant=='ipod':
         elif end=='timeout': step(m,O['SCRUB_MS'],wait=True)
         else: assert step(m,O['KEY_RETURN'],gap=50)==11
         ended(m,[],end); passed()
-    # The lyrics page (slide value 1) with lyrics: the wheel scrolls scroll_lrc LYRIC_STEP a tick within
-    # its content, ahead of scrub and the volume, with stock's timer (which re-pins the current line)
-    # stopped until SCRUB_MS after the last tick. Another page or no lyrics leaves the wheel on volume.
-    def lyric_page(page=1,size=9,lines=1):
+    # The lyrics page (slide value 1) with lyrics: the wheel scrolls scroll_lrc a row a tick, to the next
+    # or previous row's top (stock's rows are 20 px, 25 a wrapped line) within its content, ahead of scrub
+    # and the volume, with stock's timer (which re-pins the current line) stopped until SCRUB_MS after the
+    # last tick. Another page or no lyrics leaves the wheel on volume.
+    ROWS=(20,50,20,20,25)+(20,)*7  # tops 0 20 70 90 110 ...; 275 px of content, at most 97 down
+    def lyric_page(page=1,size=9,lines=len(ROWS)):
         m=scrub_page(); m.lyric_size=size
-        m.lrc=m.node('scroll_view','scroll_lrc',[m.node('label') for _ in range(lines)])
-        m.word(m.lrc+O['W_H'],178); m.word(m.lrc+O['VIEW_CONTENT_H'],250)
+        rows=[m.node('label') for _ in range(lines)]
+        for i,r in enumerate(rows): m.word(r+O['W_Y'],sum(ROWS[:i])); m.word(r+O['W_H'],ROWS[i])
+        m.lrc=m.node('scroll_view','scroll_lrc',rows)
+        m.word(m.lrc+O['W_H'],178); m.word(m.lrc+O['VIEW_CONTENT_H'],sum(ROWS))
         m.slide=m.node('slide_view','slide_view',[m.lrc],value=page)
         m.nodes[m.win]['children'].append(m.slide)
         assert m.call(address=playing,args=(m.win,7,0,0),gap=0)==0; m.calls=[]
@@ -5231,16 +5877,19 @@ if variant=='ipod':
     for kw in ({'page':0},{'size':0},{'lines':0}):
         m=lyric_page(**kw); assert m.call()==0 and not did(m,'playing_timer_clear'),kw; passed()
     m=lyric_page()
-    assert step(m)==11 and m.get(m.lrc+O['SCROLL_Y'])==O['LYRIC_STEP'] and did(m,'playing_timer_clear')==[m.win]
-    for _ in range(5): assert step(m,gap=200)==11
-    assert m.get(m.lrc+O['SCROLL_Y'])==72 and not did(m,'playing_timer_clear')  # 250 - 178
-    for _ in range(5): assert step(m,O['KEY_PREV'],gap=200)==11
-    assert m.get(m.lrc+O['SCROLL_Y'])==0 and not m.starts
+    assert step(m)==11 and m.get(m.lrc+O['SCROLL_Y'])==20 and did(m,'playing_timer_clear')==[m.win]
+    ys=[]
+    for _ in range(5): assert step(m,gap=200)==11; ys.append(m.get(m.lrc+O['SCROLL_Y']))
+    assert ys==[70,90,110,110,110] and not did(m,'playing_timer_clear'),ys  # row tops, the last the end's
+    assert m.get(m.lrc+O['VIEW_CONTENT_H'])==288  # padded: 110 + 178, not 275 - 178 = 97 cutting a row
+    ys=[]
+    for _ in range(5): assert step(m,O['KEY_PREV'],gap=200)==11; ys.append(m.get(m.lrc+O['SCROLL_Y']))
+    assert ys==[90,70,20,0,0] and not m.starts,ys
     step(m,O['SCRUB_MS']-1,wait=True); assert not m.starts
     step(m,1,wait=True); assert m.starts==[m.win] and not m.timers and m.seeks==[]; passed()
     # A scrub begun on the lyrics page ends at the next tick, committing once, and the tick scrolls.
     m=lyric_page(); centre(m); m.nodes[m.slide]['value']=0; step(m); m.nodes[m.slide]['value']=1
-    assert step(m)==11 and m.seeks==[105] and m.get(m.lrc+O['SCROLL_Y'])==O['LYRIC_STEP']
+    assert step(m)==11 and m.seeks==[105] and m.get(m.lrc+O['SCROLL_Y'])==20
     step(m,O['SCRUB_MS'],wait=True); assert m.starts==[m.win] and not m.timers; passed()  # lyrics drop the settle wait
     # Touch ends it at once; the page's destruction keeps stock's timer off.
     m=lyric_page(); step(m); step(m,address=HOOKS['on_wm_tsdown_before_fun'][0],event_type=O['EVT_POINTER_DOWN'],gap=50)
@@ -5277,6 +5926,7 @@ if 'mclLoadExLyric' in HOOKS:
             elif name=='_deque_push_back' and a==self.get(O['MCL_LYRICS']): self.lines.append((signed(self.get(b)),self.text(self.get(b+4))))
             elif name=='_deque_push_back': return super().hook(u,address,size,unused)
             elif name=='taglib_file_new':
+                assert b==0  # Embedded lyrics need tags only.
                 self.tag_calls.append(('new',self.text(a))); ret=0x1170000
                 if self.bound: self.word(O['TAGLIB_NEW_GOT'],TAGLIB+O['TAGLIB_FILE_NEW'])
             elif name=='get':
@@ -5300,6 +5950,10 @@ if 'mclLoadExLyric' in HOOKS:
     m=LyricMachine({'LYRICS':('a'*99+'\n')*700}); assert m.load()==1 and len(m.lines)==656 and m.lines[-1]==(FAR,'a'*99); passed()  # 64 KB
 else:
     not_ported("A track's LYRICS tag without a .lrc (mclLoadExLyric not hooked on M1 Plus)")
+# Now Playing's lyric follow (LYRIC_FOLLOW): stock's scroll_to past the end clamps to a row top, the
+# content padded to it, not to 275 - 178 = 97 through a row; repeated it stays; a short page is left.
+if 'LYRIC_FOLLOW' in SITES: raise AssertionError('LYRIC_FOLLOW is patched on M1 Plus: port its case from test/patch.py')
+else: not_ported("The lyrics' top row whole (LYRIC_FOLLOW not patched in V2.1)")
 
 # Sparse populated initials: one destination per sustained tick, both directions, utilities
 # and wrap edges. Album and Artist share article handling; nonalphabetical sorts stay single-step.
@@ -6296,6 +6950,19 @@ if variant=='ipod':
     end(m,labels[0]); begin(m,labels[1]); assert style_color(m,0xffffffff)[1]==0xffaaaaaa
     end(m,labels[1]); end(m,view); passed()
 
+    # Decorative action labels may be disabled themselves; availability belongs to the button.
+    for label_name in ('label_del','label_rename'):
+        m=Machine(); label=m.node('hscroll_label',label_name); m.nodes[label]['enable']=0
+        button=m.node('button','button',[label]); item=m.node('list_item','item',[button])
+        m.word(label+O['W_PARENT'],button); m.word(button+O['W_PARENT'],item)
+        for enabled in (1,0,1):
+            m.nodes[button]['enable']=enabled
+            begin(m,label)
+            assert style_color(m,0xffaaaaaa)[1]==(0xffffffff if enabled else 0xff000000|O['SUDO_MUTED'])
+        m.nodes[item]['enable']=0; begin(m,label)
+        assert style_color(m,0xffffffff)[1]==0xff000000|O['SUDO_MUTED']
+    passed()
+
     m=Machine(); style_color(m,red)
     assert m.config_reads==[('/mnt/data/config.ini','IPOD',key,'0') for key in ('ACCENT','HOME','BATTERY','THEME')]+[('/mnt/data/config.ini','IPOD','SHORTCUT','6')]; passed()
 
@@ -6476,6 +7143,9 @@ if variant=='ipod':
         assert rgba({**config,'THEME':'1'},'img_flac',[(0xff1448,255)])!=[(O['SUDO_MUTED'],255)]
         assert rgba(config,'switch_on',disc[:2])==[(ACCENTS[0][2],255),(0xffffff,255)]
         assert rgba(config,'file:///mnt/mmc/system_netservice',px)==px
+        # Active Delete keeps stock's white; the pressed/disabled glyph keeps its grey.
+        assert rgba(config,'navbar_delete',[(0xffffff,255)])==[(0xffffff,255)]
+        assert rgba(config,'navbar_deletedown',[(0x777777,255)])==[(0x777777,255)]
         for name in ('navbar_add','home_stream','img_edit','stream_spotify','stream_radio','tidal_fav_add','play_fav','btn_blue'):
             got=rgba(config,name,[(0x158bcd,255),(0xff1448,128),(0xffffff,0)])
             assert all(c>>16 == (c>>8&255) == (c&255) for c,a in got), (name,got)
@@ -7455,6 +8125,29 @@ m.close(); m.calls=[]; m.rescan(); m.calls=[]
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=50_000_000)==0 and called('getAllMusic')
 m.page=m.top; assert m.texts()==['Most Played']+[x for p in zip(ranked[:3],details[:3]) for x in p]; passed()
 
+# View Queue on a shuffle (Now Playing's hold menu, Up Next's list): a Play/Pause hold on a row plays its track
+# next, a move, not Play Next's copy, the queue as it was; the rows are taken again with the pick at row 0, the
+# selection there, with no menu and no play/pause. A row already next only says so; playback is not touched; once
+# the queue changes under the page a hold says so and takes the rows again from the live queue.
+m=CoverflowMachine(page='playing_page',pos=1); q=m.deque([m.song(c) for c in 'ABCDE'])
+m.word(syms['mcl_pdeqplaylist'],q); m.word(O['MCL_POOL'],m.deque(list(range(5)),'int'))
+assert m.call(address=payload_syms['playback_set'],args=(0,1,0,0),gap=0)==1
+m.press(10); assert m.hold()==11 and 'Up Next' not in m.labels(); m.release()
+m.pick(m.labels().index('View Queue')); m.advance(0); m.page=m.top; assert m.nodes[m.page]['name']=='upnext_page'
+up=m.texts()[1::2]; assert len(up)==4 and 'B' not in up and m.texts()[0]=='View Queue'
+view=m.find('scroll_view'); m.paint(view); m.call(); assert m.selected(view)==1
+m.press(20); assert m.hold()==11 and m.release()==0 and m.toasts[-1][3]=='Playing Next'
+want=[up[1],up[0]]+up[2:]; assert m.texts()[1::2]==want and m.names()==list('ABCDE') and m.mcl('MCL_POS')==1
+view=m.find('scroll_view'); assert m.selected(view)==0 and not m.playback() and m.top==m.page
+m.paint(view); m.call(O['KEY_NEXT']); assert m.selected(view)==1
+m.call(O['KEY_PREV']); assert m.selected(view)==0
+toasts=len(m.toasts); m.press(30); assert m.hold()==11 and m.release()==0 and len(m.toasts)==toasts+1
+assert m.texts()[1::2]==want and m.names()==list('ABCDE')
+m.deqs[q][1][4]=m.song('F'); m.call(O['KEY_NEXT']); toasts=len(m.toasts)
+m.press(40); assert m.hold()==11 and m.release()==0 and len(m.toasts)==toasts+1 and m.toasts[-1][3]=='Queue changed'
+fresh=m.texts()[1::2]; assert fresh[0]==up[1] and 'F' in fresh and 'E' not in fresh and m.selected(m.find('scroll_view'))==0
+m.close(); passed()
+
 # Ratings (navigation.c rate_*): 5 hearts are stock's My Fav, 1-4 kept in /mnt/data/ringnav-ratings by listen_key with
 # the hearts in its low three bits. Now Playing's heart: stock's click (bound with the window: V1.32's 0x52b154 to the
 # image img_fav, V2.1's 0x53b480 to the button btn_fav) is swapped for one telling a tap, stock's toggle that leaves
@@ -7499,6 +8192,7 @@ class RateMachine(FileMocks,ShuffleMachine):
         elif name=='fseek': ret=0
         elif name=='ftell': ret=len(self.files[self.open_files[a][0]])
         elif name=='taglib_file_new':
+            assert b==1  # Long Songs requires audio properties.
             path=self.text(a); self.probed.append(path)
             if path in self.lengths: ret=self.alloc(8); props=self.alloc(8); vt=self.alloc(16); self.word(props,vt); self.word(vt+12,0x1000030); self.word(ret,props); self.word(props+4,self.lengths[path])
         elif name=='taglib_file_audioproperties': ret=self.get(a)
@@ -7800,6 +8494,53 @@ if not is_m1plus:
     assert m.open()==('/mnt/mmc/Podcasts',3) and m.back()[::2]==(0,0); passed()
 else:
     not_ported("Folder Root's open and Back through stock folder_back (the case needs V1.32's history globals; V2.1 has yoffset_rowsave and m3ufile_path)")
+# Go to Folder: a card song's hold menu row, after Go to Artist, opens folder_page in the song's folder as a
+# fresh visit at the layer stock's enters would have reached (the card 2, each folder one more), so stock
+# folder_back, run here, climbs a folder at a time to the card and out of the page, or to the storage
+# selector with a drive. The path is copied as it is: percent signs, format directives and UTF-8 stay literal.
+if not is_m1plus:
+    class GoMachine(RootMachine):
+        def __init__(self,path,dirs=(),otg=0):
+            super().__init__(otg=otg); self.handlers[syms['navigator_to']]='q:navigator_to'; self.dirs=set(dirs)
+            self.word(self.row(0)+O['REC_PATH'],self.string(path))
+        def hook(self,u,address,size,unused):
+            folder=address==syms['navigator_to'] and self.text(u.reg_read(REGS[0]))=='folder_page'
+            super().hook(u,address,size,unused)
+            if folder: self.win=self.top; self.nested(HOOKS['folder_page_init'][0],self.win,0)  # stock's init is synchronous
+        def menu(self): self.press(5); assert self.hold()==11; got=self.nodes[self.title]['text'],self.labels(); self.release(); return got
+        def go(self): self.calls=[]; self.pick(len(SONG_MENU)); self.advance(0)  # Go to Folder, from the open menu
+    GO=[*SONG_MENU,'Go to Folder']
+    DEEP='/mnt/mmc/Music/100% %s%n/Ünï cødé'
+    for otg in (0,1):
+        m=GoMachine(DEEP+'/song.flac',['/mnt/mmc/Music/100% %s%n',DEEP],otg=otg); m.push(5,6)  # a visit left deep
+        assert m.menu()==('Row 0',GO); m.go(); assert m.opened[-1][0]=='folder_page'
+        assert (m.text(syms['g_folder_path']),m.u.mem_read(syms['g_folder_layer'],1)[0])==(DEEP,5) and not any(m.stacks.values())
+        for want,layer in (('/mnt/mmc/Music/100% %s%n',4),('/mnt/mmc/Music',3),('/mnt/mmc',2)): assert RootMachine.back(m)[:3]==(1,want,layer)
+        assert RootMachine.back(m)[::2]==((1,1) if otg else (0,0)); passed()  # the selector, or out of the page
+    # A song at the card's root opens the card itself.
+    m=GoMachine('/mnt/mmc/x.mp3',['/mnt/mmc']); assert m.menu()[1]==GO; m.go()
+    assert (m.text(syms['g_folder_path']),m.u.mem_read(syms['g_folder_layer'],1)[0])==('/mnt/mmc',2) and RootMachine.back(m)[::2]==(0,0); passed()
+    # No row off the card, for a path stock's enters never build, a gone folder, one too long for g_folder_path
+    # (1023 bytes fit), or while a folder_page is open.
+    for path,dirs,row in (('/mnt/mmcx/a.mp3',['/mnt/mmcx'],0),('/mnt/mmc/A/../a.mp3',['/mnt/mmc/A/..'],0),
+            ('/mnt/mmc/./a.mp3',['/mnt/mmc/.'],0),('/mnt/mmc/A//a.mp3',['/mnt/mmc/A/'],0),('/mnt/mmc/Gone/a.mp3',[],0),
+            ('/mnt/mmc/'+'d'*1015+'/a.mp3',['/mnt/mmc/'+'d'*1015],0),('/mnt/mmc/'+'d'*1014+'/a.mp3',['/mnt/mmc/'+'d'*1014],1),
+            ('/mnt/mmc/..a/.b/a.mp3',['/mnt/mmc/..a/.b'],1)):
+        assert GoMachine(path,dirs).menu()[1]==(GO if row else SONG_MENU),path; passed()
+    m=GoMachine(DEEP+'/a.mp3',[DEEP]); m.open_pages.add('folder_page'); assert m.menu()[1]==SONG_MENU; passed()
+    # Gone between the menu and the pick: a toast, no page, and the next Folder visit opens as before.
+    m=GoMachine(DEEP+'/a.mp3',[DEEP]); m.menu(); m.dirs.clear(); m.go()
+    assert m.toasts[-1][3]=='Folder not found' and m.opened[-1][0]!='folder_page' and m.open()==('/mnt/mmc',2); passed()
+    # The card gone as the page opens: stock's page, the pending folder dropped.
+    m=GoMachine(DEEP+'/a.mp3',[DEEP]); m.menu(); m.missing=True; m.go()
+    assert m.opened[-1][0]=='folder_page' and m.u.mem_read(syms['g_folder_layer'],1)[0]==1; m.missing=False
+    assert m.open()==('/mnt/mmc',2); passed()
+    # Now Playing: the playing song's row sits after Go to Artist, before the play modes.
+    m=playing_menu(); m.dirs.add('/mnt/mmc/Music'); m.word(m.items(m.get(syms['mcl_pdeqplaylist']))[1]+O['REC_PATH'],m.string('/mnt/mmc/Music/B'))
+    m.press(6000); assert m.hold()==11 and m.labels()==SONG_MENU[:2]+['View Queue']+SONG_MENU[2:]+['Go to Folder','Shuffle','Repeat','Group by: Album']
+    passed()
+else:
+    not_ported("Go to Folder's open and Back through stock folder_back (the case needs V1.32's history globals, as Folder Root's)")
 
 # Photos (patch/photos.c): the helpers first. Names: .jpg, .jpeg and .png, case aside, not hidden.
 m=Machine(); m.mock('memcmp@GLIBC_2.0',prefix='cmp:')
@@ -8420,6 +9161,11 @@ OUT='/tmp/q2-librespot.out'; assert OUT not in m.files
 m.way=1; m.byte(syms['g_volume'],42); m.poll(); assert m.files[OUT]==b'plug:bluealsa 42\n' and m.sent[-1][1::4]==('v*','/tmp/q2sink.sock')
 m.poll(); assert not m.sent; m.byte(syms['g_volume'],43); m.poll(); assert m.files[OUT]==b'plug:bluealsa 43\n'
 m.way=0; m.poll(); assert OUT not in m.files; passed()
+# Swap alone selects the same headphone PCM helper as Mono Audio.
+sw=SpotMachine({BIN:bytearray(b'bin')}); sw.config['SWAPLR']='1'; sw.byte(syms['g_volume'],42)
+spot_open(sw,stream_page(sw)); sw.now+=500
+sw.call(address=payload_syms['spot_poll'],args=(0,0,0,0),gap=0)
+assert sw.files[OUT]==b'plughw:0,0 h42\n'; passed()
 # The page: the art (librespot's cover sized by Coverflow's thumbnailer, once a track), title, artist
 # and album, the position moving on from at= and the remaining time, all clear of the glass.
 m.state('playing',position=10000,at=m.now+500,cover=1); m.files[STATE+'.jpg']=bytearray(b'cover'); m.poll(); m.advance(0)
@@ -8522,20 +9268,23 @@ class RadioMachine(SpotMachine):
                   'mkdir@GLIBC_2.0'):
             self.handlers[syms[n]]='r:'+n
         self.mock('fflush@GLIBC_2.0','fsync@GLIBC_2.0','fileno@GLIBC_2.0','ferror@GLIBC_2.0')
-        self.wifi=3; self.reply=b''; self.code=200; self.opts={}
+        self.wifi=3; self.reply=b''; self.code=200; self.codes=[]; self.location=''; self.opts={}
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')
         if not name.startswith('r:'): return super().hook(u,address,size,unused)
         name=name[2:].split('@')[0]; a,b,c,d=[u.reg_read(r) for r in REGS]; ret=0
         if name=='get_wifisignal': ret=self.wifi
         elif name=='mkdir': self.tree[self.text(a)]=[]
-        elif name=='curl_easy_init': ret=0x5150
+        elif name=='curl_easy_init': ret=0x5150; self.opts={}  # each handle starts with curl's defaults
         elif name=='curl_easy_setopt': self.opts[b]=self.text(c) if b in (10002,10018,10065) else c
+        elif name=='curl_easy_perform' and 20011 not in self.opts: ret=0  # NOBODY: headers only
         elif name=='curl_easy_perform':  # the write callback, run nested as qsort's comparator is
             data=self.alloc((len(self.reply)+7)&~3); u.mem_write(data,self.reply)
-            took=self.nested(self.opts[20011],data,1,len(self.reply),0)
+            took=self.nested(self.opts[20011],data,1,len(self.reply),self.opts.get(10001,0))
             ret=0 if took==len(self.reply) and self.code else 23  # CURLE_WRITE_ERROR
-        elif name=='curl_easy_getinfo': self.word(c,self.code)
+        elif name=='curl_easy_getinfo' and b==0x10001f:  # REDIRECT_URL
+            text=self.alloc(len(self.location)+4); u.mem_write(text,self.location.encode()+b'\0'); self.word(c,text)
+        elif name=='curl_easy_getinfo': self.word(c,self.codes.pop(0) if self.codes else self.code)
         self.calls.append((name,a,b,c))
         for r in [UC_MIPS_REG_V1,*REGS,UC_MIPS_REG_T8,UC_MIPS_REG_T9]: u.reg_write(r,0xdeadbeef)
         u.reg_write(UC_MIPS_REG_V0,ret&0xffffffff); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA))
@@ -9073,6 +9822,56 @@ else:  # M1 Plus: V2.1's About rows are in its asset; its init's widget_foreach 
     assert m.nodes[label]['text']==f"CFW. Version:{manifest.get('release', VERSION)}{f" dev {manifest['dev_count']}" if manifest['dev'] else ''}"
     assert not m.nodes[item].get('handlers') and not m.nodes[item].get('name'); passed()
 
+if 'systemset_fwupdate_page_init' in HOOKS:  # M1 Plus: Network Update fetches the Q2's release (roadmap U4)
+    # Network Update (netupdate.c): System Update's second row, built by stock's own row builder
+    # (0x4c3140), is renamed "2" so stock's click (atoi of the name: 0 TF card, 1 Shanling) skips it, and
+    # fetches the latest GitHub release over verified TLS to the card's update.tar (a .part, renamed),
+    # then runs stock's TF card update (0x4c2994). A failure keeps the old update.tar.
+    m=RadioMachine(); resume=int(manifest['patch_symbols']['stock_fwupdate_trampoline'],16); m.handlers[resume]='stock_fwupdate'
+    m.u.hook_add(UC_HOOK_CODE,m.hook,begin=resume,end=resume)  # fast(): payload addresses hook one by one
+    m.handlers[0x4c2994]='fwupdate_tf'; m.mock('strcpy@GLIBC_2.0','widget_set_tr_text')
+    view=m.node('scroll_view','scroll_view_fwupdate'); m.top=m.node('window','fwupdate_page',[view])
+    for i in range(2):
+        row=m.node('list_item'); m.nodes[view]['children'].append(row)
+        assert m.call(address=0x4c3140,args=(row,i,0,0),gap=0)==0
+    tf,online=(m.nodes[r]['children'][0] for r in m.nodes[view]['children'])
+    assert m.call(address=HOOKS['systemset_fwupdate_page_init'][0],args=(m.top,5,0,0),gap=0,count=5_000_000)==0
+    assert m.calls[0][:3]==('stock_fwupdate',m.top,5) and m.nodes[tf]['name']=='0' and m.nodes[online]['name']=='2'
+    label=m.nodes[online]['children'][0]; assert m.nodes[label]['type']=='hscroll_label'
+    def press():
+        f,ctx=[(f,c) for t,f,c in m.nodes[online]['handlers'] if t==O['EVT_CLICK']][-1]
+        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0; m.advance(0,clear=False)
+    UPDATE='/mnt/mmc/update.tar'; ASSET='update.tar' if variant=='ipod' else 'update-legacy.tar'
+    m.files[UPDATE]=bytearray(b'old')
+    m.wifi=-1; press(); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and not m.threads; m.wifi=3
+    def fetch(codes,tag,reply=b'',done=500):
+        press(); assert m.nodes[label]['text']=='Checking…'
+        m.codes=list(codes); m.location=f'https://github.com/DiamondBond/q2-pod/releases/tag/{tag}'; m.reply=reply
+        m.advance(500,clear=False)  # while it runs: the percentage, and standby and auto power-off wait
+        assert m.nodes[label]['text']=='Checking…' and ('reset_poweroptions_timer',1,1,0) in [c[:4] for c in m.calls]
+        worker,arg=m.threads[-1]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,count=5_000_000)==0
+        threads=len(m.threads); press(); assert len(m.threads)==threads  # ended, not yet joined: nothing
+        m.advance(done,clear=False)
+        assert ('widget_set_tr_text',label) in [c[:2] for c in m.calls] and UPDATE+'.part' not in m.files
+    fetch([302,200],'9.9.9',b'TAR'*100)
+    assert m.opts[10002]==f'https://github.com/DiamondBond/q2-pod/releases/latest/download/{ASSET}' and m.opts[52]==1
+    assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.opts[64]==1 and m.opts[81]==2 and m.opts[99]==1
+    assert bytes(m.files[UPDATE])==b'TAR'*100 and 'fwupdate_tf' in [c[0] for c in m.calls]
+    m.files[UPDATE]=bytearray(b'old')
+    fetch([302,404],'9.9.9'); assert m.toasts[-1][3]=='No update for this build' and m.files[UPDATE]==b'old'
+    fetch([200],'9.9.9'); assert m.toasts[-1][3]=="Can't reach GitHub"  # no redirect: no tag
+    if not manifest['dev']:  # --dev builds have no release tag, so always fetch
+        fetch([302],VERSION); assert m.toasts[-1][3]=='Latest firmware installed' and m.files[UPDATE]==b'old'
+        fetch([302],'1.0.0'); assert m.toasts[-1][3]=='Latest firmware installed'  # older: never a downgrade
+    # Leaving the page cancels before the download starts: the card may be unmounted or shared next.
+    press(); m.codes=[302,200]; m.location='https://github.com/DiamondBond/q2-pod/releases/tag/9.9.9'; m.reply=b'NEW'
+    f,ctx=m.handler(label,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    worker,arg=m.threads[-1]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,count=5_000_000)==0
+    m.advance(500,clear=False); assert m.toasts[-1][3]=='Download cancelled' and m.files[UPDATE]==b'old'
+    assert 'fwupdate_tf' not in [c[0] for c in m.calls]; passed()
+else:
+    not_ported("Network Update (systemset_fwupdate_page_init: it fetches DiamondBond's Q2 update.tar)")
+
 # Resume: once a second the UI loop polls the playing track; one of Q2POD RESUMEMIN minutes (30) or
 # longer keeps its place in a ring written whole to /mnt/data (a .tmp, renamed), every RESUME_SAVE_S
 # of play, after a pause and on a track change, and jumps back there when it next starts playing near
@@ -9285,6 +10084,50 @@ if not is_m1plus:
 else:
     not_ported('Key lock and quick lock rows (keylock_rows, quick_lock not hooked in V2.1)')
 
+if 'dialog_statusbar_dialog_init' in HOOKS:  # M1 Plus: V2.1's own pull-down (native, roadmap 4)
+    # Quick settings (#70): a tap passes unchanged; a stationary hold opens settings without a click.
+    for radio,page in (('wifi','systemset/wifi_page'),('bt','systemset/bluetooth_page')):
+        def quick_page():
+            m=QueueMachine(); m.mock('dialog_quit','widget_dispatch_event_to_target_recursive')
+            m.handlers[int(manifest['patch_symbols']['stock_quicksettings_trampoline'],16)]='stock_quicksettings'
+            icon=m.node('image','img_'+radio+'switch')
+            win=m.node('dialog','statusbar_dialog',[icon,m.node('image','img_lock'),m.node('label','label_lock')])
+            m.top=win
+            m.call(address=HOOKS['dialog_statusbar_dialog_init'][0],args=(win,0,0,0),gap=0)
+            def down():
+                m.pressed=1
+                m.word(m.event+O['EVENT_X'],30); m.word(m.event+O['EVENT_Y'],40)
+                f,ctx=m.handler(icon,O['EVT_POINTER_DOWN'])
+                m.call(key=30,address=f,args=(ctx,m.event,0,0),event_type=O['EVT_POINTER_DOWN'],gap=0)
+            def dispatch(kind,x=30):
+                m.word(m.event+O['EVENT_X'],x); m.word(m.event+O['EVENT_Y'],40)
+                return m.call(key=x,address=HOOKS['widget_dispatch'][0],args=(icon,m.event,0,0),event_type=kind,gap=0)
+            return m,icon,win,down,dispatch
+        m,icon,win,down,dispatch=quick_page(); down()
+        m.advance(O['RATE_HOLD_MS']-1); assert not m.opened
+        dispatch(O['EVT_POINTER_UP_BEFORE']); assert not m.timers
+        assert dispatch(O['EVT_CLICK'])==0 and any(c[0]=='stock_dispatch' for c in m.calls)
+        m.advance(O['RATE_HOLD_MS']); assert not m.opened; passed()
+        m,icon,win,down,dispatch=quick_page(); down(); m.advance(O['RATE_HOLD_MS'])
+        assert m.opened==[(page,None)] and [c[1:3] for c in m.calls if c[0]=='dialog_quit']==[(win,0)]
+        assert any(c[0]=='widget_dispatch_event_to_target_recursive' for c in m.calls)
+        assert dispatch(O['EVT_CLICK'])==11 and not any(c[0]=='stock_dispatch' for c in m.calls)
+        # A later touch can tap the same icon normally.
+        m.top=win; down(); dispatch(O['EVT_POINTER_UP_BEFORE']); assert dispatch(O['EVT_CLICK'])==0; passed()
+        for kind in (O['EVT_POINTER_MOVE_BEFORE'],O['EVT_POINTER_ABORT'],O['EVT_KEY_DOWN_BEFORE']):
+            m,icon,win,down,dispatch=quick_page(); down(); dispatch(kind,x=50)
+            m.advance(O['RATE_HOLD_MS']); assert not m.opened, (kind,m.opened)
+        for kind in (O['EVT_DESTROY'],O['EVT_WINDOW_CLOSE'],O['EVT_WINDOW_BACKGROUND']):
+            m,icon,win,down,dispatch=quick_page(); down(); f,ctx=m.handler(win,kind)
+            m.call(address=f,args=(ctx,m.event,0,0),event_type=kind,gap=0)
+            m.advance(O['RATE_HOLD_MS']); assert not m.opened
+        m,icon,win,down,dispatch=quick_page(); down(); m.top=m.node('window','other')
+        m.advance(O['RATE_HOLD_MS']); assert not m.opened
+        m,icon,win,down,dispatch=quick_page(); m.timer_fail=True; down()
+        assert dispatch(O['EVT_CLICK'])==0 and not m.opened; passed()
+else:
+    not_ported("Quick settings' radio hold shortcuts (dialog_statusbar_dialog_init: V2.1's pull-down is its own)")
+
 # Settings rows (docs/internals.md#charge-limit, #low-power, #album-artists): Power management gains
 # Charge limit and Low power, Audio settings gains Artists, after the stock rows in the same widgets
 # and styles; Centre or tap toggles and saves each. Artists is stock's own PLAYSET ARTISTTYPE.
@@ -9356,8 +10199,8 @@ if not is_m1plus:
 m,rows,texts,*_=settings_page('power',NAMES['VIEW_POWER'],{'CHARGELIMIT':'1','LOWPOWER':'1','WAKEDOUBLE':'1'})
 assert texts()==[f"Charge Limit: {O['CHARGE_STOP']}%",'Low Power: On']+([] if is_m1plus else ['Wake: Double Press']); passed()
 m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],stock_rows=15)
-assert len(rows)==7 and icons==[NAMES[k] for k in ('ICON_COVERMODE','ICON_FOLDERJUMP','ICON_COVERMODE','ICON_GAPLESS','ICON_FOLDERJUMP','ICON_MEMPLAY','ICON_BALANCE')]
-assert texts()==['Year Order: Newest First','Artists: Artist','Artist Album Order: Year','Crossfade: Off','Folder Root: Card','Resume Songs: 30 min','Mono Audio: Off']
+assert len(rows)==8 and icons==[NAMES[k] for k in ('ICON_COVERMODE','ICON_FOLDERJUMP','ICON_COVERMODE','ICON_GAPLESS','ICON_FOLDERJUMP','ICON_MEMPLAY','ICON_BALANCE','ICON_BALANCE')]
+assert texts()==['Year Order: Newest First','Artists: Artist','Artist Album Order: Year','Crossfade: Off','Folder Root: Card','Resume Songs: 30 min','Mono Audio: Off','Swap L/R: Off']
 assert click(2)==[(1,'Q2POD','ARTISTAZ')] and texts()[2]=='Artist Album Order: A–Z'
 assert click(2)==[(0,'Q2POD','ARTISTAZ')] and texts()[2]=='Artist Album Order: Year'
 assert click(0)==[(1,'Q2POD','YEAROLD')] and texts()[0]=='Year Order: Oldest First'
@@ -9430,6 +10273,16 @@ assert not [c for c in m.calls if c[0]=='mono:open']
 assert click(6)==[(1,'Q2POD','MONO')] and texts()[6]=='Mono Audio: On' and m.get(m.flag)==1
 assert click(6)==[(0,'Q2POD','MONO')] and texts()[6]=='Mono Audio: Off' and m.get(m.flag)==0
 assert [c[0] for c in m.calls if c[0]=='mono:open']==[]; passed()  # mapped once
+# A failed map must never publish an inode that consumers could retain forever.
+class FailedMapMachine(MonoMachine):
+    def hook(self,u,address,size,unused):
+        if self.handlers.get(address)=='mono:mmap':
+            self.calls.append(('mono:mmap',)); self.returns(0xffffffff); return
+        return super().hook(u,address,size,unused)
+m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],stock_rows=15,cls=FailedMapMachine)
+assert click(6)==[(1,'Q2POD','MONO')]
+assert 'mono:mmap' in [c[0] for c in m.calls] and 'mono:rename' not in [c[0] for c in m.calls]
+passed()
 # Mono Audio with the EQ off and the player stopped (mono_sync): the filter is not attached until something
 # plays (peq_chain), then is attached; once the filter is in (peq_chained) a later sync does not attach it again.
 class MonoStoppedMachine(MonoMachine):
@@ -9447,7 +10300,14 @@ assert 'mono:peq_attach' not in [c[0] for c in m.calls]; passed()
 # Playback Setting restacks by use (navigation.c playset_order): stock's rows by id, then ours.
 def stacked(m,view_name): return [(m.entries+rows).index(c) for c in m.nodes[named(m,m.top,view_name)]['children']]
 # (V1.32's row ids: M1 Plus keeps V2.1's order, ours after.)
-assert stacked(m,NAMES['VIEW_PLAYSET'])==(list(range(22)) if is_m1plus else [3,2,0,10,18,9,4,5,11,21,1,8,20,16,15,17,13,14,19,12,6,7]); passed()
+assert stacked(m,NAMES['VIEW_PLAYSET'])==(list(range(23)) if is_m1plus else [3,2,0,18,9,10,4,5,11,21,22,1,8,20,16,15,17,13,14,19,12,6,7]); passed()
+# Swap L/R uses its own persistent flag, immediately below Mono Audio.
+m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],stock_rows=15,cls=MonoMachine)
+assert texts()[7]=='Swap L/R: Off'
+assert click(7)==[(1,'Q2POD','SWAPLR')] and texts()[7]=='Swap L/R: On' and m.get(m.flag)==1
+assert click(7)==[(0,'Q2POD','SWAPLR')] and texts()[7]=='Swap L/R: Off' and m.get(m.flag)==0
+m,rows,texts,*_=settings_page('audioset',NAMES['VIEW_PLAYSET'],{'SWAPLR':'1'},stock_rows=15)
+assert texts()[7]=='Swap L/R: On'; passed()
 # Folder Root (#49): the row cycles the card's top-level folders, case aside, then the card, saving Q2POD
 # FOLDERROOT each time. Not offered: files, dot-folders, names with an edge space or over 200 bytes (a
 # config.ini line can't keep them). A saved folder gone moves on to the next name after it.
@@ -9493,7 +10353,7 @@ if is_m1plus:
     m.nodes[view]['children']=[m.entry(view) for _ in range(15)]  # stock's rebuild
     assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
     again=m.nodes[view]['children'][15:]
-    assert len(again)==7 and [m.nodes[m.nodes[row_button(m,r)]['children'][-1]]['text'] for r in again]==before; passed()
+    assert len(again)==8 and [m.nodes[m.nodes[row_button(m,r)]['children'][-1]]['text'] for r in again]==before; passed()  # 1.3.8's Swap L/R the eighth
 # Wheel sensitivity (playback.c wheel_pct, test/m1plus/playback.py's travel): Display's last row in both
 # builds, Q2POD WHEELSENSITIVITY as 1.0.6 saved it, 50% unless a canonical ten in 50-200.
 if not is_m1plus:  # Q2 only: the touch wheel's
@@ -9631,6 +10491,9 @@ WALLS=['q2pod:'+n for n in ('aurora','sunrise','graphite','tide','ember','black'
 class LockMachine(QueueMachine):
     reset=False
     def hook(self,u,address,size,unused):
+        if address==syms['strcpy@GLIBC_2.0']:
+            a,b=[u.reg_read(r) for r in REGS[:2]]
+            self.u.mem_write(a,self.raw(b)+b'\0'); self.returns(a); return
         if self.handlers.get(address)=='stock_saverlist' and self.reset:
             self.u.mem_write(syms['g_screensaver_picture'],b'screensaver_default\0')
         if self.handlers.get(address)=='q:image_base_cast':  # the widget itself, an image
@@ -9644,6 +10507,29 @@ def lock_machine(picture='screensaver_default',config={}):
             m.handlers[int(manifest['patch_symbols'][key],16)]='stock_'+h
     m.u.mem_write(syms['g_screensaver_picture'],picture.encode()+b'\0')
     return m
+if 'lockscreen_access' in payload_syms:  # M1 Plus: config_init's and the list's access sites, roadmap U3's batch
+    # Startup and list validation call the same narrow access wrapper, without repair writes.
+    for picture in WALLS+['q2pod:invalid','/mnt/mmc/missing.jpg','/mnt/mmc/exists.jpg']:
+        m=lock_machine(picture); m.present.add('/mnt/mmc/exists.jpg')
+        result=m.call(address=payload_syms['lockscreen_access'],args=(m.string(picture),4,0,0),gap=0)
+        assert (result==0)==(picture in WALLS or picture.endswith('/exists.jpg'))
+        assert not any(c[0]=='toolsWriteConfig' for c in m.calls)
+    passed()
+    # Execute config_init's real validation/copy block, including the patched access call.
+    for picture in WALLS+['screensaver_default','/mnt/mmc/missing.jpg','/mnt/mmc/exists.jpg']:
+        m=lock_machine(); m.present.add('/mnt/mmc/exists.jpg')
+        path=m.string(picture); stack=0x7000f000
+        for _ in range(2):
+            m.calls=[]; m.u.reg_write(UC_MIPS_REG_SP,stack); m.word(stack+24,0xa26cc0)
+            m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0); m.u.reg_write(UC_MIPS_REG_S0,path)
+            m.u.emu_start(0x4fa410,0x4fa460,count=100000)
+            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4fa460
+            expected='screensaver_default' if picture.endswith('/missing.jpg') else picture
+            assert m.text(syms['g_screensaver_picture'])==expected
+            assert not any(c[0]=='toolsWriteConfig' for c in m.calls)
+    passed()
+else:
+    not_ported('A built-in wallpaper kept through a reboot (lockscreen_access not patched in V2.1)')
 cards=['/mnt/mmc/lockscreenimage/a.jpg','/mnt/mmc/lockscreenimage/b.png']
 m=lock_machine('q2pod:tide'); m.reset=True
 m.word(syms['p_deque_screensaverlist'],m.deque([m.string(n) for n in ['screensaver_default',*cards]],'char*'))
@@ -9651,7 +10537,7 @@ listed=lambda:[m.text(e) for e in m.items(m.get(syms['p_deque_screensaverlist'])
 for _ in range(2):
     m.calls=[]; assert m.call(address=HOOKS['get_screensaver_image'][0],args=(0,0,0,0),gap=0)==0
     assert listed()==['screensaver_default',*WALLS,*cards] and m.text(syms['g_screensaver_picture'])=='q2pod:tide'
-    assert [(m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='toolsWriteConfig']==[('SYSSET','SCREENSAVERPATH')]
+    assert not [c for c in m.calls if c[0]=='toolsWriteConfig']
 m.u.mem_write(syms['g_screensaver_picture'],cards[0].encode()+b'\0'); m.reset=False; m.calls=[]
 assert m.call(address=HOOKS['get_screensaver_image'][0],args=(0,0,0,0),gap=0)==0
 assert listed()==['screensaver_default',*WALLS,*cards] and not [c for c in m.calls if c[0]=='toolsWriteConfig']; passed()
@@ -10079,7 +10965,7 @@ def boot_row(value=None,mode=0o100755):
     assert m.call(address=HOOKS['systemset_sysset_page_init'][0],args=(m.top,5,0,0),gap=0)==0
     assert m.calls[0][:3]==('stock_systemset',m.top,5)
     # sysset_order is V1.32's row ids: M1 Plus keeps V2.1's order and appends Boot to.
-    order=list(range(12)) if is_m1plus else [1,3,4,5,8,7,2,0,6,9,10,11]
+    order=list(range(12)) if is_m1plus else [1,3,4,5,8,7,2,0,6,9,11,10]
     if mode!=0o100755:
         assert m.nodes[view]['children']==[entries[i] for i in order]
         return m,None,None
@@ -10481,6 +11367,117 @@ if is_m1plus:
         assert [knob(k,**kw) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']],kw
     assert knob('KEY_POWER',setup=lambda m:m.byte(syms['g_power_longkey'],1))==O['KEY_POWER']
     assert knob('KEY_POWER',setup=lambda m:m.byte(O['BOOT_KEY_GUARD'],1))==O['KEY_POWER']; passed()
+
+# Chapter subprocess syscalls use Linux o32 and pass the filename through argv.
+for name,number,args,error in (('chapter_pipe2',4328,(0x1001000,0x80000,0,0),False),
+                                ('chapter_pipe2',4328,(0x1001000,0x80000,0,0),True),
+                                ('chapter_kill',4037,(123,9,0,0),False),
+                                ('chapter_execv',4011,(0x1001000,0x1002000,99,0),False)):
+    m=Machine(); seen=[]
+    def chapter_syscall(u,interrupt,unused):
+        seen.append((u.reg_read(UC_MIPS_REG_V0),*[u.reg_read(r) for r in REGS[:3]]))
+        u.reg_write(UC_MIPS_REG_A3,int(error)); u.reg_write(UC_MIPS_REG_V0,13 if error else 0)
+    m.u.hook_add(UC_HOOK_INTR,chapter_syscall)
+    result=m.call(address=payload_syms[name],args=args,gap=0)
+    assert result==(-1 if error else 0)
+    assert seen==[(number,args[0],args[1],0 if name=='chapter_execv' else args[2])]; passed()
+
+# Chapter extraction is tested with real FFmpeg in chapters.py; here only that boundary is mocked.
+class ChapterMachine(CoverflowMachine):
+    def __init__(self, count=3, failed=False, ready=True):
+        super().__init__(page='playing_page', pos=1)
+        self.ready=ready; self.cancelled=0; self.playtime=70
+        self.job=self.alloc(32+512*260)
+        for off,v in ((12,0),(16,int(failed)),(20,count)): self.word(self.job+off,v)
+        for i,(sec,title) in enumerate(((0,'Opening'),(60,''),(120,'日本語'))):
+            self.word(self.job+32+i*260,sec)
+            self.u.mem_write(self.job+36+i*260,title.encode()+b'\0')
+        for name in ('chapters_start','chapters_poll','chapters_cancel'):
+            self.handlers[payload_syms[name]]='chapter:'+name
+        self.mock('navigator_back')
+        self.handlers.pop(syms['mclGetPlayStatus'],None); self.word(PLAY_STATUS,2)
+        self.track=self.items(self.get(syms['mcl_pdeqplaylist']))[1]
+        self.word(self.track+O['REC_PATH'],self.string('/mnt/mmc/Book ; $x.M4B'))
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if not name.startswith('chapter:'): return super().hook(u,address,size,unused)
+        a=u.reg_read(REGS[0]); ret=0
+        if name=='chapter:chapters_start':
+            assert self.text(a)=='/mnt/mmc/Book ; $x.M4B'; ret=self.job
+        elif name=='chapter:chapters_poll':
+            ret=int(self.ready)
+            if ret: self.word(self.job+12,1)
+        else: self.cancelled+=1; self.ready=True
+        self.returns(ret)
+    def open_chapters(self):
+        self.press(6000); assert self.hold()==11
+        assert 'Chapters' in self.labels(); self.release()
+        self.pick(self.labels().index('Chapters')); self.advance(0)
+        self.page=self.top
+        assert self.nodes[self.page]['name']=='chapters_page'
+    def rows(self): return self.nodes[self.find('scroll_view')]['children']
+    def choose(self,i):
+        f,ctx=self.handler(self.rows()[i],O['EVT_CLICK'])
+        self.call(address=f,args=(ctx,self.event,0,0),gap=0)
+
+for ext,shown in (('m4b',True),('M4B',True),('M4b',True),('mp3',False),('m4b.mp3',False)):
+    m=playing_menu(); r=m.items(m.get(syms['mcl_pdeqplaylist']))[1]
+    m.word(r+O['REC_PATH'],m.string('/p/book.'+ext))
+    m.press(6000); assert m.hold()==11 and ('Chapters' in m.labels())==shown; passed()
+for state in (2,3):
+    m=ChapterMachine(); m.word(PLAY_STATUS,state); m.open_chapters()
+    assert 'Loading chapters…' in m.texts()
+    m.advance(50); view=m.find('scroll_view'); m.paint(view)
+    assert m.nodes[view]['_ringnav_index']==1
+    assert 'Chapter 2' in m.texts() and '0:01:00' in m.texts() and '日本語' in m.texts()
+    m.choose(2)
+    seeks=[c for c in m.calls if c[0] in ('player_seek_time','mclSetSeek','mclSetResume')]
+    assert [(c[0],c[1]) for c in seeks]==[('player_seek_time' if state==2 else 'mclSetSeek',120)]
+    assert any(c[0]=='navigator_back' for c in m.calls); passed()
+m=ChapterMachine(); m.open_chapters(); m.advance(50); m.word(O['MCL_POS'],2); m.choose(1)
+assert not any(c[0] in ('player_seek_time','mclSetSeek') for c in m.calls)
+assert any(c[0]=='navigator_back' for c in m.calls); passed()
+for count,failed,title in ((0,False,'No embedded chapters'),(0,True,'Could not read chapters')):
+    m=ChapterMachine(count,failed); m.open_chapters(); m.advance(50)
+    assert title in m.texts() and not m.rows(); passed()
+m=ChapterMachine(ready=False); m.open_chapters(); m.advance(50)
+f,ctx=m.handler(m.page,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+assert m.cancelled==1
+m.advance(50); assert m.freed==1 and not m.timers; passed()
+
+# Centre/wheel and touch reach the same guarded row handler.
+for touch in (False,True):
+    m=ChapterMachine(); m.open_chapters(); m.advance(50); view=m.find('scroll_view'); m.paint(view)
+    if touch:
+        m.choose(2)
+    else:
+        assert m.call(O['KEY_NEXT'],gap=0)==11
+        assert m.nodes[view]['_ringnav_index']==2
+        m.on_click=lambda w,e: m.nested(m.handler(w,O['EVT_CLICK'])[0],m.handler(w,O['EVT_CLICK'])[1],e)
+        assert m.confirm()==11
+    assert any(c[0]=='player_seek_time' and c[1]==120 for c in m.calls); passed()
+
+class ChapterResumeMachine(ChapterMachine):
+    def __init__(self):
+        super().__init__()
+        self.files=place(85,'/mnt/mmc/Book ; $x.M4B'); self.open={}; self.play=(0,225)
+        self.seeks=[]; self.opens=self.renames=0; self.epoch=1700000000
+        self.handlers[sleep_hook+12]='stock_sleep'
+        for name in ('fopen@GLIBC_2.2','fread@GLIBC_2.0','fwrite@GLIBC_2.0','fclose@GLIBC_2.2',
+                     'rename@GLIBC_2.0','access@GLIBC_2.0','time@GLIBC_2.0',
+                     'player_playtime_and_length','player_seek_time'):
+            self.handlers[syms[name]]='r:'+name
+    def hook(self,u,address,size,unused):
+        if self.handlers.get(address,'').startswith('r:'): return ResumeMachine.hook(self,u,address,size,unused)
+        return super().hook(u,address,size,unused)
+    poll=ResumeMachine.poll
+for polls in (0,1,2):  # before first resume poll, during settling, or with a restore pending
+    m=ChapterResumeMachine()
+    if polls: m.poll(0,225,pos=1,n=polls)
+    m.open_chapters(); m.advance(50); m.choose(0)
+    assert m.seeks==[0]
+    m.poll(0,225,n=2); m.poll(1,225,n=3)
+    assert m.seeks==[0], (polls,m.seeks); passed()
 
 print(f'{checks} MIPS execution scenarios passed; toolkit services mocked, stock lock filter executed.')
 if is_m1plus:
