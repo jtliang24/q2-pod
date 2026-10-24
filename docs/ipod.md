@@ -156,7 +156,7 @@ The percentage's slot is as wide as its digits (measured once in the stock font,
 digits), so every mode ends on the icons' margin with the same 4-pixel gap to Wi-Fi; `BATT_PCT_W`
 (42, "100%") stands in until the first paint has measured them.
 
-- Percent Inside (`BATTERY=3`): a compact 32×16 solid battery with softly rounded corners and a 2×6 terminal. Centred 13 px dark digits show the percentage without a percent sign. The body turns green while charging and red when low.
+- Percent Inside (`BATTERY=3`): a compact 28×15 solid battery with slightly rounded corners and a 2×5 terminal, the regular icon's. Centred 13 px dark digits show the percentage without a percent sign. The body turns green while charging and red when low.
 
 The playback, Bluetooth and Wi-Fi glyphs share smooth edges, rounded ends and a consistent visual weight. Four-pixel spacing keeps the enlarged numbers clear of connectivity icons. Wi-Fi's arcs are concentric round its dot and stand the battery's 11 pixels tall; it retains all five signal states.
 
@@ -181,7 +181,9 @@ their size. The settings inits never move or resize
 these widgets. Left out: `wifitransport_page` (its image starts above the
 navbar's bottom edge), `fwdownload_page` (no navbar), the PEQ page (it replaces
 all children) and every Tidal page, whose navbars hold the search and sort
-buttons. A page with a visible navbar keeps its own title.
+buttons. A page with a visible navbar keeps its own title. The artist page shows its stock
+navbar (multi-select, the Album Artist switch) again at run time when Artist Albums is Grid, its
+tabs 50 pixels lower ([internals.md](internals.md#artist-albums-in-coverflow)).
 
 ## Settings
 
@@ -434,7 +436,7 @@ is stock's label; the remaining time replaces stock's total. Sizes are `NP_*` co
 
 A tap on the art opens stock's full-screen art (`bigcover_page`; any tap closes it). Its song name
 and the shade band behind it show for `BC_MS` (3 s), then fade out together over `BC_STEPS` steps
-`BC_STEP_MS` apart (`ringnav_bigcover`, after stock's init).
+`BC_STEP_MS` apart (`ringnav_bigcover`, after stock's init). They show again for each new song while it is open.
 
 **Scrub.** A double press of the centre button starts scrubbing, as on an iPod classic (with the screen off it only
 wakes it, [Wake](internals.md#wake)), and the bar fill turns white
@@ -453,9 +455,11 @@ scrub ends, instead of after each pause between ticks. Values are `SCRUB_*` in
 The top row's text and icons, the bar's ends and the times keep clear of the corners
 ([Rounded corners](#rounded-corners)).
 
-**Lyrics.** Stock already highlights the current line and scrolls to keep it in view. On the
-lyrics page, while the track has lyrics, the wheel scrolls them a line (25 pixels, `LYRIC_STEP`)
-per tick instead of changing the volume or scrubbing; a scrub under way ends first, as any other end
+**Lyrics.** Stock already highlights the current line and scrolls to keep it in view. The top row is
+always whole: near the end the lines stop with up to a row of space below the last, not with the top
+one cut. On the
+lyrics page, while the track has lyrics, the wheel scrolls them a row
+per tick, to the next row's top, instead of changing the volume or scrubbing; a scrub under way ends first, as any other end
 does. Both times, the bar and the highlight wait meanwhile, and 3 seconds (`SCRUB_MS`) after the
 last tick, or at a touch, the page follows the current line again; see
 [internals.md](internals.md#scrub-ipod).
@@ -504,7 +508,7 @@ its tiles, framed in white when selected.
 | `confirminfo_dialog`          | Cancel, OK (full-width rows)                    |
 | `tidal_confirminfo_dialog`    | `img_cancel`, `img_enter` (80x80, side by side) |
 | `autoshutdown_dialog`         | `btn_cancel`                                    |
-| `playlistsmore_page` (a page) | Rename, Delete                                  |
+| `playlistsmore_page` (a page) | Rename, Delete Playlist, Edit Playlist          |
 | `tidal_quality_select_dialog` | four quality rows, `btn_ok`                     |
 | `tidal_sortmode_dialog`       | three sort rows, `btn_cancel`                   |
 
@@ -512,7 +516,7 @@ its tiles, framed in white when selected.
 wheel stays on the volume: the text-entry dialogs (`addplaylist`, `editwifi`, `kbwifiadd`,
 `kbwifipass`, `renameplaylist`, `searchbox`, `tidal_searchbox` and Baidu's `edit_dialog`), the Update
 Local Music progress (`updatemusic_dialog`, whose only button cancels a scan that can run for
-minutes), the pull-down quick settings (`statusbar_dialog`, whose wheel sets the brightness: see
+minutes), the pull-down quick settings (`statusbar_dialog`, whose wheel sets the brightness, or the volume after a Play/Pause hold: see
 [internals.md](internals.md#setting-editors)), and the dialogs without buttons
 (`volume_dialog`, `msginfo_dialog`, `checkfw_dialog`, `showsn_dialog`, `dialog_wifibt_test`).
 

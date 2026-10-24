@@ -58,13 +58,13 @@
 >
 > Flashing firmware carries risk. Back up anything on the card you can't lose before you start.
 
-1. **Download** `Q2.Firmware.*.zip` (for Q2) from the [latest release](https://github.com/DiamondBond/q2-pod/releases/latest), or `M1Plus.Firmware.*.zip` (for M1 Plus) from [the M1 Plus releases](https://github.com/jtliang24/q2-pod/releases) (none yet: the first comes after the next upstream sync; until then, [build it](docs/building.md)), and unzip it.
+1. **Download** `update.tar` (for Q2) from the [latest release](https://github.com/DiamondBond/q2-pod/releases/latest), or `M1Plus.Firmware.*.zip` (for M1 Plus) from [the M1 Plus releases](https://github.com/jtliang24/q2-pod/releases) and unzip it (none yet: the first comes after the next upstream sync; until then, [build it](docs/building.md)).
 2. **Plug your device into your computer** with the USB-C cable. The card shows up as a drive.
-3. **Copy the update archive** to the **root** of the card (copy `update.tar` for Q2 or `update.bin` for M1 Plus, not inside a folder), then eject and unplug.
+3. **Copy the update archive** to the **root** of the card (`update.tar` for Q2 or `update.bin` for M1 Plus, not inside a folder), then eject and unplug.
 4. **Update:** open **System settings → System Update → TF card update**. Leave the card in until the player restarts.
 
 > [!TIP]
-> Prefer Shanling's original look? Download `Q2.Firmware.*-legacy.zip` instead. It has the same features and fixes, without the iPod UI.
+> Prefer Shanling's original look? Download `update-legacy.tar` instead, then rename `update-legacy.tar` to `update.tar` before you copy it to the card. It has the same features and fixes, without the iPod UI.
 
 ## Extras
 
@@ -96,6 +96,8 @@ Settings, play counts, ratings and resume points are stored on the Q2 itself, so
 ## Updating
 
 Repeat the [install steps](#install) with the newest release. Your settings, ratings and play counts are kept. The updater skips a version that's already installed, so a newer release always goes on.
+
+Or, over Wi-Fi: **System settings → System Update → Network Update** downloads the newest release to the card's `update.tar`, replacing any that's there, then opens the TF card update's confirmation. Press the row again to cancel the download.
 
 ## Restoring stock firmware
 

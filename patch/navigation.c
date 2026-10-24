@@ -1,10 +1,12 @@
 /* Logical menu selection is independent of native touch focus. Stock code owns gestures. */
+#include "chapters.h"
 #include "offsets.inc"
 #include "peq.h" /* libc/libcstl imports (deque_*, send) and the shared helpers */
 #include "playback.h"
 #include "stock.h"
 #include "m1plus_nav.h" /* the M1 Plus's declarations and V2.1 stand-ins (docs/m1plus-roadmap.md U1c) */
 #undef select /* the UI selection helper below; headset.c uses libc select */
+extern int stock_sorted_query_trampoline(const char *, const char *, void *, int);
 extern int stock_dbquery_trampoline(const char *, const char *, void *, int),
     stock_content_query_trampoline(const char *, const char *, void *, void *, int);
 extern int stock_quicksettings_trampoline(void *, void *);
@@ -18,6 +20,7 @@ int ringnav_timezone(void) {
 }
 extern int stock_music_info_trampoline(int, char *, const char *);
 static int library_music __attribute__((section(".scratch")));
+static int spoken(const char *path);
 
 /* Failed exec in a forked child must not flush demo's copied stdio or run its exit handlers. */
 __asm__(".globl child_exit\nchild_exit:\nli $v0, 4001\nsyscall\n");
@@ -52,16 +55,27 @@ static int library_query(int content, const char *db, const char *sql, void *row
         if (n < 0 || (unsigned)n >= sizeof filtered) return -1;
         sql = filtered;
     }
+    if (sql && strstr(sql, "select * from playlist where id > 100 and cd_num=") == sql &&
+        !strstr(sql, "order by")) {
+        int n = tk_snprintf(filtered, sizeof filtered, "%s order by id asc", sql);
+        if (n < 0 || (unsigned)n >= sizeof filtered) return -1;
+        sql = filtered;
+    }
+    if (content == 2) return stock_sorted_query_trampoline(db, sql, row, (int)arg);
     return content ? stock_content_query_trampoline(db, sql, row, arg, sort)
                    : stock_dbquery_trampoline(db, sql, row, (int)arg);
 }
 int ringnav_library_query(const char *db, const char *sql, void *row, int sort) {
     return library_query(0, db, sql, row, (void *)sort, 0);
 }
+int ringnav_sorted_query(const char *db, const char *sql, void *row, int sort) {
+    return library_query(2, db, sql, row, (void *)sort, 0);
+}
 int ringnav_content_query(const char *db, const char *sql, void *row, void *arg, int sort) {
     return library_query(1, db, sql, row, arg, sort);
 }
 extern int stock_keyup_trampoline(void *, void *), stock_touch_trampoline(void *, void *),
+    stock_output_trampoline(int), stock_write_config_trampoline(int, const char *, const char *),
     stock_paint_trampoline(void *, void *), stock_dispatch_trampoline(void *, void *),
     stock_keylong_trampoline(void *, void *), stock_paint_bg_trampoline(void *, void *),
     stock_playing_trampoline(void *, void *), stock_display_trampoline(void *, void *),
@@ -93,10 +107,13 @@ extern int books_key(void *top, unsigned key), video_on(void);
 extern void spot_poll(void), spot_yield(void), spot_paint(void *w, void *canvas), *spot_art(void);
 extern int spot_media(unsigned key), spot_key(void *top, unsigned key),
     spot_open(void *ctx, void *event), spot_hold(void *top);
+extern void up_next(int (*closed)(void *, void *), int (*keyup)(void *, void *)),
+    upnext_closed(void *page);
+extern int un_hold(void *top);
 extern void radio_poll(void);
 extern void xfade_row(void *label), wheel_row(void *label), resume_row(void *label),
-    mono_row(void *label);
-extern int mono_click(void *ctx, void *event);
+    mono_row(void *label), swap_row(void *label);
+extern int mono_click(void *ctx, void *event), swap_click(void *ctx, void *event);
 extern int xfade_open(void *ctx, void *event), xfade_key(void *top, unsigned key), resume_min(void);
 extern int eq_key(void *top, unsigned key); /* peq_ui.c */
 extern int radio_media(unsigned key), radio_open(void *ctx, void *event);
@@ -123,6 +140,7 @@ extern unsigned album_id(void *r);
 extern unsigned album_dir(const char *, int);
 extern volatile unsigned library_gen;
 extern const char *track_name(char *buf, unsigned size, void *t);
+static int ple_key(unsigned key, int phase);
 #define STOP 11
 #define GLIDE_MS 300
 #define SCROLL_MARGIN 12
@@ -139,7 +157,6 @@ extern const char *track_name(char *buf, unsigned size, void *t);
 #define SHORT_LIST_MAX 16
 #define MAX_ENTRIES 512
 #define POS_MEM 64
-#define UP_NEXT_ROWS 100 /* Up Next's snapshot cap */
 /* RADIUS, FILL_RGB, FILL_ALPHA, SHADE_ALPHA, OUTLINE_RGB and OUTLINE_ALPHA come from offsets.inc;
  * the colors pack their bytes at compile time (little-endian r,g,b,a). The outline is translucent
  * neutral white, never the playing red, seated on a dark shade of the stock surface so bright
@@ -236,9 +253,10 @@ typedef struct {
      * opens while the library is at mp_gen (~library_gen once stale). */
     void *mp_page, *mp_list, *td_page, *td_list;
     unsigned mp_gen;
-    void *sp_page;                 /* the Library Shuffle menu's page, kept across picks */
-    void *un_page;                 /* Up Next's page, one at a time */
-    unsigned un_idx[UP_NEXT_ROWS]; /* its rows' queue indices */
+    void *sp_page; /* the Library Shuffle menu's page, kept across picks */
+    void *ch_page;
+    chapters *ch;
+    unsigned ch_timer, ch_track, ch_key;
     void *sc_page, *sc_row[2];     /* Streaming's Configuration page and its two cache rows */
     /* Ratings: the songs' 1-4 and albums' 1-5 heart tables (calloc'd on first use); Now Playing's
      * window, its heart and the heart's stock click context, the 1-4 badge, the window the picker
@@ -309,7 +327,7 @@ typedef struct {
      */
     void *bc[2];
     int bc_step;
-    unsigned bc_timer;
+    unsigned bc_timer, bc_track;
     /* Volume: the dialog vol_paint last drew, its value and the redraw timer */
     void *vol_dialog;
     int vol_drawn;
@@ -339,6 +357,7 @@ typedef struct {
      * checked by count, record and browsing-state hashes; qm_cls is the class its list holds;
      * qm_forced is a shuffle Play next. */
     unsigned long long qm_press;
+    int qs_wheel; /* Quick Settings' wheel, 1 + Q2POD QSVOLUME once read (quick_volume) */
     unsigned qm_timer, qm_cls, qm_idx, qm_rows, qm_hash, qm_browse, qm_forced, qm_forced_hash;
     int qm_kind, qm_action, qm_choice;
     void *qm_dialog, *qm_queue, *qm_playlist;
@@ -349,7 +368,10 @@ typedef struct {
      * page is there, Back at that root leaves it. */
     int media_open;
     char media_root[32];
-    void *root_label; /* Playback settings' Folder Root row */
+    /* Go to Folder: once set, folder_page opens at go_folder at g_folder_layer go_layer. */
+    int go_layer;
+    char go_folder[1024]; /* g_folder_path's size */
+    void *root_label;     /* Playback settings' Folder Root row */
     void *album;     /* what an Albums row or Go to album opened (album_open), a one-record deque */
     char **art_keys; /* an artist's albums tab's art keys by row, 0 for a name's own
                         (ringnav_artist_list) */
@@ -404,12 +426,10 @@ static int kind(void *w) {
     const char *t = widget_get_type(w);
     if (!tk_strcmp(t, "slide_menu")) return 3;
     if (!tk_strcmp(t, "table_client")) return 2;
-#if IPOD
     if (!tk_strcmp(t, "dialog") || !tk_strcmp(t, "window")) {
         int ctx = context_id(widget_get_prop_str(w, "name", (void *)0));
         return ctx >= 0 && (contexts[ctx].flags & BUTTONS) ? 4 : 0;
     }
-#endif
     return !tk_strcmp(t, "scroll_view") && B(w, VIEW_VERTICAL) && !B(w, VIEW_HORIZONTAL) &&
                    !B(w, VIEW_SNAP)
                ? 1
@@ -703,7 +723,7 @@ static void home_step(void *w, int dir, unsigned now, int jump) {
 
 static int usable(void) {
     if (!g_backlight_status || g_lockscreen_pageflag || g_testmode_flag || g_guideflag ||
-        g_poweroff_state > 1 || bt__recv_pageflag)
+        g_poweroff_state > 1)
         return 0;
     void *top = window_manager_get_top_window(window_manager());
     int confirm = top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "confirminfo_dialog");
@@ -716,7 +736,15 @@ static int usable(void) {
     return !g_usbdet_value && confirm;
 }
 
+static int usb_prompt(void) {
+    void *top = window_manager_get_top_window(window_manager());
+    return g_usblink_status == 2 && !g_usbdet_value && usable() && top &&
+           !tk_strcmp(widget_get_prop_str(top, "name", ""), "confirminfo_dialog");
+}
+
 static int allowed_top(void *top) {
+    if (!IPOD && top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "confirminfo_dialog"))
+        return usb_prompt();
     return top && context_id(widget_get_prop_str(top, "name", (void *)0)) >= 0;
 }
 
@@ -1569,7 +1597,8 @@ void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, un
     canvas_set_text_color(canvas, text);
 }
 
-/* A rounded box in color, or a square one when the canvas declines to round it (no vgcanvas). */
+/* A rounded box in color, or a square one when the canvas declines to round it (no vgcanvas, or a
+ * radius under 3, which stock zeroes and then fails). */
 static void fill_box(void *canvas, rect_t *r, unsigned color, unsigned radius) {
     if (canvas_fill_rounded_rect(canvas, r, (void *)0, &color, radius)) {
         canvas_set_fill_color(canvas, color);
@@ -1591,10 +1620,22 @@ static void frame_box(void *canvas, const rect_t *r, unsigned color, unsigned ra
     canvas_stroke_rect(canvas, in.x, in.y, in.w, in.h);
 }
 
+/* Stock names a playlist row's trailing More dots "img_more%d". */
+static void *more_image(void *w) {
+    for (unsigned i = 0, n = w ? widget_count_children(w) : 0; i < n; ++i) {
+        void *c = widget_get_child(w, i);
+        if (widget_get_visible(c) &&
+            tk_str_start_with(widget_get_prop_str(c, "name", ""), "img_more"))
+            return c;
+    }
+    return (void *)0;
+}
+
 #if IPOD
 /* A widget in a DRILL window (contexts.inc). Its own window decides, not the top one, so a window
  * painted during a transition keeps its own rows. */
 static int drill(void *w) {
+    if (more_image(w)) return 0; /* stock's More hit test owns the trailing area */
     w = window_of(w);
     int ctx = w ? context_id(widget_get_prop_str(w, "name", (void *)0)) : -1;
     return ctx >= 0 && (contexts[ctx].flags & DRILL);
@@ -1614,7 +1655,7 @@ static void paint_chevrons(void *w, void *canvas) {
         return;
     for (int i = 0; i < g_menu.n; ++i) {
         rect_t r = bounds(&g_menu, i);
-        if (2 * r.w >= I(w, W_W) && (!home || i == st.sel_row))
+        if (2 * r.w >= I(w, W_W) && drill(g_menu.at[i]) && (!home || i == st.sel_row))
             canvas_draw_icon(
                 canvas, bitmap,
                 r.x + r.w - CHEVRON_W + (int)bitmap[0] / 2 +
@@ -1893,13 +1934,25 @@ static void edit_paint(void *w, void *canvas);
 static void paint_radio(void *w, void *canvas) {
     if (!w || !st.sel_widget || st.sel_home || ipod_classic() || !P(canvas, CANVAS_LCD)) return;
     const char *image = widget_get_prop_str(w, "image", "");
+    int more = tk_str_start_with(widget_get_prop_str(w, "name", ""), "img_more");
     int dot = !tk_strcmp(image, "select");
-    if (!dot && tk_strcmp(image, "unselect")) return;
+    if (!more && !dot && tk_strcmp(image, "unselect")) return;
     void *row = P(w, W_PARENT);
     for (int depth = 0; row && row != st.sel_widget && depth < 8; ++depth) row = P(row, W_PARENT);
     if (row != st.sel_widget) return;
     int x = I(w, W_W) / 2, y = I(w, W_H) / 2;
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
+    if (more) {
+        /* Stock's 4px dots, 7px apart, centred in the 50px image. */
+        rect_t clear = { x - 13, y - 4, 26, 8 };
+        fill_box(canvas, &clear, RGBA(MINIMAL_FILL), 0);
+        for (int i = -1; i <= 1; ++i) {
+            rect_t dot = { x - 11 + (i + 1) * 7, y - 2, 4, 4 };
+            fill_box(canvas, &dot, RGBA(0x171717), 2);
+        }
+        canvas_set_fill_color(canvas, fill);
+        return;
+    }
     rect_t ring = { x - 13, y - 13, 26, 26 }, hole = { x - 11, y - 11, 22, 22 },
            in = { x - 6, y - 6, 12, 12 };
     fill_box(canvas, &ring, RGBA(0x171717), 13);
@@ -2045,9 +2098,59 @@ int ringnav_quick_lock(void *win, void *event) {
     quick_lock_text(win);
     return 0;
 }
+#define QUICK_HOLD "_quick_hold"
+static struct {
+    void *win, *icon, *slider;
+    unsigned timer;
+    int x, y, light;
+} quick __attribute__((section(".scratch")));
+
+static int quick_cancel(void *ctx, void *event) {
+    stop_timer(&quick.timer);
+    quick.win = quick.icon = quick.slider = 0;
+    return 0;
+}
+static int quick_long(const void *unused) {
+    quick.timer = 0;
+    void *win = quick.win, *icon = quick.icon;
+    if (!win || window_manager_get_top_window(window_manager()) != win ||
+        !window_manager_get_pointer_pressed(window_manager()))
+        return 0;
+    int page = widget_get_prop_int(icon, QUICK_HOLD, 0);
+    /* Abort the image's press before closing, so its release cannot toggle the radio. */
+    prop(icon, QUICK_HOLD, -page);
+    unsigned abort_event[12];
+    pointer_event_init(abort_event, EVT_POINTER_ABORT, win, 0, 0);
+    widget_dispatch_event_to_target_recursive(win, abort_event);
+    quick_cancel(0, 0);
+    dialog_quit(win, 0);
+    navigator_to(page == 1 ? "systemset/wifi_page" : "systemset/bluetooth_page");
+    return 0;
+}
+static int quick_down(void *icon, void *event) {
+    int page = widget_get_prop_int(icon, QUICK_HOLD, 0);
+    prop(icon, QUICK_HOLD, page < 0 ? -page : page);
+    quick.win = window_manager_get_top_window(window_manager());
+    quick.icon = icon;
+    quick.x = I(event, EVENT_X), quick.y = I(event, EVENT_Y);
+    rearm(&quick.timer, quick_long, RATE_HOLD_MS);
+    return 0;
+}
 int ringnav_quick_settings(void *win, void *ctx) {
     int result = stock_quicksettings_trampoline(win, ctx);
-    if (win) quick_lock_text(win);
+    if (win) {
+        quick_lock_text(win);
+        static const char *const names[] = { "img_wifiswitch", "img_btswitch" };
+        for (int i = 0; i < 2; ++i) {
+            void *icon = widget_lookup(win, names[i], 1);
+            if (!icon) continue;
+            prop(icon, QUICK_HOLD, i + 1);
+            widget_on(icon, EVT_POINTER_DOWN, quick_down, icon);
+        }
+        widget_on(win, EVT_DESTROY, quick_cancel, win);
+        widget_on(win, EVT_WINDOW_CLOSE, quick_cancel, win);
+        widget_on(win, EVT_WINDOW_BACKGROUND, quick_cancel, win);
+    }
     return result;
 }
 
@@ -2213,10 +2316,11 @@ int ringnav_scan_refresh(void *row, const char *table, int type) {
     int cue = I(row, REC_CUE_START) || I(row, REC_CUE_END);
     if (!cue) {
         /* Stock returns success even when TagLib cannot open/read a tag; keep the old tags then. */
-        void *file = taglib_file_new(path);
+        void *file = taglib_file_new(path, 0);
         int valid = file && taglib_file_tag(file);
         if (file) taglib_file_free(file);
-        if (!valid || toolsGetMusicInfo(1, info, path) != 1) return exists;
+        /* Refresh tags without the audio-properties probe that can walk the whole file. */
+        if (!valid || toolsGetMusicInfo(0, info, path) != 1) return exists;
     }
     static const char *const fields[] = { "album", "songer",   "style",
                                           "name",  "composer", "albumsonger" };
@@ -2368,19 +2472,36 @@ static void reorder(void *view, const unsigned char *order, unsigned n) {
 
 /* Playback Setting: what is changed while listening first, then library behaviour, then output. */
 static const unsigned char playset_order[] = {
-    3 /* Play Mode */,     2 /* EQ */,           0 /* Gain */,         10 /* ReplayGain */,
-    18 /* Crossfade */,    9 /* Gapless */,      4 /* Max Volume */,   5 /* Default Vol */,
-    11 /* Balance */,      21 /* Mono Audio */,  1 /* Filters */,      8 /* Memory play */,
-    20 /* Resume Songs */, 16 /* Artists */,     15 /* Year order */,  17 /* Artist album order */,
-    13 /* Folder art */,   14 /* Folder skip */, 19 /* Folder Root */, 12 /* Enlarged art */,
-    6 /* DSD Output */,    7 /* USB Audio */,
+    3 /* Play Mode */,
+    2 /* EQ */,
+    0 /* Gain */,
+    18 /* Crossfade */,
+    9 /* Gapless */,
+    10 /* ReplayGain */,
+    4 /* Max Volume */,
+    5 /* Default Vol */,
+    11 /* Balance */,
+    21 /* Mono Audio */,
+    22 /* Swap L/R */,
+    1 /* Filters */,
+    8 /* Memory play */,
+    20 /* Resume Songs */,
+    16 /* Artists */,
+    15 /* Year order */,
+    17 /* Artist album order */,
+    13 /* Folder art */,
+    14 /* Folder skip */,
+    19 /* Folder Root */,
+    12 /* Enlarged art */,
+    6 /* DSD Output */,
+    7 /* USB Audio */,
 };
-/* System Setting: connections and display first, boot/update/reset/about last. */
+/* System Setting: connections and display first, set-once items next, Reset last. */
 static const unsigned char sysset_order[] = {
     1 /* Wireless */,     3 /* Display */,  4 /* Power */,   5 /* Date and time */,
     8 /* Buttons lock */, 7 /* Key tone */, 2 /* Network */, 0 /* Language */,
-    6 /* In-Vehicle */,   12 /* Boot to */, 9 /* Update */,  10 /* Reset */,
-    11 /* About */,
+    6 /* In-Vehicle */,   12 /* Boot to */, 9 /* Update */,  11 /* About */,
+    10 /* Reset */,
 };
 
 /* Folder Root (Q2POD FOLDERROOT): the card's top-level folder Home's Folder opens in, "" the card
@@ -2454,6 +2575,7 @@ int ringnav_audioset(void *win, void *ctx) {
         root_text(name);
         resume_row(list_row(view, ICON_MEMPLAY, xfade_open, (void *)2)); /* crossfade.c */
         mono_row(list_row(view, ICON_BALANCE, mono_click, 0));
+        swap_row(list_row(view, ICON_BALANCE, swap_click, 0));
     }
     reorder(view, playset_order, sizeof playset_order);
 #if !M1PLUS
@@ -2504,7 +2626,7 @@ int ringnav_lyric(void) {
         pos >= deque_size(q) || !(r = deque_at(q, pos)) || I(r, REC_TYPE) != 8 || !P(r, REC_PATH) ||
         *(char *)P(r, REC_PATH) != '/')
         return ret;
-    void *f = taglib_file_new(P(r, REC_PATH));
+    void *f = taglib_file_new(P(r, REC_PATH), 0);
     if (!f) return ret;
     unsigned at = (unsigned)I(TAGLIB_NEW_GOT, 0), lib = at - TAGLIB_FILE_NEW;
     char **(*get)(void *, const char *) =
@@ -2537,6 +2659,49 @@ int ringnav_lyric(void) {
     if (v) ((void (*)(char **))(lib + TAGLIB_PROPERTY_FREE))(v);
     taglib_file_free(f);
     return ret;
+}
+
+/* scroll_lrc's rows are 20 px, or 25 a line when wrapped (0x52a0c8), and its 178 px are no whole
+ * number of them, so the view's end (content height - view height), where stock's follow and the
+ * wheel stop, cut the top row. The content grows to the first row top at or past that end plus the
+ * view: under a row of blank space below the last. A relayout (scroll_view's, 0x5f17a8) puts the
+ * height back and clamps the offset; the next follow or tick pads it again. ponytail: a drag still
+ * stops anywhere; snap on pointer up if that shows. */
+static void lyric_pad(void *lrc) {
+    int h = I(lrc, W_H), end = I(lrc, VIEW_CONTENT_H) - h, top = 1 << 30;
+    for (int i = widget_count_children(lrc); i-- > 0;) {
+        int t = I(widget_get_child(lrc, i), W_Y);
+        if (t >= end && t < top) top = t;
+    }
+    if (end > 0 && top < 1 << 30) I(lrc, VIEW_CONTENT_H) = top + h;
+}
+
+/* The Now Playing timer's follow (LYRIC_FOLLOW in tools/build.py): stock scrolls to the row three
+ * lines above the current one, which past the end clamps to it. */
+int ringnav_lyric_follow(void *lrc, int x, int y, int ms) {
+    lyric_pad(lrc);
+    return scroll_view_scroll_to(lrc, x, y, ms);
+}
+
+/* The playing track: its queue position and path. */
+static unsigned np_track(void) {
+    unsigned at, n;
+    void *r = queue_now(&at, &n);
+    return r ? fnv(hash_bytes(FNV_SEED, (const unsigned char *)&at, sizeof at), P(r, REC_PATH)) : 0;
+}
+
+/* Stock's seek resumes playback; a paused seek must wait for Play instead. */
+static int seek_position(int to) {
+    unsigned at, n;
+    void *r = mclGetPlayStatus() == 3 ? queue_now(&at, &n) : 0;
+    if (r) {
+        int sec = -1, total;
+        player_playtime_and_length(&sec, &total);
+        mclSetSeek(to + I(r, REC_CUE_START));
+        return sec + 1;
+    }
+    player_seek_time(to);
+    return 0;
 }
 
 #if IPOD
@@ -2697,8 +2862,7 @@ static void paint_battery(void *w, void *canvas) {
         return;
     }
     const int bw = inside ? BATT_INSIDE_W : BATT_BODY_W, bh = inside ? BATT_INSIDE_H : BATT_BODY_H,
-              nh = inside ? BATT_INSIDE_NUB_H : BATT_NUB_H,
-              y = (I(w, W_H) + 1 - bh) / 2 - BATT_PCT_DY * (st.batt_mode == 2);
+              nh = BATT_NUB_H, y = (I(w, W_H) + 1 - bh) / 2 - BATT_PCT_DY * (st.batt_mode == 2);
     canvas_set_fill_color(canvas, color);
     if (inside) {
         rect_t body = { 0, y, bw, bh };
@@ -2762,13 +2926,6 @@ static void np_sync(void *top) {
 /* Scrub (docs/internals.md#scrub-ipod) follows stock's own key seek (0x52c754): the page's 250 ms
  * timer stops, the slider and label_playtime preview the target, player_seek_time commits it once
  * on exit in track seconds (it adds a CUE track's start), and the timer restarts. */
-/* The playing track: its queue position and path. */
-static unsigned np_track(void) {
-    unsigned at, n;
-    void *r = queue_now(&at, &n);
-    return r ? fnv(hash_bytes(FNV_SEED, (const unsigned char *)&at, sizeof at), P(r, REC_PATH)) : 0;
-}
-
 /* The accent's light tone (Minimal's MINIMAL_FILL) fills the progress bar; a white fill (Minimal: a
  * thicker line) marks the scrub. */
 static void np_fill(int scrub) {
@@ -2824,20 +2981,7 @@ static void scrub_end(void) {
     st.scrub = 0;
     stop_timer(&st.scrub_timer);
     int seek = st.scrub_moved && np_track() == st.scrub_track;
-    unsigned at, n;
-    void *r = seek && mclGetPlayStatus() == 3 ? queue_now(&at, &n) : (void *)0;
-    /* Stock's player_seek_time resumes a paused track (mclSetResume) to reach the target; paused,
-     * the seek alone (in file seconds, as it adds a CUE track's start) waits for Play. */
-    if (r) {
-        int sec = -1, total;
-        player_playtime_and_length(&sec, &total);
-        st.held_sec =
-            sec + 1; /* until it plays: Now Playing reopened puts the bar back on the target */
-        mclSetSeek(st.scrub_to + I(r, REC_CUE_START));
-    } else if (seek) {
-        st.held_sec = 0;
-        player_seek_time(st.scrub_to); /* blocks the UI up to 2 s, as stock's key seek */
-    }
+    if (seek) st.held_sec = seek_position(st.scrub_to);
     st.scrub_moved = 0;
     if (!st.np_win) return;
     np_fill(0);
@@ -2870,7 +3014,8 @@ static int lyric_expire(const void *info) {
 }
 
 /* The wheel on the lyrics page (the slide_view's second), while the track has lyrics, scrolls
- * them LYRIC_STEP a tick, ahead of scrub (which ends) and the volume. */
+ * them a row a tick, to the next or previous row's top, ahead of scrub (which ends) and the
+ * volume. */
 static int np_lyrics(unsigned key) {
     void *lrc = st.np_lrc;
     if (!st.np_slide || !lrc || widget_get_prop_int(st.np_slide, "value", 0) != 1 ||
@@ -2880,9 +3025,14 @@ static int np_lyrics(unsigned key) {
     stop_timer(&st.settle_timer);
     if (!st.lyric_timer) playing_timer_clear(st.np_win);
     rearm(&st.lyric_timer, lyric_expire, SCRUB_MS);
-    int y = clamp_step(I(lrc, SCROLL_Y), I(lrc, VIEW_CONTENT_H) - I(lrc, W_H),
-                       key == KEY_NEXT ? LYRIC_STEP : -LYRIC_STEP);
-    scroll_view_set_offset(lrc, I(lrc, SCROLL_X), y);
+    lyric_pad(lrc);
+    int y = I(lrc, SCROLL_Y), max = I(lrc, VIEW_CONTENT_H) - I(lrc, W_H),
+        to = key == KEY_NEXT ? max : 0;
+    for (int i = 0, n = widget_count_children(lrc); i < n; ++i) {
+        int top = I(widget_get_child(lrc, i), W_Y);
+        if (key == KEY_NEXT ? top > y && top < to : top < y && top > to) to = top;
+    }
+    scroll_view_set_offset(lrc, I(lrc, SCROLL_X), clamp_step(to, max, 0));
     return 1;
 }
 
@@ -3022,16 +3172,25 @@ static int bc_gone(void *win, void *event) {
     return 0;
 }
 
+/* Shows the song name and its shade again for BC_MS, then fades them out. */
+static void bc_show(void) {
+    stop_timer(&st.bc_timer);
+    for (int i = 0; i < 2; ++i)
+        if (st.bc[i]) widget_set_opacity(st.bc[i], 255);
+    st.bc_step = 0;
+    st.bc_track = np_track();
+    st.bc_timer = timer_add(bc_fade, (void *)0, BC_MS);
+}
+
 /* bigcover_page_init: stock's full-screen art (a tap on Now Playing's opens it, any tap closes it)
- * shows the song name BC_MS, then bc_fade fades it out. */
+ * shows the song name BC_MS, then bc_fade fades it out. Stock's own timer writes the next song's
+ * name; ringnav_sleep shows it again when the track changes. */
 int ringnav_bigcover(void *win, void *ctx) {
     int result = stock_bigcover_trampoline(win, ctx);
     if (!win) return result;
-    stop_timer(&st.bc_timer);
     st.bc[0] = widget_lookup(win, "scrlabel_title", 1);
     st.bc[1] = widget_lookup(win, "view_shade", 1);
-    st.bc_step = 0;
-    st.bc_timer = timer_add(bc_fade, (void *)0, BC_MS);
+    bc_show();
     widget_on(win, EVT_DESTROY, bc_gone, win);
     return result;
 }
@@ -3210,6 +3369,13 @@ unsigned *ringnav_style_color(unsigned *color, void *style, const char *name, un
             *color &= 0xffffff; /* paint_caps draws it */
             return color;
         }
+        const char *label = widget_get_prop_str(st.paint_w, "name", "");
+        if (!tk_strcmp(label, "label_del") || !tk_strcmp(label, "label_rename")) {
+            int enabled = 1;
+            for (void *w = P(st.paint_w, W_PARENT); w; w = P(w, W_PARENT))
+                if (!widget_get_prop_bool(w, "enable", 1)) enabled = 0;
+            *color = (*color & 0xff000000u) | (enabled ? 0xffffff : 0xaaaaaa);
+        }
         if (selected_ink()) {
             unsigned alpha = *color & 0xff000000u;
             *color =
@@ -3336,7 +3502,7 @@ int ringnav_image_add(void *manager, const char *name, void *bitmap) {
      * towards the white glyph, so edges stay smooth; alpha kept. */
     int into = s && !*s &&
                (!tk_strcmp(name, "list_into") || !tk_strcmp(name, "bt_lefticon") ||
-                !tk_strcmp(name, "bt_refresh") || !tk_strcmp(name, "navbar_delete"));
+                !tk_strcmp(name, "bt_refresh"));
     int icon = s && !*s &&
                (settings_icon(name) || tk_str_start_with(name, "local_") ||
                 (tk_str_start_with(name, "list_") && !into) || tk_str_start_with(name, "small_") ||
@@ -3718,6 +3884,39 @@ int ringnav_touch(void *ctx, void *event) {
 /* Observe actual clicks BEFORE app callbacks can navigate or destroy/rebind their widgets.
  * Do not turn pointer-down into selection: a swipe is not a tap. */
 int ringnav_dispatch(void *target, void *event) {
+    if (event && target != window_manager() &&
+        ((I(event, EVENT_TYPE) >= EVT_KEY_DOWN && I(event, EVENT_TYPE) <= EVT_KEY_UP_BEFORE) ||
+         I(event, EVENT_TYPE) == EVT_KEY_LONG) &&
+        ple_key((unsigned)I(event, EVENT_KEY), 3))
+        return STOP;
+    if (event) {
+        int type = I(event, EVENT_TYPE);
+        if (quick.timer &&
+            (type == EVT_POINTER_UP_BEFORE || type == EVT_POINTER_UP_BEFORE - 1 ||
+             type == EVT_POINTER_ABORT || type == EVT_CLICK || type == EVT_KEY_DOWN_BEFORE ||
+             ((type == EVT_POINTER_MOVE_BEFORE || type == EVT_POINTER_MOVE_BEFORE - 1) &&
+              ((unsigned)(I(event, EVENT_X) - quick.x + 10) > 20 ||
+               (unsigned)(I(event, EVENT_Y) - quick.y + 10) > 20))))
+            quick_cancel(0, 0);
+        if (target && type == EVT_CLICK && widget_get_prop_int(target, QUICK_HOLD, 0) < 0)
+            return STOP;
+        /* Quick Settings' swipe up may start on its brightness slider. While stock slides the
+         * dialog or it follows a swipe (g_dropdown_menu_state 1, 2), the slider's moves and release
+         * first abort its press and put back the value it had at pointer-down. ponytail: stock
+         * takes the swipe after the slider sees its first move, which may set the brightness
+         * until the next event puts it back. */
+        if (type == EVT_POINTER_DOWN - 1 && target &&
+            !tk_strcmp(widget_get_prop_str(target, "name", ""), "slider_backlight"))
+            quick.slider = target, quick.light = widget_get_prop_int(target, "value", 0);
+        else if (target && target == quick.slider && type > EVT_POINTER_DOWN &&
+                 type <= EVT_POINTER_UP_BEFORE && (unsigned)(I(g_dropdown_menu_state, 0) - 1) < 2) {
+            unsigned abort_event[12];
+            stock_dispatch_trampoline(
+                target, pointer_event_init(abort_event, EVT_POINTER_ABORT, target, 0, 0));
+            if (widget_get_prop_int(target, "value", 0) != quick.light)
+                widget_set_prop_int(target, "value", quick.light);
+        }
+    }
     /* Native key delivery can retain the covered window's focused widget: the Artists list under
      * an artist's page (wheel turns queued while it loads) or under its Coverflow. */
     if (target && event && I(event, EVENT_TYPE) >= EVT_KEY_DOWN &&
@@ -3976,7 +4175,8 @@ enum {
     QA_RATE,
     QA_RESUME,
     QA_QUEUE,
-    QA_UP_NEXT
+    QA_FOLDER,
+    QA_CHAPTERS
 };
 #define MCL(a) (*(volatile int *)(a))
 
@@ -4013,7 +4213,7 @@ static void *page_tracks(void *page) {
                                 : coverflow_tracks(page);
 }
 
-static unsigned queue_hash(void *q) {
+unsigned queue_hash(void *q) {
     unsigned h = FNV_SEED;
     for (unsigned i = 0, n = deque_size(q); i < n; ++i) {
         unsigned r = rec_hash(deque_at(q, i));
@@ -4313,6 +4513,30 @@ static int artist_cf_open(const void *unused) {
     if (veiled) artist_cf_veil(veiled, 0);
     return 0;
 }
+/* Artist albums: Grid gives the artist page its stock toolbar back, for its multi-select
+ * (s_img_mulsel), which iPod hides on the local pages; the tabs move down under it. A toolbar
+ * already showing (Legacy, a reload) is left alone. */
+static void artist_bar(void) {
+    void *top = window_manager_get_top_window(window_manager()),
+         *nav = top ? widget_lookup(top, "view_navbar", 0) : 0,
+         *tab = top ? widget_lookup(top, "tab_control", 0) : 0,
+         *pages = tab ? widget_lookup(tab, "pages", 0) : 0, *album;
+    char h[12], y[12];
+    pod_settings();
+    if (st.artist_cf || !nav || !pages || widget_get_visible(nav) ||
+        tk_strcmp(widget_get_prop_str(top, "name", ""), "artistinfo_page"))
+        return;
+    int height = I(tab, W_H) - I(nav, W_H), inner = height - I(pages, W_Y);
+    widget_set_visible(nav, 1, 0);
+    widget_set_enable(nav, 1);
+    widget_move_resize(tab, I(tab, W_X), I(nav, W_H), I(tab, W_W), height);
+    tk_snprintf(y, sizeof y, "%d", I(pages, W_Y));
+    tk_snprintf(h, sizeof h, "%d", inner);
+    widget_set_self_layout_params(pages, "0", y, "100%", h);
+    if ((album = widget_lookup(pages, "list_view_album", 1))) /* its height is fixed, not 100% */
+        widget_move_resize(album, I(album, W_X), I(album, W_Y), I(album, W_W), inner);
+    widget_layout(tab);
+}
 #if M1PLUS
 /* An artist's albums, the n rows stock just put in p_deque_showlist (none for another tab): by
  * year or A-Z, with each row's art key and album_id. V2.1 loads them in ringnav_localclass too. */
@@ -4322,6 +4546,7 @@ static int artist_list(int tab) {
     int n = stock_artist_trampoline(tab);
 #endif
     void *list = P(p_deque_showlist, 0), *all;
+    artist_bar();
     artist_keys_free();
     if (tab != 1 || n <= 0 || !(st.art_keys = calloc((unsigned)n, sizeof(char *)))) return n;
     st.art_ids = calloc((unsigned)n, sizeof *st.art_ids);
@@ -4451,11 +4676,26 @@ static void fav_titles(void *list, int n) {
     }
     if (songs) deque_destroy(songs);
 }
+/* Saved collections bypass songtable; filter their displayed copies, never their stored rows. */
+static int music_records(void *list) {
+    void *music = _create_deque("stSongInfo");
+    deque_init(music);
+    for (unsigned i = 0; i < deque_size(list); ++i) {
+        void *r = deque_at(list, i);
+        if (I(r, REC_TYPE) != 8 || !spoken(P(r, REC_PATH))) _deque_push_back(music, r);
+    }
+    deque_clear(list);
+    deque_assign(list, music);
+    deque_destroy(music);
+    return (int)deque_size(list);
+}
 int ringnav_localclass(int cls) {
     I(g_artist_type, 0) = I(artist_type, 0) == 1;
-    library_music = cls == CLASS_ALBUMS || cls == 0xf004 || cls == 0xff10 || cls == CLASS_LOAD_ARTIST_ALBUMS;
+    int saved = library_music;
+    library_music = 1;
     int n = stock_localclass_trampoline(cls);
     void *list = P(p_deque_showlist, 0), *dir = P(tools_pdeq_directory, 0), *a = album_opened();
+    if (n > 0 && (cls == 0xf00a || cls == 0xff20)) n = music_records(list);
     if (n > 0 && cls == 0xff10 && a) album_only(list, a, 0), n = (int)deque_size(list);
     if (n > 0 && cls == CLASS_ALBUMS) n = coverflow_split(list);
 #if M1PLUS /* V2.1's artist albums load here (loadAlbumList, on album_page: never Coverflow's
@@ -4475,7 +4715,7 @@ int ringnav_localclass(int cls) {
             free(*title), *title = t;
         }
     if (cls < CLASS_ALBUMS || cls > 0xf006) {
-        library_music = 0;
+        library_music = saved;
         return n;
     }
     if (n > 0 && I(deque_at(list, (unsigned)n - 1), REC_ID) == -1) {
@@ -4484,7 +4724,7 @@ int ringnav_localclass(int cls) {
         deque_clear(dir);
         if (empty) deque_pop_back(list), n--;
     }
-    library_music = 0;
+    library_music = saved;
     if (n <= 0) { /* say so, not a black page; once the page that loads it is up */
         st.empty_kind = cls - CLASS_ALBUMS;
         timer_add(empty_toast, (void *)0, 0);
@@ -4495,8 +4735,7 @@ int ringnav_localclass(int cls) {
 /* The tracks stock would play for that row, in its order. */
 static void qm_tracks(void *r, void *add) {
     int n;
-    void *rows = (st.qm_cls == 0xf004 || st.qm_cls == CLASS_ARTIST_ALBUMS ? staged_music : staged)(
-        qm_query, r, &n);
+    void *rows = (st.qm_kind == QM_FOLDER ? staged : staged_music)(qm_query, r, &n);
     for (unsigned i = 0; i < deque_size(rows); ++i) {
         void *t = deque_at(rows, i);
         if (I(t, REC_TYPE) == 8) _deque_push_back(add, t);
@@ -4518,39 +4757,10 @@ static void *qm_collect(void *r) {
     return add;
 }
 
-/* Insert at pos+1 or append, then keep the shuffle pool, previous index and gapless preload
- * consistent with the shifted indices. Playback state itself is never touched. */
-static void qm_insert(void *queue, void *add, unsigned size, int next) {
-    unsigned n = deque_size(add), pos = (unsigned)MCL(MCL_POS);
-    unsigned at = next && pos < size ? pos + 1 : size;
-    if (at == size)
-        for (unsigned i = 0; i < n; ++i) _deque_push_back(queue, deque_at(add, i));
-    else {
-        void *all = _create_deque("stSongInfo");
-        deque_init(all);
-        for (unsigned i = 0; i < size + n; ++i)
-            _deque_push_back(all, i < at       ? deque_at(queue, i)
-                                  : i < at + n ? deque_at(add, i - at)
-                                               : deque_at(queue, i - n));
-        deque_clear(queue);
-        deque_assign(queue, all);
-        deque_destroy(all);
-    }
-    void *pool = P(MCL_POOL, 0);
-    for (unsigned i = 0; i < deque_size(pool); ++i) {
-        int *index = deque_at(pool, i);
-        if ((unsigned)*index >= at) *index += (int)n;
-    }
-    for (unsigned i = 0; i < n; ++i) _deque_push_back(pool, (int)(at + i));
-    if (MCL(MCL_LASTPOS) != -1 && (unsigned)MCL(MCL_LASTPOS) >= at) MCL(MCL_LASTPOS) += (int)n;
-    /* A preload always targets pos+1 (or the wrap); only an insert there makes it stale.
-     * Same close as mclSetPlayMode @0x5ab29c. */
-    if (MCL(MCL_PRELOAD) == 1 && at == pos + 1) {
-        if (MCL(MCL_FD) != -1) send(MCL(MCL_FD), "{mcl-closegapless\\null}", 23, 0);
-        MCL(MCL_PRELOAD) = -1;
-    }
-    playback_insert(at, n, next);
-    /* Shuffle picks at random: the first inserted track is forced once (ringnav_shuffle). */
+/* Insert at pos+1 or append; playback_queue_insert keeps every queue index right. Shuffle picks at
+ * random, so the first inserted track is forced once (ringnav_shuffle). */
+static void qm_insert(void *queue, void *add, int next) {
+    unsigned at = playback_queue_insert(queue, add, next);
     if (next) {
         st.qm_forced = MCL(MCL_MODE) == 2 ? at + 1 : 0;
         st.qm_forced_hash = rec_hash(deque_at(queue, at));
@@ -4568,7 +4778,7 @@ static int qm_apply(void *add, int next) {
         if (album) album_memory(deque_at(add, 0));
         mclLoadPlayList(add, 0, st.qm_kind == QM_FOLDER ? 1 : album ? 0xff10 : (int)st.qm_cls);
     } else if (n)
-        qm_insert(queue, add, size, next);
+        qm_insert(queue, add, next);
     return n != 0;
 }
 
@@ -4581,15 +4791,22 @@ void toast(const char *text) {
     navigator_to_with_context("dialog/msginfo_dialog", &info);
 }
 
-static int all_songs(void *unused) { return getAllMusic(0); }
+static int all_songs(void *unused) {
+    int saved = library_music;
+    library_music = 1;
+    int n = getAllMusic(0);
+    library_music = saved;
+    return n;
+}
 
 /* Shuffle does not need the expensive pinyin title sort; groups order their tracks themselves.
  * Non-zero music leaves audiobooks and podcasts out, as the Library's Artists and Albums
  * (MUSIC_WHERE). */
 static int songs_unsorted(void *music) {
+    int saved = library_music;
     library_music = music != 0;
     int n = getAllMusic(3);
-    library_music = 0;
+    library_music = saved;
     return n;
 }
 
@@ -4649,7 +4866,16 @@ static int page_closed(void *ctx, void *event) {
 #if M1PLUS
     if (ctx == st.lib_page) st.lib_page = 0;
 #endif
-    if (ctx == st.un_page) st.un_page = 0;
+    upnext_closed(ctx);
+    if (ctx == st.ch_page) {
+        st.ch_page = 0;
+        if (st.ch && !st.ch->done)
+            chapters_cancel(st.ch);
+        else {
+            free(st.ch);
+            st.ch = 0;
+        }
+    }
     if (ctx == st.sc_page) st.sc_page = 0;
     return 0;
 }
@@ -4744,7 +4970,7 @@ static int mp_rank(void *songs, int *idx, unsigned *score) {
  * album's index in Coverflow's list (-1 none). One pass over the library. */
 void album_plays(int (*album_of)(void *), unsigned *sum) {
     int n;
-    void *songs = staged(songs_unsorted, 0, &n);
+    void *songs = staged(songs_unsorted, (void *)1, &n);
     plays_load();
     for (unsigned i = 0; i < deque_size(songs); i++) {
         void *r = deque_at(songs, i);
@@ -4799,29 +5025,87 @@ static int most_played(void *ctx, void *event) {
     return 0;
 }
 
-/* Up Next: the tracks after the playing one in the order they play, which a shuffle's order differs
- * from the queue's. A row plays its track as View Queue's does (player_start_queue), and the page
- * closes, as its snapshot is then stale. ponytail: a snapshot taken on open, capped at
- * UP_NEXT_ROWS; the page does not follow the playing track, and a queue replaced while it is open
- * (a folder play's next folder) leaves its rows naming other tracks; keep the records to check. */
-static int un_play(void *ctx, void *event) {
-    void *q = P(mcl_pdeqplaylist, 0);
-    unsigned at = st.un_idx[(long)ctx];
-    if (q && at < deque_size(q)) player_start_queue((int)at);
+/* M4B chapters are read only while this snapshot is open. */
+static int chapter_file(const char *path) {
+    const char *ext = path ? strrchr(path, '.') : 0;
+    return ext && !strcasecmp(ext, ".m4b");
+}
+static int chapter_pick(void *ctx, void *event) {
+    unsigned i = (unsigned)(long)ctx;
+    if (st.ch && st.ch->done && !st.ch->failed && i < (unsigned)st.ch->count &&
+        np_track() == st.ch_track && (mclGetPlayStatus() == 2 || mclGetPlayStatus() == 3)) {
+        /* Suppress even a resume poll that has not yet settled this track. */
+        unsigned at, n;
+        void *r = queue_now(&at, &n);
+        st.ch_key = listen_key(r);
+        st.rs_pending = 0;
+        st.rs_go_key = 0;
+#if IPOD
+        st.scrub_track = st.ch_track;
+        st.scrub_to = st.ch->rows[i].sec;
+        st.scrub = st.scrub_moved = 1;
+        if (st.np_win) playing_timer_clear(st.np_win);
+        if (st.np_slider) widget_set_prop_int(st.np_slider, "value", st.scrub_to);
+        if (st.np_elapsed) clock_text(st.np_elapsed, 0, st.scrub_to);
+        scrub_end();
+#else
+        seek_position(st.ch->rows[i].sec);
+#endif
+    }
     navigator_back();
     return 0;
 }
-static void up_next(void) {
-    if (st.un_page || !(st.un_page = page_open("upnext_page", page_closed, page_keyup))) return;
-    void *q = P(mcl_pdeqplaylist, 0);
-    unsigned *idx = st.un_idx, n = playback_upcoming(idx, UP_NEXT_ROWS);
-    void *view = page_list(st.un_page, st.un_page, 0, n ? "Up Next" : "Nothing Up Next", n, 64);
-    char name[512];
-    for (unsigned i = 0; i < n; i++) { /* the title over the artist, if tagged */
-        void *t = deque_at(q, idx[i]);
-        const char *artist = P(t, REC_ARTIST);
-        page_row_detail(view, i, track_name(name, sizeof name, t), artist ? artist : "", un_play);
+static int chapter_poll(const void *unused) {
+    if (!chapters_poll(st.ch, time_now_ms())) return 8;
+    st.ch_timer = 0;
+    if (!st.ch_page) {
+        free(st.ch);
+        st.ch = 0;
+        return 0;
     }
+    int n = st.ch->failed ? 0 : st.ch->count;
+    void *view = page_list(st.ch_page, st.ch_page, 0,
+                           st.ch->failed ? "Could not read chapters"
+                           : n           ? "Chapters"
+                                         : "No embedded chapters",
+                           n, 64);
+    int sec = 0, total, current = 0;
+    player_playtime_and_length(&sec, &total);
+    for (int i = 0; i < n; ++i) {
+        char name[32], at[32];
+        chapter *c = &st.ch->rows[i];
+        tk_snprintf(name, sizeof name, "Chapter %d", i + 1);
+        tk_snprintf(at, sizeof at, "%d:%02d:%02d", c->sec / 3600, c->sec / 60 % 60, c->sec % 60);
+        page_row_detail(view, i, *c->title ? c->title : name, at, chapter_pick);
+        if (c->sec <= sec) current = i;
+    }
+    if (n) ringnav_select(view, current, n);
+    return 0;
+}
+static void chapters_open(void *r) {
+    if (st.ch || !chapter_file(P(r, REC_PATH))) return;
+    st.ch_track = np_track();
+    st.ch = chapters_start(P(r, REC_PATH), time_now_ms());
+    if (!st.ch) {
+        toast("Could not read chapters");
+        return;
+    }
+    st.ch_page = page_open("chapters_page", page_closed, page_keyup);
+    st.ch_timer = timer_add(chapter_poll, 0, 50);
+    if (!st.ch_page || !st.ch_timer) {
+        /* No polling timer: kill and reap the child before releasing its storage. */
+        chapters_cancel(st.ch);
+        if (st.ch->pid > 0) {
+            int status;
+            while (waitpid(st.ch->pid, &status, 0) < 0 && *__errno_location() == 4) {}
+        }
+        free(st.ch);
+        st.ch = 0;
+        if (st.ch_page) navigator_back();
+        stop_timer(&st.ch_timer);
+        return;
+    }
+    page_list(st.ch_page, st.ch_page, 0, "Loading chapters…", 0, 64);
 }
 
 /* Tidal Downloads (docs/internals.md#tidal-cache): Streaming's row lists tidal.c's complete
@@ -5363,7 +5647,7 @@ static void *ls_worker(void *unused) {
 #if M1PLUS
         void *f = taglib_file_open(ls.paths[ls.done], 1); /* read audio properties: the length */
 #else
-        void *f = taglib_file_new(ls.paths[ls.done]);
+        void *f = taglib_file_new(ls.paths[ls.done], 1);
 #endif
         void *p = f ? taglib_file_audioproperties(f) : (void *)0;
         int sec = p ? ((int (*)(void *))(*(void ***)p)[3])(p) : 0;
@@ -5470,7 +5754,7 @@ static int long_songs(void *ctx, void *event) {
         return 0;
     int n;
     lengths_read();
-    ls.songs = staged(songs_unsorted, 0, &n);
+    ls.songs = staged(songs_unsorted, (void *)1, &n);
     unsigned size = deque_size(ls.songs);
     ls.jobs = calloc(size + 1, sizeof *ls.jobs);
     ls.paths = calloc(size + 1, sizeof *ls.paths);
@@ -5584,6 +5868,27 @@ static int media_click(void *ctx, void *event) {
     return 0;
 }
 
+/* Go to Folder: a card song's folder into path (sizeof st.go_folder) and its g_folder_layer, as
+ * folder_enter counts (the card 2), so stock Back climbs to the card; 0 when off the card, too
+ * long, holding a name stock's enter never builds ("", "." or "..") or no longer a directory. */
+static int song_folder(void *r, char *path) {
+    const char *p = P(r, REC_PATH);
+    unsigned info[36], layer = 2;
+    if (!p || strlen(p) <= 9 || memcmp(p, "/mnt/mmc/", 9)) return 0;
+    unsigned n = (unsigned)(strrchr(p, '/') - p);
+    if (n >= sizeof st.go_folder) return 0;
+    memcpy(path, p, n);
+    path[n] = 0;
+    for (unsigned i = 8, j; i < n; i = j) { /* path[i] is the '/' before a name */
+        for (j = i + 1; j < n && path[j] != '/'; ++j) {}
+        unsigned len = j - i - 1;
+        if (!len || (path[i + 1] == '.' && (len == 1 || (len == 2 && path[i + 2] == '.'))) ||
+            ++layer > 255) /* g_folder_layer is a byte */
+            return 0;
+    }
+    return !__xstat(3, path, info) && (info[5] & 0170000) == 0040000 ? (int)layer : 0;
+}
+
 /* folder_page_init lists the storage roots at g_folder_layer 1, a root's folders at 2 and deeper
  * folders at 3 on (folder_enter). A media root becomes a layer-3 folder, so stock's reload, title
  * (its name, folder_reinit_navbarname) and entering all treat it as one. Each open starts a fresh
@@ -5600,6 +5905,8 @@ int ringnav_folder(void *win, void *ctx) {
         if (card && !g_otg_status) memcpy(st.media_root, "/mnt/mmc", 9), layer = 2;
         /* Folder Root: an ordinary folder below the card, so Back walks up to it, then as above. */
         if (card && root_dir(root)) path = root, layer = 3;
+        /* Go to Folder, checked as it was picked (song_folder) */
+        if (card && st.go_layer) path = st.go_folder, layer = st.go_layer;
     }
     if (path[0]) {
         folder_reset_variable();
@@ -5609,7 +5916,7 @@ int ringnav_folder(void *win, void *ctx) {
         folder_reinit_navbarname();
         folder_refresh(win);
     }
-    st.media_open = 0;
+    st.media_open = st.go_layer = 0;
     return result;
 }
 
@@ -5775,6 +6082,360 @@ int ringnav_about(void *win, void *ctx) {
 }
 #endif
 
+/* Entry IDs are stock's order. Keep our records separate from browsing and the live queue. */
+static struct {
+    void *page, *view, *songs, *picker, *edit;
+    void **match;
+    int dest, mode, selected, pending, nmatch;
+    unsigned key, timer;
+    char name[128], query[128];
+} ple __attribute__((section(".scratch")));
+
+/* One private selection for demo's lifetime, so a covered stock picker keeps its batch intact. */
+static void *ple_add_select __attribute__((section(".scratch")));
+struct ple_check {
+    void *a, *b;
+    int seen;
+};
+static int ple_checked(void *ctx, int n, char **v, char **names) {
+    struct ple_check *c = ctx;
+    if (n != 4 || !v[0] || !v[1]) return 1;
+    int id = atoi(v[0]);
+    void *r = id == I(c->a, REC_ID) ? c->a : c->b;
+    if (!r || id != I(r, REC_ID) || tk_strcmp(v[1], P(r, REC_PATH)) ||
+        (v[2] ? atoi(v[2]) : 0) != I(r, REC_CUE_START) ||
+        (v[3] ? atoi(v[3]) : 0) != I(r, REC_CUE_END))
+        return 1;
+    c->seen++;
+    return 0;
+}
+static int ple_changed(void *ctx, int n, char **v, char **names) {
+    return n != 1 || !v[0] || atoi(v[0]) != 1;
+}
+static int ple_number(void *ctx, int n, char **v, char **names) {
+    if (n != 1 || !v[0]) return 1;
+    *(int *)ctx = atoi(v[0]);
+    return 0;
+}
+
+/* Revalidate under the write lock; the temporary ID is above every occupied ID. */
+static int ple_mutate(int dest, void *a, void *b) {
+    void *db = 0;
+    int ok = 0, temp = 0;
+    char sql[512];
+    struct ple_check check = { a, b, 0 };
+    if (dest < 0 || dest >= 100 || !a || I(a, REC_ID) <= 100 ||
+        (b && (I(b, REC_ID) <= 100 || I(a, REC_ID) == I(b, REC_ID))))
+        return 0;
+    if (sqlite3_open("/mnt/data/database.db", &db)) goto done;
+    if (sqlite3_exec(db, "begin immediate", 0, 0, 0)) goto done;
+    tk_snprintf(sql, sizeof sql,
+                "select id,fileurl,time,time_end from playlist where cd_num=%d and id in (%d,%d)",
+                dest, I(a, REC_ID), b ? I(b, REC_ID) : I(a, REC_ID));
+    if (sqlite3_exec(db, sql, ple_checked, &check, 0) || check.seen != (b ? 2 : 1)) goto rollback;
+    if (b) {
+        if (sqlite3_exec(db,
+                         "select max(100,ifnull(max(id),100))+1 from playlist "
+                         "having max(100,ifnull(max(id),100))<2147483647",
+                         ple_number, &temp, 0) ||
+            temp <= 100)
+            goto rollback;
+        tk_snprintf(sql, sizeof sql,
+                    "update playlist set id=%d where cd_num=%d and id=%d;select changes();"
+                    "update playlist set id=%d where cd_num=%d and id=%d;select changes();"
+                    "update playlist set id=%d where cd_num=%d and id=%d;select changes()",
+                    temp, dest, I(a, REC_ID), I(a, REC_ID), dest, I(b, REC_ID), I(b, REC_ID), dest,
+                    temp);
+    } else
+        tk_snprintf(sql, sizeof sql,
+                    "delete from playlist where cd_num=%d and id=%d;select changes()", dest,
+                    I(a, REC_ID));
+    if (sqlite3_exec(db, sql, ple_changed, 0, 0) || sqlite3_exec(db, "commit", 0, 0, 0))
+        goto rollback;
+    ok = 1;
+    goto done;
+rollback:
+    sqlite3_exec(db, "rollback", 0, 0, 0);
+done:
+    if (db) sqlite3_close(db);
+    return ok;
+}
+
+static int ple_query(void *ctx) { return getMusicByPlayList(ple.dest); }
+static void ple_reload(void) {
+    int n;
+    void *songs = staged(ple_query, 0, &n);
+    if (ple.songs) deque_destroy(ple.songs);
+    ple.songs = songs;
+    int size = (int)deque_size(songs);
+    if (ple.selected >= size) ple.selected = size ? size - 1 : 0;
+}
+/* The Add Songs picker's Search row filters by title, artist or album, ASCII case-insensitively.
+ * ple.match holds the matching records only; the picker keeps every song, so clearing the query
+ * restores the list without re-staging it. */
+static int ple_has(const char *text, const char *query) { return text && strcasestr(text, query); }
+static void ple_filter(void) {
+    free(ple.match);
+    ple.match = 0;
+    ple.nmatch = 0;
+    int n = ple.picker ? (int)deque_size(ple.picker) : 0;
+    if (!n || !(ple.match = calloc((unsigned)n, sizeof *ple.match))) return;
+    for (int i = 0; i < n; ++i) {
+        void *r = deque_at(ple.picker, (unsigned)i);
+        char name[512];
+        const char *fields[] = { track_name(name, sizeof name, r), P(r, REC_ARTIST),
+                                 P(r, REC_ALBUM) };
+        for (unsigned f = 0; f < sizeof fields / sizeof *fields; ++f)
+            if (ple_has(fields[f], ple.query)) {
+                ple.match[ple.nmatch++] = r;
+                break;
+            }
+    }
+}
+static void ple_show(void);
+static int ple_closed(void *ctx, void *event) {
+    if (ple.timer) timer_remove(ple.timer);
+    if (ple.songs) deque_destroy(ple.songs);
+    if (ple.picker) deque_destroy(ple.picker);
+    free(ple.match);
+    unsigned key = ple.key; /* swallow the release even if the page closed during the press */
+    memset(&ple, 0, sizeof ple);
+    ple.key = key;
+    return 0;
+}
+static void ple_move(int at, int dir) {
+    int n = (int)deque_size(ple.songs), next = at + dir;
+    if (at < 0 || at >= n || next < 0 || next >= n) return;
+    if (ple_mutate(ple.dest, deque_at(ple.songs, (unsigned)at),
+                   deque_at(ple.songs, (unsigned)next))) {
+        ple.selected = next;
+        ple_reload();
+        ple_show();
+    } else
+        toast("Could not save playlist");
+}
+/* phase: press, release, or native delivery/long press. A repeat never moves twice. */
+static int ple_key(unsigned key, int phase) {
+    if (key != KEY_BACK_BTN && key != KEY_FWD_BTN) return 0;
+    unsigned bit = key == KEY_FWD_BTN ? 2 : 1;
+    int live = ple.page && window_manager_get_top_window(window_manager()) == ple.page;
+    if (!ple.page && !(ple.key & bit)) return 0;
+    if (phase == 1 && !(ple.key & bit)) {
+        ple.key |= bit;
+        if (live && !ple.mode && !ple.timer && usable())
+            ple_move(widget_get_prop_int(ple.view, SEL, ple.selected + 2) - 2,
+                     key == KEY_FWD_BTN ? 1 : -1);
+    }
+    if (phase == 2) ple.key &= ~bit;
+    return 1;
+}
+static int ple_run(const void *unused);
+static int ple_back(void *ctx, void *event) {
+    if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
+    /* The search box's text is applied by the next loop pass, never under its own key event. */
+    if (ple.mode == 4) {
+        if (!ple.timer) ple.timer = timer_add(ple_run, 0, 0);
+        return STOP;
+    }
+    stop_timer(&ple.timer);
+    if (ple.mode) {
+        ple.mode = 0;
+        ple_reload();
+        ple_show();
+    } else
+        navigator_back();
+    return STOP;
+}
+
+/* Rebuilds and closes run after click delivery, as the queue menu does. */
+static int ple_run(const void *unused) {
+    ple.timer = 0;
+    if (!ple.page) return 0;
+    int action = ple.pending, mode = ple.mode;
+    if (!mode) {
+        if (action == 1) {
+            navigator_back();
+            return 0;
+        }
+        if (!action) {
+            int n;
+            if (ple.picker) deque_destroy(ple.picker);
+            ple.picker = staged_music(all_songs, 0, &n);
+            ple_filter();
+            ple.mode = 1;
+        } else {
+            ple.selected = action - 2;
+            ple.mode = 2;
+        }
+    } else if (mode == 1) {
+        if (!action)
+            ple.mode = 4;
+        else if ((unsigned)(action - 1) >= (unsigned)ple.nmatch)
+            return 0;
+        else {
+            void *r = ple.match[action - 1];
+            if (checkPlayListExist(r, ple.dest))
+                toast("Already in playlist");
+            else {
+                int before = (int)deque_size(ple.songs);
+                void *one = _create_deque("stSongInfo");
+                if (!one) {
+                    toast("Could not save playlist");
+                    return 0;
+                }
+                deque_init(one);
+                _deque_push_back(one, r); /* stock rewrites the added record's ID and cd_num */
+                if (!ple_add_select) {
+                    ple_add_select = _create_vector("int");
+                    if (ple_add_select) {
+                        vector_init(ple_add_select);
+                        _vector_push_back(ple_add_select, 1);
+                    }
+                }
+                if (ple_add_select) batch_add_file(0xf001, 0xf00b, one, ple_add_select, ple.dest);
+                deque_destroy(one);
+                ple_reload();
+                toast((int)deque_size(ple.songs) > before ? "Added to Playlist"
+                                                          : "Could not save playlist");
+            }
+            return 0; /* picker stays on its selected song */
+        }
+    } else if (mode == 4) {
+        if (!ple.edit || widget_get_text_utf8(ple.edit, ple.query, sizeof ple.query))
+            ple.query[0] = 0;
+        ple.mode = 1;
+        ple_filter();
+    } else if (mode == 2) {
+        if (action == 2)
+            ple.mode = 3;
+        else {
+            ple.mode = 0;
+            ple_move(ple.selected, action ? 1 : -1);
+        }
+    } else {
+        if (!action && (unsigned)ple.selected < deque_size(ple.songs)) {
+            if (ple_mutate(ple.dest, deque_at(ple.songs, (unsigned)ple.selected), 0))
+                ple_reload();
+            else
+                toast("Could not save playlist");
+        }
+        ple.mode = 0;
+    }
+    ple_show();
+    return 0;
+}
+static int ple_pick(void *ctx, void *event) {
+    if (!ple.timer) {
+        ple.pending = (int)(long)ctx;
+        ple.timer = timer_add(ple_run, 0, 0);
+    }
+    return 0;
+}
+/* The T9 box over the title, as Internet Radio's pull-down: page children go so the keyboard has
+ * room. Its widget is named search_edit, so navigation.c's search_key closes the keyboard before
+ * Return can destroy the edit under it. */
+static int ple_searched(void *ctx, void *event) {
+    widget_set_focused(ple.edit, 0);
+    input_method_request(input_method(), 0); /* Detach the keyboard before rebuilding its owner. */
+    if (!ple.timer) ple.timer = timer_add(ple_run, 0, 0);
+    return 0;
+}
+static void ple_search_show(void) {
+    widget_destroy_children(ple.page);
+    ple.view = 0;
+    ple.edit = edit_create(ple.page, "text", 2, 26);
+    widget_set_name(ple.edit, "search_edit");
+    widget_set_prop_str(ple.edit, "tips", "Search songs");
+    if (*ple.query) widget_set_text_utf8(ple.edit, ple.query);
+    widget_on(ple.edit, EVT_IM_ACTION, ple_searched, 0);
+    widget_set_focused(ple.edit, 1);
+}
+static void ple_show(void) {
+    int mode = ple.mode;
+    if (mode == 4) {
+        ple_search_show();
+        return;
+    }
+    ple.edit = 0;
+    int n = mode == 0   ? (int)deque_size(ple.songs) + 2
+            : mode == 1 ? (ple.nmatch ? ple.nmatch + 1 : 2)
+            : mode == 2 ? 3
+                        : 2;
+    char title[180], name[512];
+    tk_snprintf(title, sizeof title, "%s: %s",
+                mode == 0   ? "Editing"
+                : mode == 1 ? "Add Songs"
+                : mode == 2 ? "Song Actions"
+                            : "Remove song?",
+                ple.name);
+    ple.view = page_list(ple.page, ple.page, 0, title, n, 48);
+    static const char *const actions[] = { "Move Up", "Move Down", "Remove from Playlist" };
+    if (mode == 1) {
+        char search[160];
+        tk_snprintf(search, sizeof search, "%s%s", *ple.query ? "Search: " : "Search", ple.query);
+        page_row_detail(ple.view, 0, search, 0, ple_pick);
+        if (!ple.nmatch)
+            page_row_detail(ple.view, 1, "No songs match", 0, 0);
+        else
+            for (int i = 0; i < ple.nmatch; i++)
+                page_row_detail(ple.view, i + 1, track_name(name, sizeof name, ple.match[i]), 0,
+                                ple_pick);
+    } else
+        for (int i = 0; i < n; i++) {
+            const char *caption =
+                mode == 0 && i < 2 ? (i ? "Done" : "Add Songs")
+                : mode == 2        ? actions[i]
+                : mode == 3 ? (i ? "Cancel" : "Remove from Playlist")
+                            : track_name(name, sizeof name,
+                                         deque_at(ple.songs, (unsigned)(i - (mode == 0 ? 2 : 0))));
+            page_row_detail(ple.view, i, caption, 0, ple_pick);
+        }
+    if (n) ringnav_select(ple.view, mode == 0 ? ple.selected + 2 < n ? ple.selected + 2 : 0 : 0, n);
+}
+static int ple_open(void *ctx, void *event) {
+    if (ple.page) return 0;
+    unsigned at = (unsigned)(long)ctx;
+    void *lists = P(p_deque_playlist, 0);
+    if (!lists || at >= deque_size(lists)) return 0;
+    void *r = deque_at(lists, at);
+    ple.dest = I(r, REC_DISC);
+    if (ple.dest < 0 || ple.dest >= 100) return 0;
+    tk_snprintf(ple.name, sizeof ple.name, "%s", P(r, REC_TITLE));
+    ple.page = page_open("playlistedit_page", ple_closed, ple_back);
+    if (ple.page) {
+        ple_reload();
+        ple_show();
+    }
+    return 0;
+}
+extern int stock_playlistsmore_trampoline(void *, void *);
+int ringnav_playlistsmore(void *win, void *ctx) {
+    int result = stock_playlistsmore_trampoline(win, ctx);
+    if (win) {
+        /* Stock's row says Delete Song; this page deletes the whole playlist. Rename only this
+         * label, as Now Playing's Delete Song still deletes the song. */
+        void *del = widget_lookup(win, "label_del", 1);
+        if (del) widget_set_text_utf8(del, "Delete Playlist");
+        /* A row like this page's stock Rename and Delete: a 375x72 (Legacy 78) list_item holding
+         * a 335x68 (Legacy 70) s_btn_listitem, its 52px icon at x 10 and its 20px label at x 72.
+         * Edit Playlist follows the Delete row at the same spacing. */
+        int h = IPOD ? 72 : 78, inner = IPOD ? 68 : 70;
+        void *item = list_item_create(win, 0, IPOD ? 154 : 216, 375, h);
+        widget_use_style(item, "s_listitem_black");
+        void *button = button_create(item, 20, 0, 335, inner);
+        widget_use_style(button, "s_btn_listitem");
+        widget_on(button, EVT_CLICK, ple_open, ctx);
+        void *image = image_create(button, 10, 0, 52, inner);
+        image_base_set_image(image, "rename");
+        image_set_draw_type(image, IMAGE_DRAW_CENTER);
+        void *label = hscroll_label_create(button, 72, 0, 253, inner);
+        widget_use_style(label, "s_scrlabel_white20l");
+        set_hscroll_label_attribute(label);
+        widget_set_text_utf8(label, "Edit Playlist");
+    }
+    return result;
+}
+
 /* Go to album/artist reuse g_local_classinfo_save, which the pages underneath reload from when
  * they come back, so it is put back as the page opened here closes. */
 static int qm_restore(void *page, void *event) {
@@ -5863,10 +6524,13 @@ static int qm_run(const void *unused) {
     if (r && a >= 100) {
         if (!playback_set(st.qm_choice - 1, a - 100)) toast("Queue unchanged");
         st.qm_choice = 0;
+    } else if (r && a == QA_CHAPTERS) {
+        chapters_open(r);
     } else if (r && a == QA_QUEUE) {
-        navigator_to("playerqueue_page");
-    } else if (r && a == QA_UP_NEXT) {
-        up_next();
+        if (playback_option(0)) /* a shuffle's play order is not the list's: ours */
+            up_next(page_closed, page_keyup);
+        else
+            navigator_to("playerqueue_page");
     } else if (r && (a == QA_NEXT_GROUP || a == QA_PREV_GROUP)) {
         if (!playback_group_skip(a == QA_NEXT_GROUP)) toast("No other group");
     } else if (aid && a == QA_RATE) {
@@ -5915,6 +6579,13 @@ static int qm_run(const void *unused) {
             deque_destroy(songs);
         } else
             toast("Queue unchanged");
+    } else if (r && a == QA_FOLDER) {
+        st.go_layer = song_folder(r, st.go_folder);
+        if (st.go_layer)
+            navigator_to("folder_page"); /* its init, ringnav_folder, opens there */
+        else
+            toast("Folder not found");
+        st.go_layer = 0; /* never left for a later Folder visit */
     } else if (r && a >= QA_ALBUM)
         qm_goto(r, a == QA_ALBUM);
     else {
@@ -6038,7 +6709,7 @@ static int qm_open(const void *unused) {
     /* Songs favourite, as stock's heart, and go to their album and artist; collections shuffle.
      * Go to is left out where its single-instance page is already open, or the album is the page.
      */
-    unsigned char acts[14], n = 0;
+    unsigned char acts[20], n = 0;
     /* Shuffle Albums/Folders only: skipping the group comes first */
     int group_first = st.qm_kind == QM_PLAYING && playback_option(0) >= 3;
     /* Rate (the heart's hold) follows Next/Previous album */
@@ -6049,8 +6720,8 @@ static int qm_open(const void *unused) {
     acts[n++] = QA_NEXT;
     acts[n++] = QA_ADD;
     if (st.qm_kind == QM_PLAYING) {
+        if (chapter_file(P(r, REC_PATH))) acts[n++] = QA_CHAPTERS;
         acts[n++] = QA_QUEUE;
-        if (playback_option(0)) acts[n++] = QA_UP_NEXT; /* a shuffle's order is not the list's */
     }
     if (!song) acts[n++] = QA_SHUFFLE;
     if (song) acts[n++] = checkFavExist(r) ? QA_UNFAV : QA_FAV;
@@ -6065,6 +6736,10 @@ static int qm_open(const void *unused) {
     if ((song || cls == CLASS_ALBUMS) && artist && *artist &&
         !navigator_window_is_exist("artistinfo_page"))
         acts[n++] = QA_ARTIST;
+    /* ponytail: hidden while a folder_page is open (as Go to's single-instance pages), so a folder
+     * play's Now Playing has none; Back reaches that folder_page instead. */
+    if (song && !navigator_window_is_exist("folder_page") && song_folder(r, st.go_folder))
+        acts[n++] = QA_FOLDER;
     if (st.qm_kind == QM_PLAYING) {
         acts[n++] = QA_ADV_SHUFFLE;
         acts[n++] = QA_REPEAT;
@@ -6087,7 +6762,8 @@ static int qm_open(const void *unused) {
                                         "Rate",
                                         "Resume",
                                         "View Queue",
-                                        "Up Next" };
+                                        "Go to Folder",
+                                        "Chapters" };
     char rated[32];
     /* stock sortselect row styles */
     for (int i = 0; i < n; ++i) {
@@ -6180,11 +6856,25 @@ static int qm_hold(void) {
         return 0;
 #if M1PLUS
     int cur = LP_TOUCH ? lp_entry(&g_menu) : reconcile(&g_menu, !moving(&g_menu));
+    if (cur < 0) return 0;
 #else
     int cur = reconcile(&g_menu, !moving(&g_menu));
+    if (cur < 0) return 0;
+    /* A playlist row's hold opens the same More page as its trailing dots. The Add to Playlist
+     * picker shares playlist_page's name; its add mode tells the two apart. */
+    if (!tk_strcmp(name, "playlist_page") && !I(PLAYLIST_ADD_MODE, 0)) {
+        /* The row's index counts Import and Export; its dots' name carries the playlist's. */
+        void *more = more_image(g_menu.at[cur]);
+        if (!key || !more) return 0;
+        st.qm_press = *(unsigned long long *)((char *)key + INPUT_KEY_TIME);
+        drop_input();
+        navigator_to_with_context("localmusic/playlistsmore_page",
+                                  (void *)(long)atoi(widget_get_prop_str(more, "name", "") + 8));
+        return 1;
+    }
 #endif
     if (!coverflow) list = P(p_deque_showlist, 0);
-    if (cur < 0 || !list || deque_size(list) != (unsigned)g_menu.rows) return 0;
+    if (!list || deque_size(list) != (unsigned)g_menu.rows) return 0;
     void *r = deque_at(list, g_menu.id[cur]);
     /* An artist's tabs reload the showlist with load_localartist_list, which sets classinfo +0
      * (0xff07 songs, 0xff01 albums) but not g_class_type. */
@@ -6211,14 +6901,31 @@ static int qm_hold(void) {
     return 1;
 }
 
+/* Quick Settings' wheel: 0 its brightness slider, 1 stock's volume (Q2POD QSVOLUME). A held
+ * Play/Pause there switches it (ringnav_keylong). No toast: its msginfo_dialog would cover the
+ * pull-down, taking the wheel and Centre for 2 s; the next tick shows the mode. */
+static int quick_volume(void) {
+    if (!st.qs_wheel) st.qs_wheel = 1 + config_value("Q2POD", "QSVOLUME", 2, 0);
+    return st.qs_wheel - 1;
+}
+static int quick_wheel_toggle(void *top) {
+    if (!usable() || !top || tk_strcmp(widget_get_prop_str(top, "name", ""), "statusbar_dialog"))
+        return 0;
+    int volume = !quick_volume();
+    st.qs_wheel = 1 + volume;
+    write_int_config(volume, "Q2POD", "QSVOLUME");
+    return 1;
+}
 /* Stock long-key callback: everything except a taken Play/Pause hold runs the stock body. On an
  * Internet Radio station it is the favourite toggle, on a Spotify track Add to Queue (its reply
- * toasts), the release latched as the queue menu's. */
+ * toasts), in Quick Settings the wheel's brightness/volume switch, on View Queue's shuffle list
+ * Play Next (un_hold), the release latched as the queue menu's. */
 int ringnav_keylong(void *ctx, void *event) {
+    if (event && ple_key((unsigned)I(event, EVENT_KEY), 3)) return STOP;
     if (!event || I(event, EVENT_KEY) != KEY_PLAY) return stock_keylong_trampoline(ctx, event);
     void *top = window_manager_get_top_window(window_manager());
     const char *fav = radio_hold(top);
-    int taken = fav || spot_hold(top);
+    int taken = fav || quick_wheel_toggle(top) || spot_hold(top) || un_hold(top);
     char *key = taken ? play_key() : (char *)0;
     if (taken) {
         if (key) st.qm_press = *(unsigned long long *)(key + INPUT_KEY_TIME);
@@ -6376,6 +7083,10 @@ static void resume_poll(void) {
         st.rs_sec = st.rs_saved = sec;
         st.rs_still = 0;
     }
+    if (st.ch_key == key)
+        st.rs_pending = 0;
+    else
+        st.ch_key = 0;
     /* A listen: half the track or LISTEN_MAX_S heard, seeks and pauses aside; a repeat starts over.
      */
     if (!st.rs_pending && !st.rs_spoken) {
@@ -6728,6 +7439,34 @@ static int np_animating(void) {
 #endif
 }
 
+/* Keep stock VOLUME for wired/USB and boot; Bluetooth saves its own level. */
+int ringnav_write_config(int value, const char *section, const char *key) {
+    if (!tk_strcmp(section, "PLAYSET") && !tk_strcmp(key, "VOLUME") && mclGetOutputWay() == 1)
+        key = "BT_VOLUME";
+    return stock_write_config_trampoline(value, section, key);
+}
+
+int ringnav_output(int way) {
+    int old = mclGetOutputWay();
+    int changed = (old == 1) != (way == 1);
+    if (changed) {
+        write_int_config(g_volume, "PLAYSET", "VOLUME");
+        char s[256] = "";
+        toolsReadConfig("/mnt/data/config.ini", "PLAYSET", way == 1 ? "BT_VOLUME" : "VOLUME", s,
+                        "");
+        int v = 0;
+        unsigned i;
+        for (i = 0; i < 3 && s[i] >= '0' && s[i] <= '9'; ++i) v = v * 10 + s[i] - '0';
+        if (!i || s[i] || v > 100) v = g_volume;
+        if (v > g_maxvolume) v = g_maxvolume;
+        g_volume = (unsigned char)v;
+        headset_volume_reset();
+    }
+    int result = stock_output_trampoline(way);
+    if (changed) device_set_volume(g_volume, 1);
+    return result;
+}
+
 /* AVRCP absolute volume, as in PR #3. libbtctl returns 0 on a successful write.
  * Keep stock software gain unless the headset accepted the requested level. */
 static int bt_audio_ready(void) {
@@ -6773,7 +7512,11 @@ int ringnav_btvol(int left, int right) {
 #endif
     if (bt_audio_ready()) {
         btvol.ready = bt_sync_volume(left, right);
-        if (btvol.ready && (left > 0 || right > 0)) return stock_btvol_trampoline(100, 100);
+        if (btvol.ready && (left > 0 || right > 0)) {
+            int volume = left > right ? left : right;
+            return stock_btvol_trampoline(left <= 0 ? 0 : left * 100 / volume,
+                                          right <= 0 ? 0 : right * 100 / volume);
+        }
     }
     return stock_btvol_trampoline(left, right);
 }
@@ -6791,16 +7534,13 @@ static void bt_volume_poll(void) {
         return;
     }
     if (!btvol.ready) {
-        if (bt_sync_volume(BT_VOLUME, BT_VOLUME)) {
-            stock_btvol_trampoline(BT_VOLUME ? 100 : 0, BT_VOLUME ? 100 : 0);
-            btvol.ready = 1;
-        }
-        return; /* Initial connection preserves the player's volume. */
+        device_set_volume(BT_VOLUME, 0); /* Reuse stock's Balance calculation on reconnect. */
+        return;                         /* Initial connection preserves Q2 volume. */
     }
     int cur = btctl_transport_get_volume();
     if (cur < 0 || cur > 127) {
         btvol.ready = 0;
-        stock_btvol_trampoline(g_volume, g_volume);
+        device_set_volume(BT_VOLUME, 0);
         return;
     }
     if (cur == btvol.last) return;
@@ -6814,9 +7554,6 @@ static void bt_volume_poll(void) {
 #endif
     device_set_volume(v, 1);
     write_int_config(v, "PLAYSET", BT_VOLUME_KEY);
-    /* device_set_volume invokes our gain hook; enforce the limit even when mocked/unsupported. */
-    btvol.ready = bt_sync_volume(v, v);
-    stock_btvol_trampoline(btvol.ready && v ? 100 : v, btvol.ready && v ? 100 : v);
     void *top = window_manager_get_top_window(window_manager());
     if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog")) {
 #if M1PLUS
@@ -6845,6 +7582,9 @@ int ringnav_sleep(void *loop) {
     playback_poll();
     resume_poll();
     power_poll();
+#if IPOD
+    if (st.bc[0] && np_track() != st.bc_track) bc_show();
+#endif
     if (!g_backlight_status) {
         st.dark |= 1;
         int quiet = I(g_dacoff_time, 0) < 0 && !media_playing() && !video_on() &&
@@ -6928,15 +7668,42 @@ static int wake_gate(void *e) {
 
 /* window_manager_dispatch_input_event: while q2video plays (books.c) no key or touch reaches the
  * UI; a key's release goes to the player instead. Every event times ringnav_sleep's idle. */
+int ringnav(void *ctx, void *event);
 int ringnav_input(void *wm, void *e) {
     if (e && wake_gate(e)) return 0;
     st.last_input = time_now_ms();
 #include "m1plus_nav_input.inc"
-#if !M1PLUS
-    if (!video_on()) return stock_input_trampoline(wm, e);
-#endif
-    if (e && I(e, EVENT_TYPE) == EVT_KEY_UP) video_key((unsigned)I(e, EVENT_KEY));
-    return 0;
+    if (video_on()) {
+        if (e && I(e, EVENT_TYPE) == EVT_KEY_UP) video_key((unsigned)I(e, EVENT_KEY));
+        return 0;
+    }
+    unsigned type = e ? (unsigned)I(e, EVENT_TYPE) : 0;
+    unsigned key = e ? (unsigned)I(e, EVENT_KEY) : 0;
+    if ((type == EVT_KEY_DOWN || type == EVT_KEY_UP || type == EVT_KEY_LONG) &&
+        (key == KEY_PREV || key == KEY_NEXT || key == KEY_CENTER) && usb_prompt()) {
+        reset_poweroptions_timer(1, 1, 1);
+        if (type == EVT_KEY_UP) ringnav(0, e);
+        return 0;
+    }
+    void *top = window_manager_get_top_window(wm);
+    if (type == EVT_KEY_UP && (key == KEY_PREV || key == KEY_NEXT) && usable() &&
+        window_manager_is_animating(wm) && top &&
+        !tk_strcmp(widget_get_prop_str(top, "name", ""), "playing_page")) {
+        drop_input();
+        st.held = 0; /* Queued list ticks never become volume ticks. */
+        reset_poweroptions_timer(1, 1, 1);
+        int value = g_volume + (key == KEY_NEXT ? 1 : -1);
+        if (value < 0) value = 0;
+        if (value > g_maxvolume) value = g_maxvolume;
+        if (value > 100) value = 100;
+        if (value != g_volume) {
+            g_volume = value;
+            device_set_volume(value, 1);
+            write_int_config(value, "PLAYSET", "VOLUME");
+        }
+        return 0;
+    }
+    return stock_input_trampoline(wm, e);
 }
 
 /* window_manager_paint, a leaf (tools/build.py WM_PAINT_LEAF): the window manager's own paint
@@ -6970,6 +7737,7 @@ int ringnav_buzzer(int on) {
  * scrub, the volume and every other key keep the stock click. */
 int ringnav_keydown(void *ctx, void *event) {
     unsigned key = event ? (unsigned)I(event, EVENT_KEY) : 0;
+    if (ple_key(key, 1)) return STOP;
     void *top = window_manager_get_top_window(window_manager());
 #if IPOD
     unsigned char tone = g_keytone_flag;
@@ -7072,6 +7840,7 @@ static int edit_key(void *top, unsigned key) {
         return 1;
     }
     if (key != KEY_PREV && key != KEY_NEXT) return 0;
+    if (quick && quick_volume()) return 0; /* stock's wheel volume */
     void *wm = window_manager();
     if (window_manager_is_animating(wm) || window_manager_get_pointer_pressed(wm)) return 1;
     int dir = key == KEY_NEXT ? 1 : -1;
@@ -7162,6 +7931,17 @@ static int replay_wheel(const void *info) {
     return 0;
 }
 
+/* The keyboard is its own top window: take the search edit from the input method's owner.
+ * Close it before stock's Return can destroy the edit; the next Return quits the dialog. */
+static int search_key(unsigned key) {
+    if (key != KEY_RETURN) return 0;
+    void *im = input_method(), *edit = im ? P(im, IM_WIDGET) : (void *)0;
+    if (!edit || tk_strcmp(widget_get_prop_str(edit, "name", ""), "search_edit")) return 0;
+    widget_set_focused(edit, 0);
+    input_method_request(im, (void *)0); /* searchbox dialogs do not close on blur */
+    return 1;
+}
+
 int ringnav(void *ctx, void *event) {
     pull_cancel();
     /* The stock filter dereferences the event before returning. */
@@ -7171,6 +7951,7 @@ int ringnav(void *ctx, void *event) {
     }
     unsigned key = (unsigned)I(event, EVENT_KEY);
 #include "m1plus_nav_knob.inc"
+    if (ple_key(key, 2)) return STOP;
 #if IPOD
     /* This release's press was silenced by ringnav_keydown: a row change below clicks instead. */
     int owned = st.tone_key == key;
@@ -7200,7 +7981,8 @@ int ringnav(void *ctx, void *event) {
 #endif
 #include "m1plus_nav_keyup.inc"
 #if !M1PLUS
-    int result = stock_keyup_trampoline(ctx, event);
+    if (search_key(key)) return STOP;
+    int result = usb_prompt() ? 0 : stock_keyup_trampoline(ctx, event);
     if (key == KEY_PLAY && hold_released()) return STOP;
     /* Media controls follow the active source, including when local Now Playing is visible. */
     if (!result && (media_focused() || media_owner() != 1) &&
@@ -7302,7 +8084,7 @@ int ringnav(void *ctx, void *event) {
     else if (key == KEY_CENTER || st.scrub)
         return np_key(top, key);
 #endif
-    if (!allowed_top(top)) {
+    if (!allowed_top(top) && !usb_prompt()) {
         drop_input();
         return result;
     }

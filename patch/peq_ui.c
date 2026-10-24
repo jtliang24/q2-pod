@@ -35,7 +35,7 @@ void peq_attach(void) {
 }
 
 enum { HOME, BAND, PRESETS, IMPORTS, SAVES, CONFIRM, DELETES, PICK, ADJUST, STOCKS };
-enum { BACK = 1000, APPLY, BYPASS, MENU, IMPORT, SAVE, ENABLE, TYPE, RAISE, LOWER, TYPED, CHANNEL, STEP,
+enum { BACK = 1000, APPLY, RESET, BYPASS, MENU, IMPORT, SAVE, ENABLE, TYPE, RAISE, LOWER, TYPED, CHANNEL, STEP,
        YES, CANCEL, DELETE, BALANCE, PREAMP, GAIN, /* these three open the picker, in picks[] order */
        FREQUENCY, QUALITY, /* and these two the value menu */ KEYBOARD, STOCK, FILE_PREV, FILE_NEXT };
 #define FILE_PAGE 128
@@ -117,9 +117,9 @@ static void row_dim(void *view, int index, const char *text, const char *value, 
 }
 #define row(view, index, text, id) row_dim(view, index, text, 0, id, 0)
 
-/* |H|^2 of the engine's left and right chains at f Hz (at 48 kHz, as compiled here). */
-static void response(const peq_engine *e, double f, double *l, double *r) {
-    double w = 6.283185307179586 * f / 48000, c1 = cos(w), s1 = sin(w), c2 = 2 * c1 * c1 - 1, s2 = 2 * s1 * c1;
+/* |H|^2 of the engine's left and right chains, without preamp or balance. */
+static void response(const peq_engine *e, int rate, double f, double *l, double *r) {
+    double w = 6.283185307179586 * f / rate, c1 = cos(w), s1 = sin(w), c2 = 2 * c1 * c1 - 1, s2 = 2 * s1 * c1;
     *l = *r = 1;
     for (int i = 0; i < e->used; ++i) { /* bands past used are identity */
         const peq_coeff *q = &e->c[i];
@@ -144,27 +144,48 @@ static void curve(void) {
     int ok = peq_compile(&ui.draft, 48000, &e);
     for (int x = 0; x < GRAPH_W; ++x) {
         double l = 1, r = 1;
-        if (ok) response(&e, 20 * pow(1000, x / (GRAPH_W - 1.0)), &l, &r);
+        if (ok) response(&e, 48000, 20 * pow(1000, x / (GRAPH_W - 1.0)), &l, &r);
         ui.curve[0][x] = graph_y(decibels(l));
         ui.curve[1][x] = graph_y(decibels(r));
     }
 }
 
-/* Preamp that keeps the combined response at or below 0 dB, as AutoEQ sets it: minus the peak
- * of |H| on a log grid from 20 Hz to 20 kHz at 48 kHz. ponytail: 1024 points (0.7% apart); a very
- * narrow boost between two can read a little low, refine around the best point if that matters. */
+static double response_peak(const peq_engine *e, int rate, double f) {
+    double l, r;
+    response(e, rate, f, &l, &r);
+    return l > r ? l : r;
+}
+
+/* Auto is a saved number, so cover standard PCM rates instead of tying it to the current track.
+ * shortcut: sampled steady-state peaks, not a transient limiter or a bound for nonstandard rates. */
 static double headroom(const peq_preset *p) {
+    static const int rates[] = {8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100,
+                               48000, 64000, 88200, 96000, 176400, 192000, 352800, 384000};
+    static peq_preset cached;
+    static int have_cache;
+    static double gain;
+    if (have_cache && !memcmp(p, &cached, sizeof(*p))) return gain;
     peq_engine e;
-    if (!peq_compile(p, 48000, &e)) return p->preamp; /* preamp only sets e.gain, unused here */
     double peak = 1;
-    for (int k = 0; k < 1024; ++k) {
-        double l, r;
-        response(&e, 20 * pow(1000, k / 1023.0), &l, &r);
-        if (l > peak) peak = l;
-        if (r > peak) peak = r;
+    for (unsigned i = 0; i < sizeof(rates) / sizeof(*rates); ++i) {
+        int rate = rates[i];
+        if (!peq_compile(p, rate, &e)) return p->preamp;
+        double nyquist = rate * 0.5, best = 0;
+        /* Include DC, Nyquist and each band's centre: near Nyquist a peak can be narrower than the grid. */
+        for (int k = -2; k < 1024 + p->count; ++k) {
+            double f = k == -2 ? 0 : k == -1 ? nyquist : k < 1024 ? pow(nyquist, k / 1023.0)
+                       : p->bands[k - 1024].frequency;
+            if (f >= nyquist && k != -1) continue;
+            double v = response_peak(&e, rate, f);
+            if (v > best) best = v;
+        }
+        if (best > peak) peak = best;
     }
-    double gain = -decibels(peak);
-    return peak == 1 ? 0 : gain < -60 ? -60 : gain; /* no boost: +0, not -0.0 on screen */
+    gain = -decibels(peak);
+    gain = gain > -0.0001 ? 0 : gain < -60 ? -60 : gain;
+    cached = *p;
+    have_cache = 1;
+    return gain; /* no boost: +0, not -0.0 on screen */
 }
 
 static double *picked(void) {
@@ -194,7 +215,18 @@ static int focused(void *ctx, void *event) {
     return 0;
 }
 
-static int on_auto(void) { return __builtin_fabs(ui.draft.preamp - headroom(&ui.draft)) < 0.05; }
+/* Auto unless the preamp was picked (2): imports and presets or states from before 1.3.6 take it. */
+static int on_auto(void) { return ui.draft.automatic != 2; }
+
+/* A draft on Auto takes the current headroom (an update can move it): 1 if that changed it. */
+static int follow_auto(void) {
+    double was = ui.draft.preamp;
+    if (on_auto()) { /* headroom before the flag: the flag is part of its cache key */
+        double h = headroom(&ui.draft);
+        ui.draft.automatic = 1, ui.draft.preamp = h;
+    }
+    return ui.draft.preamp != was;
+}
 
 static int compare_names(const void *a, const void *b) { return strcmp(a, b); }
 
@@ -246,6 +278,7 @@ static const signed char stock_gains[][10] = {
 static void load_draft(peq_preset *p, const char *name, int length) {
     p->bypass = ui.draft.bypass; /* ON/OFF is live state, not part of the edit */
     ui.draft = *p;
+    follow_auto();
     ui.dirty = 1;
     snprintf(ui.name, sizeof(ui.name), "%.*s", length, name);
     ui.screen = HOME;
@@ -289,7 +322,6 @@ static int action(void *ctx, void *event) {
     ui.tabs = 0;
     /* Band edits keep the preamp on Auto (just enough cut for the boosts) only if it was there. */
     int edit = (id >= ENABLE && id < STEP) || (id < 256 && ui.screen == PICK && ui.pick == GAIN);
-    int automatic = edit && on_auto();
     if (id == BACK) {
         if (ui.screen == HOME) { navigator_back(); return 0; }
         if (ui.screen == PICK) ui.screen = ui.pick == GAIN ? BAND : HOME;
@@ -336,6 +368,15 @@ static int action(void *ctx, void *event) {
             ui.named = ui.draft;
             snprintf(ui.status, sizeof(ui.status), "Applied");
         } else snprintf(ui.status, sizeof(ui.status), "Apply failed; active EQ unchanged");
+    } else if (id == RESET) {
+        /* The draft returns to peq_default; On/Off is live state, not part of the edit. */
+        int bypass = ui.draft.bypass;
+        peq_default(&ui.draft);
+        ui.draft.bypass = bypass;
+        follow_auto();
+        ui.name[0] = 0;
+        ui.dirty = 1;
+        snprintf(ui.status, sizeof(ui.status), "Reset; choose Apply to activate");
     } else if (id == YES) {
         ui.screen = ui.previous;
         if (ui.screen != DELETES) save_candidate(1);
@@ -349,6 +390,7 @@ static int action(void *ctx, void *event) {
         else if (ui.screen == PICK && id < picks[ui.pick - BALANCE].rows) {
             /* Preamp's Auto row: the band-edit cut, which later band edits then keep up to date. */
             *picked() = ui.pick == PREAMP && !id ? headroom(&ui.draft) : picks[ui.pick - BALANCE].first + picks[ui.pick - BALANCE].step * id;
+            if (ui.pick == PREAMP) ui.draft.automatic = id ? 2 : 1;
             if (ui.pick == GAIN && !b->enabled) b->enabled = 1; /* picking a gain is using the band */
             ui.dirty = 1;
             ui.screen = ui.pick == GAIN ? BAND : HOME;
@@ -357,7 +399,7 @@ static int action(void *ctx, void *event) {
             peq_preset p;
             peq_default(&p);
             for (int k = 0; k < 10; ++k) p.bands[k].enabled = (p.bands[k].gain = stock_gains[id][k]) != 0;
-            p.preamp = headroom(&p);
+            p.automatic = 1; /* load_draft sets the preamp */
             load_draft(&p, stock_names[id], sizeof(stock_names[id]));
         }
         else if (ui.screen == SAVES && id < 10) {
@@ -389,7 +431,7 @@ static int action(void *ctx, void *event) {
     }
     if (edit) { /* ENABLE, TYPE, RAISE, LOWER, TYPED, CHANNEL and a picked gain */
         ui.dirty = 1;
-        if (automatic) ui.draft.preamp = headroom(&ui.draft);
+        follow_auto();
     }
     if (screen != ui.screen) ui.file_page = 0;
     if (!ui.timer) ui.timer = timer_add(render, 0, 1);
@@ -450,13 +492,14 @@ static int render(const void *unused) {
     /* No Back row: Return steps back on every screen (keyup). */
     if (ui.screen == HOME) {
         row(view, n++, ui.dirty ? "Apply changes" : "Nothing to apply", ui.dirty ? APPLY : -1);
-        row_dim(view, n++, "Advanced", ui.draft.bypass ? "Off" : "On", BYPASS, 0);
-        snprintf(value, sizeof(value), on_auto() ? "%.1f dB (Auto)" : "%.1f dB", ui.draft.preamp);
-        row_dim(view, n++, "Preamp", value, PREAMP, 0);
+        row(view, n++, "Reset to defaults", RESET);
+        row_dim(view, n++, "Enabled", ui.draft.bypass ? "Off" : "On", BYPASS, 0);
         /* Balance turns one side down: R 1.0 dB is the left 1 dB quieter. */
         snprintf(value, sizeof(value), __builtin_fabs(ui.draft.balance) >= 0.05 ? "%s %.1f dB" : "Centre",
                  ui.draft.balance > 0 ? "R" : "L", __builtin_fabs(ui.draft.balance));
         row_dim(view, n++, "Balance", value, BALANCE, 0);
+        snprintf(value, sizeof(value), on_auto() ? "%.1f dB (Auto)" : "%.1f dB", ui.draft.preamp);
+        row_dim(view, n++, "Preamp", value, PREAMP, 0);
         row_dim(view, n++, "Presets", ui.name[0] ? ui.name : 0, MENU, 0); /* the draft's preset */
         /* Ten rows, then one spare past the last used band to add another. */
         for (int i = 0; i < PEQ_BANDS && (i < 10 || i <= ui.draft.count); ++i) {
@@ -724,19 +767,21 @@ static void *bar(void *page, int x, int w) {
     return title;
 }
 
-/* Audio settings' EQ row: Simple first, every time. Opening changes nothing. */
+/* Audio settings' EQ row: opens on the tab it was last on (ui.tab, zeroed to Simple at boot).
+ * Opening changes nothing. ponytail: kept in RAM, so a reboot goes back to Simple; saving it in
+ * eq_state would keep it, add when asked. */
 int peq_page_init(void *page, void *context) {
     if (!page) return 16;
     ui.page = page;
     ui.view = 0;
     ui.screen = HOME;
     ui.status[0] = 0;
-    ui.dirty = 0;
-    ui.tab = SIMPLE;
     ui.tabs = 0;
     eq_state s;
     eq_load(&s);
     ui.draft = s.peq;
+    /* ponytail: a moved Auto plays its old number until Apply; the player has no headroom(). */
+    ui.dirty = follow_auto();
     load(&s);
     ui.named.bypass = ui.draft.bypass;
     if (memcmp(&ui.draft, &ui.named, sizeof(ui.named))) ui.applied[0] = 0; /* replaced since */
@@ -915,7 +960,7 @@ static void e3_paint(void *canvas) {
         int focus = e3.focus == (i ? E3_RESET : E3_SWITCH);
         e3_box(canvas, i ? E3_RIGHT : 12, E3_BUTTONS, E3_BUTTON, 40, focus ? 0x333333 : 0x1a1a1a);
         if (!i) e3_box(canvas, 12, E3_BUTTONS + 36, E3_BUTTON, 4, tone);
-        caption(canvas, i ? "Reset" : e3.on ? "Simple On" : "Simple Off", i ? E3_RIGHT : 12, E3_BUTTONS, E3_BUTTON, 40, 20, 0xffffffffu);
+        caption(canvas, i ? "Reset" : e3.on ? "Enabled: On" : "Enabled: Off", i ? E3_RIGHT : 12, E3_BUTTONS, E3_BUTTON, 40, 20, 0xffffffffu);
     }
     for (int i = 0; i < 3; ++i) {
         static const char *const names[] = { "Low", "Mid", "High" };

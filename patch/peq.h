@@ -35,9 +35,18 @@ void child_exit(int status) __attribute__((noreturn));
 
 /* Versioned disk representation: fixed-width fields, no pointers or implicit padding.
  * enabled: 0 off, 1 both channels, 2 left only, 3 right only (v1 files hold 0 or 1).
- * balance: dB, above 0 turns the left channel down, below 0 the right (v2 only). */
+ * balance: dB, above 0 turns the left channel down, below 0 the right (v2 only).
+ * automatic: the preamp is 1 Auto (the UI's headroom), 2 picked, 0 never picked (an import, or
+ * saved before 1.3.6: PEQ_PRESET_V2 bytes), which the UI also takes as Auto. */
 typedef struct { int enabled, type; double frequency, gain, q; } peq_band;
-typedef struct { int count, bypass; double preamp; peq_band bands[PEQ_BANDS]; double balance; } peq_preset;
+typedef struct {
+    int count, bypass;
+    double preamp;
+    peq_band bands[PEQ_BANDS];
+    double balance;
+    int automatic, spare;
+} peq_preset;
+#define PEQ_PRESET_V2 __builtin_offsetof(peq_preset, automatic)
 typedef struct { unsigned line; const char *reason; } peq_error;
 typedef struct { double b0, b1, b2, a1, a2; } peq_coeff;
 typedef struct {
@@ -87,6 +96,7 @@ long long now_ns(void);
 /* Mono Audio: demo writes an int, 1 to mix both channels into each; hciplayer's filter and q2video map
  * it read-only (video.c keeps its own copy of the path). */
 #define MONO_FILE PEQ_ROOT "/tmp/q2mono"
+#define SWAP_FILE PEQ_ROOT "/tmp/q2swap"
 /* librespot (spotify.c) and its restart loop, whose pid its launcher left, stopped: Spotify's idle
  * stop and Home's Rockbox row, which lets ALSA go too. A q2video sink ends with librespot's pipe. */
 #define SPOT_OUT "/tmp/q2-librespot.out" /* the output for the card's aplay.sh, none on the DAC */
@@ -138,6 +148,7 @@ int album_cmp(void *a, void *b);
 void peq_attach(void); /* peq_ui.c */
 extern int peq_chained; /* peq_ui.c: peq_stock_eq ran this boot */
 void peq_chain(void);   /* crossfade.c: peq_attach once a boot, while playing */
+int swap_on(void);
 int mono_on(void);      /* crossfade.c: Mono Audio's setting */
 int worker_stop(unsigned long thread, int *running, volatile int *cancel, unsigned *timer);
 void ringnav_select(void *w, int id, int rows);

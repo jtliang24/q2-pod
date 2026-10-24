@@ -18,7 +18,8 @@ class Band(C.Structure):
 
 class Preset(C.Structure):
     _fields_ = [('count', C.c_int), ('bypass', C.c_int), ('preamp', C.c_double), ('bands', Band * 30),
-                ('balance', C.c_double)]
+                ('balance', C.c_double), ('automatic', C.c_int), ('spare', C.c_int)]
+V2 = Preset.automatic.offset  # a preset as 1.3.5 saved it
 
 class State(C.Structure):
     _fields_ = [('mode', C.c_int), ('hold', C.c_int), ('peq', Preset), ('eq3', Preset)]
@@ -165,7 +166,9 @@ def parser_check(lib, tmp):
     v1 = tmp/'v1'
     v1.write_bytes(b'Q2PEQ01\0' + bytes(q)[:16 + 10*32])
     assert lib.peq_load(bytes(v1), C.byref(p)) and bytes(p) == bytes(q)  # q's bands 11-30 are the defaults
-    v1.write_bytes(b'Q2PEQ02\0' + bytes(q)[:-8])
+    v1.write_bytes(b'Q2PEQ02\0' + bytes(q)[:V2])  # 1.3.5's, before automatic: unknown (0)
+    assert lib.peq_load(bytes(v1), C.byref(p)) and bytes(p) == bytes(q) and p.automatic == 0
+    v1.write_bytes(b'Q2PEQ02\0' + bytes(q)[:V2 - 8])
     assert not lib.peq_load(bytes(v1), C.byref(p))
     v1.write_bytes(b'')
     assert not lib.peq_load(bytes(v1), C.byref(p))
@@ -221,8 +224,8 @@ def dsp_check(lib):
     assert (e.c[9].b0, e.c[9].a1) == (1, 0)  # only the unrepresentable band is skipped
     p = parse(lib, '\n'.join(f'Filter: ON PK Fc {100+i*1000} Hz Gain 6 dB Q 1' for i in range(10)))
     d = DSP(); lib.peq_reset(C.byref(d), 48000, 2, C.byref(p))
-    clipped = process(lib, d, [1., -1.] * 20000, 2)
-    assert all(math.isfinite(x) and -1 <= x <= 1 for x in clipped)
+    boosted = process(lib, d, [1., -1.] * 20000, 2)
+    assert all(math.isfinite(x) for x in boosted) and max(boosted) > 1 and min(boosted) < -1
     # Block splitting and stereo independence; no file I/O or allocation in process.
     a, b = DSP(), DSP()
     for d in (a, b): lib.peq_reset(C.byref(d), 48000, 2, C.byref(p))
@@ -286,7 +289,88 @@ def dsp_check(lib):
     p.bands[0].enabled = 1; lib.peq_reset(C.byref(a), 48000, 2, C.byref(p)); process(lib, a, [.5, .5] * 100, 2)
     p.bands[0].enabled = 2; assert lib.peq_update(C.byref(a), C.byref(p)); process(lib, a, [0., 0.] * 2000, 2)
     assert a.current.z[1][0][0] == a.current.z[1][0][1] == 0 and a.current.z[0][0][0]
-    print('PEQ DSP: C PCM response, 30 bands, shelves, rates, bypass, clipping, channels, balance and updates passed.')
+    # Non-finite input is still sanitized while EQ is on.
+    p = parse(lib, 'Preamp: 6 dB')
+    lib.peq_reset(C.byref(a), 48000, 1, C.byref(p))
+    assert process(lib, a, [math.nan, math.inf, -math.inf, 0.25]) == [0, 0, 0, C.c_float(.25*10**(.3)).value]
+    # A preamp/bypass transition also retains float headroom, with no flattened peaks.
+    bypass = parse(lib, 'Preamp: 0 dB'); bypass.bypass = 1
+    assert lib.peq_update(C.byref(a), C.byref(bypass))
+    ramp = process(lib, a, [1.5] * 1000)
+    assert min(ramp) == 1.5 and max(ramp) > 2.9
+    print('PEQ DSP: C PCM response, 30 bands, shelves, rates, bypass, float headroom, channels, balance and updates passed.')
+
+REPORTED_PRESET = """Channel: L
+Preamp: -2.2 dB
+Filter 1: ON LSC Fc 3936 Hz Gain -0.40 dB Q 0.509
+Filter 2: ON HSC Fc 15939 Hz Gain 2.88 dB Q 2.916
+Filter 3: ON PK Fc 12705 Hz Gain 6.92 dB Q 2.292
+Filter 4: ON PK Fc 13150 Hz Gain -4.65 dB Q 4.000
+Filter 5: ON PK Fc 15172 Hz Gain 9.66 dB Q 2.078
+Filter 6: ON PK Fc 15331 Hz Gain -4.33 dB Q 0.569
+Filter 7: ON PK Fc 10160 Hz Gain 6.86 dB Q 1.401
+Filter 8: ON PK Fc 15627 Hz Gain -5.71 dB Q 0.577
+Channel: R
+Preamp: -2.2 dB
+Filter 1: ON LSC Fc 3936 Hz Gain 0.40 dB Q 0.509
+Filter 2: ON HSC Fc 15939 Hz Gain -2.88 dB Q 2.916
+Filter 3: ON PK Fc 12705 Hz Gain -6.92 dB Q 2.292
+Filter 4: ON PK Fc 13150 Hz Gain 4.65 dB Q 4.000
+Filter 5: ON PK Fc 15172 Hz Gain -9.66 dB Q 2.078
+Filter 6: ON PK Fc 15331 Hz Gain 4.33 dB Q 0.569
+Filter 7: ON PK Fc 10160 Hz Gain -6.86 dB Q 1.401
+Filter 8: ON PK Fc 15627 Hz Gain 5.71 dB Q 0.577
+Channel: all
+Preamp: -6.3 dB
+Filter 1: ON LSC Fc 32 Hz Gain 6.17 dB Q 0.552
+Filter 2: ON PK Fc 51 Hz Gain 2.04 dB Q 0.867
+Filter 3: ON PK Fc 204 Hz Gain -3.35 dB Q 0.804
+Filter 4: ON PK Fc 385 Hz Gain -0.65 dB Q 1.986
+Filter 5: ON PK Fc 787 Hz Gain 1.48 dB Q 1.224
+Filter 6: ON PK Fc 1689 Hz Gain -2.24 dB Q 0.890
+Filter 7: ON PK Fc 3076 Hz Gain 2.87 dB Q 1.327
+Filter 8: ON HSC Fc 5562 Hz Gain 1.14 dB Q 2.018
+Filter 9: ON PK Fc 9530 Hz Gain 4.19 dB Q 1.446
+Filter 10: ON PK Fc 13560 Hz Gain -0.62 dB Q 2.940
+"""
+
+def headroom_check(lib, ui):
+    """The reported preset stays linear; Auto covers rate-dependent peaks without changing manual gain."""
+    p = parse(lib, REPORTED_PRESET)
+    before = bytes(p)
+    assert p.count == 26 and p.preamp == -8.5 and p.balance == 0
+    for rate in (44100, 48000, 96000):
+        for f in (20, 50, 9840, 15000):
+            a, b = DSP(), DSP()
+            for d in (a, b): lib.peq_reset(C.byref(d), rate, 2, C.byref(p))
+            signal = [x for i in range(rate//5) for x in (0.999*math.sin(2*math.pi*f*i/rate),)*2]
+            loud = process(lib, a, signal, 2)
+            quiet = process(lib, b, [x/16 for x in signal], 2)
+            # Later volume can recover the waveform only if EQ hasn't clipped it first.
+            assert max(abs(x/16-y) for x, y in zip(loud, quiet)) < 2e-7, (rate, f)
+            if f == 9840 and rate in (44100, 48000):
+                assert max(loud[::2]) > 1 and min(loud[::2]) < -1 and max(map(abs, loud[1::2])) < 1
+    ui.check_headroom.argtypes = [C.POINTER(Preset)]
+    ui.check_headroom.restype = C.c_double
+    auto = ui.check_headroom(C.byref(p))
+    assert -12.37 < auto < -12.34, auto  # strongest response is at 32 kHz, not the old 48 kHz estimate
+    assert bytes(p) == before and ui.check_headroom(C.byref(p)) == auto
+    p.preamp = auto
+    for rate in (8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100,
+                 48000, 64000, 88200, 96000, 176400, 192000, 352800, 384000):
+        e = Engine(); assert lib.peq_compile(C.byref(p), rate, C.byref(e))
+        peak = max(response(e, rate, f, ch)
+                   for f in [0] + [(rate/2)**(i/4095) for i in range(4096)] for ch in range(2))
+        assert peak <= 1.00001, (rate, peak, auto)
+    # Flat/cut-only Auto stays +0; shelves include DC and Nyquist outside the old 20..20k grid.
+    for source, want in (('', 0), ('Filter: ON PK Fc 1000 Hz Gain -12 dB Q 1', 0),
+                         ('Filter: ON LSC Fc 20 Hz Gain 6 dB Q 0.707', -6),
+                         ('Filter: ON HSC Fc 20000 Hz Gain 6 dB Q 0.707', -6),
+                         ('Filter: ON PK Fc 3999 Hz Gain 12 dB Q 10', -12)):
+        p = parse(lib, source); actual = ui.check_headroom(C.byref(p))
+        assert abs(actual-want) < .0001, (source, actual)
+        if not want: assert math.copysign(1, actual) == 1
+    print('PEQ headroom: reported 26-band preset, unclipped float output and Auto across standard PCM rates passed.')
 
 # Host stand-ins for the stock services peq_platform.h maps on the device.
 SHIM_H = r"""
@@ -522,8 +606,10 @@ def editor_check(lib, tmp):
     """The editor's promises, driven through its real click and render paths."""
     (tmp/'shim.h').write_text(SHIM_H)
     (tmp/'shim.c').write_text('#include "peq.h"\n' + SHIM)
-    ui = compile_host(tmp, 'peq_ui.so', ROOT/'patch/peq_ui.c', ROOT/'patch/peq.c', tmp/'shim.c',
+    (tmp/'peq_ui_checks.c').write_text('#include "peq_ui.c"\ndouble check_headroom(const peq_preset *p) { return headroom(p); }\n')
+    ui = compile_host(tmp, 'peq_ui.so', tmp/'peq_ui_checks.c', ROOT/'patch/peq.c', tmp/'shim.c',
                       '-I', ROOT/'patch', '-include', tmp/'shim.h')
+    headroom_check(lib, ui)
     ui.shim_title.restype = C.c_char_p
     data, saved = tmp/'root/mnt/data', tmp/'root/mnt/data/peq-presets'
     saved.mkdir(parents=True); (tmp/'root/mnt/mmc/EQ').mkdir(parents=True)
@@ -547,15 +633,15 @@ def editor_check(lib, tmp):
     ui.shim_close(); ui.peq_attach(); assert read().bypass == 1 and ui.shim_flag() == 0; advanced()
     assert lib.peq_save(bytes(active), C.byref(preset(enabled=1)), 1) == 1
     # The switch writes the stock config key, so boot restores it; the flag follows the preset.
-    click('Advanced Off'); assert ui.shim_eqflag() == 1 and ui.shim_flag() == 1
-    click('Advanced On'); assert ui.shim_eqflag() == 0 and ui.shim_flag() == 0
-    ui.shim_close(); assert advanced() == 0; click('Advanced Off')
+    click('Enabled Off'); assert ui.shim_eqflag() == 1 and ui.shim_flag() == 1
+    click('Enabled On'); assert ui.shim_eqflag() == 0 and ui.shim_flag() == 0
+    ui.shim_close(); assert advanced() == 0; click('Enabled Off')
     full = ui.shim_list_height()
     # iPod rows are transparent, so the list itself must paint black, not the theme's light card.
     ui.shim_list_bg.restype = C.c_uint; assert ui.shim_list_bg() == 0xff000000
     # Bypass switches at once but keeps unapplied band edits out of the active preset.
     click('1  '); click('Gain +0.0 dB'); assert title() == 'Band 1 Gain'; click('+1.0 dB'); ui.shim_return()
-    click('Advanced On')
+    click('Enabled On')
     assert read().bypass == 1 and read().bands[0].gain == 0 and ui.shim_flag() == 0
     click('Apply changes')
     assert read().bands[0].gain == 1 and read().bypass == 1 and title() == 'Applied'
@@ -568,14 +654,14 @@ def editor_check(lib, tmp):
     before = active.read_bytes()
     click('Presets'); click('HD650.peq')
     assert active.read_bytes() == before and title() == 'Preset loaded; choose Apply to activate'
-    click('Advanced Off'); click('Advanced On')  # any action clears the message
+    click('Enabled Off'); click('Enabled On')  # any action clears the message
     assert named('HD650') and read().bands[0].gain == 1  # the draft's name; still the applied preset
     # A failed apply or switch leaves the active preset untouched.
     before = active.read_bytes()
     (data/'peq-active.tmp').mkdir()
     click('Apply changes')
     assert title() == 'Apply failed; active EQ unchanged' and active.read_bytes() == before
-    click('Advanced Off')
+    click('Enabled Off')
     assert title() == 'Switch failed; EQ unchanged' and active.read_bytes() == before
     (data/'peq-active.tmp').rmdir()
     click('Apply changes'); assert read().bands[0].gain == -3
@@ -602,10 +688,10 @@ def editor_check(lib, tmp):
     assert [p.bands[k].gain for k in range(10)] == [-2, 0, 2, 4, -2, -2, 0, 0, 4, 4]
     assert [p.bands[k].enabled for k in range(10)] == [1, 0, 1, 1, 1, 1, 0, 0, 1, 1] and p.preamp < -4
     # Overlapping boosts add up (+6.5 and +6 dB at 1 kHz); cuts alone leave 0 dB.
-    p = preset(enabled=1, gain=6.0); p.count = 2; p.bands[1] = p.bands[0]; p.preamp = -1
+    p = preset(enabled=1, gain=6.0); p.count = 2; p.bands[1] = p.bands[0]; p.preamp, p.automatic = -1, 2
     assert lib.peq_save(bytes(active), C.byref(p), 1) == 1
     ui.shim_close(); advanced(); click('1  '); click('Gain +6.0 dB'); click('+6.5 dB'); ui.shim_return(); click('Apply changes')
-    assert read().preamp == -1, read().preamp  # a preamp off Auto (here the preset's) sticks through band edits
+    assert read().preamp == -1, read().preamp  # a picked preamp sticks through band edits
     click('Preamp -1.0 dB'); assert title() == 'Preamp' and ui.shim_selection() == 27  # opens on -1.0
     click('Auto (-12.5 dB)'); click('Apply changes')
     assert abs(read().preamp + 12.5) < 0.05, read().preamp
@@ -646,7 +732,57 @@ def editor_check(lib, tmp):
     ui.shim_type(b'0.7'); assert edit() == '0.70'
     ui.shim_return(); ui.shim_return(); click('Apply changes')
     r = read(); assert (r.bands[0].frequency, round(r.bands[0].q, 9)) == (1000.5, 0.7), (r.bands[0].frequency, r.bands[0].q)
-    print('EQ Advanced tab: bypass, apply, auto preamp, channels, balance, frequency and Q, load, failed saves, delete and close passed.')
+    # Reset replaces the draft with peq_default's ten flat bands and leaves what plays alone until
+    # Apply changes; Advanced's On/Off is live state and stays as it was.
+    before = active.read_bytes()
+    click('Reset to defaults')
+    assert title() == 'Reset; choose Apply to activate' and active.read_bytes() == before
+    assert ui.shim_click(b'Preamp 0.0 dB (Auto)', 2) and ui.shim_click(b'Balance Centre', 2)
+    assert not ui.shim_click(b'Presets ', 2)  # the draft is no longer a named preset
+    click('Apply changes')
+    r = read()
+    assert (r.count, r.preamp, r.balance, r.bypass) == (10, 0, 0, 0)
+    assert [round(b.frequency) for b in r.bands[:10]] == [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+    assert all(not b.enabled and b.gain == 0 and b.q == 1.41 and b.type == 0 for b in r.bands[:10])
+    # Off stays Off.
+    click('Enabled On')  # turns PEQ off
+    before = active.read_bytes()
+    click('Reset to defaults')
+    assert active.read_bytes() == before
+    click('Apply changes')
+    r = read()
+    assert (r.count, r.preamp, r.balance, r.bypass) == (10, 0, 0, 1)
+    s = State(); assert lib.eq_load(C.byref(s)) and s.mode == EQ_OFF
+    # Auto is saved (automatic), so it survives a restart and a headroom change; a set preamp stays set.
+    p = preset(enabled=1, gain=6.0); want = ui.check_headroom(C.byref(p)); assert want < -5
+    shown = lambda auto: ui.shim_click(f'Preamp {want:.1f} dB{" (Auto)" if auto else ""}'.encode(), 2)
+    def reopen(preamp, automatic, v2=False):
+        p.preamp, p.automatic, s.peq, s.mode = preamp, automatic, p, EQ_PEQ; assert lib.eq_save(C.byref(s))
+        if v2: active.write_bytes(b'Q2PEQ03\0' + bytes(s)[:8] + bytes(s.peq)[:V2] + bytes(s.eq3)[:V2])  # 1.3.5's
+        ui.shim_close(); advanced()
+    reopen(-1, 1)  # Auto under an older headroom: the current one, to apply
+    assert shown(True) and ui.shim_click(b'Apply changes', 2)
+    click('Apply changes'); reopen(read().preamp, 1)
+    assert shown(True) and ui.shim_click(b'Nothing to apply', 2)
+    t = State(); assert lib.eq_load(C.byref(t)) and t.peq.automatic == 1 and t.peq.preamp == want
+    assert lib.peq_save(bytes(saved/'Auto.peq'), C.byref(p), 1) == 1  # presets carry it too
+    reopen(0, 2); click('Presets'); click('Auto.peq'); assert shown(True)
+    reopen(want, 2)  # set to exactly the headroom: still set, through a band edit
+    assert shown(False) and not shown(True)
+    click('1  '); click('Gain +6.0 dB'); click('+7.0 dB'); ui.shim_return(); click('Apply changes')
+    assert read().preamp == want and lib.eq_load(C.byref(t)) and t.peq.automatic == 2
+    reopen(-1, 0, v2=True)  # 1.3.5's state loads; never picked, so Auto, playing -1 until Apply
+    assert lib.eq_load(C.byref(t)) and t.peq.automatic == 0 and bytes(t.eq3) == bytes(s.eq3) and shown(True)
+    assert ui.shim_click(b'Apply changes', 2)
+    # An import's own preamp gives way to Auto; picking a preamp afterwards sticks across a restart.
+    (tmp/'root/mnt/mmc/EQ').mkdir(parents=True, exist_ok=True)
+    (tmp/'root/mnt/mmc/EQ/Imp.txt').write_text('Preamp: -2 dB\nFilter 1: ON PK Fc 1000 Hz Gain 6 dB Q 1.41\n')
+    click('Presets'); click('Import from SD /EQ'); click('Imp.txt'); ui.shim_close(); advanced()
+    click('Presets'); click('Imp.peq'); assert shown(True)
+    click(f'Preamp {want:.1f} dB (Auto)'); click('-3.0 dB'); click('Apply changes')
+    ui.shim_close(); advanced(); assert ui.shim_click(b'Preamp -3.0 dB', 2) and not shown(True)
+    (tmp/'root/mnt/mmc/EQ/Imp.txt').unlink(); (saved/'Imp.peq').unlink()
+    print('EQ Advanced tab: bypass, apply, auto preamp, channels, balance, frequency and Q, load, failed saves, delete, reset and close passed.')
     # A full pack stays sorted and reachable, with bounded widget counts and page-local action IDs.
     imports = tmp/'root/mnt/mmc/EQ'
     for i in reversed(range(8850)):
@@ -814,8 +950,9 @@ def eq3_editor_check(lib, ui, tmp):
         for x in k: assert ui.shim_e3_key(x)
     # PEQ playing; opening 3EQ changes nothing.
     ui.shim_close(); ui.shim_open(); assert ui.shim_tab_touch(300)
-    if ui.shim_flag() == 0: assert ui.shim_click(b'Advanced Off', 1)
-    ui.shim_close()
+    if ui.shim_flag() == 0: assert ui.shim_click(b'Enabled Off', 1)
+    ui.shim_close(); assert ui.shim_open() == 0 and ui.shim_click(b'Enabled', 2)  # reopens on the tab it was last on
+    assert ui.shim_tab_touch(50); ui.shim_close()  # back to Simple, where the page opens after a boot
     before = active.read_bytes(); peq = bytes(state().peq)
     assert state().mode == EQ_PEQ and ui.shim_flag() == 1
     assert ui.shim_e3_open() == 0 and title() == '' and active.read_bytes() == before
@@ -873,19 +1010,20 @@ def eq3_editor_check(lib, ui, tmp):
     ui.shim_e3_close(); s = state(); assert (s.mode, s.hold) == (EQ_OFF, 0)
     assert lib.peq_load_active(C.byref(e)) and e.bypass == 1 and ui.shim_flag() == 0
     # PEQ's switch selects PEQ again; the 3EQ settings stay.
-    ui.shim_open(); assert ui.shim_tab_touch(300) and ui.shim_click(b'Advanced Off', 1); s = state()
+    ui.shim_open(); assert ui.shim_tab_touch(300) and ui.shim_click(b'Enabled Off', 1); s = state()
     assert s.mode == EQ_PEQ and bytes(s.peq) == peq and gains(s) == [0.5, 0, 0] and ui.shim_flag() == 1
+    assert ui.shim_tab_touch(50); ui.shim_close()
     ui.shim_e3_open(); assert ui.shim_e3_touch(0x100, 50, 70) == 0 and state().mode == EQ_3  # and back
     ui.shim_e3_close(); assert state().mode == EQ_3 and ui.shim_flag() == 1
     # The tabs: the wheel reaches the bar above Simple's switch, Centre opens Advanced with the wheel
     # still on the bar; past it the list's first row, and back. Neither tab changes what plays.
     before = active.read_bytes()
     ui.shim_e3_open(); keys(PREV, PREV, CENTRE); ui.shim_run()
-    assert ui.shim_click(b'Advanced Off', 2) and ui.shim_selection() == -1 and title() == ''
+    assert ui.shim_click(b'Enabled Off', 2) and ui.shim_selection() == -1 and title() == ''
     keys(NEXT); assert ui.shim_selection() == 0
     assert not ui.shim_e3_key(NEXT)  # the list's own
     keys(PREV); assert ui.shim_selection() == -1
-    keys(CENTRE); ui.shim_run(); assert not ui.shim_click(b'Advanced', 2)  # Simple: no list
+    keys(CENTRE); ui.shim_run(); assert not ui.shim_click(b'Enabled', 2)  # Simple: no list
     keys(NEXT, CENTRE); assert state().mode == EQ_OFF; keys(CENTRE)  # the switch, from the bar
     assert active.read_bytes() == before and state().mode == EQ_3
     ui.shim_e3_close()
@@ -1104,6 +1242,11 @@ static void mono_check(void) {
     assert(fd >= 0 && !ftruncate(fd, sizeof(int)));
     volatile int *f = mmap(0, sizeof *f, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     assert(f != MAP_FAILED && !close(fd));
+    int sf = open(SWAP_FILE, O_RDWR | O_CREAT, 0644);
+    assert(sf >= 0 && !ftruncate(sf, sizeof(int)));
+    volatile int *swap = mmap(0, sizeof *swap, PROT_READ | PROT_WRITE, MAP_SHARED, sf, 0);
+    assert(swap != MAP_FAILED && !close(sf));
+    *swap = 1;
     *f = 1;
     unlink(PEQ_ACTIVE); /* bypass */
     track(&a, 48000);
@@ -1112,9 +1255,13 @@ static void mono_check(void) {
     for (unsigned i = 0; i < k; ++i) assert(buf[2 * i] == buf[2 * i + 1] && buf[2 * i] == (n - k + i - 1.0f) * 0.5f);
     *f = 0;
     k = block(&a, buf, 1024, &n, -1, 48000);
+    for (unsigned i = 0; i < k; ++i) assert(buf[2 * i] == -1 && buf[2 * i + 1] == (float)(n - k + i));
+    *swap = 0;
+    k = block(&a, buf, 1024, &n, -1, 48000);
     for (unsigned i = 0; i < k; ++i) assert(buf[2 * i] == (float)(n - k + i) && buf[2 * i + 1] == -1);
     a.uninit(&a);
     unlink(MONO_FILE);
+    unlink(SWAP_FILE);
     peq_pts = -1;
 }
 
@@ -1689,6 +1836,9 @@ def video_check(tmp):
     # Mono Audio: each frame's mean in both channels, never clipping at the ends.
     pcm = (C.c_short * 8)(32767, 32767, -32768, -32768, 1000, -3000, 7, 0)
     lib.mono(pcm, 4); assert list(pcm) == [32767, 32767, -32768, -32768, -1000, -1000, 3, 3]
+    pcm = (C.c_short * 4)(32767, -32768, 1000, -3000)
+    lib.swap(pcm, 2); assert list(pcm) == [-32768, 32767, -3000, 1000]
+    lib.mono(pcm, 2); lib.swap(pcm, 2); assert list(pcm) == [-1, -1, -1000, -1000]
     # The length from ffmpeg -i's report, for the position bar.
     assert lib.duration(b'Input #0, mov\n  Duration: 01:02:03.45, start: 0.0\n') == 3723
     assert lib.duration(b'  Duration: N/A, bitrate: N/A') == 0 and lib.duration(b'') == 0
@@ -1932,6 +2082,40 @@ int main(void) {
 }
 '''
 
+def netupdate_check(tmp):
+    """Network Update (netupdate.c): the latest tag from GitHub's releases/latest redirect."""
+    lib = compile_host(tmp, 'netupdate.so', ROOT/'patch/netupdate.c')
+    lib.netupdate_tag.restype = C.c_char_p
+    tag = lib.netupdate_tag
+    assert tag(b'https://github.com/DiamondBond/q2-pod/releases/tag/1.3.5') == b'1.3.5'
+    for bad in (None, b'', b'https://github.com/DiamondBond/q2-pod/releases', b'https://github.com/login',
+                b'https://github.com/DiamondBond/q2-pod/releases/tag/'):
+        assert tag(bad) is None, bad
+
+
+def online_check(tmp):
+    """Lyrics and cover search (onlinematch.c): LRCLIB's, MusicBrainz's and iTunes's search URLs,
+    percent-encoded, and iTunes artwork's 600 px size."""
+    lib = compile_host(tmp, 'onlinematch.so', ROOT/'patch/onlinematch.c')
+    def call(f, t, a, n=256):
+        out = C.create_string_buffer(n)
+        return out.value if f(out, n, t, a) else None
+    url = lambda t, a, n=256: call(lib.lrclib_url, t, a, n)
+    assert url('Café & Co/2'.encode(), b'AC~DC') == \
+        b'https://lrclib.net/api/search?track_name=Caf%C3%A9%20%26%20Co%2F2&artist_name=AC~DC'
+    assert url(b'Solo', b'') == b'https://lrclib.net/api/search?track_name=Solo&artist_name='
+    assert url(b'x' * 300, b'a') is None and url(b'Solo', b'a', 59) is None and url(b'Solo', b'a', 60)  # too long for out
+    mb = 'https://musicbrainz.org/ws/2/release/?fmt=json&limit=10&query=release%3A%22'
+    assert call(lib.mb_url, b'OK Computer', b'Radiohead') == (mb + 'OK%20Computer%22%20AND%20artist%3A%22Radiohead%22').encode()
+    assert call(lib.mb_url, b'Say "Hi" \\o', b'') == (mb + 'Say%20%5C%22Hi%5C%22%20%5C%5Co%22').encode()  # Lucene-escaped, no artist clause
+    assert call(lib.mb_url, b'x' * 100, b'a', 200) is None
+    assert call(lib.itunes_url, b'In Rainbows', b'Radiohead') == \
+        b'https://itunes.apple.com/search?entity=album&limit=5&term=Radiohead%20In%20Rainbows'
+    art = C.create_string_buffer(b'https://is1-ssl.mzstatic.com/image/thumb/a/100x100.png/100x100bb.jpg')
+    assert lib.itunes_art(art) and art.value == b'https://is1-ssl.mzstatic.com/image/thumb/a/100x100.png/600x600bb.jpg'
+    assert not lib.itunes_art(C.create_string_buffer(b'https://x/cover.jpg'))
+
+
 def tidal_check(tmp):
     """Tidal cache (tidal.c): the cached file's extension comes from the stream URL's path."""
     lib = compile_host(tmp, 'tidal.so', ROOT/'patch/tidal.c')
@@ -2014,6 +2198,8 @@ if __name__ == '__main__':
         radio_check(tmp)
         spotify_check(tmp)
         tidal_check(tmp)
+        netupdate_check(tmp)
+        online_check(tmp)
         if args.captures:
             args.captures.mkdir(parents=True, exist_ok=True)
             (tmp/'captures').mkdir()

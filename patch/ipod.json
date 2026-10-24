@@ -1,5 +1,6 @@
 {
   "assets": {
+    "dialog/addplaylist_dialog.bin": "c4ff5019863a904019b872f8baea64d3cefc9c1b520972803419507cbaa03905",
     "folder_page.bin": "7ea6d0e191ed15e42a46a3b1e4898c91b175b216615cf3d4f656dd3aa1407bcb",
     "localmusic_page.bin": "beada69a80011fef5068dcaf5d741355f57d0df936fca497f65f51bcba60b7a4",
     "localmusic/album_page.bin": "b0a6420c81b19fd78706dcb1e1db09b365c5c9b817bf615ebc535197bce41ab1",
@@ -251,6 +252,7 @@
     "mcl_shuffle_pick": "48001c3ca0eb9c2721e09903"
   },
   "event_abi_words": {
+    "0x645758": "0400828c",
     "0x523e6c": "12010524",
     "0x523e80": "15010524",
     "0x523eb8": "14010524",

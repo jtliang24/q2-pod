@@ -323,7 +323,7 @@ with tempfile.TemporaryDirectory(prefix='q2-ui-preview-') as tmp:
                 image(a,asset(after,'images/xx/bar_play.png'),STATUS_MARGIN,7,12,16)
                 effective=0 if state=='codec' else mode
                 inside=effective==3
-                bw,bh,nh=(inc(n) for n in (('BATT_INSIDE_W','BATT_INSIDE_H','BATT_INSIDE_NUB_H') if inside else ('BATT_BODY_W','BATT_BODY_H','BATT_NUB_H')))
+                bw,bh,nh=(inc(n) for n in (('BATT_INSIDE_W','BATT_INSIDE_H','BATT_NUB_H') if inside else ('BATT_BODY_W','BATT_BODY_H','BATT_NUB_H')))
                 width=inc('BATT_PCT_W') if effective==1 else bw+inc('BATT_NUB_W')+(inc('BATT_GAP')+inc('BATT_PCT_W') if effective==2 else 0)
                 x=375-STATUS_MARGIN-width; y=(31-bh)//2-(inc('BATT_PCT_DY') if effective==2 else 0)
                 if effective!=1:

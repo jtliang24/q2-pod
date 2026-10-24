@@ -38,6 +38,7 @@ LIBC = {
     'memcmp': ('int', 'const void *, const void *, unsigned'),
     'strcmp': ('int', 'const char *, const char *'),
     'strlen': ('unsigned', 'const char *'),
+    'fputs': ('int', 'const char *, void *'),
     'calloc': ('void *', 'unsigned, unsigned'),
     'free': ('void', 'void *'),
     'pow': ('double', 'double, double'), 'cos': ('double', 'double'),
@@ -69,6 +70,9 @@ LIBC = {
     'pthread_mutex_unlock': ('int', 'void *'), 'statfs': ('int', 'const char *, void *'),
     'strdup': ('char *', 'const char *'),
     'strrchr': ('char *', 'const char *, int'), 'strcasecmp': ('int', 'const char *, const char *'),
+    'munmap': ('int', 'void *, unsigned'),
+    'strcasestr': ('char *', 'const char *, const char *'),
+    'strncmp': ('int', 'const char *, const char *, unsigned'),
     'strncasecmp': ('int', 'const char *, const char *, unsigned'),
     # iPod status bar clock (navigation.c)
     'time': ('long', 'long *'), 'localtime': ('const int *', 'const long *'),
@@ -80,6 +84,8 @@ LIBC = {
     'curl_easy_cleanup': ('void', 'void *'), 'curl_slist_append': ('void *', 'void *, const char *'),
     'curl_slist_free_all': ('void', 'void *'), 'MD5_Init': ('int', 'void *'),
     'MD5_Update': ('int', 'void *, const void *, unsigned'), 'MD5_Final': ('int', 'unsigned char *, void *'),
+    'dup2': ('int', 'int, int'),
+    '__udivdi3': ('unsigned long long', 'unsigned long long, unsigned long long'),
     # Videos (books.c): q2video started and waited for, and its key socket
     'fork': ('int', 'void'), 'execl': ('int', 'const char *, const char *, ...'), 'exit': ('void', 'int'),
     # Home's Rockbox row (navigation.c rockbox_open)
@@ -121,7 +127,7 @@ def compile_common(out, binary, player=False, ipod=False):
                 f'peq_lib_{name}:', f'lui $gp, {gp >> 16}', f'ori $gp, $gp, {gp & 65535}',
                 f'lui $t8, {address >> 16}', f'ori $t8, $t8, {address & 65535}',
                 'lw $t9, 0($t8)', 'jr $t9', 'nop']
-        if name in ('memcpy', 'memset'):
+        if name in ('memcpy', 'memset', '__udivdi3'):
             asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
     if not player:
         syms = symbols(binary) | PRIVATE_FUNCTIONS
@@ -135,7 +141,7 @@ def compile_common(out, binary, player=False, ipod=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', f'-DIPOD={int(ipod)}']
     if player: flags += ['-mnan=2008']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'spotify.c', 'radio.c', 'tidal.c', 'crossfade.c', 'headset.c', 'lockscreen.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
