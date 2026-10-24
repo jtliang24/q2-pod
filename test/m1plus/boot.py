@@ -242,10 +242,10 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('preamp_back', BACK, 4, ('not', 'preamp', 'playset')),
                 ('advanced_back', BACK, 4, ('as', 'playset')),
                 ('playset_end', (DOWN_LIST + ['wait 800']) * 3 + DOWN_LIST, 4, ('not', 'playset')),
-                ('crossfade', tap(160, 446), 4, ('not', 'playset_end')),
+                ('crossfade', tap(160, 382), 4, ('not', 'playset_end')),  # above Folder Root, the last row (1.2.9)
                 ('crossfade_slid', tap(230, 247), 4, ('not', 'crossfade')),
                 # Back: the list as before (the rows V2.1 rebuilds, then ours again), Crossfade's row now 8 s.
-                ('crossfade_back', BACK, 4, ('as', 'playset_end', (30, 414), (414, 480))),
+                ('crossfade_back', BACK, 4, ('as', 'playset_end', (30, 350), (350, 414))),
                 # Display's Knob: Navigation. The knob's turns then move System Setting's selection
                 # (its outline drawn), and the volume, in the status bar, stays as it was.
                 ('knob_home', BACK, 5, ('not', 'crossfade_back')),
