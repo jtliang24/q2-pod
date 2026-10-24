@@ -20,8 +20,8 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 **Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
 one device pass. All five steps, 1.2.9, 1.3.0, 1.3.8, 1.3.9 and 1.4.2, are merged and gated
-([m1plus-progress.md](m1plus-progress.md) sections 40 to 44); 1.2.9 (dev 29), 1.3.0 (dev 5) and 1.3.8
-(dev 1) passed on the device. The batch of ports is next. Done so far:
+([m1plus-progress.md](m1plus-progress.md) sections 40 to 44); 1.2.9 (dev 29), 1.3.0 (dev 5), 1.3.8
+(dev 1) and 1.4.2 (dev 1) passed on the device. The batch of ports is next. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -293,6 +293,15 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       from the folder, opens a second Now Playing. Back past the folders reaches the first, which still
       shows the old track and position beside the new track's time. Check whether V2.1's own playing_page
       refreshes when another one is on top, or close the lower one on a new play.
+  - **Found on the device** (1.4.2 dev 1, Oct 24; progress section 44), all older than 1.2.2:
+    - **The hold menu's Go to Artist does nothing**, from a song's menu and from Cover Flow's.
+      `qm_goto` opens `localmusic/artistinfo_page` with V1.32's `{cls, record}` context. Find what
+      V2.1's own callers hand `artistinfo_page`.
+    - **Its Go to Album opens the playing song's album.** `qm_goto` fills V1.32's
+      `g_local_classinfo_save` and opens `playerjumpinfo_page`, which on V2.1 reads the playing song.
+      Open the row's album as Album's list does instead.
+    - **The hold menu closes only by OK.** Neither a tap outside nor Previous closes it. Fix it with
+      the rating picker below.
   - **Found on the device** (dev 29, Oct 23):
     - **The rating picker has no way out but a rating.** A tap outside leaves it up, the knob's press
       (Volume mode) locks the screen, and Now Playing's back button is V2.1's, which closes the page with

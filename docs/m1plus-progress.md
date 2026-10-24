@@ -1706,6 +1706,60 @@ Results:
 - **Footprint over 1.4.2's files:** +1,429/−287 over 30. The new seams are MQA's `ICON_DSDOUTPUT`, the
   Apps row's `!M1PLUS` and `peq_boot`'s `#if M1PLUS`.
 
+**On the device (dev 1 of 1.4.2, `V013s`, Oct 24), before the batch of ports.** This flash is the first
+time the device runs 1.3.9's scratch move and 1.4.2's changes. The gated build was flashed as kept:
+`test/m1plus/build.py --build work/u3/1.4.2` passed on the clean tree at `895832e`, so its
+`source_sha256` is the commits'. q2remote copied its `update.bin` (`0795d564…`) over 1.3.8 dev 1's, and
+the user flashed it.
+
+The user checked by ear and by hand:
+- playback;
+- a Bluetooth connection and its volume;
+- Mono Audio and Swap L/R.
+
+Over q2remote, with Screen Off set to Off for the pass and back to 30s after:
+- **Boot and memory:**
+  - the running payload hashes as built;
+  - a reboot, then about 30 minutes of playback across track changes and Cover Flow;
+  - the screen going off and waking to the lock screen;
+  - `demo` kept its pid, and `/proc/kmsg` (logged to the card) shows no fault.
+- **Settings:** System and Playback settings carry over at both ends: the end detent stops, and the
+  next one after a pause wraps (`edge_wraps`). Playback's last row is **MQA: Off**, the default.
+  System settings has no Apps row.
+- **EQ:**
+  - A Simple comparison left on (`mode` 0, `hold` 1 in `peq-active`, set with the page open) is
+    cleared by a reboot (`peq_boot`).
+  - Advanced's Preamp reads *Auto (44.1: −3.2 / 48: −3.2)*, and reads the same while a 96 kHz FLAC
+    plays (*Lies of P Overture*). The per-rate cut itself is hciplayer's (`prepare`), covered by the
+    host's `peq` suite.
+  - Saving the EQ rewrote 1.2.2's shorter `peq-active` record in the current layout. The PEQ bytes
+    are unchanged.
+- **Hold menu:**
+  - A song's menu (Frequent) scrolls past its fifth row to Go to Album, Go to Artist and Go to Folder,
+    by the knob and by a drag (section 42's fix).
+  - It wraps at both ends, as does an artist's menu.
+- **Albums** wraps. **Frequent** lists titles (no song on the card is untitled).
+- **Cover Flow:** it opens, swipes and turns with the knob, and its menu has Go to Artist. Previous
+  leaves it for the Q2 Pod page.
+- **Speed:** 1× (`g_playspeed_mode` 0) after the track changes. A folder set to another speed wasn't
+  tried, as it would change the user's library.
+- **Not checked:**
+  - Cover Flow's non-square covers (none found on the card);
+  - gapless with MQA off (by ear);
+  - MQA's send on a connect.
+
+The pass found three M1 gaps, all older than 1.2.2 (roadmap U4):
+- **Go to Artist does nothing**, from a song's menu and from Cover Flow's. `qm_goto` (unchanged
+  since Oct 8) opens `artistinfo_page` with V1.32's context.
+- **Go to Album opens the playing song's album**, not the row's: on *Comeback* (*The Loneliest Time*)
+  it opened *Dedicated Side B*. `qm_goto` fills V1.32's `g_local_classinfo_save` for
+  `playerjumpinfo_page`, and V2.1's page reads the playing song.
+- **The hold menu closes only by OK** (V2.1's `button_return`, which `qm_back` takes). Neither a tap
+  outside nor Previous closes it. This is the same as dev 29's rating picker.
+
+The album track list's touch hold played the row again (dev 21's gap: `g_menu.rows` read 13 for 12
+tracks). The Play/Pause hold fails there for the same reason.
+
 ## How to check a build now
 
 ```sh
