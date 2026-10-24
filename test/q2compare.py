@@ -18,6 +18,7 @@ SUITES = {
     'build': 'each', 'patch': 'each', 'playback': 'each', 'id3': 'each', 'm4b': 'each',
     'headset_io': 'each', 'ldac': 'each', 'bluealsa': 'each',
     'peq': 'host', 'mp3': 'host', 'remote': 'host', 'coverflow': 'host', 'release': 'host',
+    'chapters': 'host',  # 1.3.8; --stock-root and --qemu add its bundled-FFmpeg checks
     'alsa': None,  # takes a qemu-mipsel binary as well as a build
     'ui_preview': None,  # draws review sheets of two builds; it checks nothing
 }

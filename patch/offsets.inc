@@ -13,6 +13,7 @@
 #define W_H 0x0c
 #define W_FOCUS 0x24            /* stock focused flag byte (tests) */
 #define W_PARENT 0x48
+#define IM_WIDGET 0x04 /* input_method_t's editing target, input_method_request @0x645758 */
 #define W_EMITTER 0x60
 #define W_CHILDREN_LAYOUT 0x68
 #define CHILDREN_LAYOUT_VTABLE 0x10
@@ -150,9 +151,8 @@ static inline int arc_out(int r, int y) {
 #define BATT_PCT_PX 16
 #define BATT_BODY_W 16
 #define BATT_BODY_H 11
-#define BATT_INSIDE_W 32
-#define BATT_INSIDE_H 16
-#define BATT_INSIDE_NUB_H 6
+#define BATT_INSIDE_W 28
+#define BATT_INSIDE_H 15
 #define BATT_INSIDE_TEXT_DY 1
 #define BATT_INSIDE_PX 13
 #define BATT_NUB_W 2
@@ -287,7 +287,6 @@ static inline int arc_out(int r, int y) {
 #define DOUBLE_CLICK_MS 250 /* a second centre press within this is a double press */
 #define WAKE_MS 500 /* Wake: Double press, the screen-off double press; looser, done blind in a hand */
 #define SCRUB_MS 3000
-#define LYRIC_STEP 25 /* px per wheel tick on the lyrics page: one stock lyric row */
 /* With the screen off the UI loop idles this long a turn instead of stock's 8 ms, about 10 turns a
  * second; screen-off keys (volume, play/pause, wake) wait at most this much longer. */
 #define SCREEN_OFF_SLEEP_MS 100
@@ -425,6 +424,9 @@ static inline int arc_out(int r, int y) {
 #define MUSIC_INFO_ALBUM_ARTIST 0x580 /* toolsGetMusicInfo's info (ID3_ALBUM's base): abmartist, the scan's albumsonger */
 #define ID3_ALBUM_ARTIST (ID3_ALBUM + MUSIC_INFO_ALBUM_ARTIST) /* a CUE track's, from its file (ringnav_id3_path) */
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
+/* localmusic/playlist_page's add mode (g_play_info + 0x7894): non-zero while it is Add to Playlist;
+ * 0 when browsing the Playlists list, whose rows' trailing dots open playlistsmore_page. */
+#define PLAYLIST_ADD_MODE 0xa27894
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
 #define ALBUMINFO_ROW 0xa27200  /* the albums row localmusic_albuminfo_page_init opened (0x4a7ab4) */

@@ -1,5 +1,67 @@
 # Changelog
 
+- **1.3.8**:
+  - Full-screen album art: the song name shows again for 3 s each time the track changes, then fades as before.
+  - Battery: Percent Inside has rounded corners again. 1.3.7's radius was below the smallest stock will round, so it drew a square.
+  - Downloads: a release now carries `update.tar` (and `update-legacy.tar` for Legacy) without the ZIPs.
+
+- **1.3.7**:
+  - Bluetooth: earbuds or a speaker that connect to the Q2 while it is still trying to reconnect the last device, at power-on or when Bluetooth is turned on, now show as connected and play, instead of needing Bluetooth turned off and on. The reconnect is also skipped when a device is already connected.
+  - Battery: Percent Inside is a smaller 28×15 battery with the regular icon's terminal and slightly rounded corners, digits as before. It now stays next to an aptX HD badge with Wi-Fi on.
+
+- **1.3.6**:
+  - View Queue: with a shuffle on it lists the songs in the order they will play (it replaces the separate Up Next entry), and holding Play/Pause on a song plays it next, without playing it again later.
+  - Quick Settings: hold Play/Pause to switch the wheel between the brightness slider and volume; the choice is kept across restarts.
+  - Lyrics: Now Playing's lyrics search (⋯ menu) now looks on LRCLIB first, which has synced lyrics for most non-Chinese music, then Kugou as before. NetEase, stock's other source, no longer answers.
+  - Cover art: Now Playing's cover search (⋯ menu) now offers covers from MusicBrainz's Cover Art Archive and Apple's iTunes first, then Kugou and Baidu as before.
+  - Lyrics: the top row is no longer shown cut in half, whether the page follows the song, reaches the end or the wheel scrolls it a row a tick.
+  - Quick Settings: swiping up to close no longer changes the brightness.
+  - Artist page: with Artist Albums set to Grid, the stock toolbar is back, with its multi-select for adding or deleting several songs or albums at once.
+  - **System Update → Network Update** downloads the newest Q2 Pod release from GitHub to the card's `update.tar` over Wi-Fi, then opens the TF card update. Releases now also carry `update.tar` and `update-legacy.tar` for it.
+  - Bluetooth: the connection stays open for 5 s between songs, so true-wireless earbuds no longer start one ear before the other at each new track.
+  - EQ: presets use Auto preamp, imported ones included, unless a preamp is picked from the list; either is remembered across restarts and updates. A preamp picked before 1.3.6 returns to Auto until picked again.
+
+- **1.3.5**:
+  - Add persistent **Swap L/R** below Mono Audio, default Off, for local PCM playback, Bluetooth/USB output, Videos, Internet Radio and Spotify’s helper. DSD and AirPlay retain Mono Audio’s limitations; Spotify on the headphone jack may need pause/play after switching.
+  - Advanced EQ now reads **Enabled: On/Off**, followed by Balance, Preamp and Presets; Simple EQ’s switch reads **Enabled: On/Off** too.
+  - Library → Songs excludes podcasts and audiobooks in every stock sort, without a database reset; Folder and stored playlists keep their contents.
+  - Bluetooth main Balance keeps unequal channel gains when absolute volume succeeds, including reconnects.
+  - The disconnected USB scan prompt takes wheel and Centre input before stock volume handling.
+  - Volume input during the Now Playing transition applies immediately without a delayed overlay; fresh input after loading keeps normal feedback.
+  - Built-in lock-screen wallpapers survive startup and updates without repair writes; missing custom images still fall back normally.
+  - Playlist action labels follow the action’s enabled state. Add Songs search confirms before closing its keyboard and rebuilding the picker.
+  - Fix the remaining search freeze on wheel Back when the keyboard is the top window; the first Back closes the keyboard and the next leaves search.
+  - Hold the quick-settings Wi-Fi or Bluetooth icon to open its settings page; tapping still toggles the radio.
+  - Restore the 1.0.3 Playback and System settings order, with newer controls beside related settings and Reset last.
+  - **Edit Playlist** adds songs, reorders entries with Previous/Next or song actions, and removes an entry after confirmation. Edits save immediately; failed transactions roll back and the current playback queue keeps its order.
+  - Playlists: the three-dot menu on a playlist row opens its More page instead of playing the row, and the dots stay visible on the selected row.
+  - Playlists: holding Play/Pause on a playlist row opens the same More page as its three dots.
+  - Fix Edit Playlist doing nothing from a held playlist row: the Import/Export rows no longer shift the held playlist, so Edit Playlist, Rename and Delete act on that playlist.
+  - Playlists: the More menu's Delete Song row now reads Delete Playlist, and Edit Playlist uses the same icon, text style and row spacing as Rename and Delete Playlist.
+  - Add Songs: its Search row filters the picker by title, artist or album and keeps the query while you add several songs.
+  - New Playlist: the name field takes the keyboard as the dialog opens, without a tap first.
+
+- **1.3.4**:
+  - **Reset to defaults** in the PEQ editor puts the ten bands, preamp and balance back to flat, keeps Advanced's On/Off as it is and leaves saved presets untouched; choose **Apply changes** to activate it.
+  - Advanced's **Auto** preamp now estimates its cut across standard sample rates from 8 to 384 kHz, instead of only 48 kHz, so its headroom is right for high-resolution tracks too.
+  - The EQ keeps float headroom instead of clipping its own output at full scale, so software volume and mixing can use the extra level; manual and imported preamp and balance apply exactly.
+  - Search from the Library no longer freezes when Back is pressed while the keyboard is open: the first Back closes the keyboard, and the next leaves search.
+
+- **1.3.3**:
+  - Bluetooth and wired/USB output remember separate volume levels, respecting the configured volume limit.
+  - The wheel navigates Audio settings and its submenus while receiving Bluetooth audio from a phone.
+  - Fix Bluetooth boot reconnect initialization so callbacks and saved state are ready before connections are discovered.
+
+- **1.3.2**: Remove **Craft a Mixtape** while it undergoes further development. The user guide no longer includes Mixtape instructions. All other 1.3.1 features and fixes remain.
+
+- **1.3.1**:
+  - **Chapters** in the Now Playing hold menu opens embedded M4B audiobook chapters, with titles and start times. Pick a chapter to jump to it; paused playback stays paused.
+  - **Go to Folder** in a song's hold menu opens its containing folder.
+  - The equalizer remembers the last tab you opened.
+  - Podcasts and audiobooks stay out of music views, including genre lists and music searches.
+  - Fix folder rescans reading tags and probing track durations.
+  - Refresh the user guide's cover logo and document chapter navigation.
+
 - **1.3.0**: **Playback settings → Mono Audio**, under Balance, plays both channels in each ear, for one earbud or hearing in one ear. It works with the EQ, Crossfade, Bluetooth, USB, Videos, Internet Radio and Spotify (on the headphone jack, pause and play Spotify once after switching it). DSD and AirPlay stay stereo. **Playback settings → Resume Songs** sets how long a song must be before it remembers its place (20 to 120 minutes, or Off); podcasts and audiobooks always resume. **System settings → Power → Standby Limit** (off by default) powers the Q2 off after 1, 8 or 24 hours in Standby, so one left asleep for days no longer drains flat. Less idle battery drain: a background thread no longer wakes once a second, the Wi-Fi radio keeps its power save on while connected, and the screen and other background work wake less often. Crossfade costs less CPU, with the same sound. The EQ skips bands that do nothing, so a band set high in the editor no longer costs far more than one set low. Spotify stops 2.5 minutes after you leave it unplayed, instead of running until power-off. EQ preset lists show every file in pages of 128, instead of stopping at 256. Cover Flow sorts with large libraries are faster: album lookups use sorted searches instead of rescanning the whole list (about 37 million comparisons at 5,000 albums), and Rating and Random skip an album index they never use. Embedded cover art in `.opus` and `.ogg` files now shows in Albums and Folder, as it does in Cover Flow and Now Playing. Podcasts no longer appear among music albums and artists. A CUE sheet without an album or artist (common for audiobooks) now shows them from the file's own tags on Now Playing. Lyrics embedded in a file's tags load when there is no lyrics file beside it. The Wi-Fi transfer page is in English and has an **Upload Folder** button that keeps a folder's structure. A Folder row whose name contains `%`, such as "99% Invisible", no longer crashes the player.
 - **1.2.9**: **Playback settings → Folder Root** opens **Folder** in a top-level card folder of your choice (e.g. `Music`) instead of the card itself; Centre steps through the card's folders and back to Card. Return still climbs from there to the card. **System settings → Display → Hold Return: Home** makes Hold Return go straight Home from any page; the default, **Recent**, keeps toggling between Now Playing and the page you came from. While a shuffle is on, pressing a song in the hold menu's **Up Next** plays it, and picking a song in **View Queue** no longer plays it again later in the same shuffle or drops the songs that were due before it. With `ALBUM_ARTIST=1` in `.scrobble.ini`, songs played from Folder scrobble their album artist again instead of their artist. When Folder opens straight into the card or its Folder Root, or Podcasts and Audiobooks open, a visit left inside a playlist or deep folder no longer leaves Back stepping through stale places.
 - **1.2.8**: Next and Previous no longer crossfade: they skip at once again, as before 1.2.6. Crossfade still fades between albums when a song ends on its own. With Home's shortcut set to Rockbox and no Rockbox on the card, tapping Streaming opens Streaming again instead of saying Rockbox is missing.

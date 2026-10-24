@@ -7,7 +7,7 @@ and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
 from build import (ROOT, EXTRA_TIMEZONES, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
-                   REMOTE_HOOK, BLUEALSA, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, ICONS,
+                   REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, ICONS,
                    STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
                    run, segments, sha, source_sha256, symbols)
 
@@ -77,8 +77,14 @@ CALL_SITES = {
         # player_parsecover_thd's jalr toolsGetExternCover (Now Playing's folder art, after its embedded
         # art failed) becomes jal coverflow_player_cover, which gives ffmpeg what stock's decoder refuses.
         'PLAYER_COVER': ((0x51301c, 0x0320f809, 'coverflow_player_cover'),),
-        # openBluetooth's first GPIO write: install callbacks before powering the radio.
-        'BT_POWER': ((0x4efcbc, 0x0320f809, 'headset_bt_power'),),
+        # platform_init's control thread start: install callbacks before it discovers boot connections,
+        # and config_bt_init's reset moves before it too (1.3.8, in place of 1.2.9's BT_POWER).
+        'BT_INIT': ((0x512598, 0x0320f809, 'headset_bt_init'),),
+        'BT_PARAMS': ((0x4f3ab4, 0x0411f5ef, 0),),
+        # openBluetooth's jalr btctl_device_status_callback registers headset_bt_status instead, and
+        # autoLinkBluetooth's bal checkPairDev also skips while the link list holds a connected link.
+        'BT_STATUS': ((0x4effe0, 0x0320f809, 'headset_status_register'),),
+        'BT_AUTOLINK': ((0x4f17fc, 0x0411fd04, 'headset_bt_autolink'),),
         # toolsLoadAllFile's existing-song check, folder scans only.
         'SCAN_REFRESH': ((0x5c981c, 0x0411fd88, 'ringnav_scan_refresh'),),
         # Folder row names are text, not printf formats ("99% Invisible" crashes stock's formatter):
@@ -87,6 +93,8 @@ CALL_SITES = {
                         (0x522398, 0x8e260008, 0x8e250008)),
         # player_get_id3info's jalr strcpy of the parsed path: a CUE track without sheet tags takes its file's.
         'ID3_PATH': ((0x5148e8, 0x0320f809, 'ringnav_id3_path'),),
+        # The Now Playing timer's jalr scroll_view_scroll_to, its lyric follow: whole rows at the top.
+        'LYRIC_FOLLOW': ((0x52bed0, 0x0320f809, 'ringnav_lyric_follow'),),
         # parse_albumcovertask_thd's jalr toolsGetAlbumCover calls: Ogg pictures through ffmpeg.
         'GRID_COVER': ((0x4edf1c, 0x0320f809, 'coverflow_album_cover'), (0x4ef018, 0x0320f809, 'coverflow_grid_cover'),
                        (0x4ef0d4, 0x0320f809, 'coverflow_grid_cover')),
@@ -189,10 +197,14 @@ CALL_SITE_PURPOSES = {
     'SCAN_LIMIT': 'scan up to 65,000 songs',
     'DROP_CACHES': 'keep the page cache',
     'PLAYER_COVER': 'Now Playing art through ffmpeg',
-    'BT_POWER': 'Bluetooth callbacks before radio power',
+    'BT_INIT': 'Bluetooth callbacks before control thread',
+    'BT_PARAMS': 'Bluetooth state initialized before control thread',
+    'BT_STATUS': 'Bluetooth: incoming link during a connect',
+    'BT_AUTOLINK': 'Bluetooth: auto-link keeps an incoming link',
     'SCAN_REFRESH': 'folder scan refreshes existing tags',
     'FOLDER_NAME': 'folder names are literal text',
     'ID3_PATH': "a CUE track's file tags",
+    'LYRIC_FOLLOW': 'lyric rows whole at the top',
     'GRID_COVER': 'Ogg art in Albums and Folder view',
     'NP_INFO_CALL': "Now Playing's info lines",
     'LDAC_HQ': 'LDAC HQ sends 990 kbps',
@@ -248,6 +260,20 @@ M1PLUS_PORTS = {
                              'roadmap U3 batch)'),
     'player_start_queue': ('unported', "View Queue's and Up Next's rows in a shuffle's play order (1.2.9); V2.1's is "
                            'start_playqueue (0x4e47d0), aliased for the payload\'s calls (roadmap U3 batch)'),
+    'write_int_config': ('native', "Bluetooth's own saved level (1.3.8); V2.1 keeps it apart, [PLAYSET] BTVOLUME, "
+                         '(m1plus_nav_btvol.c)'),
+    'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
+                        "btsource_volume while the output is Bluetooth"),
+    'toolsQueryDbTableAndSort': ('unported', 'spoken audio kept out of the sorted library queries (1.3.8, #67); '
+                                 "V2.1's is 0x5ee9ac (roadmap U3 batch)"),
+    'localmusic_playlistsmore_page_init': ('unported', "a playlist's More page: editing, song search, a row hold "
+                                           "(1.3.8); V2.1 has no playlistsmore_page"),
+    'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
+                                     "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
+    'kugou_obtainlyric': ('unported', "LRCLIB lyrics before stock's Kugou search (1.3.8); V2.1's is 0x509ee4 "
+                          '(roadmap U3 batch)'),
+    'kugou_obtaincover': ('unported', "MusicBrainz and iTunes covers before stock's Kugou search (1.3.8); V2.1's is "
+                          '0x50aa78 (roadmap U3 batch)'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -259,8 +285,12 @@ M1PLUS_PORTS = {
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
     'PLAYER_COVER': ('unported', "Now Playing's art through ffmpeg when stock's decoder refuses it (1.2.9)"),
-    'BT_POWER': ('unported', "Bluetooth's callbacks before the radio powers on (1.2.9); V2.1's openBluetooth "
-                 'not checked yet'),
+    'BT_INIT': ('unported', "Bluetooth's callbacks before the control thread discovers boot links (1.3.8, "
+                "1.2.9's BT_POWER); V2.1's platform_init and openBluetooth not checked yet"),
+    'BT_PARAMS': ('unported', "config_bt_init's reset before the control thread (1.3.8), with BT_INIT"),
+    'BT_STATUS': ('unported', 'a headset that connects during the reconnect to the last device is kept (1.3.8)'),
+    'BT_AUTOLINK': ('unported', "auto-link skips while a link is connected (1.3.8), with BT_STATUS"),
+    'LYRIC_FOLLOW': ('unported', "the lyrics' top row never shows cut (1.3.8); V2.1's Now Playing timer to check"),
     'SCAN_REFRESH': ('unported', 'a folder scan refreshes existing songs\' tags (1.2.9)'),
     'FOLDER_NAME': ('unported', "a folder named with % no longer crashes Folder's rows (1.3.0); V2.1's "
                     'folder_create_tablerow (0x5331fc) to check'),
@@ -346,6 +376,12 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'mcl_open_preload': 0x5d0bd8,
     'btmenu_rows': 0x4a3734,  # the Bluetooth page's list: switch, name, quality, volume, search, devices
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
+}
+# V1.32 routines V2.1 has no twin of yet, called only from a Q2 hook the M1 leaves unported: declared
+# with no address, so the page compiles and --gc-sections drops it. The link fails if live code
+# reaches one. Each goes with its hook's U4 row.
+M1PLUS_UNRESOLVED = {
+    'fwupdate_tf': 'Network Update (netupdate.c): stock\'s TF card update, systemset_fwupdate_page_init unported',
 }
 M1PLUS_FUNCTION_ALIASES = {
     'device_set_volume': 'set_devicevolume',
@@ -562,7 +598,7 @@ def compile_common(out, binary, player=False):
                 f'peq_lib_{name}:', f'lui $gp, {gp >> 16}', f'ori $gp, $gp, {gp & 65535}',
                 f'lui $t8, {address >> 16}', f'ori $t8, $t8, {address & 65535}',
                 'lw $t9, 0($t8)', 'jr $t9', 'nop']
-        if name in ('memcpy', 'memset'):
+        if name in ('memcpy', 'memset', '__udivdi3'):
             asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
     if player:  # peq_player.c's stock addresses, V1.32's by default
         header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}u' for macro, key in (
@@ -582,6 +618,8 @@ def compile_common(out, binary, player=False):
                            f'#define {name} stock_{resumed[name]}_trampoline']
             elif name in syms and syms[name]:
                 header.append(f'#define {name} (({ret} (*)({args}))0x{syms[name]:x}u)')
+            elif name in M1PLUS_UNRESOLVED:
+                header.append(f'extern {ret} {name}({args});')
         # build.py has already checked each is a one-byte global (or, on V2.1, a byte or word).
         stubbed = dict(stubs)
         for name in GLOBALS + M1PLUS_GLOBALS:
@@ -594,7 +632,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=0', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'spotify.c', 'radio.c', 'tidal.c', 'crossfade.c', 'headset.c', 'lockscreen.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -786,13 +824,21 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     header.append(f'#define SETTINGS_ICON_NAMES "{names}"')
     header.append(f'#define ROCKBOX_FLAG "{ROCKBOX_FLAG}"')  # Home's Rockbox row, for S90play
     # About: the stock firmware's version on its own row, and this build's on the CFW. Version row.
-    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{m1_release[0] if m1_release else VERSION}{f" dev {dev_count}" if dev else ""}"']
+    release = m1_release[0] if m1_release else VERSION
+    header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{release}{f" dev {dev_count}" if dev else ""}"',
+               f'#define Q2POD_TAG "{"" if dev else release}"',  # netupdate.c (unported on M1): the release tag, none when --dev
+               f'#define Q2POD_UA "Q2Pod/{release} (https://github.com/jtliang24/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
     (out/'stock.h').write_text('\n'.join(header)+'\n')
     ps = compile_payload(out)
     payload = (out/'patch.bin').read_bytes()
     check(len(payload) < SCRATCH-BASE, 'Payload overlaps its scratch page')
     check(ps['__scratch_start'] == SCRATCH, 'Scratch state moved')
-    check(ps['__scratch_end'] <= SCRATCH + 0x10000, 'Scratch state exceeds its page')
+    # The payload's writable state ends past __scratch_end: link.ld places only .scratch, and a static
+    # outside it (coverflow.c's stock_rows, 1.3.8's headroom cache in peq.c) is an orphan .bss after it.
+    # Upstream's Q2 maps to __scratch_end, which holds while the orphans stay in its last page; the M1's
+    # larger .scratch put 1.3.8's past it, onto the heap's first page. So map to the ELF's end.
+    payload_end = max(v + m for _, (t, _, v, _, _, m, _, _) in segments((out/'patch.elf').read_bytes()) if t == 1)
+    check(ps['__scratch_end'] <= payload_end <= SCRATCH + 0x10000, 'Scratch state exceeds its page')
     patched = bytearray(raw_demo)
     def jump(off, name): patched[off:off+8] = struct.pack('<II', 0x08000000 | (ps[name] >> 2), 0)
     for name, (address, replacement, _) in M1PLUS_HOOKS.items():
@@ -822,6 +868,10 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     check(sha(cat(BLUEALSA)) == BLUEALSA_SHA, 'Unexpected bluealsa')
     bluealsa = patch_bluealsa(cat(BLUEALSA))
     (out/'bluealsa').write_bytes(bluealsa)
+    # A2DP's transport stays open 5 s between songs (1.3.8): V2.1's bluealsa2 starts the Q2's bluealsa
+    bluealsa2 = cat(BLUEALSA2)
+    check(bluealsa2.count(BT_KEEPALIVE[0]) == 1, 'Unexpected bluealsa2')
+    (out/'bluealsa2').write_bytes(bluealsa2.replace(*BT_KEEPALIVE))
     (out/'watchdog').write_bytes(cat(WATCHDOG).replace(*WATCHDOG_SLEEP))
     for name, address, old, new in call_site_words(True, ps):
         patch_word(patched, address, old, new, CALL_SITE_PURPOSES[name])
@@ -839,7 +889,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     check(re.search(r'\.pdr +PROGBITS +0+ +0*%x +0*%x ' % (pdr_off, pdr_size), run('readelf', '-SW', demo)) and
           all(p[1]+p[4] <= pdr_off for _,p in segments(patched) if p[0] == 1), '.pdr: not the audited section')
     patched[pdr_off:pdr_off+pdr_size] = bytes(pdr_size)
-    append_payload(patched, payload, BASE, ps['__scratch_end']-BASE, 'demo')
+    append_payload(patched, payload, BASE, payload_end-BASE, 'demo')
     (out/'demo').write_bytes(patched)
     # Pseudo-file round trip preserves every original inode's metadata and hardlinks.
     pseudo = out/'root.pseudo'
@@ -874,8 +924,8 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     logo_target = out/'logo.jpg'
     logo_target.write_bytes(logo_data)
     for path, src in ((b'release/bin/demo', out/'demo'), (b'usr/bin/hciplayer', out/'peq/hciplayer'),
-                      (BLUEALSA.encode(), out/'bluealsa'), (WATCHDOG.encode(), out/'watchdog'),
-                      (S90PLAY.encode(), out/'S90play'), (S11LOGO.encode(), out/'S11logo'),
+                      (BLUEALSA.encode(), out/'bluealsa'), (BLUEALSA2.encode(), out/'bluealsa2'),
+                      (WATCHDOG.encode(), out/'watchdog'), (S90PLAY.encode(), out/'S90play'), (S11LOGO.encode(), out/'S11logo'),
                       (b'release/assets/default/raw/images/xx/logo.jpg', logo_target)):
         p = swap_inode(p, path, src)
     # New inodes, each with its stock image's metadata, as build.py adds them: the Coverflow icons, the Q2 Pod

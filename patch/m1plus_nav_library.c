@@ -37,4 +37,8 @@ static void *const m1_unported_tidal_downloads __attribute__((unused)) = (void *
  * Tidal's cache sizes and Stop Streaming Services. Its icon (stream_config.png) is the Q2's
  * (docs/m1plus-roadmap.md U3's batch). Named as tidal_downloads is. */
 static void *const m1_unported_stream_config __attribute__((unused)) = (void *)stream_config;
+/* No hold on a playlist row (navigation.c more_image, the Q2's qm_hold, 1.3.8): it opens
+ * playlistsmore_page, which V2.1 doesn't have (localmusic_playlistsmore_page_init, U4). Named as
+ * tidal_downloads is. */
+static void *const m1_unported_more_image __attribute__((unused)) = (void *)more_image;
 #endif

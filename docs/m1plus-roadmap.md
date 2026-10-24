@@ -19,9 +19,9 @@ gap can't be left marked.
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 **Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
-one device pass. Steps 1 and 2, 1.2.9 and 1.3.0, are merged and gated ([m1plus-progress.md](m1plus-progress.md)
-sections 40 and 41), and dev 29 (1.2.9) passed on the device; 1.3.8 is next, flashed before the
-scratch move. Done so far:
+one device pass. Steps 1 to 3, 1.2.9, 1.3.0 and 1.3.8, are merged and gated ([m1plus-progress.md](m1plus-progress.md)
+sections 40 to 42); 1.2.9 (dev 29) and 1.3.0 (dev 5) passed on the device, and 1.3.8 is flashed next,
+before 1.3.9. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -191,11 +191,14 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - Each step's `--dev` build is gated and kept in `work/u3/<tag>/`, and `test/m1plus/fndiff.py` lists
       the payload functions it changed against dev 22.
     - 1.3.9 is its own step for 13f04f0, which moves the payload's scratch state to 0xb80000 and lets it
-      grow to 128 KB. The M1 takes `SCRATCH` from `build.py`: check that range in V2.1's `demo` first.
+      grow to 128 KB. The M1 takes `SCRATCH` from `build.py`. 1.3.8 already moves it once, to 0xb60000
+      (`9738051`), and V2.1's `demo` maps nothing above its data segment's end (0xa10fc8): the payload's
+      segment at 0xb00000 grows, and the heap starts above `__scratch_end`. Checked at the 1.3.8 step,
+      for both moves.
   - **Then port the finished features in one batch**: those whose code doesn't change after the step that
     brings them, whose function V2.1's `demo` has, and that aren't tied to the Q2:
-    - the shared hooks `write_int_config`, `toolsQueryDbTableAndSort`, `mclSetOutputWay` and
-      `networkGetWifiSignal`;
+    - the shared hooks `toolsQueryDbTableAndSort` (V2.1's `0x5ee9ac`) and `networkGetWifiSignal`
+      (`write_int_config` and `mclSetOutputWay` are native: V2.1 keeps Bluetooth's level apart);
     - `lockscreen_access` (the wallpaper fix, below);
     - the timezone page (`select_timezone`);
     - View Queue's and Up Next's picks in a shuffle's play order (`player_start_queue`, V2.1's
@@ -261,6 +264,30 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - **Folder names with `%`** (`FOLDER_NAME`): stock's row formatter crashes on them; check V2.1's
       `folder_create_tablerow` (`0x5331fc`).
     - **A CUE track's file tags** (`ID3_PATH`) and **Ogg art in the grids** (`GRID_COVER`).
+  - **Found by the 1.3.8 step** (U3, Oct 24):
+    - **Network Update** (`systemset_fwupdate_page_init`, `netupdate.c`): it fetches DiamondBond's Q2
+      `update.tar`, so it stays off until it points at the fork's M1 releases. Its `fwupdate_tf`, stock's
+      TF card update, is `M1PLUS_UNRESOLVED`: V2.1's twin is to be found from its updater thread
+      (`0x471070`, which calls `update_firmware`) back to the System Update row's click.
+    - **Playlist editing, and a playlist row's hold** (`localmusic_playlistsmore_page_init`,
+      `PLAYLIST_ADD_MODE`): V2.1 has `playlist_page` but no `playlistsmore_page`. The hold stays in
+      `qm_hold`'s Q2 branch, and `more_image` is named from `m1plus_nav_library.c`.
+    - **Bluetooth's boot and incoming links** (`BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`, in place
+      of 1.2.9's `BT_POWER`): V2.1's `platform_init`, `openBluetooth` and `autoLinkBluetooth` to check.
+    - **The lyrics' top row whole** (`LYRIC_FOLLOW`): V2.1's Now Playing timer to check.
+    - **Quick settings' brightness through a swipe up**: `g_dropdown_menu_state` is a stub on M1; V2.1 has
+      `dropdown_menu_state` (`0xa05a2c`) and a `slider_backlight`, whose states are to be checked against
+      V1.32's (1, 2 sliding, 3 open) before it is aliased.
+    - Q2 only: Return closing a search's keyboard (`search_key`), and `ringnav_input`'s USB prompt keys and
+      Now Playing's transition volume ticks (the wheel's). The M1's input include hands a key to stock first.
+  - **Found on the device** (1.3.8 dev 1, Oct 24; progress section 42):
+    - **Quick Settings' knob stays volume.** `knob_nav_active` leaves the pull-down to stock, so 1.3.8's
+      Play/Pause hold there (the wheel's brightness or volume, `QSVOLUME`) changes nothing on the M1.
+      Either take the knob in Quick Settings when Knob: Navigation is on, or mark the hold Q2 only.
+    - **A Now Playing under a folder play doesn't refresh.** Go to Folder from Now Playing, then a play
+      from the folder, opens a second Now Playing. Back past the folders reaches the first, which still
+      shows the old track and position beside the new track's time. Check whether V2.1's own playing_page
+      refreshes when another one is on top, or close the lower one on a new play.
   - **Found on the device** (dev 29, Oct 23):
     - **The rating picker has no way out but a rating.** A tap outside leaves it up, the knob's press
       (Volume mode) locks the screen, and Now Playing's back button is V2.1's, which closes the page with

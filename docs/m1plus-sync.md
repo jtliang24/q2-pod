@@ -13,7 +13,8 @@ sync (U2):
   M1. It fails on any it can't place;
 - `test/m1plus/q2only.py` lists the tag's changes inside Q2-only branches, whose M1 side the merge
   leaves as it was;
-- `test/m1plus/fndiff.py` lists the payload functions two M1 builds differ in, for the device checklist.
+- `test/m1plus/fndiff.py` lists the payload functions two M1 builds differ in, for the device checklist;
+- `test/m1plus/suitemerge.py` brings a tag's new test cases into an M1 suite copy.
 
 ## Once
 
@@ -56,13 +57,20 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
      symbol of that name. Find V2.1's by its callers (V1.32's `folder_reset_variable` is V2.1's
      `clear_foldervariate`, called at the same place in `folder_back`), alias it in
      `M1PLUS_FUNCTION_ALIASES` and pin the call in `test/m1plus/build.py`. A new `GLOBALS` name likewise
-     goes in `M1PLUS_GLOBAL_ALIASES` (`g_time_zone` is `time_zone`).
+     goes in `M1PLUS_GLOBAL_ALIASES` (`g_time_zone` is `time_zone`). A routine only an unported hook's
+     code calls can wait in `M1PLUS_UNRESOLVED` (1.3.8's `fwupdate_tf`, Network Update's): declared with
+     no address, so the page compiles and `--gc-sections` drops it; the link fails if live code reaches
+     it. A new `CONTEXT_DATA` name V2.1 lacks becomes a zero stub by itself: check what reads it.
    - **Upstream's other changes to `build()`**, those not at a V1.32 address (a new asset, helper, input
      or packing step): review `git diff <old base> <tag> -- tools/build.py`, and port each into
      `m1plus.build()` or give it a U4 row. The M1's pipeline doesn't take them by itself. The same
      goes for `tools/peq.py`, the player patch: `m1plus.PLAYER_PROFILE` takes none of its new words
      (1.2.9's MQA side chain), and for a new `#define` the M1 compile needs from build.py's header
-     (1.2.9's `EXTRA_TIMEZONE_NAMES`).
+     (1.2.9's `EXTRA_TIMEZONE_NAMES`, 1.3.8's `Q2POD_TAG` and `Q2POD_UA`). `m1plus.compile_common`
+     copies `peq.py`'s list of payload sources and its `memcpy`/`memset` aliases: a new source (1.3.8's
+     `upnext.c`, `chapters.c`, `netupdate.c`, `onlinematch.c`) fails the M1 link until it is listed. A
+     rootfs file `build()` now patches (1.3.8's `bluealsa2`) goes in the M1's swap list and
+     `test/m1plus/build.py`'s `replaced`.
    - **A new `offsets.inc` name** gets a V2.1 value in `patch/m1plus_offsets.inc`, found in V2.1's code
      by the roadmap's ground rules, or `M1_UNPORTED` (defined at the top of that file). `M1_UNPORTED` is
      only for a name whose code can't run on M1, because the hook or site that reaches it is unported.
@@ -89,19 +97,25 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
      `test/m1plus/`.
    - **Upstream's new test cases**, conflict or not: review `git diff <old base> <tag> -- test/`. The
-     M1's copies in `test/m1plus/` don't take them. Merge each copy three ways, with the old base's
-     suite as the base: `git merge-file --diff3 test/m1plus/<suite>.py <old base's test/<suite>.py>
-     <tag's test/<suite>.py>` (1.2.9's `patch.py`: 43 conflicts, where `patch -p1` rejected 109 of 134
-     hunks). In a conflict where the M1 copy restructured a section, keep the M1 side and bring in
-     upstream's new cases and changed expectations; upstream's equivalent rewrites (`jal()`,
-     `self.returns()`) can stay out. A case for code the M1 doesn't run, or one that needs V1.32 code,
+     M1's copies in `test/m1plus/` don't take them. Merge each copy with `python3
+     test/m1plus/suitemerge.py <old base> <tag> <suite>`. It places each upstream hunk by its lines'
+     text, at the copy's indentation, so a section the copy guards (and indents) takes upstream's
+     changes too; `git merge-file --diff3` made 16 conflicts of 1.3.8's `patch.py`, `suitemerge.py` 9
+     hunks to merge by hand. It prints those: a hunk whose lines the M1 copy changed or moved. Keep the
+     M1 side there and bring in upstream's new cases and changed expectations; upstream's equivalent
+     rewrites (`jal()`, `self.returns()`) can stay out. New cases land unguarded where upstream put
+     them: the suite run on M1 names those that need a guard. A case for code the M1 doesn't run, or one that needs V1.32 code,
      goes behind its hook or site (`if 'NAME' in HOOKS`) with a `not_ported` line. Then run the copies
      on a fresh M1 build: they find the rest.
    - **A conflict in a doc** takes upstream's text. The M1 docs are the `m1plus-*.md` files.
 3. **Gates, in order.**
-   1. **Q2 output and suites.** `TMPDIR=/tmp python3 test/q2compare.py <tag> --suites`. Under
-      `nix develop`'s long `TMPDIR`, 1.2.9's `test/peq.py` fails its Tidal check on `-Wformat-truncation`,
-      upstream's own tree too. Legacy and iPod `update.tar`
+   1. **Q2 output and suites.** `TMPDIR=/tmp python3 test/q2compare.py <tag> --suites`, inside the
+      shell: `nix develop` sets its own `TMPDIR` over one set outside it. Under that long `TMPDIR`,
+      1.2.9's `test/peq.py` fails its Tidal check on `-Wformat-truncation`, upstream's own tree too.
+      1.3.8's `test/chapters.py` runs `/usr/bin/ffmpeg`, which NixOS lacks; bind one in with
+      bubblewrap: `F=$(nix build --inputs-from . nixpkgs#ffmpeg-headless --no-link --print-out-paths |
+      head -1)/bin/ffmpeg; bwrap --dev-bind / / --tmpfs /usr/bin --ro-bind $F /usr/bin/ffmpeg
+      --ro-bind /usr/bin/env /usr/bin/env sh -c 'TMPDIR=/tmp python3 test/q2compare.py <tag> --suites'`. Legacy and iPod `update.tar`
       must be byte-identical to `<tag>`'s own build, and the tag's suites must pass on both
       ([the checklist](m1plus-integration.md#checklist)). It fails on a suite the tag adds that it
       doesn't know how to run (`SUITES`), and names the suites whose text differs from the tag's.
@@ -157,3 +171,4 @@ stay flat or fall.
 | Dev 21's fixes (Oct 23) | 1.2.2 (`87e2417`) | +1,417/−279 over 30 files: Coverflow's `STYLE_SCRLABEL_WHITE20C` |
 | U3 step 1: sync to 1.2.9 (Oct 23) | 1.2.9 (`7116f34`) | +1,417/−283 over 30 files: `tidal.c`'s seam now one line (`TIDAL_ID_REG`) |
 | U3 step 2: sync to 1.3.0 (Oct 23) | 1.3.0 (`92112b8`) | +1,420/−286 over 30 files |
+| U3 step 3: sync to 1.3.8 (Oct 24) | 1.3.8 (`3744dac`) | +1,418/−285 over 30 files: `ringnav_input` and `library_music` lost a seam each |
