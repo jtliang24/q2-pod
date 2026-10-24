@@ -88,9 +88,9 @@ selection rectangle or chevron. **Theme: Classic** styles the menu as before 1.0
 
 The seven destinations remain Now Playing, Library, Coverflow, Folder, Rockbox, Streaming and
 Settings. Rockbox is visible only when its binary is on the card, unless Display's **Shortcut**
-(`IPOD/SHORTCUT` 0-4) turns that row into Artists, Albums, Favorites or Rated Albums (`home_shortcut_open`; Rated Albums is Ratings → Albums, `rated_albums`); with no key it is Rockbox when the card has it, else Favorites. Centre cycles Rockbox, Favorites, Rated Albums, Artists, Albums. Settings opens Playback and
-System; Return restores the menu's previous selection, and a short Return on the main menu opens
-Now Playing without changing playback. Return there goes back to Home. The wheel bumps at either end of both lists and wraps after a pause, as ring lists do ([internals.md](internals.md#wheel-movement)).
+(`IPOD/SHORTCUT` 0-5) turns that row into Artists, Albums, Favorites, Rated Albums or Shuffle (`home_shortcut_open`; Rated Albums is Ratings → Albums, `rated_albums`; Shuffle is the Library's Shuffle page, `shuffle_menu`); with no key it is Rockbox when the card has it, else Favorites. Centre cycles Rockbox, Favorites, Shuffle, Rated Albums, Artists, Albums. Settings opens Playback and
+System; Return restores the menu's previous selection, and a short Return on the main menu selects
+Now Playing; a short Return with Now Playing selected opens it without changing playback. Return there goes back to Home. The wheel bumps at either end of both lists and wraps after a pause, as ring lists do ([internals.md](internals.md#wheel-movement)).
 Folder opens directly at the SD root when a card is in and no OTG drive is connected; Back at that root returns
 to Home. With OTG connected or no card in on entry, Folder keeps the storage selector. Nested folders and
 Library’s Podcasts/Audiobooks shortcuts keep their usual Back navigation.
@@ -110,7 +110,7 @@ Split narrows both menus to `HOME_SPLIT_W` (187, half the screen) and shows the 
 (`img_homeart` is an `image` for this, fitted to the cover's proportions and clipped to the panel,
 the menus clipped left of it; `default_album_home` without a cover); Full hides the art and
 widens the menus to the screen, their rows to `HOME_FULL_ROW` (375), or `HOME_CLASSIC_ROW` (369)
-in Classic. Minimal's labels keep x 39 and end 33 pixels from the screen edge in Full, `HOME_SPLIT_LABEL_END` (8) before the art in Split, where no corner needs clearing (122 pixels wide). Classic's
+in Classic. Minimal's labels keep x 39 and end 33 pixels from the screen edge in Full, `HOME_SPLIT_LABEL_END` (8) before the art in Split, where no corner needs clearing (140 pixels wide). Classic's
 start at `HOME_CLASSIC_TEXT_X` (33) with their existing widths. The chevron moves 15 pixels
 right in Split and 10 in Full, staying clear of the rounded glass, and rides the accent's selection bar alone.
 
@@ -130,7 +130,7 @@ so parents and order are free to change. Every tick it re-shows the volume,
 EQ, Bluetooth, SyncLink and Wi-Fi widgets and sets their images and text, but
 never their geometry. `system_bar.bin` (iPod) therefore keeps the play state
 and EQ in `view_left`, as stock does, and puts Bluetooth/codec, Wi-Fi and the
-battery in `view_right`. A 16 px `Q2` label at the left inset appears only when both playback state and EQ are hidden. `bar_sync` updates its visibility without moving the centred clock. The volume icon and number and SyncLink move to `x = -200`, where they
+battery in `view_right`. EQ uses an explicit 16 px font and a 28 px cell: its text is 24 px wide in the shipped font, so stock's 20 px cell clips it. A 16 px `Q2` label at the left inset appears only when both playback state and EQ are hidden. `bar_sync` updates its visibility without moving the centred clock. The volume icon and number and SyncLink move to `x = -200`, where they
 draw off-screen. Both groups sit 54 pixels
 from the edges (`STATUS_MARGIN`): the 50 where the 16-pixel icons clear the top corners
 ([Rounded corners](#rounded-corners)) plus 2 (`STATUS_PAD`) so they don't crowd the glass. A new
@@ -324,6 +324,12 @@ Playing and the first short Return reaches the stock Back path, with position
 memory restoring the browsing page and its selection. No short-Return callback or
 other long-key destination changes.
 
+**System settings → Display → Hold Return** (`Q2POD HOLDRETURN`, both builds) picks the
+destination: Recent (0, the default) is the behaviour above; Home (1) calls the stock Home
+destination from any page but Home, Now Playing included, and clears `np_origin`. On Home the hold
+still opens Now Playing, as does iPod's short Return on Home's first row (on any other row it first
+selects that row). The release latch on the way Home: [internals.md](internals.md#hold-return).
+
 ## Transitions
 
 Pages slide with stock's own window animator; the payload adds no animation code. The build sets
@@ -430,7 +436,8 @@ A tap on the art opens stock's full-screen art (`bigcover_page`; any tap closes 
 and the shade band behind it show for `BC_MS` (3 s), then fade out together over `BC_STEPS` steps
 `BC_STEP_MS` apart (`ringnav_bigcover`, after stock's init).
 
-**Scrub.** A double press of the centre button starts scrubbing, as on an iPod classic, and the bar fill turns white
+**Scrub.** A double press of the centre button starts scrubbing, as on an iPod classic (with the screen off it only
+wakes it, [Wake](internals.md#wake)), and the bar fill turns white
 while it lasts. Each wheel tick moves 5 seconds, times a ramp of one more step per 100 ms of spin
 (up to 40 seconds a tick; the lists' gentler ramp does not apply), within the
 track. Both times and the bar follow the target at once;
@@ -522,15 +529,16 @@ builds three rows with `0x4c19bc`: a `list_item_create(view, 0, 0, 0, 0)` in `s_
 `s_btn_listitem` with a click handler, and in it a 52-pixel icon at x 10, a
 `s_scrlabel_white24l` `hscroll_label` at (72, 0, 210, 70) and `list_into` at x 282. The rows
 show no value; each opens a sub-page (iPod's [settings rows](#settings) then lay them out 68
-pixels high). iPod runs the stock init, then adds six rows the same way: "Theme: Minimal" and
+pixels high). iPod runs the stock init, then adds seven rows the same way: "Theme: Minimal" and
 "Accent: Graphite" with the System settings Display icon (`system_display`), "Home: Split" with Play settings' cover
-mode icon (`playset_covermode`), "Artist Albums: Coverflow" (`Q2POD ARTISTCF`, the default; Grid and List, same icon, see [internals.md](internals.md#artist-albums-in-coverflow)),
+mode icon (`playset_covermode`), "Artist Albums: Coverflow" (`Q2POD ARTISTCF`, the default; Grid and List, same icon; Coverflow ends with an All albums card, see [internals.md](internals.md#artist-albums-in-coverflow)),
 "Battery: Icon" (Icon, Percent, Icon + Percent, Percent Inside; see
 [Status bar and clock](#status-bar-and-clock)) with the power manager icon
-(`system_powermanager`), then "Shortcut: Rockbox", all among the [settings icons](#settings-icons)
+(`system_powermanager`), then "Shortcut: Rockbox" and "Hold Return: Recent" (`Q2POD HOLDRETURN`,
+[Hold Return](#hold-return); Play settings' folder jump icon, `playset_folderjump`), all among the [settings icons](#settings-icons)
 the build pre-sizes. The value is in the label (260 pixels wide, to where the chevron ends) and there is no
 chevron, since Centre or a tap changes them in place.
-Both variants also append **Boot to: Rockbox / Q2-Pod** to System settings when Rockbox is present; see [Boot](boot.md#rockbox).
+Both variants also append **Boot to: Rockbox / Q2 Pod** to System settings when Rockbox is present; see [Boot](boot.md#rockbox).
 The page is `CTX_FIXED`, so the wheel walks onto them like the stock rows.
 
 A change is saved at once with the stock `write_int_config(value, "IPOD", key)` (`0x4f3f4c`):

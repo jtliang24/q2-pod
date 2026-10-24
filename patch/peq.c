@@ -342,15 +342,30 @@ int peq_update(peq_dsp *d, const peq_preset *p) {
     return 1;
 }
 
-static double sample(peq_engine *e, double x, int ch) {
-    if (e->bypass) return x;
+/* Identity coefficients: with zero memory the band passes x through unchanged. */
+static inline __attribute__((always_inline)) int identity(const peq_coeff *c) { return c->b0 == 1 && !c->b1 && !c->b2 && !c->a1 && !c->a2; }
+
+/* The bands sample can act on, in order: identity bands with zero memory stay so until an update. */
+static int live(const peq_engine *e, int *list) {
+    int n = 0;
     for (int i = 0; i < e->used; ++i) {
+        int on = e->only[i] || !identity(&e->c[i]);
+        for (int ch = 0; ch < PEQ_CHANNELS && !on; ++ch) on = e->z[ch][i][0] || e->z[ch][i][1];
+        if (on) list[n++] = i;
+    }
+    return n;
+}
+
+static double sample(peq_engine *e, const int *list, int n, double x, int ch) {
+    if (e->bypass) return x;
+    for (int k = 0; k < n; ++k) {
+        int i = list[k];
         const peq_coeff *c = &e->c[i];
         double *z = e->z[ch][i];
         /* The other channel's band: drop memory carried from a both-channel version. */
         if (e->only[i] && e->only[i] != ch + 1) { z[0] = z[1] = 0; continue; }
-        /* A band left out with settled memory passes x through: most presets leave several. */
-        if (c->b0 == 1 && !c->b1 && !c->b2 && !c->a1 && !c->a2 && !z[0] && !z[1]) continue;
+        /* Still checked per sample: a band can drain to idle mid-block. */
+        if (identity(c) && !z[0] && !z[1]) continue;
         /* Flush |y| < ~2e-34 to zero: decaying tails would otherwise reach denormals, which MIPS FPUs trap on. */
         double y = c->b0 * x + z[0] + 1e-18 - 1e-18;
         z[0] = c->b1 * x - c->a1 * y + z[1];
@@ -363,6 +378,7 @@ static double sample(peq_engine *e, double x, int ch) {
 void peq_process(peq_dsp *d, float *audio, unsigned frames) {
     if (!audio || d->channels < 1 || d->channels > PEQ_CHANNELS) return;
     if (d->current.bypass && !d->ramp && !d->waiting) return; /* steady bypass leaves the whole block untouched */
+    int cur[PEQ_BANDS], nxt[PEQ_BANDS], nc = live(&d->current, cur), nn = d->ramp ? live(&d->next, nxt) : 0;
     for (unsigned i = 0; i < frames; ++i) {
         if (!d->ramp && d->waiting) {
             d->next = d->pending;
@@ -373,20 +389,21 @@ void peq_process(peq_dsp *d, float *audio, unsigned frames) {
             /* Bands dropped from the end still run until their carried memory drains. */
             for (int b = d->next.used; b < d->current.used; ++b)
                 for (int ch = 0; ch < PEQ_CHANNELS; ++ch) if (d->next.z[ch][b][0] || d->next.z[ch][b][1]) d->next.used = b + 1;
+            nn = live(&d->next, nxt);
         }
         for (int ch = 0; ch < d->channels; ++ch, ++audio) {
             if (!d->ramp && d->current.bypass) continue; /* bit-exact steady bypass */
             double x = *audio;
             if (!__builtin_isfinite(x)) x = 0;
-            double y = sample(&d->current, x, ch);
+            double y = sample(&d->current, cur, nc, x, ch);
             if (d->ramp) {
-                double wet = sample(&d->next, x, ch);
+                double wet = sample(&d->next, nxt, nn, x, ch);
                 double mix = (double)(d->ramp_length - d->ramp + 1) / d->ramp_length;
                 y += (wet - y) * mix;
             }
             *audio = (float)(y > 1 ? 1 : y < -1 ? -1 : y);
         }
-        if (d->ramp && !--d->ramp) d->current = d->next;
+        if (d->ramp && !--d->ramp) d->current = d->next, nc = nn, memcpy(cur, nxt, sizeof(cur));
     }
 }
 

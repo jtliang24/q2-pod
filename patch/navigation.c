@@ -5,21 +5,61 @@
 #include "stock.h"
 #include "m1plus_nav.h" /* the M1 Plus's declarations and V2.1 stand-ins (docs/m1plus-roadmap.md U1c) */
 #undef select /* the UI selection helper below; headset.c uses libc select */
-extern int stock_dbquery_trampoline(const char *, const char *, void *, int);
+extern int stock_dbquery_trampoline(const char *, const char *, void *, int),
+    stock_content_query_trampoline(const char *, const char *, void *, void *, int);
 extern int stock_quicksettings_trampoline(void *, void *);
+extern int stock_timezone_trampoline(void);
+
+int ringnav_timezone(void) {
+    static const char *const extra[] = EXTRA_TIMEZONE_NAMES;
+    unsigned n = g_time_zone;
+    return n >= 27 && n - 27 < sizeof extra / sizeof *extra ? toolsSetTimeZone(extra[n - 27])
+                                                            : stock_timezone_trampoline();
+}
 extern int stock_music_info_trampoline(int, char *, const char *);
 static int library_music __attribute__((section(".scratch")));
 
-/* Restrict the Library's category queries, including Unknown and split albums, before grouping.
- * Coverflow and folder queries keep their own scope. */
-int ringnav_library_query(const char *db, const char *sql, void *row, int sort) {
+/* Failed exec in a forked child must not flush demo's copied stdio or run its exit handlers. */
+__asm__(".globl child_exit\nchild_exit:\nli $v0, 4001\nsyscall\n");
+
+/* Stock's album-artist queries (Artists, an artist's albums and songs, search) take a song without
+ * an album artist by its artist, so an untagged album stays under its artist, not Unknown.
+ * Coverflow's grouping (ifnull(albumsonger,'')) keeps the tag. Then restrict the Library's category
+ * queries, including Unknown and split albums, before grouping. Coverflow and folder queries keep
+ * their own scope. */
+#define ALBUM_ARTIST_OR_ARTIST "ifnull(nullif(albumsonger,''),songer)"
+/* toolsQueryDbTable, or (content) toolsQueryContentDbTable, which an artist's albums tab
+ * (getAlbumByAlbumArtist) runs with its row's arg and the name sort on the stack. */
+static int library_query(int content, const char *db, const char *sql, void *row, void *arg,
+                         int sort) {
+    char aa[2048], filtered[2048];
+    const char *s = sql ? strstr(sql, "albumsonger") : 0, *p = sql;
+    if (s && !strstr(sql, "ifnull(albumsonger")) {
+        unsigned n = 0;
+        for (; s && n < sizeof aa; p = s + 11, s = strstr(p, "albumsonger"))
+            n += (unsigned)tk_snprintf(aa + n, sizeof aa - n, "%.*s" ALBUM_ARTIST_OR_ARTIST,
+                                       (int)(s - p), p);
+        if (n >= sizeof aa ||
+            n + (unsigned)tk_snprintf(aa + n, sizeof aa - n, "%s", p) >= sizeof aa)
+            return -1;
+        sql = aa;
+    }
     const char *from = library_music && sql ? strstr(sql, " from songtable") : 0;
-    if (!from) return stock_dbquery_trampoline(db, sql, row, sort);
-    char filtered[2048];
-    int n = tk_snprintf(filtered, sizeof filtered, "%.*s from (select * from songtable where %s)%s",
+    if (from) {
+        int n =
+            tk_snprintf(filtered, sizeof filtered, "%.*s from (select * from songtable where %s)%s",
                         (int)(from - sql), sql, MUSIC_WHERE, from + 15);
-    if (n < 0 || (unsigned)n >= sizeof filtered) return -1;
-    return stock_dbquery_trampoline(db, filtered, row, sort);
+        if (n < 0 || (unsigned)n >= sizeof filtered) return -1;
+        sql = filtered;
+    }
+    return content ? stock_content_query_trampoline(db, sql, row, arg, sort)
+                   : stock_dbquery_trampoline(db, sql, row, (int)arg);
+}
+int ringnav_library_query(const char *db, const char *sql, void *row, int sort) {
+    return library_query(0, db, sql, row, (void *)sort, 0);
+}
+int ringnav_content_query(const char *db, const char *sql, void *row, void *arg, int sort) {
+    return library_query(1, db, sql, row, arg, sort);
 }
 extern int stock_keyup_trampoline(void *, void *), stock_touch_trampoline(void *, void *),
     stock_paint_trampoline(void *, void *), stock_dispatch_trampoline(void *, void *),
@@ -88,6 +128,7 @@ extern const char *track_name(char *buf, unsigned size, void *t);
 #define SHORT_LIST_MAX 16
 #define MAX_ENTRIES 512
 #define POS_MEM 64
+#define UP_NEXT_ROWS 100 /* Up Next's snapshot cap */
 /* RADIUS, FILL_RGB, FILL_ALPHA, SHADE_ALPHA, OUTLINE_RGB and OUTLINE_ALPHA come from offsets.inc;
  * the colors pack their bytes at compile time (little-endian r,g,b,a). The outline is translucent
  * neutral white, never the playing red, seated on a dark shade of the stock surface so bright
@@ -101,6 +142,26 @@ typedef struct {
     int ctx, id; /* logical row + 1; 0 = unused */
     unsigned scope, hash, hash2;
 } position_t;
+
+/* The settings rows pod_rows builds (pod_values and the Q2POD keys below). */
+enum {
+    POD_CHARGE,
+    POD_LOW,
+    POD_WAKE,
+    POD_ARTIST_CF,
+    POD_YEAR_OLD,
+    POD_ARTISTS,
+    POD_RESUME,
+    POD_LOCKCLOCK,
+    POD_ARTIST_AZ,
+    POD_VOL_GUARD,
+    POD_HOLD_HOME,
+#if M1PLUS
+    POD_KNOB, /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
+    POD_KNOB_DIR, /* Navigation's volume-up turn: 0 up the list, 1 down */
+#endif
+    POD_COUNT
+};
 
 /* Writable state lives in the zero-filled page the builder maps past the payload text.
  * center_timer defers confirmation; wheel_* scale repeated fast detents; pos_* remember
@@ -163,7 +224,10 @@ typedef struct {
      * opens while the library is at mp_gen (~library_gen once stale). */
     void *mp_page, *mp_list, *td_page, *td_list;
     unsigned mp_gen;
-    void *sp_page; /* the Library Shuffle menu's page, kept across picks */
+    void *sp_page;                 /* the Library Shuffle menu's page, kept across picks */
+    void *un_page;                 /* Up Next's page, one at a time */
+    unsigned un_idx[UP_NEXT_ROWS]; /* its rows' queue indices */
+    void *sc_page, *sc_row[2];     /* Streaming's Configuration page and its two cache rows */
     /* Ratings: the songs' 1-4 and albums' 1-5 heart tables (calloc'd on first use); Now Playing's
      * window, its heart and the heart's stock click context, the 1-4 badge, the window the picker
      * is up on (0 when down), the hearts picked, the heart's hold timer (rate_held once it fired),
@@ -175,27 +239,28 @@ typedef struct {
     int rate_pick, rate_held;
     unsigned rate_hold, rate_tick, rate_album;
     void *rt_menu, *rt_page, *rt_list;
-    int dark; /* the backlight was off at the last UI loop pass */
+    int dark; /* 1: the backlight was off at the last UI loop pass; 2: a centre press woke it */
     /* Power's Charge limit and Low power (read once from config.ini's Q2POD), the value
      * labels of those rows and Artists, and the poll: charging is held off at the limit; CPU1 is
      * offline (cpu_off), this boot's first offline is done (cpu_marked), and cpu_bad is 0 before
      * the check, 1 usable, 2 refused by an earlier boot's stall, 3 refused by the kernel;
      * last_input times the screen-on idle. year_old: Year order, oldest first. resume:
-     * Bluetooth's Resume on connect on. */
-    int pod_read, charge_limit, low_power, wake_double, wake_pass, charge_held, cpu_off, cpu_bad,
-        cpu_marked, artist_cf, year_old, resume, lock_clock, artist_az;
+     * Bluetooth's Resume on connect on. hold_home: Hold Return goes Home. */
+    int pod_read, charge_limit, low_power, wake_double, wake_pass, wake_eat,
+        wake_down, /* 1: the held Centre press passes; 2: it is dropped */
+        charge_held, cpu_off, cpu_bad, cpu_marked, artist_cf, year_old, resume, lock_clock,
+        artist_az, hold_home;
+    void *pod_label[POD_COUNT];
 #if M1PLUS
-    void *pod_label[11];
     int knob_mode;    /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
     int knob_reverse; /* Display's Knob Up: 0 List Up (Previous), 1 List Down (Next) */
-#else
-    void *pod_label[9];
 #endif
     void *art_cf_win, *art_cf_list; /* the artist page given its Coverflow, the albums pending */
     void *art_cf_veil;              /* the artist page unseen until they show, and its anim_hint */
     char art_cf_hint[64];
     unsigned art_cf_timer;
     unsigned wake_at; /* Wake: Double press, the screen-off centre press a second one must follow */
+    unsigned woke_at; /* the centre press that woke the screen, then its first lit loop pass */
     void *np_origin;  /* the page Hold Return opened Now Playing over */
     void *dc_top;     /* the page of the last centre press no list click took, and its time */
     unsigned dc_at;
@@ -270,6 +335,7 @@ typedef struct {
      * page is there, Back at that root leaves it. */
     int media_open;
     char media_root[32];
+    void *root_label; /* Playback settings' Folder Root row */
     void *album;     /* what an Albums row or Go to album opened (album_open), a one-record deque */
     char **art_keys; /* an artist's albums tab's art keys by row, 0 for a name's own
                         (ringnav_artist_list) */
@@ -553,7 +619,6 @@ static int home_done(void *w, void *event) {
 static void *surface(void *target, void **other);
 
 static int cf_letter_expire(const void *info) {
-    (void)info;
     st.cf_letter_timer = st.cf_letter = 0;
     void *w = surface(0, 0);
     if (w && w == st.cf_letter_surface) widget_invalidate_force(w, 0);
@@ -693,7 +758,6 @@ static int fx_live(void *w) {
 }
 
 static int fx_expire(const void *info) {
-    (void)info;
     st.fx_timer = 0;
     void *w = surface((void *)0, (void *)0);
     st.bump_dir = 0;
@@ -1134,7 +1198,6 @@ static int pending_matches(void *top, menu_t *m) {
 }
 
 static int confirm_center(const void *info) {
-    (void)info;
     void *w = surface((void *)0, (void *)0);
     if (!st.center_timer) return 0;
     /* Stock removes this one-shot after return; never repeat (RET_REPEAT=8). */
@@ -1283,13 +1346,16 @@ static void pull_begin(void *event) {
         I(w, kind(w) == 2 ? TABLE_TOP : SCROLL_Y) > 0)
         return;
     if (!widget_get_prop_int(page, PULL_BOUND, 0)) {
-        if (!widget_on(page, EVT_DESTROY, pull_event, page) ||
-            !widget_on(page, EVT_WINDOW_BACKGROUND, pull_event, page) ||
-            !widget_on(page, EVT_WINDOW_CLOSE, pull_event, page) ||
-            !widget_on(page, EVT_POINTER_ABORT, pull_event, page) ||
-            !widget_on(page, EVT_POINTER_MOVE_BEFORE, pull_event, page) ||
-            !widget_on(page, EVT_POINTER_UP_BEFORE, pull_event, page))
-            return;
+        const unsigned types[] = {
+            EVT_DESTROY,       EVT_WINDOW_BACKGROUND,   EVT_WINDOW_CLOSE,
+            EVT_POINTER_ABORT, EVT_POINTER_MOVE_BEFORE, EVT_POINTER_UP_BEFORE
+        };
+        for (unsigned i = 0; i < sizeof types / sizeof *types; ++i)
+            if (!widget_on(page, types[i], pull_event, page)) {
+                /* Retry must not duplicate the callbacks already installed. */
+                while (i) widget_off_by_func(page, types[--i], pull_event, page);
+                return;
+            }
         prop(page, PULL_BOUND, 1);
     }
     if (!widget_get_prop_int(w, PULL_BOUND, 0)) {
@@ -1348,14 +1414,14 @@ int config_digit(const char *key, int n) {
 } /* and visualizer.c's */
 /* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home, 2 Battery, 3 Theme. */
 static const char *const setting_keys[] = { "ACCENT", "HOME", "BATTERY", "THEME", "SHORTCUT" };
-static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 5 };
+static const int setting_counts[] = { ACCENT_N, 2, 4, 2, 6 };
 static int *const setting_values[] = { &st.accent, &st.home_full, &st.battery, &st.classic,
                                        &st.shortcut };
 static int accent(void) {
     if (!st.settings_read) {
         for (int i = 0; i < 4; ++i)
             *setting_values[i] = config_digit(setting_keys[i], setting_counts[i]);
-        st.shortcut = config_or("IPOD", "SHORTCUT", 5, 5); /* 5: no key, see shortcut() */
+        st.shortcut = config_or("IPOD", "SHORTCUT", 6, 6); /* 6: no key, see shortcut() */
         st.settings_read = 1;
     }
     return st.classic ? st.accent : 0; /* Graphite */
@@ -1364,7 +1430,7 @@ static int accent(void) {
  * card may mount after the first read. */
 static int shortcut(void) {
     accent();
-    return st.shortcut < 5 ? st.shortcut : rockbox_available() ? 0 : 3;
+    return st.shortcut < 6 ? st.shortcut : rockbox_available() ? 0 : 3;
 }
 int ipod_classic(void) {
     accent();
@@ -1384,16 +1450,17 @@ int ipod_home_rockbox(void) {
     return shortcut() || st.home_rockbox;
 }
 const char *ipod_home_shortcut(void) {
-    static const char *const names[] = { "Rockbox", "Artists", "Albums", "Favorites",
-                                         "Rated Albums" };
+    static const char *const names[] = { "Rockbox",   "Artists",      "Albums",
+                                         "Favorites", "Rated Albums", "Shuffle" };
     return names[shortcut()];
 }
 extern int rockbox_open(void *, void *);
-static int rated_albums(void *, void *);
+static int rated_albums(void *, void *), shuffle_menu(void *, void *);
 int home_shortcut_open(void *ctx, void *event) {
     int s = shortcut();
     if (!s) return rockbox_open(ctx, event);
     if (s == 4) return rated_albums(ctx, event);
+    if (s == 5) return shuffle_menu(ctx, event);
     if (s == 2) {
         struct {
             int cls;
@@ -1502,6 +1569,20 @@ static void fill_box(void *canvas, rect_t *r, unsigned color, unsigned radius) {
     }
 }
 
+/* A two-pixel frame in color, two concentric one-pixel rounded strokes, or a square one when the
+ * box is too small to round or the canvas declines to (no vgcanvas). Leaves the stroke color set.
+ */
+static void frame_box(void *canvas, const rect_t *r, unsigned color, unsigned radius) {
+    rect_t in = { r->x + 1, r->y + 1, r->w - 2, r->h - 2 };
+    if (r->w > 2 * (int)radius && r->h > 2 * (int)radius &&
+        !canvas_stroke_rounded_rect(canvas, r, (void *)0, &color, radius, 1) &&
+        !canvas_stroke_rounded_rect(canvas, &in, (void *)0, &color, radius - 1, 1))
+        return;
+    canvas_set_stroke_color(canvas, color);
+    canvas_stroke_rect(canvas, r->x, r->y, r->w, r->h);
+    canvas_stroke_rect(canvas, in.x, in.y, in.w, in.h);
+}
+
 #if IPOD
 /* A widget in a DRILL window (contexts.inc). Its own window decides, not the top one, so a window
  * painted during a transition keeps its own rows. */
@@ -1545,7 +1626,6 @@ static unsigned put_num(unsigned *s, unsigned v) {
 }
 
 static int letter_expire(const void *info) {
-    (void)info;
     st.letter_timer = 0;
     void *w = surface((void *)0, (void *)0);
     if (w && w == st.wheel_surface) widget_invalidate_force(w, (void *)0);
@@ -1636,7 +1716,6 @@ static int draw_spaced(void *canvas, const unsigned *s, int x, int y, unsigned p
 #define MARQUEE_PX 2
 #define MARQUEE_HOLD_MS 1500
 static int np_marquee(const void *info) {
-    (void)info;
     st.np_marquee = 0;
     if (!st.np_album || st.np_over <= 0) return 0;
     int end = st.np_off >= st.np_over;
@@ -1761,11 +1840,8 @@ static void paint_selection(void *w, void *canvas) {
     st.sel_row = i;
     st.sel_y = r.y + r.h / 2;
     if (g_menu.kind == 4 &&
-        r.w < I(g_menu.w, W_W)) { /* a pop-up button's tile: framed white on any accent */
-        canvas_set_stroke_color(canvas, 0xffffffff);
-        canvas_stroke_rect(canvas, r.x, r.y, r.w, r.h);
-        canvas_stroke_rect(canvas, r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    }
+        r.w < I(g_menu.w, W_W)) /* a pop-up button's tile: framed white on any accent */
+        frame_box(canvas, &r, 0xffffffff, SEL_RADIUS);
 #else
     rect_t outer = { r.x + 1, r.y + 1, r.w - 2, r.h - 2 };
     rect_t inner = { outer.x + 1, outer.y + 1, outer.w - 2, outer.h - 2 };
@@ -1886,13 +1962,22 @@ static void *list_button(void *view) {
  * label. */
 static void *list_row_core(void *view, const char *icon, int (*click)(void *, void *), void *ctx,
                            int w, int into) {
+    /* Match the patched Library constructor's body and art_inset (tools/ipod.py). */
+    int compact =
+        IPOD && !tk_strcmp(widget_get_prop_str(view, "name", ""), "scroll_view_localmusic");
+    int h = compact ? 68 : 70;
     void *button = list_button(view);
+    if (compact) widget_resize(button, 335, h);
     if (click) widget_on(button, EVT_CLICK, click, ctx);
-    if (icon) image_base_set_image(image_create(button, 10, 0, SET_STOCK_ICON, 70), icon);
-    void *label = hscroll_label_create(button, icon ? 72 : 10, 0, w, 70);
+    if (icon) { /* centred, as stock's rows (0x524978) */
+        void *image = image_create(button, compact ? 8 : 10, 0, SET_STOCK_ICON, h);
+        image_base_set_image(image, icon);
+        image_set_draw_type(image, IMAGE_DRAW_CENTER);
+    }
+    void *label = hscroll_label_create(button, icon ? 72 : 10, 0, w, h);
     widget_use_style(label, STYLE_SCRLABEL_WHITE24L);
     set_hscroll_label_attribute(label);
-    if (into) image_base_set_image(image_create(button, 282, 0, 50, 70), "list_into");
+    if (into) image_base_set_image(image_create(button, 282, 0, 50, h), "list_into");
     return label;
 }
 #endif
@@ -1903,31 +1988,30 @@ void *list_row(void *view, const char *icon, int (*click)(void *, void *), void 
 /* A list_row label's list_item: its parent on V2.1, its button's on V1.32. */
 static void *row_of(void *label) { return M1PLUS ? P(label, W_PARENT) : P(P(label, W_PARENT), W_PARENT); }
 
-/* Stock modes: 1 locks volume, 3 locks volume and playback buttons, only with the screen off.
+/* Stock modes, only with the screen off: 1 locks wheel volume, 2 the buttons, 3 both.
  * KEY_LOCKOUT is the separate, temporary debounce after a button press. */
-static const char *const lock_names[] = { "Off", "Everything", "Volume only" };
+static const char *const lock_names[] = { "Off", "Everything", "Buttons only", "Volume only" };
 static int lock_choice(void) {
-    if (g_keylock_flag && g_keylock_mode != 1 && g_keylock_mode != 3) {
-        g_keylock_mode = 3; /* migrate stock's buttons-only choice to Everything */
+    if (g_keylock_flag && (g_keylock_mode < 1 || g_keylock_mode > 3)) {
+        g_keylock_mode = 3; /* an unknown mode locks Everything */
         write_int_config(3, "SYSSET", "LOCKMODE");
     }
-    return !g_keylock_flag ? 0 : g_keylock_mode == 1 ? 2 : 1;
+    return g_keylock_flag ? 4 - g_keylock_mode : 0;
 }
 static void lock_set(int choice) {
-    g_keylock_mode = choice == 2 ? 1 : 3;
+    g_keylock_mode = choice ? 4 - choice : 3;
     g_keylock_flag = choice != 0;
     write_int_config(g_keylock_mode, "SYSSET", "LOCKMODE");
     write_int_config(g_keylock_flag, "SYSSET", "LOCKFLAG");
 }
 static int lock_pick(void *ctx, void *event) {
-    (void)event;
     lock_set((int)(long)ctx);
     void *win = window_manager_get_top_window(window_manager());
     void *view = widget_lookup(win, "scroll_view_keylock", 1);
+    int choice = lock_choice();
     for (unsigned i = 0; view && i < widget_count_children(view); ++i) {
         void *button = widget_get_child(widget_get_child(view, i), 0);
-        image_base_set_image(widget_get_child(button, 0),
-                             (int)i == lock_choice() ? "select" : "unselect");
+        image_base_set_image(widget_get_child(button, 0), (int)i == choice ? "select" : "unselect");
     }
     return 0;
 }
@@ -1935,9 +2019,10 @@ int ringnav_keylock_rows(void *win) {
     void *view = win ? widget_lookup(win, "scroll_view_keylock", 1) : 0;
     if (!view) return 0;
     widget_destroy_children(view);
-    for (int i = 0; i < 3; ++i) {
+    int choice = lock_choice();
+    for (int i = 0; i < 4; ++i) {
         void *label =
-            list_row(view, i == lock_choice() ? "select" : "unselect", lock_pick, (void *)(long)i);
+            list_row(view, i == choice ? "select" : "unselect", lock_pick, (void *)(long)i);
         widget_set_text_utf8(label, lock_names[i]);
     }
     return 0;
@@ -1948,8 +2033,7 @@ static void quick_lock_text(void *win) {
                          g_keylock_flag ? "drop_keylockopen" : "drop_keylock");
 }
 int ringnav_quick_lock(void *win, void *event) {
-    (void)event;
-    lock_set((lock_choice() + 1) % 3);
+    lock_set((lock_choice() + 1) % 4);
     quick_lock_text(win);
     return 0;
 }
@@ -1965,39 +2049,29 @@ int ringnav_quick_settings(void *win, void *ctx) {
  * is stock's own PLAYSET ARTISTTYPE (artist_type, the artist page's switch;
  * docs/internals.md#album-artists), and Bluetooth's Resume on connect (RESUME, so a missing key
  * holds playback; docs/internals.md#resume-on-connect), and the Lock screen's Clock (LOCKCLOCK,
- * lockscreen.c; docs/internals.md#lock-screen), and Playback's Artist album order (ARTISTAZ). */
+ * lockscreen.c; docs/internals.md#lock-screen), and Playback's Artist album order (ARTISTAZ), and
+ * Power's Volume guard (VOLGUARD, playback.c's wheel_guard; docs/internals.md#volume-guard), and
+ * Display's Hold Return (HOLDRETURN, compact_now_playing; docs/ipod.md#hold-return). */
 #define STR_(x) #x
 #define STR(x) STR_(x)
-enum {
-    POD_CHARGE,
-    POD_LOW,
-    POD_WAKE,
-    POD_ARTIST_CF,
-    POD_YEAR_OLD,
-    POD_ARTISTS,
-    POD_RESUME,
-    POD_LOCKCLOCK,
-    POD_ARTIST_AZ,
-#if M1PLUS
-    POD_KNOB, /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
-    POD_KNOB_DIR, /* Navigation's volume-up turn: 0 up the list, 1 down */
-#endif
-};
 static int *const pod_values[] = { &st.charge_limit, &st.low_power,  &st.wake_double,
                                    &st.artist_cf,    &st.year_old,   0,
                                    &st.resume,       &st.lock_clock, &st.artist_az,
+                                   &wheel_guard,     &st.hold_home,
 #if M1PLUS
                                    &st.knob_mode,    &st.knob_reverse,
 #endif
 };
 _Static_assert(POD_LOCKCLOCK == 7, "lockscreen.c passes pod_rows 7");
-static const char *const pod_keys[] = { "CHARGELIMIT", "LOWPOWER",  "WAKEDOUBLE",
-                                        "ARTISTCF",    "YEAROLD",   0,
-                                        "RESUME",      "LOCKCLOCK", "ARTISTAZ",
+_Static_assert(sizeof pod_values / sizeof *pod_values == POD_COUNT, "a pod_values per row");
+static const char *const pod_keys[] = { "CHARGELIMIT", "LOWPOWER", "WAKEDOUBLE", "ARTISTCF",
+                                        "YEAROLD",     0,          "RESUME",     "LOCKCLOCK",
+                                        "ARTISTAZ",    "VOLGUARD", "HOLDRETURN",
 #if M1PLUS
                                         "KNOB",        "KNOBDIR",
 #endif
 };
+_Static_assert(sizeof pod_keys / sizeof *pod_keys == POD_COUNT, "a pod_keys entry per row");
 static void pod_settings(void) {
     if (st.pod_read) return;
     for (unsigned i = 0; i < sizeof pod_keys / sizeof *pod_keys; ++i)
@@ -2039,34 +2113,39 @@ static void flac_album_artist(const char *path, char *out) {
     const char *ext = strrchr(path, '.');
     if (!ext || strcasecmp(ext, ".flac")) return;
     void *f = fopen(path, "rb");
-    unsigned char h[4], *b = 0;
+    unsigned char h[13];
     if (!f) return;
     if (fread(h, 4, 1, f) == 1 && !memcmp(h, "fLaC", 4))
         while (fread(h, 4, 1, f) == 1) {
-            unsigned len = (unsigned)h[1] << 16 | h[2] << 8 | h[3];
+            unsigned left = (unsigned)h[1] << 16 | h[2] << 8 | h[3], c;
             if ((h[0] & 0x7f) != 4) {
-                if (h[0] & 0x80 || fseek(f, (long)len, 1)) break;
+                if (h[0] & 0x80 || fseek(f, (long)left, 1)) break;
                 continue;
             }
-            if (len < 8 || len > 0x10000 || !(b = calloc(len, 1)) || fread(b, len, 1, f) != 1)
+            /* vendor length and string, the comment count, then each comment's length and bytes,
+             * read a field at a time: a cover kept in the comments can make the block megabytes */
+            if (left < 8 || fread(h, 4, 1, f) != 1 || (c = le32(h)) > left - 8 ||
+                fseek(f, (long)c, 1) || fread(h, 4, 1, f) != 1)
                 break;
-            /* vendor length and string, the comment count, then each comment's length and bytes */
-            unsigned at = le32(b) <= len - 8 ? 8 + le32(b) : len, n = le32(b + at - 4);
-            while (n-- && at <= len - 4) {
-                unsigned c = le32(b + at);
-                at += 4;
-                if (c > len - at) break;
-                if (c > 13 && !strncasecmp((char *)b + at, "ALBUM ARTIST=", 13)) {
-                    c = c - 13 > 0xff ? 0xff : c - 13;
-                    memcpy(out, b + at + 13, c);
-                    out[c] = 0;
-                    break;
+            left -= 8 + c;
+            for (unsigned n = le32(h); n-- && left >= 4 && fread(h, 4, 1, f) == 1;) {
+                c = le32(h);
+                left -= 4;
+                if (c > left) break;
+                left -= c;
+                if (c > 13) {
+                    if (fread(h, 13, 1, f) != 1) break;
+                    if (!strncasecmp((char *)h, "ALBUM ARTIST=", 13)) {
+                        c = c - 13 > 0xff ? 0xff : c - 13;
+                        out[fread(out, c, 1, f) == 1 ? c : 0] = 0;
+                        break;
+                    }
+                    c -= 13;
                 }
-                at += c;
+                if (fseek(f, (long)c, 1)) break;
             }
             break;
         }
-    free(b);
     fclose(f);
 }
 /* toolsGetMusicInfo (the library scan and the player's tag reads): an empty album artist falls back
@@ -2076,6 +2155,73 @@ int ringnav_music_info(int a, char *info, const char *path) {
     if (path && !info[MUSIC_INFO_ALBUM_ARTIST])
         flac_album_artist(path, info + MUSIC_INFO_ALBUM_ARTIST);
     return r;
+}
+/* Quote bounded scanner paths/tags into one UPDATE; never execute a truncated statement. */
+static int scan_quote(char *sql, unsigned cap, unsigned *n, const char *s) {
+    if (*n + 3 >= cap) return 0;
+    sql[(*n)++] = '\'';
+    for (; s && *s; ++s) {
+        if (*n + 3 >= cap) return 0;
+        if (*s == '\'') sql[(*n)++] = '\'';
+        sql[(*n)++] = *s;
+    }
+    sql[(*n)++] = '\'';
+    sql[*n] = 0;
+    return 1;
+}
+/* Only toolsLoadAllFile's folder-scan duplicate check calls this. Keep the row's ID, CUE bounds,
+ * creation time and library count, so saved queues/favourites still refer to the same song. */
+int ringnav_scan_refresh(void *row, const char *table, int type) {
+    int exists = toolsCheckItemExist(row, table, type);
+    if (!table || strcmp(table, "songtable")) return exists;
+    if (!exists) return toolsGetMusicNum() >= 65000;
+    const char *path = P(row, REC_PATH), *name = P(row, REC_NAME);
+    if (!path || !name) return exists;
+    char info[0x698] = { 0 }, sql[8192];
+    int cue = I(row, REC_CUE_START) || I(row, REC_CUE_END);
+    if (!cue) {
+        /* Stock returns success even when TagLib cannot open/read a tag; keep the old tags then. */
+        void *file = taglib_file_new(path);
+        int valid = file && taglib_file_tag(file);
+        if (file) taglib_file_free(file);
+        if (!valid || toolsGetMusicInfo(1, info, path) != 1) return exists;
+    }
+    static const char *const fields[] = { "album", "songer",   "style",
+                                          "name",  "composer", "albumsonger" };
+    static const unsigned offsets[] = { 0, 0x100, 0x200, 0x280, 0x480, 0x580 };
+    static const unsigned records[] = { REC_ALBUM, REC_ARTIST, 0x1c,
+                                        REC_TITLE, 0x20,       REC_ALBUM_ARTIST };
+    unsigned n = tk_snprintf(sql, sizeof sql, "update songtable set ");
+    for (unsigned i = 0; i < sizeof fields / sizeof *fields; ++i) {
+        n += tk_snprintf(sql + n, sizeof sql - n, "%s%s=", i ? "," : "", fields[i]);
+        if (n >= sizeof sql ||
+            !scan_quote(sql, sizeof sql, &n, cue ? P(row, records[i]) : info + offsets[i]))
+            return exists;
+    }
+    /* Stock indexes the trimmed title's pinyin initial, falling back to the filename. */
+    char title[128] = "", key[128] = "";
+    tk_snprintf(title, 31, "%s",
+                cue && P(row, REC_TITLE) ? (char *)P(row, REC_TITLE) : info + 0x280);
+    toolsTrimLeft(title);
+    toolsTrimRight(title);
+    if (!*title || !strcmp(title, "(null)")) tk_snprintf(title, 31, "%s", name);
+    toolsHanziToPinyin(title, key);
+    unsigned initial = (unsigned char)*key;
+    if (initial >= 'a' && initial <= 'z') initial -= 'a' - 'A';
+    initial = initial >= 'A' && initial <= 'Z'   ? initial
+              : initial >= '0' && initial <= '9' ? '*'
+                                                 : '#';
+    n += tk_snprintf(sql + n, sizeof sql - n,
+                     ",Initial=%u,year=%d,track=%d,cd_num=%d where filename=", initial,
+                     cue ? I(row, 0x30) : I(info, 0x680), cue ? I(row, REC_TRACK) : I(info, 0x684),
+                     cue ? I(row, REC_DISC) : I(info, 0x688));
+    if (n >= sizeof sql || !scan_quote(sql, sizeof sql, &n, name)) return exists;
+    n += tk_snprintf(sql + n, sizeof sql - n, " and fileurl=");
+    if (n >= sizeof sql || !scan_quote(sql, sizeof sql, &n, path)) return exists;
+    n += tk_snprintf(sql + n, sizeof sql - n, " and time=%d and time_end=%d", I(row, REC_CUE_START),
+                     I(row, REC_CUE_END));
+    if (n < sizeof sql) toolsUpdateDbTable("/mnt/data/database.db", sql);
+    return exists;
 }
 /* checkBluetoothStatus' player_save_start(0) once a headset's A2DP comes up (tools/build.py
  * BT_CONNECT_START): player_save_stop stopped the local or Tidal queue, and stock restarts it
@@ -2098,18 +2244,20 @@ static void pod_text(int i) {
         { "Resume on Connect: Off", "Resume on Connect: On" },
         { "Clock: Standard", "Clock: Large" },
         { "Artist Album Order: Year", "Artist Album Order: A–Z" },
+        { "Volume Guard: Off", "Volume Guard: On" },
+        { "Hold Return: Recent", "Hold Return: Home" },
 #if M1PLUS
         { "Knob: Volume", "Knob: Navigation" },
         { "Knob Up: List Up", "Knob Up: List Down" },
 #endif
     };
+    _Static_assert(sizeof names / sizeof *names == POD_COUNT, "a names entry per row");
     int v = i != POD_ARTISTS ? *pod_values[i] : I(artist_type, 0) == 1;
     widget_set_text_utf8(st.pod_label[i], names[i][v]);
 }
 /* Centre or tap toggles and saves. Charge limit and Low power take effect on the next UI loop pass
  * (power_poll); Artists on the next load of an artist list, as the artist page's switch does. */
 static int pod_click(void *ctx, void *event) {
-    (void)event;
     int i = (int)(long)ctx;
     pod_settings();
     if (i == POD_ARTISTS) {
@@ -2145,6 +2293,9 @@ int ringnav_powermanager(void *win, void *ctx) {
     int result = stock_power_trampoline(win, ctx);
     /* M1 Plus: no Wake row. V2.1 has its own (Double wake), and the knob's press is not Centre. */
     pod_rows(win, VIEW_POWER, POD_CHARGE, M1PLUS ? 2 : 3, icons);
+#if !M1PLUS /* the touch wheel's guard; M1 Plus has a knob */
+    pod_rows(win, VIEW_POWER, POD_VOL_GUARD, 1, icons + 2);
+#endif
     return result;
 }
 /* The Bluetooth page's list (stock's local builder, btmenu_rows), rebuilt whole on every search and
@@ -2180,16 +2331,16 @@ static void reorder(void *view, const unsigned char *order, unsigned n) {
 
 /* Playback Setting: what is changed while listening first, then library behaviour, then output. */
 static const unsigned char playset_order[] = {
-    3 /* Play Mode */,     2 /* EQ */,
-    0 /* Gain */,          10 /* ReplayGain */,
-    18 /* Crossfade */,    9 /* Gapless */,
-    4 /* Max Volume */,    5 /* Default Vol */,
-    11 /* Balance */,      1 /* Filters */,
-    8 /* Memory play */,   16 /* Artists */,
-    15 /* Year order */,   17 /* Artist album order */,
-    13 /* Folder art */,   14 /* Folder skip */,
-    12 /* Enlarged art */, 6 /* DSD Output */,
-    7 /* USB Audio */,
+    3 /* Play Mode */,    2 /* EQ */,
+    0 /* Gain */,         10 /* ReplayGain */,
+    18 /* Crossfade */,   9 /* Gapless */,
+    4 /* Max Volume */,   5 /* Default Vol */,
+    11 /* Balance */,     1 /* Filters */,
+    8 /* Memory play */,  16 /* Artists */,
+    15 /* Year order */,  17 /* Artist album order */,
+    13 /* Folder art */,  14 /* Folder skip */,
+    19 /* Folder Root */, 12 /* Enlarged art */,
+    6 /* DSD Output */,   7 /* USB Audio */,
 };
 /* System Setting: connections and display first, boot/update/reset/about last. */
 static const unsigned char sysset_order[] = {
@@ -2198,6 +2349,58 @@ static const unsigned char sysset_order[] = {
     6 /* In-Vehicle */,   12 /* Boot to */, 9 /* Update */,  10 /* Reset */,
     11 /* About */,
 };
+
+/* Folder Root (Q2POD FOLDERROOT): the card's top-level folder Home's Folder opens in, "" the card
+ * itself; name holds 256. toolsReadConfig leaves name alone for a missing key and empty default.
+ * ponytail: names over ROOT_MAX bytes or with an edge space are not offered: stock's config.ini
+ * line (toolsWriteConfig's 257-byte sprintf, toolsReadConfig's 255-byte fgets, then trimmed) can't
+ * keep them. */
+#define ROOT_MAX 200
+static void root_read(char *name) {
+    name[0] = 0;
+    toolsReadConfig("/mnt/data/config.ini", "Q2POD", "FOLDERROOT", name, "");
+}
+/* The card's next top-level folder after name, in name order (case aside, as FAT and exFAT hold
+ * no two names differing only so; no dot-folders): the first after "", "" (the card) after the
+ * last. d_type 0: as media_find. */
+static void root_next(char *name) {
+    char next[256] = "";
+    void *dir = opendir("/mnt/mmc");
+    for (struct dirent *e; dir && (e = readdir(dir));) {
+        const char *d = e->d_name;
+        unsigned n = strlen(d);
+        if ((e->d_type != 4 && e->d_type) || d[0] == '.' || d[0] == ' ' || d[n - 1] == ' ' ||
+            n > ROOT_MAX)
+            continue;
+        if (strcasecmp(d, name) > 0 && (!next[0] || strcasecmp(d, next) < 0))
+            memcpy(next, d, n + 1);
+    }
+    if (dir) closedir(dir);
+    memcpy(name, next, 256);
+}
+/* The saved root's folder into path (265 bytes), 0 when there is none to open. */
+static int root_dir(char *path) {
+    char name[256];
+    unsigned info[36];
+    root_read(name);
+    tk_snprintf(path, 265, "/mnt/mmc/%s", name);
+    return name[0] && name[0] != '.' && !strrchr(name, '/') && !__xstat(3, path, info) &&
+           (info[5] & 0170000) == 0040000;
+}
+static void root_text(const char *name) {
+    char t[280];
+    tk_snprintf(t, sizeof t, "Folder Root: %s", name[0] ? name : "Card");
+    widget_set_text_utf8(st.root_label, t);
+}
+/* Centre or tap: the next root, saved; Folder opens there from its next visit. */
+static int root_click(void *ctx, void *event) {
+    char name[256];
+    root_read(name);
+    root_next(name);
+    toolsWriteConfig("/mnt/data/config.ini", "Q2POD", "FOLDERROOT", name);
+    root_text(name);
+    return 0;
+}
 
 #if M1PLUS
 static void audioset_rows(void *win) {
@@ -2211,6 +2414,12 @@ int ringnav_audioset(void *win, void *ctx) {
     pod_rows(win, VIEW_PLAYSET, POD_ARTIST_AZ, 1, icons);
     void *view = win ? widget_lookup(win, VIEW_PLAYSET, 1) : (void *)0;
     if (view) xfade_row(list_row(view, ICON_GAPLESS, xfade_open, (void *)0)); /* crossfade.c */
+    if (view) {
+        char name[256];
+        root_read(name);
+        st.root_label = list_row(view, ICON_FOLDERJUMP, root_click, 0);
+        root_text(name);
+    }
     reorder(view, playset_order, sizeof playset_order);
 #if !M1PLUS
     return result;
@@ -2277,7 +2486,6 @@ _Static_assert(sizeof codecs / sizeof *codecs == sizeof codec_reach / sizeof *co
                "one reach per codec");
 
 static int codec_fade(const void *info) {
-    (void)info;
     int n = ++st.codec_step, d = CODEC_STEPS - n;
     if (n == 1)
         st.codec_timer = timer_add(codec_fade, (void *)0, CODEC_STEP_MS); /* this one ends */
@@ -2513,7 +2721,6 @@ static void np_theme(void) {
 #define SETTLE_MS 250
 #define SETTLE_PLAY_MS 2000
 static int settle_poll(const void *info) {
-    (void)info;
     int sec = -1, total, status = mclGetPlayStatus();
     player_playtime_and_length(&sec, &total);
     if (status == 2) st.settle_played += SETTLE_MS;
@@ -2559,7 +2766,6 @@ static void scrub_end(void) {
 }
 
 static int scrub_expire(const void *info) {
-    (void)info;
     st.scrub_timer = 0;
     scrub_end();
     return 0;
@@ -2575,7 +2781,6 @@ static void lyric_end(void) {
 }
 
 static int lyric_expire(const void *info) {
-    (void)info;
     st.lyric_timer = 0;
     if (st.np_win) playing_timer_start(st.np_win);
     return 0;
@@ -2611,7 +2816,6 @@ static void np_cancel(void) {
 /* A single centre press, DOUBLE_CLICK_MS on, never while scrubbing: it replays the release to stock
  * on_wm_keyup_fun, which turns the screen off (it reads only the event's key). */
 static int np_single(const void *info) {
-    (void)info;
     static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
     st.np_press = 0;
     if (g_backlight_status) on_wm_keyup_fun((void *)0, (void *)release);
@@ -2661,7 +2865,6 @@ static int np_key(void *top, unsigned key) {
 }
 
 static int np_gone(void *win, void *event) {
-    (void)event;
     if (win == st.np_win) {
         st.np_win = (void *)0;
         st.np_hash = 0;
@@ -2721,7 +2924,6 @@ int ringnav_playing(void *win, void *ctx) {
 
 /* The song name and its shade fade out together, BC_STEPS steps BC_STEP_MS apart. */
 static int bc_fade(const void *info) {
-    (void)info;
     int n = ++st.bc_step;
     if (n == 1) st.bc_timer = timer_add(bc_fade, (void *)0, BC_STEP_MS); /* this one ends */
     for (int i = 0; i < 2; ++i)
@@ -2732,8 +2934,6 @@ static int bc_fade(const void *info) {
 }
 
 static int bc_gone(void *win, void *event) {
-    (void)win;
-    (void)event;
     stop_timer(&st.bc_timer);
     st.bc[0] = st.bc[1] = (void *)0;
     return 0;
@@ -2757,7 +2957,6 @@ int ringnav_bigcover(void *win, void *ctx) {
  * whole. Stock's own invalidation of the hidden slider does not reliably reach the screen, so the
  * bar would stop following the wheel after a tick or two. */
 static int vol_poll(const void *info) {
-    (void)info;
     void *top = window_manager_get_top_window(window_manager());
     void *vol = top && top == st.vol_dialog ? widget_lookup(top, "slider_vol", 1) : (void *)0;
     if (!vol) {
@@ -3107,7 +3306,7 @@ int ringnav_image_add(void *manager, const char *name, void *bitmap) {
                     }
                     if (sat > disc) sat = disc;
                     if (icon && !disc) continue; /* already grey: keep the disc/glyph contrast */
-                    int ink = (255 - (MINIMAL_CHEVRON & 255)) * sat / disc;
+                    int ink = disc ? (255 - (MINIMAL_CHEVRON & 255)) * sat / disc : 0;
                     p[o[0]] = p[o[1]] = p[o[2]] =
                         (unsigned char)(!icon    ? MINIMAL_CHEVRON & 255
                                         : square ? (MINIMAL_CHEVRON & 255) + ink
@@ -3203,10 +3402,9 @@ static void settings_layout(void *w) {
  * and the screen repaints; Home takes its new layout and Streaming label at once (never
  * recreated), and an open Now Playing its progress bar. */
 static int setting_click(void *ctx, void *event) {
-    (void)event;
     int i = (int)(long)ctx, *value = setting_values[i];
-    /* Rockbox, Favorites, Rated Albums, Artists, Albums */
-    static const int shortcut_next[] = { 3, 2, 0, 4, 1 };
+    /* Rockbox, Favorites, Shuffle, Rated Albums, Artists, Albums */
+    static const int shortcut_next[] = { 3, 2, 0, 5, 1, 4 };
     *value = i == 4 ? shortcut_next[shortcut()] : (*value + 1) % setting_counts[i];
     write_int_config(*value, "IPOD", setting_keys[i]);
     if (i == 2)
@@ -3288,8 +3486,8 @@ int ringnav_np_info(void *win) {
  * holding a 335x70 s_btn_listitem button with a 52px icon, a 24px label at x 72 and list_into); the
  * Theme, Accent, Home and Battery rows follow with the same widgets and styles, borrowing the
  * Display (Theme and Accent), cover mode and power manager icons, the value in the label and no
- * chevron, since they change in place. Wheel sensitivity ends the list in both builds and opens its
- * slider page (crossfade.c). */
+ * chevron, since they change in place. Hold Return (folder jump icon) and Wheel sensitivity end the
+ * list in both builds, the latter opening its slider page (crossfade.c). */
 int ringnav_display(void *win, void *ctx) {
     int result = stock_display_trampoline(win, ctx);
     /* Artist albums: Grid or Coverflow, a layout as Home's, so it sits after Home. */
@@ -3297,6 +3495,7 @@ int ringnav_display(void *win, void *ctx) {
     static const char *const cf_icon[] = { 0 };
 #else
     static const char *const cf_icon[] = { ICON_COVERMODE };
+    static const char *const hold_icon[] = { ICON_FOLDERJUMP };
 #endif
     void *view = win ? widget_lookup(win, VIEW_DISPLAY, 1) : (void *)0;
 #if IPOD
@@ -3320,7 +3519,8 @@ int ringnav_display(void *win, void *ctx) {
     pod_rows(win, VIEW_DISPLAY, POD_KNOB, 2, knob_icons);
 #endif
 #endif
-#if !M1PLUS /* the touch wheel's sensitivity */
+#if !M1PLUS /* Hold Return (M1 Plus has no Return key) and the touch wheel's sensitivity */
+    pod_rows(win, VIEW_DISPLAY, POD_HOLD_HOME, 1, hold_icon);
     if (view) wheel_row(list_row(view, ICON_DISPLAY, xfade_open, (void *)1));
 #else
     (void)view;
@@ -3335,7 +3535,6 @@ static void boot_text(void *label) {
     widget_set_text_utf8(label, boot_rockbox ? "Boot to: Rockbox" : "Boot to: Q2 Pod");
 }
 static int boot_click(void *label, void *event) {
-    (void)event;
     if (!rockbox_available()) {
         toast("Rockbox is not on the card");
         return 0;
@@ -3383,7 +3582,6 @@ int ringnav_systemset(void *win, void *ctx) {
 
 #if IPOD
 static int untouch(const void *info) {
-    (void)info;
     st.untouch_timer = 0;
     st.touch_mode = 0;
     void *top = window_manager_get_top_window(window_manager());
@@ -3629,7 +3827,11 @@ void ringnav_boot(const char *page, const int *ctx) {
 
 /* Called by stock long Return (both builds) and short Return on iPod Home, after their gates.
  * Elsewhere it opens Now Playing over the page, remembered as np_origin; on Now Playing it goes
- * back to that page while it lies right under it, else Home. */
+ * back to that page while it lies right under it, else Home. With Hold Return: Home it goes Home
+ * from any page but Home itself, where it still opens Now Playing.
+ * ponytail: going Home leaves the latch to the stock release filter, as stock's own Home call
+ * here did, relying on the hold's key-up reaching it once the windows close; clearing it would
+ * let that release act on Home. */
 int compact_now_playing(void) {
     pull_cancel();
     drop_input();
@@ -3637,7 +3839,12 @@ int compact_now_playing(void) {
     void *top = window_manager_get_top_window(wm);
     fx_cancel();
     if (usable() && top && !window_manager_is_animating(wm)) {
-        if (!tk_strcmp(widget_get_prop_str(top, "name", ""), "playing_page")) {
+        const char *name = widget_get_prop_str(top, "name", "");
+        pod_settings();
+        if (st.hold_home && tk_strcmp(name, "home_page")) {
+            st.np_origin = (void *)0;
+            navigator_back_to_home();
+        } else if (!tk_strcmp(name, "playing_page")) {
             /* ponytail: np_origin is only compared, never followed; a reused address goes Back
              * instead of Home */
             unsigned n = st.np_origin ? widget_count_children(wm) : 0;
@@ -3685,7 +3892,8 @@ enum {
     QA_PREV_GROUP,
     QA_RATE,
     QA_RESUME,
-    QA_QUEUE
+    QA_QUEUE,
+    QA_UP_NEXT
 };
 #define MCL(a) (*(volatile int *)(a))
 
@@ -3779,14 +3987,12 @@ static void qm_close(void) {
 
 /* Return and the title bar arrow dismiss without the stock sort-change flag. */
 static int qm_back(void *dialog, void *event) {
-    (void)dialog;
     if (I(event, EVENT_TYPE) == EVT_KEY_UP && I(event, EVENT_KEY) != KEY_RETURN) return 0;
     qm_close();
     return STOP;
 }
 
 static int qm_gone(void *dialog, void *event) {
-    (void)event;
     if (st.qm_dialog == dialog) st.qm_dialog = (void *)0;
     return 0;
 }
@@ -3955,7 +4161,6 @@ static int artist_album(void *all, void *r) {
 extern int coverflow_artist(void *albums);
 extern void coverflow_by_year(void *albums);
 static int artist_songs(void *unused) {
-    (void)unused;
     return (I(artist_type, 0) == 1 ? getMusicByAlbumArtist : getMusicBySonger)(
         g_local_classinfo_save[0xa] ? (const char *)0
                                     : (const char *)g_local_classinfo_save + 0x10d);
@@ -3997,7 +4202,6 @@ static void artist_order(void *list, void *mine) {
     deque_destroy(out);
 }
 static int artist_cf_gone(void *win, void *event) {
-    (void)event;
     if (win == st.art_cf_win) st.art_cf_win = (void *)0;
     if (win == st.art_cf_veil) st.art_cf_veil = (void *)0;
     return 0;
@@ -4015,7 +4219,6 @@ static void artist_cf_veil(void *win, int on) {
     widget_set_opacity(win, on ? 0 : 0xff);
 }
 static int artist_cf_open(const void *unused) {
-    (void)unused;
     void *top = window_manager_get_top_window(window_manager()), *all = st.art_cf_list,
          *veiled = st.art_cf_veil;
     st.art_cf_timer = 0;
@@ -4076,7 +4279,6 @@ int ringnav_artist_list(int tab) {
 int ringnav_artist_list(int tab) { return artist_tab(tab, stock_artist_trampoline(tab)); }
 #endif
 static const char *artist_key(char *buf, void *list, unsigned i) {
-    (void)buf;
     return st.art_keys && list == P(p_deque_showlist, 0) && st.art_n == deque_size(list) &&
                    i < st.art_n
                ? st.art_keys[i]
@@ -4103,7 +4305,6 @@ int ringnav_art_header(char *buf, unsigned size, const char *fmt, const char *al
 
 static int empty_toast(const void *unused) {
     static const char *const none[] = { "No albums", "No artists", "No composers", "No genres" };
-    (void)unused;
     toast(none[st.empty_kind]);
     return 0;
 }
@@ -4131,9 +4332,33 @@ int ringnav_class_icon(void *row, int i) {
 /* list_get_img_pic: a song row's format badge (img_flac, img_mp3, ...) by its extension. "null" is
  * stock's no badge, which hides it, as an iPod's rows carry none. */
 int ringnav_badge(const char *path, char *out, int size) {
-    (void)path;
     tk_snprintf(out, (unsigned)size, "null");
     return 0;
+}
+/* My Fav's rows are stock's copies of the songs as added, some with an empty title though the
+ * library has the tag: an empty one takes the library's, by path, so it reads as every other
+ * list's instead of falling back to its file name.
+ * ponytail: each untitled row scans the library, as rate_all does; a sorted index
+ * (ringnav_memory's) if that shows. */
+static int songs_unsorted(void *);
+static void fav_titles(void *list, int n) {
+    void *songs = 0;
+    for (int i = 0; i < n; ++i) {
+        void *r = deque_at(list, (unsigned)i);
+        char **title = (char **)((char *)r + REC_TITLE), *t;
+        if (I(r, REC_TYPE) != 8 || (*title && **title) || !P(r, REC_PATH)) continue;
+        int k;
+        if (!songs) songs = staged(songs_unsorted, 0, &k);
+        for (unsigned j = 0; j < deque_size(songs); ++j) {
+            void *s = deque_at(songs, j);
+            const char *lib = P(s, REC_TITLE), *path = P(s, REC_PATH);
+            if (!path || strcmp(path, P(r, REC_PATH)) || I(s, REC_CUE_START) != I(r, REC_CUE_START))
+                continue;
+            if (lib && *lib && (t = strdup(lib))) free(*title), *title = t;
+            break;
+        }
+    }
+    if (songs) deque_destroy(songs);
 }
 int ringnav_localclass(int cls) {
     I(g_artist_type, 0) = I(artist_type, 0) == 1;
@@ -4148,6 +4373,7 @@ int ringnav_localclass(int cls) {
     if (cls == CLASS_ARTIST_ALBUMS) artist_tab(1, n);
     if (cls == CLASS_ALBUMS) artist_keys_free();
 #endif
+    if (n > 0 && cls == 0xf00a) fav_titles(list, n);
     if (IPOD) /* an untagged song's row reads its file name without the extension (track_name) */
         for (int i = 0; i < n; ++i) {
             void *r = deque_at(list, (unsigned)i);
@@ -4256,46 +4482,45 @@ void toast(const char *text) {
         int kind, ms;
         char text[0x400];
     } info = { 1, 2000, { 0 } };
-    for (unsigned i = 0; text[i]; ++i) info.text[i] = text[i];
+    for (unsigned i = 0; text[i] && i < sizeof info.text - 1; ++i) info.text[i] = text[i];
     navigator_to_with_context("dialog/msginfo_dialog", &info);
 }
 
-static int all_songs(void *unused) {
-    (void)unused;
-    return getAllMusic(0);
+static int all_songs(void *unused) { return getAllMusic(0); }
+
+/* Shuffle does not need the expensive pinyin title sort; groups order their tracks themselves.
+ * Non-zero music leaves audiobooks out, as the Library's Artists and Albums (MUSIC_WHERE). */
+static int songs_unsorted(void *music) {
+    library_music = music != 0;
+    int n = getAllMusic(3);
+    library_music = 0;
+    return n;
 }
 
-/* Shuffle does not need the expensive pinyin title sort; groups order their tracks themselves. */
-static int songs_unsorted(void *unused) {
-    (void)unused;
-    return getAllMusic(3);
-}
-
-/* Collection Shuffle keeps stock shuffle-all behavior. */
+/* Collection Shuffle is Shuffle Songs over the collection. */
 static int shuffle_play(void *all) {
     int size = (int)deque_size(all);
     if (size) {
+        int mode = playback_unshuffle();
         playback_clear(); /* stock Shuffle keeps Shuffle Albums/Folders otherwise */
         config_playmode(2, 1);
         play_folder(all, (int)rand_below((unsigned)size), 0xf001);
+        playback_shuffle(mode); /* an order Up Next can list; stock's shuffle stays the fallback */
     }
     return size;
 }
 
 static int shuffle_songs(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     int n;
-    void *all = staged(songs_unsorted, 0, &n);
+    void *all = staged(songs_unsorted, (void *)1, &n);
     if (!shuffle_play(all)) toast("Update Local Music first");
     deque_destroy(all);
     return 0;
 }
 
 static int shuffle_groups(void *ctx, void *event) {
-    (void)event;
     int n;
-    void *all = staged(songs_unsorted, 0, &n);
+    void *all = staged(songs_unsorted, (void *)1, &n);
     if (!playback_groups(all, (int)(long)ctx))
         toast(deque_size(all) ? "Too many songs to shuffle" : "Update Local Music first");
     deque_destroy(all);
@@ -4304,7 +4529,6 @@ static int shuffle_groups(void *ctx, void *event) {
 
 /* Return and destroy for the payload's own pages, shared with Most Played. */
 static int page_keyup(void *ctx, void *event) {
-    (void)ctx;
     if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
     navigator_back();
     return STOP;
@@ -4312,8 +4536,6 @@ static int page_keyup(void *ctx, void *event) {
 
 static void ls_closed(void);
 static int page_closed(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     if (ctx == st.rt_page) {
         st.rt_page = 0;
         if (st.rt_list) deque_destroy(st.rt_list);
@@ -4331,6 +4553,8 @@ static int page_closed(void *ctx, void *event) {
 #if M1PLUS
     if (ctx == st.lib_page) st.lib_page = 0;
 #endif
+    if (ctx == st.un_page) st.un_page = 0;
+    if (ctx == st.sc_page) st.sc_page = 0;
     return 0;
 }
 
@@ -4338,7 +4562,6 @@ static int page_closed(void *ctx, void *event) {
  * leaves the page open, as Most Played's rows do. Album and folder shuffles queue and group the
  * whole library, hence the note. */
 static int sp_pick(void *ctx, void *event) {
-    (void)event;
     if ((long)ctx)
         shuffle_groups((void *)((long)ctx - 1), 0);
     else
@@ -4347,8 +4570,6 @@ static int sp_pick(void *ctx, void *event) {
 }
 
 static int shuffle_menu(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     if (st.sp_page || !(st.sp_page = page_open("shuffle_page", page_closed, page_keyup))) return 0;
     void *view = page_list(st.sp_page, st.sp_page, 0, "Shuffle", 3, 48);
     page_row_detail(view, 0, "Shuffle Songs", 0, sp_pick);
@@ -4375,7 +4596,8 @@ static int shuffle_menu(void *ctx, void *event) {
 static int spot_at(unsigned key) {
     if (!st.spots_read) {
         st.spots_read = 1;
-        BLOB_IO(RESUME_FILE, st.spots, 0);
+        if (!BLOB_IO(RESUME_FILE, st.spots, 0)) /* earlier releases kept 32 */
+            blob_io(RESUME_FILE, RESUME_FILE, st.spots, 32 * sizeof *st.spots, 0);
     }
     for (int i = 0; i < RESUME_SLOTS; i++)
         if (st.spots[i].key == key) return st.spots[i].sec;
@@ -4400,7 +4622,6 @@ static unsigned listen_key(void *r) {
 
 /* Most Played's row: the ranked list from that track, as a library (not folder) queue. */
 static int mp_play(void *ctx, void *event) {
-    (void)event;
     play_folder(st.mp_list, (int)(long)ctx, 0xf001);
     return 0;
 }
@@ -4452,8 +4673,6 @@ static int mp_find(unsigned key) {
  * ponytail: the first open after boot or a library change still reads every song, and a song first
  * counted from stock's folder browser shows without its artist until then (no library tags). */
 static int most_played(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     if (st.mp_page || !(st.mp_page = page_open("mostplayed_page", page_closed, page_keyup)))
         return 0;
     int n, idx[PLAYS_TOP];
@@ -4484,6 +4703,31 @@ static int most_played(void *ctx, void *event) {
     return 0;
 }
 
+/* Up Next: the tracks after the playing one in the order they play, which a shuffle's order differs
+ * from the queue's. A row plays its track as View Queue's does (player_start_queue), and the page
+ * closes, as its snapshot is then stale. ponytail: a snapshot taken on open, capped at
+ * UP_NEXT_ROWS; the page does not follow the playing track, and a queue replaced while it is open
+ * (a folder play's next folder) leaves its rows naming other tracks; keep the records to check. */
+static int un_play(void *ctx, void *event) {
+    void *q = P(mcl_pdeqplaylist, 0);
+    unsigned at = st.un_idx[(long)ctx];
+    if (q && at < deque_size(q)) player_start_queue((int)at);
+    navigator_back();
+    return 0;
+}
+static void up_next(void) {
+    if (st.un_page || !(st.un_page = page_open("upnext_page", page_closed, page_keyup))) return;
+    void *q = P(mcl_pdeqplaylist, 0);
+    unsigned *idx = st.un_idx, n = playback_upcoming(idx, UP_NEXT_ROWS);
+    void *view = page_list(st.un_page, st.un_page, 0, n ? "Up Next" : "Nothing Up Next", n, 64);
+    char name[512];
+    for (unsigned i = 0; i < n; i++) { /* the title over the artist, if tagged */
+        void *t = deque_at(q, idx[i]);
+        const char *artist = P(t, REC_ARTIST);
+        page_row_detail(view, i, track_name(name, sizeof name, t), artist ? artist : "", un_play);
+    }
+}
+
 /* Tidal Downloads (docs/internals.md#tidal-cache): Streaming's row lists tidal.c's complete
  * downloads, newest first, and plays them from the card as a folder queue, without Wi-Fi.
  * ponytail: newest download first, not last played; demo imports no utime to touch a replay. */
@@ -4496,13 +4740,11 @@ static int td_newer(const void *a, const void *b) {
     return (y > x) - (y < x);
 }
 static int td_play(void *ctx, void *event) {
-    (void)event;
     void *t = deque_at(st.td_list, (unsigned)(long)ctx);
     if (t && !access(P(t, REC_PATH), 0)) play_folder(st.td_list, (int)(long)ctx, 0xf001);
     return 0;
 }
 static int tidal_downloads(void *ctx, void *event) {
-    (void)ctx, (void)event;
     if (st.td_page || !(st.td_page = page_open("tidal_downloads", page_closed, page_keyup)))
         return 0;
     int n = 0;
@@ -4533,6 +4775,65 @@ static int tidal_downloads(void *ctx, void *event) {
         if (dot && dot != name) *dot = 0;
         page_row_detail(view, i, name, 0, td_play);
     }
+    return 0;
+}
+
+/* Streaming's Configuration (docs/internals.md#streaming-configuration): Tidal's and Spotify's
+ * cache caps, 512 MB to 8 GB, each kept in its folder's .cache-size as "<MB>M", librespot's
+ * --cache-size-limit form, which the card's Spotify launcher reads when it starts librespot. Files,
+ * not config.ini: tidal.c's trim reads Tidal's on its download thread, and blob_io renames it into
+ * place, so a half-written one is never read. And a row that stops every stream. */
+static const char *const sc_dirs[] = { TIDAL_DIR, SPOT_DIR };
+
+/* The choice i, the cap being 512 << i MB: 2 (2 GB) when the file is missing or holds another. */
+int stream_cache(int spotify) {
+    char path[48], s[12];
+    tk_snprintf(path, sizeof path, "%s/.cache-size", sc_dirs[spotify]);
+    state_read(path, s, sizeof s);
+    unsigned mb = (unsigned)atoi(s + 1);
+    for (int i = 0; i < 5; ++i)
+        if (mb == 512u << i) return i;
+    return 2;
+}
+
+static void sc_text(int i) {
+    static const char *const sizes[] = { "512 MB", "1 GB", "2 GB", "4 GB", "8 GB" };
+    char s[40];
+    tk_snprintf(s, sizeof s, "%s Cache: %s", i ? "Spotify" : "Tidal", sizes[stream_cache(i)]);
+    widget_set_text_utf8(widget_get_child(st.sc_row[i], 0), s);
+}
+
+/* A cache row steps to the next size and saves it: Tidal's applies at the next download's trim,
+ * Spotify's when librespot next starts. Stop Streaming Services ends librespot and its restart
+ * loop, a radio station and a stock stream (Tidal's) queue, so the keys and the output are local
+ * music's again; local music already stopped is left as it is. */
+static int sc_click(void *ctx, void *event) {
+    int i = (int)(long)ctx;
+    if (i == 2) {
+        unsigned type = (unsigned)MCL(MCL_TYPE);
+        spot_stop();
+        radio_stop();
+        if (type != 1 && (type & 0xf000) != 0xf000 && mclGetPlayStatus() != 1) player_stop();
+        toast("Streaming stopped");
+        return 0;
+    }
+    char path[48], tmp[52], s[8];
+    int n = tk_snprintf(s, sizeof s, "%uM", 512u << (stream_cache(i) + 1) % 5);
+    tk_snprintf(path, sizeof path, "%s/.cache-size", sc_dirs[i]);
+    tk_snprintf(tmp, sizeof tmp, "%s.tmp", path);
+    mkdir(sc_dirs[i], 0755);
+    if (!blob_io(path, tmp, s, (unsigned)n, 1)) toast("Could not save setting");
+    sc_text(i);
+    return 0;
+}
+
+static int stream_config(void *ctx, void *event) {
+    if (st.sc_page || !(st.sc_page = page_open("streamconf_page", page_closed, page_keyup)))
+        return 0;
+    void *view = page_list(st.sc_page, st.sc_page, 0, "Configuration", 3, 48);
+    for (int i = 0; i < 2; ++i)
+        st.sc_row[i] = page_row_detail(view, i, "", 0, sc_click), sc_text(i);
+    page_row_detail(view, 2, "Stop Streaming Services", 0, sc_click);
     return 0;
 }
 
@@ -4623,7 +4924,6 @@ static void rate_badge(void) {
 }
 
 static int rate_tick(const void *unused) {
-    (void)unused;
     if (g_backlight_status) rate_badge();
     return 8; /* RET_REPEAT */
 }
@@ -4631,7 +4931,6 @@ static int rate_tick(const void *unused) {
 static int rate_tap(void *ctx, void *event);
 /* The picker goes down with its page or panel (Coverflow's load destroys the page's children). */
 static int rate_panel_gone(void *win, void *event) {
-    (void)event;
     if (win == st.rate_on) st.rate_on = (void *)0;
     return 0;
 }
@@ -4675,7 +4974,9 @@ static void rate_close(int save) {
     void *win = st.rate_on;
     if (!win) return;
     st.rate_on = (void *)0;
-    widget_set_visible(rate_panel(win), 0, 0);
+    void *panel = rate_panel(win);
+    widget_set_visible(panel, 0, 0);
+    widget_set_sensitive(panel, 0); /* stock's hit test skips only the insensitive, hidden or not */
     int n = st.rate_pick;
     char hs[16], done[40];
     if (save && st.rate_album) { /* the menu's album, still on its page */
@@ -4703,7 +5004,6 @@ static void rate_close(int save) {
 }
 
 static int rate_tap(void *ctx, void *event) {
-    (void)event;
     st.rate_pick = (int)(long)ctx;
     rate_close(1);
     return STOP;
@@ -4718,7 +5018,9 @@ static int rate_show(void *win, int pick, unsigned album) {
     st.rate_pick = pick;
     st.rate_album = album;
     rate_paint();
-    widget_set_visible(rate_panel(win), 1, 0);
+    void *panel = rate_panel(win);
+    widget_set_visible(panel, 1, 0);
+    widget_set_sensitive(panel, 1);
     return 1;
 }
 /* Now Playing's, on the playing track's rating. */
@@ -4742,34 +5044,37 @@ static int rate_key(void *top, unsigned key) {
 }
 
 /* Holding the heart RATE_HOLD_MS opens the picker; a tap is stock's, a full heart then keeping
- * nothing here, so taking it away leaves the song unrated. */
+ * nothing here, so taking it away leaves the song unrated. The picker aborts the press, so the
+ * slide_view under the heart lets go of its grab and the picker takes the next touch. */
 static int rate_long(const void *unused) {
-    (void)unused;
     st.rate_hold = 0;
-    if (window_manager_get_pointer_pressed(window_manager())) st.rate_held = rate_open();
+    if (!window_manager_get_pointer_pressed(window_manager()) || !(st.rate_held = rate_open()))
+        return 0;
+    unsigned abort_event[12];
+    pointer_event_init(abort_event, EVT_POINTER_ABORT, st.rate_win, 0, 0);
+    widget_dispatch_event_to_target_recursive(st.rate_win, abort_event);
     return 0;
 }
 static int rate_down(void *ctx, void *event) {
-    (void)ctx, (void)event;
     st.rate_held = 0;
     rearm(&st.rate_hold, rate_long, RATE_HOLD_MS);
     return 0;
 }
+/* Returns 0 as stock's does: a STOP skips the slide_view's own release, and it keeps its grab. */
 static int rate_fav_click(void *ctx, void *event) {
     stop_timer(&st.rate_hold);
     if (st.rate_held || st.rate_on) {
         st.rate_held = 0;
-        return STOP;
+        return 0;
     }
     FAV_CLICK(ctx, event);
     void *r = rate_track();
     if (r) rate_keep(0, listen_key(r), 0);
     rate_badge();
-    return STOP;
+    return 0;
 }
 
 static int rate_gone(void *win, void *event) {
-    (void)event;
     if (win != st.rate_win) return 0;
     stop_timer(&st.rate_hold);
     stop_timer(&st.rate_tick);
@@ -4799,6 +5104,7 @@ static void rate_bind(void *win) {
     widget_on(fav, EVT_POINTER_DOWN, rate_down, (void *)0);
     st.rate_badge = label(P(fav, W_PARENT), I(fav, W_X) + I(fav, W_W) - 18, I(fav, W_Y) + 6, 16, 16,
                           STYLE_SCRLABEL_WHITE20C, 12, 0xffffffffu);
+    widget_set_sensitive(st.rate_badge, 0); /* the heart's corner stays the heart's */
     widget_on(win, EVT_DESTROY, rate_gone, win);
     st.rate_tick = timer_add(rate_tick, (void *)0, 500);
     rate_badge();
@@ -4806,12 +5112,10 @@ static void rate_bind(void *win) {
 
 /* The Library's Ratings row: its menu, then a page of one list's songs, as Most Played's. */
 static int fav_songs(void *unused) {
-    (void)unused;
     return getAllFav(); /* select * from myfav, stock's song rows */
 }
 
 static int rt_play(void *ctx, void *event) {
-    (void)event;
     play_folder(st.rt_list, (int)(long)ctx, 0xf001);
     return 0;
 }
@@ -4841,7 +5145,6 @@ static void rate_all(void *songs, unsigned char *h) {
 static const char *const rt_names[] = { "Top Rated", "Loved", "All Rated", "Disliked" };
 #define RT_ALBUMS 2 /* the Ratings menu's Albums row, after Loved */
 static int rated_open(void *ctx, void *event) {
-    (void)event;
     static const unsigned char lo[] = { 4, 5, 1, 1 }, hi[] = { 5, 5, 5, 1 };
     int k = (int)(long)ctx - ((int)(long)ctx > RT_ALBUMS), n;
     if (st.rt_page || !(st.rt_page = page_open("rated_page", page_closed, page_keyup))) return 0;
@@ -4880,15 +5183,12 @@ static int rated_open(void *ctx, void *event) {
 extern int coverflow_rated(int (*hearts)(void *));
 static int album_hearts(void *r) { return rate_kept(1, album_id(r)); }
 static int rated_albums(void *ctx, void *event) {
-    (void)ctx, (void)event;
     if (!coverflow_rated(album_hearts)) toast("No rated albums yet");
     return 0;
 }
 
 /* The songs' best first, then the albums, then the songs' lists to tidy. */
 static int ratings_menu(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     if (st.rt_menu || !(st.rt_menu = page_open("ratings_page", page_closed, page_keyup))) return 0;
     void *view = page_list(st.rt_menu, st.rt_menu, 0, "Ratings", 5, 48);
     for (int i = 0; i < 5; i++)
@@ -4964,7 +5264,6 @@ static int by_key(const void *a, const void *b) {
 
 /* AudioProperties::length(), as libtag_c's taglib_audioproperties_length calls it: vtable +0xc. */
 static void *ls_worker(void *unused) {
-    (void)unused;
     while (ls.done < ls.total && !ls.cancel) {
 #if M1PLUS
         void *f = taglib_file_open(ls.paths[ls.done], 1); /* read audio properties: the length */
@@ -5050,7 +5349,6 @@ static void ls_closed(void) {
 }
 
 static int ls_done(const void *unused) {
-    (void)unused;
     ls.timer = 0;
     ls_stop();
     if (st.rt_page && ls.songs) ls_show();
@@ -5058,13 +5356,11 @@ static int ls_done(const void *unused) {
 }
 
 static int ls_cancel(void *ctx, void *event) {
-    (void)ctx, (void)event;
     ls.cancel = 1; /* the poll shows what is known */
     return 0;
 }
 
 static int ls_poll(const void *unused) {
-    (void)unused;
     if (ls.done >= ls.total || ls.cancel) return ls_done(0);
     char t[64];
     tk_snprintf(t, sizeof t, "Measuring songs\xe2\x80\xa6 %d/%d", ls.done, ls.total);
@@ -5075,7 +5371,6 @@ static int ls_poll(const void *unused) {
 /* Long Songs' row: the files never probed are probed first, with their count and Cancel, which
  * keeps what is done; the page closing does the same. */
 static int long_songs(void *ctx, void *event) {
-    (void)ctx, (void)event;
     if (st.rt_page || !(st.rt_page = page_open("longsongs_page", page_closed, page_keyup)))
         return 0;
     int n;
@@ -5105,7 +5400,6 @@ static int long_songs(void *ctx, void *event) {
 
 /* Upload Scrobbles: the log goes up on scrobble.c's thread, and a timer reports how it went. */
 static int upload_wait(const void *unused) {
-    (void)unused;
     int sent = 0, done = scrobble_poll(&sent);
     if (!done) return 8; /* RET_REPEAT */
     char s[48];
@@ -5115,8 +5409,6 @@ static int upload_wait(const void *unused) {
 }
 
 static int upload_scrobbles(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     int started = get_wifisignal() > 0 ? scrobble_start() : -2;
     if (started > 0) timer_add(upload_wait, (void *)0, 500);
     toast(started > 0     ? "Uploading scrobbles"
@@ -5182,7 +5474,6 @@ static int media_find(int kind, char *path) {
 }
 
 static int media_click(void *ctx, void *event) {
-    (void)event;
     int kind = (int)(long)ctx;
     char root[sizeof st.media_root];
     if (kind >= PHOTOS) {
@@ -5200,17 +5491,24 @@ static int media_click(void *ctx, void *event) {
 
 /* folder_page_init lists the storage roots at g_folder_layer 1, a root's folders at 2 and deeper
  * folders at 3 on (folder_enter). A media root becomes a layer-3 folder, so stock's reload, title
- * (its name, folder_reinit_navbarname) and entering all treat it as one. */
+ * (its name, folder_reinit_navbarname) and entering all treat it as one. Each open starts a fresh
+ * visit (folder_reset_variable): folder_back pops the enter history kept for each layer and leaves
+ * an M3U before stepping up, and a visit left without Back (Home, playing) keeps both. */
 int ringnav_folder(void *win, void *ctx) {
     int result = stock_folder_trampoline(win, ctx), layer = 3;
+    char root[265];
+    const char *path = st.media_root;
     if (!st.media_open || !win) {
+        int card = win && !access("/tmp/mmc_add", 0);
         st.media_root[0] = 0;
         /* No drive and a card (stock's check_tfstatus): the card is the only root, so open it. */
-        if (win && !g_otg_status && !access("/tmp/mmc_add", 0))
-            memcpy(st.media_root, "/mnt/mmc", 9), layer = 2;
+        if (card && !g_otg_status) memcpy(st.media_root, "/mnt/mmc", 9), layer = 2;
+        /* Folder Root: an ordinary folder below the card, so Back walks up to it, then as above. */
+        if (card && root_dir(root)) path = root, layer = 3;
     }
-    if (st.media_root[0]) {
-        memcpy((char *)g_folder_path, st.media_root, sizeof st.media_root);
+    if (path[0]) {
+        folder_reset_variable();
+        memcpy((char *)g_folder_path, path, strlen(path) + 1);
         g_folder_layer = layer;
         folder_reload_data();
         folder_reinit_navbarname();
@@ -5317,16 +5615,14 @@ int ringnav_localmusic(void *win, void *ctx) {
  * AirPlay 1), whose switch is on System settings' Network service page; that page, one press away.
  * V2.1 keeps the switch there too (netservice_airplay). */
 static int airplay_open(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     navigator_to("systemset/netservice_page");
     return 0;
 }
 
 #if !M1PLUS /* V2.1 has no Streaming page: the rows are on the Q2 Pod page (library_open) */
 /* stream_page_init: stock's rows, then Spotify (spotify.c), which opens its Now Playing page,
- * Internet Radio (radio.c) and AirPlay. Their buttons have no name, so stock's row click never
- * sees them. */
+ * Tidal Downloads, Internet Radio (radio.c), AirPlay and Configuration. Their buttons have no
+ * name, so stock's row click never sees them. */
 int ringnav_stream(void *win, void *ctx) {
     int result = stock_stream_trampoline(win, ctx);
     void *view = win ? widget_lookup(win, "scroll_view_streamsset", 1) : (void *)0;
@@ -5335,6 +5631,7 @@ int ringnav_stream(void *win, void *ctx) {
         library_into(view, "list_tidal", tidal_downloads, 0, "Tidal Downloads");
         library_into(view, "stream_radio", radio_open, 0, "Internet Radio");
         library_into(view, "stream_airplay", airplay_open, 0, "AirPlay");
+        library_into(view, "stream_config", stream_config, 0, "Configuration");
     }
     return result;
 }
@@ -5386,8 +5683,6 @@ int ringnav_about(void *win, void *ctx) {
 /* Go to album/artist reuse g_local_classinfo_save, which the pages underneath reload from when
  * they come back, so it is put back as the page opened here closes. */
 static int qm_restore(void *page, void *event) {
-    (void)page;
-    (void)event;
     memcpy((void *)g_local_classinfo_save, st.qm_classinfo, sizeof st.qm_classinfo);
     return 0;
 }
@@ -5427,15 +5722,13 @@ static void qm_select(void) {
 static int qm_playlist_pick(void *ctx, void *event) {
     if (!qm_record()) {
         toast("Queue unchanged");
-        return STOP;
+        return 0; /* a STOP would leave the list's scroll_view holding its grab */
     }
     qm_select();
     return PLAYLIST_PICK(ctx, event);
 }
 
 static int qm_playlist_gone(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     st.qm_playlist = 0;
     return 0;
 }
@@ -5466,7 +5759,6 @@ int ringnav_playlist(void *win) {
 static int qm_open(const void *unused);
 
 static int qm_run(const void *unused) {
-    (void)unused;
     st.qm_timer = 0;
     if (!st.qm_dialog) return 0;
     qm_close();
@@ -5478,6 +5770,8 @@ static int qm_run(const void *unused) {
         st.qm_choice = 0;
     } else if (r && a == QA_QUEUE) {
         navigator_to("playerqueue_page");
+    } else if (r && a == QA_UP_NEXT) {
+        up_next();
     } else if (r && (a == QA_NEXT_GROUP || a == QA_PREV_GROUP)) {
         if (!playback_group_skip(a == QA_NEXT_GROUP)) toast("No other group");
     } else if (aid && a == QA_RATE) {
@@ -5541,7 +5835,6 @@ static int qm_run(const void *unused) {
 
 /* Touch and centre both arrive as the row's click; the first one wins. */
 static int qm_pick(void *action, void *event) {
-    (void)event;
     if (st.qm_dialog && !st.qm_timer) {
         st.qm_action = (int)(long)action;
         st.qm_timer = timer_add(qm_run, (void *)0, 0);
@@ -5558,7 +5851,6 @@ static int qm_pick(void *action, void *event) {
  * its own 50 px rows. */
 #define QM_ROW SORTSELECT_ROW
 static int qm_open(const void *unused) {
-    (void)unused;
     st.qm_timer = 0;
     void *wm = window_manager(), *page = window_manager_get_top_window(wm);
     void *r = usable() && !window_manager_is_animating(wm) ? qm_record() : (void *)0;
@@ -5651,7 +5943,7 @@ static int qm_open(const void *unused) {
     /* Songs favourite, as stock's heart, and go to their album and artist; collections shuffle.
      * Go to is left out where its single-instance page is already open, or the album is the page.
      */
-    unsigned char acts[13], n = 0;
+    unsigned char acts[14], n = 0;
     /* Shuffle Albums/Folders only: skipping the group comes first */
     int group_first = st.qm_kind == QM_PLAYING && playback_option(0) >= 3;
     /* Rate (the heart's hold) follows Next/Previous album */
@@ -5661,7 +5953,10 @@ static int qm_open(const void *unused) {
     if (st.qm_kind == QM_SONG && book_place(qm_list(), r, &at, &off)) acts[n++] = QA_RESUME;
     acts[n++] = QA_NEXT;
     acts[n++] = QA_ADD;
-    if (st.qm_kind == QM_PLAYING) acts[n++] = QA_QUEUE;
+    if (st.qm_kind == QM_PLAYING) {
+        acts[n++] = QA_QUEUE;
+        if (playback_option(0)) acts[n++] = QA_UP_NEXT; /* a shuffle's order is not the list's */
+    }
     if (!song) acts[n++] = QA_SHUFFLE;
     if (song) acts[n++] = checkFavExist(r) ? QA_UNFAV : QA_FAV;
     /* an album's own hearts, 5 its favourite */
@@ -5696,7 +5991,8 @@ static int qm_open(const void *unused) {
                                         "Previous Album",
                                         "Rate",
                                         "Resume",
-                                        "View Queue" };
+                                        "View Queue",
+                                        "Up Next" };
     char rated[32];
     /* stock sortselect row styles */
     for (int i = 0; i < n; ++i) {
@@ -5863,7 +6159,12 @@ void ringnav_sort_key(char *s) {
 
 /* Replaces toolsLoadAllFile's 20,000-song check (SCAN_LIMIT): the scan goes on while it holds.
  * A leaf: the scanner reuses its gp after the call without reloading it. */
-int ringnav_scan_room(int songs) { return songs < 65000; }
+int ringnav_scan_room(int songs) {
+    int folder;
+    /* This fixed call site keeps toolsLoadAllFile's third argument (folder scan) in $s5. */
+    __asm__("move %0,$21" : "=r"(folder));
+    return songs < 65000 || folder; /* at capacity, scan_refresh skips new rows but refreshes old */
+}
 
 /* Moves key's place to the front of the ring at sec, or forgets it near either end. */
 static void spot_keep(unsigned key, int sec, int total) {
@@ -5911,8 +6212,8 @@ static void play_count(void *r, unsigned key) {
 /* Scrobbling (docs/internals.md#scrobbling): a Rockbox-style AudioScrobbler 1.1 log at the card's
  * root, for any .scrobbler.log uploader or Upload Scrobbles (scrobble.c). Artist and album are the
  * player's parsed tags when it has parsed this track (now_tag), or with .scrobble.ini's
- * ALBUM_ARTIST the library's album artist when the song has one; untagged (artist-less) tracks are
- * skipped, as scrobblers reject them. */
+ * ALBUM_ARTIST the song's album artist when it has one (parsed too: folder queues' records have
+ * none); untagged (artist-less) tracks are skipped, as scrobblers reject them. */
 static char *scrobble_tag(char *o, char *end, const char *s) {
     for (; s && *s && o < end - 1; s++) *o++ = *s == '\t' || *s == '\n' || *s == '\r' ? ' ' : *s;
     *o++ = '\t';
@@ -5920,7 +6221,9 @@ static char *scrobble_tag(char *o, char *end, const char *s) {
 }
 
 static void scrobble(void *r, int total, int heard) {
-    const char *artist = now_tag(r, REC_ARTIST), *album_artist = P(r, REC_ALBUM_ARTIST);
+    const char *artist = now_tag(r, REC_ARTIST), *album_artist = now_tag(r, REC_ALBUM_ARTIST);
+    if (!album_artist || !*album_artist)
+        album_artist = P(r, REC_ALBUM_ARTIST); /* CUE: none parsed */
     if (album_artist && *album_artist && scrobble_album_artist()) artist = album_artist;
     if (!artist || !*artist) return;
     long now = time((void *)0);
@@ -6152,7 +6455,6 @@ static void *logo_sync(void *unused) {
 #include "m1plus_nav_logo.inc"
 #if !M1PLUS
     const char *err = "Boot logo must be a 320x375 JPEG";
-    (void)unused;
     if (access(LOGO_SRC, 0))
         unlink(LOGO_DST), err = 0;
     else if ((b = logo_read(LOGO_SRC, &n)) && jpeg_size(b, n) == (375u << 16 | 320)) {
@@ -6163,7 +6465,7 @@ static void *logo_sync(void *unused) {
             execl("/usr/bin/ffmpeg", "/usr/bin/ffmpeg", "-nostdin", "-v", "quiet", "-i", LOGO_SRC,
                   "-vf", "transpose=1", "-pix_fmt", "yuvj444p", "-q:v", "2", "-f", "mjpeg", "-y",
                   LOGO_ROT, (char *)0);
-            exit(127);
+            child_exit(127);
         }
         if (pid > 0 && waitpid(pid, &status, 0) == pid && !status) b = logo_read(LOGO_ROT, &n);
         unlink(LOGO_ROT);
@@ -6224,8 +6526,6 @@ static void power_poll(void) {
  * watchdog (checkappprocess.sh, which reboots once demo is gone) and hciplayer (which holds the
  * DAC's PCM) are stopped, and demo is killed outright, so no exit handler can hang it. */
 int rockbox_open(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     void *flag = !rockbox_available() ? (void *)0 : fopen(ROCKBOX_FLAG, "w");
     if (!flag) {
         toast("Rockbox is not on the card");
@@ -6366,9 +6666,10 @@ static void bt_volume_poll(void) {
  * off it first idles SCREEN_OFF_SLEEP_MS (DARK_IDLE_SLEEP_MS once nothing plays and the DAC is
  * off, unless Wake's second press may be coming); stock then finds its 8 ms gone, sleeps 0 and
  * keeps its own bookkeeping. The first pass with it back on repaints every window once, so nothing
- * drawn while dark, or only partly, stays on screen until the next input. With the screen on, a
- * pass idles IDLE_SLEEP_MS once input and window animations have been still for IDLE_MS, except
- * while Now Playing animates. */
+ * drawn while dark, or only partly, stays on screen until the next input; after a centre press woke
+ * it, it also restarts Wake's window for a dropped press (woke_at). With the screen on, a pass
+ * idles IDLE_SLEEP_MS once input and window animations have been still for IDLE_MS, except while
+ * Now Playing animates. */
 int ringnav_sleep(void *loop) {
     headset_poll();
     bt_volume_poll();
@@ -6379,12 +6680,14 @@ int ringnav_sleep(void *loop) {
     resume_poll();
     power_poll();
     if (!g_backlight_status) {
-        st.dark = 1;
+        st.dark |= 1;
         int quiet = I(g_dacoff_time, 0) < 0 && !media_playing() && !video_on() &&
                     airplayGetFlag() != 2 && (signed char)bt__recv_pageflag != 2 &&
                     time_now_ms() - st.wake_at >= WAKE_MS;
         sleep_ms(quiet ? DARK_IDLE_SLEEP_MS : SCREEN_OFF_SLEEP_MS);
     } else if (st.dark) {
+        wheel_guard_reset();
+        if (st.dark & 2) st.woke_at = (unsigned)time_now_ms();
         st.dark = 0;
         widget_invalidate_force(window_manager(), (void *)0);
     } else if (time_now_ms() - st.last_input >= IDLE_MS &&
@@ -6397,17 +6700,48 @@ int ringnav_sleep(void *loop) {
  * Wake: Double press. With the screen off, a lone centre press (the power key, which wakes it)
  * never reaches the UI, so a pocket bump stays dark; one within WAKE_MS after it passes, press and
  * release, so holding that second press still powers off. With Single press it passes at once.
- * Either way a passing press clears Standby's resume guard, so its release is not dropped. Other
- * keys pass: the wheel's volume and the media buttons work dark. Returns 1 to drop the event. */
+ * Either way a passing press clears Standby's resume guard, so its release is not dropped, and
+ * another centre press within WAKE_MS of it, or of the first UI loop pass with the screen lit, is
+ * dropped with its release (wake_eat): turning the screen on (on_wm_keyup_fun) and that pass's
+ * paint stall the loop about that long, so a blind second press is dispatched only after. A blind
+ * double press only wakes, without clicking the selected row or turning the screen off again.
+ * Repeated downs share their press's fate, including a dropped press's release. A passing hold
+ * keeps stock's downstream long-press power-off. Other keys pass: the wheel and media work
+ * dark. Returns 1 to drop the event. */
+static void woke(unsigned now) { /* a passing dark press: not Standby's resume key */
+    *(volatile unsigned char *)BOOT_KEY_GUARD = 0;
+    st.woke_at = now;
+    st.dark |= 2; /* ringnav_sleep restarts woke_at once the screen is lit */
+}
 static int wake_gate(void *e) {
     unsigned type = (unsigned)I(e, EVENT_TYPE), now = (unsigned)time_now_ms();
     if (type != EVT_KEY_DOWN && type != EVT_KEY_LONG && type != EVT_KEY_UP) return 0;
     unsigned key = (unsigned)I(e, EVENT_KEY);
     if (!g_backlight_status && key == KEY_RETURN) return 1;
-    if (type == EVT_KEY_LONG || key != KEY_CENTER) return 0;
+    if (type == EVT_KEY_LONG) return 0; /* stock generates this downstream of the input hook */
+    if (key != KEY_CENTER) return 0;
+    /* Consume Standby's release guard once; our dropped press already drops its release. */
+    if (type == EVT_KEY_DOWN && !g_backlight_status && *(volatile unsigned char *)BOOT_KEY_GUARD) {
+        st.wake_down = 0;
+        *(volatile unsigned char *)BOOT_KEY_GUARD = 0;
+    }
+    if (type == EVT_KEY_UP)
+        st.wake_down = 0;
+    else {
+        if (st.wake_down) return st.wake_down == 2;
+        st.wake_down = 1;
+    }
+    if (type == EVT_KEY_UP && st.wake_eat) {
+        st.wake_eat = 0;
+        return 1;
+    }
+    /* every press sets it, so one whose release never came (Standby while held) leaves none */
+    if (type == EVT_KEY_DOWN && (st.wake_eat = now - st.woke_at < WAKE_MS)) {
+        st.wake_down = 2;
+        return 1;
+    }
     if (!st.wake_double || g_backlight_status) { /* wake_pass is read by power_poll */
-        if (!g_backlight_status && type == EVT_KEY_DOWN)
-            *(volatile unsigned char *)BOOT_KEY_GUARD = 0;
+        if (!g_backlight_status && type == EVT_KEY_DOWN) woke(now);
         return st.wake_pass = 0;
     }
     if (type == EVT_KEY_UP) {
@@ -6417,7 +6751,10 @@ static int wake_gate(void *e) {
     }
     st.wake_pass = now - st.wake_at < WAKE_MS;
     st.wake_at = st.wake_pass ? 0 : now;
-    if (st.wake_pass) *(volatile unsigned char *)BOOT_KEY_GUARD = 0; /* not Standby's resume key */
+    if (st.wake_pass)
+        woke(now);
+    else
+        st.wake_down = 2;
     return !st.wake_pass;
 }
 
@@ -6437,8 +6774,11 @@ int ringnav_input(void *wm, void *e) {
 }
 
 /* window_manager_paint, a leaf (tools/build.py WM_PAINT_LEAF): the window manager's own paint
- * (vtable +0xc), except while q2video has the framebuffer; video_poll repaints after. */
+ * (vtable +0xc), except while q2video has the framebuffer (video_poll repaints after) and while the
+ * screen is off, unless a window animates (AWTK steps it from the paint); the first lit pass
+ * repaints the whole screen (ringnav_sleep; docs/internals.md Battery). */
 int ringnav_wm_paint(void *wm) {
+    if (wm && !g_backlight_status && !window_manager_is_animating(wm)) return 0; /* RET_OK */
     void *vt = wm && !video_on() ? P(wm, M1PLUS ? 0x88 : 0x94) : (void *)0;
     int (*paint)(void *) = vt ? (int (*)(void *))P(vt, 0xc) : (int (*)(void *))0;
     return paint ? paint(wm) : video_on() ? 0 : 0x10; /* RET_BAD_PARAMS, as stock */
@@ -6531,7 +6871,6 @@ static void field_set(void *top, int f) {
 }
 
 static int edit_single(const void *info) {
-    (void)info;
     st.edit_press = 0;
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
     if (!usable() || window_manager_is_animating(wm) || window_manager_get_pointer_pressed(wm))
@@ -6617,9 +6956,8 @@ static void edit_paint(void *w, void *canvas) {
         return;
     }
     unsigned old = (unsigned)I(P(canvas, CANVAS_LCD), LCD_STROKE_COLOR);
-    canvas_set_stroke_color(canvas, 0xffffffff);
-    canvas_stroke_rect(canvas, 0, 0, ww, wh);
-    canvas_stroke_rect(canvas, 1, 1, ww - 2, wh - 2);
+    rect_t r = { 0, 0, ww, wh };
+    frame_box(canvas, &r, 0xffffffff, SEL_RADIUS);
     canvas_set_stroke_color(canvas, old);
 }
 
@@ -6638,7 +6976,6 @@ static int hold_wheel(void *ctx, void *event, int dir) {
 }
 
 static int replay_wheel(const void *info) {
-    (void)info;
     void *wm = window_manager();
     if (!st.held || (unsigned)time_now_ms() - st.held_at > HOLD_MS || !usable()) {
         st.held = 0;
@@ -6683,8 +7020,11 @@ int ringnav(void *ctx, void *event) {
     if (usable() && rate_key(window_manager_get_top_window(window_manager()), key)) return STOP;
 #if IPOD
     /* Return or Centre closes quick settings, as its swipe up does (dialog_quit); stock leaves
-     * Return to its Home button and Centre to turning the screen off. */
-    if ((key == KEY_RETURN || key == KEY_CENTER) && usable()) {
+     * Return to its Home button and Centre to turning the screen off. A held Return's release
+     * goes to the stock filter, which consumes its latch (a hold may go Home from here). */
+    if ((key == KEY_CENTER ||
+         (key == KEY_RETURN && !*(volatile unsigned char *)RETURN_RELEASE_LATCH)) &&
+        usable()) {
         void *top = window_manager_get_top_window(window_manager());
         if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "statusbar_dialog")) {
             dialog_quit(top, 0);
@@ -6718,7 +7058,8 @@ int ringnav(void *ctx, void *event) {
     /* Home's Settings list goes back to Home's list (coverflow_home_back). */
     if (key == KEY_RETURN && coverflow_home_back(window_manager_get_top_window(window_manager())))
         return STOP;
-    /* Return on Home's main list opens Now Playing with the current queue untouched. */
+    /* Return on Home's main list selects Now Playing (its first row); on that row it opens Now
+     * Playing with the current queue untouched. */
     if (key == KEY_RETURN && usable()) {
         void *wm = window_manager(), *top = window_manager_get_top_window(wm);
         void *w = home_menu(top) && !window_manager_is_animating(wm)
@@ -6726,7 +7067,12 @@ int ringnav(void *ctx, void *event) {
                       : (void *)0;
         if (w && load(&g_menu, w, 1) && g_menu.n) {
             st.touch_mode = 0;
-            compact_now_playing();
+            if (widget_get_prop_int(w, SEL, -1) != 0) {
+                select(&g_menu, 0);
+                reveal(&g_menu, 0, 1);
+                widget_invalidate_force(w, (void *)0);
+            } else
+                compact_now_playing();
             return STOP;
         }
     }

@@ -148,7 +148,6 @@ static int next_job(void) {
 }
 
 static void *worker(void *unused) {
-    (void)unused;
     for (int i; !ph.cancel && (i = next_job()) >= 0; ++ph.done)
         ph.state[i] = (unsigned char)build(i);
     ph.finished = 1;
@@ -159,7 +158,6 @@ static void info(void);
 
 /* While the worker runs: repaint as photos become ready. */
 static int poll(const void *unused) {
-    (void)unused;
     ph.poll = 0;
     if (ph.done != ph.seen) {
         ph.seen = ph.done;
@@ -226,7 +224,6 @@ static int toggle_info(void *ctx, void *event);
 /* The grid of album target - 1, or with -1 All Photos: the folder's own photos, then every
  * album's. The worker then makes whatever is not cached yet. */
 static int to_grid(const void *unused) {
-    (void)unused;
     ph.timer = 0;
     drop_photos();
     int a = ph.target - 1, n = 0;
@@ -292,15 +289,16 @@ static void info(void) {
                     s ? "Can't open this photo" : "Loading\xe2\x80\xa6");
     else
         tk_snprintf(caption, sizeof caption, "%d of %d  %s", ph.current + 1, ph.n, name);
-    widget_set_text_utf8(ph.info, caption);
+    if (tk_strcmp(widget_get_prop_str(ph.info, "text", ""), caption)) { /* a decode redraws the same */
+        widget_set_text_utf8(ph.info, caption);
+        widget_set_prop_int(ph.info, "xoffset", 0); /* a long caption's scroll would shift this one left */
+    }
     widget_set_visible(ph.info, ph.info_on || !s || s == PH_BAD, 0);
 }
 
 #include "m1plus_photos_touch.c"
 
 static int moved(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     ph.current = I(ph.slide, SLIDE_INDEX);
     info();
     return 0;
@@ -311,7 +309,6 @@ static int moved(void *ctx, void *event) {
  * Coverflow's covers (ringnav's carousel), and the paint hook draws the photos at its live
  * offset, so they slide. */
 static int to_viewer(const void *unused) {
-    (void)unused;
     ph.timer = 0;
     int h = widget_get_prop_int(ph.page, "h", PH_SHOT_H);
     if (!ph.slide) {
@@ -360,29 +357,24 @@ static void to_tiles(void) {
 
 /* Clicks only schedule: a screen change never destroys the widget whose click is running. */
 static int open_album(void *ctx, void *event) {
-    (void)event;
     ph.target = (int)(long)ctx;
     rearm(&ph.timer, to_grid, 0);
     return 0;
 }
 
 static int open_tile(void *ctx, void *event) {
-    (void)event;
     ph.target = (int)(long)ctx;
     rearm(&ph.timer, to_viewer, 0);
     return 0;
 }
 
 static int toggle_info(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     ph.info_on = !ph.info_on;
     info();
     return 0;
 }
 
 static int leave(const void *unused) {
-    (void)unused;
     ph.timer = 0;
     if (ph.screen == VIEWER)
         to_tiles();
@@ -401,12 +393,10 @@ static int leave(const void *unused) {
 
 /* Return: viewer -> grid -> albums -> Local Music. */
 static int keyup(void *ctx, void *event) {
-    (void)ctx;
     return return_key(event, &ph.timer, leave);
 }
 
 static int closed(void *ctx, void *event) {
-    (void)ctx; (void)event;
     ph.viewer = 0; /* going with the page */
     drop_photos();
     stop_timer(&ph.timer);

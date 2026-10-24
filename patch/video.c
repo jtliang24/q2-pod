@@ -175,7 +175,7 @@ void _exit(int) __attribute__((noreturn));
 int pthread_create(unsigned long *, const void *, void *(*)(void *), void *), pthread_join(unsigned long, void **);
 int snd_pcm_open(void **, const char *, int, int), snd_pcm_close(void *), snd_pcm_drop(void *);
 int snd_pcm_set_params(void *, int, int, unsigned, unsigned, int, unsigned), snd_pcm_prepare(void *);
-int snd_pcm_recover(void *, int, int), snd_pcm_delay(void *, long *);
+int snd_pcm_recover(void *, int, int), snd_pcm_delay(void *, long *), snd_pcm_drain(void *);
 const char *snd_strerror(int);
 long snd_pcm_writei(void *, const void *, unsigned long);
 
@@ -206,20 +206,22 @@ static struct {
 } au;
 
 static void *writer(void *unused) {
-    (void)unused;
     short buf[2 * CHUNK];
     long written = 0, delay;
-    for (;;) {
-        for (unsigned got = 0; got < sizeof buf;) {
+    for (int end = 0; !end;) {
+        unsigned got = 0;
+        while (got < sizeof buf) {
             int r = read(au.fd, (char *)buf + got, sizeof buf - got);
-            if (r <= 0) return au.played = written, au.done = 1, (void *)0;
+            if (r <= 0) { end = 1; break; } /* the short last block still plays */
             got += (unsigned)r;
         }
+        unsigned frames = got / 4;
+        if (!frames) break;
         while (au.paused) usleep(20000);
-        if (au.gain < 65536) scale(buf, 2 * CHUNK, au.gain);
+        if (au.gain < 65536) scale(buf, 2 * frames, au.gain);
         int recovered = 0;
-        for (unsigned sent = 0; sent < CHUNK;) {
-            long r = snd_pcm_writei(au.pcm, buf + 2 * sent, CHUNK - sent);
+        for (unsigned sent = 0; sent < frames;) {
+            long r = snd_pcm_writei(au.pcm, buf + 2 * sent, frames - sent);
             if (r < 0) {
                 int err = recovered ? (int)r : snd_pcm_recover(au.pcm, (int)r, 1);
                 if (!err) { recovered = 1; continue; }
@@ -236,6 +238,7 @@ static void *writer(void *unused) {
         au.played = !snd_pcm_delay(au.pcm, &delay) && delay > 0 && delay < written ? written - delay
                                                                                  : written;
     }
+    return au.done = 1, (void *)0; /* played stays behind the buffer, as the picture's clock wants */
 }
 
 /* fd onto at for ffmpeg: dup2 of an fd onto itself keeps O_CLOEXEC, so exec would close it (demo
@@ -417,6 +420,9 @@ static int sink(char **argv) {
             struct pollfd p = { sock, 1, 0 };
             if (poll(&p, 1, 500) > 0) radio_key(sock, soft, &quit);
         }
+    /* an end, not a quit or a lost device: the buffer's last 200 ms still play (never paused in
+     * ALSA, so the drain ends) */
+    if (au.done && !quit && !au.error[0]) snd_pcm_drain(au.pcm);
     unlink(SINK_SOCK);
     return !au.pcm;
 }
@@ -489,14 +495,15 @@ int main(int argc, char **argv) {
         }
         close(vp[1]);
         unsigned long thread = 0;
+        au.paused = held; /* before the writer starts, so a paused seek plays nothing */
         if (audio) {
             close(ap[1]);
             au.fd = ap[0];
             au.played = au.done = 0, au.video = 1;
-            if (pthread_create(&thread, 0, writer, 0)) thread = 0;
+            if (pthread_create(&thread, 0, writer, 0)) /* no reader: ffmpeg's sound write fails and it ends */
+                thread = 0, close(ap[0]), ap[0] = -1;
         }
-        int n = 0, seek = 0, ended = pid < 0, paced = audio;
-        au.paused = held;
+        int n = 0, seek = 0, ended = pid < 0, paced = audio && thread;
         unsigned have = 0, size = row * H;
         long long wall = 0, last = now_ms(), seek_at = 0;
         while (!ended && !quit) {
@@ -566,6 +573,7 @@ int main(int argc, char **argv) {
         au.paused = 0;             /* so the writer reads to the end and stops */
         if (thread) pthread_join(thread, 0);
         close(vp[0]);
+        if (thread && !quit && !seek && !held) snd_pcm_drain(au.pcm); /* an end: the buffer plays out */
         if (audio) close(ap[0]), snd_pcm_drop(au.pcm), snd_pcm_prepare(au.pcm);
         place = quit ? resume_at(at + seek + n / FPS, len) : 0; /* a pending seek too */
         if (seek) {

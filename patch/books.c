@@ -355,6 +355,17 @@ int book_convert(const char *src, const char *out, volatile int *cancel) {
             continue;      /* not in the manifest, or a picture (a cover) */
         unsigned at = dir; /* the OPF's folder, then the href, %XX decoded, up to any #fragment */
         for (const char *h = q, *end = q + len; h < end && *h != '#' && at < sizeof path - 1; ++h) {
+            int seg = !at || path[at - 1] == '/'; /* at a segment's start */
+            if (seg && end - h >= 2 && !memcmp(h, "./", 2)) {
+                ++h; /* a ./ segment */
+                continue;
+            }
+            if (seg && end - h >= 3 && !memcmp(h, "../", 3)) {
+                if (at) --at; /* a ../ segment drops the folder before it */
+                while (at && path[at - 1] != '/') --at;
+                h += 2;
+                continue;
+            }
             unsigned hi = h + 2 < end ? digit(h[1]) : 16, lo = hi < 16 ? digit(h[2]) : 16;
             unsigned x = lo < 16 ? hi * 16 + lo : 256;
             path[at++] = *h == '%' && x < 256 ? (h += 2, (char)x) : *h;
@@ -542,7 +553,10 @@ static void info(void) {
                     bk.state == BAD ? "Can't open this book" : "Preparing\xe2\x80\xa6");
     else
         tk_snprintf(caption, sizeof caption, "%u%%  %s", pct, title(bk.path[bk.current], name));
-    widget_set_text_utf8(bk.info, caption);
+    if (tk_strcmp(widget_get_prop_str(bk.info, "text", ""), caption)) {
+        widget_set_text_utf8(bk.info, caption);
+        widget_set_prop_int(bk.info, "xoffset", 0); /* a long caption's scroll would shift this one left */
+    }
     widget_set_visible(bk.info, bk.info_on || bk.state, 0);
 }
 
@@ -573,7 +587,6 @@ static void load(void) {
 }
 
 static void *worker(void *unused) {
-    (void)unused;
     bk.result = book_convert(bk.path[bk.current], bk.tmp, &bk.cancel);
     bk.finished = 1;
     return 0;
@@ -584,7 +597,6 @@ static void stop_worker(void) {
 }
 
 static int poll(const void *unused) {
-    (void)unused;
     if (!bk.finished) return 8; /* RET_REPEAT */
     bk.poll = 0;
     pthread_join(bk.thread, 0);
@@ -600,7 +612,6 @@ static int poll(const void *unused) {
 
 /* Book target: its text, or an EPUB's made first on the worker. */
 static int to_reader(const void *unused) {
-    (void)unused;
     bk.timer = 0;
     const char *path = bk.path[bk.current = bk.target];
     bk.key = fnv(FNV_SEED, (const unsigned char *)path);
@@ -630,14 +641,12 @@ static int to_reader(const void *unused) {
 }
 
 static int open_book(void *ctx, void *event) {
-    (void)event;
     bk.target = (int)(long)ctx;
     rearm(&bk.timer, to_reader, 0);
     return 0;
 }
 
 static int leave(const void *unused) {
-    (void)unused;
     bk.timer = 0;
     if (bk.screen != READER) {
         navigator_back();
@@ -656,7 +665,6 @@ static int leave(const void *unused) {
 
 /* Return: reader -> books -> Local Music. */
 static int keyup(void *ctx, void *event) {
-    (void)ctx;
     return return_key(event, &bk.timer, leave);
 }
 
@@ -678,7 +686,6 @@ int books_key(void *top, unsigned key) {
 }
 
 static int closed(void *ctx, void *event) {
-    (void)ctx; (void)event;
     marks_save();
     stop_worker();
     stop_timer(&bk.timer);
@@ -793,13 +800,12 @@ int video_start(const char *file, int radio) {
             execl(VIDEO_BIN, VIDEO_BIN, "-r", dev, file, v, (char *)0);
         else
             execl(VIDEO_BIN, VIDEO_BIN, dev, file, v, (char *)0);
-        exit(127);
+        child_exit(127);
     }
     return pid > 0 ? pid : 0;
 }
 
 static int play_video(void *ctx, void *event) {
-    (void)event;
     if (vid.pid) return 0;
     headset_manual();
     radio_stop(); /* it holds the PCM too */
@@ -818,7 +824,7 @@ static int play_video(void *ctx, void *event) {
     vid.volume = g_volume; /* the helper starts at output_device's level: nothing to send, no bar */
     vid.gain = headset_gain();
     unlink("/tmp/q2video.state");
-    vid.sock = socket(1, 1, 0); /* AF_UNIX, SOCK_DGRAM (MIPS numbering) */
+    if (vid.pid) vid.sock = socket(1, 1, 0); /* AF_UNIX, SOCK_DGRAM (MIPS numbering) */
     return 0;
 }
 
@@ -891,11 +897,7 @@ void video_key(unsigned key) {
                   : wheel || key == KEY_CENTER                           ? 'v'
                                                                          : 0,
                   (char)g_volume };
-    struct {
-        unsigned short family;
-        char path[108];
-    } to = { 1, VIDEO_SOCK };
-    if (c[0]) sendto(vid.sock, c, c[0] == 'v' ? 2 : 1, 0x40, &to, sizeof to); /* MSG_DONTWAIT */
+    if (c[0]) dgram_send(&vid.sock, VIDEO_SOCK, c, c[0] == 'v' ? 2 : 1);
 #if M1PLUS
     if (c[0] == 'q' && !vid.quit_at) vid.quit_at = time_now_ms() | 1;
 #endif

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """JPEG checks; optionally pass the stock ZIP to test packaging with a custom logo and quoted paths too."""
 import io, sys; sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first: test/build.py must import tools/build.py
-from build import CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover
+from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover
 
 logo = (ROOT/'assets/boot-logo.jpg').read_bytes()
 assert jpeg_size(logo) == (320, 375)
@@ -102,7 +102,7 @@ logo_check()
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
     from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, WHEEL_TS_READ, PDR
-    from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CHEVRON_W, CONFIRM, VOLUME, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
+    from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
                       STATUS_ICONS, status_icon, QUIET_ICONS, quiet_icon, SET_ICON, SET_STOCK_ICON, SETTINGS_ICONS, SETTINGS_SLIDERS, decode, slider_plain, imagemagick, inc, png_header, settings_icon, walk,
@@ -111,6 +111,17 @@ def validate_assets(directory):
     ipod = manifest['variant'] == 'ipod'
     stock = (directory/'stock-demo').read_bytes()
     demo = (directory/'demo').read_bytes()
+    from build import patch_timezones, EXTRA_TIMEZONES
+    zones = bytearray(stock)
+    patch_timezones(zones)
+    start = fileoff(stock, 0x76b5d0)
+    labels = [zones[start+i*32:start+(i+1)*32].split(b'\0')[0] for i in range(28+len(EXTRA_TIMEZONES))]
+    assert labels[:28] == [stock[start+i*64:start+(i+1)*64].split(b'\0')[0] for i in range(28)]
+    assert labels[28:] == [label.encode() for label, _ in EXTRA_TIMEZONES]
+    assert demo[start:start+28*64] == zones[start:start+28*64]
+    for address in (0x4bce34, 0x4bd090, 0x4bd4d0, 0x4fa5dc):
+        off = fileoff(stock, address)
+        assert demo[off:off+4] == zones[off:off+4]
     # All original executable bytes outside the reviewed hooks, version and compact sites
     # must remain stock; the payload and ELF mapping are independently hashed by the runner.
     if not ipod:
@@ -138,11 +149,11 @@ def validate_assets(directory):
     for address, name in [*(h[:2] for h in IPOD_HOOKS.values()), IPOD_LEAF[1:3]]:
         off = fileoff(stock, address)
         want = stock[off:off+8]
-        if ipod: want = (0x08000000 | symbols(directory/'patch.elf')[name] >> 2).to_bytes(4, 'little') + bytes(4)
+        if ipod: want = j(symbols(directory/'patch.elf')[name]).to_bytes(4, 'little') + bytes(4)
         assert demo[off:off+8] == want
     # Both jump from window_manager_paint (Videos).
     off = fileoff(stock, WM_PAINT_LEAF[1])
-    assert demo[off:off+8] == (0x08000000 | symbols(directory/'patch.elf')[WM_PAINT_LEAF[2]] >> 2).to_bytes(4, 'little') + bytes(4)
+    assert demo[off:off+8] == j(symbols(directory/'patch.elf')[WM_PAINT_LEAF[2]]).to_bytes(4, 'little') + bytes(4)
     from build import AUDIO_EXTENSION_CALLS
     for entry, address in zip(manifest['audio_extension_calls'], AUDIO_EXTENSION_CALLS, strict=True):
         off = fileoff(stock, address)
@@ -266,31 +277,41 @@ def validate_assets(directory):
     assert abs(g[empty].xMin - g[full].xMin) <= 1 and abs(g[empty].xMax - g[full].xMax) <= 1
     assert abs(g[empty].yMin - g[full].yMin) <= 1 and abs(g[empty].yMax - g[full].yMax) <= 1
     assert all(new.reader[t] == old.reader[t] for t in old.reader.keys() if t not in ('cmap', 'head', 'glyf', 'loca', 'hmtx'))
-    # The crash watchdog only sleeps longer; check_mem_thd's drop_caches write is branched over.
+    # The crash watchdog only sleeps longer; check_mem_thd returns on entry, so it never drops caches.
     old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
     assert new == old.replace(*WATCHDOG_SLEEP) and new != old
-    off = fileoff(stock, DROP_CACHES[0])
-    assert struct.unpack_from('<I', stock, off)[0] == DROP_CACHES[1] and struct.unpack_from('<I', demo, off)[0] == DROP_CACHES[2]
+    for address, word, patched in DROP_CACHES:
+        off = fileoff(stock, address)
+        assert struct.unpack_from('<I', stock, off)[0] == word and struct.unpack_from('<I', demo, off)[0] == patched
     # The encoder thread's ts_read call goes through ringnav_ts_read (playback.c wheel_sample).
     off = fileoff(stock, WHEEL_TS_READ[0])
     assert struct.unpack_from('<I', stock, off)[0] == WHEEL_TS_READ[1]
-    assert struct.unpack_from('<I', demo, off)[0] == 0x0c000000 | symbols(directory/'patch.elf')['ringnav_ts_read'] >> 2
-    # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates
-    # and the ID3v2 walker calls, now id3_gain (MP3 ReplayGain).
-    from peq import VBR_SCAN, EQ_RATE_GATES, ID3_CALLS
+    assert struct.unpack_from('<I', demo, off)[0] == jal(symbols(directory/'patch.elf')['ringnav_ts_read'])
+    # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates,
+    # the ID3v2 walker calls, now id3_gain (MP3 ReplayGain), and the MQA side chain's gate and probe length.
+    from peq import VBR_SCAN, EQ_RATE_GATES, ID3_CALLS, MQA_GATE, MQA_PROBE
     old, new = read('stock.squashfs', 'usr/bin/hciplayer'), read('rootfs.squashfs', 'usr/bin/hciplayer')
     off = fileoff(old, VBR_SCAN)
-    gates = [fileoff(old, a) for a in (*(a for a, _, _ in EQ_RATE_GATES), *ID3_CALLS)]
+    words = (*EQ_RATE_GATES, *MQA_GATE, *MQA_PROBE)
+    gates = [fileoff(old, a) for a in (*(a for a, _, _ in words), *ID3_CALLS)]
     differ = [i for i in range(0x3e40, 0x485250) if old[i] != new[i]]
     assert set(differ) <= {*range(off, off+4), *(i for g in gates for i in range(g, g+4))} and not any(new[off:off+4])
-    assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in EQ_RATE_GATES] == [p for _, _, p in EQ_RATE_GATES]
+    assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in words] == [p for _, _, p in words]
     id3_gain = symbols(directory/'peq'/'peq.elf')['id3_gain']
-    assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in ID3_CALLS} == {0x0c000000 | id3_gain >> 2}
+    assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in ID3_CALLS} == {jal(id3_gain)}
     # Include every excluded UI screen and saved-preference defaults in byte parity checks.
     paths = [l.removeprefix('squashfs-root/') for l in run('unsquashfs', '-l', directory/'stock.squashfs').splitlines()
              if ('/raw/ui/' in l or '/raw/styles/' in l) and l.endswith('.bin') or l.endswith('/config.ini')]
     names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
     assert not {'squashfs-root/'+rel for rel in STOCK_EQ} & names, 'Stock EQ assets remain'
+    # The Library's rows, stock's and list_row_core's alike, draw each local_* icon centred in one 52px
+    # box (iPod x 8, Legacy x 10): each disc's alpha-weighted centre must sit on its image's.
+    for rel in sorted(n.removeprefix('squashfs-root/') for n in names if n.startswith('squashfs-root/'+xx+'local_')):
+        png = read('rootfs.squashfs', rel)
+        w, h = png_header(png)[:2]
+        alpha = imagemagick('png:-', '-alpha', 'extract', '-depth', '8', 'gray:-', data=png)
+        off = [sum(a*(i % w if axis else i // w) for i, a in enumerate(alpha))/sum(alpha) - ((w if axis else h)-1)/2 for axis in (1, 0)]
+        assert max(map(abs, off)) < 0.5, (rel, off)
     # iPod drops the carousel images and adds no Coverflow icons; Stock keeps both.
     icons = {'squashfs-root/release/assets/default/raw/images/xx/'+n for n in ICONS}
     carousel = {'squashfs-root/'+rel for rel in CAROUSEL}
@@ -477,8 +498,8 @@ def validate_assets(directory):
             # Full's last chevron leaves the same glass clearance as the label on the left.
             # Split's glyph ends 13px before the art, as in the Home concept.
             assert inc('HOME_SPLIT_W') == 375 // 2
-            assert CHEVRON_W - 30 - inc('HOME_CHEVRON_SHIFT') == 13
-            glyph_end = inc('HOME_CLASSIC_ROW') - CHEVRON_W + 30 + inc('HOME_FULL_CHEVRON_SHIFT')
+            assert inc('CHEVRON_W') - 30 - inc('HOME_CHEVRON_SHIFT') == 13
+            glyph_end = inc('HOME_CLASSIC_ROW') - inc('CHEVRON_W') + 30 + inc('HOME_FULL_CHEVRON_SHIFT')
             glyph_y = 30 + 6*HOME_ROW + (HOME_ROW - 50) // 2 + 16
             assert 375 - glyph_end >= corner_x(glyph_y, 34 - 16)
             assert inc('HOME_CLASSIC_TEXT_X') >= corner_x(30 + HOME_TOP + 6*HOME_ROW + 9, 20)

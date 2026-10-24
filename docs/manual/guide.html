@@ -153,6 +153,7 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
 
     <li class="chap"><span class="n">{{p:c2}}</span><a href="#c2">Chapter 2: Library and Music</a></li>
     <li><span class="n">{{p:addmusic}}</span><a href="#addmusic">Adding music</a></li>
+    <li><span class="n">{{p:tagging}}</span><a href="#tagging">Tagging your music</a></li>
     <li><span class="n">{{p:card}}</span><a href="#card">What goes on the microSD card</a></li>
     <li><span class="n">{{p:ratings}}</span><a href="#ratings">Rating songs and albums</a></li>
     <li><span class="n">{{p:playlists}}</span><a href="#playlists">Playlists and Long Songs</a></li>
@@ -258,8 +259,8 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
       <tr><td>Change the volume</td><td>Turn the wheel outside menus.</td></tr>
       <tr><td>Adjust a slider</td><td>Turn the wheel while the slider is open.</td></tr>
       <tr><td>Open the highlighted item</td><td>Press the Centre button.</td></tr>
-      <tr><td>Turn the screen off</td><td>Double-press the Centre button on any page (videos excepted). On Now Playing, a single press does it.</td></tr>
-      <tr><td>Jump to Now Playing</td><td>Hold Return from anywhere. Return, or another hold, goes back where you were.</td></tr>
+      <tr><td>Turn the screen off</td><td>Double-press the Centre button on any page (videos excepted). On Now Playing, a single press does it. With the screen off, a quick double press only wakes it.</td></tr>
+      <tr><td>Jump to Now Playing</td><td>Hold Return from anywhere. Return, or another hold, goes back where you were. With <b>Hold Return: Home</b> a hold goes Home instead, from anywhere but Home.</td></tr>
       <tr><td>See options for a song</td><td>Hold Play/Pause on a song or the local Now Playing track: rate (on Now Playing), queue, favourite, add to a playlist, or go to its album or artist.</td></tr>
       <tr><td>See options for an album, artist, genre or folder</td><td>Hold Play/Pause on it: queue, shuffle or add to a playlist. An album in Coverflow, Library Albums or an artist’s albums can also be favourited and rated; a Coverflow album can go to its artist.</td></tr>
       <tr><td>Skip to a point in a song</td><td>On Now Playing, double-press Centre, then turn: 5 s per tick. Double-press, Return, touch or wait 3 s to jump.</td></tr>
@@ -281,8 +282,8 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
   <h2 id="ui">Finding your way around</h2>
   <img class="shot" src="../../assets/screenshots/home-split.png" alt="Home in the Split layout: Now Playing, Library, Coverflow, Folder, Favorites, Streaming and Settings on the left, the playing album’s cover on the right">
   <ul>
-    <li><b>Home:</b> a list (Now Playing, Library, Coverflow, Folder, a shortcut, Streaming, Settings) beside the playing track’s cover. The shortcut is Rockbox when it’s on the card, otherwise Favorites; <b>System settings → Display → Shortcut</b> changes it, and <b>Home: Full</b> drops the cover and widens the list. <b>Settings</b> slides in <b>Playback</b> and <b>System</b> in the list’s place, as an iPod’s submenu, with the cover still beside it; Return goes back. Both Home lists wrap immediately at either end. A short Return on Home’s main list opens Now Playing without changing playback; Return there goes back to Home.</li>
-    <li><b>Folder:</b> opens the SD card directly when no OTG drive is connected. Return at the SD root goes back to Home; inside a folder it goes up one level. With OTG connected when Folder opens, choose SD or OTG first.</li>
+    <li><b>Home:</b> a list (Now Playing, Library, Coverflow, Folder, a shortcut, Streaming, Settings) beside the playing track’s cover. The shortcut is Rockbox when it’s on the card, otherwise Favorites; <b>System settings → Display → Shortcut</b> changes it, and <b>Home: Full</b> drops the cover and widens the list. <b>Settings</b> slides in <b>Playback</b> and <b>System</b> in the list’s place, as an iPod’s submenu, with the cover still beside it; Return goes back. Both Home lists wrap immediately at either end. A short Return on Home’s main list selects Now Playing, and another opens it without changing playback; Return there goes back to Home.</li>
+    <li><b>Folder:</b> opens the SD card directly when no OTG drive is connected. Return at the SD root goes back to Home; inside a folder it goes up one level. With OTG connected when Folder opens, choose SD or OTG first. A folder set in <b>Audio settings → Folder Root</b> opens directly either way; Return climbs from it to the SD root, then to Home, or to the SD/OTG choice with OTG connected.</li>
     <li><b>Lists:</b> four rows per screen with a full-width accent bar; <b>&gt;</b> marks rows that open another list.</li>
     <li><b>Status bar:</b> play state, EQ, time, Bluetooth, Wi-Fi and battery. The Bluetooth codec (AAC, LDAC…) shows briefly on connect.</li>
     <li><b>Page slides:</b> pages slide in from the right and back out on Return.</li>
@@ -310,6 +311,17 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
 
   </div>
   <div class="sec">
+  <h2 id="tagging">Tagging your music</h2>
+  <p>Q2 Pod builds the library from your files’ tags, so a few tag habits decide how albums and songs show up. Fix tags on a computer (Mp3tag, MusicBrainz Picard or foobar2000), then run <b>Update Local Music</b> and press <b>Refresh library</b> in Coverflow.</p>
+  <ul>
+    <li><b>An album is its name plus its Album Artist.</b> Coverflow, <b>Library → Albums</b>, Album groups, Crossfade and album ratings all go by these two tags. Give every track on an album the same Album Artist. A track with a different one, for example “Artist; Guest” where the rest say “Artist”, becomes an album of its own. So does a track that has no Album Artist when the others do. Put guests in the track’s <b>Artist</b> or <b>Title</b> instead, and use one Album Artist such as “Various Artists” for a compilation.</li>
+    <li><b>No Album Artist on any track:</b> the album’s folder tells it apart instead, and disc folders (<code>CD1</code>, <code>Disc 2</code>) count as one album. Two albums with the same name in one folder then become one album, so give each album its own folder or an Album Artist.</li>
+    <li><b>Audio settings → Artists</b> picks what the <b>Artists</b> list groups by, <b>Album Artist</b> (the default) or <b>Artist</b>. It doesn’t change how albums are grouped.</li>
+    <li><b>Keep Genre short.</b> A very long Genre tag, such as dozens of genres joined with “//”, overflows into the title: the song shows the end of its genre as its name in song lists and on Now Playing. Trim the Genre to a few entries.</li>
+  </ul>
+
+  </div>
+  <div class="sec">
   <h2 id="card">What goes on the microSD card</h2>
   <p>Media folders go at the card’s root, with any capitalisation; each adds its own <b>Library</b> row when present. Caches are safe to delete and are rebuilt as needed (Coverflow and Photos need 16 MB free).</p>
   <table class="paths">
@@ -331,7 +343,7 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
       <tr><td><code>.books/</code></td><td>EPUBs converted to text</td><td>Q2 Pod</td></tr>
       <tr><td><code>.sldp/</code></td><td>Stock’s own cover cache</td><td>Stock</td></tr>
       <tr><td><code>.spotify/</code></td><td>Spotify; <code>cache/</code> is the saved login, plus logs</td><td>You</td></tr>
-      <tr><td><code>.tidal/</code></td><td>Tidal tracks you’ve played, so they replay without streaming or Wi-Fi (Streaming → Tidal Downloads); up to 2 GB</td><td>Q2 Pod</td></tr>
+      <tr><td><code>.tidal/</code></td><td>Tidal tracks you’ve played, so they replay without streaming or Wi-Fi (Streaming → Tidal Downloads); up to 2 GB, set in Streaming → Configuration</td><td>Q2 Pod</td></tr>
     </tbody>
   </table>
 
@@ -361,7 +373,7 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
   </div>
   <div class="sec">
   <h2 id="shuffle">Shuffle, repeat and grouping</h2>
-  <p>On <b>Now Playing</b>, hold <b>Play/Pause</b> and choose <b>View Queue</b> to browse the current queue with the wheel. The same menu has <b>Shuffle</b>, <b>Repeat</b> and <b>Group by: Album / Folder</b>. The wheel and touch select an option; the selected option has a check mark. Changes keep the playing track and its position.</p>
+  <p>On <b>Now Playing</b>, hold <b>Play/Pause</b> and choose <b>View Queue</b> to browse the current queue with the wheel. The same menu has <b>Shuffle</b>, <b>Repeat</b> and <b>Group by: Album / Folder</b>. The wheel and touch select an option; the selected option has a check mark. Changes keep the playing track and its position. While a shuffle is on, the menu also has <b>Up Next</b>: the tracks that follow, in the order they will play.</p>
   <table>
     <thead><tr><th>Shuffle</th><th>How the queue plays</th></tr></thead>
     <tbody>
@@ -376,7 +388,7 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
   <ul>
     <li><b>Album groups</b> tell albums apart as Coverflow does: by album name (ignoring case), then album artist. Songs without an album artist, and untagged songs, use their parent folder. Albums play in disc and track order.</li>
     <li><b>Folder groups</b> use the folder a song is in and play in path order.</li>
-    <li><b>Library → Shuffle → Shuffle Albums / Shuffle Folders</b> loads all scanned songs and shuffles those groups, which can take a while on a large library. Shuffle in an album, artist, genre or folder’s hold menu still shuffles every song it collects.</li>
+    <li><b>Library → Shuffle → Shuffle Albums / Shuffle Folders</b> loads all scanned songs except audiobooks and shuffles those groups, which can take a while on a large library. Shuffle in an album, artist, genre or folder’s hold menu still shuffles every song it collects. <b>Shuffle Songs</b> and those Shuffles play in one shuffled order with Repeat All, so <b>Up Next</b> shows what comes next. Shuffle Songs is one-shot: the next album or song you pick plays in the play mode you had before, unless you chose another mode meanwhile.</li>
     <li><b>Next Album / Previous Album</b> in the hold menu skips the rest of the group, or returns to the start of the previously played group. Folder grouping shows <b>Next Folder / Previous Folder</b>.</li>
     <li>Choosing a stock play mode clears these options, except Shuffle during Shuffle Albums or Folders, which keeps the groups. In those modes, <b>Next Album / Previous Album</b> (or folder) lead the hold menu.</li>
   </ul>
@@ -412,7 +424,7 @@ ALBUM_ARTIST=1</pre>
     <li>Safely eject the card, put it in the Q2 and reopen <b>Library</b>. <b>Upload Scrobbles</b> appears just above <b>Update Local Music</b> when a ListenBrainz token or all four Last.fm fields are present. If it’s missing, check the filename, section headings and required fields.</li>
     <li>Connect to Wi-Fi, then select <b>Upload Scrobbles</b>.</li>
   </ol>
-  <p>A listen is logged when you play a tagged song for at least half its length or four minutes, whichever comes first. Set the Q2’s date and time correctly before listening. The firmware includes the certificates needed for verified uploads, so no <code>.scrobble.pem</code> is needed; a certificate or storage failure keeps pending listens.</p>
+  <p>A listen is logged when you play a tagged song for at least half its length or four minutes, whichever comes first. Set the Q2’s date, time and timezone correctly before listening: an incorrect device time or timezone can prevent scrobbles from uploading. The firmware includes the certificates needed for verified uploads, so no <code>.scrobble.pem</code> is needed; a certificate or storage failure keeps pending listens.</p>
   </div>
   </div>
 </section>
@@ -451,11 +463,11 @@ ALBUM_ARTIST=1</pre>
   <h2 id="cf"><img class="hicon" src="../../assets/icons/menu_coverflow.png" alt="">Browsing with Coverflow</h2>
   <ul>
     <li>Run <b>Update Local Music</b> first.</li>
-    <li><b>First open</b> prepares artwork once; <b>Cancel</b> keeps progress. Later opens add only new albums; <b>Refresh Library</b>, the last card, rebuilds everything.</li>
+    <li><b>First open</b> prepares artwork once; <b>Cancel</b> keeps progress. Later opens add only new albums; <b>Refresh library</b>, the last card, rebuilds everything.</li>
     <li><b>Sort</b>, the card before it: press to switch between <b>Album</b>, <b>Artist</b> (then year), <b>Year</b> (newest or oldest first, as <b>Year Order</b>), <b>Recently Added</b>, <b>Most Played</b> and <b>Random</b>. The choice is kept; Random reshuffles each time you pick it.</li>
-    <li><b>An artist’s albums as Coverflow:</b> <b>System settings → Display → Artist Albums: Coverflow</b> switches <b>Library → Artists → artist → Albums</b> from the default Grid to Coverflow; <b>List</b> shows the album names alone. It contains only that artist’s albums, also when Artists is set to Album Artist. Return goes straight back to the Artists list.</li>
-    <li><b>Audiobooks</b> stay out of Coverflow: an album whose tracks are all <code>.m4b</code> files or sit under the card’s <code>Audiobooks/</code> folder. Library Artists and Albums exclude them too; Podcasts keep their current listings.</li>
-    <li><b>Artwork:</b> embedded art first, then <code>cover.jpg</code> and <code>folder.jpg</code>; otherwise a placeholder. A folder shared by several albums skips its <code>cover.jpg</code> and <code>folder.jpg</code>, since they’d be another album’s art.</li>
+    <li><b>An artist’s albums as Coverflow:</b> <b>System settings → Display → Artist Albums: Coverflow</b> switches <b>Library → Artists → artist → Albums</b> from the default Grid to Coverflow; <b>List</b> shows the album names alone. It contains only that artist’s albums, also when Artists is set to Album Artist. With two or more, the last card, <b>All albums</b>, plays all of them: the albums in the order shown, each in disc and track order, from the first song. Return goes straight back to the Artists list.</li>
+    <li><b>Audiobooks</b> stay out of Coverflow: an album whose tracks are all <code>.m4b</code> files or sit under the card’s <code>Audiobooks/</code> folder. Library Artists, Albums and Shuffle exclude them too; Podcasts keep their current listings.</li>
+    <li><b>Artwork:</b> embedded art first, then a <code>cover</code> or <code>folder</code> image (<code>.jpg</code>, <code>.png</code> or <code>.webp</code>); otherwise a placeholder. A folder shared by several albums skips its cover and folder images, since they’d be another album’s art. Now Playing shows the same WebP and large or unusual PNG covers.</li>
   </ul>
   </div>
 </section>
@@ -518,7 +530,8 @@ ALBUM_ARTIST=1</pre>
   <p><b>Pairing, once:</b> the first time, the page says “Open Spotify on your phone and choose Q2”. With the phone on the same Wi-Fi, pick <b>Q2</b> in the Spotify app’s device list; the page turns into the menu, and the login is saved on the card. From then on the Q2 needs no phone. <b>Account</b> shows who is signed in and signs out.</p>
   <p><b>Browsing:</b> pick a song to play it in its playlist or album; Now Playing opens, and Return goes back to the list. <b>More…</b> at the end of a list loads the next part. <b>Search</b> asks for the words first, then Tracks, Albums, Artists or Playlists. Hold Play/Pause on a song to add it to the queue. Queue and Playback Settings appear while something plays.</p>
   <p>Now Playing shows <b>Loading…</b> while a song starts, including a downloaded song. If no track arrives within 15 seconds, it says “Playback didn’t start”; go back to try again. The phone instructions appear when Spotify confirms that pairing is needed. Long titles, artists and albums scroll so you can read them.</p>
-  <p><b>Downloaded Tracks</b> lists the songs you’ve played whose download finished, newest first, and plays them without Wi-Fi. Spotify keeps up to 2 GB of them on the card; signing out deletes them. It needs q2-librespot v1.4. Tidal’s are under <b>Streaming → Tidal Downloads</b>, which plays them as local music.</p>
+  <p><b>Downloaded Tracks</b> lists the songs you’ve played whose download finished, newest first, and plays them without Wi-Fi. Spotify keeps up to 2 GB of them on the card (see Configuration, below); signing out deletes them. It needs q2-librespot v1.4. Tidal’s are under <b>Streaming → Tidal Downloads</b>, which plays them as local music.</p>
+  <p><b>Download Playlist</b>, at the end of a playlist, saves all its tracks for offline listening in the background, without interrupting playback; <b>Downloads</b> on Spotify’s menu shows its progress, and finished tracks join Downloaded Tracks. A playlist larger than the Spotify Cache can push out its earlier tracks. Stop Streaming Services or signing out stops a download. It needs q2-librespot v1.6.</p>
   <table>
     <thead><tr><th>Control</th><th>What it does</th></tr></thead>
     <tbody>
@@ -528,7 +541,7 @@ ALBUM_ARTIST=1</pre>
       <tr><td>Centre</td><td>As on Now Playing: press once to turn the screen off; double-press, turn the wheel 5 s a tick, then double-press again or wait 3 s to jump</td></tr>
     </tbody>
   </table>
-  <p>After each power-on, open <b>Streaming → Spotify</b> once and the Q2 shows up in Spotify again; until then nothing Spotify runs. To save battery, Spotify stops itself after 30 seconds paused or stopped once you have left its menu; open the row again to bring it back. An older Spotify add-on still plays from the phone, and the page asks you to update it to browse on the Q2.</p>
+  <p>After each power-on, open <b>Streaming → Spotify</b> once and the Q2 shows up in Spotify again; until then nothing Spotify runs. To save battery, Spotify stops itself after 30 seconds paused or stopped once you have left its menu, or after 2½ minutes if nothing has played; open the row again to bring it back. An older Spotify add-on still plays from the phone, and the page asks you to update it to browse on the Q2.</p>
   <p>Until you play local music again, the playback buttons control Spotify from any page, including local Now Playing. On a Spotify, Tidal or Internet Radio page they always control that service. Picking a song in the Library pauses Spotify and plays the song; casting from the phone again stops local music. Playback carries on with the screen off.</p>
   <p>Spotify plays on the headphone jack, Bluetooth or a USB DAC: whichever is in use when playback starts. If you switch output while it plays, pause and play again to move it. Bluetooth and USB need a current <code>.spotify/aplay.sh</code>; an older one always plays on the headphone jack.</p>
 
@@ -582,6 +595,14 @@ http://stream.radioparadise.com/mp3-128</pre>
   <h2 id="airplay">AirPlay</h2>
   <p><b>Streaming → AirPlay</b> opens <b>Network service</b>, where the Q2’s own AirPlay receiver is switched on. Then pick the Q2 from your iPhone’s AirPlay menu. It is AirPlay 1 (audio from one device; Apple Music works), not AirPlay 2 multiroom.</p>
   </div>
+  <div class="sec">
+  <h2 id="stream-config">Configuration</h2>
+  <p><b>Streaming → Configuration</b> holds three rows; turn the wheel to pick one and press Centre, or tap it:</p>
+  <ul>
+    <li><b>Tidal Cache</b> and <b>Spotify Cache:</b> how much of the card each service’s downloads may use: 512 MB, 1 GB, 2 GB (the default), 4 GB or 8 GB; press to step to the next. When Tidal’s folder is over the new size, its oldest downloads are deleted after the next download. Spotify’s takes effect the next time Spotify starts (after <b>Stop Streaming Services</b>, or the next power-on), with q2-librespot v1.5 or later.</li>
+    <li><b>Stop Streaming Services:</b> stops Spotify, Internet Radio and a playing Tidal queue at once, so the playback buttons and the output are free for local music; pick something in your library to play. Use it when local music misbehaves after streaming. Open Streaming → Spotify to start Spotify again.</li>
+  </ul>
+  </div>
 </section>
 
 <!-- ============ 6 PODCASTS ETC ============ -->
@@ -597,13 +618,13 @@ http://stream.radioparadise.com/mp3-128</pre>
 
   <div class="sec">
   <h2 id="pods">Podcasts and audiobooks</h2>
-  <p>Put one folder per show or book in <code>Podcasts/</code> or <code>Audiobooks/</code> at the card’s root. They always resume where you stopped and never count as plays. Playback speed is set per folder (see Chapter 3).</p>
+  <p>Put one folder per show or book in <code>Podcasts/</code> or <code>Audiobooks/</code> at the card’s root. Each file resumes where you stopped, independently of the others (the 512 most recent are remembered), and never counts as a play. Playback speed is set per folder (see Chapter 3).</p>
   <div class="sub">
   <h3>M4B audiobooks</h3>
   <p>Unprotected <code>.m4b</code> files play as they are: copy the original files onto the card, with no renaming or conversion needed. Extensions are case-insensitive. M4B files anywhere on the card resume at any duration and don’t count toward Most Played or scrobbles. <code>Audiobooks/</code> adds a Library shortcut, but is optional for M4B. Embedded artwork uses the MP4 cover reader, with folder artwork as the fallback. M4B audiobooks stay out of Coverflow and Library Artists and Albums.</p>
   <h3>Books with a CUE sheet</h3>
   <p>A book split into chapters by a <code>.cue</code> sheet remembers one place for the whole book, if it’s an <code>.m4b</code> or sits in <code>Podcasts/</code> or <code>Audiobooks/</code>. Picking a chapter plays that chapter from its start, and it becomes the book’s place once you’re past its first 30 seconds. To continue where you stopped, open the book’s chapters and hold Play/Pause on any of them: <b>Resume</b>, at the top of the menu, plays from the right chapter and position. Music albums with a CUE sheet don’t resume.</p>
-  <div class="note"><p><span class="label">Note:</span> DRM-protected files and chapter navigation aren’t supported. As with stock resume, the number of saved positions is limited and the last 30 seconds of a file aren’t resumed.</p></div>
+  <div class="note"><p><span class="label">Note:</span> DRM-protected files and chapter navigation aren’t supported. The last 30 seconds of a file aren’t resumed.</p></div>
 
   </div>
   </div>
@@ -648,7 +669,8 @@ http://stream.radioparadise.com/mp3-128</pre>
       <tr><td>Home</td><td>Split (menu beside the playing album’s cover) or Full (menu only)</td></tr>
       <tr><td>Battery</td><td>Icon (default), Percent, Icon + Percent, Percent Inside</td></tr>
       <tr><td>Artist Albums</td><td>Grid (default), Coverflow or List (names only, no artwork) for an artist’s albums</td></tr>
-      <tr><td>Shortcut</td><td>What Home’s shortcut row opens: Rockbox (default when it’s on the card, otherwise Favorites), Artists, Albums or Favorites</td></tr>
+      <tr><td>Shortcut</td><td>What Home’s shortcut row opens: Rockbox (default when it’s on the card, otherwise Favorites), Artists, Albums, Favorites, Rated Albums or Shuffle (Library → Shuffle)</td></tr>
+      <tr><td>Hold Return</td><td>Recent (default): a hold opens Now Playing and another goes back where you were. Home: a hold goes Home from any page; on Home it still opens Now Playing.</td></tr>
       <tr><td>Wheel Sensitivity</td><td>50–200% in 10% steps, 50% by default (a seventh of a turn per tick). Higher needs less turning per step: 100% half as much, 200% a quarter. Turn the wheel or drag the slider; Centre goes back.</td></tr>
     </tbody>
   </table>
@@ -663,9 +685,10 @@ http://stream.radioparadise.com/mp3-128</pre>
       <tr><td>Charge Limit</td><td><b>80%</b> stops charging at 80% and starts again at 75%, so a Q2 left plugged in isn’t held full. Off by default. It applies while the Q2 is on; charging while it’s powered off is stock’s.</td></tr>
       <tr><td>Low Power</td><td>Longer battery: the second CPU core sleeps while the screen is off, and the screen-on UI idles when you don’t touch it. It never touches the sound, EQ, brightness or radios. Off by default.</td></tr>
       <tr><td>Wake</td><td><b>Double Press:</b> with the screen off, or after Standby, a single Centre press is ignored, so a pocket bump stays dark; press twice to wake. Play/Pause and the volume work without waking it. To power off from a dark screen, double-press, then hold. Off (Single Press) by default.</td></tr>
+      <tr><td>Volume Guard</td><td><b>On:</b> with the screen off, the wheel ignores the first half turn in one direction, so a brush in a pocket or hand doesn’t change the volume. Keep turning and the volume moves as usual, back and forth and across several strokes, until the wheel rests for a second and a half; then the next change needs another half turn. Turning back or lifting your finger before the half turn starts it again. The screen-on wheel is unchanged. Off by default.</td></tr>
     </tbody>
   </table>
-  <p>Either way, Return does nothing while the screen is off, and a key that resumes from Standby (Play/Pause, the volume) leaves it dark. <b>Settings → Buttons Lock</b> offers <b>Off</b>, <b>Everything</b> and <b>Volume only</b>. With the screen off, Everything locks the wheel volume and playback buttons; Volume only locks wheel volume while skip and Play/Pause keep working. The quick-settings lock tile cycles through the same three choices. The sleep timer is set with the wheel, like brightness.</p>
+  <p>Either way, Return does nothing while the screen is off, and a key that resumes from Standby (Play/Pause, the volume) leaves it dark. <b>Settings → Buttons Lock</b> offers <b>Off</b>, <b>Everything</b>, <b>Buttons only</b> and <b>Volume only</b>. With the screen off, Everything locks the wheel volume and playback buttons; Buttons only locks the playback buttons while the wheel volume keeps working; Volume only locks wheel volume while skip and Play/Pause keep working. The quick-settings lock tile cycles through the same four choices. The sleep timer is set with the wheel, like brightness.</p>
 
   </div>
   <div class="sec">
@@ -675,6 +698,7 @@ http://stream.radioparadise.com/mp3-128</pre>
     <tbody>
       <tr><td>Year Order</td><td><b>Newest First</b> (default) or <b>Oldest First</b>: the order of every year view, an artist’s albums (grid and Coverflow) and Coverflow’s <b>Year</b> sort. Undated albums go last.</td></tr>
       <tr><td>Artist Album Order</td><td><b>Year</b> (default, as <b>Year Order</b>) or <b>A–Z</b>: the order of an artist’s albums, grid and Coverflow.</td></tr>
+      <tr><td>Folder Root</td><td>Where Home’s <b>Folder</b> opens: <b>Card</b> (default) or one of the card’s top-level folders, such as <code>Music</code>. Press to step through them in name order and back to Card. It opens directly even with an OTG drive connected. Return climbs to the card, then goes back to Home, or to the SD/OTG choice with OTG connected. If the folder is renamed or removed, Folder opens as if set to Card. Folders whose names start with a dot, start or end with a space, or run over 200 bytes aren’t offered.</td></tr>
       <tr><td>Artists</td><td><b>Album Artist</b> (default) or <b>Artist</b>: Album Artist browses Artists by the Album Artist tag, so guest artists don’t split albums. A choice saved before stays.</td></tr>
       <tr><td>Crossfade</td><td>Fades one song into the next, 1–10 s (5 by default): turn the wheel or drag the slider, all the way down for Off; Centre switches it on or off. Only between different albums, so albums stay gapless; needs stock’s <b>Gapless</b> on. Off by default.</td></tr>
       <tr><td>EQ</td><td>Simple tone controls and the parametric EQ (see Chapter 4).</td></tr>
@@ -800,11 +824,11 @@ http://stream.radioparadise.com/mp3-128</pre>
     <li><b>Hold Play/Pause</b> on Now Playing for the queue, favourites, playlists, shuffle and repeat.</li>
     <li><b>Rate songs with hearts:</b> hold the heart on Now Playing, turn to 0–5 hearts, press Centre to save. Five hearts is My Fav; <b>Library → Ratings</b> lists them.</li>
     <li><b>Double-press the Centre button</b> to turn the screen off on any page (videos excepted); on Now Playing a single press does it.</li>
-    <li><b>Hold Return</b> to jump to Now Playing from anywhere; hold it again there to go back where you were.</li>
+    <li><b>Hold Return</b> to jump to Now Playing from anywhere; hold it again there to go back where you were. Rather go Home? <b>System settings → Display → Hold Return: Home</b>.</li>
     <li><b>Wheel too fast or slow?</b> <b>System settings → Display → Wheel Sensitivity</b>.</li>
     <li><b>Longer battery:</b> <b>System settings → Power → Low Power</b> and <b>Charge Limit</b>.</li>
     <li><b>Guest artists splitting albums?</b> <b>Audio settings → Artists → Album Artist</b> (the default unless you picked Artist).</li>
-    <li><b>Coverflow order:</b> the <b>Sort</b> card, just before Refresh Library, switches to Artist, Year, Recently Added, Most Played or Random.</li>
+    <li><b>Coverflow order:</b> the <b>Sort</b> card, just before Refresh library, switches to Artist, Year, Recently Added, Most Played or Random.</li>
     <li><b>Screen waking in your pocket?</b> <b>System settings → Power → Wake: Double Press</b>.</li>
     <li><b>Want stock’s EQ presets?</b> <b>EQ → Advanced → Presets → Stock presets</b> has Pop, Rock, Jazz and the rest; the ten default bands work as a 10-band graphic EQ.</li>
     <li><b>Wheel click gone?</b> Key Tone is the Q2’s own speaker, so it stays quiet while headphones, Bluetooth or a USB DAC are connected.</li>

@@ -255,7 +255,12 @@ static void radio_halt(void) {
     send_key("q", 1);
     while (!(done = waitpid(rd.pid, &status, 1)) && time_now_ms() - start < RADIO_QUIT_MS)
         sleep_ms(20);
-    if (!done) system("killall -9 q2video"), waitpid(rd.pid, &status, 0);
+    if (!done) {
+        char kill[24]; /* this helper only: librespot's sink is a q2video too (demo imports no kill) */
+        tk_snprintf(kill, sizeof kill, "kill -9 %d", rd.pid);
+        system(kill);
+        waitpid(rd.pid, &status, 0);
+    }
     rd.pid = 0;
     unlink(RADIO_STATE);
     tk_snprintf(rd.state, sizeof rd.state, "stopped");
@@ -395,26 +400,21 @@ static void np_refresh(void) {
 }
 
 static int np_tick(const void *unused) {
-    (void)unused;
     if (g_backlight_status) np_refresh();
     return 8; /* RET_REPEAT */
 }
 
 static int np_leave(const void *unused) {
-    (void)unused;
     np.leave = 0;
     navigator_back();
     return 0;
 }
 
 static int np_keyup(void *ctx, void *event) {
-    (void)ctx;
     return return_key(event, &np.leave, np_leave);
 }
 
 static int np_closed(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     stop_timer(&np.timer);
     stop_timer(&np.leave);
     memset(&np, 0, sizeof np);
@@ -423,7 +423,6 @@ static int np_closed(void *ctx, void *event) {
 
 /* The heart: the station playing in or out of favourites.m3u. */
 static int np_heart(void *ctx, void *event) {
-    (void)ctx; (void)event;
     if (rd.list.n) toast(fav_toggle(&rd.list, rd.at));
     return 0;
 }
@@ -463,15 +462,17 @@ static void *fetch_worker(void *unused);
 static int menu_click(void *ctx, void *event), pick_click(void *ctx, void *event),
     station_click(void *ctx, void *event);
 
-/* The search box's keyboard closed with text: the directory searched by name, Return then going
- * back to the menu or the country or genre list. */
+/* The search box's OK, or its keyboard closed with text: the directory searched by name, Return then
+ * going back to the menu or the country or genre list. An empty OK closes the keyboard with no other
+ * event, so it is taken here too. */
 static int searched(void *ctx, void *event) {
-    (void)ctx; (void)event;
-    const unsigned *t = widget_get_text(ui.edit); /* wchar_t, narrowed as the EQ editor's value */
-    unsigned n = 0;
-    if (!t || !t[0]) return later(A_SHOW, 0), 0;
-    while (t[n] && n < sizeof ui.caption - 1) ui.caption[n] = (char)t[n], ++n;
-    ui.caption[n] = 0;
+    char q[sizeof ui.caption];
+    if (widget_get_text_utf8(ui.edit, q, sizeof q) || !q[0]) {
+        const unsigned *text = widget_get_text(ui.edit);
+        if (text && text[0]) toast("Search is too long");
+        return later(A_SHOW, 0), 0;
+    }
+    snprintf(ui.caption, sizeof ui.caption, "%s", q);
     ui.favs = 0, ui.sel[STATIONS] = 0;
     if (ui.level != STATIONS) ui.from = ui.level;
     later(A_SEARCH, 0);
@@ -480,7 +481,6 @@ static int searched(void *ctx, void *event) {
 
 /* The box left without a search: the page as it was. */
 static int search_left(void *ctx, void *event) {
-    (void)ctx; (void)event;
     if (!ui.go) later(A_SHOW, 0);
     return 0;
 }
@@ -489,9 +489,12 @@ static int search_left(void *ctx, void *event) {
  * its keyboard open. */
 void radio_search(void) {
     if (!ui.page || ui.note || ui.edit) return;
-    ui.edit = edit_create(ui.page, "text");
+    if (ui.view) ui.sel[ui.level] = widget_get_prop_int(ui.view, "_ringnav_index", 0);
+    widget_destroy_children(ui.page), ui.view = 0; /* the box alone: the keyboard leaves no room for the rows */
+    ui.edit = edit_create(ui.page, "text", 2, 26);
     widget_set_prop_str(ui.edit, "tips", "Search stations");
     widget_on(ui.edit, EVT_VALUE_CHANGED, searched, 0);
+    widget_on(ui.edit, EVT_IM_ACTION, searched, 0);
     widget_on(ui.edit, EVT_BLUR, search_left, 0);
     widget_set_focused(ui.edit, 1);
 }
@@ -558,7 +561,6 @@ static void fetch(const char *path, int want) {
 }
 
 static unsigned fetch_got(const char *data, unsigned size, unsigned n, void *unused) {
-    (void)unused;
     if (fx.cancel || fx.n + size * n >= FETCH_MAX) return 0; /* stops the transfer */
     memcpy(fx.body + fx.n, data, size * n);
     fx.n += size * n;
@@ -566,12 +568,10 @@ static unsigned fetch_got(const char *data, unsigned size, unsigned n, void *unu
 }
 
 static int fetch_progress(void *u, long long a, long long b, long long c, long long d) {
-    (void)u, (void)a, (void)b, (void)c, (void)d;
     return fx.cancel; /* Return while loading: the transfer ends within a second */
 }
 
 static void *fetch_worker(void *unused) {
-    (void)unused;
     void *c = curl_easy_init();
     if (c) {
         curl_easy_setopt(c, 10002, fx.url);         /* CURLOPT_URL */
@@ -595,7 +595,6 @@ static void *fetch_worker(void *unused) {
 
 /* The page's timer: a finished fetch becomes ui.want's list. */
 static int tick(const void *unused) {
-    (void)unused;
     if (!fx.running || !fx.done) return 8; /* RET_REPEAT */
     pthread_join(fx.thread, 0);
     fx.running = 0;
@@ -615,7 +614,6 @@ static int tick(const void *unused) {
 
 /* A row's choice, on a timer: a row's click may not rebuild the list it is in. */
 static int go(const void *unused) {
-    (void)unused;
     char key[128], path[256];
     int i = ui.arg;
     ui.go = 0;
@@ -656,11 +654,10 @@ static int go(const void *unused) {
 
 static void later(int next, int arg) {
     ui.next = next, ui.arg = arg;
-    rearm(&ui.go, go, 0);
+    if (ui.page) rearm(&ui.go, go, 0); /* not once closed: the box's blur can come after */
 }
 
 static int menu_click(void *ctx, void *event) {
-    (void)event;
     int r = ui.rows[(int)(long)ctx];
     if (r != R_PLAYING) {
         ui.favs = r == R_FAVS, ui.from = MENU;
@@ -680,14 +677,12 @@ static int menu_click(void *ctx, void *event) {
 }
 
 static int pick_click(void *ctx, void *event) {
-    (void)event;
     ui.favs = 0, ui.from = PICK;
     later(A_PICK, (int)(long)ctx);
     return 0;
 }
 
 static int station_click(void *ctx, void *event) {
-    (void)event;
     list_copy(&rd.list, &ui.list);
     radio_play((int)(long)ctx);
     np_open();
@@ -708,9 +703,10 @@ const char *radio_hold(void *top) {
 }
 
 static int leave(const void *unused) {
-    (void)unused;
     ui.leave = 0;
-    if (ui.note)
+    if (ui.edit) /* the search box emptied, so no search; its blur shuts the keyboard, then the box */
+        widget_set_text_utf8(ui.edit, ""), widget_set_focused(ui.edit, 0);
+    else if (ui.note)
         fetch_cancel(), show(ui.level);
     else if (ui.level != MENU)
         show(ui.level == STATIONS ? ui.from : MENU);
@@ -719,14 +715,12 @@ static int leave(const void *unused) {
     return 0;
 }
 
-/* Return: a list goes up a level, the menu back to Streaming. */
+/* Return: the search box shut, else a list goes up a level, the menu back to Streaming. */
 static int keyup(void *ctx, void *event) {
-    (void)ctx;
     return return_key(event, &ui.leave, leave);
 }
 
 static int closed(void *ctx, void *event) {
-    (void)ctx; (void)event;
     fetch_cancel();
     stop_timer(&ui.timer);
     stop_timer(&ui.go);
@@ -739,8 +733,6 @@ static int closed(void *ctx, void *event) {
 
 /* Streaming's Internet Radio row (navigation.c ringnav_stream). */
 int radio_open(void *ctx, void *event) {
-    (void)ctx;
-    (void)event;
     if (ui.page || !(ui.page = page_open("radio_page", closed, keyup))) return 0;
     if (access(RADIO_DIR, 0)) mkdir(RADIO_DIR, 0777);
     ui.timer = timer_add(tick, 0, 250);

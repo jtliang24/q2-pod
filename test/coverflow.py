@@ -43,7 +43,7 @@ extern void *shim_choicemenu; /* M1 Plus: the Home menu's cards (coverflow.c hom
 #define pdeq_choicemenu ((const unsigned char *)&shim_choicemenu)
 int shim_lock(void *), shim_unlock(void *), shim_statfs(const char *, void *);
 """ + ''.join(f'{r} {n}({a});\n' for n in """
-getAllAlbum getMusicByAlbum toolsQueryDbTable album_row toolsThumbSpecCover toolsGetAlbumCover _create_deque deque_init_copy deque_clear
+getAllAlbum getMusicByAlbum toolsQueryDbTable album_row toolsThumbSpecCover toolsGetAlbumCover toolsGetExternCover _create_deque deque_init_copy deque_clear
 deque_init _deque_push_back deque_pop_back
 deque_assign deque_destroy deque_size deque_at window_create widget_factory
 widget_factory_create_widget image_create hscroll_label_create set_hscroll_label_attribute
@@ -71,7 +71,7 @@ TEST = r"""
 #include <stdint.h>
 #undef pthread_mutex_lock /* the stubs below record, then take the real lock */
 #undef pthread_mutex_unlock
-int coverflow_home(void *, void *);
+int coverflow_home(void *, void *), coverflow_player_cover(const char *, const char *, int, int);
 const char *track_name(char *, unsigned, void *);
 
 /* Widgets: raw memory first, so the payload's field reads (SLIDE_INDEX) land in it. */
@@ -93,14 +93,14 @@ static void *placed(void *x, int left, int top, int ww, int h) {
     r[0] = left; r[1] = top; r[2] = ww; r[3] = h;
     return x;
 }
-void *window_create(void *p, int x, int y, int ww, int h) { (void)p; (void)x; (void)y; (void)ww; (void)h; return make(0, "window"); }
+void *window_create(void *p, int x, int y, int ww, int h) { return make(0, "window"); }
 void *widget_factory(void) { return (void *)1; }
-void *widget_factory_create_widget(void *f, const char *t, void *p, int x, int y, int ww, int h) { (void)f; return placed(make(p, t), x, y, ww, h); }
+void *widget_factory_create_widget(void *f, const char *t, void *p, int x, int y, int ww, int h) { return placed(make(p, t), x, y, ww, h); }
 #define CREATE(name, type) void *name(void *p, int x, int y, int ww, int h) { return placed(make(p, type), x, y, ww, h); }
 CREATE(image_create, "image") CREATE(list_view_create, "list_view")
 CREATE(hscroll_label_create, "hscroll_label")
 CREATE(scroll_view_create, "scroll_view") CREATE(list_item_create, "list_item")
-int image_set_draw_type(void *x, int t) { (void)x; (void)t; return 0; }
+int image_set_draw_type(void *x, int t) { return 0; }
 int image_base_set_image(void *x, const char *s) { snprintf(W(x)->image, 600, "%s", s); return 0; }
 /* A zero-length "no art" marker does not decode. Every successful load is unloaded again and
    decodes to art_w x art_h (bitmap_t w @0, h @4). */
@@ -125,7 +125,7 @@ static void pattern(unsigned char *px, unsigned seed) {
         }
 }
 int widget_load_image(void *x, const char *url, void *b) {
-    (void)x; struct stat s;
+    struct stat s;
     int failed = strncmp(url, "file://", 7) || stat(url + 7, &s) || !s.st_size;
     loads += !failed;
     if (!failed) {
@@ -140,18 +140,18 @@ int widget_load_image(void *x, const char *url, void *b) {
     return failed;
 }
 const unsigned char *bitmap_lock_buffer_for_read(void *b) { ++reads; return *(unsigned char **)((char *)b + 0x14); }
-int widget_unload_image(void *x, void *b) { (void)x; (void)b; ++unloads; return 0; }
+int widget_unload_image(void *x, void *b) { ++unloads; return 0; }
 void set_hscroll_label_attribute(void *x) { assert(!strcmp(W(x)->type, "hscroll_label")); }
 int slide_menu_set_value(void *x, int value) { *(int *)(W(x)->raw + SLIDE_INDEX) = value; return 0; }
 int widget_set_name(void *x, const char *s) { snprintf(W(x)->type, 32, "%s", s); return 0; }
-int widget_use_style(void *x, const char *s) { (void)x; (void)s; return 0; }
+int widget_use_style(void *x, const char *s) { return 0; }
 int widget_set_text_utf8(void *x, const char *s) { snprintf(W(x)->text, 160, "%s", s); return 0; }
-int widget_restack(void *x, unsigned i) { (void)x; (void)i; return 0; }
-void *widget_animator_prop_create(void *x, unsigned d, unsigned l, int e, const char *p) { (void)x; (void)d; (void)l; (void)e; (void)p; return 0; }
-int widget_animator_prop_set_params(void *a, double f, double t) { (void)a; (void)f; (void)t; return 0; }
-int widget_animator_start(void *a) { (void)a; return 0; }
-int widget_set_visible(void *x, int v, int r) { (void)r; W(x)->visible = v; return 0; }
-int widget_get_prop_int(void *x, const char *k, int d) { (void)x; (void)k; return d; }
+int widget_restack(void *x, unsigned i) { return 0; }
+void *widget_animator_prop_create(void *x, unsigned d, unsigned l, int e, const char *p) { return 0; }
+int widget_animator_prop_set_params(void *a, double f, double t) { return 0; }
+int widget_animator_start(void *a) { return 0; }
+int widget_set_visible(void *x, int v, int r) { W(x)->visible = v; return 0; }
+int widget_get_prop_int(void *x, const char *k, int d) { return d; }
 int widget_set_prop_int(void *x, const char *k, int v) { if (!strcmp(k, "style:normal:bg_color")) W(x)->bg = v; return 0; }
 const char *widget_get_prop_str(void *x, const char *k, const char *d) { return strcmp(k, "image") ? d : W(x)->image; }
 int widget_set_prop_str(void *x, const char *k, const char *v) { (void)x; (void)k; (void)v; return 0; }
@@ -166,12 +166,11 @@ unsigned widget_on(void *x, unsigned type, handler f, void *ctx) {
 int widget_destroy_children(void *x) { W(x)->nkids = 0; return 0; }
 static int wm_repaints; /* whole-screen invalidations, from outside a paint */
 void *window_manager(void) { return &wm_repaints; }
-int widget_invalidate_force(void *x, void *y) { (void)y; wm_repaints += x == &wm_repaints; return 0; }
+int widget_invalidate_force(void *x, void *y) { wm_repaints += x == &wm_repaints; return 0; }
 unsigned widget_count_children(void *x) { return W(x)->nkids; }
 void *widget_get_child(void *x, unsigned i) { return &w[W(x)->kids[i]]; }
 static void *home_art, *home_list; /* iPod Home's art and list; none in the carousel tests */
 void *widget_lookup(void *x, const char *n, int r) {
-    (void)r;
     return !x ? 0 : !strcmp(n, "img_coverflow") ? x : !strcmp(n, "img_homeart") ? home_art :
            !strcmp(n, "list_view_home") ? home_list : 0;
 }
@@ -180,7 +179,7 @@ int ipod_home_full(void) { return home_full; }
 int ipod_classic(void) { return classic; }
 int ipod_home_rockbox(void) { return 0; }
 const char *ipod_home_shortcut(void) { return "Rockbox"; }
-int home_shortcut_open(void *x, void *e) { (void)x; (void)e; return 0; }
+int home_shortcut_open(void *x, void *e) { return 0; }
 int widget_move_resize(void *x, int left, int top, int ww, int h) {
     int *r = (int *)W(x)->raw; /* W_X, W_Y, W_W, W_H */
     r[0] = left; r[1] = top; r[2] = ww; r[3] = h;
@@ -189,15 +188,15 @@ int widget_move_resize(void *x, int left, int top, int ww, int h) {
 static int insensitive; /* the widget last made insensitive */
 int widget_set_sensitive(void *x, int v) { if (!v) insensitive = W(x) - w; return 0; }
 static int clip_rect[4] = { 0, 0, 375, 320 }; /* the canvas clip, screen x, y, w, h */
-int canvas_get_clip_rect(void *c, void *r) { (void)c; memcpy(r, clip_rect, sizeof clip_rect); return 0; }
-int canvas_set_clip_rect(void *c, const void *r) { (void)c; memcpy(clip_rect, r, sizeof clip_rect); return 0; }
+int canvas_get_clip_rect(void *c, void *r) { memcpy(r, clip_rect, sizeof clip_rect); return 0; }
+int canvas_set_clip_rect(void *c, const void *r) { memcpy(clip_rect, r, sizeof clip_rect); return 0; }
 const char *widget_get_type(void *x) { return W(x)->type; }
 int widget_get_visible(void *x) { return W(x)->visible; }
 int tk_strcmp(const char *a, const char *b) { return strcmp(a ? a : "", b ? b : ""); }
 int navigator_back_to_home(void) { return 0; }
 int navigator_back(void) { return 0; }
-int window_manager_close_window_force(void *m, void *x) { (void)m; (void)x; return 0; }
-int navigator_to_with_context(const char *n, const void *c) { (void)n; (void)c; return 0; }
+int window_manager_close_window_force(void *m, void *x) { return 0; }
+int navigator_to_with_context(const char *n, const void *c) { return 0; }
 /* slide_menu: square items as high as the menu, plus the spacer. */
 int slide_menu_item_width(void *x) { return *(int *)(W(x)->raw + W_H); }
 int slide_menu_set_spacer(void *x, int v) { *(int *)(W(x)->raw + SLIDE_SPACER) = v; return 0; }
@@ -217,29 +216,29 @@ void *bitmap_create_ex(unsigned ww, unsigned h, unsigned line, unsigned format) 
 }
 int bitmap_destroy(void *b) { free(*(void **)((char *)b + 0x14)); free(b); --frames; return 0; }
 unsigned char *bitmap_lock_buffer_for_write(void *b) { ++locks; return *(unsigned char **)((char *)b + 0x14); }
-int bitmap_unlock_buffer(void *b) { (void)b; return 0; }
+int bitmap_unlock_buffer(void *b) { return 0; }
 unsigned bitmap_get_line_length(void *b) { return ((unsigned *)b)[2]; }
 int canvas_draw_image(void *c, void *b, const void *src, const void *dst) {
-    (void)c; ++draws;
+    ++draws;
     const int *r = dst, *q = src;
     assert(!memcmp(r, q, 16) && ((unsigned short *)b)[6] & 1); /* 1:1, and marked opaque */
     memcpy(drawn, r, sizeof drawn);
     for (int y = 0; y < CF_VIEW_H; ++y) memcpy(shown + y * CF_VIEW_W, *(unsigned char **)((char *)b + 0x14) + y * ((unsigned *)b)[2], CF_VIEW_W * 4);
     return 0;
 }
-int stock_home_trampoline(void *win, void *ctx) { (void)win; (void)ctx; return 0; }
+int stock_home_trampoline(void *win, void *ctx) { return 0; }
 /* The songtable writers' stock bodies; during_write runs inside one, as an open mid-scan would. */
 static void (*during_write)(void);
 static int stock_write(void) { if (during_write) during_write(); return 0; }
-int stock_scan_all_trampoline(void *a, void *b) { (void)a; (void)b; return stock_write(); }
-int stock_scan_folder_trampoline(void *a, void *b) { (void)a; (void)b; return stock_write(); }
-int stock_delete_song_trampoline(void *a, void *b) { (void)a; (void)b; return stock_write(); }
+int stock_scan_all_trampoline(void *a, void *b) { return stock_write(); }
+int stock_scan_folder_trampoline(void *a, void *b) { return stock_write(); }
+int stock_delete_song_trampoline(void *a, void *b) { return stock_write(); }
 int coverflow_scan_all(void *, void *);
 static void rescan(void) { coverflow_scan_all(0, 0); } /* the library changed, as only a scan changes it */
 
 static int (*timer_fn)(const void *);
-unsigned timer_add(int (*f)(const void *), void *ctx, unsigned ms) { (void)ctx; (void)ms; timer_fn = f; return 1; }
-int timer_remove(unsigned id) { (void)id; timer_fn = 0; return 0; }
+unsigned timer_add(int (*f)(const void *), void *ctx, unsigned ms) { timer_fn = f; return 1; }
+int timer_remove(unsigned id) { timer_fn = 0; return 0; }
 void stop_timer(unsigned *t) { if (*t) timer_remove(*t); *t = 0; } /* navigation.c's */
 void rearm(unsigned *t, int (*f)(const void *), unsigned ms) { stop_timer(t); *t = timer_add(f, 0, ms); }
 static void run(void) { while (timer_fn) { int (*f)(const void *) = timer_fn; timer_fn = 0; usleep(1000); f(0); } }
@@ -247,7 +246,7 @@ static void run(void) { while (timer_fn) { int (*f)(const void *) = timer_fn; ti
 /* libcstl: a deque of record pointers; the query stubs fill the staging deque. */
 typedef struct { unsigned n; void *at[64]; } deque;
 void *shim_dir;
-void *_create_deque(const char *t) { (void)t; return calloc(1, sizeof(deque)); }
+void *_create_deque(const char *t) { return calloc(1, sizeof(deque)); }
 void deque_init_copy(void *d, const void *s) { *(deque *)d = *(const deque *)s; }
 void deque_assign(void *d, const void *s) { *(deque *)d = *(const deque *)s; }
 void deque_clear(void *d) { ((deque *)d)->n = 0; }
@@ -323,9 +322,8 @@ int ringnav_year_old(void) { return year_old; }
 static int artist_view;
 int ringnav_artist_view(void) { return artist_view; }
 int ringnav_artist_az(void) { return 0; }
-int album_row(void *a, int n, char **v, char **c) { (void)a; (void)n; (void)v; (void)c; return 0; }
+int album_row(void *a, int n, char **v, char **c) { return 0; }
 int toolsQueryDbTable(const char *db, const char *sql, void *row, int sort) {
-    (void)row;
     assert(!strcmp(db, "/mnt/data/database.db") && !sort && strstr(sql, "group by album COLLATE NOCASE,ifnull(albumsonger"));
     deque *d = shim_dir;
     d->n = 0;
@@ -391,9 +389,13 @@ int toolsThumbSpecCover(const char *src, const char *dst, int ww, int h) {
     return write_art(dst, strrchr(src, '/') + 1);
 }
 int toolsGetAlbumCover(const char *src, const char *dst, int ww, int h) {
-    (void)src;
     assert(ww == 160 && h == 160 && held[0] && held[1] && strstr(dst, ".jpg.tmp"));
     return embedded_fails ? 0 : write_art(dst, "embedded");
+}
+static int extern_found;
+int toolsGetExternCover(const char *src, const char *dst, int ww, int h) {
+    assert(ww == 320 && h == 320 && !held[0] && !held[1]);
+    return extern_found ? write_art(dst, "extern") : 0;
 }
 static unsigned free_blocks = 1 << 20;
 int shim_statfs(const char *p, void *out) {
@@ -408,7 +410,7 @@ unsigned char shim_memory[0x800]; /* g_memory_info, which album_memory fills */
 unsigned char shim_covertype;
 char shim_lastcover[1024], shim_id3[2716];
 static widget *page;
-static void *release(void *unused) { (void)unused; usleep(50000); blocked = 0; return 0; }
+static void *release(void *unused) { usleep(50000); blocked = 0; return 0; }
 static void open_page(void) {
     widget home;
     memset(&home, 0, sizeof(home));
@@ -436,16 +438,21 @@ static const char *title(void) {
     for (int i = nw; i > page - w; --i) if (!strcmp(w[i].type, "hscroll_label") && w[w[i].parent].parent == page - w) return w[i].text;
     return "";
 }
+/* The cache file of Artist's album_name. */
+static char *art_file(char *path, const char *album_name) {
+    unsigned h = 2166136261u;
+    for (const unsigned char *s = (const unsigned char *)"Artist"; *s; ++s) h = (h ^ *s) * 16777619u;
+    h *= 16777619u;
+    for (const unsigned char *s = (const unsigned char *)album_name; *s; ++s) h = (h ^ *s) * 16777619u;
+    h *= 16777619u;
+    snprintf(path, 600, PEQ_ROOT "/mnt/mmc/.coverflow/%08x.jpg", h);
+    return path;
+}
 static long size(const char *album_name) {
     char path[600];
     for (int i = 0; i < albums; ++i) {
         if (strcmp(names[i], album_name)) continue;
-        unsigned h = 2166136261u;
-        for (const unsigned char *s = (const unsigned char *)"Artist"; *s; ++s) h = (h ^ *s) * 16777619u;
-        h *= 16777619u;
-        for (const unsigned char *s = (const unsigned char *)names[i]; *s; ++s) h = (h ^ *s) * 16777619u;
-        h *= 16777619u;
-        snprintf(path, sizeof(path), PEQ_ROOT "/mnt/mmc/.coverflow/%08x.jpg", h);
+        art_file(path, names[i]);
         struct stat s;
         return stat(path, &s) ? -1 : s.st_size;
     }
@@ -812,8 +819,8 @@ static void sorting(void) {
     rescan();
 }
 
-/* Artist albums: Coverflow (navigation.c): an artist's albums alone, in their order, no Sort or
-   Refresh card; the library's list is back once the page closes. */
+/* Artist albums: Coverflow (navigation.c): an artist's albums alone, in their order, then All
+   albums, no Sort or Refresh card; the library's list is back once the page closes. */
 int coverflow_artist(void *albums);
 static void artist_only(void) {
     rescan();
@@ -825,7 +832,7 @@ static void artist_only(void) {
     page = &w[nw + 1];
     assert(coverflow_artist(d));
     run();
-    assert(slide()->nkids == 2);
+    assert(slide()->nkids == 3);
     order_is((const char *const[]){ "B", "Tight", 0 });
     deque *again = _create_deque(0);
     again->at[again->n++] = records[0];
@@ -918,7 +925,7 @@ static void same_name(void) {
     rescan();
 }
 /* Audiobook folders and M4B files never make covers, including artist and rated views. */
-static int five_hearts(void *r) { (void)r; return 5; }
+static int five_hearts(void *r) { return 5; }
 static void audiobooks(void) {
     extern int coverflow_rated(int (*hearts)(void *));
     int music = albums;
@@ -1022,6 +1029,64 @@ static void ffmpeg_art(void) {
     open_page();
     assert(calls == before && size("Webp") == 6 && size("Ffok") == 6 && !tmp_files());
     close_page();
+}
+
+static void player_cover(void) {
+    /* Now Playing's folder art (coverflow_player_cover): stock's, else ffmpeg alone on a folder image
+       (stock already refused it), then on the embedded picture. No stock thumbnailer: its parse lock
+       would nest under the player's. */
+    const char *dst = PEQ_ROOT "/externpic.jpg";
+    char got[16];
+    struct { const char *album, *want; int found; } cases[] = {
+        { "Webp", "ffmpeg", 0 }, { "Ffok", "ffmpeg", 0 }, { "Cover", 0, 0 }, { "Cover", "extern", 1 } };
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {
+        char track[600];
+        snprintf(track, sizeof track, PEQ_ROOT "/music/%s/01.flac", cases[i].album);
+        unlink(dst);
+        extern_found = cases[i].found;
+        int before = calls, ok = coverflow_player_cover(track, dst, 320, 320);
+        FILE *f = fopen(dst, "r");
+        size_t n = f ? fread(got, 1, sizeof(got) - 1, f) : 0;
+        if (f) fclose(f);
+        got[n] = 0;
+        assert(ok == !!cases[i].want && calls == before + cases[i].found);
+        assert(cases[i].want ? !strcmp(got, cases[i].want) : !f);
+    }
+    extern_found = 0;
+    /* Once the player has parsed the track, an album Coverflow marked empty skips ffmpeg; a
+       missing marker, or a real cover, still goes to it. */
+    char track[600], marker[600];
+    snprintf(track, sizeof track, PEQ_ROOT "/music/Ffok/01.flac");
+    snprintf(shim_id3, sizeof(shim_id3), "%s", track);
+    snprintf(shim_id3 + ID3_ALBUM, 256, "%s", "Ffok");
+    snprintf(shim_id3 + ID3_ARTIST, 256, "%s", "Artist");
+    art_file(marker, "Ffok");
+    for (int i = 0; i < 3; ++i) {
+        FILE *f = i == 1 ? 0 : fopen(marker, "w");
+        if (f) fprintf(f, "%s", i ? "ffmpeg" : ""), fclose(f);
+        if (i == 1) unlink(marker);
+        unlink(dst);
+        int ok = coverflow_player_cover(track, dst, 320, 320);
+        assert(ok == !!i && access(dst, 0) == (i ? 0 : -1));
+    }
+    /* The marker skips only the embedded probe: with it, Webp's cover.webp still shows (a shared
+       folder, or a disc Coverflow did not look at), and a track the player has not parsed probes. */
+    FILE *f = fopen(art_file(marker, "Webp"), "w");
+    fclose(f);
+    snprintf(track, sizeof track, PEQ_ROOT "/music/Webp/01.flac");
+    snprintf(shim_id3, sizeof(shim_id3), "%s", track);
+    snprintf(shim_id3 + ID3_ALBUM, 256, "%s", "Webp");
+    unlink(dst);
+    assert(coverflow_player_cover(track, dst, 320, 320) && !access(dst, 0));
+    f = fopen(marker, "w"); /* Webp's art back, as ffmpeg_art left it */
+    fputs("ffmpeg", f), fclose(f);
+    f = fopen(art_file(marker, "Ffok"), "w");
+    fclose(f);
+    snprintf(track, sizeof track, PEQ_ROOT "/music/Ffok/01.flac");
+    unlink(dst);
+    assert(coverflow_player_cover(track, dst, 320, 320) && !access(dst, 0));
+    fputs("ffmpeg", f = fopen(marker, "w")), fclose(f);
+    memset(shim_id3, 0, sizeof(shim_id3));
 }
 
 int main(void) {
@@ -1158,6 +1223,7 @@ int main(void) {
     disc_folders();
     audiobooks();
     ffmpeg_art();
+    player_cover();
 #if IPOD
     /* iPod Home: the player's cover for its type, once the player has parsed the current track
        (g_lastcover_url is its path), else the track album's Coverflow thumbnail, else the
@@ -1355,7 +1421,7 @@ def main():
         for ipod in (0, 1):  # a fresh card each run
             binary = tmp/f'coverflow_test{ipod}'
             subprocess.run(['cc', '-m32', '-pthread', '-DPEQ_HOST', f'-DPEQ_ROOT="{tmp}/root{ipod}"', f'-DIPOD={ipod}',
-                            f'-DART_FFMPEG="{tmp}/ffmpeg"', '-D_GNU_SOURCE', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
+                            f'-DART_FFMPEG="{tmp}/ffmpeg"', '-D_GNU_SOURCE', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-Wno-unused-function',
                             '-I', str(ROOT/'patch'), '-include', str(tmp/'shim.h'), str(ROOT/'patch/coverflow.c'),
                             str(tmp/'test.c'), '-o', str(binary)], check=True)
             env = dict(os.environ)
