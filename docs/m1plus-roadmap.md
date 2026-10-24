@@ -19,9 +19,9 @@ gap can't be left marked.
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 **Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
-one device pass. Steps 1 to 3, 1.2.9, 1.3.0 and 1.3.8, are merged and gated ([m1plus-progress.md](m1plus-progress.md)
-sections 40 to 42); 1.2.9 (dev 29) and 1.3.0 (dev 5) passed on the device, and 1.3.8 is flashed next,
-before 1.3.9. Done so far:
+one device pass. Steps 1 to 4, 1.2.9, 1.3.0, 1.3.8 and 1.3.9, are merged and gated
+([m1plus-progress.md](m1plus-progress.md) sections 40 to 43); 1.2.9 (dev 29), 1.3.0 (dev 5) and 1.3.8
+(dev 1) passed on the device. Step 5, 1.4.2, is next. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -194,7 +194,8 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       grow to 128 KB. The M1 takes `SCRATCH` from `build.py`. 1.3.8 already moves it once, to 0xb60000
       (`9738051`), and V2.1's `demo` maps nothing above its data segment's end (0xa10fc8): the payload's
       segment at 0xb00000 grows, and the heap starts above `__scratch_end`. Checked at the 1.3.8 step,
-      for both moves.
+      for both moves. 13f04f0 also folds `.bss` into `.scratch`, upstream's own fix for the orphan
+      `.bss` the 1.3.8 step found on M1 (progress section 42), so there is no PR to raise.
   - **Then port the finished features in one batch**: those whose code doesn't change after the step that
     brings them, whose function V2.1's `demo` has, and that aren't tied to the Q2:
     - the shared hooks `toolsQueryDbTableAndSort` (V2.1's `0x5ee9ac`) and `networkGetWifiSignal`
@@ -274,7 +275,11 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `qm_hold`'s Q2 branch, and `more_image` is named from `m1plus_nav_library.c`.
     - **Bluetooth's boot and incoming links** (`BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`, in place
       of 1.2.9's `BT_POWER`): V2.1's `platform_init`, `openBluetooth` and `autoLinkBluetooth` to check.
-    - **The lyrics' top row whole** (`LYRIC_FOLLOW`): V2.1's Now Playing timer to check.
+    - **The lyrics' top row whole** (`LYRIC_FOLLOW`): V2.1's Now Playing timer to check. With it, 1.3.9's
+      **lyrics keeping their place on a refresh** (`LYRIC_ROWS`): V2.1's page refresh and its lyric row
+      builder to find. `ringnav_lyric_rows` calls V1.32's builder by its address (`0x529f0c`), so it
+      needs an `offsets.inc` name before the site is ported. On M1 it links (the build keeps the
+      `ringnav_*` entry points) but nothing calls it.
     - **Quick settings' brightness through a swipe up**: `g_dropdown_menu_state` is a stub on M1; V2.1 has
       `dropdown_menu_state` (`0xa05a2c`) and a `slider_backlight`, whose states are to be checked against
       V1.32's (1, 2 sliding, 3 open) before it is aliased.

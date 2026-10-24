@@ -91,6 +91,8 @@ Copy your music to the card over USB-C, then run **Library → Update Local Musi
 
 These folders at the card's root each add their own Library entry: `Podcasts/`, `Audiobooks/`, `Photos/`, `Books/` and `Videos/`; `EQ/` holds EQ presets to import. See the user guide for supported formats.
 
+On iPod, **Library → Games** has Sudoku, Vortex and Solitaire, playable while music plays.
+
 Settings, play counts, ratings and resume points are stored on the Q2 itself, so they stay put when you swap cards.
 
 ## Updating
@@ -117,3 +119,11 @@ Or, over Wi-Fi: **System settings → System Update → Network Update** downloa
 ## License
 
 [MIT](LICENSE) covers this repository's code and docs. The Shanling firmware included in release images remains Shanling's. Q2 Pod is an independent project and is not affiliated with Shanling.
+
+## Support
+
+Q2 Pod is free and built in spare time. If it has made your Q2 better and you'd like to give something back, you can support development on Ko-fi. If that isn't an option, please consider donating to a good cause instead ❤️
+
+<p align="center">
+  <a href="https://ko-fi.com/diamondbond"><img alt="Support Q2 Pod on Ko-fi" src="https://img.shields.io/badge/Ko--fi-support%20Q2%20Pod-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white"></a>
+</p>

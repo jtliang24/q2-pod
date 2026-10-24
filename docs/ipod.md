@@ -270,7 +270,7 @@ The controls' stock images are 60-pixel discs: `#444444` with a white glyph when
 disc takes the accent's red tone, as everything else red does, so it stands clearly apart from the
 grey inactive discs. On a tone brighter than `GLYPH_LIGHT_MAX` (perceived brightness 160 of 255),
 which is Graphite's silver, the white glyph and its anti-aliased edges turn `CONFIRM_SURFACE`
-(`#2B2B2B`) so the glyph stays legible; Crimson, Tidal and Champagne keep the white glyph (3:1 or
+(`#2B2B2B`) so the glyph stays legible; Crimson, Tidal, Champagne and Cobalt keep the white glyph (3:1 or
 more). Only an image that holds the red disc gets the dark glyph, so inactive discs keep their white
 glyphs; off and disabled discs contain no red and keep their stock look, and alpha is untouched.
 The brightness suns (`drop_lighleft`, `drop_lightright`) sit on black, not a disc, and keep the
@@ -425,12 +425,12 @@ the three lines centre in the art's height above them. Both retain their 50 px t
 vertical position. Both keep their stock images and handlers and swipe away with the art.
 Internet Radio uses the same heart alignment in both iPod themes.
 
-The bar is a four-pixel plain-colour line inside the original 30-pixel seek target: a `#1C1C1C` track
+The bar is a four-pixel plain-colour line inside a 44-pixel seek target: a `#1C1C1C` track
 (`TRACK_COLOR`) and an off-white `MINIMAL_FILL` fill, with no thumb. **Theme: Classic** makes it an
 8-pixel capsule (`NP_BAR_CLASSIC`; `bar_size` and `round_radius` set on the slider at runtime,
 `np_theme`) filled in the accent's light tone (Graphite `#6E6E6E`, 3.3:1; see [Display
 settings](#display-settings)), and shows stock's play/pause glyph on the art again. Spotify's bar follows the same theme.
-The asset holds Graphite's; `ringnav_playing` sets the current accent's. Tap or drag anywhere on it to seek, as stock. The elapsed time
+The asset holds Graphite's; `ringnav_playing` sets the current accent's. Tap or drag anywhere in the bar's taller target to seek; the page dots sit just above it so page swipes keep a separate target. The elapsed time
 is stock's label; the remaining time replaces stock's total. Sizes are `NP_*` constants in
 `tools/ipod.py`; see [internals.md](internals.md#now-playing-ipod).
 
@@ -439,8 +439,7 @@ and the shade band behind it show for `BC_MS` (3 s), then fade out together over
 `BC_STEP_MS` apart (`ringnav_bigcover`, after stock's init). They show again for each new song while it is open.
 
 **Scrub.** A double press of the centre button starts scrubbing, as on an iPod classic (with the screen off it only
-wakes it, [Wake](internals.md#wake)), and the bar fill turns white
-while it lasts. Each wheel tick moves 5 seconds, times a ramp of one more step per 100 ms of spin
+wakes it, [Wake](internals.md#wake)), and the bar fill turns white while it lasts. Each wheel tick moves 5 seconds, times a ramp of one more step per 100 ms of spin
 (up to 40 seconds a tick; the lists' gentler ramp does not apply), within the
 track. Both times and the bar follow the target at once;
 the track jumps there once, when the scrub ends. A press of the centre button confirms it at once
@@ -563,6 +562,7 @@ no `THEME`, keeps 1.0.1's look.
 | Crimson (1)           | `#EB2F56`                            | stock `#FF1448`  |
 | Tidal (2)             | `#30929B`                            | `#30929B`        |
 | Champagne (3)         | `#9A8446`                            | `#9A8446`        |
+| Cobalt (4)            | `#447CDD`                            | `#447CDD`        |
 
 Existing accent preference values and the red-tone mapping stay compatible; greys and artwork
 remain unchanged by the live accent mapper. See [internals.md](internals.md#accent) for the mapping.
@@ -573,14 +573,16 @@ Now Playing uses 24 px monochrome control glyphs on 28 px canvases inside the ex
 
 **Theme: Minimal** (`THEME=0`, the default) is the look described above. **Theme: Classic**
 (`1`) is the iPod look before 1.0.1, drawn at runtime over the same assets: the accent's
-full-width selection bar under white text, with Home's chevron on its bar, coloured settings icons and the stock `list_into`, a `#242424` status
-bar (`BAR_CLASSIC`), and Now Playing's 8-pixel capsule and play/pause glyph.
+full-width selection bar under white text, with Home's chevron on its bar, coloured settings icons and the stock `list_into`, and Now Playing's 8-pixel capsule and play/pause
+glyph. Its status bar is black, as Minimal's.
 
 Minimal has no accent: the Accent row hides (the list's layout skips a hidden row, so it leaves
 no gap) and the stored accent is kept for Classic. Its drawing takes Graphite's greys,
 whatever `ACCENT` holds, and its own fills (the progress bars, Spotify's, the PEQ curve and the
 visualizer) are `MINIMAL_FILL`, white on the dark track; a scrub's fill is pure white. In Classic
-the Accent row follows Theme and every accent applies as before.
+the Accent row follows Theme and every accent applies as before. Now Playing's bar has no thumb:
+stock draws its dragger (a box and knob, the stock theme's blue) unless `border_color` is clear,
+so `playing_page` clears it in every state. 1.3.9 first painted it white, which drew the box at rest.
 
 A change applies at once, as Accent does: the image cache is dropped and the screen repaints
 (icons and chevrons reload in the new theme's colours), Home re-lays its menus and art, and all
@@ -591,6 +593,17 @@ selection staying on Theme. Nothing needs a restart.
 What Classic does not restore: the pinned theme edit of `s_btn_listitem`'s pressed colour
 (`#3D1920` to `#333333`), so a touched row flashes grey rather than an accent tint, and the
 status bar asset's own background (`#000000`, not `#161616`), which the payload's fill covers.
+
+## Games
+
+**Library → Games** opens Sudoku, Vortex and Solitaire ([internals](internals.md#games)). A game
+takes every key but Power and a held Return, so the music keeps playing untouched.
+
+| Game      | Wheel                                    | Centre                                          | Play/Pause            | Previous/Next    | Return                              |
+| --------- | ---------------------------------------- | ----------------------------------------------- | --------------------- | ---------------- | ----------------------------------- |
+| Sudoku    | Moves through the cells; picks the digit | Opens the digit, then writes it                 | New game (asks first) | Up or down a row | Cancels the digit; back to Games    |
+| Vortex    | Turns the paddle                         | Launches; plays again after a game              | Pauses and resumes    |                  | Pause menu: Continue or Quit        |
+| Solitaire | Moves between the piles                  | Draws; picks up, drops; twice sends a card home | New game (asks first) | Up or down a row | Drops the held cards; back to Games |
 
 ## Review sheets
 

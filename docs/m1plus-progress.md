@@ -1592,6 +1592,65 @@ The pass found three M1 gaps, all older than 1.3.8:
   from the folder, opens a second Now Playing. Back past the folders reaches the first, which still
   shows the old track and position (*402/417*) beside the new track's time. Roadmap U4.
 
+## 43. U3 step 4: sync to upstream 1.3.9 (Oct 24)
+
+1.3.9 has 17 commits past 1.3.8:
+- the hold and More menus wrap, and so does the library's Albums;
+- Go to Artist works from Cover Flow, and Cover Flow fits non-square covers whole;
+- Frequent and Recent take the library's titles for untitled songs, as My Fav does;
+- a track's start sends its folder's speed to the decoder;
+- lyrics keep their place on Play/Pause;
+- the Cobalt accent, a black status bar in Classic, and Games (Sudoku, Vortex, Solitaire) on the iPod;
+- the payload's scratch at 0xb80000, 128 KB, with `.bss` folded into it.
+
+| Commit | Change | Why |
+|---|---|---|
+| `afa1289` | Merge upstream 1.3.9 | 3 hunks in 2 files. In `build.py`, `VERSION` sits beside the fork's `Q2_TAR_SHA`, and `PAYLOAD_WINDOWS` takes `games_page` beside the M1's `library_page`. In `navigation.c`, `fav_titles` covers Frequent and Recent, after the M1's artist albums block. |
+| `2e04b1a` | 1.3.9's tunables on M1 | The Cobalt row of `ACCENTS`: `accent_names`' `_Static_assert` fails the M1 compile without it. `BAR_CLASSIC` dropped, as upstream's. |
+| `33b5db0` | 1.3.9's source and scratch bound | `games.c` in the M1's copy of `peq.py`'s list (it compiles to nothing at `IPOD=0`). The scratch check allows 128 KB, as `build.py`'s. The mapping still ends at the ELF's end, which is now `__scratch_end`. |
+| `b744073` | `LYRIC_ROWS` unported | 1.3.9's one new site. It is mirrored in `CALL_SITES['q2']` and waits with `LYRIC_FOLLOW`. |
+| `feee27a` | 1.3.9's test cases in the M1 suites | `suitemerge.py` merged `build` and `playback` cleanly and left 10 hunks of `patch`. The iPod slider case went in as upstream wrote it, under its `variant=='ipod'` guard. The `LYRIC_ROWS` case went in as `not_ported`, as `LYRIC_FOLLOW`'s is. The 8 library hunks stayed out: they shift row counts for iPod's Games row, and the M1's library cases run its own page (`LIBRARY_INIT`), where the counts are the M1's. |
+| `87971d4` | The runbook's V1.32 number check | A load class or stock address in shared C fails nothing, so `docs/m1plus-sync.md` now lists the tag's hex literals for a check against V2.1's `demo`. Device passes set Screen Off to Off. |
+
+Checked by hand:
+- **`q2only.py 1.3.9`** lists 17 lines. The `offsets.inc` tunables are mirrored above, and the `playback.c`
+  wheel lines are `#if IPOD` (Vortex).
+- **V1.32 numbers in the tag's C:**
+  - `fav_titles`' 0xf008 and 0xf007 are V2.1's Frequent and Recent too: V2.1's `guide_page_init`
+    loads 0xf00a, 0xf008 and 0xf007, and so does `loadLocalClassList`.
+  - `ringnav_lyric_rows` calls V1.32's lyric row builder by its address (`0x529f0c`). On M1 it links,
+    since the build keeps the `ringnav_*` entry points, but nothing calls it until `LYRIC_ROWS` is
+    ported (roadmap U4).
+  - `list_delete` is iPod only.
+- **`ring_list`** now reads the top window's name. On M1, `album_page` also holds an artist's albums
+  (`0xff01`), and they keep hard ends, as an album's songs do.
+- **The orphan `.bss`** that section 42 found is fixed upstream by 13f04f0, so there is no PR to send.
+
+Results:
+- **`test/q2compare.py 1.3.9 --suites`:** Legacy `cdbc6749…` and iPod `e306e72e…` are byte-identical to
+  1.3.9's build, and all 22 suite runs pass (`patch` 1262 and 1679 scenarios). `coverflow`, `peq` and
+  `remote` differ in text from 1.3.9's, by the same fork seams as at 1.3.8.
+- **The M1** (`work/u3/1.3.9`, 1.3.9 dev 1, `V012s`, `update.bin` `a5671299…`): these pass:
+  - `build --build`;
+  - `patch`: 1084 scenarios, no `KNOWN GAP`, 32 `NOT PORTED`;
+  - `boot` and its two walks;
+  - `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa`.
+- **`test/m1plus/ports.py`:** 553 rows.
+- **`fndiff.py` from 1.3.8 dev 1:** 18 changed, 8 added, 0 removed. For the final device pass:
+  - Cover Flow's Go to Artist (`scoped_open`, `artist_under`) and its non-square covers (`decode`);
+  - the hold menu's wrap, with section 42's scroll fix (`qm_open`, `ringnav_dispatch`);
+  - Albums' wrap and the Frequent and Recent titles (`ringnav_localclass`);
+  - a folder's speed at a track's start (`playback_track_speed`);
+  - the PEQ editor's rename (`peq_ui.c`).
+
+  The playlist editor's changes (`ple_*`) don't run on M1.
+- **Footprint over 1.3.9's files:** +1,421/−285 over 30. That is the 1.3.8 step's, plus section 42's
+  three lines.
+
+New to the runbook:
+- a rule for V1.32 numbers in shared C, with the scan;
+- Screen Off set to Off for a device pass.
+
 ## How to check a build now
 
 ```sh

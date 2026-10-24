@@ -95,6 +95,8 @@ CALL_SITES = {
         'ID3_PATH': ((0x5148e8, 0x0320f809, 'ringnav_id3_path'),),
         # The Now Playing timer's jalr scroll_view_scroll_to, its lyric follow: whole rows at the top.
         'LYRIC_FOLLOW': ((0x52bed0, 0x0320f809, 'ringnav_lyric_follow'),),
+        # The page refresh's bal to the lyric row builder: the lyrics keep their place on a refresh.
+        'LYRIC_ROWS': ((0x52b8f8, 0x0411f984, 'ringnav_lyric_rows'),),
         # parse_albumcovertask_thd's jalr toolsGetAlbumCover calls: Ogg pictures through ffmpeg.
         'GRID_COVER': ((0x4edf1c, 0x0320f809, 'coverflow_album_cover'), (0x4ef018, 0x0320f809, 'coverflow_grid_cover'),
                        (0x4ef0d4, 0x0320f809, 'coverflow_grid_cover')),
@@ -205,6 +207,7 @@ CALL_SITE_PURPOSES = {
     'FOLDER_NAME': 'folder names are literal text',
     'ID3_PATH': "a CUE track's file tags",
     'LYRIC_FOLLOW': 'lyric rows whole at the top',
+    'LYRIC_ROWS': 'lyrics keep their place on a refresh',
     'GRID_COVER': 'Ogg art in Albums and Folder view',
     'NP_INFO_CALL': "Now Playing's info lines",
     'LDAC_HQ': 'LDAC HQ sends 990 kbps',
@@ -291,6 +294,8 @@ M1PLUS_PORTS = {
     'BT_STATUS': ('unported', 'a headset that connects during the reconnect to the last device is kept (1.3.8)'),
     'BT_AUTOLINK': ('unported', "auto-link skips while a link is connected (1.3.8), with BT_STATUS"),
     'LYRIC_FOLLOW': ('unported', "the lyrics' top row never shows cut (1.3.8); V2.1's Now Playing timer to check"),
+    'LYRIC_ROWS': ('unported', "Play/Pause no longer flicks the lyrics to the top (1.3.9); V2.1's page refresh to "
+                   'check, with LYRIC_FOLLOW'),
     'SCAN_REFRESH': ('unported', 'a folder scan refreshes existing songs\' tags (1.2.9)'),
     'FOLDER_NAME': ('unported', "a folder named with % no longer crashes Folder's rows (1.3.0); V2.1's "
                     'folder_create_tablerow (0x5331fc) to check'),
@@ -632,7 +637,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=0', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -833,12 +838,12 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     payload = (out/'patch.bin').read_bytes()
     check(len(payload) < SCRATCH-BASE, 'Payload overlaps its scratch page')
     check(ps['__scratch_start'] == SCRATCH, 'Scratch state moved')
-    # The payload's writable state ends past __scratch_end: link.ld places only .scratch, and a static
-    # outside it (coverflow.c's stock_rows, 1.3.8's headroom cache in peq.c) is an orphan .bss after it.
-    # Upstream's Q2 maps to __scratch_end, which holds while the orphans stay in its last page; the M1's
-    # larger .scratch put 1.3.8's past it, onto the heap's first page. So map to the ELF's end.
+    # Map to the ELF's end, not __scratch_end: up to 1.3.8 link.ld placed only .scratch, and a static
+    # outside it (coverflow.c's stock_rows, 1.3.8's headroom cache in peq.c) was an orphan .bss after it,
+    # which put 1.3.8's on the heap's first page on M1. 1.3.9's link.ld takes .bss into .scratch, so the
+    # two now agree; the ELF's end stays the bound if a section lands past it again.
     payload_end = max(v + m for _, (t, _, v, _, _, m, _, _) in segments((out/'patch.elf').read_bytes()) if t == 1)
-    check(ps['__scratch_end'] <= payload_end <= SCRATCH + 0x10000, 'Scratch state exceeds its page')
+    check(ps['__scratch_end'] <= payload_end <= SCRATCH + 0x20000, 'Scratch state exceeds its 128 KB')
     patched = bytearray(raw_demo)
     def jump(off, name): patched[off:off+8] = struct.pack('<II', 0x08000000 | (ps[name] >> 2), 0)
     for name, (address, replacement, _) in M1PLUS_HOOKS.items():

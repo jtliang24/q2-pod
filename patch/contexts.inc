@@ -9,12 +9,15 @@
 { "audiosetting_page", CTX_FIXED, 0 },
 { "netdiskdownload_page", CTX_DYNAMIC, 0 },
 { "netdiskfolder_page", CTX_DYNAMIC, 0 },
-{ "sortselect_dialog", CTX_DYNAMIC, CHOICE },
+{ "sortselect_dialog", CTX_DYNAMIC, CHOICE | RING }, /* also the hold menu */
 { "folder_page", CTX_FOLDER, RING },
 { "home_page", CTX_DYNAMIC, DRILL },
 { "coverflow_page", CTX_DYNAMIC, 0 }, /* runtime window (patch/coverflow.c) */
 { "photos_page", CTX_DYNAMIC, 0 },    /* runtime window (patch/photos.c) */
 { "books_page", CTX_DYNAMIC, 0 },     /* runtime window (patch/books.c) */
+#if IPOD
+{ "games_page", CTX_DYNAMIC, 0 }, /* runtime window (patch/games.c) */
+#endif
 { "mostplayed_page", CTX_FIXED, 0 }, /* runtime window (patch/navigation.c); fixed: the hold menu */
 { "shuffle_page", CTX_DYNAMIC, 0 },   /* runtime window (patch/navigation.c) */
 { "playlistedit_page", CTX_DYNAMIC, 0 },
@@ -35,7 +38,7 @@
 { "playlist_page", CTX_LOCAL, RING | DRILL },
 { "localmusic_page", CTX_FIXED, RING },
 { "playerjumpinfo_page", CTX_DYNAMIC, 0 },
-{ "playermore_page", CTX_DYNAMIC, 0 },
+{ "playermore_page", CTX_DYNAMIC, RING },
 { "playerqueue_page", CTX_DYNAMIC, 0 },
 { "dsdoutput_page", CTX_FIXED, CHOICE },
 { "filter_page", CTX_FIXED, CHOICE },
