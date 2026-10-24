@@ -2452,8 +2452,8 @@ int ringnav_audioset(void *win, void *ctx) {
         root_read(name);
         st.root_label = list_row(view, ICON_FOLDERJUMP, root_click, 0);
         root_text(name);
-        resume_row(list_row(view, "playset_memplay", xfade_open, (void *)2)); /* crossfade.c */
-        mono_row(list_row(view, "playset_balance", mono_click, 0));
+        resume_row(list_row(view, ICON_MEMPLAY, xfade_open, (void *)2)); /* crossfade.c */
+        mono_row(list_row(view, ICON_BALANCE, mono_click, 0));
     }
     reorder(view, playset_order, sizeof playset_order);
 #if !M1PLUS

@@ -89,6 +89,8 @@
 #define ICON_DISPLAY "sset_display"
 #define ICON_COVERMODE "pset_covermode"
 #define ICON_FOLDERJUMP "pset_jumpfolder"
+#define ICON_MEMPLAY "pset_memplay" /* Resume Songs' row */
+#define ICON_BALANCE "pset_balance" /* Mono Audio's row */
 #define ICON_GAPLESS "pset_gapless"
 /* The payload's own widgets' styles: V1.32's, or V2.1's nearest of the same widget type, colour,
  * size and alignment (V2.1 has no centred 18 px label, no right-aligned 20 px scrolling label: their
