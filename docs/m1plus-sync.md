@@ -156,3 +156,4 @@ stay flat or fall.
 | Pilot sync to 1.2.2 (U2, Oct 23) | 1.2.2 (`87e2417`) | +1,416/−278 over 30 files |
 | Dev 21's fixes (Oct 23) | 1.2.2 (`87e2417`) | +1,417/−279 over 30 files: Coverflow's `STYLE_SCRLABEL_WHITE20C` |
 | U3 step 1: sync to 1.2.9 (Oct 23) | 1.2.9 (`7116f34`) | +1,417/−283 over 30 files: `tidal.c`'s seam now one line (`TIDAL_ID_REG`) |
+| U3 step 2: sync to 1.3.0 (Oct 23) | 1.3.0 (`92112b8`) | +1,420/−286 over 30 files |

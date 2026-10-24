@@ -19,8 +19,9 @@ gap can't be left marked.
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
 **Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
-one device pass. Step 1, 1.2.9, is merged and gated ([m1plus-progress.md](m1plus-progress.md) section
-40); 1.3.0 is next. Done so far:
+one device pass. Steps 1 and 2, 1.2.9 and 1.3.0, are merged and gated ([m1plus-progress.md](m1plus-progress.md)
+sections 40 and 41), and dev 29 (1.2.9) passed on the device; 1.3.8 is next, flashed before the
+scratch move. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -247,6 +248,19 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `yoffset_rowsave`, and `m3ufile_path`), and Shuffle Songs being one-shot (V2.1 has no
       `config_playmode` symbol to stand for the user's mode choice). Both features run on M1.
     - Q2 only: Hold Return: Home (the M1 has no Return key) and Volume Guard (the touch wheel's).
+  - **Found by the 1.3.0 step** (U3, Oct 23):
+    - **Lyrics from tags** (`mclLoadExLyric`): `MCL_LYRICS`, `MCL_LYRIC_LOCK` and the TagLib offsets are
+      `M1_UNPORTED`; the M1's `libtag_c.so.2.0.1` is another build than the Q2's, so its offsets are
+      to be found too (in the batch).
+    - **Standby Limit** and **the Wi-Fi signal** (`toolsIntoStandby`, `networkGetWifiSignal`): in the
+      batch; their rows and cases are off on M1.
+    - **Wi-Fi power save** (`WIFI_LPS`, a battery fix): V2.1's demo has the same
+      `rtwpriv wlan0 pm_set lps=0` string, so it's a string patch to port.
+    - **The Wi-Fi transfer page** (`WEB`: English, folder uploads): V2.1 has `/usr/share/web`; check its
+      files against the patch's strings.
+    - **Folder names with `%`** (`FOLDER_NAME`): stock's row formatter crashes on them; check V2.1's
+      `folder_create_tablerow` (`0x5331fc`).
+    - **A CUE track's file tags** (`ID3_PATH`) and **Ogg art in the grids** (`GRID_COVER`).
   - **Found on the device** (dev 29, Oct 23):
     - **The rating picker has no way out but a rating.** A tap outside leaves it up, the knob's press
       (Volume mode) locks the screen, and Now Playing's back button is V2.1's, which closes the page with
