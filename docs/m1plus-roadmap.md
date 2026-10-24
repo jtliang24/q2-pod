@@ -247,6 +247,10 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `yoffset_rowsave`, and `m3ufile_path`), and Shuffle Songs being one-shot (V2.1 has no
       `config_playmode` symbol to stand for the user's mode choice). Both features run on M1.
     - Q2 only: Hold Return: Home (the M1 has no Return key) and Volume Guard (the touch wheel's).
+  - **Found on the device** (dev 29, Oct 23):
+    - **The rating picker has no way out but a rating.** A tap outside leaves it up, the knob's press
+      (Volume mode) locks the screen, and Now Playing's back button is V2.1's, which closes the page with
+      the picker. A tap outside it, or the back button, should close the picker alone, as Return does.
   - **Found on the device** (dev 21, Oct 23):
     - **A touch hold on an album's tracks plays the track.** On Album's list the hold menu opens for the
       row held. On an album's track list (16 tracks), `load` counted 17 rows (`g_menu.rows`, read over

@@ -1445,6 +1445,22 @@ in V2.1 by their callers and aliased; `tools/peq.py`'s changes and changed tunab
 reviewed as `build()`'s are; seams in files upstream's host tests cut as names, not `#if`s; the test
 copies merged three ways; `TMPDIR=/tmp` for the Q2 suites; and `fndiff.py` for the checklist.
 
+**On the device (dev 29, `V00Ts`, Oct 23).** The user flashed it from the card, where q2remote had put
+it (hash checked on the device); About shows CFW 1.2.9 dev 29, and the running `demo` hashes as built.
+Over q2remote:
+- **Folder Root:** the fifth Playback row reads *Folder Root: Card*, and taps step through the card's
+  folders in name order, saving each (`Audiobooks`, `Books`, `MusicLibrary`). Folder itself wasn't
+  opened: this Home menu has no Folder card. The setting was put back to Card.
+- **Shuffle Songs and Up Next:** Shuffle Songs plays (40 of 417); the held Play/Pause's menu offers
+  Up Next, its rows the tracks to come, and Next played the first of them.
+- **The heart and the picker:** a tap toggles My Fav and back; the page still swipes after it; a hold
+  opens the picker (*Unrated*).
+- Not checked: Tidal (no account), Search's OK, videos, crossfade, scrobbles, Coverflow's All albums.
+- **Found, older than 1.2.9: the picker has no way out on M1 but a rating** (roadmap U4). A tap outside
+  leaves it up; the knob's press, in Volume mode, locks the screen instead; and Now Playing's back
+  button is V2.1's (`on_back_onclick`), which closes the page and the picker with it, saving nothing,
+  where Return would close the picker alone (`rate_key`).
+
 ## How to check a build now
 
 ```sh
