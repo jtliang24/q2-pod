@@ -34,7 +34,9 @@ static int previous_back(const void *info) {
  * leaves both modes to stock) and a dark screen keep the volume. */
 static int knob_nav_active(void) {
     pod_settings();
-    if (!st.knob_mode || !usable() || now_playing()) return 0;
+    /* Bluetooth receiver mode keeps the knob's volume: usable() no longer refuses it (1.3.8, the
+     * Q2's wheel navigates the gear's Audio settings there). */
+    if (!st.knob_mode || !usable() || now_playing() || bt__recv_pageflag) return 0;
     return allowed_top(window_manager_get_top_window(window_manager()));
 }
 #endif
