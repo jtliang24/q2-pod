@@ -1511,6 +1511,45 @@ per-version count includes the gate builds), and the running `demo` hashes as bu
 - Not checked: Folder's rows (this Home menu has no Folder card).
 
 
+## 42. U3 step 3: sync to upstream 1.3.8 (Oct 24)
+
+1.3.8, 63 commits past 1.3.0: View Queue in a shuffle's play order and its hold moving a row up next,
+Go to Folder, chapters in M4Bs, Swap L/R, EQ Auto preamp and Reset to defaults, playlist editing,
+Network Update, LRCLIB and MusicBrainz lookups, quick settings' radio holds, Bluetooth's boot and
+incoming links, and the payload's scratch page at 0xb60000.
+
+| Commit | Change | Why |
+|---|---|---|
+| `995bc97` | Merge upstream 1.3.8 | 17 hunks in 5 files, 11 in `navigation.c`. Upstream's side wins: the new rows take `ICON_*` names; `library_music` is 1 for every class, as upstream's; `ringnav_input` is the M1's include, then upstream's text, without its `#if !M1PLUS`; the playlist row's hold stays in the Q2 branch (V2.1 has no `playlistsmore_page`), the M1's taking the new `cur < 0` return; Bluetooth volume takes upstream's `device_set_volume`, with `BT_VOLUME` and `BT_VOLUME_KEY` (`g_volume`, `"VOLUME"` on the Q2). |
+| `4517813` | 1.3.8's names at their M1 values | `IM_WIDGET` is 0x04 on V2.1 too (`input_method_request` @`0x656308`). Battery tunables copied. |
+| `7922406` | 1.3.8's sources and header names | Four new payload sources in the M1's copy of `peq.py`'s list, `__udivdi3`, `Q2POD_TAG`/`Q2POD_UA`, and `M1PLUS_UNRESOLVED` for Network Update's `fwupdate_tf`. |
+| `20c4a42` | 1.3.8's unported hooks and sites | `write_int_config` and `mclSetOutputWay` are native (V2.1's `BTVOLUME`); the rest wait. `more_image` and `search_key` are named from M1 files. |
+| `388af7c` | The knob's volume in receiver mode | 1.3.8 drops `bt__recv_pageflag` from `usable()`, which Knob Navigation leaned on. The knob test found it: a condition removed from shared code shows in neither a conflict nor `q2only.py`. |
+| `c45f525` | The payload's state past `__scratch_end` | `link.ld` places only `.scratch`; statics outside it are orphan `.bss` after it, which the segment didn't cover. 1.3.8's `headroom` cache pushed the M1's `stock_rows` onto the heap's first page, and Coverflow's open wrote there. Upstream's Q2 builds are still inside the page: a fix for upstream. |
+| `75d67e0` | A2DP held between songs | V2.1's `bluealsa2` starts the Q2's `bluealsa`, so 1.3.8's `--keep-alive=5` applies as is. |
+| `b00f7ea` | `CLASS_LOAD_ARTIST_ALBUMS` dropped | No reader since `library_music` is always 1. |
+| `f3efb72` | `chapters` in `q2compare.py` | A host suite; it runs `/usr/bin/ffmpeg`, bound in with bubblewrap here. |
+| `cd02cf1` | `test/m1plus/suitemerge.py` | `git merge-file` made 16 conflicts of `patch.py`, each a guarded (re-indented) section; matching lines by text left 9 hunks to merge by hand. |
+| `0571519` | 1.3.8's test cases in the M1 suites | Guards for the unported features; V2.1's play status word in the chapters case; `boot.py`'s walk taps moved for Reset to defaults and Swap L/R. |
+
+Results:
+- `test/q2compare.py 1.3.8 --suites` (under bubblewrap, `TMPDIR=/tmp`): Legacy `fb49c579…` and iPod
+  `6239cbc8…` are byte-identical to 1.3.8's build, and its 22 suite runs pass (`patch` 1255 and 1642
+  scenarios).
+- The M1 (`work/u3/1.3.8`, 1.3.8 dev 1, `V010s`): `build --build`, `patch` (1079 scenarios, no
+  `KNOWN GAP`, 31 `NOT PORTED`), `boot` and its two walks, `playback`, `id3`, `m4b`, `headset_io`,
+  `ldac` and `bluealsa` pass.
+- The scratch page: V2.1's `demo` maps nothing above its data segment's end (0xa10fc8), so 1.3.8's
+  0xb60000 and 1.3.9's 0xb80000 only grow the payload's segment.
+- `test/m1plus/ports.py`: 553 rows, 32 `NOT PORTED`.
+- `test/m1plus/q2only.py`: 22 lines, each handled or Q2 only (the playlist hold, `search_key`, the USB
+  prompt's keys).
+- `fndiff.py` from 1.3.0 dev 5: 157 changed, 57 added, 3 removed.
+- Footprint over 1.3.8's files: +1,418/−285 over 30.
+
+New to the runbook: `suitemerge.py`; `M1PLUS_UNRESOLVED`; the payload source list and rootfs swaps
+`m1plus.py` copies; `TMPDIR` set inside `nix develop`; `chapters.py` under bubblewrap.
+
 ## How to check a build now
 
 ```sh
