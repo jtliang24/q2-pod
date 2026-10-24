@@ -18,8 +18,8 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** the first full sync, to upstream's latest release (U3), chosen when it starts: upstream was at
-1.3.9 when U3 was planned (Oct 22) and at 1.4.1 a day later. Done so far:
+**Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
+one device pass. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -178,15 +178,37 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   - **Its device pass** (dev 21) found two more the gates had missed: a Q2 style named by its string in
     Coverflow, and a key-up change the merge took only in Q2-only code. Both are fixed (dev 22), with a
     harness check for the first and `test/m1plus/q2only.py` for the second, both now runbook rules.
-- **U3. First sync: upstream's latest release (L).**
-  - The tag is picked when U3 starts: upstream releases several times a week (1.3.9 on Oct 22, 1.4.1 on
-    Oct 23), so the latest then saves a second sync right after.
-  - Merge the tag, by the [sync runbook](m1plus-sync.md). Don't rebase: `m1plus-progress.md` cites the
-    branch's commit hashes.
+- **U3. First sync: upstream 1.4.2 (L).** The user chose 1.4.2 on Oct 23. 1.4.3, out the same day,
+  is the first U5 sync. 1.4.2 is 235 commits past 1.2.2, and a trial merge conflicts in 15 files, 57
+  hunks (28 in `navigation.c`). U1 brought this down from about 150 hunks.
+  - **Merge in steps**, each one a full pass of the [sync runbook](m1plus-sync.md):
+    1.2.9 → 1.3.0 → 1.3.8 → 1.3.9 → 1.4.2. Don't rebase: `m1plus-progress.md` cites the branch's commit
+    hashes.
+    - Each step only merges and keeps the M1 working. New upstream features stay off on M1, as
+      `unported` rows.
+    - Each step's `--dev` build is gated and kept in `work/u3/<tag>/`, and `test/m1plus/fndiff.py` lists
+      the payload functions it changed against dev 22.
+    - 1.3.9 is its own step for 13f04f0, which moves the payload's scratch state to 0xb80000 and lets it
+      grow to 128 KB. The M1 takes `SCRATCH` from `build.py`: check that range in V2.1's `demo` first.
+  - **Then port the finished features in one batch**: those whose code doesn't change after the step that
+    brings them, whose function V2.1's `demo` has, and that aren't tied to the Q2:
+    - the shared hooks `write_int_config`, `toolsQueryDbTableAndSort`, `mclSetOutputWay` and
+      `networkGetWifiSignal`;
+    - `lockscreen_access` (the wallpaper fix, below);
+    - the timezone page (`select_timezone`);
+    - embedded lyrics (`mclLoadExLyric`);
+    - chapters;
+    - online cover and lyric search (`kugou_obtain*`);
+    - Standby Limit (`toolsIntoStandby`), if V2.1's standby behaves like the Q2's.
+
+    Porting after the merges, not at each step, ports each feature once, against the final code, and
+    keeps each step's changes to merges alone.
+  - **One device pass at the end**: the function diff's list plus the ports. A regression is bisected by
+    flashing the kept step images.
   - Done when:
-    - `q2compare.py` against the tag is exact, and its suites pass on the Q2 builds;
+    - `q2compare.py` against 1.4.2 is exact, and its suites pass on the Q2 builds;
     - the M1 gates pass, and the port report fills U4;
-    - a device pass on the M1 has run.
+    - the device pass has run. `1.4.2-m1.1` is then the first published M1 release.
 - **U4. Upstream features to port (M each, many).** This is the porting queue from now on; section 4 is
   the record for 1.2.2. One row per feature from the port report: its hooks and sites, and what V2.1
   has. Porting follows the ground rules: find it in V2.1's code, then pin it in a test.
@@ -213,6 +235,15 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   - **Seeded by 1.3.9** (to confirm against the report; a later tag adds its own):
     - **New pages:** games (`games.c`), chapters (`chapters.c`), Up Next (`upnext.c`), network update
       (`netupdate.c`, `systemset_fwupdate_page_init`), online match (`onlinematch.c`), Qobuz.
+    - **Left for after U3, and why** (checked Oct 23 against 1.4.2 and V2.1's `demo` symbols):
+      - V2.1 has no `player_start_queue` (Up Next, queue play), `toolsQueryContentDbTable` or
+        `localmusic_playlistsmore_page_init`. Each needs a V2.1 stand-in found first.
+      - Network update fetches DiamondBond's Q2 `update.tar`. It stays off on M1 until it points at
+        the fork's M1 releases.
+      - The card app host (`addon.c`, `usbmode_page_init`, 1.4.2) runs over librespot: it goes with
+        section 3.
+      - Games changed again in 1.4.2 and use the Return key, which the M1 lacks. They need a touch
+        design.
     - **Hooks:** lyric search and cover search (`kugou_obtainlyric`, `kugou_obtaincover`),
       `mclLoadExLyric`, the timezone page, `localmusic_playlistsmore_page_init`,
       `toolsQueryDbTableAndSort` and `toolsQueryContentDbTable`, `mclSetOutputWay`, `write_int_config`,
