@@ -15,6 +15,7 @@ void playback_insert(unsigned at, unsigned n, int next); /* the advanced part al
 int playback_move(unsigned from); /* Up Next's hold: from plays next; its new index, else -1 */
 void playback_poll(void);
 void playback_speed_start(void);
+void playback_track_speed(void); /* a track's start: the folder's speed, to the decoder */
 void xfade_poll(int next); /* crossfade.c */
 void mono_sync(void);      /* crossfade.c */
 int playback_resumed(void *r);
@@ -24,4 +25,7 @@ int wheel_pct(void); /* Wheel sensitivity, 50-200% */
 void wheel_set_pct(int n);
 void wheel_guard_reset(void);
 extern int wheel_guard; /* Volume guard: the screen-off wheel's half-turn guard, 0 off */
+/* iPod: while wheel_raw is set the wheel posts no ticks and adds its raw travel to wheel_travel,
+ * 200 units a turn, rising anticlockwise (games.c's Vortex) */
+extern volatile int wheel_raw, wheel_travel;
 #endif

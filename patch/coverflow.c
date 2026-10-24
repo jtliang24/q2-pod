@@ -1392,10 +1392,10 @@ static struct {
     int c, frac, drawn;           /* the position the frame holds, once drawn */
 } fx __attribute__((section(".scratch")));
 
-/* A decoded image copied into a texture: its centred square, nearest sampled to ART_SIZE, over
- * black. Only 32-bit formats (BITMAP_RGBA_AT); stock decodes covers to RGBA8888 with straight
- * alpha. The image manager's copy is only
- * read, and a cover's load is dropped again at once, as stock does. */
+/* A decoded image copied into a texture: fitted whole and centred, nearest sampled to ART_SIZE, over
+ * black, so a non-square cover shows uncropped between black bars, as Now Playing shows it. Only
+ * 32-bit formats (BITMAP_RGBA_AT); stock decodes covers to RGBA8888 with straight alpha. The image
+ * manager's copy is only read, and a cover's load is dropped again at once, as stock does. */
 static int decode(const char *url, unsigned *out, int unload) {
     static const unsigned char at[4][4] = BITMAP_RGBA_AT;
     unsigned bitmap[64]; /* bitmap_t */
@@ -1405,13 +1405,19 @@ static int decode(const char *url, unsigned *out, int unload) {
         format < 4 && w && h && w <= 4096 && h <= 4096 ? bitmap_lock_buffer_for_read(bitmap) : 0;
     if (data) {
         const unsigned char *o = at[format];
-        unsigned stride = bitmap_get_line_length(bitmap), side = w < h ? w : h, xoff[ART_SIZE];
-        const unsigned char *base = data + (h - side) / 2 * stride + (w - side) / 2 * 4;
-        for (unsigned x = 0; x < ART_SIZE; ++x) xoff[x] = x * side / ART_SIZE * 4;
+        unsigned stride = bitmap_get_line_length(bitmap), side = w > h ? w : h, xoff[ART_SIZE];
+        for (unsigned x = 0; x < ART_SIZE; ++x) { /* ~0u: a bar; left of the image wraps to one */
+            unsigned sx = x * side / ART_SIZE - (side - w) / 2;
+            xoff[x] = sx < w ? sx * 4 : ~0u;
+        }
         for (unsigned y = 0; y < ART_SIZE; ++y) {
-            const unsigned char *line = base + y * side / ART_SIZE * stride;
+            unsigned sy = y * side / ART_SIZE - (side - h) / 2; /* wraps above the image */
             for (unsigned x = 0; x < ART_SIZE; ++x) {
-                const unsigned char *px = line + xoff[x];
+                if (sy >= h || xoff[x] == ~0u) {
+                    *out++ = 0xff000000u;
+                    continue;
+                }
+                const unsigned char *px = data + sy * stride + xoff[x];
                 unsigned a = px[o[3]], r = px[o[0]], g = px[o[1]], b = px[o[2]];
                 if (a < 255) r = r * a / 255, g = g * a / 255, b = b * a / 255; /* over black */
                 *out++ = 0xff000000u | r | g << 8 | b << 16;
@@ -1869,6 +1875,16 @@ static int pick(void *ctx, void *event) {
     return 0;
 }
 
+/* The artist page right under an artist's covers, which they close with them (keyup,
+ * coverflow_artist), or 0. */
+static void *artist_under(void) {
+    void *wm = window_manager(), *under = 0;
+    for (unsigned i = 1, n = cf.scoped == ARTIST_ALBUMS ? widget_count_children(wm) : 0; i < n; ++i)
+        if (widget_get_child(wm, i) == cf.page) under = widget_get_child(wm, i - 1);
+    if (under && tk_strcmp(widget_get_prop_str(under, "name", ""), "artistinfo_page")) under = 0;
+    return under;
+}
+
 /* Return: tracks -> covers (the slide_menu kept its album), preparing -> cancel and covers,
  * covers or the message -> Home, or back out of a scoped page. */
 static int keyup(void *ctx, void *event) {
@@ -1879,11 +1895,8 @@ static int keyup(void *ctx, void *event) {
         /* An artist's covers: the unseen artist page under them closes first, unanimated (its
          * own Return is navigator_back too; its cleanup runs on EVT_WINDOW_CLOSE), so Return
          * lands on the Artists list. */
-        void *wm = window_manager(), *under = 0;
-        unsigned n = cf.scoped == ARTIST_ALBUMS ? widget_count_children(wm) : 0;
-        if (n >= 2 && widget_get_child(wm, n - 1) == cf.page) under = widget_get_child(wm, n - 2);
-        if (under && !tk_strcmp(widget_get_prop_str(under, "name", ""), "artistinfo_page"))
-            window_manager_close_window_force(wm, under);
+        void *under = artist_under();
+        if (under) window_manager_close_window_force(window_manager(), under);
         navigator_back();
     } else
 #if M1PLUS /* opened from the Q2 Pod page, which Return goes back to */
@@ -1895,6 +1908,7 @@ static int keyup(void *ctx, void *event) {
 }
 
 static int closed(void *ctx, void *event) {
+    if (ctx != cf.page) return 0; /* a page scoped_open closed already */
     if (cf.saved_album) BLOB_IO(LAST_ALBUM, cf.saved_album, 1);
     drop();
     cf.page = cf.body = cf.covers = cf.slide = 0;
@@ -1917,14 +1931,30 @@ static int coverflow_open(void *ctx, void *event) {
     return 0;
 }
 
+/* A scoped page: a Coverflow already open (played from, under Now Playing's Go to Artist, issue
+ * #73) closes once the new one is up, with an artist page under it: there is one page's state.
+ * ponytail: Return then skips it; stack the state if that is missed. */
+static int scoped_open(void) {
+    void *old = cf.page, *under = artist_under(),
+         *page = page_open("coverflow_page", closed, keyup);
+    if (!page) return 0; /* the old page and its state stay */
+    if (old) {
+        closed(old, 0);
+        window_manager_close_window_force(window_manager(), old);
+        if (under) window_manager_close_window_force(window_manager(), under);
+    }
+    cf.page = page;
+    return 1;
+}
+
 /* Display settings' Artist albums: Coverflow (navigation.c): albums, coverflow_split's, as the
- * covers, which the page owns; 0 when Coverflow is open already, and albums is the caller's. */
+ * covers, which the page owns; 0 when there are none, and albums is the caller's. */
 int coverflow_artist(void *albums) {
-    if (cf.page || !deque_size(albums)) return 0;
+    if (!deque_size(albums)) return 0;
     void *music = _create_deque("stSongInfo");
     deque_init_copy(music, albums);
     music = music_albums(music);
-    if (!deque_size(music) || !(cf.page = page_open("coverflow_page", closed, keyup))) {
+    if (!deque_size(music) || !scoped_open()) {
         deque_destroy(music);
         return 0;
     }
@@ -1940,10 +1970,9 @@ int coverflow_artist(void *albums) {
 }
 
 /* Library Ratings' Albums (navigation.c): the albums hearts gives 1 to 5 hearts, as covers with the
- * rated Sort card alone; 0 when none is, or Coverflow is open already. */
+ * rated Sort card alone; 0 when none is. */
 int coverflow_rated(int (*hearts)(void *)) {
     int n;
-    if (cf.page) return 0;
     void *all = staged(albums, 0, &n), *rated = _create_deque("stSongInfo");
     if (n > 0) all = split(all);
     all = music_albums(all);
@@ -1951,7 +1980,7 @@ int coverflow_rated(int (*hearts)(void *)) {
     for (unsigned i = 0; i < deque_size(all); ++i)
         if (hearts(deque_at(all, i))) _deque_push_back(rated, deque_at(all, i));
     deque_destroy(all);
-    if (!deque_size(rated) || !(cf.page = page_open("coverflow_page", closed, keyup))) {
+    if (!deque_size(rated) || !scoped_open()) {
         deque_destroy(rated);
         return 0;
     }

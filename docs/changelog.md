@@ -1,5 +1,27 @@
 # Changelog
 
+- **1.3.9**:
+  - iPod: **Library → Games** with a controller icon and Sudoku, Vortex and Solitaire (Klondike, draw one), playable while music plays. Sudoku and Solitaire keep the game in progress and Vortex the best score across restarts.
+  - Games: Vortex lets the screen dim and turn off while the ball is in play (which pauses it) and no longer redraws the screen when nothing moves, saving battery.
+  - Games: Sudoku and Solitaire save a couple of seconds after your moves instead of after every one, and still on leaving the game.
+  - Library: My Fav, Frequent and Recent, and **Add Songs**' ticks, open faster in a large library.
+  - Library: Frequent and Recent show a song's title instead of its file name and track number when it was played from Folder.
+  - Quick Settings: swiping up to close from the brightness slider no longer moves the brightness. The slider now only moves once your finger goes sideways.
+  - Wi-Fi and Bluetooth (Minimal): the delete mark on the selected row is grey instead of white on white.
+  - Lyrics: Play/Pause no longer flicks the lyrics to the top and back.
+  - Cover Flow: **Go to Artist** from a song played in Cover Flow opens the artist in Cover Flow when **Artist Albums** is set to Coverflow, instead of the grid.
+  - Cover Flow: a cover that isn't square shows whole, between black bars, instead of cropped to its centre.
+  - Lyrics: a lyrics search no longer shows the credits (writer, mix engineer and so on) some LRCLIB lyrics start with.
+  - EQ: **Presets → Rename a preset** renames a saved preset.
+  - Now Playing: a larger touchscreen seek target, separate from page swipes. The progress bar shows no thumb when you touch it to seek, instead of a blue one.
+  - Menus: the hold menu, Now Playing's ⋯ menu and the sort picker wrap from bottom to top and back after a pause at the end, as Library lists do.
+  - Audiobooks: a song that follows a book played at a faster speed plays at normal speed; the speed sent to the decoder follows each track's folder.
+  - Library: **Albums** wraps from bottom to top the same way as Artists: push past the end's resistance, then turn again after a pause.
+  - Playlists: the ⋯ page's row that deletes the whole playlist always reads **Delete Playlist**.
+  - Edit Playlist: **Add Songs** shows a tick beside songs already in the playlist, and ticks a song as you add it.
+  - Display: **Accent: Cobalt**, the iPod's blue, for the Classic theme.
+  - Display: the Classic theme's status bar is black, as Minimal's.
+
 - **1.3.8**:
   - Full-screen album art: the song name shows again for 3 s each time the track changes, then fades as before.
   - Battery: Percent Inside has rounded corners again. 1.3.7's radius was below the smallest stock will round, so it drew a square.
