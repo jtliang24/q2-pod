@@ -104,3 +104,5 @@
 #define PH_GRID_H 240
 #define VIS_H 186
 #define BOOK_ROWS 10
+/* tidal_start: the register mcl_tidalStartPlayer's caller keeps its song id in (patch/tidal.c) */
+#define TIDAL_ID_REG "$s2"

@@ -505,6 +505,9 @@ static inline int arc_out(int r, int y) {
 /* tidal_play's Downloads naming only: on M1, tidal_start passes no song id, so it streams stock's
  * way first. V2.1's get_tidal_trackurl (0x512ed0) hands its URL thread (0x51c288) the whole row. */
 #define REC_TIDAL_ID M1_UNPORTED
+/* tidal_start passes no song id: V2.1's two callers (0x500d5c, 0x51c7b0) keep no audited id, so stock
+ * streams, uncached (patch/tidal.c, roadmap U4). */
+#define TIDAL_ID_REG "$zero"
 #define REC_NAME 0x08          /* the file name; REC_TITLE is the tag's, empty when untagged */
 #define REC_PATH 0x0c
 #define REC_TITLE 0x10
