@@ -569,6 +569,11 @@ static inline int arc_out(int r, int y) {
  * then branches to loadLocalClassList (0x4ee930, 0x4ee9a8), where V1.32 loads 0xff11 (ringnav_localclass's
  * artist_tab). */
 #define CLASS_ARTIST_ALBUMS 0xff01
+#define CLASS_ARTISTS 0xf004     /* the Artists list: a row opens album_page with {0xf004, record} (0x535d04) */
+/* The hold menu's Go to (m1plus_nav_goto.c): albuminfo_page is the album's, and an artist's albums are
+ * album_page with classinfo CLASS_ARTIST_ALBUMS, the Albums list's own page too */
+#define GOTO_ALBUM_PAGE "albuminfo_page"
+#define GOTO_ARTIST_SHOWN (I(g_local_classinfo_save, 0) == CLASS_ARTIST_ALBUMS)
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */

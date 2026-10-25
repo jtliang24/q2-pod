@@ -6611,6 +6611,8 @@ int ringnav_playlistsmore(void *win, void *ctx) {
     return result;
 }
 
+#include "m1plus_nav_goto.c"
+
 /* Go to album/artist reuse g_local_classinfo_save, which the pages underneath reload from when
  * they come back, so it is put back as the page opened here closes. */
 static int qm_restore(void *page, void *event) {
@@ -6624,6 +6626,9 @@ static void qm_goto(void *r, int album) {
     unsigned char *info = (unsigned char *)g_local_classinfo_save;
     void *wm = window_manager(), *page = window_manager_get_top_window(wm);
     memcpy(st.qm_classinfo, info, sizeof st.qm_classinfo);
+#if M1PLUS
+    m1plus_goto(r, album);
+#else
     if (album) {
         info[9] = 0;
         tk_snprintf((char *)info + 0xd, 0x100, "%s", (const char *)P(r, REC_ALBUM));
@@ -6638,6 +6643,7 @@ static void qm_goto(void *r, int album) {
         } context = { (int)st.qm_cls, r };
         navigator_to_with_context("localmusic/artistinfo_page", &context);
     }
+#endif
     void *top = window_manager_get_top_window(wm);
     if (top != page) widget_on(top, EVT_WINDOW_CLOSE, qm_restore, top);
 }
@@ -6909,10 +6915,9 @@ static int qm_open(const void *unused) {
     if (aid) acts[n++] = album_hearts == 5 ? QA_UNFAV : QA_FAV, acts[n++] = QA_RATE;
     if (st.qm_kind < QM_COVERFLOW || st.qm_kind == QM_PLAYING) acts[n++] = QA_PLAYLIST;
     if ((st.qm_kind == QM_SONG || st.qm_kind == QM_PLAYING) && album && *album &&
-        (cls & 0xfff0) != 0xff10 && !navigator_window_is_exist("playerjumpinfo_page"))
+        (cls & 0xfff0) != 0xff10 && !navigator_window_is_exist(GOTO_ALBUM_PAGE))
         acts[n++] = QA_ALBUM;
-    if ((song || cls == CLASS_ALBUMS) && artist && *artist &&
-        !navigator_window_is_exist("artistinfo_page"))
+    if ((song || cls == CLASS_ALBUMS) && artist && *artist && !GOTO_ARTIST_SHOWN)
         acts[n++] = QA_ARTIST;
     /* ponytail: hidden while a folder_page is open (as Go to's single-instance pages), so a folder
      * play's Now Playing has none; Back reaches that folder_page instead. */

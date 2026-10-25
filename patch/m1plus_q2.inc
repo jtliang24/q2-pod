@@ -109,6 +109,9 @@
 #define BT_STATUS_CB 0x4f1a50 /* openBluetooth's btctl_device_status_callback */
 #define BT_PROMPT_CB 0x4ef600 /* openBluetooth's btctl_set_prompt_callback */
 #define LYRIC_ROW_BUILDER 0x529f0c /* Now Playing's lyric rows, from the page's refresh (LYRIC_ROWS) */
+/* The hold menu's Go to: Album's page (hidden while one is open) and whether Go to Artist's is open */
+#define GOTO_ALBUM_PAGE "playerjumpinfo_page"
+#define GOTO_ARTIST_SHOWN navigator_window_is_exist("artistinfo_page")
 #define PH_GRID_H 240
 #define VIS_H 186
 #define BOOK_ROWS 10

@@ -3472,6 +3472,7 @@ class QueueMachine(Machine):
             elif page=='playing_page': self.opened.append((page,self.names(self.get(b)),self.get(b+4),self.get(b+8),self.get(b+12)))
             elif page=='localmusic/playlist_page': self.opened.append((page,b))
             elif page=='localmusic/playlistsmore_page': self.opened.append((page,b))
+            elif page=='albuminfo_page': self.opened.append((page,b)); self.top=self.node('window',page); self.stack.append(self.top)  # V2.1: row << 16 | class
             else: self.opened.append((page,self.get(b),self.get(b+4))); self.top=self.node('window',page); self.stack.append(self.top)
         elif name=='checkFavExist': ret=self.text(self.get(a+O['REC_NAME'])) in self.favs
         elif name=='navigator_window_is_exist': ret=self.text(a) in self.open_pages
@@ -3611,9 +3612,13 @@ assert [c[1] for c in m.calls if c[0]=='deleteMusicFromFav']==[m.items(m.get(sym
 m=playing_menu(); m.run(4)
 assert m.opened[-1]==('localmusic/playlist_page',0x2f001)
 assert sel(m)==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]; passed()
-for action,page in ((5,'playerjumpinfo_page'),(6,'localmusic/artistinfo_page')):
+for action,page in ((5,'albuminfo_page' if is_m1plus else 'playerjumpinfo_page'),(6,'album_page' if is_m1plus else 'localmusic/artistinfo_page')):
     m=playing_menu(); m.run(action); assert m.opened[-1][0]==page
-    if action==6: assert m.opened[-1][2]==m.items(m.get(syms['mcl_pdeqplaylist']))[1]
+    playing=m.items(m.get(syms['mcl_pdeqplaylist']))[1]
+    if action==6: assert m.opened[-1][2]==playing and (not is_m1plus or m.opened[-1][1]==O['CLASS_ARTISTS'])
+    elif is_m1plus:  # the record, copied last into the showlist, is the row albuminfo_page loads
+        shown=m.items(m.get(syms['p_deque_showlist'])); assert m.opened[-1][1]==(len(shown)-1)<<16|O['CLASS_ALBUMS']
+        assert m.text(m.get(shown[-1]+O['REC_ALBUM']))==m.text(m.get(playing+O['REC_ALBUM']))
     passed()
 for stage in ('open','action'):
     for change in ('advance','replace','resize','other','song','cue','stream'):
@@ -3871,14 +3876,15 @@ def menu(m,setup=None):
 GROUP=['Play Next','Add to Queue','Shuffle','Add to Playlist']
 for kw,setup,want in (({},None,('Row 0',SONG_MENU)),
         ({},lambda m:m.favs.add('Row 0'),('Row 0',[*SONG_MENU[:2],'Remove from Favourites',*SONG_MENU[3:]])),
-        ({},lambda m:m.open_pages.update({'artistinfo_page','playerjumpinfo_page'}),('Row 0',SONG_MENU[:4])),
+        ({},lambda m:m.open_pages.update({'artistinfo_page','playerjumpinfo_page'}) if not is_m1plus else
+            (m.open_pages.add('albuminfo_page'),m.word(syms['g_local_classinfo_save'],O['CLASS_ARTIST_ALBUMS'])),('Row 0',SONG_MENU[:4])),
         ({'cls':0xff10,'page':'album_page'},None,('Row 0',[*SONG_MENU[:4],'Go to Artist'])),
         ({},lambda m:m.word(m.row(0)+O['REC_ALBUM'],0),('Row 0',[*SONG_MENU[:4],'Go to Artist'])),
         ({'cls':0xf003,'page':'album_page'},None,('Album',[*GROUP[:3],'Add to Favourites','Rate Album',GROUP[3],'Go to Artist'])),
         ({'cls':0xff01,'page':'album_page'},None,('Album',GROUP)),
         # An artist's tabs set classinfo +0, not g_class_type: Albums first, then Songs after an album.
         ({'cls':0xff07,'page':'artistinfo_page'},lambda m:m.word(syms['g_local_classinfo_save'],0xff01),('Album',GROUP)),
-        ({'cls':0xff01,'page':'artistinfo_page'},lambda m:(m.word(syms['g_local_classinfo_save'],0xff07),m.open_pages.add('artistinfo_page')),('Row 0',SONG_MENU[:5])),
+        ({'cls':0xff01,'page':'artistinfo_page'},lambda m:(m.word(syms['g_local_classinfo_save'],0xff07),m.open_pages.add('artistinfo_page')),('Row 0',SONG_MENU[:6 if is_m1plus else 5])),
         ({'cls':0xf004,'page':'localclass_page'},None,('Artist',GROUP)),
         ({'cls':0xf006,'page':'localclass_page'},lambda m:m.word(m.row(0)+0x1c,m.string('Pop')),('Pop',GROUP)),
         ({'page':'folder_page','cls':1},lambda m:m.word(m.row(0)+O['REC_TYPE'],4),('Row 0',GROUP))):
@@ -3989,14 +3995,24 @@ assert [c[0] for c in m.calls].count('stock_playback_shuffle')==1; passed()
 m=QueueMachine(cls=0xf004,page='localclass_page'); m.found=[]; assert m.run(2)=='Queue unchanged' and m.opened[-1][0]!='playing_page'; passed()
 # Go to album fills the album query as Now Playing's Album info and opens playerjumpinfo_page; Go to
 # artist opens artistinfo_page with {class, record}. Closing either puts the browsing state back.
+# M1 Plus: V2.1's pages (m1plus_nav_goto.c): albuminfo_page with the record copied last into the
+# showlist, as its row; album_page with {CLASS_ARTISTS, record}; closing puts cur_classtype back too.
 info=syms['g_local_classinfo_save']
-for row,want in ((4,'playerjumpinfo_page'),(5,'localmusic/artistinfo_page')):
+for row,want in ((4,'albuminfo_page' if is_m1plus else 'playerjumpinfo_page'),(5,'album_page' if is_m1plus else 'localmusic/artistinfo_page')):
     m=QueueMachine(); m.u.mem_write(info,bytes(range(256))*3+bytes(144)); before=bytes(m.u.mem_read(info,912))
+    held=m.row(2); cls=m.get(syms['g_class_type']); n=len(m.items(m.get(syms['p_deque_showlist'])))
     page=m.top; assert m.run(row,steps=2) is None and m.opened[-1][0]==want and m.top!=page
-    if row==4:
+    if row==4 and is_m1plus:
+        shown=m.items(m.get(syms['p_deque_showlist'])); assert len(shown)==n+1 and m.opened[-1][1]==n<<16|O['CLASS_ALBUMS']
+        assert [m.text(m.get(shown[-1]+O[k])) for k in ('REC_NAME','REC_ALBUM')]==[m.text(m.get(held+O[k])) for k in ('REC_NAME','REC_ALBUM')]
+        m.deqs[m.get(syms['p_deque_showlist'])][1]=shown[:n]  # the page's load replaces it
+    elif row==4:
         assert m.get(info)==0xff10 and m.u.mem_read(info+9,1)==b'\0' and m.text(info+0xd)=='Album' and m.text(info+0x10d)=='Artist'
-    else: assert m.opened[-1][1:]==(0xf001,m.row(2))
-    f,ctx=m.handler(m.top,O['EVT_WINDOW_CLOSE']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    else: assert m.opened[-1][1:]==((O['CLASS_ARTISTS'] if is_m1plus else 0xf001),m.row(2))
+    m.word(syms['g_class_type'],0xff10)  # the opened page's own class
+    for t,f,ctx in m.nodes[m.top]['handlers']:
+        if t==O['EVT_WINDOW_CLOSE']: m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    assert m.get(syms['g_class_type'])==(cls if is_m1plus else 0xff10)
     assert bytes(m.u.mem_read(info,912))==before and m.names()==['A','B','C']; passed()
 # An empty queue is filled by the stock loader without starting playback.
 m=QueueMachine(queue=0); assert m.run(0)=='Playing Next' and m.names()==['Row 0'] and m.mcl('MCL_POS')==0
@@ -6355,7 +6371,7 @@ assert m.names(m.get(syms['tools_pdeq_directory']))==['staged'] and m.pool()==[0
 
 # Go to artist uses the album record directly; an absent artist omits that action.
 m=CoverflowMachine(); m.open(); m.run(5)
-assert m.opened[-1][:2]==('localmusic/artistinfo_page',O['CLASS_ALBUMS']); passed()
+assert m.opened[-1][:2]==(('album_page',O['CLASS_ARTISTS']) if is_m1plus else ('localmusic/artistinfo_page',O['CLASS_ALBUMS'])); passed()
 m=CoverflowMachine(); m.word(m.albums[0]+O['REC_ARTIST'],0); m.open(); m.press(100); assert m.hold()==11
 assert m.labels()==COVER_ALBUM; passed()
 # Closing the source before the deferred open never creates a dialog.
