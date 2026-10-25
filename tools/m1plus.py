@@ -212,6 +212,9 @@ CALL_SITES = {
         # before its toolsGetExternCover, then Folder view's two (40 px).
         'GRID_COVER': ((0x4dd6a8, 0x0320f809, 'coverflow_album_cover'), (0x4de8a4, 0x0320f809, 'coverflow_grid_cover'),
                        (0x4de960, 0x0320f809, 'coverflow_grid_cover')),
+        # parseplaycover_thd's toolsGetExternCover after a local track's embedded art failed (0x4df1e8),
+        # under parse_cover_mutex: m1plus_player_cover drops it for ffmpeg (patch/m1plus_player_cover.c).
+        'PLAYER_COVER': ((0x4df218, 0x8f99b880, None), (0x4df228, 0x0320f809, 'm1plus_player_cover')),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -298,7 +301,6 @@ M1PLUS_PORTS = {
     'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
-    'PLAYER_COVER': ('unported', "Now Playing's art through ffmpeg when stock's decoder refuses it (1.2.9)"),
     'BT_INIT': ('unported', "Bluetooth's callbacks before the control thread discovers boot links (1.3.8, "
                 "1.2.9's BT_POWER); V2.1's platform_init and openBluetooth not checked yet"),
     'BT_PARAMS': ('unported', "config_bt_init's reset before the control thread (1.3.8), with BT_INIT"),

@@ -6931,6 +6931,15 @@ if 'GRID_COVER' in SITES:
     assert m.cover('04.opus','coverflow_album_cover',extern=1)==1 and m.seen==['toolsGetAlbumCover','toolsGetExternCover']
     assert m.cover('05.opus','coverflow_album_cover',extern=0)==1 and 'fork' in m.seen
     passed()
+    # Now Playing's folder art on M1 (PLAYER_COVER's m1plus_player_cover): stock's folder image keeps the
+    # lock; a folder cover.jpg stock refused goes to ffmpeg with parse_cover_mutex dropped, then retaken.
+    if is_m1plus and 'PLAYER_COVER' in SITES:
+        m=GridCoverMachine(); m.mock('snprintf@GLIBC_2.0')
+        assert m.cover('01.webp','m1plus_player_cover',extern=1)==1 and m.seen==['toolsGetExternCover'],m.seen
+        assert m.cover('01.webp','m1plus_player_cover',extern=0,out=b'jpeg')==1 and m.files[m.dst]==b'jpeg',m.seen
+        assert m.seen[:2]==['toolsGetExternCover','pthread_mutex_unlock'] and m.seen[-1]=='pthread_mutex_lock',m.seen
+        assert m.seen.count('pthread_mutex_unlock')==m.seen.count('pthread_mutex_lock')==1 and 'fork' in m.seen,m.seen
+        passed()
 else: not_ported('Ogg art in Albums and Folder view (GRID_COVER not patched in V2.1)')
 
 # Coverflow depth (docs/internals.md#coverflow-depth): the payload's renderer, run as MIPS, draws

@@ -222,6 +222,7 @@ int coverflow_player_cover(const char *track, const char *dst, int w, int h) {
     return toolsGetExternCover(track, dst, w, h) == 1 || beside_art(track, dst, w, h, 0, ff_thumb) ||
            (!marked_empty(track) && ff_thumb(track, dst, w, h));
 }
+#include "m1plus_player_cover.c"
 
 /* parse_albumcovertask_thd's embedded-art calls (Albums grids; Folder view's folder and track rows),
  * made on stock's one cover thread under parse_cover_mutex: stock reads no Ogg picture, so an .opus
