@@ -21,7 +21,9 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 **Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
 one device pass. All five steps, 1.2.9, 1.3.0, 1.3.8, 1.3.9 and 1.4.2, are merged and gated
 ([m1plus-progress.md](m1plus-progress.md) sections 40 to 44); 1.2.9 (dev 29), 1.3.0 (dev 5), 1.3.8
-(dev 1) and 1.4.2 (dev 1) passed on the device. The batch of ports is next. Done so far:
+(dev 1) and 1.4.2 (dev 1) passed on the device. The batch of ports is done and passed on the device as
+1.4.2 dev 3 (section 45), but for Standby Limit's power-off, which the user tests before the release.
+`1.4.2-m1.1` is next. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -196,18 +198,22 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       segment at 0xb00000 grows, and the heap starts above `__scratch_end`. Checked at the 1.3.8 step,
       for both moves. 13f04f0 also folds `.bss` into `.scratch`, upstream's own fix for the orphan
       `.bss` the 1.3.8 step found on M1 (progress section 42), so there is no PR to raise.
-  - **Then port the finished features in one batch**: those whose code doesn't change after the step that
-    brings them, whose function V2.1's `demo` has, and that aren't tied to the Q2:
+  - **Then port the finished features in one batch. Done (Oct 24,** [m1plus-progress.md](m1plus-progress.md)
+    **section 45):** all but the time zones, which went to U4 (the user's choice), and with one fix the
+    device pass found (`LYRIC_SOURCES`: V2.1 ran NetEase after every lyric search). Those whose code
+    doesn't change after the step that brings them, whose function V2.1's `demo` has, and that aren't
+    tied to the Q2:
     - the shared hooks `toolsQueryDbTableAndSort` (V2.1's `0x5ee9ac`) and `networkGetWifiSignal`
       (`write_int_config` and `mclSetOutputWay` are native: V2.1 keeps Bluetooth's level apart);
     - `lockscreen_access` (the wallpaper fix, below);
-    - the timezone page (`select_timezone`);
+    - the timezone page (`select_timezone`): to U4;
     - View Queue's and Up Next's picks in a shuffle's play order (`player_start_queue`, V2.1's
       `start_playqueue`, `0x4e47d0`, which the payload's own calls already reach by alias);
     - embedded lyrics (`mclLoadExLyric`);
     - chapters;
     - online cover and lyric search (`kugou_obtain*`);
-    - Standby Limit (`toolsIntoStandby`), if V2.1's standby behaves like the Q2's.
+    - Standby Limit (`toolsIntoStandby`), if V2.1's standby behaves like the Q2's: the row works, and its
+      power-off at the limit is the user's test before the release.
 
     Porting after the merges, not at each step, ports each feature once, against the final code, and
     keeps each step's changes to merges alone.
@@ -252,12 +258,17 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `yoffset_rowsave`, and `m3ufile_path`), and Shuffle Songs being one-shot (V2.1 has no
       `config_playmode` symbol to stand for the user's mode choice). Both features run on M1.
     - Q2 only: Hold Return: Home (the M1 has no Return key) and Volume Guard (the touch wheel's).
+  - **Found by the batch** (U3, Oct 24):
+    - **The extra time zones** (`select_timezone`, V2.1's `0x4d6b2c`). V2.1 keeps its 27 labels as a
+      `const char *` table at `0x97c810`, NULL-ended, with the `lan_*` table right after it, and its row
+      layout (`timezone_listitem_layout`, `0x4a21c8`) copies the table onto its stack (108 bytes, under
+      another buffer), so the table can't grow. A jal at the label read (`0x4a224c`) returning the
+      payload's labels would do instead. The counts to raise by 11: the page builder's `li 29`
+      (`0x4a246c`), the click's `sltiu 30` (`0x4a2604`), `config_init`'s `sltiu 27` (`0x4e65dc`); the
+      hook covers `select_timezone`'s own (`0x4d6b68`). `set_systime` (`0x4d77b0`) and
+      `networktime_adjust_thd` (`0x4d9454`) each have a `sltiu 28` to read first.
   - **Found by the 1.3.0 step** (U3, Oct 23):
-    - **Lyrics from tags** (`mclLoadExLyric`): `MCL_LYRICS`, `MCL_LYRIC_LOCK` and the TagLib offsets are
-      `M1_UNPORTED`; the M1's `libtag_c.so.2.0.1` is another build than the Q2's, so its offsets are
-      to be found too (in the batch).
-    - **Standby Limit** and **the Wi-Fi signal** (`toolsIntoStandby`, `networkGetWifiSignal`): in the
-      batch; their rows and cases are off on M1.
+    - **Lyrics from tags**, **Standby Limit** and **the Wi-Fi signal**: ported in the batch.
     - **Wi-Fi power save** (`WIFI_LPS`, a battery fix): V2.1's demo has the same
       `rtwpriv wlan0 pm_set lps=0` string, so it's a string patch to port.
     - **The Wi-Fi transfer page** (`WEB`: English, folder uploads): V2.1 has `/usr/share/web`; check its
@@ -317,7 +328,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       (`netupdate.c`, `systemset_fwupdate_page_init`), online match (`onlinematch.c`), Qobuz.
     - **Left for after U3, and why** (checked Oct 23 against 1.4.2 and V2.1's `demo` symbols):
       - V2.1 has no `toolsQueryContentDbTable` or `localmusic_playlistsmore_page_init`. Each needs a
-        V2.1 stand-in found first. (`player_start_queue` is V2.1's `start_playqueue`: in the batch.)
+        V2.1 stand-in found first. (`player_start_queue` is V2.1's `start_playqueue`: ported in the batch.)
       - Network update fetches DiamondBond's Q2 `update.tar`. It stays off on M1 until it points at
         the fork's M1 releases.
       - The card app host (`addon.c`, `usbmode_page_init`, 1.4.2) runs over librespot: it goes with
@@ -326,15 +337,13 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
         in `ringnav_systemset`). Whether what it downloads runs on the M1 is to be checked first.
       - Games changed again in 1.4.2 and use the Return key, which the M1 lacks. They need a touch
         design.
-    - **Hooks:** lyric search and cover search (`kugou_obtainlyric`, `kugou_obtaincover`),
-      `mclLoadExLyric`, the timezone page, `localmusic_playlistsmore_page_init`,
-      `toolsQueryDbTableAndSort` and `toolsQueryContentDbTable`, `mclSetOutputWay`, `write_int_config`,
-      `toolsIntoStandby`, `player_start_queue`, `networkGetWifiSignal`.
+    - **Hooks:** the timezone page, `localmusic_playlistsmore_page_init` and `toolsQueryContentDbTable`
+      (`mclSetOutputWay` and `write_int_config` are native; the batch ported the rest).
     - **Call sites:** `FOLDER_NAME`, `BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`, `PLAYER_COVER`,
-      `ID3_PATH`, `LYRIC_FOLLOW`, `GRID_COVER`, `SCAN_REFRESH`, `DROP_CACHES`, and the lock screen's
-      `lockscreen_access` sites.
+      `ID3_PATH`, `LYRIC_FOLLOW`, `GRID_COVER`, `SCAN_REFRESH`, `DROP_CACHES` (the lock screen's
+      `lockscreen_access` sites: ported in the batch).
     - **A known bug these fix:** a built-in wallpaper doesn't survive a reboot, on the Q2 at 1.2.2 and on
-      the M1 (seen on 1.2.2-m1.1). `config_init` resets a picture that `access()` can't find to
+      the M1 (seen on 1.2.2-m1.1; fixed on M1 by the batch's `LOCKSCREEN_ACCESS`, section 45). `config_init` resets a picture that `access()` can't find to
       `screensaver_default`, and `q2pod:aurora` and the others aren't files. Upstream's
       `lockscreen_access` (1.3.9, `f1cfeb7`) replaces the two `jalr $25` to `access`: V1.32's
       `0x4fa41c` (`config_init`) and `0x4fad60` (`get_screensaver_image`). V2.1's are `0x4e6218`
