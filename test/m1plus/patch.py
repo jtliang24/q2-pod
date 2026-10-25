@@ -4023,6 +4023,20 @@ for row,want in ((4,'albuminfo_page' if is_m1plus else 'playerjumpinfo_page'),(5
         if t==O['EVT_WINDOW_CLOSE']: m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     assert m.get(syms['g_class_type'])==(cls if is_m1plus else 0xff10)
     assert bytes(m.u.mem_read(info,912))==before and m.names()==['A','B','C']; passed()
+# A Folder play's Now Playing (FOLDER_PLAY, m1plus_nav_goto.c): one open under the folders closes
+# first, unanimated, and the new one opens over the folders; with none open, it only opens.
+if 'FOLDER_PLAY' in SITES:
+    site_patched('FOLDER_PLAY')
+    for pages,closed in ((['home_page','playing_page','folder_page','folder_page'],['playing_page']),(['home_page','folder_page'],[])):
+        m=Machine(); m.mock('window_manager_close_window_force','navigator_to_with_context')
+        wins=[m.node('window',p) for p in pages]; m.nodes[m.wm]=dict(type='window_manager',name='',children=list(wins),visible=1)
+        ctx=m.alloc(16); m.call(address=payload_syms['m1plus_play_page'],args=(m.string('playing_page'),ctx),gap=0)
+        got=[(c[0],m.nodes[c[2]]['name'] if c[0]=='window_manager_close_window_force' else (m.text(c[1]),c[2])) for c in m.calls
+             if c[0] in ('window_manager_close_window_force','navigator_to_with_context')]
+        assert got==[('window_manager_close_window_force',n) for n in closed]+[('navigator_to_with_context',('playing_page',ctx))],got
+        passed()
+else:
+    not_ported('A Folder play replaces the open Now Playing (FOLDER_PLAY not patched in V2.1)')
 # An empty queue is filled by the stock loader without starting playback.
 m=QueueMachine(queue=0); assert m.run(0)=='Playing Next' and m.names()==['Row 0'] and m.mcl('MCL_POS')==0
 assert m.mcl('MCL_TYPE')==0xf001 and m.pool()==[0] and not m.playback(); passed()

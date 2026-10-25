@@ -382,6 +382,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert bal(0x4d44e4, 'checkPairDev') and stock_syms['autoLinkBluetooth'] < 0x4d44e4
     # BTLINKMAC: readBtLinkMac's buffer, its GOT page and offset
     assert words(0x4d2800, 1) == (0x8f9082c0,) and slot(-0x7d40) == 0xa00000 and words(0x4d280c, 1) == (0x261041d0,)
+    # FOLDER_PLAY: the Folder file click's navigator_to_with_context("playing_page", ...), after its loadSongList.
+    def cstr(at): return stock[fileoff(stock, at):stock.index(b'\0', fileoff(stock, at))]
+    assert got(0x531e7c) == stock_syms['navigator_to_with_context'] and got(0x531e48) == stock_syms['loadSongList']
+    assert words(0x531e88, 1) == (0x24845b14,) and cstr(slot(-0x58f8) + 0x5b14) == b'playing_page'  # $a0 from -0x58f8's page
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores

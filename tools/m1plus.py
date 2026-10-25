@@ -214,6 +214,9 @@ CALL_SITES = {
         # show_player_face's bal to the lyric row builder (LYRIC_ROW_BUILDER, $t9 set before it), after
         # NP_INFO_CALL's: the rebuild ends at offset 0.
         'LYRIC_ROWS': ((0x53bed0, 0x0411f8db, 'ringnav_lyric_rows'),),
+        # The Folder file click's navigator_to_with_context("playing_page", ...) (0x531c38's), which doesn't
+        # look for an open one as the album track click does: m1plus_play_page closes it first.
+        'FOLDER_PLAY': ((0x531e7c, 0x8f99a980, None), (0x531e94, 0x0320f809, 'm1plus_play_page')),
         # toolsLoadAllFile's existing-song check (bal toolsCheckItemExist), folder scans only: V1.32's word.
         'SCAN_REFRESH': ((0x5eff54, 0x0411fd88, 'ringnav_scan_refresh'),),
         # The folder row's text (0x532e34, bal'd from 0x533124; V1.32's 0x522304): tk_snprintf(buf, 512,
@@ -263,6 +266,7 @@ CALL_SITE_PURPOSES = {
     'COVER_DONE': 'discard stale cover completion',
     'LOCKSCREEN_ACCESS': 'a built-in wallpaper survives a reboot',
     'LYRIC_SOURCES': "a found lyric isn't overwritten by NetEase's",
+    'FOLDER_PLAY': 'a Folder play replaces the open Now Playing',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):

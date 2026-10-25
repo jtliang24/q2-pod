@@ -1,5 +1,5 @@
-/* M1 Plus: the hold menu's Go to Album and Go to Artist on V2.1's pages. patch/navigation.c includes
- * this before qm_goto (docs/m1plus-roadmap.md U4). */
+/* M1 Plus: the hold menu's Go to Album and Go to Artist, and a Folder play's Now Playing, on V2.1's
+ * pages. patch/navigation.c includes this before qm_goto (docs/m1plus-roadmap.md U4). */
 #if M1PLUS
 /* V2.1 has no artistinfo_page, and its playerjumpinfo_page shows the playing song's album. An artist's
  * albums are album_page with V2.1's Artists row context, {CLASS_ARTISTS, record}: loadAlbumList takes
@@ -28,5 +28,22 @@ static void m1plus_goto(void *r, int album) {
     }
     void *top = window_manager_get_top_window(wm);
     if (top != page) widget_on(top, EVT_WINDOW_CLOSE, goto_restore, top);
+}
+
+/* V2.1's Folder file click opens playing_page without looking for one already open (FOLDER_PLAY, its
+ * navigator_to_with_context): after Go to Folder from Now Playing, a play opened a second Now Playing
+ * over the folders, and the first one, under them, went stale. That one closes first, unanimated and
+ * unseen, as Coverflow's scoped page closes the artist page under it, so Back from the new one goes to
+ * the folder. V2.1's album track click instead goes back down to it (0x525860). */
+int m1plus_play_page(const char *name, void *context) {
+    void *wm = window_manager();
+    for (unsigned i = widget_count_children(wm); i-- > 0;) {
+        void *w = widget_get_child(wm, i);
+        if (!tk_strcmp(widget_get_prop_str(w, "name", ""), "playing_page")) {
+            window_manager_close_window_force(wm, w);
+            break;
+        }
+    }
+    return navigator_to_with_context(name, context);
 }
 #endif
