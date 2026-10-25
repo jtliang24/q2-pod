@@ -2459,10 +2459,10 @@ int ringnav_powermanager(void *win, void *ctx) {
     int result = stock_power_trampoline(win, ctx);
     /* M1 Plus: no Wake row. V2.1 has its own (Double wake), and the knob's press is not Centre. */
     pod_rows(win, VIEW_POWER, POD_CHARGE, M1PLUS ? 2 : 3, icons);
-#if !M1PLUS /* the touch wheel's guard (M1 Plus has a knob), and Standby Limit: toolsIntoStandby isn't hooked on M1 */
+#if !M1PLUS /* the touch wheel's guard (M1 Plus has a knob) */
     pod_rows(win, VIEW_POWER, POD_VOL_GUARD, 1, icons + 2);
-    pod_rows(win, VIEW_POWER, POD_STANDBY, 1, icons + 1);
 #endif
+    pod_rows(win, VIEW_POWER, POD_STANDBY, 1, icons + 1);
     return result;
 }
 /* The Bluetooth page's list (stock's local builder, btmenu_rows), rebuilt whole on every search and

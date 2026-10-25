@@ -260,8 +260,6 @@ M1PLUS_PORTS = {
                         "table and patch_timezones' words not yet found (roadmap U3 batch)"),
     'toolsQueryContentDbTable': ('unported', "an artist's albums tab's album-artist rewrite (1.2.9); V2.1 has no "
                                  'toolsQueryContentDbTable'),
-    'toolsIntoStandby': ('unported', "Standby Limit (1.3.0): the Power row is Q2 only until V2.1's standby is checked "
-                         '(roadmap U3 batch)'),
     'write_int_config': ('native', "Bluetooth's own saved level (1.3.8); V2.1 keeps it apart, [PLAYSET] BTVOLUME, "
                          '(m1plus_nav_btvol.c)'),
     'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
@@ -444,6 +442,9 @@ M1PLUS_HOOKS = {
     # The status bar's Wi-Fi signal from rtl8733bs's rx_signal, which keeps the radio's power save;
     # V2.1's asks the radio (SIOCGIWSTATS), as V1.32's does
     'networkGetWifiSignal': (0x5d76a8, 'ringnav_wifi_signal', None),
+    # Standby Limit: into_standby's suspend to RAM (V1.32's device_standby's), V1.32's instruction for
+    # instruction; the M1's rtc-ingenic has the same wakealarm
+    'toolsIntoStandby': (0x5e5228, 'ringnav_standby', 'standby'),
     # Gapless: the next track's pick and its decoder's open, V1.32's moved
     'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
     'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),

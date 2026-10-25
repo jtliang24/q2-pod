@@ -10679,14 +10679,21 @@ def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False,via_row=
     m.entries=entries
     return m,rows,lambda:[m.nodes[l]['text'] for l in labels],icons,click
 m,rows,texts,icons,click=settings_page('power',NAMES['VIEW_POWER'])
-# M1 Plus: V2.1's icon-less standby rows, and no Wake row (V2.1 has its own; the knob's press is not Centre).
-WAKE_ROW=[] if is_m1plus else ['Wake: Single Press']
-assert len(rows)==2+len(WAKE_ROW) and all(m.nodes[r]['style']==('list_item_style' if is_m1plus else S('s_listitem_black')) for r in rows)
-assert icons==([None,None] if is_m1plus else ['usb_chargeswitch','system_powermanager','system_keylock'])
-assert texts()==['Charge Limit: Off','Low Power: Off']+WAKE_ROW
+# M1 Plus: V2.1's icon-less standby rows, no Wake row (V2.1 has its own; the knob's press is not Centre),
+# and no Volume Guard (the touch wheel's): Standby Limit follows Low Power.
+WAKE_ROW=[] if is_m1plus else ['Wake: Single Press','Volume Guard: Off']
+assert len(rows)==3+len(WAKE_ROW) and all(m.nodes[r]['style']==('list_item_style' if is_m1plus else S('s_listitem_black')) for r in rows)
+assert icons==([None,None,None] if is_m1plus else ['usb_chargeswitch','system_powermanager','system_keylock','system_keylock','system_powermanager'])
+assert texts()==['Charge Limit: Off','Low Power: Off']+WAKE_ROW+['Standby Limit: Off']
 assert click(0)==[(1,'Q2POD','CHARGELIMIT')] and texts()[0]==f"Charge Limit: {O['CHARGE_STOP']}%"
 assert click(1)==[(1,'Q2POD','LOWPOWER')] and texts()[1]=='Low Power: On'
-assert click(0)==[(0,'Q2POD','CHARGELIMIT')] and texts()==['Charge Limit: Off','Low Power: On']+WAKE_ROW; passed()
+assert click(0)==[(0,'Q2POD','CHARGELIMIT')] and texts()==['Charge Limit: Off','Low Power: On']+WAKE_ROW+['Standby Limit: Off']; passed()
+# Standby limit (its alarm with the power poll's tests): each click steps to the next limit, then Off.
+limits=[f"Standby Limit: {O[f'STANDBY_LIMIT_{i}']} h" for i in (1,2,3)]
+standby_row=len(rows)-1
+for v,want in ((1,limits[0]),(2,limits[1]),(3,limits[2]),(0,'Standby Limit: Off')):
+    assert click(standby_row)==[(v,'Q2POD','STANDBYLIMIT')] and texts()[standby_row]==want
+passed()
 # Wake (docs/internals.md#wake): screen off, a lone centre press and its release never reach the UI;
 # a second press within WAKE_MS passes, press and release. Other keys, the screen on, or the
 # setting off pass untouched, except one more centre press within WAKE_MS of the waking one (#45).
@@ -10721,7 +10728,7 @@ if not is_m1plus:
     assert wake(DOWN,gap=100) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\0' and wake(UP,gap=50)
     assert click(2)==[(0,'Q2POD','WAKEDOUBLE')]; passed()
 m,rows,texts,*_=settings_page('power',NAMES['VIEW_POWER'],{'CHARGELIMIT':'1','LOWPOWER':'1','WAKEDOUBLE':'1'})
-assert texts()==[f"Charge Limit: {O['CHARGE_STOP']}%",'Low Power: On']+([] if is_m1plus else ['Wake: Double Press']); passed()
+assert texts()==[f"Charge Limit: {O['CHARGE_STOP']}%",'Low Power: On']+([] if is_m1plus else ['Wake: Double Press','Volume Guard: Off'])+['Standby Limit: Off']; passed()
 m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],stock_rows=15)
 assert len(rows)==9 and icons==[NAMES[k] for k in ('ICON_COVERMODE','ICON_FOLDERJUMP','ICON_COVERMODE','ICON_GAPLESS','ICON_FOLDERJUMP','ICON_MEMPLAY','ICON_BALANCE','ICON_BALANCE','ICON_DSDOUTPUT')]
 assert texts()==['Year Order: Newest First','Artists: Artist','Artist Album Order: Year','Crossfade: Off','Folder Root: Card','Resume Songs: 30 min','Mono Audio: Off','Swap L/R: Off','MQA: Off']
@@ -11321,7 +11328,7 @@ if 'toolsIntoStandby' in HOOKS:
             super().__init__(config,files={RTC_NOW:f'{rtc}\n'.encode()} if readable else {})
             self.rtc,self.key,self.readable,self.refuse,self.alarm,self.events=rtc,key,readable,refuse,0,[]
             self.handlers[int(manifest['patch_symbols']['stock_standby_trampoline'],16)]='stock_standby'
-            self.handlers.pop(syms['mclGetPlayStatus'],None); self.word(0xa3beac,3)
+            self.handlers.pop(syms['mclGetPlayStatus'],None); self.word(PLAY_STATUS,3)
         def hook(self,u,address,size,unused):
             name=self.handlers.get(address,''); a=u.reg_read(REGS[0])
             if name=='stock_standby':  # asleep until the key (seconds in) or the alarm, whichever is first
@@ -11354,7 +11361,7 @@ if 'toolsIntoStandby' in HOOKS:
     m=StandbyMachine({'STANDBYLIMIT':'1'},key=7200,readable=False); assert m.standby()==['suspend'] and not m.off(); passed()
     m=StandbyMachine({'STANDBYLIMIT':'1'},key=7200,refuse=True); assert m.standby()==[('alarm',0),'suspend'] and not m.off(); passed()
     for usb,play in ((1,3),(0,2)):  # a cable in, or playing: it stays on, and no later pass powers off
-        m=StandbyMachine({'STANDBYLIMIT':'1'}); m.standby(); m.byte(syms['g_usbdet_value'],usb); m.word(0xa3beac,play)
+        m=StandbyMachine({'STANDBYLIMIT':'1'}); m.standby(); m.byte(syms['g_usbdet_value'],usb); m.word(PLAY_STATUS,play)
         assert not m.off() and not m.off(); passed()
 else:
     not_ported("Standby Limit (toolsIntoStandby not hooked on M1 Plus)")
