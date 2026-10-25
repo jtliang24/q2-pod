@@ -101,6 +101,7 @@ Audio on the same connection keeps one reconnect path and one token. If control 
 - 16-bit 44.1 kHz on the wire: Soloist's 24-bit lossless is cut to 16 bits.
 - Controls answer about the relay's buffer late (~1 s).
 - Termux on Android: not planned. Spotify doesn't list Android for Soloist, it would need a glibc `proot` and PulseAudio inside Termux, and Android kills long-running background processes. A Linux box is the target.
+- On the device itself: ruled out. Soloist is closed source, so it could only run under QEMU's user-mode emulation, and only its ARMv7 build, since QEMU can't run 64-bit programs on the 32-bit X2000. Measured on x86_64 (2026-10-25, Soloist 1.3.9, a minute into playback), the main process peaked at 65 MB (17 threads, 1.9% of one core) and its crash reporter at 21.7 MB, about 87 MB in all. The M1 has 115 MB of RAM, about 85 MB free with V2.1 running, and no swap, before QEMU's translation cache, the ARM libraries and a stand-in `libpulse.so.0` (Soloist's only audio library, loaded at run time). Its CPU use, scaled to the X2000's 1.2 GHz cores and slowed further by emulation, comes to roughly a whole core or more.
 
 ## Steps
 
