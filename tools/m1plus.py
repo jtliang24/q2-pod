@@ -262,8 +262,6 @@ M1PLUS_PORTS = {
     'read_artistype_value': ('native', "V2.1's Artists page has its own Artist/Album Artist switch (roadmap 4)"),
     'saver_cover': ('native', "V2.1's image_base_set_image always invalidates (progress 29)"),
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
-    'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); V2.1's "
-                          'info keeps it at +0x580 too'),
     'select_timezone': ('unported', "the extra time zones (1.2.9); V2.1's select_timezone is 0x4d6b2c, but its 27 "
                         'labels are a pointer table (0x97c810) its row layout (0x4a21c8) copies to the stack, and '
                         "its counts are at 0x4a246c, 0x4a2604, 0x4e65dc and 0x4d6b68 (roadmap U4)"),
@@ -481,6 +479,9 @@ M1PLUS_HOOKS = {
     # A manual Play/Pause (V2.1's playpause_quick_click, DLNA, the payload's own) is marked, so a
     # headset's automatic resume doesn't undo it: V1.32's player_play_pause, (void) -> int as V2.1's
     'play_pause_music': (0x4e43b4, 'ringnav_play_pause', 'pause'),
+    # A FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST; V2.1's (a, info, path), V1.32's
+    # instruction for instruction, keeps the album artist at +0x580
+    'toolsGetMusicInfo': (0x5ec6a8, 'ringnav_music_info', 'music_info'),
 }
 
 def m1plus_symbols(syms, symbol_table):
