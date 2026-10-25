@@ -268,8 +268,6 @@ M1PLUS_PORTS = {
                          '(m1plus_nav_btvol.c)'),
     'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
                         "btsource_volume while the output is Bluetooth"),
-    'toolsQueryDbTableAndSort': ('unported', 'spoken audio kept out of the sorted library queries (1.3.8, #67); '
-                                 "V2.1's is 0x5ee9ac (roadmap U3 batch)"),
     'localmusic_playlistsmore_page_init': ('unported', "a playlist's More page: editing, song search, a row hold "
                                            "(1.3.8); V2.1 has no playlistsmore_page"),
     'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
@@ -417,6 +415,8 @@ M1PLUS_HOOKS = {
     'set_equalizer_value': (0x4d851c, 'peq_stock_eq', 'eq'),
     'home_page_init': (0x534cd4, 'coverflow_home', 'home'),
     'toolsQueryDbTable': (0x5ee77c, 'ringnav_library_query', 'dbquery'),
+    # Songs by filename and by format (sort_filename, sort_format); V2.1's title sort runs toolsQueryDbTable
+    'toolsQueryDbTableAndSort': (0x5ee9ac, 'ringnav_sorted_query', 'sorted_query'),
     'scanAllMusicFile': (0x4e9df4, 'coverflow_scan_all', 'scan_all'),
     'scanSpecFolder': (0x4e9e90, 'coverflow_scan_folder', 'scan_folder'),
     'deleteMusicFromMusicDb': (0x4ede44, 'coverflow_delete_song', 'delete_song'),

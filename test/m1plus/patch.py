@@ -4492,9 +4492,9 @@ class LibraryQueryMachine(Machine):
             u.mem_write(a,re.sub('%s',lambda _:self.text(next(v)),self.text(b)).encode()+b'\0')
             self.returns(a); return
         if address not in self.tramps: return super().hook(u,address,size,unused)
-        a,b,c,d=[u.reg_read(r) for r in REGS]; self.sql=self.text(b)
+        a,b,c,d=[u.reg_read(r) for r in REGS]; self.sql=self.text(b); self.route=self.tramps[address]
         if self.tramps[address]=='content_query': self.content=(c,self.text(d),self.get(u.reg_read(UC_MIPS_REG_SP)+16))
-        elif self.tramps[address]=='dbquery': assert self.text(a)=='/mnt/data/database.db' and (c,d)==(123,1)
+        else: assert self.text(a)=='/mnt/data/database.db'; self.args=(c,d)
         self.results=self.db.execute(self.sql).fetchall()
         if self.tramps[address]=='content_query': raise QueryDone  # stock's row handling after it isn't emulated
         self.returns(len(self.results))
@@ -4507,14 +4507,16 @@ for query in ('select id,songer from songtable group by songer COLLATE NOCASE',
     for scoped in (0,1,0):
         lm.word(payload_syms['library_music'],scoped)
         lm.call(address=HOOKS['toolsQueryDbTable'][0],args=(lm.string('/mnt/data/database.db'),lm.string(query),123,1),gap=0)
-        assert (lm.sql==(query.replace('albumsonger',AA) if 'by albumsonger' in query else query)) == (not scoped)
+        assert lm.args==(123,1) and (lm.sql==(query.replace('albumsonger',AA) if 'by albumsonger' in query else query)) == (not scoped)
         assert {r[0] for r in lm.results} == ({2} if scoped and 'group by' in query else set() if scoped else
                                              {1,3,4,5,6} if 'group by' in query else {6}),lm.results
-# The stock Songs title sorter uses the separate AndSort helper.
+# Songs' sorters: V2.1's title sort (sort_first_alphabet) runs toolsQueryDbTable (0x4ea118), where
+# V1.32's runs the separate AndSort helper; its filename and format sorts run AndSort (0x4ea1a4, 0x4ea230).
 if 'toolsQueryDbTableAndSort' in HOOKS:
-    lm.word(payload_syms['library_music'],1)
-    lm.call(address=syms['sort_first_alphabet'],args=(0,0,0,0),gap=0)
-    assert [r[0] for r in lm.results]==[2] and 'where '+ 'fileurl' in lm.sql
+    for sorter,route,sort in (('sort_first_alphabet','dbquery',1),('sort_filename','sorted_query',1),('sort_format','sorted_query',2)):
+        lm.word(payload_syms['library_music'],1)
+        lm.call(address=syms[sorter],args=(0,0,0,0),gap=0)
+        assert lm.route==route and lm.args[1]==sort and [r[0] for r in lm.results]==[2] and 'where '+ 'fileurl' in lm.sql, sorter
 else:
     not_ported('Spoken audio out of the Songs title sort (toolsQueryDbTableAndSort not hooked on M1 Plus)')
 passed()
