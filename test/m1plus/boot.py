@@ -226,7 +226,8 @@ HOME3_ROWS = ('rows', (30, 266), (266, 394))
 WALK = [
     ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, HOME3_ROWS),
     ('sysset', tap(82, 318), 4, 'same'),
-    ('sysset_end', DOWN_LIST + ['wait 800'] + DOWN_LIST, 4, 'same'),
+    # Its end: System Update, Formatting Card, Reset and About as stock's, Apps (netupdate.c) before them.
+    ('sysset_end', DOWN_LIST + ['wait 800'] + DOWN_LIST, 4, ('rows', (224, 480), (84, 220))),
     # About: Model and FW. Version (the stock firmware's, ringnav_about) as stock's, then CFW. Version.
     ('about', tap(160, 446), 4, ('rows', (30, 208), (208, 272))),
     ('home3_again', BACK + ['wait 2500'] + BACK, 5, HOME3_ROWS),

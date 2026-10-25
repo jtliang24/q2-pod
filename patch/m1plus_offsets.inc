@@ -580,6 +580,7 @@ static inline int arc_out(int r, int y) {
 /* The playlist editor's tick (ple_tick) at the end of V2.1's PAGE_ROW_H row, before the scroll bar */
 #define PLE_TICK_X 284
 #define PLE_ROW_H PAGE_ROW_H
+#define QR_NO_WIFI "Connect the M1 Plus to Wi-Fi"
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */

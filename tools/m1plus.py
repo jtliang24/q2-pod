@@ -308,8 +308,6 @@ M1PLUS_PORTS = {
                                            'its editor (m1plus_nav_playlist_hold.inc)'),
     'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
-    'usbmode_page_init': ('unported', "card apps end before USB storage unmounts the card (1.4.2); the card app "
-                          'host (addon.c) waits for U4, with Apps'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -502,6 +500,9 @@ M1PLUS_HOOKS = {
     # A FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST; V2.1's (a, info, path), V1.32's
     # instruction for instruction, keeps the album artist at +0x580
     'toolsGetMusicInfo': (0x5ec6a8, 'ringnav_music_info', 'music_info'),
+    # USB mode's page, as a cable to a computer opens it, before stock unmounts the card for USB
+    # storage: the card apps end first (addon_card_away). V2.1's init binds its window as V1.32's.
+    'usbmode_page_init': (0x545dd8, 'ringnav_usbmode', 'usbmode'),
 }
 
 def m1plus_symbols(syms, symbol_table):
@@ -1009,6 +1010,8 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     for n in ('home_q2pod', 'home_q2pod_down'):
         icons[f'{n}.png'] = ('mymusic.png', (ROOT/'assets/icons'/f'{n}.png').read_bytes())
     icons['stream_airplay.png'] = ('airplay.png', cat(xx+'airplay.png'))
+    # the card apps' rows on the Q2 Pod page (addon.c), at V2.1's 40 px as row_spotify
+    icons['stream_app.png'] = ('tidal.png', sized_art((ROOT/'assets/icons/stream_app.png').read_bytes(), 40))
     added = []
     helper_items = {
         HELPER: (HELPER_LIKE, compile_helper(out, cat, 'video', 'q2video', HELPER_LIBS)),

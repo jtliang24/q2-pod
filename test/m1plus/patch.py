@@ -9628,7 +9628,8 @@ def streaming(m):
         assert m.nodes[m.top]['name']=='library_page'
         page=m.top; view=next(w for w in m.nodes if m.nodes[w]['type']=='scroll_view' and m.get(m.get(w+O['W_PARENT'])+O['W_PARENT'])==page)
         rows=m.nodes[view]['children']; names=[m.nodes[m.nodes[row_button(m,r)]['children'][1]].get('text') for r in rows]
-        assert names[names.index('Coverflow')+1:][:3]==['Spotify','Internet Radio','AirPlay'],names
+        after=names[names.index('Coverflow')+1:]  # the card apps on the card (addon_scan) follow Spotify
+        assert after[0]=='Spotify' and after[after.index('Internet Radio'):][:2]==['Internet Radio','AirPlay'],names
         m.lib_page=page; m.streams={n:row_button(m,r) for n,r in zip(names,rows) if n}
         return m.streams
     else:
@@ -10349,7 +10350,7 @@ if 'usbmode_page_init' in HOOKS:
             self.bin,self.browse=f'/mnt/mmc/.{self.app}/q2-{self.app}',f'/tmp/q2-{self.app}.browse.sock'
             super().__init__(files); card_app(self,self.app,self.manifest)
             self.row_text=re.search(r'name=(.*)',self.manifest)[1]
-        def add_on_row(self): return stream_rows(self)[self.row_text]
+        def add_on_row(self): return (streaming(self) if is_m1plus else stream_rows(self))[self.row_text]
         def gone(self):
             """Its row, then its binary gone from the card before the press."""
             self.button=self.add_on_row(); self.files.pop(self.bin)
@@ -10359,8 +10360,10 @@ if 'usbmode_page_init' in HOOKS:
     m=AppMachine(); card_app(m,'filebrowser','name=File Browser\nqr=1\n'); card_app(m,'deezer','name=Deezer\n')
     card_app(m,'gone','name=Gone\n'); m.files.pop('/mnt/mmc/.gone/q2-gone'); card_app(m,'Bad_Id','name=Bad\n')
     m.tree['/mnt/mmc']+=[('.spotify',4),('Music',4)]; m.files['/mnt/mmc/.spotify/librespot']=bytearray()
-    rows=stream_rows(m)
-    assert list(rows)==['Spotify','Deezer','File Browser','Soulseek','Tidal Downloads','Internet Radio','AirPlay','Configuration'],list(rows)
+    rows=streaming(m) if is_m1plus else stream_rows(m)
+    if is_m1plus:  # the Q2 Pod page: Spotify, the card apps by name, Internet Radio and AirPlay after Coverflow
+        assert list(rows)[list(rows).index('Coverflow')+1:]==['Spotify','Deezer','File Browser','Soulseek','Internet Radio','AirPlay'],list(rows)
+    else: assert list(rows)==['Spotify','Deezer','File Browser','Soulseek','Tidal Downloads','Internet Radio','AirPlay','Configuration'],list(rows)
     for t in ('Deezer','File Browser','Soulseek'):
         icon=m.nodes[rows[t]]['children'][0]; assert m.nodes[icon]['image']=='stream_app' and not m.nodes[rows[t]].get('name')
     passed()
@@ -10416,8 +10419,10 @@ if 'usbmode_page_init' in HOOKS:
     hexed=''.join(''.join('%x'%sum(8>>b for b in range(4) if d*4+b<21 and row[d*4+b]) for d in range(6)) for row in code)
     m.files[SSTATE]=bytearray(f'addr=192.168.1.23:8080\ndl=0\nhold=0\nnote=Online as alice\npin=548001\nqr={hexed}\nqrsize=21\n'.encode())
     m.pick(0); qp=m.top; assert m.nodes[qp]['name']=='qrcode_page'
-    assert {'Soulseek','192.168.1.23:8080','548 001','Online as alice','Scan with your',"phone's camera"}<=set(texts(qp)),texts(qp)
-    qr=next(w for w in m.nodes if m.nodes[w]['type']=='view' and m.get(w+O['W_PARENT'])==qp and cf_geometry(m,w)==(16,40,186,186))
+    scan=["Scan with your phone's camera"] if is_m1plus else ['Scan with your',"phone's camera"]  # M1 Plus: the text under the code
+    assert {'Soulseek','192.168.1.23:8080','548 001','Online as alice',*scan}<=set(texts(qp)),texts(qp)
+    where=((O['UI_W']-186)//2,56) if is_m1plus else (16,40)
+    qr=next(w for w in m.nodes if m.nodes[w]['type']=='view' and m.get(w+O['W_PARENT'])==qp and cf_geometry(m,w)==(*where,186,186))
     m.bands.clear(); m.rounded.clear(); m.call(address=HOOKS['widget_on_paint_border'][0],args=(qr,m.canvas,0,0))
     mod,off=186//25,(186-186//25*21)//2; want=[]
     for y,row in enumerate(code):
@@ -10430,7 +10435,9 @@ if 'usbmode_page_init' in HOOKS:
     assert [b[:4] for b in m.bands]==want and {b[4] for b in m.bands}=={color_t(0)} and m.rounded[0]['rect']==(0,0,186,186),(m.bands[:3],want[:3],m.rounded[:1]); passed()
     # No address (no Wi-Fi): the code hides and the page says so; a second later it follows the file.
     m.files[SSTATE]=bytearray(b'dl=0\nhold=0\nnote=Connect the Q2 to Wi-Fi\npin=548001\nqr=\nqrsize=0\n'); m.advance(1000)
-    assert not m.nodes[qr]['visible'] and 'Connect the Q2 to Wi-Fi' in texts(qp),texts(qp); m.destroy(qp); m.top=m.page; passed()
+    wifi='Connect the M1 Plus to Wi-Fi' if is_m1plus else 'Connect the Q2 to Wi-Fi'  # the page's own line (QR_NO_WIFI)
+    assert not m.nodes[qr]['visible'] and wifi in texts(qp),texts(qp)
+    m.destroy(qp); m.top=m.page; passed()
     # Holding standby off: while the add-on asks (hold=1), each poll resets standby and auto power-off
     # (not the screen's); once it stops by itself (its loop's pid gone), it is let go.
     m.files[SSTATE]=bytearray(b'addr=x\ndl=1\nhold=1\n'); names=m.poll()
@@ -10448,8 +10455,10 @@ if 'usbmode_page_init' in HOOKS:
     assert m.systems==['kill $(cat /tmp/q2-soulseek) 2>/dev/null || rm -f /tmp/q2-soulseek'] and names.index('stock_usbmode')>names.index('sleep_ms') and SPID not in m.files,(m.systems,names[-12:])
     m.open_pages={'usbmode_page'}; m.poll(); assert m.systems==['kill $(cat /tmp/q2-soulseek) 2>/dev/null || rm -f /tmp/q2-soulseek']
     m.open_pages=set(); m.poll(); assert m.systems[-1]=='/bin/sh /mnt/mmc/.soulseek/run'; passed()
-    # Stop Streaming Services stops it too.
-    m.systems=[]; run(m,'addon_stop'); assert m.systems==['kill $(cat /tmp/q2-soulseek) 2>/dev/null || rm -f /tmp/q2-soulseek']; passed()
+    # Stop Streaming Services stops it too. M1 Plus: no Streaming Configuration page (stream_config, U4).
+    if 'addon_stop' in payload_syms:
+        if 'addon_stop' in payload_syms:  # M1 Plus: no Stop Streaming Services (stream_config, U4)
+            m.systems=[]; run(m,'addon_stop'); assert m.systems==['kill $(cat /tmp/q2-soulseek) 2>/dev/null || rm -f /tmp/q2-soulseek']; passed()
 
     # File Browser: q2-filebrowser from the card's .filebrowser folder, the same page on its own socket.
     # Its manifest's qr=1: turned on by its row, its QR code page opens once it answers, the menu behind
@@ -10469,7 +10478,7 @@ if 'usbmode_page_init' in HOOKS:
     m.files[FSTATE]=bytearray(f"addr=192.168.1.23:8000\nhold=0\nnote=Manage the card's files there\npin=548001\nqr={hexed}\nqrsize=21\nversion=q2f-v1.0\n".encode())
     m.answer('ok','refresh','',FMENU); assert m.requests[-1]==('menu',) and m.labels()==FLABELS
     qp=m.top; assert m.nodes[qp]['name']=='qrcode_page'
-    assert {'File Browser','192.168.1.23:8000','548 001',"Manage the card's files there",'Scan with your'}<=set(texts(qp)),texts(qp)
+    assert {'File Browser','192.168.1.23:8000','548 001',"Manage the card's files there",scan[0]}<=set(texts(qp)),texts(qp)
     m.destroy(qp); m.top=m.page
     # Asked again while on top: the same rows, and no second code page.
     m.advance(2000); m.worker(); assert m.requests[-1]==('menu',) and m.top==m.page and m.labels()==FLABELS; passed()
@@ -10483,7 +10492,8 @@ if 'usbmode_page_init' in HOOKS:
     m.calls=[]; m.pick(3); m.answer('ok','File Browser off','',[])
     assert m.requests[-1]==('stop',) and m.toasts[-1][3]=='File Browser off' and 'navigator_back' in [c[0] for c in m.calls]; m.close()
     # Stop Streaming Services stops it too.
-    m.systems=[]; run(m,'addon_stop'); assert m.systems==['kill $(cat /tmp/q2-filebrowser) 2>/dev/null || rm -f /tmp/q2-filebrowser']; passed()
+    if 'addon_stop' in payload_syms:  # M1 Plus: no Stop Streaming Services (stream_config, U4)
+        m.systems=[]; run(m,'addon_stop'); assert m.systems==['kill $(cat /tmp/q2-filebrowser) 2>/dev/null || rm -f /tmp/q2-filebrowser']; passed()
 
     # Deezer: q2-deezer from the card's .deezer folder. Nothing streams: a press downloads, to Deezer/ on
     # the card, and a song on the card, a local row, plays from it as local music (navigation.c songs_open).
@@ -10551,8 +10561,9 @@ if 'usbmode_page_init' in HOOKS:
     m.destroy(songs); m.top=m.page; m.advance(2000); m.answer('ok','refresh','',[('local',f'{ALBUM}/{names[0]}','Valerie','Broadcast · on the card','album','')])
     m.plays=[]; m.pick(0); assert [p[2:4] for p in m.plays]==[(1,0xf001)] and m.play_names==list(sorted(names)),(m.plays,m.play_names); passed()
     # Stop Streaming Services, USB storage and Rockbox stop it as the other apps (it writes to the card).
-    m.close(); m.files[DZPID]=bytearray(b'7'); m.systems=[]; run(m,'addon_stop')
-    assert 'kill $(cat /tmp/q2-deezer) 2>/dev/null || rm -f /tmp/q2-deezer' in m.systems,m.systems; passed()
+    if 'addon_stop' in payload_syms:  # M1 Plus: no Stop Streaming Services (stream_config, U4)
+        m.close(); m.files[DZPID]=bytearray(b'7'); m.systems=[]; run(m,'addon_stop')
+        assert 'kill $(cat /tmp/q2-deezer) 2>/dev/null || rm -f /tmp/q2-deezer' in m.systems,m.systems; passed()
 else:
     not_ported('Card apps (addon.c: the card app host, usbmode_page_init not hooked on M1 Plus)')
 
@@ -10681,52 +10692,79 @@ if 'usbmode_page_init' in HOOKS:
     def shelf_job(m,ms=500):
         worker,arg=m.threads[-1]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,count=50_000_000)==0; m.advance(ms,clear=False)
     KILL='killall -9 librespot aplay'
-    m=ShelfMachine({SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
-                    '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
-    m.rockbox_mode=0; m.wifi=-1; apps_open(m)
-    assert m.labels()==['Apps','Rockbox','Install','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install'] and not m.threads; passed()  # no themes without Rockbox; the card apps last
-    m.close(); m.wifi=3; m.rockbox_mode=0o100755; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
-    assert m.labels()==['Apps','Rockbox','Update','Rockbox Themes','Install','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install']
-    m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
-    assert m.opts[10002]=='https://api.github.com/repos/group-a-study/q2-filebrowser/releases/latest' and m.opts[10018]=='Q2Pod'  # the last of six
-    assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.opts[64]==1 and m.opts[81]==2
-    assert m.labels()[6]=='Update' and '/tmp/q2-shelf.json' not in m.files; passed()  # q2-v1.8 against the latest q2-v1.9
-    m.close(); m.now+=9*60*1000; apps_open(m); assert len(m.threads)==1 and m.labels()[6]=='Update'; passed()  # still fresh: no requests
-    m.row(2); assert m.labels()[6]=='Checking…' and len(m.threads)==2 and KILL in m.systems[-1]; m.row(2); assert m.labels()[6]=='Cancelling…'
-    shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[6]=='Update'; passed()
-    m.wifi=-1; m.row(2); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and len(m.threads)==2; m.wifi=3; passed()
-    m.codes=[403]; m.row(2); shelf_job(m); assert m.toasts[-1][3]=='GitHub is busy, try later'; passed()  # the API's rate limit
-    m.files[SPOT_TAG]=bytearray(b'q2-v1.9'); m.close(); m.wifi=-1; apps_open(m); assert m.labels()[6]=='Installed' and len(m.threads)==3
-    m.row(2); assert m.labels()[6]=='Press again to remove' and len(m.threads)==3
-    m.row(3); assert m.labels()[6]=='Installed' and m.labels()[8]=='Press again to erase the login and cache'  # one row armed at a time
-    m.row(2); m.row(2); assert m.labels()[6]=='Removing…' and m.labels()[8]=='Login and cache'; shelf_job(m)
-    assert m.toasts[-1][3]=='Spotify removed' and KILL in m.systems[-3] and m.systems[-2]=='sync' and KILL in m.systems[-1]  # spot_stop: before and after
-    assert not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/run','/mnt/mmc/.spotify/librespot'}&set(m.files) and m.labels()[6]=='Install'; passed()
-    m.row(3); assert m.labels()[8]=='Press again to erase the login and cache'; m.row(3)
-    assert m.labels()[6]=='Install' and m.labels()[8]=='Erasing…'; shelf_job(m)
-    assert 'rm -rf /mnt/mmc/.spotify/cache /mnt/mmc/.spotify/.cache-size' in m.systems and m.toasts[-1][3]=="Spotify's login and cache erased"; passed()
-    # A stale check, stopped by a press (it needs no answer); then Rockbox from its release to "ready".
-    m.close(); m.wifi=3; m.now+=11*60*1000; apps_open(m); assert len(m.threads)==6
-    m.row(1); assert m.toasts[-1][3]=='Stopped checking for updates'; shelf_job(m); assert len(m.threads)==6; passed()
-    m.close(); m.rockbox_mode=0; m.dirs.pop('/mnt/mmc/.spotify'); m.reply=(ROOT/'test/shelf/q2-rockbox.json').read_bytes()
-    apps_open(m); shelf_job(m); assert m.labels()==['Apps','Rockbox','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install']  # not stopped: checked again
-    m.row(0); assert m.labels()[2]=='Starts at power-on; Boot to changes that. Press again to install' and len(m.threads)==7
-    m.row(0); assert len(m.threads)==8 and m.labels()[2]=='Checking…'; m.row(0); shelf_job(m); assert m.toasts[-1][3]=='Download cancelled'
-    m.free=10<<20; m.row(0); m.row(0); shelf_job(m)  # the zip (13018581 bytes) and 64 MB left over
-    assert m.toasts[-1][3]==f'Needs {(13018581+(54<<20)+(1<<20)-1)>>20} MB more space' and not [f for f in m.files if '.q2/staging/' in f]; passed()
-    m.free=1<<32; m.staged=[('.rockbox/rockbox',b'ELF3.2'),('.rockbox/codecs/flac.codec',b'c'),('.rockbox/fonts/a b.fnt',b'f')]
-    m.listing=''.join(f'{len(d):9}  10-06-2026 13:18   {f}\n' for f,d in m.staged)
-    m.row(0); m.row(0); m.rockbox_mode=0o100755; m.moves=[]; shelf_job(m)  # Rockbox on the card by the end
-    assert m.toasts[-1][3]==('Rockbox is ready. Find it on Home' if variant=='ipod' else 'Rockbox is ready. It starts at power-on')
-    assert [x for x in m.moves if x.startswith('/mnt/mmc/.rockbox/')][-1]=='/mnt/mmc/.rockbox/rockbox'  # the binary last
-    assert m.moves[-2:]==['/mnt/mmc/.q2/apps/rockbox.files','/mnt/mmc/.q2/apps/rockbox.tag'] and m.files['/mnt/mmc/.q2/apps/rockbox.tag']==b'v3.2'
-    assert m.files['/mnt/mmc/.rockbox/rockbox']==b'ELF3.2' and m.files['/mnt/mmc/.rockbox/fonts/a b.fnt']==b'f'
-    assert m.files['/mnt/mmc/.q2/apps/rockbox.files']==b'.rockbox/rockbox\n.rockbox/codecs/flac.codec\n.rockbox/fonts/a b.fnt\n'
-    assert not [f for f in m.files if '.q2/staging' in f] and 'sync' in m.systems; passed()
-    assert m.labels()==['Apps','Rockbox','Installed','Rockbox Themes','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install']; passed()  # the rows built again
-    m.listing='        1  10-06-2026 13:18   .rockbox/../../x\n'; m.files.pop('/mnt/mmc/.q2/apps/rockbox.tag'); m.row(0); shelf_job(m)
-    assert m.toasts[-1][3]=='The download is not a usable app' and m.files['/mnt/mmc/.rockbox/rockbox']==b'ELF3.2'; passed()
-    m.close(); passed()
+    if is_m1plus:
+        # M1 Plus: Spotify and the card apps. No Rockbox or Rockbox Themes row, even with a Rockbox on the
+        # card (there is none for the M1, and S90play would boot the Q2's), and the check asks GitHub for
+        # the four apps' releases alone; then Spotify's update, remove and erase, as on the Q2.
+        class M1ShelfMachine(ShelfMachine):
+            def hook(self,u,address,size,unused):
+                if self.handlers.get(address,'').endswith('curl_easy_setopt') and u.reg_read(UC_MIPS_REG_A1)==10002:
+                    self.urls.append(self.text(u.reg_read(UC_MIPS_REG_A2)))
+                return super().hook(u,address,size,unused)
+        m=M1ShelfMachine({SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
+                          '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
+        m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
+        assert m.labels()==['Apps','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install'] and not m.threads; passed()
+        m.close(); m.wifi=3; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
+        assert m.labels()==['Apps','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install']
+        m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
+        assert m.urls==[f'https://api.github.com/repos/{r}/releases/latest' for r in
+                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser')],m.urls
+        assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.labels()[2]=='Update'; passed()  # q2-v1.8 against the latest q2-v1.9
+        m.row(0); assert m.labels()[2]=='Checking…' and KILL in m.systems[-1]; m.row(0); assert m.labels()[2]=='Cancelling…'
+        shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[2]=='Update'; passed()
+        m.files[SPOT_TAG]=bytearray(b'q2-v1.9'); m.close(); m.wifi=-1; apps_open(m); assert m.labels()[2]=='Installed'
+        m.row(0); m.row(0); assert m.labels()[2]=='Removing…'; shelf_job(m)
+        assert m.toasts[-1][3]=='Spotify removed' and not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/librespot'}&set(m.files); passed()
+        m.row(1); assert m.labels()[4]=='Press again to erase the login and cache'; m.row(1); shelf_job(m)
+        assert m.toasts[-1][3]=="Spotify's login and cache erased"; m.close(); passed()
+    if not is_m1plus:  # Rockbox's rows: Q2 only
+        m=ShelfMachine({SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
+                        '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
+        m.rockbox_mode=0; m.wifi=-1; apps_open(m)
+        assert m.labels()==['Apps','Rockbox','Install','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install'] and not m.threads; passed()  # no themes without Rockbox; the card apps last
+        m.close(); m.wifi=3; m.rockbox_mode=0o100755; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
+        assert m.labels()==['Apps','Rockbox','Update','Rockbox Themes','Install','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install']
+        m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
+        assert m.opts[10002]=='https://api.github.com/repos/group-a-study/q2-filebrowser/releases/latest' and m.opts[10018]=='Q2Pod'  # the last of six
+        assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.opts[64]==1 and m.opts[81]==2
+        assert m.labels()[6]=='Update' and '/tmp/q2-shelf.json' not in m.files; passed()  # q2-v1.8 against the latest q2-v1.9
+        m.close(); m.now+=9*60*1000; apps_open(m); assert len(m.threads)==1 and m.labels()[6]=='Update'; passed()  # still fresh: no requests
+        m.row(2); assert m.labels()[6]=='Checking…' and len(m.threads)==2 and KILL in m.systems[-1]; m.row(2); assert m.labels()[6]=='Cancelling…'
+        shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[6]=='Update'; passed()
+        m.wifi=-1; m.row(2); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and len(m.threads)==2; m.wifi=3; passed()
+        m.codes=[403]; m.row(2); shelf_job(m); assert m.toasts[-1][3]=='GitHub is busy, try later'; passed()  # the API's rate limit
+        m.files[SPOT_TAG]=bytearray(b'q2-v1.9'); m.close(); m.wifi=-1; apps_open(m); assert m.labels()[6]=='Installed' and len(m.threads)==3
+        m.row(2); assert m.labels()[6]=='Press again to remove' and len(m.threads)==3
+        m.row(3); assert m.labels()[6]=='Installed' and m.labels()[8]=='Press again to erase the login and cache'  # one row armed at a time
+        m.row(2); m.row(2); assert m.labels()[6]=='Removing…' and m.labels()[8]=='Login and cache'; shelf_job(m)
+        assert m.toasts[-1][3]=='Spotify removed' and KILL in m.systems[-3] and m.systems[-2]=='sync' and KILL in m.systems[-1]  # spot_stop: before and after
+        assert not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/run','/mnt/mmc/.spotify/librespot'}&set(m.files) and m.labels()[6]=='Install'; passed()
+        m.row(3); assert m.labels()[8]=='Press again to erase the login and cache'; m.row(3)
+        assert m.labels()[6]=='Install' and m.labels()[8]=='Erasing…'; shelf_job(m)
+        assert 'rm -rf /mnt/mmc/.spotify/cache /mnt/mmc/.spotify/.cache-size' in m.systems and m.toasts[-1][3]=="Spotify's login and cache erased"; passed()
+        # A stale check, stopped by a press (it needs no answer); then Rockbox from its release to "ready".
+        m.close(); m.wifi=3; m.now+=11*60*1000; apps_open(m); assert len(m.threads)==6
+        m.row(1); assert m.toasts[-1][3]=='Stopped checking for updates'; shelf_job(m); assert len(m.threads)==6; passed()
+        m.close(); m.rockbox_mode=0; m.dirs.pop('/mnt/mmc/.spotify'); m.reply=(ROOT/'test/shelf/q2-rockbox.json').read_bytes()
+        apps_open(m); shelf_job(m); assert m.labels()==['Apps','Rockbox','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install']  # not stopped: checked again
+        m.row(0); assert m.labels()[2]=='Starts at power-on; Boot to changes that. Press again to install' and len(m.threads)==7
+        m.row(0); assert len(m.threads)==8 and m.labels()[2]=='Checking…'; m.row(0); shelf_job(m); assert m.toasts[-1][3]=='Download cancelled'
+        m.free=10<<20; m.row(0); m.row(0); shelf_job(m)  # the zip (13018581 bytes) and 64 MB left over
+        assert m.toasts[-1][3]==f'Needs {(13018581+(54<<20)+(1<<20)-1)>>20} MB more space' and not [f for f in m.files if '.q2/staging/' in f]; passed()
+        m.free=1<<32; m.staged=[('.rockbox/rockbox',b'ELF3.2'),('.rockbox/codecs/flac.codec',b'c'),('.rockbox/fonts/a b.fnt',b'f')]
+        m.listing=''.join(f'{len(d):9}  10-06-2026 13:18   {f}\n' for f,d in m.staged)
+        m.row(0); m.row(0); m.rockbox_mode=0o100755; m.moves=[]; shelf_job(m)  # Rockbox on the card by the end
+        assert m.toasts[-1][3]==('Rockbox is ready. Find it on Home' if variant=='ipod' else 'Rockbox is ready. It starts at power-on')
+        assert [x for x in m.moves if x.startswith('/mnt/mmc/.rockbox/')][-1]=='/mnt/mmc/.rockbox/rockbox'  # the binary last
+        assert m.moves[-2:]==['/mnt/mmc/.q2/apps/rockbox.files','/mnt/mmc/.q2/apps/rockbox.tag'] and m.files['/mnt/mmc/.q2/apps/rockbox.tag']==b'v3.2'
+        assert m.files['/mnt/mmc/.rockbox/rockbox']==b'ELF3.2' and m.files['/mnt/mmc/.rockbox/fonts/a b.fnt']==b'f'
+        assert m.files['/mnt/mmc/.q2/apps/rockbox.files']==b'.rockbox/rockbox\n.rockbox/codecs/flac.codec\n.rockbox/fonts/a b.fnt\n'
+        assert not [f for f in m.files if '.q2/staging' in f] and 'sync' in m.systems; passed()
+        assert m.labels()==['Apps','Rockbox','Installed','Rockbox Themes','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install']; passed()  # the rows built again
+        m.listing='        1  10-06-2026 13:18   .rockbox/../../x\n'; m.files.pop('/mnt/mmc/.q2/apps/rockbox.tag'); m.row(0); shelf_job(m)
+        assert m.toasts[-1][3]=='The download is not a usable app' and m.files['/mnt/mmc/.rockbox/rockbox']==b'ELF3.2'; passed()
+        m.close(); passed()
 else:
     not_ported("Q2 Shelf, System settings' Apps (netupdate.c): no Apps row on M1 Plus, with the card app host")
 
@@ -11839,6 +11877,8 @@ def boot_row(value=None,mode=0o100755):
     m.handlers[int(manifest['patch_symbols']['stock_systemset_trampoline'],16)]='stock_systemset'
     m.mock('ferror@GLIBC_2.0','fflush@GLIBC_2.0','fsync@GLIBC_2.0','fileno@GLIBC_2.0','navigator_to_with_context')
     entries=[m.entry(0) for _ in range(12)]
+    if is_m1plus:  # V2.1's System Update row, by its icon (m1plus_nav_sysset.c), the ninth here
+        icon=m.node('image'); m.nodes[icon]['image']='system_update'; m.nodes[entries[8]]['children'].append(icon)
     view=m.node('scroll_view',NAMES['VIEW_SYSSET'],entries.copy())
     m.top=m.node('window','sysset_page',[m.node('list_view','list_view_sysset',[view])])
     assert m.call(address=HOOKS['systemset_sysset_page_init'][0],args=(m.top,5,0,0),gap=0)==0
@@ -11846,17 +11886,16 @@ def boot_row(value=None,mode=0o100755):
     # sysset_order is V1.32's row ids: M1 Plus keeps V2.1's order and appends Boot to.
     order=list(range(12)) if is_m1plus else [1,3,4,5,8,7,2,0,6,9,11,10]
     kids=m.nodes[view]['children']
-    if mode!=0o100755:  # Apps (System Update's icon, netupdate.c's page) before Update; no Boot to. M1
-        # Plus has no Apps: the card app host waits for U4.
-        if is_m1plus: assert kids==[entries[i] for i in order]
-        else:
-            assert kids[:9]+kids[10:]==[entries[i] for i in order]
-            apps=m.nodes[kids[9]]['children'][0]; icon,label=m.nodes[apps]['children'][:2]
-            assert m.nodes[icon]['image']=='system_update' and m.nodes[label]['text']=='Apps' and m.handler(apps,O['EVT_CLICK'])[0]==payload_syms['shelf_open']
+    # Apps (System Update's icon, netupdate.c's page) before Update; on M1 Plus before V2.1's System Update.
+    at=8 if is_m1plus else 9
+    apps=row_button(m,kids[at]); icon,label=m.nodes[apps]['children'][:2]
+    assert m.nodes[icon]['image']=='system_update' and m.nodes[label]['text']=='Apps' and m.handler(apps,O['EVT_CLICK'])[0]==payload_syms['shelf_open']
+    if mode!=0o100755:  # no Boot to
+        assert kids[:at]+kids[at+1:]==[entries[i] for i in order]
         return m,None,None
-    at,added=(12,1) if is_m1plus else (9,2)  # Boot to's row; it and Apps
-    assert len(kids)==12+added
-    assert kids[:at]+kids[at+added:]==[entries[i] for i in order]
+    at,added=(13,1) if is_m1plus else (9,2)  # Boot to's row, last on M1 Plus; it and Apps
+    assert len(kids)==14 if is_m1plus else len(kids)==12+added
+    assert (kids[:8]+kids[9:13] if is_m1plus else kids[:at]+kids[at+added:])==[entries[i] for i in order]
     button=row_button(m,kids[at])
     label=m.nodes[button]['children'][1]
     return m,button,label

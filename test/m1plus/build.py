@@ -504,6 +504,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
                                                                     'books', 'videos', 'longsongs')} | {
              xx+f'stream_{n}.png' for n in ('spotify', 'radio', 'airplay')} | {HELPER, SCROBBLE_CA, BOOT} | ({REMOTE} if manifest['dev'] else set())
     added |= {xx+f'row_{n}.png' for n in ('spotify', 'radio')}  # the Q2 Pod page's Streaming rows, at 40 px
+    added |= {xx+'stream_app.png'}  # its card apps' rows (addon.c), at 40 px too
     # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
     added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C}

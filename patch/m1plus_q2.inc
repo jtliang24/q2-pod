@@ -114,6 +114,7 @@
 #define GOTO_ARTIST_SHOWN navigator_window_is_exist("artistinfo_page")
 #define PLE_TICK_X 340 /* the playlist editor's tick on an Add Songs row (ple_tick), PLE_ROW_H tall */
 #define PLE_ROW_H 48
+#define QR_NO_WIFI "Connect the Q2 to Wi-Fi" /* a card app's QR page, without an address (addon.c) */
 #define PH_GRID_H 240
 #define VIS_H 186
 #define BOOK_ROWS 10

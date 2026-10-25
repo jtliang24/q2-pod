@@ -637,7 +637,7 @@ static void qr_refresh(void) {
     widget_set_visible(qp.col, code, 0);
     widget_set_visible(qp.msg, !code, 0);
     if (!code) {
-        set(qp.say, !n ? "Not running" : addr[0] ? "No code yet" : "Connect the Q2 to Wi-Fi");
+        set(qp.say, !n ? "Not running" : addr[0] ? "No code yet" : QR_NO_WIFI);
         set(qp.sub, !n ? "Open it again" : addr[0] ? "Wait a moment" : "Then come back here");
         return;
     }
@@ -687,6 +687,7 @@ static void qr_open(const char *state, const char *title) {
     void *f = widget_factory(), *page = qp.page;
     int h = widget_get_prop_int(page, "h", 290);
     qp.state = state;
+#if !M1PLUS
     widget_set_text_utf8(label(page, 16, 12, 240, 16, "s_scrlabel_white20l", 16, SPOT_GREY), title);
     qp.qr = widget_factory_create_widget(f, "view", page, 16, 40, QR_PX, QR_PX);
     qp.col = widget_factory_create_widget(f, "view", page, QR_COL, 40, 375 - QR_COL - 12, QR_PX);
@@ -701,14 +702,18 @@ static void qr_open(const char *state, const char *title) {
                          "PIN");
     qp.pin = label(qp.col, 0, 130, 140, 28, "s_scrlabel_white20l", 24, 0xffffffffu);
     qp.note = label(qp.col, 0, 172, 375 - QR_COL - 12, 20, "s_scrlabel_white20l", 14, SPOT_GREY);
+#endif
+#include "m1plus_addon_qr.inc"
     void *scroll[] = { qp.addr, qp.note };
     for (unsigned i = 0; i < 2; ++i)
         hscroll_label_set_only_focus(scroll[i], 0), hscroll_label_set_ellipses(scroll[i], 0);
+#if !M1PLUS
     qp.msg = widget_factory_create_widget(f, "view", page, 0, 0, 375, h);
     qp.say =
         label(qp.msg, CF_EDGE, 100, 375 - 2 * CF_EDGE, 30, "s_scrlabel_white20c", 20, 0xffffffffu);
     qp.sub =
         label(qp.msg, CF_EDGE, 134, 375 - 2 * CF_EDGE, 24, "s_scrlabel_white20c", 16, SPOT_GREY);
+#endif
     qp.seen = 0; /* nothing read yet: no read hashes to 0 but by chance, and then only once */
     qr_refresh();
     qp.timer = timer_add(qr_tick, 0, 1000);
