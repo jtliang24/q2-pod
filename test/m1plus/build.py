@@ -259,6 +259,15 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert manifest['variant'] == 'stock' and manifest['compact_code'] == []
     assert set(manifest['changed_assets']) == {TAG_C}
     stock_syms = symbols(directory/'stock-demo')
+    # Every page m1plus_contexts.inc lets ringnav navigate is a window V2.1's assets name, as build.py
+    # checks contexts.inc's against V1.32's.
+    listing = subprocess.run(['unsquashfs', '-l', str(directory/'stock.squashfs')], capture_output=True, text=True).stdout
+    windows = set()
+    for rel in re.findall(r'squashfs-root/(release/assets/default/raw/ui/\S+\.bin)', listing):
+        data = read('stock.squashfs', rel); i = data.find(b'name\0')
+        if i >= 0: windows.add(data[i+5:data.index(b'\0', i+5)].decode('utf-8', 'replace'))
+    m1_contexts = re.findall(r'"([^"]+)"', (ROOT/'patch/m1plus_contexts.inc').read_text())
+    assert m1_contexts and not set(m1_contexts) - windows, set(m1_contexts) - windows
     allowed = set()  # demo file offsets the build may change
     def jumped(address, name):
         off = fileoff(stock, address)
