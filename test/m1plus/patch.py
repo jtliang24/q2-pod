@@ -1278,6 +1278,21 @@ if variant=='ipod':
     for button in [w for w,n in m.nodes.items() if n['type']=='button' and n['children']]:
         check_album_tile(m,button)
 
+# Folder row names are text, not printf formats (FOLDER_NAME): V2.1's row text (0x532e34) runs, its
+# tk_strncpy real, with the listing's record and the playing checks mocked.
+if 'FOLDER_NAME' in SITES:
+    site_patched('FOLDER_NAME')
+    m=Machine(); title=m.node('hscroll_label','scrlabel_name'); button=m.node('button','',[title])
+    m.row_record=m.alloc(0x80); m.word(m.row_record+O['REC_TYPE'],8)
+    m.mock('deque_at','widget_set_text_utf8','widget_use_style','widget_resize','is_folderplaying','is_m3ulistplaying','is_playing')
+    for label in ('99% Invisible','100% true %s %n.mp3','plain.mp3','x'*600):
+        m.word(m.row_record+O['REC_NAME'],m.string(label))
+        m.call(address=0x532e34,args=(button,7,0,0),gap=0)
+        assert m.nodes[title]['text']==label[:511],label
+    passed()
+else:
+    not_ported('Folder names with % (FOLDER_NAME not patched in V2.1)')
+
 if not is_m1plus:
     for address in (0x523038, 0x4aa2cc, 0x4b0efc, 0x4a4ae8):
         for grid in ((0, 1) if address == 0x4a4ae8 else (0,)):

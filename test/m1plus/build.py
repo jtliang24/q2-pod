@@ -352,6 +352,12 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert words(0x4ee9a8, 1)[0] == 0x10000000 | ((stock_syms['loadLocalClassList'] - 0x4ee9ac) >> 2) & 0xffff
     # SCAN_REFRESH: toolsLoadAllFile's bal toolsCheckItemExist, V1.32's word.
     assert bal(0x5eff54, 'toolsCheckItemExist') and stock_syms['toolsLoadAllFile'] < 0x5eff54
+    # FOLDER_NAME: the folder row's text (0x532e34, a PIC entry bal'd from 0x533124, V1.32's 0x522304):
+    # tk_snprintf at -0x5798, tk_strncpy at -0x3300 from V2.1's GOT base.
+    def slot(offset): return struct.unpack_from('<I', stock, fileoff(stock, M1PLUS_GP + offset))[0]
+    assert got(0x532ec0) == stock_syms['tk_snprintf'] and slot(-0x3300) == stock_syms['tk_strncpy']
+    assert words(0x533124, 1)[0] == 0x04110000 | ((0x532e34 - 0x533128) >> 2) & 0xffff
+    assert words(0x532e34, 3) == (0x3c1c004d, 0x279c109c, 0x0399e021)  # gp = 0xa03ed0
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores
