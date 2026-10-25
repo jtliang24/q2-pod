@@ -8086,6 +8086,55 @@ def q2pod_real_grid():
     m,win=real_home(list(range(17))); rebuild(m,win); assert where(m,win)[:3]==(3,2,5)
     assert rebuild(m,win,list(range(6)))==[1,2] and where(m,win)[:3]==(2,1,0)
     assert rebuild(m,win,list(range(13)))==[3] and where(m,win)[:3]==(3,2,1); passed()
+    # Knob: Navigation on Home (m1plus_nav_home.c), on V2.1's real grid: the turns step a frame
+    # through the cards in reading order, page by page, home_sview following to the card's page; the
+    # press clicks the card's image, V2.1's or the Q2 Pod card's. At an end a turn stops, and one
+    # after a pause wraps. A touch hides the frame, and the next turn shows it on the page in view; a
+    # rebuild drops it. Volume mode leaves Home alone.
+    def knob_home(n,mode='1'):
+        m,win=real_home(list(range(n))); rebuild(m,win); m.config['KNOB']=mode; m.mock('slide_view_set_active_ex')
+        slides=named(m,win,'home_sview')
+        return m,win,slides,[c for p in m.nodes[slides]['children'] for c in m.nodes[p]['children']]
+    def turn(m,slides,key='KEY_VOLUMEDOWN',gap=1000):  # the knob's volume down: Next (Knob Up: List Up)
+        m.call(O[key],gap=gap); slid=[c[1:4] for c in m.calls if c[0]=='slide_view_set_active_ex']
+        if slid: m.nodes[slides]['active']=slid[-1][1]
+        return [(s==slides,page,anim) for s,page,anim in slid]
+    def framed(m,cards):
+        out=[]
+        for i,c in enumerate(cards):
+            m.paint(c,gap=0)
+            if m.rounded: out.append(i); assert m.rounded[0]['rect']==(2,2,150,114),m.rounded[0]
+        return out
+    image=lambda m,c: next(w for w in m.nodes[c]['children'] if m.nodes[w]['type']!='label')
+    m,win,slides,cards=knob_home(11); assert len(cards)==12 and framed(m,cards)==[]
+    assert turn(m,slides)==[] and framed(m,cards)==[0]  # the first turn shows the first card in view
+    for i in range(1,6): assert turn(m,slides)==[] and framed(m,cards)==[i]
+    assert turn(m,slides)==[(True,1,1)] and framed(m,cards)==[6]  # the next page, slid to
+    assert turn(m,slides,'KEY_VOLUMEUP')==[(True,0,1)] and framed(m,cards)==[5]; passed()
+    for _ in range(6): turn(m,slides)
+    assert framed(m,cards)==[11] and [m.nodes[c]['name'] for c in cards].index('q2pod_card')==11
+    assert turn(m,slides)==[] and framed(m,cards)==[11]  # the end stops,
+    assert turn(m,slides,gap=50)==[] and framed(m,cards)==[11]  # a spin keeps stopping,
+    assert turn(m,slides)==[(True,0,1)] and framed(m,cards)==[0]; passed()  # and a turn after a pause wraps
+    assert turn(m,slides,'KEY_VOLUMEUP')==[] and turn(m,slides,'KEY_VOLUMEUP')==[(True,1,1)] and framed(m,cards)==[11]
+    # The press clicks the card: the Q2 Pod card's image (its own click), then a V2.1 card's.
+    m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[image(m,cards[11])]
+    assert m.handler(image(m,cards[11]),O['EVT_CLICK'])[0]==payload_syms['library_open']
+    turn(m,slides,'KEY_VOLUMEUP'); m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[image(m,cards[10])]; passed()
+    # A touch hides the frame; the next turn shows it on the page in view.
+    inp=HOOKS['window_manager_dispatch_input_event'][0]; m.handlers[inp+12]='stock_input'
+    m.call(0,address=inp,event_type=O['EVT_INPUT_POINTER_DOWN'])
+    assert framed(m,cards)==[]
+    m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[]  # no frame: the press isn't a card's
+    m.nodes[slides]['active']=1; assert turn(m,slides)==[] and framed(m,cards)==[6]; passed()
+    # A rebuild (the Home editor) makes new cards: the frame goes, and comes back on a turn.
+    rebuild(m,win); cards=[c for p in m.nodes[slides]['children'] for c in m.nodes[p]['children']]
+    assert framed(m,cards)==[] and turn(m,slides)==[] and framed(m,cards)==[6]; passed()
+    # One page: no slide. Volume mode: the knob stays the volume and Home shows nothing.
+    m,win,slides,cards=knob_home(5)
+    for i in range(6): assert turn(m,slides)==[] and framed(m,cards)==[i]
+    m,win,slides,cards=knob_home(11,mode='0'); m.mock('on_wm_keyup_fun'); turn(m,slides)
+    assert m.get(m.event+O['EVENT_KEY'])==O['KEY_VOLUMEDOWN'] and framed(m,cards)==[]; passed()
 if is_m1plus: q2pod_real_grid()
 def home_settings(full,classic=0):
         # Home's Rockbox row shows only while the card has Rockbox: hidden, it moves after Settings, so the

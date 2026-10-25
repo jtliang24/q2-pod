@@ -130,6 +130,7 @@
 #define HOME_ICON 66
 #define HOME_LABEL_Y 92
 #define HOME_LABEL_H 36
+#define HOME_FRAME_INSET 2 /* Knob: Navigation's frame inside a card (m1plus_nav_home.c) */
 /* V2.1's AWTK numbers its events differently from V1.32's from focus on: one lower to the key
  * events (one entry fewer before them), two higher from the window events. Each is V2.1's value in
  * the same stock function that uses V1.32's: widget_on_keydown (0x670908: 0x10f, 0x111, long

@@ -22,6 +22,8 @@ M1PLUS_FUNCTIONS = {
  'view_create': ('void *', 'void *, int, int, int, int'),  # the Home card's page and card views
  'label_set_line_wrap': ('int', 'void *, int'),
  'slide_indicator_set_max': ('int', 'void *, unsigned'),
+ # (widget, index, animate): Knob: Navigation slides Home to the focused card's page (m1plus_nav_home.c)
+ 'slide_view_set_active_ex': ('int', 'void *, unsigned, int'),
  # its four corner radii, the width and the edges (0xffff all), as V1.32's wrapper (0x63d034) passes them
  'canvas_stroke_rounded_rect_ex': ('int', 'void *, const void *, const void *, const void *, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned'),
  # Shanling's real signature, (name, readAudioProperties): the M1 Plus passes 1 (V2.1's scanner passes 0)

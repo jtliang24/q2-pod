@@ -13,5 +13,7 @@
     /* search_key (1.3.8) closes the library search's keyboard on Return, which the M1 doesn't
      * have: V2.1's search dialog closes by its back button. */
     (void)search_key;
+    /* Knob: Navigation's turns and press on V2.1's Home grid (m1plus_nav_home.c) */
+    if (home_key(window_manager_get_top_window(window_manager()), key)) return STOP;
     int result = stock_keyup_trampoline(ctx, event);
 #endif

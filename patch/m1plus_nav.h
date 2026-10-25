@@ -6,4 +6,8 @@
     canvas_stroke_rounded_rect_ex(c, rect, s, color, radius, radius, radius, radius, width, 0xffff)
 extern int coverflow_centre(int x, int y); /* coverflow.c */
 extern void video_touch(void *e);          /* books.c */
+/* Knob: Navigation on Home (m1plus_nav_home.c, included after its callers) */
+static int home_key(void *top, unsigned key);
+static void home_input(void *e);
+static void home_paint(void *w, void *canvas);
 #endif

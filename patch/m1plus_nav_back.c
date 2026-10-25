@@ -40,3 +40,4 @@ static int knob_nav_active(void) {
     return allowed_top(window_manager_get_top_window(window_manager()));
 }
 #endif
+#include "m1plus_nav_home.c"
