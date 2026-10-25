@@ -78,6 +78,10 @@
 #define ROW_STYLE "list_item_style"            /* V2.1's settings row (list_row_core) */
 #define ROW_LABEL_STYLE "srlabel_leftwhite21_style"
 #define ROW_CHEVRON "right_arrow"
+/* page_list's rows on M1 (m1plus_coverflow_rows.c): list_row_core's height, the caption at its x */
+#define PAGE_ROW_H 64
+#define PAGE_ROW_X 12
+#define PAGE_ROW_W 270
 #define VIEW_SYSSET "sysset_scrollview"
 #define VIEW_POWER "standby_scrollview" /* Idle (powermanager_page) */
 #define VIEW_DISPLAY "display_scrollview"

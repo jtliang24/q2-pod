@@ -6624,7 +6624,9 @@ if variant=='ipod':
         label=m.nodes[item]['children'][0]; assert cf_geometry(m,label)[::2]==(E,O['UI_W']-2*E)
     assert clear(E,48+(rows-1)*48+14,O['UI_W']-2*E,20)  # the lowest visible row
 else:
-    view=m.tracks(); assert {cf_geometry(m,m.nodes[i]['children'][0])[::2] for i in m.nodes[view]['children']}=={(12,O['UI_W']-25)}
+    # M1 Plus: page_list's rows are V2.1's (m1plus_coverflow_rows.c): the caption left at PAGE_ROW_X, clear of a chevron
+    view=m.tracks(); assert {cf_geometry(m,m.nodes[i]['children'][0])[::2] for i in m.nodes[view]['children']}=={(O['PAGE_ROW_X'],O['PAGE_ROW_W'])}
+    assert {m.nodes[i]['style'] for i in m.nodes[view]['children']}=={'list_item_style'} and m.get(m.nodes[view]['children'][1]+O['W_Y'])==O['PAGE_ROW_H']
 passed()
 
 # Execute stock sibling selection and playback scheduling; mock filesystem enumeration,
@@ -7965,7 +7967,7 @@ page=m.top; assert m.nodes[page]['name']=='shuffle_page' and m.nodes[page]['styl
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.top==page
 m.page=page; menu=m.find('scroll_view'); rows=m.nodes[menu]['children']
 def caption(r): return m.nodes[m.nodes[r]['children'][0]]['text']
-assert [m.get(r+O['W_H']) for r in rows]==[48]*3 and [caption(r) for r in rows]==['Shuffle Songs','Shuffle Albums','Shuffle Folders']
+assert [m.get(r+O['W_H']) for r in rows]==[O['PAGE_ROW_H'] if is_m1plus else 48]*3 and [caption(r) for r in rows]==['Shuffle Songs','Shuffle Albums','Shuffle Folders']
 note=m.nodes[page]['children'][-1]
 assert m.texts()==['Shuffle']+[caption(r) for r in rows]+([] if is_m1plus else [m.nodes[note]['text']])
 assert m.nodes[note]['text']=='Albums and folders take a moment to shuffle' and m.nodes[note]['style:normal:text_color']==-0x555556 and m.nodes[note]['style:normal:font_size']==16 and not m.nodes[note].get('handlers')
@@ -7974,6 +7976,7 @@ if is_m1plus:
     # it is a centred label the screen's width less 20 px each side, wrapped onto two lines.
     assert m.nodes[note]['type']=='label' and m.nodes[note]['style']==NAMES['STYLE_LABEL_WHITE18C']
     assert (m.get(note+O['W_X']),m.get(note+O['W_W']))==(20,O['UI_W']-40) and ('label_set_line_wrap',note,1) in opened
+    assert m.get(note+O['W_Y'])==48+3*O['PAGE_ROW_H']+10  # under V2.1's 64 px rows (m1plus_coverflow_rows.c)
     assert m.nodes[note].get('word_wrap')==1  # between words: line_wrap alone split "shu/ffle" on dev 13
 else:
     assert m.nodes[note]['type']=='hscroll_label' and m.get(note+O['W_W'])==335

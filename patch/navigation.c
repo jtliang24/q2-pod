@@ -4994,7 +4994,7 @@ static int shuffle_menu(void *ctx, void *event) {
     page_row_detail(view, 1, "Shuffle Albums", 0, sp_pick);
     page_row_detail(view, 2, "Shuffle Folders", 0, sp_pick);
 #if M1PLUS /* the Q2's 335 px ran past the 320 px screen: two centred lines in the screen's width */
-    void *note = label_create(st.sp_page, 20, 200, UI_W - 40, 44);
+    void *note = label_create(st.sp_page, 20, 48 + 3 * PAGE_ROW_H + 10, UI_W - 40, 44); /* under the rows */
     widget_use_style(note, STYLE_LABEL_WHITE18C);
     label_set_line_wrap(note, 1);
     widget_set_prop_int(note, "word_wrap", 1); /* between words: line_wrap alone split "shu/ffle" */

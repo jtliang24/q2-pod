@@ -1090,6 +1090,9 @@ void *page_title(void *body, const char *caption) {
 /* The peq_ui.c page: a title bar (*title, unless 0) over n whole item_h rows in body, shrunk so the list's
  * white background never shows below a short list. Shared with photos.c. */
 void *page_list(void *page, void *body, void **title, const char *caption, int n, int item_h) {
+#if M1PLUS
+    item_h = PAGE_ROW_H; /* V2.1's rows (m1plus_coverflow_rows.c) */
+#endif
     int h = widget_get_prop_int(page, "h", BOTTOM), rows = (h - 48) / item_h * item_h;
     if (n * item_h < rows) rows = n * item_h;
     widget_destroy_children(body);
@@ -1113,6 +1116,7 @@ static void *list(const char *title, int n) {
     return page_list(cf.page, cf.body, &cf.title, title, n, 48);
 }
 
+#if !M1PLUS
 /* One 48px row of a page_list or, with a detail (navigation.c's Most Played), a 64px one: the caption
  * over the detail in 16px #AAAAAA, stock's s_scrlabel_gray24l grey. iPod left-aligns them, as every
  * stock list. Returns the row. Shared with photos.c. */
@@ -1140,6 +1144,8 @@ void page_row_into(void *view, int index, const char *caption, int (*click)(void
     void *item = page_row_detail(view, index, caption, 0, click);
     if (IPOD) image_base_set_image(image_create(item, 302, 0, 50, 48), "list_into");
 }
+#endif
+#include "m1plus_coverflow_rows.c"
 
 /* clip: the canvas clip, read into old, narrowed to x, y, w, h; false when nothing shows. Shared
  * with navigation.c. */
