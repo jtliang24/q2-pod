@@ -264,8 +264,6 @@ M1PLUS_PORTS = {
                          '(roadmap U3 batch)'),
     'networkGetWifiSignal': ('unported', "the Wi-Fi signal from the driver, keeping the radio's power save (1.3.0; "
                              'roadmap U3 batch)'),
-    'player_start_queue': ('unported', "View Queue's and Up Next's rows in a shuffle's play order (1.2.9); V2.1's is "
-                           'start_playqueue (0x4e47d0), aliased for the payload\'s calls (roadmap U3 batch)'),
     'write_int_config': ('native', "Bluetooth's own saved level (1.3.8); V2.1 keeps it apart, [PLAYSET] BTVOLUME, "
                          '(m1plus_nav_btvol.c)'),
     'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
@@ -436,6 +434,9 @@ M1PLUS_HOOKS = {
     'mclPrevSong': (0x5d56dc, 'ringnav_prev', 'prev'),
     'mclSetPlayMode': (0x5d278c, 'ringnav_mode', 'mode'),
     'mclSetPlaySpeed': (0x5d281c, 'ringnav_speed', 'speed'),
+    # A queue row's pick (View Queue, stock's View Queue dialog, a queue delete) in a shuffle's play
+    # order: V1.32's player_start_queue. The payload's player_start_queue calls reach it by alias.
+    'start_playqueue': (0x4e47d0, 'ringnav_start_queue', 'start_queue'),
     # A track's LYRICS tag without a .lrc; stock's loader runs first, from every caller's GOT call
     'mclLoadExLyric': (0x5d41e4, 'ringnav_lyric', 'lyric'),
     # Online lyric and cover search: LRCLIB, then MusicBrainz and iTunes, before stock's Kugou. Both,
