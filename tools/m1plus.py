@@ -187,6 +187,10 @@ CALL_SITES = {
                     (0x4d3058, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
                     (0x4d3064, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
                     (0x4d3070, 0x24040016, 0x8fa40014)),  # lw $4,0x14($sp), was li $4,0x16
+        # The lock screen picture's access checks, config_init's (0x4e5030) and get_screensaver_image's
+        # (0x4d7524), access from -0x834($gp): a built-in wallpaper isn't a file. The Q2's build()
+        # patches its two with upstream's code, as LOCKSCREEN_ACCESS's words.
+        'LOCKSCREEN_ACCESS': ((0x4e6218, 0x0320f809, 'lockscreen_access'), (0x4d75b0, 0x0320f809, 'lockscreen_access')),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -219,6 +223,7 @@ CALL_SITE_PURPOSES = {
     'COVER_PAUSE': 'album grids never pause the cover worker',
     'ARTIST_COVER_ROW': "an artist's albums request the covers in view",
     'COVER_DONE': 'discard stale cover completion',
+    'LOCKSCREEN_ACCESS': 'a built-in wallpaper survives a reboot',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
@@ -710,7 +715,8 @@ def compile_payload(out):
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     leaf_paint = WM_PAINT_LEAF_M1PLUS
     undefined = [f'--undefined={name}' for _, name, _ in active_hooks.values()]
-    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
+    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set',
+                  '--undefined=lockscreen_access']
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')

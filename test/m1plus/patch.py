@@ -11048,15 +11048,16 @@ if 'lockscreen_access' in payload_syms:  # M1 Plus: config_init's and the list's
         assert (result==0)==(picture in WALLS or picture.endswith('/exists.jpg'))
         assert not any(c[0]=='toolsWriteConfig' for c in m.calls)
     passed()
-    # Execute config_init's real validation/copy block, including the patched access call.
+    # Execute V2.1's config_init validation/copy block, including the patched access call.
+    from m1plus import M1PLUS_GP
     for picture in WALLS+['screensaver_default','/mnt/mmc/missing.jpg','/mnt/mmc/exists.jpg']:
         m=lock_machine(); m.present.add('/mnt/mmc/exists.jpg')
         path=m.string(picture); stack=0x7000f000
         for _ in range(2):
-            m.calls=[]; m.u.reg_write(UC_MIPS_REG_SP,stack); m.word(stack+24,0xa26cc0)
-            m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0); m.u.reg_write(UC_MIPS_REG_S0,path)
-            m.u.emu_start(0x4fa410,0x4fa460,count=100000)
-            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4fa460
+            m.calls=[]; m.u.reg_write(UC_MIPS_REG_SP,stack); m.word(stack+24,M1PLUS_GP)
+            m.u.reg_write(UC_MIPS_REG_GP,M1PLUS_GP); m.u.reg_write(UC_MIPS_REG_S0,path)
+            m.u.emu_start(0x4e620c,0x4e625c,count=100000)
+            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4e625c
             expected='screensaver_default' if picture.endswith('/missing.jpg') else picture
             assert m.text(syms['g_screensaver_picture'])==expected
             assert not any(c[0]=='toolsWriteConfig' for c in m.calls)
