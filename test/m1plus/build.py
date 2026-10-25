@@ -372,6 +372,16 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert words(0x53bed0, 1)[0] == 0x04110000 | ((0x53a240 - 0x53bed4) >> 2) & 0xffff and stock_syms['show_player_face'] < 0x53bed0
     assert pic_gp(stock, 0x53a240) == M1PLUS_GP and got(0x53a3e4) == stock_syms['scroll_view_set_offset']
     assert got(0x53a42c) == stock_syms['mclGetLyricBuffer'] and got(0x53a568) == stock_syms['mclGetLyricTime']
+    # BT_INIT, BT_PARAMS, BT_STATUS and BT_AUTOLINK: V1.32's calls in V2.1's platform_init, config_bt_init,
+    # openBluetooth (its two callbacks PIC entries, the a2dp one btrecvA2dpFunc) and autoLinkBluetooth.
+    assert got(0x50be24) == stock_syms['btctl_create_daemon_thread'] and stock_syms['platform_init'] < 0x50be28
+    assert bal(0x4d6ae4, 'initBluetoothParam') and stock_syms['config_bt_init'] < 0x4d6ae4
+    assert got(0x4d2cec) == stock_syms['btctl_device_status_callback'] and got(0x4d2cd4) == stock_syms['btctl_set_prompt_callback']
+    assert slot(-0x4d4c) + 0x4738 == 0x4d4738 and words(0x4d2cdc, 1) == (0x24842310,) and stock_syms['openBluetooth'] < 0x4d2cd8
+    assert pic_gp(stock, 0x4d4738) == pic_gp(stock, 0x4d2310) == M1PLUS_GP and got(0x4d2d04) == stock_syms['btrecvA2dpFunc']
+    assert bal(0x4d44e4, 'checkPairDev') and stock_syms['autoLinkBluetooth'] < 0x4d44e4
+    # BTLINKMAC: readBtLinkMac's buffer, its GOT page and offset
+    assert words(0x4d2800, 1) == (0x8f9082c0,) and slot(-0x7d40) == 0xa00000 and words(0x4d280c, 1) == (0x261041d0,)
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores

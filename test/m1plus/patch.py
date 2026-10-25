@@ -4025,11 +4025,9 @@ else:
     not_ported('LDAC HQ sends 990 kbps (LDAC_HQ not patched in V2.1)')
 if 'BT_INIT' in SITES:  # with BT_PARAMS, BT_STATUS and BT_AUTOLINK
     # A boot reconnect can arrive as the control thread starts, before openBluetooth's GPIO write.
-    from build import BT_INIT, BT_PARAMS
-    assert struct.unpack_from('<I',demo,fileoff(demo,BT_INIT[0]))[0]==jal(payload_syms['headset_bt_init'])
-    assert struct.unpack_from('<I',demo,fileoff(demo,BT_PARAMS[0]))[0]==0
+    site_patched('BT_INIT'); site_patched('BT_PARAMS')
     # The old radio-power hook is gone: startup owns registration, and stock retains its toggle path.
-    assert struct.unpack_from('<I',demo,fileoff(demo,0x4efcbc))[0]==0x0320f809
+    if not is_m1plus: assert struct.unpack_from('<I',demo,fileoff(demo,0x4efcbc))[0]==0x0320f809
     class BtInitMachine(Machine):
         def hook(self,u,addr,size,_):
             if self.handlers.get(addr)=='btctl_create_daemon_thread':
@@ -4043,7 +4041,7 @@ if 'BT_INIT' in SITES:  # with BT_PARAMS, BT_STATUS and BT_AUTOLINK
         assert bt_init.call(address=payload_syms['headset_bt_init'],args=(thread,0,0,0),gap=0)==result
         assert bt_init.calls[0][0]=='initBluetoothParam'
         assert [c[:3] for c in bt_init.calls[1:]]==[
-            ('btctl_set_prompt_callback',0x4ef600,0),
+            ('btctl_set_prompt_callback',O['BT_PROMPT_CB'],0),
             ('btctl_device_status_callback',payload_syms['headset_bt_status'],0),
             ('btctl_set_a2dp_callback',syms['btrecvA2dpFunc'],0x01020304),
             ('btctl_create_daemon_thread',thread,0)]
@@ -4051,14 +4049,12 @@ if 'BT_INIT' in SITES:  # with BT_PARAMS, BT_STATUS and BT_AUTOLINK
         passed()
     # An incoming link while a link thread waits for the saved device (BT_STATUS) is adopted; auto-link
     # skips while a listed one is connected (BT_AUTOLINK).
-    from build import BT_STATUS, BT_AUTOLINK
-    assert struct.unpack_from('<I',demo,fileoff(demo,BT_STATUS[0]))[0]==jal(payload_syms['headset_status_register'])
-    assert struct.unpack_from('<I',demo,fileoff(demo,BT_AUTOLINK[0]))[0]==jal(payload_syms['headset_bt_autolink'])
+    site_patched('BT_STATUS'); site_patched('BT_AUTOLINK')
     class BtLinkMachine(Machine):
         def __init__(self,links,paired=True,connecting=1,saved='AA:AA:AA:AA:AA:AA'):
             super().__init__(); self.links=[list(x) for x in links]; self.paired=paired
-            self.u.mem_write(0xa38168,saved.encode()+b'\0')  # BTLINKMAC
-            self.word(syms['bt_connectstatus'],connecting); self.handlers[0x4f1a50]='device_status'
+            self.u.mem_write(O['BTLINKMAC'],saved.encode()+b'\0')
+            self.word(syms['bt_connectstatus'],connecting); self.handlers[O['BT_STATUS_CB']]='device_status'
         def hook(self,u,addr,size,_):
             name=self.handlers.get(addr)
             if name not in ('getBtLinkStatus','getBtLinkSize','getBtLinkItem','addBtLinkItem','updateBtLinkStatus','checkPairDev','device_status'):

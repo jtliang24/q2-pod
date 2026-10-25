@@ -200,6 +200,15 @@ CALL_SITES = {
         # Now Playing's info page: show_player_face's bal to its fill (np_info, 0x539c40; $t9 is set
         # before it), as the Q2's one call.
         'NP_INFO_CALL': ((0x53bebc, 0x0411f760, 'ringnav_np_info'),),
+        # platform_init's jalr btctl_create_daemon_thread: the callbacks before the control thread, and
+        # config_bt_init's bal initBluetoothParam moves before it too (headset_bt_init), as V1.32's.
+        'BT_INIT': ((0x50be24, 0x8f99f2c0, None), (0x50be28, 0x0320f809, 'headset_bt_init')),
+        'BT_PARAMS': ((0x4d6ae4, 0x0411f51d, 0),),
+        # openBluetooth's btctl_device_status_callback(BT_STATUS_CB, 0) registers headset_bt_status, and
+        # autoLinkBluetooth's bal checkPairDev also skips while the link list holds a connected link.
+        'BT_STATUS': ((0x4d2cec, 0x8f99f888, None), (0x4d2cf0, 0x0320f809, 'headset_status_register'),
+                      (0x4d2cf4, 0x24844738, None)),
+        'BT_AUTOLINK': ((0x4d44e4, 0x0411fd04, 'headset_bt_autolink'),),
         # Now Playing's timer: scroll_view_scroll_to(scroll_lrc, 0, y, 10), its lyric follow, as V1.32's.
         'LYRIC_FOLLOW': ((0x53ad54, 0x8f99acfc, None), (0x53ad64, 0x0320f809, 'ringnav_lyric_follow')),
         # show_player_face's bal to the lyric row builder (LYRIC_ROW_BUILDER, $t9 set before it), after
@@ -306,11 +315,6 @@ M1PLUS_PORTS = {
     'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
-    'BT_INIT': ('unported', "Bluetooth's callbacks before the control thread discovers boot links (1.3.8, "
-                "1.2.9's BT_POWER); V2.1's platform_init and openBluetooth not checked yet"),
-    'BT_PARAMS': ('unported', "config_bt_init's reset before the control thread (1.3.8), with BT_INIT"),
-    'BT_STATUS': ('unported', 'a headset that connects during the reconnect to the last device is kept (1.3.8)'),
-    'BT_AUTOLINK': ('unported', "auto-link skips while a link is connected (1.3.8), with BT_STATUS"),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
