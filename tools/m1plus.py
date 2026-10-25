@@ -197,6 +197,9 @@ CALL_SITES = {
         # com163_obtainlyric if it found nothing, as V1.32's does, but then NetEase again in every case
         # (0x50a1e4), which overwrote a found lyric. A find now branches past both (bnez $v0, 0x50a1ec).
         'LYRIC_SOURCES': ((0x50a1c0, 0x14400006, 0x1440000a),),
+        # Now Playing's info page: show_player_face's bal to its fill (np_info, 0x539c40; $t9 is set
+        # before it), as the Q2's one call.
+        'NP_INFO_CALL': ((0x53bebc, 0x0411f760, 'ringnav_np_info'),),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -284,7 +287,6 @@ M1PLUS_PORTS = {
     'CLASS_ICON': ('native', 'V2.1 draws its own artist icon (roadmap 4)'),
     'ARTIST_COVER_ROW': ('native', "V2.1 has no artist page of 160 px rows: an artist's albums are an album list, "
                          'whose covers COVER_PAUSE and ALBUM_ART cover (progress 12, 30)'),
-    'NP_INFO_CALL': ('unported', "Now Playing's info lines read better; V2.1's site is 0x53bebc (roadmap 7)"),
     'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
@@ -381,6 +383,8 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'mcl_preload': 0x5d0ea4,  # the gapless pick and its open, hooked (M1PLUS_HOOKS) as on the Q2
     'mcl_open_preload': 0x5d0bd8,
     'btmenu_rows': 0x4a3734,  # the Bluetooth page's list: switch, name, quality, volume, search, devices
+    # Now Playing's info page: its labels from the playing track, "Label:value" (show_player_face's bal, NP_INFO_CALL)
+    'np_info': 0x539c40,
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
 }
 # V1.32 routines V2.1 has no twin of yet, called only from a Q2 hook the M1 leaves unported: declared

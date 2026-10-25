@@ -3733,7 +3733,6 @@ int ringnav_playing(void *win, void *ctx) {
 }
 #endif
 
-#if !M1PLUS /* entered only from V1.32's NP_INFO_CALL */
 /* Now Playing's info page: stock (0x52a508, from its one call, NP_INFO_CALL in tools/build.py)
  * writes "Label:value" lines and the folder alone. Each line gets ": ", a number its unit's space
  * ("35.92 MB", "16-bit", "950 kbps", "44.1 kHz"), the folder its Location label, and an unknown
@@ -3775,7 +3774,6 @@ int ringnav_np_info(void *win) {
     }
     return result;
 }
-#endif
 
 /* systemset_display_page_init: stock builds its three rows (0x4c19bc: a s_listitem_black list_item
  * holding a 335x70 s_btn_listitem button with a 52px icon, a 24px label at x 72 and list_into); the

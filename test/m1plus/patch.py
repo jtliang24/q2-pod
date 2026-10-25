@@ -11871,13 +11871,14 @@ if 'NP_INFO_CALL' in SITES:
                 u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
             return super().hook(u,address,size,unused)
     m=InfoMachine(); m.handlers[syms['getFormatString']]='i:format'
-    stock_lines={'label_album':'Album:Kid A','label_genre':'Genre:Unknown Artist','label_size':'File Size:35.92MB',
-                 'label_year':'Year:2000','label_encode':'Encoding:FLAC','label_bits':'Bit Depth:16bit','label_kbps':'Bitrate:950kbps',
-                 'label_sample':'Sample Rate:44.1kHz','label_location':'SD:/Music/Radiohead'}
+    # M1 Plus: V2.1's fill (0x539c40) has five of the labels, and labels the folder itself: album, genre,
+    # player_era, player_filesize (%s:%.2fMB) and player_location (%s:%s), V2.1's en_US words; its
+    # player_unknown is plain "Unknown".
+    stock_lines={'label_album':'Album:Kid A','label_genre':'Genres:Unknown','label_year':'Era:2000',
+                 'label_size':'File Size:35.92MB','label_location':'Location:SD:/Music/Radiohead'}
     lines={k:m.node('label',k,text=v) for k,v in stock_lines.items()}
     win=m.node('window','playing_page',list(lines.values()))
-    want=['Album: Kid A','Genre: Unknown','File Size: 35.92 MB','Year: 2000','Encoding: FLAC','Bit Depth: 16-bit',
-          'Bitrate: 950 kbps','Sample Rate: 44.1 kHz','Location: SD:/Music/Radiohead']
+    want=['Album: Kid A','Genres: Unknown','Era: 2000','File Size: 35.92 MB','Location: SD:/Music/Radiohead']
     for _ in range(2):
         m.call(address=payload_syms['ringnav_np_info'],args=(win,0,0,0),gap=0)
         assert [c[1] for c in m.calls if c[0]=='np_info']==[win] and [m.nodes[l]['text'] for l in lines.values()]==want, [m.nodes[l]['text'] for l in lines.values()]
