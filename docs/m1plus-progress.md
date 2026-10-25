@@ -1823,6 +1823,50 @@ The limit went back to Off, and the log was removed.
 Not checked: Songs by filename and format. The user's Home has no Songs card, and their sort is by
 title.
 
+## 46. Polish before 1.4.2-m1.1: the knob on Home, the menus' exits, the look (Oct 25)
+
+The roadmap's section 7, the knob on Home (the user's request), and the two touch gaps from earlier
+passes, on `polish/1.4.2`. Each item is M1 code; the shared files gained only `#if M1PLUS` lines or
+named literals.
+
+| Commit | Change |
+|---|---|
+| `8420f66` | **The knob on Home** (`m1plus_nav_home.c`). V2.1's Home is a `slide_view` of card grids that no ringnav pane matches, so Knob: Navigation's turns did nothing there. A focus now steps through the cards in reading order, sliding `home_sview` to the card's page (`slide_view_set_active_ex`, animated); the press clicks the card's image; the lists' rounded frame shows it, with the lists' end detent and wrap; a touch hides it, a rebuild drops it. |
+| `d0324b9` | The real-grid harness zeroes the builder's stack: its mocked `memset` had left the name buffer to chance. |
+| `4b51cae` | **Exits.** A press outside the hold menu closes it, as OK does; one outside the rating picker, Now Playing's back button included, closes the picker alone. Previous closes the hold menu in Knob: Navigation. |
+| `f518292` | **`page_list` rows** (Shuffle, Ratings, Long Songs, Internet Radio, Books, Spotify, View Queue, Coverflow's lists) in V2.1's 64 px row: tile, caption left at x 12, grey detail, `right_arrow` (`m1plus_coverflow_rows.c`). |
+| `9cf4182` | **Streaming icons** at V2.1's 40 px (`row_spotify`, `row_radio`). |
+| `b656935`, `35a54fb` | **Now Playing's info lines** (`NP_INFO_CALL`, V2.1 `0x53bebc` to its fill `0x539c40`): V2.1's five lines spaced, "File Size: 20.05 MB". The M1 link now keeps every call site's routine. |
+| `8f84a10` | **Knob: Navigation on V2.1's settings pages** (`m1plus_contexts.inc`), found on dev 4: Date and time's menu is V2.1's `typedatetime_page`, which no context named, so the knob turned the volume there. An audit of V2.1's page assets added Automatic Time Set, Screen Rotation, Theme, and the DSD, USB, USB volume and ripping settings. |
+| `3f8efcd` | **Pickers open on their checked option** (`CHOICE_CHECK`), found on dev 6: V2.1 marks it `selected`, not V1.32's `select`, so every M1 picker had opened on its first row. |
+
+Results (dev 7, `V019s`, `update.bin` `19deac75…`): Q2 Legacy and iPod byte-identical to 1.4.2's
+build and all 22 Q2 suite runs pass; the M1's suites pass, `patch` with 1133 scenarios and 28
+`NOT PORTED` (NP_INFO_CALL's gone), and the three qemu walks, `boot.py`'s now turning the knob on Home.
+
+**On the device**, dev 4 (`V016s`), dev 6 (`V018s`) and dev 7 (`V019s`), over q2remote:
+- **Home:** the frame stepped System Setting, Recent and Q2 Pod, stopped at the end, and after a pause
+  wrapped to TIDAL, Home sliding to page 1; two turns and the press opened Album; Previous came back with
+  the frame kept; a touch hid it.
+- **Exits:** a tap below the hold menu closed it without opening the row under the tap; Previous closed
+  it; a tap outside the rating picker, and the back button, each closed the picker alone, the song
+  unrated.
+- **Rows:** Internet Radio's menu and stations, the Q2 Pod page's Spotify and Internet Radio icons.
+- **Info:** "Album: Tug Of War", "Genres: pop", "Era: 2008", "File Size: 20.05 MB", "Location:
+  SD:/MusicLibrary/…".
+- **Coverflow:** a tap centres a side cover, and a 200 px swipe in 0.6 s moved two covers.
+- **Settings pages** (dev 6): Date and time, Automatic Time Set, Theme and Screen Rotation navigate by
+  the knob. **Pickers** (dev 7): Automatic Time Set opened on New York (checked by the user), and Screen
+  Off on its checked option.
+- `demo` kept its pid and the kernel logged no fault.
+
+During dev 7's check, a chained wake-and-tap command landed on Screen Off's rows (touch works on a
+dark panel) and set it to 15s; it went back to the user's 1 min.
+
+Left for later (roadmap section 7 and U4): Coverflow's back arrow over its left cover; the picker frame
+reaching into the scroll bar; Knob: Navigation on V2.1 pages outside System Setting and on Set Time
+Manually.
+
 ## How to check a build now
 
 ```sh
