@@ -75,6 +75,31 @@ static void lp_input(void *e) {
         stop_timer(&st.lp_timer);
 }
 
+/* A press outside the hold menu, or outside the rating picker on Now Playing (its back button
+ * included), closes it, as OK closes the menu and Return the Q2's picker: the menu runs nothing
+ * (qm_close), the picker keeps the rating it had (rate_close(0)). The press goes no further, so
+ * nothing under it is pressed, and its release finds no press to click. */
+static int outside_of(void *w, int x, int y) {
+    int xy[2] = { x, y };
+    widget_to_local(w, xy);
+    return xy[0] < 0 || xy[1] < 0 || xy[0] >= I(w, W_W) || xy[1] >= I(w, W_H);
+}
+static int touch_closes(void *e) {
+    if (!e || I(e, EVENT_TYPE) != EVT_INPUT_POINTER_DOWN || !usable()) return 0;
+    void *top = window_manager_get_top_window(window_manager()), *panel;
+    int x = I(e, EVENT_X), y = I(e, EVENT_Y);
+    if (st.qm_dialog && top == st.qm_dialog && outside_of(top, x, y)) {
+        qm_close();
+        return 1;
+    }
+    if (st.rate_on && top == st.rate_on && (panel = widget_lookup(top, "rate_panel", 0)) &&
+        outside_of(panel, x, y)) {
+        rate_close(0);
+        return 1;
+    }
+    return 0;
+}
+
 /* playback.c's Volume guard is the Q2 touch wheel's (#if !M1PLUS there): the M1 Plus turns a knob,
  * and Power has no Volume Guard row. pod_values and ringnav_sleep still name these. */
 int wheel_guard __attribute__((section(".scratch")));

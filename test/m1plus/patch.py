@@ -3752,6 +3752,28 @@ assert m.call(address=f,args=(ctx,ev,0,0),gap=0)==0 and m.top!=page
 m.word(ev+O['EVENT_KEY'],O['KEY_RETURN']); assert m.call(address=f,args=(ctx,ev,0,0),gap=0)==11
 assert m.top==page and not m.toasts and m.names()==['A','B','C'] and m.u.mem_read(syms['g_sort_changeflag'],1)==b'\0'
 passed()
+# M1 Plus (m1plus_nav_touch.c touch_closes): a press outside the menu closes it, as OK does (no
+# action, no sort flag), and goes no further; one on the menu is the menu's. Previous, in Knob:
+# Navigation, closes it too (previous_back): the menu has no back button.
+def touch_down(m,x,y):
+    """A press at x, y as the input thread queues it; whether it reached the window manager."""
+    inp=HOOKS['window_manager_dispatch_input_event'][0]; m.handlers[inp+12]='stock_input'
+    for k in ('W_X','W_Y','W_PARENT'): m.word(m.wm+O[k],0)  # the window manager: the screen's origin, no parent
+    m.word(m.event+O['EVENT_Y'],y)
+    m.call(x,address=inp,event_type=O['EVT_INPUT_POINTER_DOWN'],gap=0)  # a pointer event's x is a key event's key (0x18)
+    return any(c[0]=='stock_input' for c in m.calls)
+if is_m1plus:
+    def menu_open(knob='0'):
+        m=QueueMachine(); m.config['KNOB']=knob; page=m.top; m.press(6000); assert m.hold()==11 and m.release()==0
+        d=m.top; assert m.nodes[d]['name']=='sortselect_dialog'
+        for k,v in (('W_X',30),('W_Y',60),('W_W',260),('W_H',360)): m.word(d+O[k],v)  # its panel on screen
+        return m,page,d
+    m,page,d=menu_open(); assert touch_down(m,160,200) and touch_down(m,30,60) and m.top==d
+    assert not touch_down(m,160,440) and m.top==page and touch_down(m,29,200)  # the next press is the page's
+    assert not m.toasts and m.names()==['A','B','C'] and m.u.mem_read(syms['g_sort_changeflag'],1)==b'\0'; passed()
+    m,page,d=menu_open('1'); m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0)
+    assert m.top==page and not m.toasts; passed()
+    m,page,d=menu_open(); m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0); assert m.top==d; passed()  # Volume mode: a media key
 # A dropped release (AWTK aborts keys when windows change) leaves a latch that must not eat a later
 # press: the press time differs.
 m=QueueMachine(); m.press(1); assert m.hold()==11
@@ -6306,6 +6328,14 @@ def song_side_effects(m):
     return '/mnt/data/ringnav-ratings' in m.files or any(c[0] in ('batch_add_file','deleteMusicFromFav') for c in m.calls)
 m=AlbumRateMachine(); m.open(); m.word(m.slide+O['SLIDE_INDEX'],1); a1=m.aid(m.albums[1])
 assert m.menu()==[*COVER_ALBUM,'Go to Artist'] and m.top==m.page; passed()
+# M1 Plus: a press outside the rating picker closes it with the rating kept, as Return does on the
+# Q2, and goes no further; one on the picker is the picker's (touch_closes).
+if is_m1plus:
+    m=AlbumRateMachine(); m.open(); m.word(m.slide+O['SLIDE_INDEX'],1)
+    assert m.run(4) is None and m.top==m.page and m.panel(); p=m.panel()
+    x,y=signed(m.get(p+O['W_X'])),signed(m.get(p+O['W_Y']))
+    assert touch_down(m,x+5,y+5) and m.panel()==p
+    assert not touch_down(m,x-1,y+5) and m.panel() is None and m.top==m.page and m.kept()==[] and not song_side_effects(m); passed()
 # Add, then Remove from Favourites: 5 hearts, then none; the other covers stay unrated.
 assert m.run(3)=='Added to Favourites' and m.kept()==[(a1&~7)|5] and not song_side_effects(m)
 assert m.menu()[3:5]==['Remove from Favourites','Rate Album  ♥♥♥♥♥']

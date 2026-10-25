@@ -1,5 +1,6 @@
 /* M1 Plus: ringnav_input's touches: the long-press, and q2video's back chevron. patch/navigation.c includes this where it stood (docs/m1plus-roadmap.md U1c). */
 #if M1PLUS
+    if (touch_closes(e)) return 0;
     lp_input(e);
     home_input(e);
     if (e && video_on()) video_touch(e);
