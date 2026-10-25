@@ -200,6 +200,8 @@ CALL_SITES = {
         # Now Playing's info page: show_player_face's bal to its fill (np_info, 0x539c40; $t9 is set
         # before it), as the Q2's one call.
         'NP_INFO_CALL': ((0x53bebc, 0x0411f760, 'ringnav_np_info'),),
+        # toolsLoadAllFile's existing-song check (bal toolsCheckItemExist), folder scans only: V1.32's word.
+        'SCAN_REFRESH': ((0x5eff54, 0x0411fd88, 'ringnav_scan_refresh'),),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -295,7 +297,6 @@ M1PLUS_PORTS = {
     'LYRIC_FOLLOW': ('unported', "the lyrics' top row never shows cut (1.3.8); V2.1's Now Playing timer to check"),
     'LYRIC_ROWS': ('unported', "Play/Pause no longer flicks the lyrics to the top (1.3.9); V2.1's page refresh to "
                    'check, with LYRIC_FOLLOW'),
-    'SCAN_REFRESH': ('unported', 'a folder scan refreshes existing songs\' tags (1.2.9)'),
     'FOLDER_NAME': ('unported', "a folder named with % no longer crashes Folder's rows (1.3.0); V2.1's "
                     'folder_create_tablerow (0x5331fc) to check'),
     'ID3_PATH': ('unported', "a CUE track without sheet tags takes its file's (1.3.0)"),

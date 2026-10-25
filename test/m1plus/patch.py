@@ -4307,9 +4307,61 @@ if 'SCAN_LIMIT' in SITES:
     assert scan(0,{'/m':['a','b','c']},stop_at=1)==(0,['/m/a'],1,1); passed()
 else:
     not_ported('65,000-song scan (SCAN_LIMIT not patched in V2.1)')
-# A folder rescan refreshes existing tags in place (SCAN_REFRESH, 1.2.9): its case is test/patch.py's
-# FolderTagsMachine, on V2.1's addresses when the site is ported.
-if 'SCAN_REFRESH' in SITES: raise AssertionError('SCAN_REFRESH is patched on M1 Plus: port its case from test/patch.py')
+# A folder rescan refreshes existing tags in place, including quoted paths/tags and CUE rows.
+# Run the actual recursive scanner and refresh wrapper against SQLite; full scans still add songs.
+if 'SCAN_REFRESH' in SITES:
+    site_patched('SCAN_REFRESH')
+    import sqlite3
+    class FolderTagsMachine(ScanMachine):
+        def __init__(self,patched=True,cue=False,valid=True,songs=1,title="New artist's tags"):
+            super().__init__({'/m':["it's.flac"]},songs,patched=patched)
+            self.valid=valid; self.cue=cue; self.title=title; self.reads=0; self.updates=[]
+            self.db=sqlite3.connect(':memory:')
+            self.db.execute('create table songtable(id primary key,filename,fileurl,album,songer,style,name,composer,albumsonger,year,track,cd_num,time,time_end,time_create,Initial)')
+            self.old=(7,"it's.flac","/m/it's.flac",'Old album','Old artist','Old genre','Old title','Old composer','Old album artist',1990,1,1,10 if cue else 0,20 if cue else 0,123,ord('O'))
+            self.db.execute('insert into songtable values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',self.old)
+            # Another CUE segment in the same file must keep its own tags.
+            self.db.execute('insert into songtable values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(8,*self.old[1:12],30,40,456,ord('O')))
+            for n in ('taglib_file_new','taglib_file_tag','taglib_file_free','toolsGetMusicInfo','toolsUpdateDbTable','toolsTrimLeft','toolsTrimRight','toolsHanziToPinyin','toolsGetMusicNum'):
+                self.handlers[syms[n]]='refresh:'+n
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            a,b,c,d=[u.reg_read(r) for r in REGS]
+            if name=='scan:toolsCheckItemExist':
+                # The real folder listing includes the path and any parsed CUE tags.
+                self.word(a+O['REC_PATH'],self.string("/m/it's.flac"))
+                if self.cue:
+                    for off,v in ((0x48,10),(0x4c,20),(0x30,2026),(0x3c,3),(0x40,2)): self.word(a+off,v)
+                    for off in (0x14,0x18,0x1c,0x10,0x20,0x24): self.word(a+off,self.string("CUE's tags"))
+                ret=self.text(self.get(a+O['REC_NAME']))!="new.flac"
+            elif name.startswith('refresh:'):
+                name=name[8:]; ret=0
+                if name=='toolsGetMusicNum': ret=self.get(SONGS)
+                elif name=='taglib_file_new':
+                    assert b==0  # TagLib's vendor ABI: tags only, no audio-properties scan.
+                    ret=123 if self.valid else 0
+                elif name=='taglib_file_tag': assert a==123; ret=456
+                elif name in ('toolsTrimLeft','toolsTrimRight'): u.mem_write(a,self.text(a).strip().encode()+b'\0')
+                elif name=='toolsHanziToPinyin': u.mem_write(b,self.text(a).encode()+b'\0')
+                elif name=='toolsGetMusicInfo':
+                    self.reads+=1; assert (a,self.text(c))==(0,"/m/it's.flac"); ret=1
+                    for off in (0,0x100,0x200,0x280,0x480,0x580): u.mem_write(b+off,(self.title if off==0x280 else "New artist's tags").encode()+b'\0')
+                    for off,v in ((0x680,2026),(0x684,3),(0x688,2)): self.word(b+off,v)
+                elif name=='toolsUpdateDbTable':
+                    assert self.text(a)=='/mnt/data/database.db'; self.updates.append(self.text(b)); self.db.execute(self.text(b)); ret=1
+            else: return super().hook(u,address,size,unused)
+            self.returns(ret)
+        def rescan(self):
+            return self.call(address=syms['toolsLoadAllFile'],args=(self.string('/m'),self.string('songtable'),1,0),gap=0)
+    for patched in (False,True):
+        for cue in (False,True):
+            for valid in (False,True):
+                m=FolderTagsMachine(patched,cue,valid); assert m.rescan()==1 and not m.added and m.get(SONGS)==1
+                row=m.db.execute('select * from songtable where id=7').fetchone()
+                changed=patched and (cue or valid)
+                assert row==((7,*m.old[1:3],*(["CUE's tags" if cue else "New artist's tags"]*6),2026,3,2,*m.old[12:15],ord('C' if cue else 'N')) if changed else m.old),(patched,cue,valid,row)
+                assert m.db.execute('select * from songtable where id=8').fetchone()==(8,*m.old[1:12],30,40,456,ord('O'))
+                passed()
 else: not_ported('Folder scans refresh existing tags (SCAN_REFRESH not patched in V2.1)')
 if 'CLASS_ICON' in SITES:
     # Library Artists rows hide the head picture (CLASS_ICON); Composers and Genres, sharing the rebound

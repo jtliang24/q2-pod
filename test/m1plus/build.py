@@ -350,6 +350,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # stores 0xff01 in classinfo_save (ori $v0, 0xff01; sw $v0, 0($s0)) and branches to loadLocalClassList.
     assert words(0x4ee930, 1) == (0x3402ff01,) and words(0x4ee93c, 1) == (0xae020000,)
     assert words(0x4ee9a8, 1)[0] == 0x10000000 | ((stock_syms['loadLocalClassList'] - 0x4ee9ac) >> 2) & 0xffff
+    # SCAN_REFRESH: toolsLoadAllFile's bal toolsCheckItemExist, V1.32's word.
+    assert bal(0x5eff54, 'toolsCheckItemExist') and stock_syms['toolsLoadAllFile'] < 0x5eff54
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores
