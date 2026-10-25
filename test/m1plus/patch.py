@@ -6114,7 +6114,17 @@ else:
     not_ported("A track's LYRICS tag without a .lrc (mclLoadExLyric not hooked on M1 Plus)")
 # Now Playing's lyric follow (LYRIC_FOLLOW): stock's scroll_to past the end clamps to a row top, the
 # content padded to it, not to 275 - 178 = 97 through a row; repeated it stays; a short page is left.
-if 'LYRIC_FOLLOW' in SITES: raise AssertionError('LYRIC_FOLLOW is patched on M1 Plus: port its case from test/patch.py')
+if 'LYRIC_FOLLOW' in SITES:
+    site_patched('LYRIC_FOLLOW')
+    m=Machine(); rows=[m.node('label') for _ in range(12)]
+    for i,(y,h) in enumerate(zip((0,20,70,90,110,135,155,175,195,215,235,255),(20,50,20,20,25)+(20,)*7)):
+        m.word(rows[i]+O['W_Y'],y); m.word(rows[i]+O['W_H'],h)
+    lrc=m.node('scroll_view','scroll_lrc',rows); m.word(lrc+O['W_H'],178); m.word(lrc+O['VIEW_CONTENT_H'],275)
+    ys=[]
+    for y in (195,0,20,195): m.call(address=payload_syms['ringnav_lyric_follow'],args=(lrc,0,y,10),gap=0); ys.append(m.get(lrc+O['SCROLL_Y']))
+    assert ys==[110,0,20,110] and m.get(lrc+O['VIEW_CONTENT_H'])==288,ys
+    m.word(lrc+O['VIEW_CONTENT_H'],100); m.call(address=payload_syms['ringnav_lyric_follow'],args=(lrc,0,0,10),gap=0)
+    assert m.get(lrc+O['VIEW_CONTENT_H'])==100 and m.get(lrc+O['SCROLL_Y'])==0; passed()
 else: not_ported("The lyrics' top row whole (LYRIC_FOLLOW not patched in V2.1)")
 # A refresh's lyric rebuild (LYRIC_ROWS), which stock ends at offset 0, keeps the view where it was.
 if 'LYRIC_ROWS' in SITES: raise AssertionError('LYRIC_ROWS is patched on M1 Plus: port its case from test/patch.py')

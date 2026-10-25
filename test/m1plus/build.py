@@ -365,6 +365,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert got(0x4dd6c0) == stock_syms['toolsGetExternCover'] and words(0x4de8a4, 1) == words(0x4de960, 1) == (0x0320f809,)
     # PLAYER_COVER: parseplaycover_thd's toolsGetExternCover after its toolsGetAlbumCover (0x4df1e8) missed.
     assert got(0x4df218) == stock_syms['toolsGetExternCover'] and stock_syms['parseplaycover_thd'] < 0x4df1e8 < 0x4df218
+    # LYRIC_FOLLOW: Now Playing's timer's scroll_view_scroll_to(scroll_lrc, 0, y, 10).
+    assert got(0x53ad54) == stock_syms['scroll_view_scroll_to'] and words(0x53ad58, 1) == (0x2407000a,)  # li $a3, 10
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores
