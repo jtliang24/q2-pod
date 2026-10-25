@@ -5971,11 +5971,11 @@ if variant=='ipod':
 # list at a time no track reaches. Online queues, other rows and an unbound GOT entry ask nothing.
 if 'mclLoadExLyric' in HOOKS:
     import subprocess
-    from build import GP
+    from m1plus import M1PLUS_GP
     got=next(int(l.split()[0],16) for l in subprocess.run(['readelf','-AW',B/'stock-demo'],capture_output=True,text=True).stdout.splitlines() if l.endswith(' taglib_file_new'))
     lib=symbols(B/'libtag_c.so.2.0.1')
     assert got==O['TAGLIB_NEW_GOT'] and [lib[n] for n in ('taglib_file_new','taglib_property_get','taglib_property_free')]==[O['TAGLIB_FILE_NEW'],O['TAGLIB_PROPERTY_GET'],O['TAGLIB_PROPERTY_FREE']]
-    m=Machine(); assert m.get(GP-0x7f44)==0xa40000 and m.get(0x5aac60)==0x8c44bdac and m.get(0x5aac4c)==0x2624bdb8; passed()  # -0x4254, -0x4248
+    m=Machine(); assert m.get(M1PLUS_GP-0x7f4c)==0xa10000 and m.get(0x5d22b4)==0x8c44aae4 and m.get(0x5d22a0)==0x2624aaf0; passed()  # -0x551c, -0x5510
     TAGLIB=0x1180000  # libtag_c's load address here
     class LyricMachine(QueueMachine):
         def __init__(self,tags,lrc=(),cls=0xf001,kind=8,bound=True):
