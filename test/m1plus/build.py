@@ -358,6 +358,9 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert got(0x532ec0) == stock_syms['tk_snprintf'] and slot(-0x3300) == stock_syms['tk_strncpy']
     assert words(0x533124, 1)[0] == 0x04110000 | ((0x532e34 - 0x533128) >> 2) & 0xffff
     assert words(0x532e34, 3) == (0x3c1c004d, 0x279c109c, 0x0399e021)  # gp = 0xa03ed0
+    # ID3_PATH: get_id3info's strcpy(playsong_id3info, record->path), the id3 info ringnav_id3_path fills.
+    assert got(0x4dff40) == stock_syms['strcpy@GLIBC_2.0'] and got(0x4dff44) == stock_syms['playsong_id3info']
+    assert stock_syms['get_id3info'] < 0x4dff4c and words(0x4dff50, 1) == (0x8e05000c,)  # lw $a1, REC_PATH($s0)
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores

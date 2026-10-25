@@ -206,6 +206,8 @@ CALL_SITES = {
         # name) becomes tk_strncpy(buf, name, 511), its GOT slot -0x3300.
         'FOLDER_NAME': ((0x532eb4, 0x24050200, 0x240601ff), (0x532ec0, 0x8f99a868, 0x8f99cd00),
                         (0x532ec8, 0x8e260008, 0x8e250008)),
+        # get_id3info's strcpy(playsong_id3info, record->path), its lw $t9 pinned.
+        'ID3_PATH': ((0x4dff40, 0x8f99f324, None), (0x4dff4c, 0x0320f809, 'ringnav_id3_path')),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -301,7 +303,6 @@ M1PLUS_PORTS = {
     'LYRIC_FOLLOW': ('unported', "the lyrics' top row never shows cut (1.3.8); V2.1's Now Playing timer to check"),
     'LYRIC_ROWS': ('unported', "Play/Pause no longer flicks the lyrics to the top (1.3.9); V2.1's page refresh to "
                    'check, with LYRIC_FOLLOW'),
-    'ID3_PATH': ('unported', "a CUE track without sheet tags takes its file's (1.3.0)"),
     'GRID_COVER': ('unported', 'Ogg covers in the album grids and Folder (1.3.0)'),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR

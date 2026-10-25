@@ -6847,11 +6847,38 @@ if not is_m1plus:
         assert events.count('mclLoadPlayList')==4 and events.count('mclClearChangeFlag')==len(paths)-1
 else:
     not_ported("test: folder rollover and UI scheduler delay use V1.32's player addresses")
-# A CUE track's file tags (ID3_PATH, 1.3.0) and Ogg art in the grids (GRID_COVER, 1.3.0): their cases are
-# test/patch.py's, on V2.1's addresses when each site is ported.
-for site,what in (('ID3_PATH',"A CUE track's file tags"),('GRID_COVER','Ogg art in Albums and Folder view')):
-    if site in SITES: raise AssertionError(f'{site} is patched on M1 Plus: port its case from test/patch.py')
-    not_ported(f'{what} ({site} not patched in V2.1)')
+# A CUE track (issue #59): a sheet without TITLE or PERFORMER takes the file's album, artist and album
+# artist; its own fields stay; the path is copied last (ID3_PATH). ringnav_id3_path runs on V2.1's
+# playsong_id3info as get_id3info's strcpy hands it; the tag reader is mocked.
+if 'ID3_PATH' in SITES:
+    site_patched('ID3_PATH')
+    class Id3Machine(Machine):
+        def __init__(self,cue=1):
+            super().__init__(); self.cue=cue; self.reads=0
+            self.mock('mclGetCueFlag','toolsGetMusicInfo','toolsTrimLeft','tk_snprintf')
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if name not in ('mclGetCueFlag','toolsGetMusicInfo','toolsTrimLeft'): return super().hook(u,address,size,unused)
+            a,b,c=(u.reg_read(r) for r in REGS[:3]); ret=0
+            if name=='mclGetCueFlag': ret=self.cue
+            elif name=='toolsGetMusicInfo':
+                self.reads+=1; assert a==0 and self.text(c)=='/mnt/mmc/b.m4b'; ret=1
+                for off,v in ((0,'File album'),(0x100,'File artist'),(0x580,'File album artist')): u.mem_write(b+off,v.encode()+b'\0')
+            self.returns(ret)
+    id3=syms['playsong_id3info'] if is_m1plus else syms['g_play_id3_info']
+    m=Id3Machine(); m.u.mem_write(id3+O['ID3_ARTIST'],b'Author\0')
+    assert m.call(address=payload_syms['ringnav_id3_path'],args=(id3,m.string('/mnt/mmc/b.m4b')),gap=0)==id3
+    album_artist=O['ID3_ALBUM']+O['MUSIC_INFO_ALBUM_ARTIST']  # ID3_ALBUM_ARTIST
+    assert [m.text(id3+o) for o in (O['ID3_ALBUM'],O['ID3_ARTIST'],album_artist)]==['File album','Author','File album artist']
+    assert m.text(id3)=='/mnt/mmc/b.m4b' and m.reads==1; passed()
+    m=Id3Machine(cue=0); m.u.mem_write(id3,bytes(0x800))
+    assert m.call(address=payload_syms['ringnav_id3_path'],args=(id3,m.string('/mnt/mmc/b.m4b')),gap=0)==id3
+    assert m.reads==0 and m.text(id3+O['ID3_ALBUM'])=='' and m.text(id3)=='/mnt/mmc/b.m4b'; passed()  # not a CUE track
+else:
+    not_ported("A CUE track's file tags (ID3_PATH not patched in V2.1)")
+# Ogg art in the grids (GRID_COVER, 1.3.0): its case is test/patch.py's, on V2.1's addresses when the site is ported.
+if 'GRID_COVER' in SITES: raise AssertionError('GRID_COVER is patched on M1 Plus: port its case from test/patch.py')
+else: not_ported('Ogg art in Albums and Folder view (GRID_COVER not patched in V2.1)')
 
 # Coverflow depth (docs/internals.md#coverflow-depth): the payload's renderer, run as MIPS, draws
 # byte for byte what the host build of the same source draws (test/coverflow.py checks that
