@@ -328,6 +328,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
     assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
     assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
+    # online_lyricthd: the hooked search (kugou_obtainlyric), NetEase's com163_obtainlyric on a miss and
+    # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
+    assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')
+    assert stock_syms['online_lyricthd'] < 0x50a1b8 and words(0x50a1ec, 1) == (0x24030001,)
     # ringnav_localclass takes an artist's albums by CLASS_ARTIST_ALBUMS (artist_tab): V2.1's loadAlbumList
     # stores 0xff01 in classinfo_save (ori $v0, 0xff01; sw $v0, 0($s0)) and branches to loadLocalClassList.
     assert words(0x4ee930, 1) == (0x3402ff01,) and words(0x4ee93c, 1) == (0xae020000,)

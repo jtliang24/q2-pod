@@ -191,6 +191,10 @@ CALL_SITES = {
         # (0x4d7524), access from -0x834($gp): a built-in wallpaper isn't a file. The Q2's build()
         # patches its two with upstream's code, as LOCKSCREEN_ACCESS's words.
         'LOCKSCREEN_ACCESS': ((0x4e6218, 0x0320f809, 'lockscreen_access'), (0x4d75b0, 0x0320f809, 'lockscreen_access')),
+        # online_lyricthd (0x50a048) runs the hooked kugou_obtainlyric (LRCLIB, then Kugou), then NetEase's
+        # com163_obtainlyric if it found nothing, as V1.32's does, but then NetEase again in every case
+        # (0x50a1e4), which overwrote a found lyric. A find now branches past both (bnez $v0, 0x50a1ec).
+        'LYRIC_SOURCES': ((0x50a1c0, 0x14400006, 0x1440000a),),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -224,6 +228,7 @@ CALL_SITE_PURPOSES = {
     'ARTIST_COVER_ROW': "an artist's albums request the covers in view",
     'COVER_DONE': 'discard stale cover completion',
     'LOCKSCREEN_ACCESS': 'a built-in wallpaper survives a reboot',
+    'LYRIC_SOURCES': "a found lyric isn't overwritten by NetEase's",
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
