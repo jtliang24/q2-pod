@@ -315,6 +315,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # now_tag's ID3_ALBUM_ARTIST (coverflow.c): toolsGetMusicInfo fixes id3 field 6 (li $v1, 6) and
     # copies it to info+0x580 (addiu $a0, $s2, 0x580), MUSIC_INFO_ALBUM_ARTIST, as V1.32 does.
     assert stock_syms['toolsGetMusicInfo'] < 0x5ecba0 and words(0x5ecba0, 1) == (0x24030006,) and words(0x5ecbc4, 1) == (0x26440580,)
+    # The online searches (onlinematch.c) read stock's keyinfo as online_setkeyword_info fills it: the
+    # title at +0x200, the album at +0x400 and the artist at +0x500 (addiu $a0, $s0, ...; $s0 keyinfo).
+    assert got(0x50b49c) == stock_syms['keyinfo'] and words(0x50b4d4, 1) == (0x26040200,)
+    assert words(0x50b4f0, 1) == (0x26040400,) and words(0x50b50c, 1) == (0x26040500,)
     # radio.c's and spotify.c's Search take the keyboard's OK as EVT_IM_ACTION: V2.1's
     # input_method_dispatch_action dispatches 0x13c (li $a1), V1.32's 0x13a.
     assert words(stock_syms['input_method_dispatch_action'] + 0x14, 1) == (0x2405013c,)

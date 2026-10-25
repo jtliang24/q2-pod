@@ -271,10 +271,6 @@ M1PLUS_PORTS = {
                                            "(1.3.8); V2.1 has no playlistsmore_page"),
     'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
-    'kugou_obtainlyric': ('unported', "LRCLIB lyrics before stock's Kugou search (1.3.8); V2.1's is 0x509ee4 "
-                          '(roadmap U3 batch)'),
-    'kugou_obtaincover': ('unported', "MusicBrainz and iTunes covers before stock's Kugou search (1.3.8); V2.1's is "
-                          '0x50aa78 (roadmap U3 batch)'),
     'usbmode_page_init': ('unported', "card apps end before USB storage unmounts the card (1.4.2); the card app "
                           'host (addon.c) waits for U4, with Apps'),
     # Call sites
@@ -437,6 +433,10 @@ M1PLUS_HOOKS = {
     'mclSetPlaySpeed': (0x5d281c, 'ringnav_speed', 'speed'),
     # A track's LYRICS tag without a .lrc; stock's loader runs first, from every caller's GOT call
     'mclLoadExLyric': (0x5d41e4, 'ringnav_lyric', 'lyric'),
+    # Online lyric and cover search: LRCLIB, then MusicBrainz and iTunes, before stock's Kugou. Both,
+    # online_getkeyword_info and online_setkeyword_info are V1.32's but for their data addresses.
+    'kugou_obtainlyric': (0x509ee4, 'ringnav_lyric_search', 'kugou'),
+    'kugou_obtaincover': (0x50aa78, 'ringnav_cover_search', 'kugoucover'),
     # Gapless: the next track's pick and its decoder's open, V1.32's moved
     'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
     'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),
