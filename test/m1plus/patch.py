@@ -6220,7 +6220,8 @@ for found,want in (((('b.mp3','/p/b.mp3',2,1),('a.mp3','/p/a.mp3',1,2),('c.mp3',
                    ((('Mr. Blue','/p/img.flac',0,0,300),('Intro','/p/img.flac'),('01 x.flac','/p/01 x.flac')),['01 x','Intro','Mr. Blue'])):
     m=CoverflowMachine(); m.found=[track(m,*t) for t in found]; m.open(); view=m.tracks()
     assert [m.nodes[m.nodes[i]['children'][0]].get('text') for i in m.nodes[view]['children']]==want
-    assert all(m.nodes[m.nodes[i]['children'][0]]['style']==S('s_scrlabel_white20c') for i in m.nodes[view]['children'])
+    # M1 Plus: the titles keep V2.1's row label, left at PAGE_ROW_X, where the Q2 centres them
+    assert all(m.nodes[m.nodes[i]['children'][0]]['style']==(NAMES['ROW_LABEL_STYLE'] if is_m1plus else S('s_scrlabel_white20c')) for i in m.nodes[view]['children'])
     body=next(n for n in m.nodes.values() if m.find('list_view') in n.get('children',())); assert m.nodes[body['children'][0]]['style:normal:font_size']==O['CF_NAME_PX']
     f,ctx=m.handler(m.nodes[view]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     assert [n.rsplit('.',1)[0] if n.endswith(('.mp3','.flac')) else n for n in m.names(m.plays[-1][1]&0xffffffff)]==want; passed()
