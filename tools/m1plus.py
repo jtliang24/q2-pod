@@ -261,8 +261,6 @@ M1PLUS_PORTS = {
     'dialog_statusbar_dialog_init': ('native', "quick settings' lock label, which goes with quick_lock (roadmap 4)"),
     'read_artistype_value': ('native', "V2.1's Artists page has its own Artist/Album Artist switch (roadmap 4)"),
     'saver_cover': ('native', "V2.1's image_base_set_image always invalidates (progress 29)"),
-    'player_play_pause': ('unported', "a manual Play/Pause isn't marked (headset_manual), so a headset's automatic "
-                          "resume can undo it; V2.1's play_pause_music is unhooked"),
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
     'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); V2.1's "
                           'info keeps it at +0x580 too'),
@@ -480,6 +478,9 @@ M1PLUS_HOOKS = {
     'mclSetVol': (0x5d4cb0, 'ringnav_btvol', 'btvol'),
     # The hold menu: its sortselect_dialog opens non-modal, as V1.32's init leaves it
     'dialog_sortselect_dialog_init': (0x47d358, 'qm_sortselect_init', 'sortselect'),
+    # A manual Play/Pause (V2.1's playpause_quick_click, DLNA, the payload's own) is marked, so a
+    # headset's automatic resume doesn't undo it: V1.32's player_play_pause, (void) -> int as V2.1's
+    'play_pause_music': (0x4e43b4, 'ringnav_play_pause', 'pause'),
 }
 
 def m1plus_symbols(syms, symbol_table):

@@ -11720,6 +11720,15 @@ for owner in (1,2,3,4):
     m=HeadsetMachine(owner); m.command(163); m.command(163,gap=1); assert len(m.actions)==1
     m.command(165); assert len(m.actions)==2 and all(a[0]==owner for a in m.actions)
     passed()
+# A Play/Pause through stock's own entry (ringnav_play_pause) is manual: after it, the headset's
+# automatic resume leaves a pause alone, as after headset_manual. Stock's body is mocked at the trampoline.
+pause_hook='play_pause_music' if is_m1plus else 'player_play_pause'
+m=HeadsetMachine(); m.handlers.pop(syms['player_play_pause'])
+tramp=int(manifest['patch_symbols']['stock_pause_trampoline'],16); m.handlers[tramp]='hs:local_toggle'
+m.ears(3); m.ears(2); assert not m.playing and m.actions==[(1,'pause')]  # the headset's pause
+m.call(address=HOOKS[pause_hook][0],gap=0); assert m.playing  # the user's play
+m.call(address=HOOKS[pause_hook][0],gap=0); assert not m.playing  # and pause
+m.ears(3); assert not m.playing and len(m.actions)==3; passed()
 m=HeadsetMachine(); good=bytes([4,0,4,0,6,0,0,2])
 for packet in (b'',good[:7],good+b'\0',bytes([4,0,4,0,6,0,3,0]),bytes([4,1,4,0,6,0,0,0])):
     p=m.alloc(max(1,len(packet))); m.u.mem_write(p,packet)
