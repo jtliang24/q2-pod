@@ -262,8 +262,6 @@ M1PLUS_PORTS = {
                                  'toolsQueryContentDbTable'),
     'toolsIntoStandby': ('unported', "Standby Limit (1.3.0): the Power row is Q2 only until V2.1's standby is checked "
                          '(roadmap U3 batch)'),
-    'networkGetWifiSignal': ('unported', "the Wi-Fi signal from the driver, keeping the radio's power save (1.3.0; "
-                             'roadmap U3 batch)'),
     'write_int_config': ('native', "Bluetooth's own saved level (1.3.8); V2.1 keeps it apart, [PLAYSET] BTVOLUME, "
                          '(m1plus_nav_btvol.c)'),
     'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
@@ -443,6 +441,9 @@ M1PLUS_HOOKS = {
     # online_getkeyword_info and online_setkeyword_info are V1.32's but for their data addresses.
     'kugou_obtainlyric': (0x509ee4, 'ringnav_lyric_search', 'kugou'),
     'kugou_obtaincover': (0x50aa78, 'ringnav_cover_search', 'kugoucover'),
+    # The status bar's Wi-Fi signal from rtl8733bs's rx_signal, which keeps the radio's power save;
+    # V2.1's asks the radio (SIOCGIWSTATS), as V1.32's does
+    'networkGetWifiSignal': (0x5d76a8, 'ringnav_wifi_signal', None),
     # Gapless: the next track's pick and its decoder's open, V1.32's moved
     'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
     'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),
