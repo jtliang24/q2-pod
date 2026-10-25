@@ -1981,10 +1981,12 @@ m,sels,ok,slide=time_page('sleepshutdown_page')
 assert m.call()==11 and m.get(sels[0]+O['SELECTOR_INDEX'])==6
 assert m.confirm()==11 and m.confirm()==11 and m.confirm()==11 and m.clicks==[ok]; passed()
 
-# A picker opens on its checked option, not the row last chosen there.
-m=Machine(); w,es=m.page_list(4,name='playmode_page')
-m.nodes[es[2]]['children']=[m.node('image',image='select')]
-m.paint(w); assert m.selected(w)==2; passed()
+# A picker opens on its checked option, not the row last chosen there. M1 Plus: V2.1 checks it with
+# "selected" (CHOICE_CHECK), the others "unselect", as Automatic Time Set's zones on dev 6.
+for page in ('playmode_page','autosynctime_page'):
+    m=Machine(); w,es=m.page_list(4,name=page)
+    for i,e in enumerate(es): m.nodes[e]['children']=[m.node('image',image='selected' if i==2 else 'unselect')]
+    m.paint(w); assert m.selected(w)==2,page; passed()
 # iPod Minimal: the selected row's white radio is drawn again dark on the off-white card: a ring,
 # and its dot when checked. Other rows keep stock's.
 if variant=='ipod':

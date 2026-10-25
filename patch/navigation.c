@@ -1000,7 +1000,7 @@ static int load_rows(menu_t *m, void *w) {
 /* A row holding stock's "select" check image: a CHOICE picker's current option. */
 static int checked(void *w, int depth, int *budget) {
     if (!w || depth == 16 || --*budget < 0 || !widget_get_visible(w)) return 0;
-    if (!tk_strcmp(widget_get_prop_str(w, "image", ""), "select")) return 1;
+    if (!tk_strcmp(widget_get_prop_str(w, "image", ""), CHOICE_CHECK)) return 1;
     unsigned n = widget_count_children(w);
     for (unsigned i = 0; i < n; ++i)
         if (checked(widget_get_child(w, i), depth + 1, budget)) return 1;

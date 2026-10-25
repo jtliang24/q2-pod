@@ -136,6 +136,9 @@
 #define HOME_LABEL_H 36
 #define HOME_FRAME_INSET 2 /* Knob: Navigation's frame inside a card (m1plus_nav_home.c) */
 #define M1PLUS_CONTEXTS "m1plus_contexts.inc" /* V2.1's pages ringnav navigates, for patch/contexts.inc */
+/* A CHOICE picker's checked option: V2.1 has no "select" image; its pickers set "selected", and
+ * "unselect" otherwise, as V1.32 (timezone_listitem_layout, 0x4a2388 and 0x4a2420) */
+#define CHOICE_CHECK "selected"
 /* V2.1's AWTK numbers its events differently from V1.32's from focus on: one lower to the key
  * events (one entry fewer before them), two higher from the window events. Each is V2.1's value in
  * the same stock function that uses V1.32's: widget_on_keydown (0x670908: 0x10f, 0x111, long
