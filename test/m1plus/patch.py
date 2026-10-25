@@ -8064,7 +8064,7 @@ def q2pod_page():
     STREAMS=['Spotify','Internet Radio','AirPlay']  # Streaming's rows: V2.1 has no Streaming page
     assert labels==['Shuffle','Ratings','Most Played','Long Songs','Podcasts','Photos','Videos','Coverflow',*STREAMS],labels
     assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_podcasts','local_photos','local_videos',
-                   'local_coverflow','stream_spotify','stream_radio','stream_airplay']
+                   'local_coverflow','row_spotify','row_radio','stream_airplay']
     assert [len(m.nodes[r]['children']) for r in rows]==[3,3,2,2,2,2,2,2,3,3,3]  # rows opening lists (as the Q2's): the chevron
     # Each row's click is the Library's handler; Shuffle's opens its menu, Coverflow's the carousel.
     f,ctx=m.handler(rows[0],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='shuffle_page'
@@ -9420,7 +9420,7 @@ BIN='/mnt/mmc/.spotify/librespot'
 # nothing starts.
 m=SpotMachine({}); button=stream_page(m)
 icon,label=m.nodes[button]['children'][:2]
-assert m.nodes[icon]['image']=='stream_spotify' and m.nodes[label]['text']=='Spotify' and not m.nodes[button].get('name')
+assert m.nodes[icon]['image']==('row_spotify' if is_m1plus else 'stream_spotify') and m.nodes[label]['text']=='Spotify' and not m.nodes[button].get('name')
 page=spot_open(m,button); info,msg=np_views(m,page)
 assert not m.nodes[info]['visible'] and m.nodes[msg]['visible'] and texts(msg)==["Spotify isn't on the card",'See the Q2 Pod guide to add it']
 m.poll(); assert not m.systems; m.close(); passed()
@@ -9610,7 +9610,7 @@ class RadioMachine(SpotMachine):
         worker,arg=self.threads[-1]; assert self.call(address=worker,args=(arg,0,0,0),gap=0,count=5_000_000)==0; self.advance(250)
 def radio_open(m):
     button=m.stream(); icon,label=m.nodes[button]['children'][:2]
-    assert m.nodes[icon]['image']=='stream_radio' and m.nodes[label]['text']=='Internet Radio' and not m.nodes[button].get('name')
+    assert m.nodes[icon]['image']==('row_radio' if is_m1plus else 'stream_radio') and m.nodes[label]['text']=='Internet Radio' and not m.nodes[button].get('name')
     m.click(button); m.page=m.top; assert m.nodes[m.page]['name']=='radio_page'; return m.page
 # The row follows Spotify's. The first open makes the card's Radio folder but leaves Favourites
 # empty, the user's to fill; the starter stations are Featured. The menu has no Now Playing until

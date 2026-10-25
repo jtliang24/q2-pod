@@ -189,6 +189,11 @@ def shared_checks(directory, manifest, stock, demo, read):
         xx = 'release/assets/default/raw/images/xx/'
         photos = read('rootfs.squashfs', xx+'local_photos.png')
         assert photos == read('stock.squashfs', xx+'pset_covermode.png') and struct.unpack('>II', photos[16:24]) == (40, 40)
+        # Its Streaming rows' Spotify and Internet Radio icons at that size too; the 52 px originals stay
+        # for the radio's Now Playing art.
+        for n in ('spotify', 'radio'):
+            assert struct.unpack('>II', read('rootfs.squashfs', xx+f'row_{n}.png')[16:24]) == (40, 40)
+            assert struct.unpack('>II', read('rootfs.squashfs', xx+f'stream_{n}.png')[16:24]) == (52, 52)
     # The crash watchdog only sleeps longer.
     old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
     assert new == old.replace(*WATCHDOG_SLEEP) and new != old
@@ -453,6 +458,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added = {xx+n for n in ICONS} | {xx+f'local_{n}.png' for n in ('shuffle', 'scrobble', 'podcasts', 'audiobooks', 'photos',
                                                                     'books', 'videos', 'longsongs')} | {
              xx+f'stream_{n}.png' for n in ('spotify', 'radio', 'airplay')} | {HELPER, SCROBBLE_CA, BOOT} | ({REMOTE} if manifest['dev'] else set())
+    added |= {xx+f'row_{n}.png' for n in ('spotify', 'radio')}  # the Q2 Pod page's Streaming rows, at 40 px
     # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
     added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C}

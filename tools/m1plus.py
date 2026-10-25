@@ -966,6 +966,8 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
                                      else cat(xx+like)) for n, like in mapping.items()})
     for n in ('spotify', 'radio'):  # Streaming's Spotify and Internet Radio rows
         icons[f'stream_{n}.png'] = ('tidal.png', (ROOT/'assets/icons'/f'stream_{n}.png').read_bytes())
+        # the Q2 Pod page's rows at V2.1's 40 px (list_row_core); the radio's Now Playing art keeps stream_radio's 52
+        icons[f'row_{n}.png'] = ('tidal.png', sized_art((ROOT/'assets/icons'/f'stream_{n}.png').read_bytes(), 40))
     # V2.1's rows draw a 40 px icon (list_row_core) where V1.32's drew 52: the drawn ones at its size,
     # and the Q2 Pod page's Coverflow row from the Coverflow card's art. The Home card's pair is V2.1's
     # 66 px card art (mymusic.png's).
