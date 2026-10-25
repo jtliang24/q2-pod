@@ -4012,19 +4012,22 @@ m=QueueMachine(cls=0xf004,page='localclass_page'); m.found=[]; assert m.run(2)==
 info=syms['g_local_classinfo_save']
 for row,want in ((4,'albuminfo_page' if is_m1plus else 'playerjumpinfo_page'),(5,'album_page' if is_m1plus else 'localmusic/artistinfo_page')):
     m=QueueMachine(); m.u.mem_write(info,bytes(range(256))*3+bytes(144)); before=bytes(m.u.mem_read(info,912))
-    held=m.row(2); cls=m.get(syms['g_class_type']); n=len(m.items(m.get(syms['p_deque_showlist'])))
+    held=m.row(2); cls=m.get(syms['g_class_type']); n=len(m.items(m.get(syms['p_deque_showlist']))); shown_before=m.names(m.get(syms['p_deque_showlist']))
     page=m.top; assert m.run(row,steps=2) is None and m.opened[-1][0]==want and m.top!=page
     if row==4 and is_m1plus:
         shown=m.items(m.get(syms['p_deque_showlist'])); assert len(shown)==n+1 and m.opened[-1][1]==n<<16|O['CLASS_ALBUMS']
         assert [m.text(m.get(shown[-1]+O[k])) for k in ('REC_NAME','REC_ALBUM')]==[m.text(m.get(held+O[k])) for k in ('REC_NAME','REC_ALBUM')]
-        m.deqs[m.get(syms['p_deque_showlist'])][1]=shown[:n]  # the page's load replaces it
+        m.deqs[m.get(syms['p_deque_showlist'])][1]=[m.song('Album track')]  # the page's load replaces it
     elif row==4:
         assert m.get(info)==0xff10 and m.u.mem_read(info+9,1)==b'\0' and m.text(info+0xd)=='Album' and m.text(info+0x10d)=='Artist'
-    else: assert m.opened[-1][1:]==((O['CLASS_ARTISTS'] if is_m1plus else 0xf001),m.row(2))
+    else:
+        assert m.opened[-1][1:]==((O['CLASS_ARTISTS'] if is_m1plus else 0xf001),m.row(2))
+        if is_m1plus: m.deqs[m.get(syms['p_deque_showlist'])][1]=[m.song('An album')]  # album_page's load
     m.word(syms['g_class_type'],0xff10)  # the opened page's own class
     for t,f,ctx in m.nodes[m.top]['handlers']:
         if t==O['EVT_WINDOW_CLOSE']: m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     assert m.get(syms['g_class_type'])==(cls if is_m1plus else 0xff10)
+    if is_m1plus: assert m.names(m.get(syms['p_deque_showlist']))==shown_before  # the page underneath's list again
     assert bytes(m.u.mem_read(info,912))==before and m.names()==['A','B','C']; passed()
 # A Folder play's Now Playing (FOLDER_PLAY, m1plus_nav_goto.c): one open under the folders closes
 # first, unanimated, and the new one opens over the folders; with none open, it only opens.

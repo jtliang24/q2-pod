@@ -6,16 +6,31 @@
  * the album artist (or the artist, as Artists is set) from the record. An album is albuminfo_page with
  * Album's row context, its showlist row << 16 | CLASS_ALBUMS, which loadAlbumdetailList (hooked as
  * ringnav_album_detail) reads the album and artist from: the record goes last in the showlist, which
- * the page's load then replaces with the album's songs. Either page sets cur_classtype, which the page
- * underneath reads again, so it is put back as the page closes, as qm_restore puts classinfo back. */
+ * the page's load then replaces with the album's songs. Either page sets cur_classtype and reloads the
+ * showlist, which a page underneath draws from again as it comes back (Recent's showed the album's
+ * songs on the device), so both are put back as the page closes, as qm_restore puts classinfo back. */
 static unsigned goto_class __attribute__((section(".scratch")));
+static void *goto_list __attribute__((section(".scratch")));
 static int goto_restore(void *page, void *event) {
+    void *list = P(p_deque_showlist, 0);
     I(g_class_type, 0) = (int)goto_class;
+    if (goto_list && list) {
+        deque_clear(list);
+        deque_assign(list, goto_list);
+    }
+    if (goto_list) deque_destroy(goto_list);
+    goto_list = 0;
     return 0;
 }
 static void m1plus_goto(void *r, int album) {
     void *wm = window_manager(), *page = window_manager_get_top_window(wm), *list = P(p_deque_showlist, 0);
     goto_class = (unsigned)I(g_class_type, 0);
+    if (goto_list) deque_destroy(goto_list);
+    goto_list = list ? _create_deque("stSongInfo") : 0;
+    if (goto_list) {
+        deque_init(goto_list);
+        deque_assign(goto_list, list);
+    }
     if (album && list) {
         _deque_push_back(list, r);
         navigator_to_with_context("albuminfo_page", (void *)(long)((deque_size(list) - 1) << 16 | CLASS_ALBUMS));
