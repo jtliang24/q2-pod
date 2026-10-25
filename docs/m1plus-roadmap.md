@@ -260,7 +260,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - Q2 only: Hold Return: Home (the M1 has no Return key) and Volume Guard (the touch wheel's).
   - **Found by the polish pass** (Oct 25, progress section 46):
     - *Partly done (Oct 25, progress section 47): the stock pages have rows; the Tidal and HiFi pages wait for an account to check them on.* **Knob: Navigation outside System Setting.** The knob turns the volume on V2.1 pages ringnav
-      doesn't list: stock's View Queue dialog (`playmore_dialog`), the Home editor (`homemenu_dialog`),
+      doesn't list: stock's View Queue dialog (`playqueue_dialog`; `playmore_dialog` is Now Playing's ⋯ menu), the Home editor (`homemenu_dialog`),
       search (`search_page`, `onlinesearch_page`), CD Ripper (`cdripper_page`, `searchcdripper_page`),
       Recent and Frequent's `guide_page`, and the Tidal and HiFi store pages. Each needs a check on the
       device before its `m1plus_contexts.inc` row.

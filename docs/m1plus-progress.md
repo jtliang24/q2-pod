@@ -1899,8 +1899,35 @@ Results (`catchup/1.4.2` at `5efb249`): Q2 Legacy and iPod byte-identical to 1.4
 suites pass, `patch` with 1222 scenarios and 17 `NOT PORTED`, and the three qemu walks, `boot.py`'s
 System Setting end now with Apps. The port report has 52 hooks and 25 call sites on M1.
 
-The device pass is to come: the M1 didn't answer over q2remote (192.168.1.210) on Oct 25, so the
-apps' binaries were checked from their releases, not run.
+**On the device**, dev 8 (`V01As`, `update.bin` `dd9044ff…`), over q2remote, Screen Off set to Off for
+the pass and back to 1 min after:
+- **Passed:**
+  - Coverflow's track titles are left at x 14.
+  - From Coverflow's tracks, Go to Artist opens Carly Rae Jepsen's albums, and Back returns.
+  - From Recent, Go to Album on "Porsche (feat. MØ)" opens Pop 2.
+  - A hold on Pop 2's "Lucky" opens Lucky's menu (`st.qm_rows` 10, `st.qm_idx` 2).
+  - After Go to Folder from Now Playing, a play of "Tell Me" leaves one Now Playing. Back goes to the
+    folder, up the folders, and Home.
+  - The knob moves Recent's list and the ⋯ menu's rows, and on search the volume stays.
+  - Lyrics fetched from LRCLIB: the top row shows whole as the song follows, and stays through
+    Play/Pause.
+  - A folder "Q2Pod Test 99% Invisible" draws as written (made for the check and deleted after).
+  - Apps lists Spotify and the card apps, no Rockbox; its GitHub check marks Spotify's update.
+  - File Browser installs (`q2-v1.2`) and gets a row after Spotify. It opens its upright QR page and
+    serves `http://192.168.1.210:8000` (200), then turns off and is removed. Its leftovers are deleted.
+  - Deezer, Soulseek and File Browser each run on the M1's kernel (`-h`, exit 0).
+  - The user checked Bluetooth: a headset linking during the boot reconnect, and a manual pause kept.
+- **Found, then fixed:**
+  - Back after a Go to showed the opened page's list in Recent (`2a2de53`): albuminfo_page's load
+    replaces `pdeq_showlist`, which Recent draws from as it comes back.
+  - The knob turned the volume on Now Playing's queue panel, `playqueue_dialog` (`96ed037`); the
+    `playmore_dialog` row is the ⋯ menu.
+  - Previous didn't close those two dialogs, which have no back button (`a416e9a`).
+- **Not checked:**
+  - Playlist editing and the Home editor's knob (the Playlists card isn't on the user's Home).
+  - CD Ripper's pages, and `datetime_page`'s knob.
+  - Ogg/Opus, CUE, WebP and rescans (the card has none).
+  - A card app ending as USB storage takes the card.
 
 ## How to check a build now
 
