@@ -12281,6 +12281,10 @@ if is_m1plus:
     m=input_machine('shuffle_page'); m.config['KNOB']='1'; page=m.top
     button=m.call(address=payload_syms['back_button'],args=(page,0,0,0),gap=0)
     m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0); assert m.clicks==[button]; passed()
+    # A V2.1 dialog without a back button (Now Playing's ⋯ menu, playmore_dialog) closes by navigator_back.
+    m=input_machine('playmore_dialog'); m.config['KNOB']='1'; m.top=m.node('dialog','playmore_dialog',[m.node()])
+    m.mock('navigator_back'); m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0)
+    assert [c[0] for c in m.calls].count('navigator_back')==1 and not m.clicks; passed()
     # Display's Knob: Navigation (Q2POD KNOB=1). The knob's turns are Previous and Next, volume up
     # Previous (up the list) unless Knob Up: List Down (KNOBDIR=1), and its press Centre, on the release, before stock's key-up, which is where V2.1 opens the volume dialog
     # (on_wm_keyup_fun's 220/221 test, pinned in test/m1plus/build.py). Volume (the default), a dark screen,
