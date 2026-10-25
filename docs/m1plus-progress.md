@@ -1867,6 +1867,41 @@ Left for later (roadmap section 7 and U4): Coverflow's back arrow over its left 
 reaching into the scroll bar; Knob: Navigation on V2.1 pages outside System Setting and on Set Time
 Manually.
 
+## 47. The last of the 1.4.2 catch-up: U4's fixes, playlist editing and card apps (Oct 25)
+
+Before 1.4.2-m1.1, the user chose the U4 rows to finish: the open device bugs, the fix call sites,
+lyrics, Bluetooth, playlist editing, and card apps with System settings' Apps. Quick Settings' knob
+became Q2 only. The battery and settings rows, time zones, Network Update, games and the iPod UI wait.
+On `catchup/1.4.2`, with each commit gated. Every address is V2.1's, pinned in `test/m1plus/build.py`.
+
+| Commit | Port | What V2.1 needed |
+|---|---|---|
+| `21b04e7` | Coverflow's track titles left-aligned | `to_tracks` restyled `page_row_detail`'s caption with the Q2's centred style, centred in a 270 px box at x 12 (x 147). The restyle is the Q2's alone. |
+| `d79d5da` | A manual Play/Pause is marked (`player_play_pause`) | V2.1's `play_pause_music` (`0x4e43b4`), `(void) -> int` as V1.32's: hooked. |
+| `2f83b21` | A FLAC's `ALBUM ARTIST` (`toolsGetMusicInfo`) | V2.1's `0x5ec6a8`, `(a, info, path)` and `+0x580`, as V1.32's: hooked. |
+| `51631d5` | A folder scan refreshes tags (`SCAN_REFRESH`) | `toolsLoadAllFile`'s bal `toolsCheckItemExist` at `0x5eff54`, V1.32's word; the same `songtable` schema and `+0x680..0x688`. |
+| `bf470a6` | A folder named with `%` (`FOLDER_NAME`) | The row text is a private PIC routine, `0x532e34` (bal'd from `0x533124`), not `folder_create_tablerow`: V1.32's three words, `tk_strncpy` at GOT −0x3300. |
+| `b35a790` | A CUE track's file tags (`ID3_PATH`) | `get_id3info`'s `strcpy(playsong_id3info, path)` at `0x4dff4c`. |
+| `bea081d` | Ogg and Opus art in the grids (`GRID_COVER`) | `parse_albumcovertask_thd`'s `toolsGetAlbumCover` jalrs `0x4dd6a8` (the Albums grid's), `0x4de8a4`, `0x4de960`, all under `parse_cover_mutex`. |
+| `60af6ff` | Now Playing's art through ffmpeg (`PLAYER_COVER`) | `parseplaycover_thd`'s `toolsGetExternCover` at `0x4df228`, under `parse_cover_mutex`, which the grids and Coverflow share: `m1plus_player_cover` drops it around ffmpeg. |
+| `9455e93` | The lyrics' top row whole (`LYRIC_FOLLOW`) | The timer's `scroll_view_scroll_to(scroll_lrc, 0, y, 10)` at `0x53ad64`. |
+| `1dca7e7` | The lyrics keep their place (`LYRIC_ROWS`) | The builder is `0x53a240`, bal'd from `show_player_face` at `0x53bed0`; `LYRIC_ROW_BUILDER` names the shared literal. |
+| `b0f47b0`, `210f695` | Bluetooth's boot and incoming links (`BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`) | V1.32's words in `platform_init`, `config_bt_init`, `openBluetooth` and `autoLinkBluetooth`. `BTLINKMAC` `0xa041d0` (`readBtLinkMac`), the callbacks `0x4d4738` and `0x4d2310`. |
+| `0c5d88a` | The hold menu's Go to Album and Go to Artist | No `artistinfo_page`, and V2.1's `playerjumpinfo_page` shows the playing album: `album_page` with `{0xf004, record}` and `albuminfo_page` with the record copied last into the showlist. `cur_classtype` is put back as the page closes. |
+| `c3b908b` | A hold on an album's tracks | `albuminfo_page`'s head (cover, Play All) is a tap target: its entries go before the showlist's rows. |
+| `ef403a6` | A Folder play's Now Playing (`FOLDER_PLAY`) | The folder file click (`0x531e94`) opened a second `playing_page`: the open one closes first, unanimated, so Back goes to the folder. |
+| `e47f232` | Knob: Navigation on V2.1's other lists | `m1plus_contexts.inc` rows: View Queue's dialog, the Home editor, `guide_page`, search, online search, CD Ripper's pages. |
+| `864a3b6` | Quick Settings' wheel switch: Q2 only | The user's choice. |
+| `282cd90` | Playlist editing | No `playlistsmore_page`: a playlist row's hold opens the editor. The row's `list_item` is named its `pdeq_playlist` index (`0x53e6d0`); add mode is `playlist_page_init`'s context >> 16 (`0xa06f50`). V2.1 deletes playlists itself and renames none. |
+| `5efb249` | Card apps and Apps | `usbmode_page_init` (`0x545dd8`) hooked. Apps sits before System Update and offers no Rockbox. The Q2 Pod page lists the apps; the QR page is upright. The apps are static Go binaries (MIPS32, soft float), and q2-librespot needs only V2.1's glibc 2.28. |
+
+Results (`catchup/1.4.2` at `5efb249`): Q2 Legacy and iPod byte-identical to 1.4.2's build; the M1's
+suites pass, `patch` with 1222 scenarios and 17 `NOT PORTED`, and the three qemu walks, `boot.py`'s
+System Setting end now with Apps. The port report has 52 hooks and 25 call sites on M1.
+
+The device pass is to come: the M1 didn't answer over q2remote (192.168.1.210) on Oct 25, so the
+apps' binaries were checked from their releases, not run.
+
 ## How to check a build now
 
 ```sh
