@@ -256,8 +256,9 @@ M1PLUS_PORTS = {
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
     'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); V2.1's "
                           'info keeps it at +0x580 too'),
-    'select_timezone': ('unported', "the extra time zones (1.2.9); V2.1's select_timezone is 0x4d6b2c, its label "
-                        "table and patch_timezones' words not yet found (roadmap U3 batch)"),
+    'select_timezone': ('unported', "the extra time zones (1.2.9); V2.1's select_timezone is 0x4d6b2c, but its 27 "
+                        'labels are a pointer table (0x97c810) its row layout (0x4a21c8) copies to the stack, and '
+                        "its counts are at 0x4a246c, 0x4a2604, 0x4e65dc and 0x4d6b68 (roadmap U4)"),
     'toolsQueryContentDbTable': ('unported', "an artist's albums tab's album-artist rewrite (1.2.9); V2.1 has no "
                                  'toolsQueryContentDbTable'),
     'write_int_config': ('native', "Bluetooth's own saved level (1.3.8); V2.1 keeps it apart, [PLAYSET] BTVOLUME, "
