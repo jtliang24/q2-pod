@@ -24,3 +24,5 @@
 { "onlinesearch_page", CTX_DYNAMIC, 0 },
 { "cdripper_page", CTX_DYNAMIC, 0 },
 { "searchcdripper_page", CTX_DYNAMIC, 0 },
+/* Now Playing's queue (its queue button's playqueue_dialog), found on dev 8: the knob turned the volume there. */
+{ "playqueue_dialog", CTX_DYNAMIC, 0 },
