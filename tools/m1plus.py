@@ -726,8 +726,9 @@ def compile_payload(out):
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     leaf_paint = WM_PAINT_LEAF_M1PLUS
     undefined = [f'--undefined={name}' for _, name, _ in active_hooks.values()]
-    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set',
-                  '--undefined=lockscreen_access']
+    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
+    # every call site's payload routine: a jal from stock code is no reference the linker sees
+    undefined += [f'--undefined={new}' for words in CALL_SITES['m1plus'].values() for _, _, new in words if isinstance(new, str)]
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
