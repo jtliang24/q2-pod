@@ -22,7 +22,7 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 one device pass. All five steps, 1.2.9, 1.3.0, 1.3.8, 1.3.9 and 1.4.2, are merged and gated
 ([m1plus-progress.md](m1plus-progress.md) sections 40 to 44); 1.2.9 (dev 29), 1.3.0 (dev 5), 1.3.8
 (dev 1) and 1.4.2 (dev 1) passed on the device. The batch of ports is done and passed on the device as
-1.4.2 dev 3 (section 45), but for Standby Limit's power-off, which the user tests before the release.
+1.4.2 dev 3 (section 45), Standby Limit's power-off included.
 `1.4.2-m1.1` is next. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
@@ -212,8 +212,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - embedded lyrics (`mclLoadExLyric`);
     - chapters;
     - online cover and lyric search (`kugou_obtain*`);
-    - Standby Limit (`toolsIntoStandby`), if V2.1's standby behaves like the Q2's: the row works, and its
-      power-off at the limit is the user's test before the release.
+    - Standby Limit (`toolsIntoStandby`): V2.1's RTC alarm wakes it at the limit, and it powers off.
 
     Porting after the merges, not at each step, ports each feature once, against the final code, and
     keeps each step's changes to merges alone.

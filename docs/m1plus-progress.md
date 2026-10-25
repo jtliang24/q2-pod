@@ -1814,10 +1814,14 @@ pass and back to 30s after:
 - **Standby Limit's row** steps 1 h, 8 h, 24 h and Off, saving each.
 - `demo` kept its pid, and the kernel logged no fault.
 
-Not checked:
-- Songs by filename and format: the user's Home has no Songs card, and their sort is by title.
-- Standby Limit powering the device off at its limit: it needs the cable out and an hour; the user runs it
-  before the release.
+**Standby Limit at its limit** (dev 3): with the limit at 1 h, the cable out and the music paused, a
+logger on `/mnt/data` wrote the time, uptime and `wakealarm` every 5 s. It stopped at 02:24:23 UTC
+(Auto-standby's 5 minutes), and wrote one more line at 03:24:29, the RTC 3605 s on, with the alarm
+already cleared: the alarm woke the device an hour into Standby, and it powered off, as the user saw.
+The limit went back to Off, and the log was removed.
+
+Not checked: Songs by filename and format. The user's Home has no Songs card, and their sort is by
+title.
 
 ## How to check a build now
 
