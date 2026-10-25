@@ -304,8 +304,8 @@ M1PLUS_PORTS = {
                          '(m1plus_nav_btvol.c)'),
     'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
                         "btsource_volume while the output is Bluetooth"),
-    'localmusic_playlistsmore_page_init': ('unported', "a playlist's More page: editing, song search, a row hold "
-                                           "(1.3.8); V2.1 has no playlistsmore_page"),
+    'localmusic_playlistsmore_page_init': ('ported', "V2.1 has no playlistsmore_page: a playlist row's hold opens "
+                                           'its editor (m1plus_nav_playlist_hold.inc)'),
     'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
     'usbmode_page_init': ('unported', "card apps end before USB storage unmounts the card (1.4.2); the card app "
@@ -372,6 +372,7 @@ M1PLUS_CONTEXT_ALIASES = {
     'g_class_type': 'cur_classtype',
     'g_local_classinfo_save': 'classinfo_save',
     'p_deque_showlist': 'pdeq_showlist',
+    'p_deque_playlist': 'pdeq_playlist',  # the playlists getAllPlayList loads (loadLocalClassList, 0x4ee634)
     'p_vector_select_record': 'pvec_selectrecord',
     'g_play_id3_info': 'playsong_id3info',
     'p_deque_screensaverlist': 'pdeq_screensaverlist',

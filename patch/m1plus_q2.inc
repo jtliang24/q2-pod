@@ -112,6 +112,8 @@
 /* The hold menu's Go to: Album's page (hidden while one is open) and whether Go to Artist's is open */
 #define GOTO_ALBUM_PAGE "playerjumpinfo_page"
 #define GOTO_ARTIST_SHOWN navigator_window_is_exist("artistinfo_page")
+#define PLE_TICK_X 340 /* the playlist editor's tick on an Add Songs row (ple_tick), PLE_ROW_H tall */
+#define PLE_ROW_H 48
 #define PH_GRID_H 240
 #define VIS_H 186
 #define BOOK_ROWS 10

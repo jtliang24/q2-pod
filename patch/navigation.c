@@ -6357,8 +6357,8 @@ static void ple_filter(void) {
 static void ple_tick(void *item) {
     void *label = item ? widget_get_child(item, 0) : 0;
     if (!label) return;
-    widget_move_resize(label, I(label, W_X), I(label, W_Y), 330 - I(label, W_X), I(label, W_H));
-    image_base_set_image(image_create(item, 340, 0, 24, 48), "select");
+    widget_move_resize(label, I(label, W_X), I(label, W_Y), PLE_TICK_X - 10 - I(label, W_X), I(label, W_H));
+    image_base_set_image(image_create(item, PLE_TICK_X, 0, 24, PLE_ROW_H), CHOICE_CHECK);
 }
 static void ple_show(void);
 static int ple_closed(void *ctx, void *event) {
@@ -7040,6 +7040,7 @@ static int qm_hold(void) {
 #if M1PLUS
     int cur = LP_TOUCH ? lp_entry(&g_menu) : reconcile(&g_menu, !moving(&g_menu));
     if (cur < 0) return 0;
+#include "m1plus_nav_playlist_hold.inc"
 #else
     int cur = reconcile(&g_menu, !moving(&g_menu));
     if (cur < 0) return 0;

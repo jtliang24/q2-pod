@@ -5416,7 +5416,7 @@ def finger(m,view,points,ms=400,kinds=None):
         m.word(ev,k); m.word(ev+O['EVENT_X'],x); m.word(ev+O['EVENT_Y'],y)
         f,ctx=m.handler(view,k); assert m.call(address=f,args=(ctx,ev,0,0),gap=0,clear=False)==0
 
-if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playlistsmore_page (roadmap U4)
+if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no playlistsmore_page; a row's hold opens the editor
     # Local playlist editor: real MIPS UI/control code and real SQLite transactions at its ABI boundary.
     class PlaylistEditMachine(CoverflowMachine):
         def __init__(self,count=3):
@@ -5481,6 +5481,7 @@ if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playli
                 self.stack.remove(self.page); self.top=self.stack[-1]
             self.returns(ret,clobber=True)
         def open_editor(self):
+            if is_m1plus: return self.open_from_hold()
             more=self.node('window','playlistsmore_page'); self.word(more+O['W_PARENT'],self.wm)
             self.top=more; self.stack.append(more)
             deleted=self.node('hscroll_label',name='label_del')
@@ -5502,10 +5503,22 @@ if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playli
             self.call(address=f,args=(ctx,self.event,0,0),gap=0)
             self.page=self.top; self.view=self.find('scroll_view'); self.paint(self.view)
             assert self.nodes[self.page]['name']=='playlistedit_page'
+        def open_from_hold(self,mode=0):
+            """M1 Plus: V2.1's playlist_page, its New row first and each playlist's entry named its pdeq_playlist
+            index (playlist_listitem_layout); Play/Pause held on the highlighted playlist opens the editor."""
+            self.surface,_,es=self.table_page(4,'playlist_page',rebind=True); self.word(self.surface+O['TABLE_ROWS'],4)
+            for i,e in enumerate(es): self.nodes[e]['name']='img_new' if not i else str(i-1)
+            self.word(O['PLAYLIST_ADD_MODE'],mode); self.paint(self.surface); self.call(); self.paint(self.surface)
+            self.press(7100); held=self.hold()
+            if mode or held!=11: return held
+            assert self.release()==0  # the hold's release never toggles playback
+            self.page=self.top; self.view=self.find('scroll_view'); self.paint(self.view)
+            assert self.nodes[self.page]['name']=='playlistedit_page'
+            return held
         def showlabels(self):
             self.view=self.find('scroll_view'); return self.labels()
-        def ticks(self):  # rows holding stock's "select" check: songs already in the playlist
-            return [any(self.nodes[c].get('image')=='select' for c in self.nodes[r]['children'])
+        def ticks(self):  # rows holding stock's "select" check (V2.1's "selected"): songs already in the playlist
+            return [any(self.nodes[c].get('image')==('selected' if is_m1plus else 'select') for c in self.nodes[r]['children'])
                     for r in self.nodes[self.view]['children']]
         def choose(self,i):
             self.view=self.find('scroll_view'); self.pick(i); self.advance(0)
@@ -5541,8 +5554,10 @@ if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playli
     m=PlaylistEditMachine(); m.open_editor()
     assert m.showlabels()==['Add Songs','Done','A','B','C']
     assert m.nodes[m.nodes[m.page]['children'][0]]['text']=='Editing: Mix'
-    # A repeat and long press cannot move again, and releases never reach playback.
-    for key,want in ((O['KEY_FWD_BTN'],['B','A','C']),(O['KEY_FWD_BTN'],['B','C','A']),(O['KEY_BACK_BTN'],['B','A','C'])):
+    # A repeat and long press cannot move again, and releases never reach playback. Q2 only: the
+    # side keys move a song through the key-down hook, which V2.1 binds none of; on M1 Plus the
+    # Song Actions rows move it.
+    for key,want in ((O['KEY_FWD_BTN'],['B','A','C']),(O['KEY_FWD_BTN'],['B','C','A']),(O['KEY_BACK_BTN'],['B','A','C']))*(not is_m1plus):
         assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
         for _ in range(2):
             assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
@@ -5550,6 +5565,7 @@ if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playli
         assert m.order()==want
         assert m.call(key,gap=0)==11
         m.view=m.find('scroll_view'); assert m.selected(m.view)==want.index('A')+2
+    if is_m1plus: m.choose(2); m.choose(1); assert m.order()==['B','A','C']  # A's Move Down
     assert m.names()==m.before_queue and not m.playback(); passed()
     # Touch actions and confirmation; cancel and Back leave the entry intact.
     m.choose(3); assert m.showlabels()==['Move Up','Move Down','Remove from Playlist']
@@ -5594,23 +5610,35 @@ if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playli
     # Return from the box applies its text, and a filtered pick can close the page cleanly.
     m.choose(0); m.nodes[m.find('edit')]['text']='t1'; assert m.key()==11
     assert m.showlabels()==['Search: t1','T1']; m.close(); passed()
+    # M1 Plus: holding Play/Pause on a playlist row opens its editor (m1plus_nav_playlist_hold.inc), the
+    # playlist the row's name gives; the New row isn't one, and the Add to Playlist picker keeps stock's hold.
+    if is_m1plus:
+        m=PlaylistEditMachine(); m.open_editor(); assert m.nodes[m.nodes[m.page]['children'][0]]['text']=='Editing: Mix'
+        m.close(); passed()
+        m=PlaylistEditMachine(); m.open_from_hold(mode=2); assert m.nodes[m.top]['name']!='playlistedit_page'; passed()
+        m=PlaylistEditMachine(); m.surface,_,es=m.table_page(4,'playlist_page',rebind=True)
+        for i,e in enumerate(es): m.nodes[e]['name']='img_new' if not i else str(i-1)
+        m.word(O['PLAYLIST_ADD_MODE'],0); m.paint(m.surface); m.press(7000)
+        assert m.hold()!=11 and m.nodes[m.top]['name']!='playlistedit_page'; passed()  # the New row
     # Holding Play/Pause on a playlist row opens the same More page as its trailing dots.
     # The Add to Playlist picker shares playlist_page's name and keeps stock's hold.
     # Its context is the playlist index from the dots' name: row positions also count Import/Export.
     m=QueueMachine(page='playlist_page',rows=3); m.word(O['PLAYLIST_ADD_MODE'],0)
-    for i,e in enumerate(m.nodes[r]['children'][0] for r in m.nodes[m.surface]['children']):
+    for i,e in enumerate(m.nodes[r]['children'][0] for r in m.nodes[m.surface]['children'] if not is_m1plus):
         if i: dots=m.node('image',f'img_more{i-1}'); m.word(dots+O['W_PARENT'],e); m.nodes[e]['children'].append(dots)
-    m.paint(m.surface)
-    m.press(7000); assert m.hold()!=11 and not m.opened  # Import: no dots, stock keeps the hold
-    m.paint(m.surface); m.call(); m.paint(m.surface)
-    m.press(7100); assert m.hold()==11 and m.opened[-1][:2]==('localmusic/playlistsmore_page',0)
-    assert m.release()==0  # the locked hold's release never toggles playback
-    m.opened=[]; m.word(O['PLAYLIST_ADD_MODE'],1); m.press(7300)
-    m.hold(); assert not [o for o in m.opened if o[0]=='localmusic/playlistsmore_page']; passed()
-    for count in (0,1):
-        m=PlaylistEditMachine(count); m.open_editor(); before=m.order()
-        m.move(O['KEY_BACK_BTN']); m.move(); assert m.order()==before
-        assert m.key()==11 and not m.get(payload_syms['ple']); passed()
+    if not is_m1plus:
+        m.paint(m.surface)
+        m.press(7000); assert m.hold()!=11 and not m.opened  # Import: no dots, stock keeps the hold
+        m.paint(m.surface); m.call(); m.paint(m.surface)
+        m.press(7100); assert m.hold()==11 and m.opened[-1][:2]==('localmusic/playlistsmore_page',0)
+        assert m.release()==0  # the locked hold's release never toggles playback
+        m.opened=[]; m.word(O['PLAYLIST_ADD_MODE'],1); m.press(7300)
+        m.hold(); assert not [o for o in m.opened if o[0]=='localmusic/playlistsmore_page']; passed()
+    if not is_m1plus:  # the side keys (key-down hook): Q2 only
+        for count in (0,1):
+            m=PlaylistEditMachine(count); m.open_editor(); before=m.order()
+            m.move(O['KEY_BACK_BTN']); m.move(); assert m.order()==before
+            assert m.key()==11 and not m.get(payload_syms['ple']); passed()
     # Roll back failed statements/commits, stale IDs, wrong playlist, CUE/path changes and ignored writes.
     for failure in ('open','begin','update','commit'):
         m=PlaylistEditMachine(); m.fail=failure
@@ -5638,33 +5666,37 @@ if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playli
     m=PlaylistEditMachine(); m.open_editor(); m.choose(2); m.choose(2)
     m.pick(0); assert m.key()==11 and m.order()==list('ABC')
     assert m.showlabels()==['Add Songs','Done','A','B','C']; passed()
-    # A side press during a deferred click cannot change the row that click refers to.
-    m.choose(2); assert m.key()==11
-    m.view=m.find('scroll_view')
-    m.pick(3); m.move(); m.advance(0)
-    assert m.order()==list('ABC') and m.showlabels()==['Move Up','Move Down','Remove from Playlist']; passed()
-    # Simultaneous side-button presses retain independent repeat/release latches.
-    m=PlaylistEditMachine(); m.open_editor()
-    for key in (O['KEY_FWD_BTN'],O['KEY_BACK_BTN']):
-        assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
-    assert m.order()==list('ABC')
-    assert m.call(O['KEY_BACK_BTN'],gap=0)==11
-    assert m.call(O['KEY_FWD_BTN'],address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
-    assert m.order()==list('ABC') and m.call(O['KEY_FWD_BTN'],gap=0)==11; passed()
+    if not is_m1plus:  # the side keys (key-down hook): Q2 only
+        # A side press during a deferred click cannot change the row that click refers to.
+        m.choose(2); assert m.key()==11
+        m.view=m.find('scroll_view')
+        m.pick(3); m.move(); m.advance(0)
+        assert m.order()==list('ABC') and m.showlabels()==['Move Up','Move Down','Remove from Playlist']; passed()
+    if not is_m1plus:  # the side keys (key-down hook): Q2 only
+        # Simultaneous side-button presses retain independent repeat/release latches.
+        m=PlaylistEditMachine(); m.open_editor()
+        for key in (O['KEY_FWD_BTN'],O['KEY_BACK_BTN']):
+            assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+        assert m.order()==list('ABC')
+        assert m.call(O['KEY_BACK_BTN'],gap=0)==11
+        assert m.call(O['KEY_FWD_BTN'],address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+        assert m.order()==list('ABC') and m.call(O['KEY_FWD_BTN'],gap=0)==11; passed()
     # Failed removal and identical occurrences still target one entry only.
     for failure in ('delete','commit'):
         m=PlaylistEditMachine(); m.fail=failure
         assert m.mutate(101,0)==0 and m.order()==list('ABC') and not m.db.in_transaction; passed()
     m=PlaylistEditMachine(); m.db.execute("update playlist set fileurl='/same',time=0,time_end=0 where id in (101,102)")
     assert m.mutate(102,0)==1 and m.order()==['A','C']; passed()
-    # Native delivery is consumed too; closing during a press consumes its remaining release.
-    m=PlaylistEditMachine(); m.open_editor(); key=O['KEY_FWD_BTN']
-    assert m.call(key,address=HOOKS['widget_dispatch'][0],args=(m.view,m.event,0,0),event_type=O['EVT_KEY_LONG'],gap=0)==11
-    assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
-    m.close(); assert m.call(key,gap=0)==11
-    assert m.call(address=payload_syms['ple_key'],args=(key,3,0,0),gap=0)==0
-    assert not m.playback(); passed()
+    if not is_m1plus:  # the side keys (key-down hook): Q2 only
+        # Native delivery is consumed too; closing during a press consumes its remaining release.
+        m=PlaylistEditMachine(); m.open_editor(); key=O['KEY_FWD_BTN']
+        assert m.call(key,address=HOOKS['widget_dispatch'][0],args=(m.view,m.event,0,0),event_type=O['EVT_KEY_LONG'],gap=0)==11
+        assert m.call(key,address=HOOKS['on_wm_keydown_before_fun'][0],event_type=O['EVT_KEY_DOWN_BEFORE'],gap=0)==11
+        m.close(); assert m.call(key,gap=0)==11
+        assert m.call(address=payload_syms['ple_key'],args=(key,3,0,0),gap=0)==0
+        assert not m.playback(); passed()
     # Reopen an on-disk database, independently of the editor's record cache.
+    if is_m1plus: m=PlaylistEditMachine(); assert m.mutate()==1  # A and B swapped, as the side keys' case leaves them
     import tempfile
     with tempfile.TemporaryDirectory() as directory:
         path=str(pathlib.Path(directory)/'database.db'); disk=sqlite3.connect(path)
@@ -5672,10 +5704,11 @@ if 'localmusic_playlistsmore_page_init' in HOOKS:  # M1 Plus: V2.1 has no playli
         assert [r[0] for r in disk.execute('select filename from playlist where cd_num=0 and id>100 order by id')]==['B','A','C']
         disk.close()
     passed()
-    # A success/error toast covering the editor also consumes media keys, without moving songs.
-    m=PlaylistEditMachine(); m.open_editor(); page=m.top; m.top=m.node('dialog','msginfo_dialog')
-    m.move(); assert m.order()==list('ABC') and not m.playback()
-    m.top=page; m.move(); assert m.order()==['B','A','C']; passed()
+    if not is_m1plus:  # the side keys (key-down hook): Q2 only
+        # A success/error toast covering the editor also consumes media keys, without moving songs.
+        m=PlaylistEditMachine(); m.open_editor(); page=m.top; m.top=m.node('dialog','msginfo_dialog')
+        m.move(); assert m.order()==list('ABC') and not m.playback()
+        m.top=page; m.move(); assert m.order()==['B','A','C']; passed()
     # A subsequent stock playback load takes the saved order; editing itself left the queue alone.
     m=PlaylistEditMachine(); assert m.mutate()==1; m.open_editor()
     assert m.names()==m.before_queue

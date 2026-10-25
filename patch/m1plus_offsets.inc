@@ -574,6 +574,12 @@ static inline int arc_out(int r, int y) {
  * album_page with classinfo CLASS_ARTIST_ALBUMS, the Albums list's own page too */
 #define GOTO_ALBUM_PAGE "albuminfo_page"
 #define GOTO_ARTIST_SHOWN (I(g_local_classinfo_save, 0) == CLASS_ARTIST_ALBUMS)
+/* playlist_page_init's context >> 16 (0x53eb9c): Add to Playlist's mode, 0 when browsing; its row
+ * click adds in a mode > 0 (0x53d470), as V1.32's 0xa27894 */
+#define PLAYLIST_ADD_MODE 0xa06f50
+/* The playlist editor's tick (ple_tick) at the end of V2.1's PAGE_ROW_H row, before the scroll bar */
+#define PLE_TICK_X 284
+#define PLE_ROW_H PAGE_ROW_H
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
