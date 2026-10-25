@@ -8058,6 +8058,9 @@ def q2pod_real_grid():
         return m,win
     def rebuild(m,win,ids=None):
         if ids is not None: m.word(syms['pdeq_choicemenu'],m.deque(ids,'int'))
+        # The card builder zeroes its name buffer (memset, 0x533e70) before get_homemenu_showinfo fills
+        # it; both are mocked, so the stack starts zeroed, as memset leaves it.
+        m.u.mem_write(0x7000c000,bytes(0x3000))
         m.calls=[]; assert m.call(address=GRID,args=(win,1,0,0),gap=0,clear=False)==0
         (f,ctx),=[(f,ctx) for t,f,ctx in m.nodes[win]['handlers'] if t==O['EVT_WINDOW_FOREGROUND']]
         assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,clear=False)==0
