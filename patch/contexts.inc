@@ -97,4 +97,5 @@
 #endif
 #if M1PLUS
 { "library_page", CTX_FIXED, 0 }, /* runtime window (patch/navigation.c): the Q2 Pod Home card's */
+#include M1PLUS_CONTEXTS /* V2.1's own pages: unquoted, so build.py's V1.32 window check skips it */
 #endif

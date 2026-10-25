@@ -1000,7 +1000,7 @@ static int load_rows(menu_t *m, void *w) {
 /* A row holding stock's "select" check image: a CHOICE picker's current option. */
 static int checked(void *w, int depth, int *budget) {
     if (!w || depth == 16 || --*budget < 0 || !widget_get_visible(w)) return 0;
-    if (!tk_strcmp(widget_get_prop_str(w, "image", ""), "select")) return 1;
+    if (!tk_strcmp(widget_get_prop_str(w, "image", ""), CHOICE_CHECK)) return 1;
     unsigned n = widget_count_children(w);
     for (unsigned i = 0; i < n; ++i)
         if (checked(widget_get_child(w, i), depth + 1, budget)) return 1;
@@ -2027,6 +2027,9 @@ int ringnav_paint(void *w, void *canvas) {
     st.paint_w = w ? P(w, W_PARENT) : (void *)0;
 #else
     paint_selection(w, canvas);
+#if M1PLUS
+    home_paint(w, canvas); /* Knob: Navigation's card on V2.1's Home (m1plus_nav_home.c) */
+#endif
 #endif
     return result;
 }
@@ -3730,7 +3733,6 @@ int ringnav_playing(void *win, void *ctx) {
 }
 #endif
 
-#if !M1PLUS /* entered only from V1.32's NP_INFO_CALL */
 /* Now Playing's info page: stock (0x52a508, from its one call, NP_INFO_CALL in tools/build.py)
  * writes "Label:value" lines and the folder alone. Each line gets ": ", a number its unit's space
  * ("35.92 MB", "16-bit", "950 kbps", "44.1 kHz"), the folder its Location label, and an unknown
@@ -3772,7 +3774,6 @@ int ringnav_np_info(void *win) {
     }
     return result;
 }
-#endif
 
 /* systemset_display_page_init: stock builds its three rows (0x4c19bc: a s_listitem_black list_item
  * holding a 335x70 s_btn_listitem button with a 52px icon, a 24px label at x 72 and list_into); the
@@ -4991,7 +4992,7 @@ static int shuffle_menu(void *ctx, void *event) {
     page_row_detail(view, 1, "Shuffle Albums", 0, sp_pick);
     page_row_detail(view, 2, "Shuffle Folders", 0, sp_pick);
 #if M1PLUS /* the Q2's 335 px ran past the 320 px screen: two centred lines in the screen's width */
-    void *note = label_create(st.sp_page, 20, 200, UI_W - 40, 44);
+    void *note = label_create(st.sp_page, 20, 48 + 3 * PAGE_ROW_H + 10, UI_W - 40, 44); /* under the rows */
     widget_use_style(note, STYLE_LABEL_WHITE18C);
     label_set_line_wrap(note, 1);
     widget_set_prop_int(note, "word_wrap", 1); /* between words: line_wrap alone split "shu/ffle" */

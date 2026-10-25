@@ -199,7 +199,7 @@ def executed(log, elf):
         if i >= 0: hits[funcs[i][1]] += 1
     return hits
 
-WALK_SECONDS = 180  # the walk's budget after startup, inside the same run
+WALK_SECONDS = 210  # the walk's budget after startup, inside the same run
 
 def tap(x, y): return [f'{x} {y} 200', 'wait 80', f'{x} {y} 0']
 def swipe(x0, y0, x1, y1, steps=10):
@@ -211,6 +211,7 @@ BACK = tap(18, 53)                    # V2.1's title-bar back button, and the pa
 # Keys, as Linux reports them (keyboard_gpio_add.sh, keyboard_encoder): "keys CODE" on the buttons'
 # device, "knob CODE" on the knob's; each a press and a release.
 PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
+KNOB_DOWN, PRESS = 'knob 114', 'keys 116'   # KEY_VOLUMEDOWN, and the knob's press, KEY_POWER
 # (name, touches for both, seconds to settle, expectation): 'same', stock's below the status bar;
 # ('rows', same, differ), the y bands that match stock's and that must not; 'differs'; ('as', step),
 # the patched screen as it was at that step; ('not', step, ...), unlike it at each of those steps; or
@@ -274,7 +275,15 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('q2pod_shuffle_back', BACK, 4, ('as', 'q2pod')),
                 ('q2pod_previous', [PREVIOUS], 4, ('as', 'previous_home')),
                 ('q2pod_again', tap(*Q2POD_CARD), 4, ('as', 'q2pod')),
-                ('q2pod_back', BACK, 4, ('as', 'previous_home'))]
+                ('q2pod_back', BACK, 4, ('as', 'previous_home')),
+                # Knob: Navigation on Home (m1plus_nav_home.c): the first turn frames the first card
+                # of the page in view, five more the Q2 Pod card in its sixth slot, and the press opens
+                # its page. Previous closes it, the frame kept; six turns back cross to the second page.
+                ('home_knob', [KNOB_DOWN], 3, ('not', 'q2pod_back')),
+                ('home_knob_q2pod', [KNOB_DOWN] * 5, 3, ('not', 'home_knob', 'q2pod_back')),
+                ('home_knob_open', [PRESS], 4, ('as', 'q2pod')),
+                ('home_knob_back', [PREVIOUS], 4, ('as', 'home_knob_q2pod')),
+                ('home_knob_page2', [KNOB_UP] * 6, 4, ('not', 'home_knob_back', 'q2pod_back'))]
 # --home-menu: V2.1's Home with six cards (My Music to Composer), a full page, so the Q2 Pod card starts a
 # second page and the dots count it: Home is stock's but for the dots (y 390 to 404). The walk goes to
 # the second page, opens the card (its first slot) and closes the page with the back button.

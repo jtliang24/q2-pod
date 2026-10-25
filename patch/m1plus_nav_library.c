@@ -23,8 +23,8 @@ int library_open(void *ctx, void *event) {
     for (int k = 0; k < VIDEOS; k++)
         if (media[k]) library_row(view, icons[k], media_click, (void *)(long)(k + 1), MEDIA[k]);
     library_row(view, "local_coverflow", coverflow_row, 0, "Coverflow");
-    library_into(view, "stream_spotify", spot_open, 0, "Spotify");
-    library_into(view, "stream_radio", radio_open, 0, "Internet Radio");
+    library_into(view, "row_spotify", spot_open, 0, "Spotify"); /* stream_*'s at 40 px (tools/m1plus.py) */
+    library_into(view, "row_radio", radio_open, 0, "Internet Radio");
     library_into(view, "stream_airplay", airplay_open, 0, "AirPlay");
     if (scrobbles) library_row(view, "local_scrobble", upload_scrobbles, 0, "Upload Scrobbles");
     return 0;

@@ -5,6 +5,7 @@
 #define M1PLUS 0
 #endif
 #define UI_W 375
+#define CHOICE_CHECK "select" /* a CHOICE picker's checked option's image */
 #define UI_H 320
 #define BOTTOM 290
 #define CORNER_R 80

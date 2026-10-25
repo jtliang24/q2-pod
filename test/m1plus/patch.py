@@ -1981,10 +1981,12 @@ m,sels,ok,slide=time_page('sleepshutdown_page')
 assert m.call()==11 and m.get(sels[0]+O['SELECTOR_INDEX'])==6
 assert m.confirm()==11 and m.confirm()==11 and m.confirm()==11 and m.clicks==[ok]; passed()
 
-# A picker opens on its checked option, not the row last chosen there.
-m=Machine(); w,es=m.page_list(4,name='playmode_page')
-m.nodes[es[2]]['children']=[m.node('image',image='select')]
-m.paint(w); assert m.selected(w)==2; passed()
+# A picker opens on its checked option, not the row last chosen there. M1 Plus: V2.1 checks it with
+# "selected" (CHOICE_CHECK), the others "unselect", as Automatic Time Set's zones on dev 6.
+for page in ('playmode_page','autosynctime_page'):
+    m=Machine(); w,es=m.page_list(4,name=page)
+    for i,e in enumerate(es): m.nodes[e]['children']=[m.node('image',image='selected' if i==2 else 'unselect')]
+    m.paint(w); assert m.selected(w)==2,page; passed()
 # iPod Minimal: the selected row's white radio is drawn again dark on the off-white card: a ring,
 # and its dot when checked. Other rows keep stock's.
 if variant=='ipod':
@@ -3752,6 +3754,28 @@ assert m.call(address=f,args=(ctx,ev,0,0),gap=0)==0 and m.top!=page
 m.word(ev+O['EVENT_KEY'],O['KEY_RETURN']); assert m.call(address=f,args=(ctx,ev,0,0),gap=0)==11
 assert m.top==page and not m.toasts and m.names()==['A','B','C'] and m.u.mem_read(syms['g_sort_changeflag'],1)==b'\0'
 passed()
+# M1 Plus (m1plus_nav_touch.c touch_closes): a press outside the menu closes it, as OK does (no
+# action, no sort flag), and goes no further; one on the menu is the menu's. Previous, in Knob:
+# Navigation, closes it too (previous_back): the menu has no back button.
+def touch_down(m,x,y):
+    """A press at x, y as the input thread queues it; whether it reached the window manager."""
+    inp=HOOKS['window_manager_dispatch_input_event'][0]; m.handlers[inp+12]='stock_input'
+    for k in ('W_X','W_Y','W_PARENT'): m.word(m.wm+O[k],0)  # the window manager: the screen's origin, no parent
+    m.word(m.event+O['EVENT_Y'],y)
+    m.call(x,address=inp,event_type=O['EVT_INPUT_POINTER_DOWN'],gap=0)  # a pointer event's x is a key event's key (0x18)
+    return any(c[0]=='stock_input' for c in m.calls)
+if is_m1plus:
+    def menu_open(knob='0'):
+        m=QueueMachine(); m.config['KNOB']=knob; page=m.top; m.press(6000); assert m.hold()==11 and m.release()==0
+        d=m.top; assert m.nodes[d]['name']=='sortselect_dialog'
+        for k,v in (('W_X',30),('W_Y',60),('W_W',260),('W_H',360)): m.word(d+O[k],v)  # its panel on screen
+        return m,page,d
+    m,page,d=menu_open(); assert touch_down(m,160,200) and touch_down(m,30,60) and m.top==d
+    assert not touch_down(m,160,440) and m.top==page and touch_down(m,29,200)  # the next press is the page's
+    assert not m.toasts and m.names()==['A','B','C'] and m.u.mem_read(syms['g_sort_changeflag'],1)==b'\0'; passed()
+    m,page,d=menu_open('1'); m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0)
+    assert m.top==page and not m.toasts; passed()
+    m,page,d=menu_open(); m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0); assert m.top==d; passed()  # Volume mode: a media key
 # A dropped release (AWTK aborts keys when windows change) leaves a latch that must not eat a later
 # press: the press time differs.
 m=QueueMachine(); m.press(1); assert m.hold()==11
@@ -6306,6 +6330,14 @@ def song_side_effects(m):
     return '/mnt/data/ringnav-ratings' in m.files or any(c[0] in ('batch_add_file','deleteMusicFromFav') for c in m.calls)
 m=AlbumRateMachine(); m.open(); m.word(m.slide+O['SLIDE_INDEX'],1); a1=m.aid(m.albums[1])
 assert m.menu()==[*COVER_ALBUM,'Go to Artist'] and m.top==m.page; passed()
+# M1 Plus: a press outside the rating picker closes it with the rating kept, as Return does on the
+# Q2, and goes no further; one on the picker is the picker's (touch_closes).
+if is_m1plus:
+    m=AlbumRateMachine(); m.open(); m.word(m.slide+O['SLIDE_INDEX'],1)
+    assert m.run(4) is None and m.top==m.page and m.panel(); p=m.panel()
+    x,y=signed(m.get(p+O['W_X'])),signed(m.get(p+O['W_Y']))
+    assert touch_down(m,x+5,y+5) and m.panel()==p
+    assert not touch_down(m,x-1,y+5) and m.panel() is None and m.top==m.page and m.kept()==[] and not song_side_effects(m); passed()
 # Add, then Remove from Favourites: 5 hearts, then none; the other covers stay unrated.
 assert m.run(3)=='Added to Favourites' and m.kept()==[(a1&~7)|5] and not song_side_effects(m)
 assert m.menu()[3:5]==['Remove from Favourites','Rate Album  ♥♥♥♥♥']
@@ -6594,7 +6626,9 @@ if variant=='ipod':
         label=m.nodes[item]['children'][0]; assert cf_geometry(m,label)[::2]==(E,O['UI_W']-2*E)
     assert clear(E,48+(rows-1)*48+14,O['UI_W']-2*E,20)  # the lowest visible row
 else:
-    view=m.tracks(); assert {cf_geometry(m,m.nodes[i]['children'][0])[::2] for i in m.nodes[view]['children']}=={(12,O['UI_W']-25)}
+    # M1 Plus: page_list's rows are V2.1's (m1plus_coverflow_rows.c): the caption left at PAGE_ROW_X, clear of a chevron
+    view=m.tracks(); assert {cf_geometry(m,m.nodes[i]['children'][0])[::2] for i in m.nodes[view]['children']}=={(O['PAGE_ROW_X'],O['PAGE_ROW_W'])}
+    assert {m.nodes[i]['style'] for i in m.nodes[view]['children']}=={'list_item_style'} and m.get(m.nodes[view]['children'][1]+O['W_Y'])==O['PAGE_ROW_H']
 passed()
 
 # Execute stock sibling selection and playback scheduling; mock filesystem enumeration,
@@ -7935,7 +7969,7 @@ page=m.top; assert m.nodes[page]['name']=='shuffle_page' and m.nodes[page]['styl
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.top==page
 m.page=page; menu=m.find('scroll_view'); rows=m.nodes[menu]['children']
 def caption(r): return m.nodes[m.nodes[r]['children'][0]]['text']
-assert [m.get(r+O['W_H']) for r in rows]==[48]*3 and [caption(r) for r in rows]==['Shuffle Songs','Shuffle Albums','Shuffle Folders']
+assert [m.get(r+O['W_H']) for r in rows]==[O['PAGE_ROW_H'] if is_m1plus else 48]*3 and [caption(r) for r in rows]==['Shuffle Songs','Shuffle Albums','Shuffle Folders']
 note=m.nodes[page]['children'][-1]
 assert m.texts()==['Shuffle']+[caption(r) for r in rows]+([] if is_m1plus else [m.nodes[note]['text']])
 assert m.nodes[note]['text']=='Albums and folders take a moment to shuffle' and m.nodes[note]['style:normal:text_color']==-0x555556 and m.nodes[note]['style:normal:font_size']==16 and not m.nodes[note].get('handlers')
@@ -7944,6 +7978,7 @@ if is_m1plus:
     # it is a centred label the screen's width less 20 px each side, wrapped onto two lines.
     assert m.nodes[note]['type']=='label' and m.nodes[note]['style']==NAMES['STYLE_LABEL_WHITE18C']
     assert (m.get(note+O['W_X']),m.get(note+O['W_W']))==(20,O['UI_W']-40) and ('label_set_line_wrap',note,1) in opened
+    assert m.get(note+O['W_Y'])==48+3*O['PAGE_ROW_H']+10  # under V2.1's 64 px rows (m1plus_coverflow_rows.c)
     assert m.nodes[note].get('word_wrap')==1  # between words: line_wrap alone split "shu/ffle" on dev 13
 else:
     assert m.nodes[note]['type']=='hscroll_label' and m.get(note+O['W_W'])==335
@@ -8031,7 +8066,7 @@ def q2pod_page():
     STREAMS=['Spotify','Internet Radio','AirPlay']  # Streaming's rows: V2.1 has no Streaming page
     assert labels==['Shuffle','Ratings','Most Played','Long Songs','Podcasts','Photos','Videos','Coverflow',*STREAMS],labels
     assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_podcasts','local_photos','local_videos',
-                   'local_coverflow','stream_spotify','stream_radio','stream_airplay']
+                   'local_coverflow','row_spotify','row_radio','stream_airplay']
     assert [len(m.nodes[r]['children']) for r in rows]==[3,3,2,2,2,2,2,2,3,3,3]  # rows opening lists (as the Q2's): the chevron
     # Each row's click is the Library's handler; Shuffle's opens its menu, Coverflow's the carousel.
     f,ctx=m.handler(rows[0],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='shuffle_page'
@@ -8058,6 +8093,9 @@ def q2pod_real_grid():
         return m,win
     def rebuild(m,win,ids=None):
         if ids is not None: m.word(syms['pdeq_choicemenu'],m.deque(ids,'int'))
+        # The card builder zeroes its name buffer (memset, 0x533e70) before get_homemenu_showinfo fills
+        # it; both are mocked, so the stack starts zeroed, as memset leaves it.
+        m.u.mem_write(0x7000c000,bytes(0x3000))
         m.calls=[]; assert m.call(address=GRID,args=(win,1,0,0),gap=0,clear=False)==0
         (f,ctx),=[(f,ctx) for t,f,ctx in m.nodes[win]['handlers'] if t==O['EVT_WINDOW_FOREGROUND']]
         assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,clear=False)==0
@@ -8083,6 +8121,55 @@ def q2pod_real_grid():
     m,win=real_home(list(range(17))); rebuild(m,win); assert where(m,win)[:3]==(3,2,5)
     assert rebuild(m,win,list(range(6)))==[1,2] and where(m,win)[:3]==(2,1,0)
     assert rebuild(m,win,list(range(13)))==[3] and where(m,win)[:3]==(3,2,1); passed()
+    # Knob: Navigation on Home (m1plus_nav_home.c), on V2.1's real grid: the turns step a frame
+    # through the cards in reading order, page by page, home_sview following to the card's page; the
+    # press clicks the card's image, V2.1's or the Q2 Pod card's. At an end a turn stops, and one
+    # after a pause wraps. A touch hides the frame, and the next turn shows it on the page in view; a
+    # rebuild drops it. Volume mode leaves Home alone.
+    def knob_home(n,mode='1'):
+        m,win=real_home(list(range(n))); rebuild(m,win); m.config['KNOB']=mode; m.mock('slide_view_set_active_ex')
+        slides=named(m,win,'home_sview')
+        return m,win,slides,[c for p in m.nodes[slides]['children'] for c in m.nodes[p]['children']]
+    def turn(m,slides,key='KEY_VOLUMEDOWN',gap=1000):  # the knob's volume down: Next (Knob Up: List Up)
+        m.call(O[key],gap=gap); slid=[c[1:4] for c in m.calls if c[0]=='slide_view_set_active_ex']
+        if slid: m.nodes[slides]['active']=slid[-1][1]
+        return [(s==slides,page,anim) for s,page,anim in slid]
+    def framed(m,cards):
+        out=[]
+        for i,c in enumerate(cards):
+            m.paint(c,gap=0)
+            if m.rounded: out.append(i); assert m.rounded[0]['rect']==(2,2,150,114),m.rounded[0]
+        return out
+    image=lambda m,c: next(w for w in m.nodes[c]['children'] if m.nodes[w]['type']!='label')
+    m,win,slides,cards=knob_home(11); assert len(cards)==12 and framed(m,cards)==[]
+    assert turn(m,slides)==[] and framed(m,cards)==[0]  # the first turn shows the first card in view
+    for i in range(1,6): assert turn(m,slides)==[] and framed(m,cards)==[i]
+    assert turn(m,slides)==[(True,1,1)] and framed(m,cards)==[6]  # the next page, slid to
+    assert turn(m,slides,'KEY_VOLUMEUP')==[(True,0,1)] and framed(m,cards)==[5]; passed()
+    for _ in range(6): turn(m,slides)
+    assert framed(m,cards)==[11] and [m.nodes[c]['name'] for c in cards].index('q2pod_card')==11
+    assert turn(m,slides)==[] and framed(m,cards)==[11]  # the end stops,
+    assert turn(m,slides,gap=50)==[] and framed(m,cards)==[11]  # a spin keeps stopping,
+    assert turn(m,slides)==[(True,0,1)] and framed(m,cards)==[0]; passed()  # and a turn after a pause wraps
+    assert turn(m,slides,'KEY_VOLUMEUP')==[] and turn(m,slides,'KEY_VOLUMEUP')==[(True,1,1)] and framed(m,cards)==[11]
+    # The press clicks the card: the Q2 Pod card's image (its own click), then a V2.1 card's.
+    m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[image(m,cards[11])]
+    assert m.handler(image(m,cards[11]),O['EVT_CLICK'])[0]==payload_syms['library_open']
+    turn(m,slides,'KEY_VOLUMEUP'); m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[image(m,cards[10])]; passed()
+    # A touch hides the frame; the next turn shows it on the page in view.
+    inp=HOOKS['window_manager_dispatch_input_event'][0]; m.handlers[inp+12]='stock_input'
+    m.call(0,address=inp,event_type=O['EVT_INPUT_POINTER_DOWN'])
+    assert framed(m,cards)==[]
+    m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[]  # no frame: the press isn't a card's
+    m.nodes[slides]['active']=1; assert turn(m,slides)==[] and framed(m,cards)==[6]; passed()
+    # A rebuild (the Home editor) makes new cards: the frame goes, and comes back on a turn.
+    rebuild(m,win); cards=[c for p in m.nodes[slides]['children'] for c in m.nodes[p]['children']]
+    assert framed(m,cards)==[] and turn(m,slides)==[] and framed(m,cards)==[6]; passed()
+    # One page: no slide. Volume mode: the knob stays the volume and Home shows nothing.
+    m,win,slides,cards=knob_home(5)
+    for i in range(6): assert turn(m,slides)==[] and framed(m,cards)==[i]
+    m,win,slides,cards=knob_home(11,mode='0'); m.mock('on_wm_keyup_fun'); turn(m,slides)
+    assert m.get(m.event+O['EVENT_KEY'])==O['KEY_VOLUMEDOWN'] and framed(m,cards)==[]; passed()
 if is_m1plus: q2pod_real_grid()
 def home_settings(full,classic=0):
         # Home's Rockbox row shows only while the card has Rockbox: hidden, it moves after Settings, so the
@@ -9335,7 +9422,7 @@ BIN='/mnt/mmc/.spotify/librespot'
 # nothing starts.
 m=SpotMachine({}); button=stream_page(m)
 icon,label=m.nodes[button]['children'][:2]
-assert m.nodes[icon]['image']=='stream_spotify' and m.nodes[label]['text']=='Spotify' and not m.nodes[button].get('name')
+assert m.nodes[icon]['image']==('row_spotify' if is_m1plus else 'stream_spotify') and m.nodes[label]['text']=='Spotify' and not m.nodes[button].get('name')
 page=spot_open(m,button); info,msg=np_views(m,page)
 assert not m.nodes[info]['visible'] and m.nodes[msg]['visible'] and texts(msg)==["Spotify isn't on the card",'See the Q2 Pod guide to add it']
 m.poll(); assert not m.systems; m.close(); passed()
@@ -9525,7 +9612,7 @@ class RadioMachine(SpotMachine):
         worker,arg=self.threads[-1]; assert self.call(address=worker,args=(arg,0,0,0),gap=0,count=5_000_000)==0; self.advance(250)
 def radio_open(m):
     button=m.stream(); icon,label=m.nodes[button]['children'][:2]
-    assert m.nodes[icon]['image']=='stream_radio' and m.nodes[label]['text']=='Internet Radio' and not m.nodes[button].get('name')
+    assert m.nodes[icon]['image']==('row_radio' if is_m1plus else 'stream_radio') and m.nodes[label]['text']=='Internet Radio' and not m.nodes[button].get('name')
     m.click(button); m.page=m.top; assert m.nodes[m.page]['name']=='radio_page'; return m.page
 # The row follows Spotify's. The first open makes the card's Radio folder but leaves Favourites
 # empty, the user's to fill; the starter stations are Featured. The menu has no Now Playing until
@@ -11786,13 +11873,14 @@ if 'NP_INFO_CALL' in SITES:
                 u.reg_write(UC_MIPS_REG_V0,0); u.reg_write(UC_MIPS_REG_PC,u.reg_read(UC_MIPS_REG_RA)); return
             return super().hook(u,address,size,unused)
     m=InfoMachine(); m.handlers[syms['getFormatString']]='i:format'
-    stock_lines={'label_album':'Album:Kid A','label_genre':'Genre:Unknown Artist','label_size':'File Size:35.92MB',
-                 'label_year':'Year:2000','label_encode':'Encoding:FLAC','label_bits':'Bit Depth:16bit','label_kbps':'Bitrate:950kbps',
-                 'label_sample':'Sample Rate:44.1kHz','label_location':'SD:/Music/Radiohead'}
+    # M1 Plus: V2.1's fill (0x539c40) has five of the labels, and labels the folder itself: album, genre,
+    # player_era, player_filesize (%s:%.2fMB) and player_location (%s:%s), V2.1's en_US words; its
+    # player_unknown is plain "Unknown".
+    stock_lines={'label_album':'Album:Kid A','label_genre':'Genres:Unknown','label_year':'Era:2000',
+                 'label_size':'File Size:35.92MB','label_location':'Location:SD:/Music/Radiohead'}
     lines={k:m.node('label',k,text=v) for k,v in stock_lines.items()}
     win=m.node('window','playing_page',list(lines.values()))
-    want=['Album: Kid A','Genre: Unknown','File Size: 35.92 MB','Year: 2000','Encoding: FLAC','Bit Depth: 16-bit',
-          'Bitrate: 950 kbps','Sample Rate: 44.1 kHz','Location: SD:/Music/Radiohead']
+    want=['Album: Kid A','Genres: Unknown','Era: 2000','File Size: 35.92 MB','Location: SD:/Music/Radiohead']
     for _ in range(2):
         m.call(address=payload_syms['ringnav_np_info'],args=(win,0,0,0),gap=0)
         assert [c[1] for c in m.calls if c[0]=='np_info']==[win] and [m.nodes[l]['text'] for l in lines.values()]==want, [m.nodes[l]['text'] for l in lines.values()]
@@ -11906,6 +11994,9 @@ if is_m1plus:
     assert [knob(k,reverse='0') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_PREV'],O['KEY_NEXT']]
     assert [knob(k,reverse='1') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN','KEY_POWER')]==[O['KEY_NEXT'],O['KEY_PREV'],O['KEY_CENTER']]
     assert [knob(k,mode='0',reverse='1') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']]
+    # V2.1's own settings pages (m1plus_contexts.inc): Date and time's menu turned the volume on dev 4.
+    for page in re.findall(r'"(\w+)"',(ROOT/'patch/m1plus_contexts.inc').read_text()):
+        assert [knob(k,page=page) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_PREV'],O['KEY_NEXT']],page
     # Only where the payload navigates: Now Playing's enlarged art, Bluetooth receiver and USB DAC
     # modes, by page or flag, and the volume dialog keep the volume too.
     for kw in (dict(mode=None),dict(mode='0'),dict(page='playing_page'),dict(page='bigcover_page'),

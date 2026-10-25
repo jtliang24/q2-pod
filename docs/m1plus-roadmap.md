@@ -22,7 +22,8 @@ Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 one device pass. All five steps, 1.2.9, 1.3.0, 1.3.8, 1.3.9 and 1.4.2, are merged and gated
 ([m1plus-progress.md](m1plus-progress.md) sections 40 to 44); 1.2.9 (dev 29), 1.3.0 (dev 5), 1.3.8
 (dev 1) and 1.4.2 (dev 1) passed on the device. The batch of ports is done and passed on the device as
-1.4.2 dev 3 (section 45), Standby Limit's power-off included.
+1.4.2 dev 3 (section 45), Standby Limit's power-off included, and section 7's look and feel with the
+knob on Home followed (section 46).
 `1.4.2-m1.1` is next. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
@@ -257,6 +258,14 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `yoffset_rowsave`, and `m3ufile_path`), and Shuffle Songs being one-shot (V2.1 has no
       `config_playmode` symbol to stand for the user's mode choice). Both features run on M1.
     - Q2 only: Hold Return: Home (the M1 has no Return key) and Volume Guard (the touch wheel's).
+  - **Found by the polish pass** (Oct 25, progress section 46):
+    - **Knob: Navigation outside System Setting.** The knob turns the volume on V2.1 pages ringnav
+      doesn't list: stock's View Queue dialog (`playmore_dialog`), the Home editor (`homemenu_dialog`),
+      search (`search_page`, `onlinesearch_page`), CD Ripper (`cdripper_page`, `searchcdripper_page`),
+      Recent and Frequent's `guide_page`, and the Tidal and HiFi store pages. Each needs a check on the
+      device before its `m1plus_contexts.inc` row.
+    - **Set Time Manually** (V2.1's `datetime_page`, two text-selector views in a `slide_view`) isn't
+      the Q2's `manualtime_page`: the knob turns the volume there.
   - **Found by the batch** (U3, Oct 24):
     - **The extra time zones** (`select_timezone`, V2.1's `0x4d6b2c`). V2.1 keeps its 27 labels as a
       `const char *` table at `0x97c810`, NULL-ended, with the `lan_*` table right after it, and its row
@@ -310,12 +319,10 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - **Its Go to Album opens the playing song's album.** `qm_goto` fills V1.32's
       `g_local_classinfo_save` and opens `playerjumpinfo_page`, which on V2.1 reads the playing song.
       Open the row's album as Album's list does instead.
-    - **The hold menu closes only by OK.** Neither a tap outside nor Previous closes it. Fix it with
-      the rating picker below.
+    - ~~The hold menu closes only by OK.~~ Done (progress section 46): a tap outside and Previous close it.
   - **Found on the device** (dev 29, Oct 23):
-    - **The rating picker has no way out but a rating.** A tap outside leaves it up, the knob's press
-      (Volume mode) locks the screen, and Now Playing's back button is V2.1's, which closes the page with
-      the picker. A tap outside it, or the back button, should close the picker alone, as Return does.
+    - ~~The rating picker has no way out but a rating.~~ Done (progress section 46): a tap outside it, or
+      Now Playing's back button, closes the picker alone.
   - **Found on the device** (dev 21, Oct 23):
     - **A touch hold on an album's tracks plays the track.** On Album's list the hold menu opens for the
       row held. On an album's track list (16 tracks), `load` counted 17 rows (`g_menu.rows`, read over
@@ -545,7 +552,13 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
 
 ## 7. Final pass: look and feel (after U3 and sections 1–4)
 
-Items that only change how something looks, gathered once all the functionality is ported:
+**Done (Oct 25,** [m1plus-progress.md](m1plus-progress.md) **section 46),** with the knob on Home: the
+`page_list` pages' rows, the Streaming icons and Now Playing's info lines. Coverflow's touch works as
+designed on the device; its feel is the user's call. Left:
+- **Coverflow's back arrow** overlaps the left cover at the top left.
+- **The selection frame on V2.1's pickers** (Theme, Screen Rotation) reaches into the scroll bar.
+
+The items as recorded:
 
 - **The Shuffle page's rows.** Its three rows (`shuffle_menu`, `page_row_detail`) show on M1 as bare
   centred text, with no row background or separator, where the Q2 Pod page's rows are V2.1's (ground

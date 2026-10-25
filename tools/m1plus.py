@@ -22,6 +22,8 @@ M1PLUS_FUNCTIONS = {
  'view_create': ('void *', 'void *, int, int, int, int'),  # the Home card's page and card views
  'label_set_line_wrap': ('int', 'void *, int'),
  'slide_indicator_set_max': ('int', 'void *, unsigned'),
+ # (widget, index, animate): Knob: Navigation slides Home to the focused card's page (m1plus_nav_home.c)
+ 'slide_view_set_active_ex': ('int', 'void *, unsigned, int'),
  # its four corner radii, the width and the edges (0xffff all), as V1.32's wrapper (0x63d034) passes them
  'canvas_stroke_rounded_rect_ex': ('int', 'void *, const void *, const void *, const void *, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned'),
  # Shanling's real signature, (name, readAudioProperties): the M1 Plus passes 1 (V2.1's scanner passes 0)
@@ -195,6 +197,9 @@ CALL_SITES = {
         # com163_obtainlyric if it found nothing, as V1.32's does, but then NetEase again in every case
         # (0x50a1e4), which overwrote a found lyric. A find now branches past both (bnez $v0, 0x50a1ec).
         'LYRIC_SOURCES': ((0x50a1c0, 0x14400006, 0x1440000a),),
+        # Now Playing's info page: show_player_face's bal to its fill (np_info, 0x539c40; $t9 is set
+        # before it), as the Q2's one call.
+        'NP_INFO_CALL': ((0x53bebc, 0x0411f760, 'ringnav_np_info'),),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -282,7 +287,6 @@ M1PLUS_PORTS = {
     'CLASS_ICON': ('native', 'V2.1 draws its own artist icon (roadmap 4)'),
     'ARTIST_COVER_ROW': ('native', "V2.1 has no artist page of 160 px rows: an artist's albums are an album list, "
                          'whose covers COVER_PAUSE and ALBUM_ART cover (progress 12, 30)'),
-    'NP_INFO_CALL': ('unported', "Now Playing's info lines read better; V2.1's site is 0x53bebc (roadmap 7)"),
     'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
@@ -379,6 +383,8 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     'mcl_preload': 0x5d0ea4,  # the gapless pick and its open, hooked (M1PLUS_HOOKS) as on the Q2
     'mcl_open_preload': 0x5d0bd8,
     'btmenu_rows': 0x4a3734,  # the Bluetooth page's list: switch, name, quality, volume, search, devices
+    # Now Playing's info page: its labels from the playing track, "Label:value" (show_player_face's bal, NP_INFO_CALL)
+    'np_info': 0x539c40,
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
 }
 # V1.32 routines V2.1 has no twin of yet, called only from a Q2 hook the M1 leaves unported: declared
@@ -724,8 +730,9 @@ def compile_payload(out):
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     leaf_paint = WM_PAINT_LEAF_M1PLUS
     undefined = [f'--undefined={name}' for _, name, _ in active_hooks.values()]
-    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set',
-                  '--undefined=lockscreen_access']
+    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
+    # every call site's payload routine: a jal from stock code is no reference the linker sees
+    undefined += [f'--undefined={new}' for words in CALL_SITES['m1plus'].values() for _, _, new in words if isinstance(new, str)]
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
@@ -964,6 +971,8 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
                                      else cat(xx+like)) for n, like in mapping.items()})
     for n in ('spotify', 'radio'):  # Streaming's Spotify and Internet Radio rows
         icons[f'stream_{n}.png'] = ('tidal.png', (ROOT/'assets/icons'/f'stream_{n}.png').read_bytes())
+        # the Q2 Pod page's rows at V2.1's 40 px (list_row_core); the radio's Now Playing art keeps stream_radio's 52
+        icons[f'row_{n}.png'] = ('tidal.png', sized_art((ROOT/'assets/icons'/f'stream_{n}.png').read_bytes(), 40))
     # V2.1's rows draw a 40 px icon (list_row_core) where V1.32's drew 52: the drawn ones at its size,
     # and the Q2 Pod page's Coverflow row from the Coverflow card's art. The Home card's pair is V2.1's
     # 66 px card art (mymusic.png's).

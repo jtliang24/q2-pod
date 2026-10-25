@@ -19,6 +19,11 @@ static void *back_of(void *w, int depth) {
  * button, clicked. */
 static int previous_back(const void *info) {
     (void)info;
+    /* The hold menu has no back button: Previous closes it as OK does */
+    if (st.qm_dialog && window_manager_get_top_window(window_manager()) == st.qm_dialog) {
+        qm_close();
+        return 0;
+    }
     void *button = back_of(window_manager_get_top_window(window_manager()), 0);
     char click[0x30];
     if (button && widget_get_prop_bool(button, "enable", 1))
@@ -40,3 +45,4 @@ static int knob_nav_active(void) {
     return allowed_top(window_manager_get_top_window(window_manager()));
 }
 #endif
+#include "m1plus_nav_home.c"
