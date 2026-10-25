@@ -7057,8 +7057,11 @@ static int qm_hold(void) {
     }
 #endif
     if (!coverflow) list = P(p_deque_showlist, 0);
+#if !M1PLUS
     if (!list || deque_size(list) != (unsigned)g_menu.rows) return 0;
     void *r = deque_at(list, g_menu.id[cur]);
+#endif
+#include "m1plus_nav_hold_head.inc"
     /* An artist's tabs reload the showlist with load_localartist_list, which sets classinfo +0
      * (0xff07 songs, 0xff01 albums) but not g_class_type. */
     unsigned cls = (unsigned)(tk_strcmp(name, "artistinfo_page") ? I(g_class_type, 0)
@@ -7077,6 +7080,9 @@ static int qm_hold(void) {
     st.qm_cls = cls;
     st.qm_idx = (unsigned)g_menu.id[cur];
     st.qm_rows = (unsigned)g_menu.rows;
+#if M1PLUS /* the showlist's, after the album page's head (m1plus_nav_hold_head.inc) */
+    st.qm_idx -= head, st.qm_rows -= head;
+#endif
     st.qm_hash = rec_hash(r);
     st.qm_browse = browse_hash();
     st.qm_press = LP_TOUCH ? 0 : *(unsigned long long *)((char *)key + INPUT_KEY_TIME);

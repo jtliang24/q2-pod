@@ -3931,6 +3931,15 @@ if is_m1plus:
         # The click after the release is the row's again.
         m.calls=[]; m.call(address=HOOKS['widget_dispatch'][0],args=(m.nodes[m.nodes[m.surface]['children'][0]]['children'][0],m.event,0,0),event_type=O['EVT_CLICK'],gap=0,clear=False)
         assert m.dispatched(); passed()
+    # V2.1's albuminfo_page heads its tracks with a tap target of its own (the cover and Play All), so
+    # its entries are one more than the showlist's rows (m1plus_nav_hold_head.inc): a hold on a track
+    # opens that track's menu, one on the head opens none and its click goes through.
+    m=QueueMachine(page='albuminfo_page',rows=3); m.word(m.surface+O['TABLE_ROWS'],4)
+    assert long_press(m,60)[0][0]=='Row 0'; passed()
+    m=QueueMachine(page='albuminfo_page',rows=3); m.word(m.surface+O['TABLE_ROWS'],4)
+    assert long_press(m,10)==(None,True); passed()
+    m=QueueMachine(page='album_page',rows=3); m.word(m.surface+O['TABLE_ROWS'],4)
+    assert long_press(m,60)==(None,True); passed()  # elsewhere a count off by one is still refused
     for kw in (dict(moves=((8,0),)),dict(moves=((0,-9),)),dict(held=LONG-1),dict(y=100),dict(x=250)):
         assert long_press(QueueMachine(),**{'y':60,**kw})==(None,True), kw; passed()
     assert long_press(QueueMachine(),60,moves=((7,-7),))[0]==('Row 1',SONG_MENU); passed()  # a tremor isn't a scroll
