@@ -105,6 +105,9 @@
 #define ICON_SWITCH_ON "switch_on"
 #define ICON_SWITCH_OFF "switch_off"
 #define BT_PAIRLIST 0xa38110 /* stock pdeq_btpairlist */
+#define BTLINKMAC 0xa38168 /* readBtLinkMac's buffer: the saved device a link thread connects (headset.c) */
+#define BT_STATUS_CB 0x4f1a50 /* openBluetooth's btctl_device_status_callback */
+#define BT_PROMPT_CB 0x4ef600 /* openBluetooth's btctl_set_prompt_callback */
 #define LYRIC_ROW_BUILDER 0x529f0c /* Now Playing's lyric rows, from the page's refresh (LYRIC_ROWS) */
 #define PH_GRID_H 240
 #define VIS_H 186

@@ -14,13 +14,13 @@ static void headset_bt_status(int event, char *address, char *name, void *data) 
     if (event == 3 && *(const volatile int *)bt_connectstatus == 1 && !getBtLinkStatus(address) &&
         checkPairDev(address)) {
         getBtLinkItem(getBtLinkSize() - 1, &status, target);
-        if (status == 5 && !strcmp(target, (const char *)0xa38168)) {
+        if (status == 5 && !strcmp(target, (const char *)BTLINKMAC)) {
             addBtLinkItem(address, 3);
             updateBtLinkStatus(4, target);
             return;
         }
     }
-    ((void (*)(int, char *, char *, void *))0x4f1a50)(event, address, name, data);
+    ((void (*)(int, char *, char *, void *))BT_STATUS_CB)(event, address, name, data);
 }
 void headset_status_register(void) { btctl_device_status_callback(headset_bt_status, 0); }
 /* Auto-link would append its target after a connected incoming link; its failure clears both. */
@@ -33,7 +33,7 @@ int headset_bt_autolink(char *address) {
 /* The control thread can discover a boot reconnect before openBluetooth powers the radio. */
 int headset_bt_init(void *thread) {
     initBluetoothParam(); /* Lists must exist before callbacks; the later reset would erase links. */
-    btctl_set_prompt_callback((void *)0x4ef600, 0);
+    btctl_set_prompt_callback((void *)BT_PROMPT_CB, 0);
     headset_status_register();
     btctl_set_a2dp_callback((void *)btrecvA2dpFunc, (void *)0x01020304);
     return btctl_create_daemon_thread(thread);

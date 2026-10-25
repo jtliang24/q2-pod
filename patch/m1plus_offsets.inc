@@ -640,6 +640,9 @@ static inline int arc_out(int r, int y) {
 #define SCAN_THREAD 0xa03a44
 #define SCAN_DONE 0xa03a40
 #define BT_PAIRLIST 0xa041c0 /* stock pdeq_btpairlist (a symbol in V2.1) */
+#define BTLINKMAC 0xa041d0 /* readBtLinkMac's buffer (0x4d2800: GOT page 0xa00000 + 0x41d0) */
+#define BT_STATUS_CB 0x4d4738 /* openBluetooth's status callback (0x4d2cf0), V1.32's 0x4f1a50 */
+#define BT_PROMPT_CB 0x4d2310 /* openBluetooth's prompt callback (0x4d2cd8), V1.32's 0x4ef600 */
 /* Coverflow text: iPod keeps every label CF_EDGE from the sides, where the lowest track row's text
  * clears the bottom corners; both builds keep the captions there. Album names and artists scroll
  * within that. Under the covers (CF_TEXT_Y), the album name is CF_NAME_PX white and the artist
