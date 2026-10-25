@@ -4492,9 +4492,9 @@ class LibraryQueryMachine(Machine):
             u.mem_write(a,re.sub('%s',lambda _:self.text(next(v)),self.text(b)).encode()+b'\0')
             self.returns(a); return
         if address not in self.tramps: return super().hook(u,address,size,unused)
-        a,b,c,d=[u.reg_read(r) for r in REGS]; self.sql=self.text(b)
+        a,b,c,d=[u.reg_read(r) for r in REGS]; self.sql=self.text(b); self.route=self.tramps[address]
         if self.tramps[address]=='content_query': self.content=(c,self.text(d),self.get(u.reg_read(UC_MIPS_REG_SP)+16))
-        elif self.tramps[address]=='dbquery': assert self.text(a)=='/mnt/data/database.db' and (c,d)==(123,1)
+        else: assert self.text(a)=='/mnt/data/database.db'; self.args=(c,d)
         self.results=self.db.execute(self.sql).fetchall()
         if self.tramps[address]=='content_query': raise QueryDone  # stock's row handling after it isn't emulated
         self.returns(len(self.results))
@@ -4507,14 +4507,16 @@ for query in ('select id,songer from songtable group by songer COLLATE NOCASE',
     for scoped in (0,1,0):
         lm.word(payload_syms['library_music'],scoped)
         lm.call(address=HOOKS['toolsQueryDbTable'][0],args=(lm.string('/mnt/data/database.db'),lm.string(query),123,1),gap=0)
-        assert (lm.sql==(query.replace('albumsonger',AA) if 'by albumsonger' in query else query)) == (not scoped)
+        assert lm.args==(123,1) and (lm.sql==(query.replace('albumsonger',AA) if 'by albumsonger' in query else query)) == (not scoped)
         assert {r[0] for r in lm.results} == ({2} if scoped and 'group by' in query else set() if scoped else
                                              {1,3,4,5,6} if 'group by' in query else {6}),lm.results
-# The stock Songs title sorter uses the separate AndSort helper.
+# Songs' sorters: V2.1's title sort (sort_first_alphabet) runs toolsQueryDbTable (0x4ea118), where
+# V1.32's runs the separate AndSort helper; its filename and format sorts run AndSort (0x4ea1a4, 0x4ea230).
 if 'toolsQueryDbTableAndSort' in HOOKS:
-    lm.word(payload_syms['library_music'],1)
-    lm.call(address=syms['sort_first_alphabet'],args=(0,0,0,0),gap=0)
-    assert [r[0] for r in lm.results]==[2] and 'where '+ 'fileurl' in lm.sql
+    for sorter,route,sort in (('sort_first_alphabet','dbquery',1),('sort_filename','sorted_query',1),('sort_format','sorted_query',2)):
+        lm.word(payload_syms['library_music'],1)
+        lm.call(address=syms[sorter],args=(0,0,0,0),gap=0)
+        assert lm.route==route and lm.args[1]==sort and [r[0] for r in lm.results]==[2] and 'where '+ 'fileurl' in lm.sql, sorter
 else:
     not_ported('Spoken audio out of the Songs title sort (toolsQueryDbTableAndSort not hooked on M1 Plus)')
 passed()
@@ -5971,11 +5973,11 @@ if variant=='ipod':
 # list at a time no track reaches. Online queues, other rows and an unbound GOT entry ask nothing.
 if 'mclLoadExLyric' in HOOKS:
     import subprocess
-    from build import GP
+    from m1plus import M1PLUS_GP
     got=next(int(l.split()[0],16) for l in subprocess.run(['readelf','-AW',B/'stock-demo'],capture_output=True,text=True).stdout.splitlines() if l.endswith(' taglib_file_new'))
     lib=symbols(B/'libtag_c.so.2.0.1')
     assert got==O['TAGLIB_NEW_GOT'] and [lib[n] for n in ('taglib_file_new','taglib_property_get','taglib_property_free')]==[O['TAGLIB_FILE_NEW'],O['TAGLIB_PROPERTY_GET'],O['TAGLIB_PROPERTY_FREE']]
-    m=Machine(); assert m.get(GP-0x7f44)==0xa40000 and m.get(0x5aac60)==0x8c44bdac and m.get(0x5aac4c)==0x2624bdb8; passed()  # -0x4254, -0x4248
+    m=Machine(); assert m.get(M1PLUS_GP-0x7f4c)==0xa10000 and m.get(0x5d22b4)==0x8c44aae4 and m.get(0x5d22a0)==0x2624aaf0; passed()  # -0x551c, -0x5510
     TAGLIB=0x1180000  # libtag_c's load address here
     class LyricMachine(QueueMachine):
         def __init__(self,tags,lrc=(),cls=0xf001,kind=8,bound=True):
@@ -10677,14 +10679,21 @@ def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False,via_row=
     m.entries=entries
     return m,rows,lambda:[m.nodes[l]['text'] for l in labels],icons,click
 m,rows,texts,icons,click=settings_page('power',NAMES['VIEW_POWER'])
-# M1 Plus: V2.1's icon-less standby rows, and no Wake row (V2.1 has its own; the knob's press is not Centre).
-WAKE_ROW=[] if is_m1plus else ['Wake: Single Press']
-assert len(rows)==2+len(WAKE_ROW) and all(m.nodes[r]['style']==('list_item_style' if is_m1plus else S('s_listitem_black')) for r in rows)
-assert icons==([None,None] if is_m1plus else ['usb_chargeswitch','system_powermanager','system_keylock'])
-assert texts()==['Charge Limit: Off','Low Power: Off']+WAKE_ROW
+# M1 Plus: V2.1's icon-less standby rows, no Wake row (V2.1 has its own; the knob's press is not Centre),
+# and no Volume Guard (the touch wheel's): Standby Limit follows Low Power.
+WAKE_ROW=[] if is_m1plus else ['Wake: Single Press','Volume Guard: Off']
+assert len(rows)==3+len(WAKE_ROW) and all(m.nodes[r]['style']==('list_item_style' if is_m1plus else S('s_listitem_black')) for r in rows)
+assert icons==([None,None,None] if is_m1plus else ['usb_chargeswitch','system_powermanager','system_keylock','system_keylock','system_powermanager'])
+assert texts()==['Charge Limit: Off','Low Power: Off']+WAKE_ROW+['Standby Limit: Off']
 assert click(0)==[(1,'Q2POD','CHARGELIMIT')] and texts()[0]==f"Charge Limit: {O['CHARGE_STOP']}%"
 assert click(1)==[(1,'Q2POD','LOWPOWER')] and texts()[1]=='Low Power: On'
-assert click(0)==[(0,'Q2POD','CHARGELIMIT')] and texts()==['Charge Limit: Off','Low Power: On']+WAKE_ROW; passed()
+assert click(0)==[(0,'Q2POD','CHARGELIMIT')] and texts()==['Charge Limit: Off','Low Power: On']+WAKE_ROW+['Standby Limit: Off']; passed()
+# Standby limit (its alarm with the power poll's tests): each click steps to the next limit, then Off.
+limits=[f"Standby Limit: {O[f'STANDBY_LIMIT_{i}']} h" for i in (1,2,3)]
+standby_row=len(rows)-1
+for v,want in ((1,limits[0]),(2,limits[1]),(3,limits[2]),(0,'Standby Limit: Off')):
+    assert click(standby_row)==[(v,'Q2POD','STANDBYLIMIT')] and texts()[standby_row]==want
+passed()
 # Wake (docs/internals.md#wake): screen off, a lone centre press and its release never reach the UI;
 # a second press within WAKE_MS passes, press and release. Other keys, the screen on, or the
 # setting off pass untouched, except one more centre press within WAKE_MS of the waking one (#45).
@@ -10719,7 +10728,7 @@ if not is_m1plus:
     assert wake(DOWN,gap=100) and m.u.mem_read(O['BOOT_KEY_GUARD'],1)==b'\0' and wake(UP,gap=50)
     assert click(2)==[(0,'Q2POD','WAKEDOUBLE')]; passed()
 m,rows,texts,*_=settings_page('power',NAMES['VIEW_POWER'],{'CHARGELIMIT':'1','LOWPOWER':'1','WAKEDOUBLE':'1'})
-assert texts()==[f"Charge Limit: {O['CHARGE_STOP']}%",'Low Power: On']+([] if is_m1plus else ['Wake: Double Press']); passed()
+assert texts()==[f"Charge Limit: {O['CHARGE_STOP']}%",'Low Power: On']+([] if is_m1plus else ['Wake: Double Press','Volume Guard: Off'])+['Standby Limit: Off']; passed()
 m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],stock_rows=15)
 assert len(rows)==9 and icons==[NAMES[k] for k in ('ICON_COVERMODE','ICON_FOLDERJUMP','ICON_COVERMODE','ICON_GAPLESS','ICON_FOLDERJUMP','ICON_MEMPLAY','ICON_BALANCE','ICON_BALANCE','ICON_DSDOUTPUT')]
 assert texts()==['Year Order: Newest First','Artists: Artist','Artist Album Order: Year','Crossfade: Off','Folder Root: Card','Resume Songs: 30 min','Mono Audio: Off','Swap L/R: Off','MQA: Off']
@@ -11048,15 +11057,16 @@ if 'lockscreen_access' in payload_syms:  # M1 Plus: config_init's and the list's
         assert (result==0)==(picture in WALLS or picture.endswith('/exists.jpg'))
         assert not any(c[0]=='toolsWriteConfig' for c in m.calls)
     passed()
-    # Execute config_init's real validation/copy block, including the patched access call.
+    # Execute V2.1's config_init validation/copy block, including the patched access call.
+    from m1plus import M1PLUS_GP
     for picture in WALLS+['screensaver_default','/mnt/mmc/missing.jpg','/mnt/mmc/exists.jpg']:
         m=lock_machine(); m.present.add('/mnt/mmc/exists.jpg')
         path=m.string(picture); stack=0x7000f000
         for _ in range(2):
-            m.calls=[]; m.u.reg_write(UC_MIPS_REG_SP,stack); m.word(stack+24,0xa26cc0)
-            m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0); m.u.reg_write(UC_MIPS_REG_S0,path)
-            m.u.emu_start(0x4fa410,0x4fa460,count=100000)
-            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4fa460
+            m.calls=[]; m.u.reg_write(UC_MIPS_REG_SP,stack); m.word(stack+24,M1PLUS_GP)
+            m.u.reg_write(UC_MIPS_REG_GP,M1PLUS_GP); m.u.reg_write(UC_MIPS_REG_S0,path)
+            m.u.emu_start(0x4e620c,0x4e625c,count=100000)
+            assert m.u.reg_read(UC_MIPS_REG_PC)==0x4e625c
             expected='screensaver_default' if picture.endswith('/missing.jpg') else picture
             assert m.text(syms['g_screensaver_picture'])==expected
             assert not any(c[0]=='toolsWriteConfig' for c in m.calls)
@@ -11318,7 +11328,7 @@ if 'toolsIntoStandby' in HOOKS:
             super().__init__(config,files={RTC_NOW:f'{rtc}\n'.encode()} if readable else {})
             self.rtc,self.key,self.readable,self.refuse,self.alarm,self.events=rtc,key,readable,refuse,0,[]
             self.handlers[int(manifest['patch_symbols']['stock_standby_trampoline'],16)]='stock_standby'
-            self.handlers.pop(syms['mclGetPlayStatus'],None); self.word(0xa3beac,3)
+            self.handlers.pop(syms['mclGetPlayStatus'],None); self.word(PLAY_STATUS,3)
         def hook(self,u,address,size,unused):
             name=self.handlers.get(address,''); a=u.reg_read(REGS[0])
             if name=='stock_standby':  # asleep until the key (seconds in) or the alarm, whichever is first
@@ -11351,7 +11361,7 @@ if 'toolsIntoStandby' in HOOKS:
     m=StandbyMachine({'STANDBYLIMIT':'1'},key=7200,readable=False); assert m.standby()==['suspend'] and not m.off(); passed()
     m=StandbyMachine({'STANDBYLIMIT':'1'},key=7200,refuse=True); assert m.standby()==[('alarm',0),'suspend'] and not m.off(); passed()
     for usb,play in ((1,3),(0,2)):  # a cable in, or playing: it stays on, and no later pass powers off
-        m=StandbyMachine({'STANDBYLIMIT':'1'}); m.standby(); m.byte(syms['g_usbdet_value'],usb); m.word(0xa3beac,play)
+        m=StandbyMachine({'STANDBYLIMIT':'1'}); m.standby(); m.byte(syms['g_usbdet_value'],usb); m.word(PLAY_STATUS,play)
         assert not m.off() and not m.off(); passed()
 else:
     not_ported("Standby Limit (toolsIntoStandby not hooked on M1 Plus)")

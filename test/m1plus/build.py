@@ -315,6 +315,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # now_tag's ID3_ALBUM_ARTIST (coverflow.c): toolsGetMusicInfo fixes id3 field 6 (li $v1, 6) and
     # copies it to info+0x580 (addiu $a0, $s2, 0x580), MUSIC_INFO_ALBUM_ARTIST, as V1.32 does.
     assert stock_syms['toolsGetMusicInfo'] < 0x5ecba0 and words(0x5ecba0, 1) == (0x24030006,) and words(0x5ecbc4, 1) == (0x26440580,)
+    # The online searches (onlinematch.c) read stock's keyinfo as online_setkeyword_info fills it: the
+    # title at +0x200, the album at +0x400 and the artist at +0x500 (addiu $a0, $s0, ...; $s0 keyinfo).
+    assert got(0x50b49c) == stock_syms['keyinfo'] and words(0x50b4d4, 1) == (0x26040200,)
+    assert words(0x50b4f0, 1) == (0x26040400,) and words(0x50b50c, 1) == (0x26040500,)
     # radio.c's and spotify.c's Search take the keyboard's OK as EVT_IM_ACTION: V2.1's
     # input_method_dispatch_action dispatches 0x13c (li $a1), V1.32's 0x13a.
     assert words(stock_syms['input_method_dispatch_action'] + 0x14, 1) == (0x2405013c,)
@@ -324,6 +328,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
     assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
     assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
+    # online_lyricthd: the hooked search (kugou_obtainlyric), NetEase's com163_obtainlyric on a miss and
+    # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
+    assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')
+    assert stock_syms['online_lyricthd'] < 0x50a1b8 and words(0x50a1ec, 1) == (0x24030001,)
     # ringnav_localclass takes an artist's albums by CLASS_ARTIST_ALBUMS (artist_tab): V2.1's loadAlbumList
     # stores 0xff01 in classinfo_save (ori $v0, 0xff01; sw $v0, 0($s0)) and branches to loadLocalClassList.
     assert words(0x4ee930, 1) == (0x3402ff01,) and words(0x4ee93c, 1) == (0xae020000,)

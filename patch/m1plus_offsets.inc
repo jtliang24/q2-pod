@@ -543,14 +543,16 @@ static inline int arc_out(int r, int y) {
  * V1.32 does. ringnav_music_info isn't hooked on M1 (toolsGetMusicInfo, roadmap U4); now_tag reads it. */
 #define MUSIC_INFO_ALBUM_ARTIST 0x580
 #define ID3_ALBUM_ARTIST (ID3_ALBUM + MUSIC_INFO_ALBUM_ARTIST) /* a CUE track's, from its file (ringnav_id3_path) */
-/* Lyrics from tags (ringnav_lyric): mclLoadExLyric isn't hooked on M1 (roadmap U3's batch), and the
- * M1's libtag_c.so.2.0.1 is another build than the Q2's, so its offsets are to be found too. */
-#define MCL_LYRICS M1_UNPORTED_ADDR
-#define MCL_LYRIC_LOCK M1_UNPORTED
-#define TAGLIB_NEW_GOT M1_UNPORTED_ADDR
-#define TAGLIB_FILE_NEW M1_UNPORTED
-#define TAGLIB_PROPERTY_GET M1_UNPORTED
-#define TAGLIB_PROPERTY_FREE M1_UNPORTED
+/* Lyrics from tags (ringnav_lyric). mclLoadExLyric (0x5d41e4) clears the list under its lock, both off
+ * GOT[gp-0x7f4c] (0xa10000): -0x551c and -0x5510, as mclGetLyricSize reads them (0x5d22b4, 0x5d22a0).
+ * MCL_POS sits 0xf8 past the list, as on V1.32. libtag_c.so.2.0.1 is another build than the Q2's:
+ * its exports, and demo's GOT slot for taglib_file_new (-0x94c($gp)). */
+#define MCL_LYRICS 0xa0aae4
+#define MCL_LYRIC_LOCK 0xa0aaf0
+#define TAGLIB_NEW_GOT 0xa03584
+#define TAGLIB_FILE_NEW 0x98a0
+#define TAGLIB_PROPERTY_GET 0xb48c
+#define TAGLIB_PROPERTY_FREE 0xb6b0
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
 /* An artist's albums. V2.1 loads them with this class too: loadAlbumList stores 0xff01 in classinfo_save,

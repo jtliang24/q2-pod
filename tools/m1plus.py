@@ -187,6 +187,14 @@ CALL_SITES = {
                     (0x4d3058, 0x8c820000, 0x24840015),   # addiu $4,$4,0x15
                     (0x4d3064, 0x00000000, 0xafa40014),   # sw $4,0x14($sp), jr's delay slot
                     (0x4d3070, 0x24040016, 0x8fa40014)),  # lw $4,0x14($sp), was li $4,0x16
+        # The lock screen picture's access checks, config_init's (0x4e5030) and get_screensaver_image's
+        # (0x4d7524), access from -0x834($gp): a built-in wallpaper isn't a file. The Q2's build()
+        # patches its two with upstream's code, as LOCKSCREEN_ACCESS's words.
+        'LOCKSCREEN_ACCESS': ((0x4e6218, 0x0320f809, 'lockscreen_access'), (0x4d75b0, 0x0320f809, 'lockscreen_access')),
+        # online_lyricthd (0x50a048) runs the hooked kugou_obtainlyric (LRCLIB, then Kugou), then NetEase's
+        # com163_obtainlyric if it found nothing, as V1.32's does, but then NetEase again in every case
+        # (0x50a1e4), which overwrote a found lyric. A find now branches past both (bnez $v0, 0x50a1ec).
+        'LYRIC_SOURCES': ((0x50a1c0, 0x14400006, 0x1440000a),),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -219,6 +227,8 @@ CALL_SITE_PURPOSES = {
     'COVER_PAUSE': 'album grids never pause the cover worker',
     'ARTIST_COVER_ROW': "an artist's albums request the covers in view",
     'COVER_DONE': 'discard stale cover completion',
+    'LOCKSCREEN_ACCESS': 'a built-in wallpaper survives a reboot',
+    'LYRIC_SOURCES': "a found lyric isn't overwritten by NetEase's",
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
@@ -251,32 +261,19 @@ M1PLUS_PORTS = {
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
     'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); V2.1's "
                           'info keeps it at +0x580 too'),
-    'select_timezone': ('unported', "the extra time zones (1.2.9); V2.1's select_timezone is 0x4d6b2c, its label "
-                        "table and patch_timezones' words not yet found (roadmap U3 batch)"),
+    'select_timezone': ('unported', "the extra time zones (1.2.9); V2.1's select_timezone is 0x4d6b2c, but its 27 "
+                        'labels are a pointer table (0x97c810) its row layout (0x4a21c8) copies to the stack, and '
+                        "its counts are at 0x4a246c, 0x4a2604, 0x4e65dc and 0x4d6b68 (roadmap U4)"),
     'toolsQueryContentDbTable': ('unported', "an artist's albums tab's album-artist rewrite (1.2.9); V2.1 has no "
                                  'toolsQueryContentDbTable'),
-    'mclLoadExLyric': ('unported', "a track's LYRICS tag without a .lrc (1.3.0); MCL_LYRICS and the TagLib offsets "
-                       'are M1_UNPORTED, V2.1\'s libtag_c being another build (roadmap U3 batch)'),
-    'toolsIntoStandby': ('unported', "Standby Limit (1.3.0): the Power row is Q2 only until V2.1's standby is checked "
-                         '(roadmap U3 batch)'),
-    'networkGetWifiSignal': ('unported', "the Wi-Fi signal from the driver, keeping the radio's power save (1.3.0; "
-                             'roadmap U3 batch)'),
-    'player_start_queue': ('unported', "View Queue's and Up Next's rows in a shuffle's play order (1.2.9); V2.1's is "
-                           'start_playqueue (0x4e47d0), aliased for the payload\'s calls (roadmap U3 batch)'),
     'write_int_config': ('native', "Bluetooth's own saved level (1.3.8); V2.1 keeps it apart, [PLAYSET] BTVOLUME, "
                          '(m1plus_nav_btvol.c)'),
     'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
                         "btsource_volume while the output is Bluetooth"),
-    'toolsQueryDbTableAndSort': ('unported', 'spoken audio kept out of the sorted library queries (1.3.8, #67); '
-                                 "V2.1's is 0x5ee9ac (roadmap U3 batch)"),
     'localmusic_playlistsmore_page_init': ('unported', "a playlist's More page: editing, song search, a row hold "
                                            "(1.3.8); V2.1 has no playlistsmore_page"),
     'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
-    'kugou_obtainlyric': ('unported', "LRCLIB lyrics before stock's Kugou search (1.3.8); V2.1's is 0x509ee4 "
-                          '(roadmap U3 batch)'),
-    'kugou_obtaincover': ('unported', "MusicBrainz and iTunes covers before stock's Kugou search (1.3.8); V2.1's is "
-                          '0x50aa78 (roadmap U3 batch)'),
     'usbmode_page_init': ('unported', "card apps end before USB storage unmounts the card (1.4.2); the card app "
                           'host (addon.c) waits for U4, with Apps'),
     # Call sites
@@ -420,6 +417,8 @@ M1PLUS_HOOKS = {
     'set_equalizer_value': (0x4d851c, 'peq_stock_eq', 'eq'),
     'home_page_init': (0x534cd4, 'coverflow_home', 'home'),
     'toolsQueryDbTable': (0x5ee77c, 'ringnav_library_query', 'dbquery'),
+    # Songs by filename and by format (sort_filename, sort_format); V2.1's title sort runs toolsQueryDbTable
+    'toolsQueryDbTableAndSort': (0x5ee9ac, 'ringnav_sorted_query', 'sorted_query'),
     'scanAllMusicFile': (0x4e9df4, 'coverflow_scan_all', 'scan_all'),
     'scanSpecFolder': (0x4e9e90, 'coverflow_scan_folder', 'scan_folder'),
     'deleteMusicFromMusicDb': (0x4ede44, 'coverflow_delete_song', 'delete_song'),
@@ -437,6 +436,21 @@ M1PLUS_HOOKS = {
     'mclPrevSong': (0x5d56dc, 'ringnav_prev', 'prev'),
     'mclSetPlayMode': (0x5d278c, 'ringnav_mode', 'mode'),
     'mclSetPlaySpeed': (0x5d281c, 'ringnav_speed', 'speed'),
+    # A queue row's pick (View Queue, stock's View Queue dialog, a queue delete) in a shuffle's play
+    # order: V1.32's player_start_queue. The payload's player_start_queue calls reach it by alias.
+    'start_playqueue': (0x4e47d0, 'ringnav_start_queue', 'start_queue'),
+    # A track's LYRICS tag without a .lrc; stock's loader runs first, from every caller's GOT call
+    'mclLoadExLyric': (0x5d41e4, 'ringnav_lyric', 'lyric'),
+    # Online lyric and cover search: LRCLIB, then MusicBrainz and iTunes, before stock's Kugou. Both,
+    # online_getkeyword_info and online_setkeyword_info are V1.32's but for their data addresses.
+    'kugou_obtainlyric': (0x509ee4, 'ringnav_lyric_search', 'kugou'),
+    'kugou_obtaincover': (0x50aa78, 'ringnav_cover_search', 'kugoucover'),
+    # The status bar's Wi-Fi signal from rtl8733bs's rx_signal, which keeps the radio's power save;
+    # V2.1's asks the radio (SIOCGIWSTATS), as V1.32's does
+    'networkGetWifiSignal': (0x5d76a8, 'ringnav_wifi_signal', None),
+    # Standby Limit: into_standby's suspend to RAM (V1.32's device_standby's), V1.32's instruction for
+    # instruction; the M1's rtc-ingenic has the same wakealarm
+    'toolsIntoStandby': (0x5e5228, 'ringnav_standby', 'standby'),
     # Gapless: the next track's pick and its decoder's open, V1.32's moved
     'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
     'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),
@@ -710,7 +724,8 @@ def compile_payload(out):
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     leaf_paint = WM_PAINT_LEAF_M1PLUS
     undefined = [f'--undefined={name}' for _, name, _ in active_hooks.values()]
-    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
+    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set',
+                  '--undefined=lockscreen_access']
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')

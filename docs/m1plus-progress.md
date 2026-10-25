@@ -1760,6 +1760,69 @@ The pass found three M1 gaps, all older than 1.2.2 (roadmap U4):
 The album track list's touch hold played the row again (dev 21's gap: `g_menu.rows` read 13 for 12
 tracks). The Play/Pause hold fails there for the same reason.
 
+## 45. U3's batch of ports, and 1.4.2 dev 2 and dev 3 on the device (Oct 24)
+
+The batch ports the features that were finished by 1.4.2, whose V2.1 function has V1.32's shape and
+which nothing ties to the Q2 (roadmap U3). Each was found in V2.1's `demo` before it was hooked, and each
+is its own commit, so one row turns it off. The extra time zones went to U4 (the user's choice): V2.1
+keeps their labels as a pointer table its row layout copies onto the stack. Chapters needed no code: it
+was built and tested on M1 already, and V2.1's rootfs has `/usr/bin/ffmpeg` (FFmpeg 4.2, `ffmetadata`).
+
+| Commit | Port | What V2.1 needed |
+|---|---|---|
+| `459fbb1` | Lyrics from tags (`mclLoadExLyric`, `0x5d41e4`) | The lyric list and its lock off GOT[gp−0x7f4c] (`0xa0aae4`, `0xa0aaf0`), as `mclGetLyricSize` reads them; the M1's own `libtag_c` offsets (`0x98a0`, `0xb48c`, `0xb6b0`) and demo's GOT slot for `taglib_file_new` (`0xa03584`). V2.1 has one reader of the lyric times, its row builder (`0x53a42c`), and no counterpart of V1.32's `label_title` line. |
+| `a74ea07` | Online lyric and cover search (`kugou_obtainlyric` `0x509ee4`, `kugou_obtaincover` `0x50aa78`) | Both and `online_*keyword_info` are V1.32's but for data addresses. `test/m1plus/build.py` pins `keyinfo`'s title, album and artist at +0x200, +0x400, +0x500. |
+| `b117f1a` | A built-in wallpaper through a reboot (`LOCKSCREEN_ACCESS`) | `config_init`'s and `get_screensaver_image`'s `access` calls (`0x4e6218`, `0x4d75b0`) to `lockscreen_access`, an M1 call site, and the link keeps the symbol. V2.1's `get_screensaver_image` also wrote `screensaver_default` to config.ini. |
+| `965d9dc` | A View Queue pick in a shuffle's order (`start_playqueue`, `0x4e47d0`) | The hook's key is V2.1's name; the payload's `player_start_queue` alias reaches it. |
+| `c6e60e8` | Spoken audio out of Songs by filename and format (`toolsQueryDbTableAndSort`, `0x5ee9ac`) | V2.1's title sort (`sort_first_alphabet`) runs `toolsQueryDbTable`, already hooked; only `sort_filename` and `sort_format` run this one. The case drives all three. |
+| `1df6b78` | The Wi-Fi signal from the driver (`networkGetWifiSignal`, `0x5d76a8`) | The same `rtl8733bs` driver, its `wlan0` with `rx_signal`. |
+| `0b0440d` | Standby Limit (`toolsIntoStandby`, `0x5e5228`) and its Power row | `into_standby` makes V1.32's `device_standby`'s calls; the M1's `rtc-ingenic` has `since_epoch` and `wakealarm`. The seam narrows to Volume Guard's row. |
+| `514b4a4` | The time zones' port row | V2.1's layout, for U4. |
+| `e43141a` | Online lyrics kept (`LYRIC_SOURCES`, found on dev 2) | V2.1's `online_lyricthd` runs NetEase's `com163_obtainlyric` after the search in every case (`0x50a1e4`), which overwrote LRCLIB's find. A find now branches past both NetEase calls, the Q2's order. |
+
+Results:
+- **`test/q2compare.py 1.4.2 --suites`:** Legacy and iPod `update.tar` byte-identical to 1.4.2's build, all
+  22 suite runs pass.
+- **The M1** (`work/u3/1.4.2-ports2`, 1.4.2 dev 3, `V015s`, `update.bin` `3ae06235…`): `build --build`,
+  `patch` (1120 scenarios, from 1087; 29 `NOT PORTED`, from 34; no `KNOWN GAP`), `boot` and its two walks,
+  `playback` (its View Queue pick cases now run), `id3`, `m4b`, `headset_io`, `ldac`, `bluealsa` and
+  `ports.py` pass.
+- **`fndiff.py` from 1.4.2 dev 1:** 3 changed (`ringnav_lyric`, `ringnav_powermanager`, `ringnav_about`), 12
+  added (`onlinematch.c`, `lockscreen_access`, `ringnav_start_queue`). The Standby, Wi-Fi and sort
+  functions were linked already; only their hooks are new. Dev 3 changes one `demo` word over dev 2.
+
+**On the device (dev 2, `V014s`, then dev 3, Oct 24),** over q2remote with Screen Off set to Off for the
+pass and back to 30s after:
+- The running payload hashes as built; About reads 1.4.2 dev 2, then dev 3.
+- **Wallpaper:** Graphite (`q2pod:graphite`) survived both flashes' reboots, on the lock screen and in
+  config.ini.
+- **Lyrics from tags:** a test MP3 with an ID3 USLT frame and no `.lrc` shows its lyric line, the page at
+  its top.
+- **Online search:** on dev 2, *Tug of War* (Carly Rae Jepsen) came back with *Bucket*'s lyrics, and the
+  lyric file had no BOM: NetEase's, not the payload's. LRCLIB had the song (12 synced results), and a
+  probe built against V2.1's libcurl fetched it on the device (HTTP 200, 192 KB, through the bundled CA),
+  which led to `online_lyricthd`'s second NetEase call. On dev 3 the file starts with the payload's BOM
+  and holds *Tug of War*'s lyrics. The covers list *Tug Of War*'s covers first, then Kugou's; the grid
+  takes 30–50 s to fill, MusicBrainz's requests included. `keyinfo` on the device held the file name,
+  title, album and artist at the pinned offsets.
+- **View Queue in Shuffle Songs:** a pick in stock's View Queue dialog went into the order (cursor 0→1,
+  `order[1]` the pick, history 166 → 169).
+- **Wi-Fi signal:** the status bar reads `rx_signal` every 2 s (the cache's stamps), −58 dBm, the radio's
+  own level in `/proc/net/wireless`.
+- **Chapters:** the test M4B's 10 chapters list with their times (`ffmpeg` reads them in 0.9 s), and a pick
+  seeks to the chapter's start (50:36).
+- **Standby Limit's row** steps 1 h, 8 h, 24 h and Off, saving each.
+- `demo` kept its pid, and the kernel logged no fault.
+
+**Standby Limit at its limit** (dev 3): with the limit at 1 h, the cable out and the music paused, a
+logger on `/mnt/data` wrote the time, uptime and `wakealarm` every 5 s. It stopped at 02:24:23 UTC
+(Auto-standby's 5 minutes), and wrote one more line at 03:24:29, the RTC 3605 s on, with the alarm
+already cleared: the alarm woke the device an hour into Standby, and it powered off, as the user saw.
+The limit went back to Off, and the log was removed.
+
+Not checked: Songs by filename and format. The user's Home has no Songs card, and their sort is by
+title.
+
 ## How to check a build now
 
 ```sh
