@@ -6127,7 +6127,18 @@ if 'LYRIC_FOLLOW' in SITES:
     assert m.get(lrc+O['VIEW_CONTENT_H'])==100 and m.get(lrc+O['SCROLL_Y'])==0; passed()
 else: not_ported("The lyrics' top row whole (LYRIC_FOLLOW not patched in V2.1)")
 # A refresh's lyric rebuild (LYRIC_ROWS), which stock ends at offset 0, keeps the view where it was.
-if 'LYRIC_ROWS' in SITES: raise AssertionError('LYRIC_ROWS is patched on M1 Plus: port its case from test/patch.py')
+if 'LYRIC_ROWS' in SITES:
+    site_patched('LYRIC_ROWS')
+    class LyricRowsMachine(Machine):
+        def __init__(self): super().__init__(); self.handlers[O['LYRIC_ROW_BUILDER']]='rows'
+        def hook(self,u,address,size,unused):
+            if self.handlers.get(address)!='rows': return super().hook(u,address,size,unused)
+            assert u.reg_read(UC_MIPS_REG_T9)==address  # a PIC entry: its gp from $t9
+            self.word(self.lrc+O['SCROLL_Y'],0); self.returns(0,clobber=True)
+    for y in (110,0):
+        m=LyricRowsMachine(); m.lrc=m.node('scroll_view','scroll_lrc'); win=m.node('window','playing_page',[m.lrc])
+        m.word(m.lrc+O['SCROLL_Y'],y); m.call(address=payload_syms['ringnav_lyric_rows'],args=(win,),gap=0)
+        assert m.get(m.lrc+O['SCROLL_Y'])==y; passed()
 else: not_ported("The lyrics keep their place on a refresh (LYRIC_ROWS not patched in V2.1)")
 
 # Sparse populated initials: one destination per sustained tick, both directions, utilities

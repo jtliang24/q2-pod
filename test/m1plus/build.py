@@ -367,6 +367,11 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert got(0x4df218) == stock_syms['toolsGetExternCover'] and stock_syms['parseplaycover_thd'] < 0x4df1e8 < 0x4df218
     # LYRIC_FOLLOW: Now Playing's timer's scroll_view_scroll_to(scroll_lrc, 0, y, 10).
     assert got(0x53ad54) == stock_syms['scroll_view_scroll_to'] and words(0x53ad58, 1) == (0x2407000a,)  # li $a3, 10
+    # LYRIC_ROWS: show_player_face's bal to the lyric row builder, a PIC entry that zeroes scroll_lrc's
+    # offset (scroll_view_set_offset) before it reads the lyrics.
+    assert words(0x53bed0, 1)[0] == 0x04110000 | ((0x53a240 - 0x53bed4) >> 2) & 0xffff and stock_syms['show_player_face'] < 0x53bed0
+    assert pic_gp(stock, 0x53a240) == M1PLUS_GP and got(0x53a3e4) == stock_syms['scroll_view_set_offset']
+    assert got(0x53a42c) == stock_syms['mclGetLyricBuffer'] and got(0x53a568) == stock_syms['mclGetLyricTime']
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores

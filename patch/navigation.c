@@ -2720,7 +2720,7 @@ int ringnav_lyric_follow(void *lrc, int x, int y, int ms) {
  * The offset stays; the follow moves it if the line did. */
 int ringnav_lyric_rows(void *win) {
     void *lrc = widget_lookup(win, "scroll_lrc", 1);
-    int y = lrc ? I(lrc, SCROLL_Y) : 0, ret = ((int (*)(void *))0x529f0c)(win);
+    int y = lrc ? I(lrc, SCROLL_Y) : 0, ret = ((int (*)(void *))LYRIC_ROW_BUILDER)(win);
     if (y) scroll_view_set_offset(lrc, I(lrc, SCROLL_X), y);
     return ret;
 }

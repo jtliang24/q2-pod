@@ -558,6 +558,7 @@ static inline int arc_out(int r, int y) {
  * its exports, and demo's GOT slot for taglib_file_new (-0x94c($gp)). */
 #define MCL_LYRICS 0xa0aae4
 #define MCL_LYRIC_LOCK 0xa0aaf0
+#define LYRIC_ROW_BUILDER 0x53a240 /* show_player_face's (0x53bed0); V2.1's one mclGetLyricTime reader */
 #define TAGLIB_NEW_GOT 0xa03584
 #define TAGLIB_FILE_NEW 0x98a0
 #define TAGLIB_PROPERTY_GET 0xb48c
