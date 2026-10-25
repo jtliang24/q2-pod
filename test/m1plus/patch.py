@@ -1899,17 +1899,20 @@ for key in ('KEY_CENTER','KEY_RETURN')*(variant=='ipod'):  # Legacy keeps stock'
     assert m.call(O[key])==11 and [c[1:3] for c in m.calls if c[0]=='dialog_quit']==[(m.top,0)]
 passed()
 # A held Play/Pause there switches its wheel to stock's volume and back, kept as Q2POD QSVOLUME.
-m=Machine(); bright=m.node('slider','slider_backlight',value=50)
-m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])])
-hold=lambda: m.call(O['KEY_PLAY'],address=syms['on_wm_keylong_fun'],event_type=O['EVT_KEY_LONG'],gap=0)
-saved=lambda: [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
-assert hold()==11 and saved()==[(1,'Q2POD','QSVOLUME')]
-assert m.call()!=11 and m.nodes[bright]['value']==50  # stock's volume takes the tick
-assert hold()==11 and saved()==[(0,'Q2POD','QSVOLUME')]
-assert m.call()==11 and m.nodes[bright]['value']==51
-m=Machine(); m.config['QSVOLUME']='1'; bright=m.node('slider','slider_backlight',value=50)
-m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])])
-assert m.call()!=11 and m.nodes[bright]['value']==50; passed()
+# Q2 only (the user's choice, 2026-10-25): on M1 Plus the knob stays volume in Quick Settings, which
+# knob_nav_active leaves to stock, so there is no wheel there to switch.
+if not is_m1plus:
+    m=Machine(); bright=m.node('slider','slider_backlight',value=50)
+    m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])])
+    hold=lambda: m.call(O['KEY_PLAY'],address=syms['on_wm_keylong_fun'],event_type=O['EVT_KEY_LONG'],gap=0)
+    saved=lambda: [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']
+    assert hold()==11 and saved()==[(1,'Q2POD','QSVOLUME')]
+    assert m.call()!=11 and m.nodes[bright]['value']==50  # stock's volume takes the tick
+    assert hold()==11 and saved()==[(0,'Q2POD','QSVOLUME')]
+    assert m.call()==11 and m.nodes[bright]['value']==51
+    m=Machine(); m.config['QSVOLUME']='1'; bright=m.node('slider','slider_backlight',value=50)
+    m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])])
+    assert m.call()!=11 and m.nodes[bright]['value']==50; passed()
 if 'g_dropdown_menu_state' in syms:  # M1 Plus: a stub until V2.1's dropdown_menu_state is checked (roadmap U4)
     # A swipe up that closes it may start on the brightness slider: the slider gets its press only once the
     # touch goes 10 px more sideways than up or down, or with a tap's release; a touch that goes up first,
