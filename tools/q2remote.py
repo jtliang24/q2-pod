@@ -51,6 +51,9 @@ SETTLE_S, SETTLE_POLL_S, REBOOT_WAIT_S = 5, .15, 360
 GLOBALS = {"backlight": ("g_backlight_status", 0x99f5b0), "usb": ("g_usblink_status", 0xa38aef),
            "keylock": ("g_keylock_flag", 0xa38c32), "lockscreen": ("g_lockscreen_pageflag", 0xa38b0f),
            "volume": ("g_volume", 0xa38c41)}
+# The same bytes in V2.1's demo (an M1 Plus build's peq_platform.h: backlight_status, usblink_status, keylock_flag,
+# lockscreen_pageflag, volume), read on a Q2 with an md-rotary-knob.
+M1_GLOBALS = {"backlight": 0x97cae4, "usb": 0xa059f4, "keylock": 0xa05aa0, "lockscreen": 0xa059fc, "volume": 0x97cb10}
 
 
 def event(kind, code, value):
@@ -275,10 +278,13 @@ def parse_state(text):
 
 
 def state():
-    """demo's pid, the uptime and GLOBALS, read from demo's memory."""
-    reads = "".join(f'v=$(dd if=/proc/$p/mem bs=1 skip={addr} count=1 2>/dev/null | xxd -p); echo "${{v:--}}"; '
-                    for _, addr in GLOBALS.values())
-    return parse_state(shell(f'p=$(pidof -s demo) && echo $p && cut -d" " -f1 /proc/uptime && {{ {reads}}}').decode())
+    """demo's pid, the uptime and GLOBALS, read from demo's memory: M1_GLOBALS' on an M1 Plus."""
+    def reads(addresses):
+        return "".join(f'v=$(dd if=/proc/$p/mem bs=1 skip={addr} count=1 2>/dev/null | xxd -p); echo "${{v:--}}"; '
+                       for addr in addresses)
+    return parse_state(shell(f'p=$(pidof -s demo) && echo $p && cut -d" " -f1 /proc/uptime && '
+                             f'if grep -q {M1_KNOB} /proc/bus/input/devices; then {reads(M1_GLOBALS.values())}'
+                             f'else {reads(addr for _, addr in GLOBALS.values())}fi').decode())
 
 
 def wake():

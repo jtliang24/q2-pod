@@ -62,6 +62,7 @@ for bad in ((375, 0), (0, 320), (-1, 0)):
 assert q.event_writer("/x", [b"a", b"b"], 0).count("printf") == 1 and q.event_writer("/x", [b"a", b"b"]).count("printf") == 2
 assert q.parse_state("1072\n92.41\n00\n01\n-\n00\n1e\n") == {
     "demo": 1072, "uptime": 92.41, "backlight": 0, "usb": 1, "keylock": None, "lockscreen": 0, "volume": 30}
+assert q.M1_GLOBALS.keys() == q.GLOBALS.keys()  # parse_state names the M1's bytes alike
 try: q.parse_state("")
 except ValueError: pass
 else: raise AssertionError("missing demo accepted")
