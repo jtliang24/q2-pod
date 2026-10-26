@@ -154,6 +154,26 @@ CALL_SITES = {
         # at the key as the others do.
         'COVER_DONE': ((0x4edd9c, 0x8f99b6d4, 0x27a61688), (0x4edda0, 0x0411ff44, 'ringnav_cover_done'),
                        (0x4eeddc, 0x1000fbf0, 0x1000fbef)),
+        # Hold Play/Pause: input_device_status' long press for key 232 (500 ms) moves to Play/Pause (171)
+        # at PLAY_HOLD_MS, the key-down's timer interval and the callback's threshold both.
+        'PLAY_HOLD': ((0x6a007c, 0x240201f4, 0x240202bc), (0x6a008c, 0x3a7300e8, 0x3a7300ab),
+                      (0x6a0404, 0x240401f4, 0x240402bc), (0x6a0408, 0x384200e8, 0x384200ab)),
+        # toolsFixId3ErrorCode's jalr strcmp of the GBK round trip: GBK only when the bytes read as GBK.
+        'TAG_TEXT': ((0x5c5e7c, 0x0320f809, 'ringnav_gbk_tag'),),
+        # The CUE sheet parser's seven bal toolsIconvConvert: UTF-8, GBK or Windows-1252.
+        'CUE_TEXT': ((0x5c06d0, 0x0411f176, 'ringnav_cue_text'), (0x5c0794, 0x0411f145, 'ringnav_cue_text'),
+                     (0x5c084c, 0x0411f117, 'ringnav_cue_text'), (0x5c0908, 0x0411f0e8, 'ringnav_cue_text'),
+                     (0x5c0bc8, 0x0411f038, 'ringnav_cue_text'), (0x5c0f84, 0x0411ef49, 'ringnav_cue_text'),
+                     (0x5c130c, 0x0411ee67, 'ringnav_cue_text')),
+        # The library scan's folder walk: its first strcmp (jalr, "." in its delay slot, pinned) skips
+        # every hidden folder.
+        'SCAN_DIRS': ((0x5c3c0c, 0x0320f809, 'ringnav_scan_dir'), (0x5c3c10, 0x24a55110, None)),
+        # Baidu Pan's and Tidal's start-flag polls: li $4,10000 -> lui $4,3 (196 ms).
+        'STREAM_POLLS': ((0x47f828, 0x24042710, 0x3c040003), (0x486408, 0x24042710, 0x3c040003)),
+        # mclSyncPlayerStatus', parse_albumcovertask_thd's and player_parsecover_thd's jalr usleep: at
+        # least DARK_POLL_US while the Q2 is dark and quiet.
+        'DARK_POLLS': ((0x5a958c, 0x0320f809, 'ringnav_dark_usleep'), (0x4edbe0, 0x0320f809, 'ringnav_dark_usleep'),
+                       (0x512fac, 0x0320f809, 'ringnav_dark_usleep')),
     },
     # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
     'm1plus': {
@@ -268,6 +288,12 @@ CALL_SITE_PURPOSES = {
     'LOCKSCREEN_ACCESS': 'a built-in wallpaper survives a reboot',
     'LYRIC_SOURCES': "a found lyric isn't overwritten by NetEase's",
     'FOLDER_PLAY': 'a Folder play replaces the open Now Playing',
+    'PLAY_HOLD': 'Play/Pause hold time',
+    'TAG_TEXT': 'tag text GBK only when it reads as GBK',
+    'CUE_TEXT': 'CUE text read as UTF-8, GBK or Windows-1252',
+    'SCAN_DIRS': 'the library scan skips hidden folders',
+    'STREAM_POLLS': 'stream start polls 5 a second',
+    'DARK_POLLS': 'stock polls idle while dark',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
@@ -318,6 +344,18 @@ M1PLUS_PORTS = {
     'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
+    'PLAY_HOLD': ('unported', "Play/Pause's hold at 700 ms (1.4.5); V2.1's input_device_status is unnamed, and the "
+                  'M1 opens the hold menu with a touch long-press too'),
+    'TAG_TEXT': ('unported', "Latin-1 tags kept out of GBK (1.4.5); V2.1's toolsFixId3ErrorCode is 0x5ec460, its "
+                 'round trip strcmp not yet found'),
+    'CUE_TEXT': ('unported', "CUE sheets read as UTF-8, GBK or Windows-1252 (1.4.5); V2.1's CUE parser calls "
+                 "toolsIconvConvert (0x5e39b0), its call sites not yet found, and ringnav_cue_text calls V1.32's"),
+    'SCAN_DIRS': ('unported', "the library scan skips hidden folders (1.4.5); V2.1's toolsLoadAllFile (0x5efd98) "
+                  'walks with the same exclusions, its strcmp not yet found'),
+    'STREAM_POLLS': ('unported', "Tidal's start-flag poll at 5 a second (1.4.5); V2.1 has no Baidu Pan, and its "
+                     "Tidal worker's usleep(10000) is not yet found"),
+    'DARK_POLLS': ('unported', "stock's pollers idle while dark (1.4.5): V2.1's mclSyncPlayerStatus (0x5d144c) and "
+                   'cover threads, their usleep calls not yet found'),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
