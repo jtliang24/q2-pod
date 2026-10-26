@@ -133,6 +133,19 @@ release, or at once after a structural step.
      string. On M1 the Q2's string is a style V2.1's theme lacks, and the widget stays unstyled: 1.2.2's
      Coverflow tracks came out grey and left-aligned on dev 21. `test/m1plus/patch.py` fails on a style
      the payload sets that V2.1's theme lacks; nothing checks views and icons.
+   - **A Q2 image or screen size in new shared C** reaches the M1 with no conflict. Review the tag's
+     added lines that the M1 runs, `git diff <old base> <tag> -- 'patch/*.c' | grep '^+'`, for quoted
+     image names and the Q2's sizes (375, 320, 335, 302, 290): name each with each model's value
+     (`UI_W`, `BOTTOM`, an `ICON_*`), or give the M1 its own function where V2.1 lays it out
+     differently. 1.4.5's `list_toggle` named `switch_on` and sized its switch from a row height a
+     V2.1 row only gets from its list, so the M1's rows showed no state; its `coverflow_goto_album`
+     made a 375x290 body.
+   - **Upstream's changes to a function an M1 file stands in for.** The merge takes them into the
+     Q2's function and leaves the M1's file as it was, and `q2only.py` sees only `#if` branches. Read
+     the tag's diff of each: `m1plus_nav_library.c` (the Q2 Pod page, for `ringnav_localmusic` and
+     `stream_page_init`'s rows), `m1plus_nav_rows.c` (`list_row_core`), `m1plus_coverflow_rows.c`
+     (`page_row_detail`, `row_into`), `m1plus_nav_goto.c` (`qm_goto`). 1.4.5's Library gave its rows
+     that open a page a chevron; the Q2 Pod page followed by hand.
    - **A V1.32 number in shared C**: a load class, or a stock address called directly. Nothing fails on
      one. List the tag's hex literals with `git diff <old base> <tag> -- 'patch/*.c' | grep '^+' | grep
      -E '0x[0-9a-f]{4,}'`, and check each against V2.1's `demo` (`llvm-objdump -d` on the gated build's
@@ -141,7 +154,9 @@ release, or at once after a structural step.
      `offsets.inc` before its code runs on M1; until then the hook or site that reaches it stays
      unported (1.3.9's `ringnav_lyric_rows`).
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
-     `test/m1plus/`.
+     `test/m1plus/`. `test/m1plus/boot.py`'s walks tap screen positions: an upstream row added above
+     one they tap moves it (1.4.5's Coverflow Sort and Refresh pushed Knob: Navigation off Display's
+     screen).
    - **Upstream's new test cases**, conflict or not: review `git diff <old base> <tag> -- test/`. The
      M1's copies in `test/m1plus/` don't take them. Merge each copy with `python3
      test/m1plus/suitemerge.py <old base> <tag> <suite>`. It places each upstream hunk by its lines'
@@ -170,9 +185,14 @@ release, or at once after a structural step.
    2. **Q2 scenario counts.** `test/patch.py`'s counts are at least the tag's own: no case dropped or
       skipped.
    3. **M1 gates.** The V2.1 name check (the M1 build itself: `m1plus_names` fails on a V2.1 name the rootfs lacks),
-      `test/m1plus/build.py --build`, `test/m1plus/patch.py` and
-      `test/m1plus/boot.py` on a fresh M1 build. Edit no source between the build and its gates: they
-      check its `source_sha256` against the tree, and a table edit after the build fails every one.
+      then on a fresh M1 build the suites of [How to check a build
+      now](m1plus-progress.md#how-to-check-a-build-now): `test/m1plus/build.py --build`,
+      `test/m1plus/patch.py`, `test/m1plus/boot.py` with and without `--home-menu` and `--media`,
+      `test/m1plus/playback.py`, `m4b`, `id3`, `headset_io`, `test/ldac.py` and `test/bluealsa.py`.
+      Edit no source between the build and its gates: they check its `source_sha256` against the
+      tree, and a table edit after the build fails every one. A failing gate is fixed in a follow-up
+      commit. A fix to tests alone keeps the build: run the failed gate and those after it on it. A
+      fix to a hashed source (`tools/*.py`, `patch/*`) needs a fresh build and every M1 gate again.
    4. **Port report.** `python3 test/m1plus/ports.py` passes: every hook, site and name is classified
       (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for
       [m1plus-unported.md](m1plus-unported.md).

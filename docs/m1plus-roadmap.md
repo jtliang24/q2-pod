@@ -18,13 +18,12 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** the first full sync, to upstream 1.4.2 (U3): merges in steps, then a batch of ports, then
-one device pass. All five steps, 1.2.9, 1.3.0, 1.3.8, 1.3.9 and 1.4.2, are merged and gated
-([m1plus-progress.md](m1plus-progress.md) sections 40 to 44); 1.2.9 (dev 29), 1.3.0 (dev 5), 1.3.8
-(dev 1) and 1.4.2 (dev 1) passed on the device. The batch of ports is done and passed on the device as
-1.4.2 dev 3 (section 45), Standby Limit's power-off included, and section 7's look and feel with the
-knob on Home followed (section 46).
-`1.4.2-m1.1` is next. Done so far:
+**Next:** U5, the later syncs: merge upstream by the drift and release weekly
+([the cadence](m1plus-sync.md#cadence)). The first merge, to 1.4.5, landed on Oct 26 (progress
+section 48); from there no merge is due until upstream drifts again, and the next release is due about
+Nov 1. U3, the first full sync to 1.4.2, is done: its five merge steps (sections 40 to 44), its batch of
+ports (section 45), the look and feel (section 46) and the catch-up (section 47), then `1.4.2-m1.1`,
+published on Oct 25 from dev 10's code. Done so far:
 U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
 now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
@@ -183,8 +182,8 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   - **Its device pass** (dev 21) found two more the gates had missed: a Q2 style named by its string in
     Coverflow, and a key-up change the merge took only in Q2-only code. Both are fixed (dev 22), with a
     harness check for the first and `test/m1plus/q2only.py` for the second, both now runbook rules.
-- **U3. First sync: upstream 1.4.2 (L).** The user chose 1.4.2 on Oct 23. 1.4.3, out the same day,
-  is the first U5 sync. 1.4.2 is 235 commits past 1.2.2, and a trial merge conflicts in 15 files, 57
+- **U3. First sync: upstream 1.4.2 (L). Done (Oct 25):** `1.4.2-m1.1` is published. The user chose
+  1.4.2 on Oct 23; 1.4.3, out the same day, went to U5, whose first merge took 1.4.5. 1.4.2 is 235 commits past 1.2.2, and a trial merge conflicts in 15 files, 57
   hunks (28 in `navigation.c`). U1 brought this down from about 150 hunks.
   - **Merge in steps**, each one a full pass of the [sync runbook](m1plus-sync.md):
     1.2.9 → 1.3.0 → 1.3.8 → 1.3.9 → 1.4.2. Don't rebase: `m1plus-progress.md` cites the branch's commit
@@ -229,7 +228,10 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   those before it. Section 4 is the record for 1.2.2.
 - **U5. Each later release (S–M each).** Merge upstream by the drift, about every 100 commits, and
   release about weekly ([the cadence](m1plus-sync.md#cadence), `test/m1plus/drift.py`), by the same
-  runbook as U3. A merge past due leapfrogs in steps, as U3 did. New features go into U4.
+  runbook as U3. A merge past due leapfrogs in steps, as U3 did. New features go into U4. The
+  `upstream-sync` skill (local) drives it.
+  - **1.4.5 (Oct 26,** [progress section 48](m1plus-progress.md)**):** the first merge. `drift.py`
+    planned 1.4.2 → 1.4.5 → 1.4.8; once 1.4.5 landed, 1.4.8 was 47 commits on and no longer due.
 
 ## 1. Small fixes (S)
 

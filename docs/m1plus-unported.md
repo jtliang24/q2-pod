@@ -1,7 +1,7 @@
 # M1 Plus: unported features
 
-The upstream Q2 Pod features that the M1 Plus doesn't have yet, as of 1.4.2-m1.1. Each row has a
-status:
+The upstream Q2 Pod features that the M1 Plus doesn't have yet, as of the merge of 1.4.5 (`staging`;
+`1.4.2-m1.1` is the last release). Each row has a status:
 
 - **Planned:** to be ported. Most have a known way in on V2.1, or a check to make first.
 - **Unplanned:** not to be ported for now, for the reason given.
