@@ -29,6 +29,11 @@ About's **CFW. Version** row shows the name, and **FW. Version** the tag.
    python3 test/release_m1.py
    ```
 
+   Package with `TMPDIR=/tmp` (`nix develop -c env TMPDIR=/tmp sh`). Inside `nix develop`, `TMPDIR`
+   is `/tmp/nix-shell.XXXXXX`, and `test/peq.py` compiles `tidal_dl.c` with its Tidal folder under it.
+   That path is long enough for GCC's `-Werror=format-truncation` to refuse the build (1.4.2-m1.1,
+   GCC 16).
+
    Packaging builds twice and compares `update.bin` and the ZIP byte for byte. It validates the first
    build: the manifest's model, release, tag, stock input and splash; the archive against V2.1's
    updater rule; then `peq`, `build --build`, `patch`, `boot`, `playback`, `m4b` and `ldac`. It writes
