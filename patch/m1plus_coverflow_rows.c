@@ -26,9 +26,26 @@ void *page_row_detail(void *view, int index, const char *caption, const char *de
     return item;
 }
 
-/* A row that opens another list: V2.1's chevron at the right, as on the Q2 Pod page. */
+/* V2.1's chevron at the right of a row h high, as on the Q2 Pod page, the row's labels narrowed to
+ * end where page rows' do. Shared with peq_ui.c. */
+void row_into(void *item, int h) {
+    for (unsigned i = 0, n = widget_count_children(item); i < n; ++i) {
+        void *label = widget_get_child(item, i);
+        widget_move_resize(label, I(label, W_X), I(label, W_Y), PAGE_ROW_X + PAGE_ROW_W - I(label, W_X), I(label, W_H));
+    }
+    image_base_set_image(image_create(item, 295, (h - 22) / 2, 13, 22), ROW_CHEVRON);
+}
+
+/* A row that opens another list, with row_into's chevron. An empty detail centres the caption, as a
+ * row without one. */
+void *page_row_detail_into(void *view, int index, const char *caption, const char *detail,
+                           int (*click)(void *, void *)) {
+    void *item = page_row_detail(view, index, caption, detail && *detail ? detail : 0, click);
+    row_into(item, PAGE_ROW_H);
+    return item;
+}
+
 void page_row_into(void *view, int index, const char *caption, int (*click)(void *, void *)) {
-    void *item = page_row_detail(view, index, caption, 0, click);
-    image_base_set_image(image_create(item, 295, 21, 13, 22), ROW_CHEVRON);
+    page_row_detail_into(view, index, caption, 0, click);
 }
 #endif

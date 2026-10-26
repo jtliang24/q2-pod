@@ -37,6 +37,7 @@ M1PLUS_FUNCTIONS = {
  'notifyPlayMode': ('int', 'void'),
  'dmrSendPlayMode': ('int', 'int'),
  'volume_refresh': ('void', 'void *'),  # the volume dialog shows the output's level
+ 'text_edit_set_select': ('int', 'void *, unsigned, unsigned'),  # the M1 Plus's edit_set_select (patch/m1plus_peq.h)
 }
 WM_PAINT_LEAF_M1PLUS = ('window_manager_paint', 0x677b44, 'ringnav_wm_paint', (0x10800009, 0, 0x8c820088))
 BLUEALSA_SHA = '0a4ffb7cc8207a46a3568440c5f31022b7125befd164e2f1af52537340a9892a'  # the same binary in Q2 V1.32 and M1 Plus V2.1
@@ -879,6 +880,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     release = m1_release[0] if m1_release else VERSION
     header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{release}{f" dev {dev_count}" if dev else ""}"',
                f'#define Q2POD_TAG "{"" if dev else release}"',  # netupdate.c (unported on M1): the release tag, none when --dev
+               '#define Q2POD_REPO "jtliang24/q2-pod"',  # netupdate.c (unported on M1): the repo of its releases
                f'#define Q2POD_UA "Q2Pod/{release} (https://github.com/jtliang24/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
     (out/'stock.h').write_text('\n'.join(header)+'\n')
     ps = compile_payload(out)

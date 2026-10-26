@@ -26,6 +26,9 @@
 #define W_H 0x0c
 #define W_FOCUS 0x24            /* stock focused flag byte (tests) */
 #define IM_WIDGET 0x04 /* input_method_t's editing target, V2.1's input_method_request @0x656308 (V1.32's too) */
+/* the default input method's open keyboard window, 0 once it closes: V2.1's close handler reads it
+ * @0x69430c to close it (V1.32's 0x0c, @0x68bbec) */
+#define IM_KEYBOARD 0x08
 /* V2.1's widget_t has one field fewer before its parent: the block to the vtable is 4 lower (parent
  * window_close and widget_to_global, emitter widget_off_by_func, children layout
  * widget_set_children_layout, vtable widget_get_type 0x70); subclasses still start at 0x78. */
@@ -391,6 +394,9 @@ static inline int arc_out(int r, int y) {
  * second, so a Q2 left dark without Standby stops waking the CPU for nothing. The first key waits
  * at most that; Wake's second press is timed at the screen-off pace. */
 #define DARK_IDLE_SLEEP_MS 250
+/* Stock's player status sync and cover pollers sleep at least this long a turn while ringnav_sleep finds
+ * the player dark and quiet (ringnav_dark_usleep; tools/build.py DARK_POLLS, unported on M1). */
+#define DARK_POLL_US 1000000
 /* Bluetooth absolute volume is read back this often with the screen off and no volume limit to
  * hold, or after the headset refused it (bt_volume_poll); 400 ms otherwise. A headset's own volume
  * keys show on the M1 that late. */
@@ -565,6 +571,11 @@ static inline int arc_out(int r, int y) {
 #define TAGLIB_PROPERTY_FREE 0xb6b0
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
+/* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */
+#define ALBUM_YEAR "max(case when cast(year as text) glob '[1-9][0-9][0-9][0-9]*' then cast(substr(year,1,4) as integer) else 0 end)"
+/* One row per album, as album_cmp tells them apart (coverflow.c; navigation.c's Era). */
+#define ALBUM_GROUP " group by album COLLATE NOCASE," \
+    "ifnull(albumsonger,'') COLLATE NOCASE,case ifnull(albumsonger,'') when '' then rtrim(fileurl,replace(fileurl,'/','')) end"
 /* An artist's albums. V2.1 loads them with this class too: loadAlbumList stores 0xff01 in classinfo_save,
  * then branches to loadLocalClassList (0x4ee930, 0x4ee9a8), where V1.32 loads 0xff11 (ringnav_localclass's
  * artist_tab). */

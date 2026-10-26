@@ -60,6 +60,14 @@ extern int window_manager_dispatch_input_event(void *, void *);
 #ifndef slide_menu_scroll_to_next
 static inline int slide_menu_scroll_to_next(void *w) { (void)w; return 0; }
 #endif
+#if !defined(edit_set_select) && defined(text_edit_set_select)
+/* V2.1 has none: V1.32's, on the edit's text model, which V2.1's edit_set_cursor reads at +0xbc
+ * (0x62a28c; V1.32's +0xc8) */
+static inline int edit_set_select(void *edit, unsigned start, unsigned end) {
+    void *model = edit ? *(void **)((char *)edit + 0xbc) : 0;
+    return model ? text_edit_set_select(model, start, end) : 0x10; /* RET_BAD_PARAMS, as V1.32's */
+}
+#endif
 #ifndef slide_menu_scroll_to_prev
 static inline int slide_menu_scroll_to_prev(void *w) { (void)w; return 0; }
 #endif
