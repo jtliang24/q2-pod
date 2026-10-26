@@ -521,9 +521,14 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   - **The M1 target itself (later).** Once a few syncs have gone cleanly, offer the M1 target upstream.
     The squash-and-split note in [m1plus-integration.md](m1plus-integration.md#decision-finish-on-this-tree)
     covers its history.
-- **Latent Q2 bugs found through M1.** Both were fixed only behind `M1PLUS`, to keep the Q2 build
-  byte-identical (ground rules). Fixing them on the Q2 is a deliberate Q2 change, best made
-  upstream, with a Q2 device check:
+- **Latent Q2 bugs found through M1.** Each was fixed only for M1 (behind `M1PLUS`, or a name with
+  each model's value), to keep the Q2 build byte-identical (ground rules). Fixing them on the Q2 is a
+  deliberate Q2 change, best made upstream, with a Q2 device check:
+  - Edit Playlist's Move Up and Move Down always fail with "Could not save playlist": `ple_mutate`'s
+    temporary id is a HAVING with no GROUP BY, which both firmwares' SQLite 3.19.3 refuses. The M1's
+    `PLE_TEMP_ID_SQL` is a CASE instead ([m1plus-progress.md](m1plus-progress.md) section 47). A pull
+    request with the same CASE is drafted on `fix/playlist-move-sqlite319`, off upstream `main`; the
+    seam goes at the sync after it lands;
   - Long Songs' `taglib_file_new` call passes no `readAudioProperties`, so it reads whatever `$a1`
     holds; when that is 0, every length reads as 0 and is cached as measured;
   - AWTK's hit test doesn't skip hidden views, so the hidden book reader and photo viewer take taps

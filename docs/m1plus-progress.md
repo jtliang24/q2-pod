@@ -1929,6 +1929,30 @@ the pass and back to 1 min after:
   - Ogg/Opus, CUE, WebP and rescans (the card has none).
   - A card app ending as USB storage takes the card.
 
+**On the device**, dev 9 (`V01Bs`, `update.bin` `b59edb5e…`), a testing-only pass over q2remote, Screen
+Off, the volume and the Home cards back to the user's values after:
+- **Passed:**
+  - The three dev 8 fixes: after Go to Album and Go to Artist from Recent, Back shows Recent's own
+    list, and a hold on it reads it; the knob moves the queue panel's rows; Previous closes the queue
+    panel, the ⋯ menu and the Home editor.
+  - The Home editor (a swipe past the last page): its knob works.
+  - The Playlist card opens V2.1's playlist page, and a hold on a playlist's row opens "Editing: tad".
+  - Add Songs ticks rows with V2.1's "selected", and its Search filters. Remove from Playlist works,
+    Done closes, and the playlist holds the result. The test playlist was deleted after.
+- **Found, then fixed:** Move Up and Move Down said "Could not save playlist" (`c5f85c9`).
+  `ple_mutate`'s temporary id came from a HAVING with no GROUP BY. V2.1's libsqlite3 is 3.19.3, as
+  V1.32's is, and refuses that query ("a GROUP BY clause is required before HAVING"). Only SQLite 3.39
+  and later accept it, and the harness runs the host's. On M1, `PLE_TEMP_ID_SQL` is a CASE that gives
+  NULL at the top id, and the harness now refuses HAVING without GROUP BY there, which fails the old
+  query's touch Move Down. The Q2 has the same bug: an upstream pull request is drafted (roadmap
+  section 6).
+- **Not checked:**
+  - `datetime_page`'s knob: Set Time Manually is greyed while Automatic Time Set is on, and the user's
+    setting was left alone.
+  - CD Ripper's pages.
+  - Ogg/Opus, CUE, WebP and rescans (the card has none).
+  - A card app ending as USB storage takes the card.
+
 ## How to check a build now
 
 ```sh
