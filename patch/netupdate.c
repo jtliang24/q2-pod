@@ -566,7 +566,9 @@ static int check(void) {
         m += snprintf(text + m, sizeof text - m, "%s %s\n", sh.next[k].repo, sh.next[k].name);
     if (fresh) mkdir(SH_DIR, 0755), blob_io(SH_LIST, SH_LIST ".tmp", text, m, 1);
     sh.n = n;
-    for (int k = 0; k < n && !sh.cancel; ++k) ok &= !release(&sh.next[k], tag, url, &size);
+    for (int k = 0; k < n && !sh.cancel; ++k)
+        if (!M1PLUS || (strcmp(sh.next[k].id, "rockbox") && strcmp(sh.next[k].id, "themes")))
+            ok &= !release(&sh.next[k], tag, url, &size); /* M1 Plus: no Rockbox rows (sh_rows) */
     return ok;
 }
 
@@ -783,7 +785,8 @@ static void sh_rows(void) {
     int map[SH_MAX + 1] = { 0 }, n = 0;
     for (int i = 0; i < shelf_n; ++i) {
         if (is(i, "themes") && !rockbox_available()) continue;
-        if (M1PLUS && is(i, "rockbox")) continue; /* M1 Plus: no Rockbox for it, and S90play would boot the Q2's */
+        if (M1PLUS && (is(i, "rockbox") || is(i, "themes")))
+            continue; /* M1 Plus: no Rockbox for it, and S90play would boot the Q2's */
         map[n++] = i;
         if (is(i, "spotify") && file_mode(SPOT_DIR) == 0040000) map[n++] = ROW_ERASE;
     }
