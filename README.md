@@ -16,7 +16,7 @@
   <b><a href="https://github.com/jtliang24/q2-pod/releases/latest">Download</a></b> ·
   <b><a href="#install">Install</a></b> ·
   <b><a href="docs/m1plus-changelog.md">Changelog</a></b> ·
-  <b><a href="docs/m1plus-roadmap.md">Roadmap</a></b>
+  <b><a href="docs/m1plus-unported.md">Not ported yet</a></b>
 </p>
 
 > [!NOTE]
@@ -52,7 +52,7 @@ The fork follows upstream by merging each of its release tags.
 - **Battery:** Standby Limit powers the player off after a long Standby.
 
 Not on the M1 Plus yet: the iPod UI, Network Update, Streaming's Configuration, Games and the extra time zones.
-The [roadmap](docs/m1plus-roadmap.md) has what is planned.
+[m1plus-unported.md](docs/m1plus-unported.md) lists each one and whether it is planned.
 
 ## Install
 
@@ -93,7 +93,7 @@ byte-identical to upstream's.
 
 - [Building](docs/building.md): `nix develop -c python3 tools/build.py "<M1 Plus Firmware V2.1.zip>" --out <fresh dir>`
 - [The M1 Plus port](docs/m1plus.md): the hardware, the firmware's layout and how the port works
-- [Syncing with upstream](docs/m1plus-sync.md) · [Releasing](docs/m1plus-releasing.md) · [Roadmap](docs/m1plus-roadmap.md) · [Progress log](docs/m1plus-progress.md)
+- [Syncing with upstream](docs/m1plus-sync.md) · [Releasing](docs/m1plus-releasing.md) · [Roadmap](docs/m1plus-roadmap.md) · [Unported features](docs/m1plus-unported.md) · [Progress log](docs/m1plus-progress.md)
 - [Remote control (dev builds)](docs/remote.md) · [Internals](docs/internals.md)
 
 ## Credits and license
