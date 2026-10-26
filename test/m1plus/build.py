@@ -120,7 +120,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     helpers and init scripts, bluealsa, the watchdog and hciplayer."""
     import hashlib, pathlib, re, struct, subprocess, tarfile, tempfile
     from build import (sha, run, fileoff, segments, symbols, ROOT, TAG_C, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK,
-                       REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG,
+                       REMOTE, REMOTE_HOOK, LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, RTC_WRITE, LOCK_CLOCK_12H, WATCHDOG,
                        WATCHDOG_SLEEP, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, AAC_44K1, STOCK_EQ)
     import build as q2, m1plus as m1, peq
     m1plus = manifest.get('model') == 'Shanling M1 Plus'  # upstream's Q2 manifest has no model
@@ -158,6 +158,8 @@ def shared_checks(directory, manifest, stock, demo, read):
         assert sha(remote) == manifest['q2remote_sha256'] and remote[:4] == b'\x7fELF'
         assert remote[36:40] == helper[36:40]
         expected_start = expected_start.replace(*REMOTE_HOOK)
+        if not m1plus:  # M1 Plus: demo's output isn't kept (LOG_HOOK, m1plus-unported.md)
+            expected_start = expected_start.replace(*LOG_HOOK)
     else:
         assert 'q2remote_sha256' not in manifest
         assert not (directory/'q2remote').exists()
@@ -197,10 +199,12 @@ def shared_checks(directory, manifest, stock, demo, read):
     # The crash watchdog only sleeps longer.
     old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
     assert new == old.replace(*WATCHDOG_SLEEP) and new != old
-    # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates
-    # and the ID3v2 walker calls, now id3_gain (MP3 ReplayGain); each model's at its own addresses.
+    # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates,
+    # the ID3v2 walker calls, now id3_gain (MP3 ReplayGain), and the Q2's pause loop's sleep (PAUSE_SLEEP,
+    # unported on M1); each model's at its own addresses.
     old, new = read('stock.squashfs', 'usr/bin/hciplayer'), read('rootfs.squashfs', 'usr/bin/hciplayer')
-    profile = m1.PLAYER_PROFILE if m1plus else dict(vbr_scan=peq.VBR_SCAN, eq_rate_gates=peq.EQ_RATE_GATES, id3_calls=peq.ID3_CALLS)
+    profile = m1.PLAYER_PROFILE if m1plus else dict(vbr_scan=peq.VBR_SCAN, eq_rate_gates=(*peq.EQ_RATE_GATES, peq.PAUSE_SLEEP),
+                                                    id3_calls=peq.ID3_CALLS)
     assert manifest['peq']['stock_sha256'] == sha(old) and manifest['peq']['sha256'] == sha(new)
     assert (directory/'peq'/'stock-hciplayer').read_bytes() == old
     text = re.search(r'\.text +PROGBITS +[0-9a-f]+ ([0-9a-f]+) ([0-9a-f]+) ', run('readelf', '-SW', directory/'peq'/'stock-hciplayer'))
@@ -542,8 +546,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
 
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
-    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, WHEEL_TS_READ, PDR
-    from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
+    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLLS, DARK_POLLS, WHEEL_TS_READ, PDR
+    from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, BIGCOVER, BC_ART, BC_TITLE_PAD, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_TOUCH, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
                       STATUS_ICONS, status_icon, QUIET_ICONS, quiet_icon, SET_ICON, SET_STOCK_ICON, SETTINGS_ICONS, SETTINGS_SLIDERS, decode, slider_plain, imagemagick, inc, png_header, settings_icon, walk,
@@ -590,7 +594,15 @@ def validate_assets(directory):
     assert demo[off:off+8] == j(symbols(directory/'patch.elf')[WM_PAINT_LEAF[2]]).to_bytes(4, 'little') + bytes(4)
     changed = manifest['changed_assets']
     xx = 'release/assets/default/raw/images/xx/'
-    assert set(changed) == {'release/assets/default/raw/ui/'+p for p in (UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])} | {
+    # Every stock UI asset with Chinese text is given in English (english_ui), the edited ones after their edit.
+    from build import CJK, english_ui
+    ui = 'release/assets/default/raw/ui/'
+    chinese = {l.removeprefix('squashfs-root/'+ui) for l in run('unsquashfs', '-l', directory/'stock.squashfs').splitlines()
+               if l.startswith('squashfs-root/'+ui) and l.endswith('.bin') and l.removeprefix('squashfs-root/') not in STOCK_EQ}
+    chinese = {rel for rel in chinese if CJK.search(read('stock.squashfs', ui+rel).decode('utf-8', 'replace'))}
+    assert chinese and {'testmode/test_key.bin', 'kb_default_t9.bin', 'dialog/search_dialog.bin'} <= chinese
+    patched_ui = set(UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])
+    assert set(changed) == {ui+p for p in patched_ui | chinese} | {
         'release/assets/default/raw/styles/'+p for p in (AUDIT['styles'] if ipod else [])} | {
         xx+n for n in (SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS | ART_PLACEHOLDERS if ipod else [])} | {'release/assets/default/raw/strings/en_US.bin', FONT, TAG_C}
     master = (ROOT/'assets/icons/default_album_home.png').read_bytes()
@@ -771,7 +783,12 @@ def validate_assets(directory):
             else: assert name in SETTINGS_ICONS and new==settings_icon(name,original)
             continue
         short = rel.split('/raw/ui/')[1]
-        assert new == patch_asset(short, original, ipod), short
+        edited = patch_asset(short, original, ipod) if short in patched_ui else original
+        assert new == (english_ui(short, edited) if short in chinese else edited), short
+        if short not in patched_ui:
+            continue
+        if short in chinese:  # the checks below are of the edits: compare with stock given in English
+            original = english_ui(short, original)
         if short == 'dialog/addplaylist_dialog.bin':
             expected = decode(original)
             expected[3][0][3][0][2]['sensitive'] = 'true'
@@ -792,10 +809,11 @@ def validate_assets(directory):
             assert root == plain
             continue
         # iPod: browsing, settings and the PEQ editor slide; Home, Now Playing, the bar and dialogs don't.
-        slides = ipod and short not in (HOME_PAGE, STATUS_BAR, PLAYING_PAGE, QUICK_SETTINGS, CONFIRM)
+        slides = ipod and short not in (HOME_PAGE, STATUS_BAR, PLAYING_PAGE, QUICK_SETTINGS, CONFIRM, BIGCOVER)
         assert root[2].get('anim_hint') == (SLIDE if slides else None), short
         if ipod:  # screen coordinates: the bar, full-screen dialogs (quick settings slides down from -320), windows
-            origin, window = {STATUS_BAR: (0, (0, 30)), QUICK_SETTINGS: (320, (0, 320)), CONFIRM: (0, (0, 320))}.get(short, (30, (30, 320)))
+            origin, window = {STATUS_BAR: (0, (0, 30)), QUICK_SETTINGS: (320, (0, 320)), CONFIRM: (0, (0, 320)),
+                              BIGCOVER: (0, (0, 320))}.get(short, (30, (30, 320)))
             corners(short, root, 0, origin, window)
         if short == QUICK_SETTINGS:  # iPod only: the stock 4x2 grid, even label areas, a slim brightness track
             menu, light = root[3]
@@ -822,6 +840,16 @@ def validate_assets(directory):
             assert [n[0] for n in root[3]] == ['button', 'button'] and [n[2]['name'] for n in root[3]] == ['img_cancel', 'img_enter']
             assert cancel[1] == [0, 208, 375, 48] and enter[1] == [0, 256, 375, 48] and enter[1][1] + enter[1][3] <= 320
             assert [n[2]['text'] for n in root[3]] == ['Cancel', 'OK']
+            continue
+        if short == BIGCOVER:  # iPod only: a centred square of art clear of the glass (corners above), the name on its foot
+            art, shade, title = root[3]
+            x, y = (375 - BC_ART) // 2, (320 - BC_ART) // 2
+            assert root[2] == decode(original)[2] and art[2]['image'] == 'default_bigcover' and art[2]['draw_type'] == 'scale_auto'
+            assert art[1] == [x, y, BC_ART, BC_ART] and art[2]['self_layout'] == f'default(x={x},y={y},w={BC_ART},h={BC_ART})'
+            assert abs((375 - x - BC_ART) - x) <= 1 and 320 - y - BC_ART == y and BC_ART > 280  # centred, and still most of the height
+            assert (375 - BC_ART - 2) // 2 < corner_x((320 - BC_ART - 2) // 2, BC_ART + 2)  # the largest that clears
+            assert shade[1] == [x, y + BC_ART - 50, BC_ART, 50] and shade[2] == decode(original)[3][1][2]
+            assert title[1] == [x + BC_TITLE_PAD, y + BC_ART - 50 + 11, BC_ART - 2 * BC_TITLE_PAD, 28] and title[2] == decode(original)[3][2][2]
             continue
         if short == HOME_PAGE and not ipod:  # only the Coverflow card is added
             cards = [n[2]['name'] for n in root[3][0][3]]
@@ -897,11 +925,12 @@ def validate_assets(directory):
             assert [n[2]['name'] for n in album] == ['img_cover', 'img_playstate', 'scrlabel_title', 'scrlabel_artist', 'label_ipod_album',
                                                      'img_playmode', 'img_fav']
             # 16px outer margins, 12px from the art to the text, the text column 165px wide; the title larger.
-            # Order and favourite at the page's foot; favourite centred below More.
-            assert [n[1] for n in album] == [[16, 10, 166, 166], [39, 33, 120, 120], [194, 31, 165, 28], [194, 65, 165, 22], [194, 93, 165, 22],
-                                             [247, 136, 50, 50], [303, 136, 50, 50]]
+            # Order and favourite level with the art's foot; favourite centred below More. The art's gap to
+            # the dots below (y 182) matches its gap to "3 of 12"'s text above.
+            assert [n[1] for n in album] == [[16, 2, 166, 166], [39, 25, 120, 120], [194, 18, 165, 28], [194, 52, 165, 22], [194, 80, 165, 22],
+                                             [247, 118, 50, 50], [303, 118, 50, 50]]
             assert album[-1][1][0] == named['img_more'][1][0] and album[-1][1][2] == named['img_more'][1][2] == 50
-            assert album[-1][1][0] - (album[-2][1][0] + album[-2][1][2]) == 6 and 93 + 22 < 136 + 13
+            assert album[-1][1][0] - (album[-2][1][0] + album[-2][1][2]) == 6 and 80 + 22 < 118 + 13
             assert album[1][2]['opacity'] == '0'  # playback gestures retain their original target
             assert album[2][2]['style:normal:font_size'] == '22' and album[3][2]['style:normal:font_size'] == '18'
             for node, color in ((album[3], '#CCCCCC'), (album[4], '#BBBBBB')):

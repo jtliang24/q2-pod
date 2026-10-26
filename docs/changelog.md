@@ -1,5 +1,57 @@
 # Changelog
 
+- **1.4.5**:
+  - Buttons Lock works with the lock screen on again. 1.4.4 changed how the screen wakes to the lock screen, and with the lock screen on the locked buttons could act after the screen turned off. That change is gone: the screen wakes as it did in 1.4.3, the page you left shows for a moment, then the lock screen.
+  - Snake: with the pause menu open the wheel picks Continue or Quit, as Previous and Next do. In play the wheel still does nothing.
+  - iPod: Now Playing's lyrics no longer lose their last letters on the right when a line nearly fills the width.
+  - Battery: the player wakes the processor far less often in the background. Shanling's Baidu and Tidal streaming helpers checked for work 100 times a second each from power-on, whatever the Q2 was doing; they now check 5 times a second, so a Tidal stream can take up to 0.2 s longer to start. A paused track checks for Play 20 times a second instead of 50. With the screen off and nothing playing, the player's status check and the album art loaders run once a second.
+  - Videos: starting a video while Spotify plays pauses Spotify first, so the video has sound.
+  - Spotify: the pairing screen stops asking every 2 s while the screen is off or another page covers it.
+  - Tidal Downloads: **Clear All Downloads** also stops the download in progress instead of letting it finish into a deleted file.
+  - iPod: Now Playing's scrolling album name stops while the screen is off or another page covers Now Playing.
+  - iPod: dragging a list with a finger no longer redraws the whole screen on every move.
+- **1.4.4**:
+  - Search boxes and text fields (Internet Radio, Spotify and card-app search, Advanced EQ's Frequency, Q and preset name): **Return** with the keyboard up closes the keyboard and leaves the box as it was, instead of crashing the player; the next Return goes back. The EQ's number keys open on the keyboard that is showing, every time.
+  - Advanced EQ: the Frequency, Q and preset-name fields sit at the top of the screen, above the keyboard, so what you type shows and is kept. They used to sit under the keyboard, which hid the typing and lost it. The row below names the field; Centre on it opens the keyboard.
+  - Advanced EQ: reopen the keyboard even when the value field kept focus after Done, and detach it before replacing the field.
+  - Era: bound SQLite cache memory while counting the entire library, including libraries above 20,000 songs.
+  - Advanced EQ: Q and Frequency accept typed decimals and zero digits without the stock numeric editor rewriting the entry. Completed values keep the EQ limits (Q 0.1–10; Frequency 20–20,000 Hz).
+  - Advanced EQ: imported presets play the preamp written in their file instead of Auto. Switching a saved preset's preamp to Auto (or another value) is kept with that preset; the file on the card is not changed. Presets imported before stay on Auto until imported again.
+  - Era and Coverflow year sorting use the year from full-date tags such as `20220510`, so these albums appear under **2020s**.
+  - Lock screen: with a lock screen picture set, turning the screen on goes straight to the lock screen. It used to show the page you left for a moment, then a black screen, before the lock screen appeared.
+  - Streaming: **Configuration** lists the services under a **Show in Streaming** caption, each with a tick. Untick the ones you don't use to hide them from Streaming; tick them again to bring them back.
+  - System settings: Wireless and Network come first, and **Apps** is now **App Store**, its page titled **Q2 App Store**. System settings and Playback drop their section headings; the rows keep their order.
+  - Cover Flow: the rated albums' **Sort** card (**Library → Ratings → Albums**) adds **Most Played**, after Year, as Display's Coverflow Sort has.
+  - Quick Settings: a swipe down while the player is still starting could leave Quick Settings open but not shown, so the wheel changed the volume or brightness on Home. The next wheel turn or button press now closes it and Home takes the wheel again.
+  - Set date and time: **Next** and **Previous** move between the fields and OK, as Centre moves on (the sleep timer's fields too). OK, pressed with Centre or tapped, sets the clock and goes back to the Time settings.
+  - iPod: Now Playing's art sits higher, clear of the page dots, and the shuffle and heart buttons line up with its bottom edge. Spotify's and Internet Radio's art moves up to match.
+  - Streaming's **Configuration** row has a new icon. The old globe looked frayed at the row's size.
+  - Holding **Play/Pause** (queue menu, radio favourite, Spotify's Add to Queue, card-app downloads) takes 0.7 s instead of 1 s. Holding Centre or Return still takes 1 s.
+  - System settings and Playback: on/off settings use switches.
+  - iPod: the status bar's EQ icon no longer flashes in the play icon's place while Spotify, Internet Radio or a video plays.
+  - Spotify: **Downloads** has **Downloaded Playlists** (each playlist under its own name, its tracks in the playlist's order), **Downloaded Tracks**, **Download Progress** (with Pause, Resume and Retry Failed) and **Storage Management** (remove playlists or tracks, or clear all downloads; your login stays). **Liked Songs** can be downloaded too. When Spotify limits downloads, they wait and carry on instead of failing. Needs q2-librespot v1.10 from the App Store.
+  - Snake: the side **Previous** and **Next** buttons turn; the wheel no longer does.
+  - Adding to Favourites, Play Next, Add to Queue and ratings no longer show a message when they work; a message shows only when one fails.
+  - Rows that open a page show the **>** arrow everywhere: Spotify, card apps, Era, Books, the EQ, and on Legacy every list page. On/off rows in Streaming's **Configuration**, the EQ (**Enabled**, a band's **Band**) and Spotify's **Shuffle** are switches.
+  - Tidal Downloads: **Clear All Downloads…** at the end of the list removes every downloaded Tidal track after asking, as Spotify's does. Your Tidal settings stay.
+
+- **1.4.3**:
+  - Spotify: holding **Play/Pause** on a playlist in a list downloads it, as its Download Playlist row does.
+  - Games: **Snake**. Turn with the wheel, one click left or right, or with Previous/Next. Each apple adds length and a little speed, and the best score is kept.
+  - Library: **Era**, after Genre, lists each decade with dated albums, oldest first. A decade has **Play All**, **Shuffle** and its albums by year, each with its artist and year; an album opens its tracks in Cover Flow.
+  - Cover Flow: with **Artists** set to Album Artist, a compilation shows its album artist ("Various Artists", or whoever compiled it) under the cover, not the artist of its last track; sorting by Artist uses the same name.
+  - Go to Album from a song played in Cover Flow, or with **Artist Albums** set to Coverflow, opens the album's tracks in Cover Flow, as Go to Artist opens the artist's covers. Return goes back to where you were.
+  - **System settings → Apps** lists its apps from a list it fetches over Wi-Fi and keeps on the card, so the firmware no longer names any app beyond its own. Besides Rockbox, its themes and Spotify, the list holds card apps from their own GitHub releases, which keep their saved settings over an update. Once on the card each gets a row in **Streaming**, and one with a phone page opens a QR code to scan. Plugging in USB storage stops them and they start again after.
+  - Library: titles, artists and albums with accented letters (Lo que la música me enseñó, Café, Ölüdeniz) show as tagged instead of as Chinese characters, in FLAC, MP3 and every other format, and in CUE sheets. Chinese tags and CUE sheets saved in GBK still show in Chinese. Run **Library → Update Local Music** once to read the tags again.
+  - English throughout: Search's tabs, Now Playing's info labels, Quick Settings, About's **Certification** row and the other pages that showed Chinese text are in English; the keyboard's Chinese input page is gone (its key switches between lower and upper case), and **Baidu Netdisk** is off Streaming.
+  - Coverflow: the **Sort** and **Refresh library** tiles after the last album are gone; **System settings → Display → Coverflow Sort** and **Refresh Coverflow** do the same, applied the next time Coverflow opens.
+  - Card apps: **More…** pages on through long lists (Deezer's Albums showed the second page again from the third on).
+  - Deezer's **Stream** mode: a pressed song plays straight away, the rest of its list after it, without filling the library (needs q2-deezer v3.3).
+  - Lyrics: embedded lyrics in LRC form (a `[01:03.01]` stamp a line, as q2-deezer v3.3 embeds them) show in time on Now Playing.
+  - Library: **Update Local Music** skips hidden folders (apps' caches).
+  - EQ: Advanced's band **Q** takes a typed value with a decimal point. Opening the keyboard on **Q** or **Frequency** selects the value, so the first key replaces it instead of adding to it.
+  - iPod: the full-screen art (a tap on Now Playing's cover) shows the whole cover, centred and rounded, instead of filling the screen's height with its corners hidden under the screen's rounded glass; the song name sits on the cover's foot.
+
 - **1.4.2**:
   - Gapless albums no longer have a short gap between FLAC and WAV tracks. The cause was the MQA check at the start of every track. **Audio settings → MQA**, after DSD Output, turns MQA decoding back on. It is off by default, and MQA files play as ordinary FLAC while it's off.
   - System settings: **Apps** comes before **System Update**.

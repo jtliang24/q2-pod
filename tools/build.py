@@ -8,7 +8,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 ZIP_SHA = '154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00'
 DEMO_SHA = '2c5f06142850b4fc168f82b44a81550cce0a5b4b9fe1c179dced4a08a3049138'
 Q2_TAR_SHA = '0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1'  # the update.tar in the ZIP, alone
-VERSION = '1.4.2'  # major.minor.patch, single digits, shown as is (About and release tag)
+VERSION = '1.4.5'  # major.minor.patch, single digits, shown as is (About and release tag)
+REPO = 'DiamondBond/q2-pod'  # whose releases Network Update fetches (--update-repo) and release.py publishes
 # The updater's identity (firmware_v20.info and demo's version literal) must be 5 characters and
 # differ from the installed one, so it packs the digits: 1.0.1 is V101I. About shows the stock
 # firmware version and a CFW. Version row with VERSION and the edition instead (ringnav_about).
@@ -127,6 +128,8 @@ HOOKS = {
 IPOD_HOOKS = {'playlist_rebuild': (0x4b2dac, 'ringnav_playlist', 'playlist'),
               'widget_on_paint_background': (0x65c77c, 'ringnav_paint_bg', 'paint_bg'),
               'bigcover_page_init': (0x5200ec, 'ringnav_bigcover', 'bigcover'),
+              # Status bar's 1 s tick: the payload's play state, before any paint (navigation.c bar_sync)
+              'systembar_showface': (0x52f610, 'ringnav_showface', 'showface'),
               'style_get_color': (0x649f6c, 'ringnav_style_color', 'color'),
               'image_manager_add': (0x6445d4, 'ringnav_image_add', 'image'),
               # Song rows: no format badge (navigation.c ringnav_badge)
@@ -190,6 +193,11 @@ LOGO_HOOK = (b'   \tdisplay_logo /release/assets/default/raw/images/xx/logo.jpg\
              b'   \tl=/mnt/data/boot-logo.jpg; [ -f $l ] || l=/release/assets/default/raw/images/xx/logo.jpg; display_logo $l\n')
 REMOTE_HOOK = (b'/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf\n',
                b'/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf\n/usr/bin/q2remote &\n')
+# --dev only (docs/remote.md#log): demo's console output, and hciplayer's, which inherits it, in RAM, so
+# emptied once a minute past 4 MB (O_APPEND keeps demo writing at its end). In BOOT_HOOK's start path.
+LOG_HOOK = (b'        while :; do\n            /release/bin/demo\n',
+            b'        (while sleep 60; do n=$(wc -c 2>/dev/null </tmp/q2-demo.log); [ "${n:-0}" -gt 4000000 ] && : >/tmp/q2-demo.log; done) &\n'
+            b'        while :; do\n            /release/bin/demo >>/tmp/q2-demo.log 2>&1\n')
 # The byte in bluealsa's AAC capability holding the 44.1 kHz bit; see docs/internals.md.
 BLUEALSA = 'usr/bin/bluealsa'
 # Its launcher: keep the A2DP transport open 5 s after hciplayer closes the PCM between songs, so
@@ -231,6 +239,12 @@ SHUFFLE_CALL = (0x5addf0, 0x0411e8cb)  # bal mcl_shuffle_pick; its delay slot (a
 # Hold Return: only on_wm_keylong_fun's final Home call (bal) changes; all stock gates and its release
 # guard precede it. It becomes jal compact_now_playing (docs/ipod.md#hold-return).
 HOLD_RETURN = (0x4e8924, 0x04110fdf)
+# Hold Play/Pause: input_device_status' long press is 1000 ms for every key but 232 (unused on the Q2), which
+# gets 500. The key-down's timer interval and the callback's threshold both move that case to Play/Pause (171)
+# at PLAY_HOLD_MS; Centre and Return keep 1000 (docs/internals.md#queue-menu).
+PLAY_HOLD_MS = 700
+PLAY_HOLD = ((0x6a007c, 0x240201f4, 0x24020000 | PLAY_HOLD_MS), (0x6a008c, 0x3a7300e8, 0x3a7300ab),
+             (0x6a0404, 0x240401f4, 0x24040000 | PLAY_HOLD_MS), (0x6a0408, 0x384200e8, 0x384200ab))
 # device_standby's bal awake_screen after the resume from Standby becomes li $v0, 1: the screen stays dark,
 # so the resuming key acts as it does dark (Play plays, centre wakes).
 STANDBY_WAKE = (0x4f7d24, 0x0411ff26, 0x24020001)
@@ -266,6 +280,20 @@ GRID_COVER = ((0x4edf1c, 0x4edf18, 'coverflow_album_cover'), (0x4ef018, 0x4ef008
 SCAN_REFRESH = (0x5c981c, 0x0411fd88)  # toolsLoadAllFile's existing-song check, folder scans only
 AUDIO_EXTENSION_CALLS = (0x5c2054, 0x5c3da4)  # toolsLoadDirectory and recursive scan
 SORT_TRIMS = (0x5b9e38, 0x5b9ea4, 0x5ba750, 0x5ba7bc)
+# Tag text as tagged (docs/internals.md#tag-text): toolsFixId3ErrorCode (0x5c5cf8), which toolsGetMusicInfo
+# runs on each of its six fields, took any field whose every character TagLib decoded below U+0100 ("Lo que
+# la música me enseñó") for GBK bytes when they went to UTF-8 and back unchanged, and showed it in Chinese
+# ("m" + 鷖...). That round trip's strcmp (jalr, with the round trip's copy in its delay slot) becomes jal
+# ringnav_gbk_tag, which also asks that the bytes read as GBK; otherwise TagLib's UTF-8 copy is kept.
+TAG_TEXT = (0x5c5e7c, 0x0320f809)
+# The CUE sheet parser (the unnamed function after toolsFreeStSongInfo) ran each field through the same
+# toolsIconvConvert(field, "utf-8", "gbk"); its seven bal become jal ringnav_cue_text.
+CUE_TEXT = (0x5c06d0, 0x5c0794, 0x5c084c, 0x5c0908, 0x5c0bc8, 0x5c0f84, 0x5c130c)
+# The library scan's folder walk (the unnamed recursive function toolsLoadAllFile runs, 0x5c3b64) skips
+# ".", "..", .LOST.DIR, lost+found and the like by name; its first strcmp (jalr, with "." in its delay
+# slot) becomes jal ringnav_scan_dir, which skips every hidden folder, as Folder view's list does: a card
+# app's own (q2-deezer's stream cache) never joins the Library.
+SCAN_DIRS = (0x5c3c0c, 0x0320f809)
 # toolsLoadAllFile stops a scan at 20,000 songs: lw $2,count; slti $2,$2,0x4e20 before each entry. 65,000
 # overflows slti's signed immediate, so the lw becomes jal ringnav_scan_room and the slti loads the count
 # into a0 in its delay slot; the bnez after it, and its delay slot's stop-flag load, stay.
@@ -300,6 +328,14 @@ LDAC_HQ = ((0x4f033c, 0x00042080, 0x00041880),   # sll $3,$4,2
 # check_mem_thd (platform_init's detached thread) returns NULL on entry: it never opens drop_caches,
 # writes 3 to it or wakes each second. lui/addiu $gp -> jr $ra; move $v0,$zero.
 DROP_CACHES = ((0x512050, 0x3c1c0051, 0x03e00008), (0x512054, 0x279c4c70, 0x00001025))
+# Two threads started at boot poll a start flag with usleep(10000) for the life of the player: Baidu
+# Pan's (baidu_pthread_playurl) and Tidal's URL worker (static, after tidalGetFavoritesIdsThd), 200
+# wakes a second between them, dark or not. li $4,10000 -> lui $4,3: 196 ms, a stream starts that much later.
+STREAM_POLLS = ((0x47f828, 0x24042710, 0x3c040003), (0x486408, 0x24042710, 0x3c040003))
+# The jalr usleep (lw $t9,-0x59c($gp)) of mclSyncPlayerStatus' 200 ms loop, parse_albumcovertask_thd's 50 ms
+# and player_parsecover_thd's 100 ms wait becomes jal ringnav_dark_usleep (its argument set in the delay
+# slot): at least DARK_POLL_US while ringnav_sleep finds the Q2 dark, quiet and the DAC off, else stock's.
+DARK_POLLS = (0x5a958c, 0x4edbe0, 0x512fac)
 # The encoder thread's ts_read call (jalr $t9) becomes jal ringnav_ts_read, which makes the wheel's
 # ticks from the samples (playback.c wheel_sample).
 WHEEL_TS_READ = (0x625b6c, 0x0320f809)
@@ -333,6 +369,7 @@ LABELS = tuple((k.encode(), o.encode(), n.encode()) for k, o, n in (
     ('screenlock_info3', '3.Maximum of 5 images in folder.', '3. Up to 5 pictures.'),
     ('about_sn', 'Serial number', 'Serial Number'), ('about_version', 'FW. Version', 'Version'),
     ('list_baidu', 'Baidu Netdisk(BETA)', 'Baidu Netdisk'), ('msg_poweroff', 'Confirm Shutdown?', 'Shut Down?'),
+    ('system_prove', '技术证明', 'Certification'),  # About's regulatory row, Chinese in stock's English
     ('genre', 'Genres', 'Genre'), ('player_era', 'Era', 'Year'), ('batch_addplaylist', 'Add to playlist', 'Add to Playlist'),
     ('scan_startscan', 'Scanning', 'Scan')))  # Scan specified folders' button; wifi_scan keeps its "Scanning"
 
@@ -468,6 +505,61 @@ def patch_web(path, data):
         text = text.replace(old, new)
     check(not re.search('[　-鿿＀-￯]', text), f'Chinese left in {path}')
     return text.encode()
+
+# Stock's UI assets carry Chinese text (docs/internals.md#english), most of it designers' placeholders that
+# stock replaces, but some shows through in every language (Search's tabs, Now Playing's info labels, Folder's
+# title, Quick Settings' row names, the test-mode pages). Every Chinese text in them is given in English
+# (english_ui); a per-asset entry wins over the shared one. The T9 keyboard's EN key opened its Chinese
+# pinyin page: it toggles case instead (ABC on the lowercase page, abc on the capitals), so that page is
+# never reached, and its 《》 key types «».
+CJK = re.compile('[\u3000-\u9fff\uff00-\uffef]')
+ENGLISH = {
+    '文件夹': 'Folder', '正在播放': 'Now Playing', '本地音乐': 'Library', '更多': 'More', 'AB复读': 'A-B Repeat',
+    '倍速': 'Speed', '*仅对含48KHz以下有效': '*Only for 48 kHz and below', '无歌词': 'No lyrics', '专辑': 'Album',
+    '风格': 'Genre', '大小': 'Size', '年代': 'Year', '编码': 'Format', '位深': 'Bit Depth', '比特率': 'Bit Rate',
+    '采样率': 'Sample Rate', '位置': 'Location', '流媒体': 'Streaming', '自动扫描音乐': 'Auto Scan',
+    '立即更新曲库': 'Update Library Now', '指定文件夹扫描': 'Scan Folders', '确认': 'OK', '确定': 'OK',
+    '取消': 'Cancel', '单曲': 'Songs', '歌手': 'Artists', '蓝牙': 'Bluetooth', '按键锁': 'Key Lock',
+    '低增益': 'Low Gain', 'USB存储': 'USB Storage', '播放设置': 'Playback', '设置': 'Settings',
+    '自定义': 'Custom', '重置': 'Reset', '在浏览器输入以下网址:': 'Open this address in a browser:',
+    '下载中': 'Downloading', '已下载': 'Downloaded', '百度网盘': 'Baidu Netdisk', '退出登录': 'Sign Out',
+    '登录': 'Sign In', '请使用百度网盘或百度App扫码登录': 'Scan with the Baidu app to sign in',
+    '百度加密技术保护您的隐私安全': 'Baidu encryption protects your privacy',
+    '蓝牙定频测试,请操作电脑连接': 'Bluetooth RF test: connect from a computer', '按下一曲退出': 'Press Next to exit',
+    '亮度测试': 'Brightness Test', '下一步': 'Next', '蓝牙测试': 'Bluetooth Test', '右': 'Right', '左': 'Left',
+    '下': 'Down', '上': 'Up', '左滑': 'Swipe Left', '右滑': 'Swipe Right', '按键测试': 'Key Test',
+    '耳机输出测试': 'Headphone Test', '请插单端耳机': 'Plug in single-ended headphones',
+    '播放(男左女右)': 'Play (left male, right female)', '蓝牙接收测试': 'Bluetooth Receiver Test', '完成': 'Done',
+    '电池检测': 'Battery Test', '当前电量：': 'Battery:', '充电状态：': 'Charging:', 'TF测试': 'microSD Test',
+    '触摸测试': 'Touch Test', 'wifi测试': 'Wi-Fi Test', '太阳之子': 'Album', '周杰伦': 'Artist',
+    '播放全部': 'Play All', '导入歌单': 'Import Playlists', '导出歌单': 'Export Playlists', '测试歌单': 'Playlist',
+    '共0首': '0 songs',
+}
+ENGLISH_IN = {'testmode/test_key.bin': {'中': 'Centre'}, 'kb_default_t9.bin': {'中': 'abc', '《》': '«»'},
+              'dialog/search_dialog.bin': {'专辑': 'Albums', '风格': 'Genres'},
+              'systemset/screensaver_about.bin': {}}
+
+def english_ui(rel, data):
+    """rel's widgets' Chinese text in English, and the T9 keyboard's Chinese page out of reach."""
+    from ipod import decode, encode, walk
+    root = decode(data)
+    check(encode(root) == data, f'{rel}: UI round trip differs')
+    upper = {id(n) for page in walk(root) if page[2].get('name') == 'upper' for n in walk(page)}
+    for n in walk(root):
+        props = n[2]
+        if rel == 'kb_default_t9.bin' and props.get('name') == 'page:chinese':  # EN: the case toggle
+            props['name'], props['text'] = ('page:lower', 'abc') if id(n) in upper else ('page:upper', 'ABC')
+        if rel == 'kb_default_t9.bin' and props.get('name') == 'opt:《》':
+            props['name'] = 'opt:«»'
+        text = props.get('text', '')
+        if not CJK.search(text):
+            continue
+        if rel == 'systemset/screensaver_about.bin':  # Polish, with a full-width comma
+            props['text'] = text.replace('，', ', ')
+        else:
+            props['text'] = ENGLISH_IN.get(rel, {}).get(text) or ENGLISH[text]
+    check(not any(CJK.search(n[2].get('text', '')) for n in walk(root)), f'Chinese left in {rel}')
+    return encode(root)
 
 # The stock font (Arial merged with a CJK font) gives curly quotes the CJK em advance, a wide gap
 # inside words wherever a tag has one; its cmaps map them to the straight glyphs instead. Its hearts
@@ -678,6 +770,7 @@ FUNCTIONS = {
  'widget_set_prop_int': ('int', 'void *, const char *, int'),
  'widget_set_prop_str': ('int', 'void *, const char *, const char *'),
  'pages_set_active_by_name': ('int', 'void *, const char *'),
+ 'edit_set_select': ('int', 'void *, unsigned, unsigned'),
  'widget_invalidate_force': ('int', 'void *, void *'),
  'widget_animator_start': ('int', 'void *'),
  'widget_animator_prop_create': ('void *', 'void *, unsigned, unsigned, int, const char *'),  # Home's Settings slide
@@ -734,6 +827,7 @@ FUNCTIONS = {
  'table_client_scroll_to': ('int', 'void *, int'),
  'scroll_view_scroll_delta_to': ('int', 'void *, int, int, int'),
  'widget_destroy_children': ('int', 'void *'),
+ 'widget_destroy': ('int', 'void *'),  # Streaming's Baidu Netdisk row (navigation.c ringnav_stream)
  'list_item_create': ('void *', 'void *, int, int, int, int'),
  'hscroll_label_create': ('void *', 'void *, int, int, int, int'),
  'set_hscroll_label_attribute': ('void', 'void *'),
@@ -940,7 +1034,7 @@ CONTEXT_DATA = {'bt_showcoding': 4, 'g_memory_info': 3476, 'g_folder_path': 1024
                 'g_screensaver_picture': 256, 'p_deque_screensaverlist': 4,
                 'bt_connectstatus': 4}  # a link thread runs (1), ended (2), checked (3)
 # Windows the payload creates at runtime (window_create), so no rootfs asset names them.
-PAYLOAD_WINDOWS = {'playlistedit_page', 'chapters_page', 'coverflow_page', 'photos_page', 'books_page', 'games_page', 'mostplayed_page', 'shuffle_page', 'upnext_page', 'ratings_page', 'rated_page', 'longsongs_page', 'spotify_page',
+PAYLOAD_WINDOWS = {'playlistedit_page', 'chapters_page', 'coverflow_page', 'photos_page', 'books_page', 'games_page', 'mostplayed_page', 'shuffle_page', 'upnext_page', 'ratings_page', 'era_page', 'era_albums_page', 'rated_page', 'longsongs_page', 'spotify_page',
                    'spotbrowse_page', 'radio_page', 'radionp_page', 'streamconf_page', 'tidal_downloads', 'apps_page',
                    'addon_page', 'app_songs', 'qrcode_page',
                    'library_page'}  # M1 Plus only: the Q2 Pod Home card's page
@@ -981,7 +1075,7 @@ def compile_payload(out, ipod):
     run('clang',*FLAGS,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *[f'--undefined={name}' for _, name, _ in hooks(ipod).values()], *[f'--undefined={IPOD_LEAF[2]}'] * ipod,
-        f'--undefined={WM_PAINT_LEAF[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=lockscreen_access', '--undefined=ringnav_ts_read',
+        f'--undefined={WM_PAINT_LEAF[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=lockscreen_access','--undefined=ringnav_ts_read',
         '--undefined=coverflow_player_cover', '--undefined=coverflow_grid_cover', '--undefined=coverflow_album_cover', '--undefined=headset_bt_init',
         '--undefined=headset_status_register', '--undefined=headset_bt_autolink',
         out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
@@ -1075,11 +1169,12 @@ def patch_bluealsa(raw):
     struct.pack_into('<2I', image, fileoff(raw, BT_DROP_HANDLER), j(reset), 0)
     return bytes(image)
 
-def build(zip_path, out, logo, ipod=False, dev=False):
+def build(zip_path, out, logo, ipod=False, dev=False, repo=REPO):
     import m1plus  # the M1 Plus's own pipeline, beside this one (docs/m1plus-roadmap.md U1)
     if m1plus.takes(zip_path): return m1plus.build(zip_path, out, logo, ipod, dev)
     variant = 'ipod' if ipod else 'stock'
     version = VERSIONS[variant]
+    check(re.fullmatch(r'[A-Za-z0-9-]+/[A-Za-z0-9._-]+', repo), f'{repo}: not a GitHub owner/name')  # a C string
     out.mkdir(parents=True, exist_ok=True)
     check(not (out/'update.tar').exists(), 'Output already exists; use a fresh --out directory')
     if dev:  # the next number in the untracked .build-number
@@ -1112,12 +1207,14 @@ def build(zip_path, out, logo, ipod=False, dev=False):
                       STATUS_ICONS, status_icon, row_icon, ART_PLACEHOLDERS, sized_art)
     contexts = re.findall(r'"([^"]+)"', (ROOT/'patch/contexts.inc').read_text())
     check(contexts, 'No navigation contexts audited')
-    windows = set()
+    windows, chinese = set(), set()  # chinese: the UI assets english_ui rewrites
     for line in run('unsquashfs', '-l', sq).splitlines():
         found = re.search(r'/raw/ui/(.+)\.bin$', line)
         if not found: continue
         rel = found.group(1)
         data = cat('release/assets/default/raw/ui/'+rel+'.bin')
+        if CJK.search(data.decode('utf-8', 'replace')) and 'release/assets/default/raw/ui/'+rel+'.bin' not in STOCK_EQ:
+            chinese.add(rel + '.bin')  # the stock EQ pages go
         i = data.find(b'name\x00')
         name = data[i+5:data.find(b'\x00', i+5)].decode('utf-8', 'replace') if i >= 0 else ''
         windows.add(name or rel.split('/')[-1])
@@ -1147,6 +1244,7 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     # About: the stock firmware's version on its own row, and this build's on the CFW. Version row.
     header += [f'#define STOCK_VERSION "{info[1]}"', f'#define Q2POD_VERSION "{VERSION}{" Pod" if ipod else ""}{f" dev {dev}" if dev else ""}"',
                f'#define Q2POD_TAG "{"" if dev else VERSION}"',  # netupdate.c: the release tag, none when --dev
+               f'#define Q2POD_REPO "{repo}"',  # netupdate.c: the repo whose latest release it fetches
                f'#define Q2POD_UA "Q2Pod/{VERSION} (https://github.com/DiamondBond/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
     (out/'stock.h').write_text('\n'.join(header)+'\n')
     ps = compile_payload(out, ipod)
@@ -1204,6 +1302,8 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     patch_word(patched, *HOLD_RETURN, jal(ps['compact_now_playing']),
                'long Return destination after stock input gates')
     patch_word(patched, *STANDBY_WAKE, 'Standby resume stays dark')
+    for hold in PLAY_HOLD:
+        patch_word(patched, *hold, 'Play/Pause hold time')
     check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, 0x51300c))[0] == 0x8f99b6e4,
           'player cover: expected toolsGetExternCover import')
     patch_word(patched, *PLAYER_COVER, jal(ps['coverflow_player_cover']), 'Now Playing art through ffmpeg')
@@ -1229,11 +1329,22 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     patch_word(patched, *BT_STATUS, jal(ps['headset_status_register']), 'Bluetooth: incoming link during a connect')
     patch_word(patched, *BT_AUTOLINK, jal(ps['headset_bt_autolink']), 'Bluetooth: auto-link keeps an incoming link')
     patch_word(patched, *SCAN_REFRESH, jal(ps['ringnav_scan_refresh']), 'folder scan refreshes existing tags')
+    patch_word(patched, *TAG_TEXT, jal(ps['ringnav_gbk_tag']), 'tag text GBK only when it reads as GBK')
+    for address in CUE_TEXT:
+        patch_word(patched, address, branch(0x04110000, address, syms['toolsIconvConvert']),
+                   jal(ps['ringnav_cue_text']), 'CUE text read as UTF-8, GBK or Windows-1252')
+    check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, SCAN_DIRS[0] + 4))[0] == 0x24a55110,
+          'library scan: expected the "." exclusion')
+    patch_word(patched, *SCAN_DIRS, jal(ps['ringnav_scan_dir']), 'the library scan skips hidden folders')
     scan, load, limit, count = SCAN_LIMIT
     patch_word(patched, scan, load, jal(ps['ringnav_scan_room']), 'scan up to 65,000 songs')
     patch_word(patched, scan + 4, limit, count, 'scan up to 65,000 songs')
     for address, old, new in DROP_CACHES:
         patch_word(patched, address, old, new, 'keep the page cache')
+    for address, old, new in STREAM_POLLS:
+        patch_word(patched, address, old, new, 'stream start polls 5 a second')
+    for address in DARK_POLLS:
+        patch_word(patched, address, 0x0320f809, jal(ps['ringnav_dark_usleep']), 'stock polls idle while dark')
     for word in FOLDER_NAME:
         patch_word(patched, *word, 'folder names are literal text')
     patch_word(patched, NP_INFO_CALL, branch(0x04110000, NP_INFO_CALL, PRIVATE_FUNCTIONS['np_info']),
@@ -1311,7 +1422,8 @@ def build(zip_path, out, logo, ipod=False, dev=False):
     s90play = cat(S90PLAY)
     check(s90play.count(BOOT_HOOK[0]) == 1 and s90play.count(REMOTE_HOOK[0]) == 1, 'Unexpected S90play')
     s90play = s90play.replace(*BOOT_HOOK)
-    (out/'S90play').write_bytes(s90play.replace(*REMOTE_HOOK) if dev else s90play)
+    check(s90play.count(LOG_HOOK[0]) == 1, 'Unexpected demo loop')
+    (out/'S90play').write_bytes(s90play.replace(*REMOTE_HOOK).replace(*LOG_HOOK) if dev else s90play)
     s11logo = cat(S11LOGO)
     check(s11logo.count(LOGO_HOOK[0]) == 1, 'Unexpected S11logo_display_shell')
     (out/'S11logo').write_bytes(s11logo.replace(*LOGO_HOOK))
@@ -1339,15 +1451,14 @@ def build(zip_path, out, logo, ipod=False, dev=False):
                                      else cat(xx+like)) for n, like in dict(
         shuffle='playset_playmode.png', scrobble='wifiset_wifi.png', podcasts='netservice_dlna.png',
         audiobooks='playset_foldercover.png', photos='playset_covermode.png', books='system_language.png',
-        videos='system_display.png', longsongs='system_time.png').items()})
+        videos='system_display.png', longsongs='system_time.png', era='local_genre.png').items()})
     if ipod:
         icons['local_games.png'] = ('system_language.png', (ROOT/'assets/icons/local_games.png').read_bytes())
         # Minimal's selected Wi-Fi and Bluetooth rows draw this grey copy over stock's white delete mark
         icons['list_delete.png'] = ('navbar_delete.png', cat(xx+'navbar_delete.png'))
-    for n in ('spotify', 'radio', 'app'):  # Streaming's Spotify, Internet Radio and card app rows
+    for n in ('spotify', 'radio', 'app', 'config'):  # Streaming's Spotify, Internet Radio, card app and Configuration rows
         icons[f'stream_{n}.png'] = ('list_tidal.png', (ROOT/'assets/icons'/f'stream_{n}.png').read_bytes())
     icons['stream_airplay.png'] = ('list_tidal.png', cat(xx+'netservice_airplay.png'))  # iPod resizes stock's
-    icons['stream_config.png'] = ('list_tidal.png', cat(xx+'system_netservice.png'))  # Configuration's
     art = (ROOT/'assets/icons/default_album_home.png').read_bytes() if ipod else None
     if ipod:  # Streaming's rows draw them at SET_ICON; Home's placeholder at the art panel's 290px
         for n in ('spotify', 'radio', 'app', 'airplay', 'config'):
@@ -1384,7 +1495,9 @@ def build(zip_path, out, logo, ipod=False, dev=False):
         (out/name).write_bytes(data)
         p = swap_inode(p, path.encode(), out/name)
         changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
-    assets = ['ui/'+rel for rel in (UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])] + ['strings/en_US.bin']
+    patched_ui = list(UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])
+    check(chinese, 'No Chinese UI text found')
+    assets = ['ui/'+rel for rel in patched_ui + sorted(chinese - set(patched_ui))] + ['strings/en_US.bin']
     if ipod:
         assets += ['styles/'+rel for rel in AUDIT['styles']]
         # settings icons pre-sized to the rows' SET_ICON, in place, so each keeps its inode metadata
@@ -1397,7 +1510,10 @@ def build(zip_path, out, logo, ipod=False, dev=False):
         data = (relabel(original) if kind == 'strings' else
                 patch_style(original, AUDIT['styles'][name]) if kind == 'styles' else
                 (sized_art(art, ART_PLACEHOLDERS[name]) if name in ART_PLACEHOLDERS else
-                 status_icon(name, original) if name in STATUS_ICONS else quiet_icon(name, original) if name in QUIET_ICONS else settings_icon(name, original)) if kind == 'images' else patch_asset(name, original, ipod))
+                 status_icon(name, original) if name in STATUS_ICONS else quiet_icon(name, original) if name in QUIET_ICONS else settings_icon(name, original)) if kind == 'images' else
+                patch_asset(name, original, ipod) if name in patched_ui else original)
+        if kind == 'ui' and name in chinese:
+            data = english_ui(name, data)
         target = out/rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
@@ -1431,7 +1547,7 @@ def build(zip_path, out, logo, ipod=False, dev=False):
         rootfs_sha256=sha(newsq.read_bytes()), kernel_sha256=sha(blobs['recovery-update/xImage']),
         patch_bytes=len(payload), ring_step_pixels=RING_STEP,
         audio_extension_calls=[dict(address=hex(a), original='0x0320f809', replacement=hex(jal(ps['ringnav_audio_extension']))) for a in AUDIO_EXTENSION_CALLS],
-        version=version, variant=variant, dev=dev, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=code_changes, changed_assets=changed_assets, logo_sha256=sha(logo_data),
+        version=version, variant=variant, dev=dev, update_repo=repo, peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=code_changes, changed_assets=changed_assets, logo_sha256=sha(logo_data),
         patch_symbols={n:hex(v) for n,v in ps.items() if n.startswith('stock_')},
         tools={t:run(t,'--version').splitlines()[0] for t in ['clang','ld.lld','llvm-objcopy']} |
               ({'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]} if ipod else {}))
@@ -1447,8 +1563,10 @@ if __name__ == '__main__':
     ap.add_argument('--ipod', action='store_true', help='iPod UI: compact local browsing and long Return to Now Playing')
     ap.add_argument('--dev', action='store_true',
                     help='development build: tag from the next .build-number (V001i, V002i...); never a release input')
+    ap.add_argument('--update-repo', default=REPO, metavar='OWNER/NAME',
+                    help="GitHub repo whose latest release Network Update fetches (default: %(default)s), for a fork's test builds")
     a=ap.parse_args()
     try:
-        build(a.zip,a.out.resolve(),a.logo,a.ipod,a.dev)
+        build(a.zip,a.out.resolve(),a.logo,a.ipod,a.dev,a.update_repo)
     except (OSError, ValueError, zipfile.BadZipFile, subprocess.CalledProcessError) as exc:
         ap.error(str(exc))

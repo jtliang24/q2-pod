@@ -60,7 +60,7 @@ enum { BACK = 1000, APPLY, RESET, BYPASS, MENU, IMPORT, SAVE, ENABLE, TYPE, RAIS
 enum { SIMPLE, ADVANCED };
 static struct {
     void *page, *view, *edit, *graph, *bar; /* bar: the title, which shows the tabs on the top screens */
-    unsigned timer;
+    unsigned timer, keyboard_timer;
     int screen, band, step, count, previous, rendered, dirty, pick, adjust, tries;
     int capacity, file_page;
     int tab, tabs; /* tabs: the wheel is on the tab bar, over Advanced's list */
@@ -110,18 +110,23 @@ static struct {
 static int action(void *ctx, void *event);
 static int render(const void *unused);
 
-/* A row: the caption on the left, white or, for display-only rows and off bands (dim), grey, and
- * the value, if any, in grey against the right edge. Returns the last label, the value's if any. */
-static void *row_dim(void *view, int index, const char *text, const char *value, int id, int dim) {
+/* A row: the caption on the left, white or, for display-only rows and off bands (DIM), grey, and
+ * the value, if any, in grey against the right edge, or left of stock's list_into chevron on a row
+ * that opens a screen or picker (INTO: coverflow.c's row_into). Returns the last label, the
+ * value's if any. */
+enum { DIM = 1, INTO = 2, SMALL = 4 };
+static void *row_dim(void *view, int index, const char *text, const char *value, int id, int flags) {
     void *item = list_item_create(view, 0, index * 48, UI_W, 48), *label = 0;
     widget_use_style(item, STYLE_LISTITEM_BLACK);
     for (int i = 0; i < 1 + !!value; ++i) {
         label = label_create(item, ROW_X, 0, UI_W - 2 * ROW_X, 48);
         widget_use_style(label, STYLE_LABEL_WHITE20L);
-        if (i || dim || id < 0) widget_set_prop_int(label, "style:normal:text_color", (int)CF_GREY);
+        if (i || flags & DIM || id < 0) widget_set_prop_int(label, "style:normal:text_color", (int)CF_GREY);
         if (i) widget_set_prop_str(label, "style:normal:text_align_h", "right");
+        if (!i && flags & SMALL) widget_set_prop_int(label, "style:normal:font_size", 16);
         widget_set_text_utf8(label, i ? value : text);
     }
+    if (flags & INTO) row_into(item, 48);
     widget_on(item, EVT_CLICK, action, (void *)(long)id);
     return label;
 }
@@ -188,30 +193,43 @@ static double *picked(void) {
 
 /* The value menu's edit closed with new text: apply it if it is a number (clamped like Raise/Lower), else restore it. */
 static int typed(void *ctx, void *event) {
+    if (!ui.edit) return 0;
     char s[16];
-    if (!ui.edit || widget_get_text_utf8(ui.edit, s, sizeof s)) s[0] = 0;
+    if (widget_get_text_utf8(ui.edit, s, sizeof s)) s[0] = 0;
     if (peq_number(s, &ui.typed)) action((void *)(long)TYPED, 0);
     else if (!ui.timer) ui.timer = timer_add(render, 0, 1); /* show the value again */
     return 0;
 }
 
-/* The rename edit closed with new text. */
+/* The rename edit closed with new text; empty (Return's cancel, search_key) shows the name again.
+ */
 static int named(void *ctx, void *event) {
-    action((void *)(long)NAMED, 0);
+    char s[4];
+    if (!ui.edit) return 0;
+    if (!widget_get_text_utf8(ui.edit, s, sizeof s) && s[0])
+        action((void *)(long)NAMED, 0);
+    else if (!ui.timer)
+        ui.timer = timer_add(render, 0, 1);
     return 0;
 }
 
-/* The T9 keyboard opens on its letters; a value only needs its "123" page (symnum). The keyboard can open a
- * moment after the focus, so look for its window every 16 ms, up to 20 times. */
+/* Open T9's "123" page and select the old value so the first key replaces it.
+ * The keyboard may open after focus; look for it every 16 ms, up to 20 times. It is the input
+ * method's own, for this edit: a lookup by name could find the last one while it still closes. */
 static int numbers(const void *unused) {
-    void *kb = widget_lookup(window_manager(), "kb_default_t9", 0);
+    void *im = input_method(),
+         *kb = im && ui.edit && P(im, IM_WIDGET) == ui.edit ? P(im, IM_KEYBOARD) : 0;
+    char s[16];
     if (kb) pages_set_active_by_name(widget_lookup(kb, "panel", 1), "symnum");
-    return kb || ++ui.tries >= 20 ? 7 : 8; /* RET_REMOVE, else RET_REPEAT */
+    if (kb && ui.edit && !widget_get_text_utf8(ui.edit, s, sizeof s)) edit_set_select(ui.edit, 0, strlen(s));
+    if (kb || ++ui.tries >= 20) { ui.keyboard_timer = 0; return 7; }
+    return 8; /* RET_REPEAT */
 }
 
 static int focused(void *ctx, void *event) {
+    stop_timer(&ui.keyboard_timer);
     ui.tries = 0;
-    timer_add(numbers, 0, 16);
+    ui.keyboard_timer = timer_add(numbers, 0, 16);
     return 0;
 }
 
@@ -226,6 +244,18 @@ static void follow_auto(void) {
 /* The Preamp row's and the picker's Auto. */
 static void auto_text(char *s, unsigned n) {
     snprintf(s, n, "Auto (44.1: %.1f / 48: %.1f)", autos()[0], autos()[1]);
+}
+
+/* A Preamp pick sticks to the saved preset it was loaded from (its copy in PEQ_SAVED, never the
+ * card's .txt); its bands stay as saved until Save. ponytail: keyed on ui.name, so a stock preset
+ * named like a saved one ("Rock") writes to that file; keep the loaded path if that matters. */
+static void remember_preamp(void) {
+    char path[600];
+    peq_preset p;
+    snprintf(path, sizeof(path), PEQ_SAVED "/%s.peq", ui.name);
+    if (!ui.name[0] || !peq_load(path, &p)) return; /* a stock preset, Reset or none */
+    p.automatic = ui.draft.automatic, p.preamp = ui.draft.preamp;
+    peq_save(path, &p, 1);
 }
 
 static int compare_names(const void *a, const void *b) { return strcmp(a, b); }
@@ -332,6 +362,7 @@ void *edit_create(void *item, const char *input_type, int y, int h) {
             widget_set_prop_str(edit, name, props[i][1] ? props[i][1] : radius);
         }
     }
+    widget_set_name(edit, EDIT_NAME);
     return edit;
 }
 
@@ -347,7 +378,14 @@ static int action(void *ctx, void *event) {
     if (id < 0) return 0; /* display-only rows */
     int screen = ui.screen;
     /* The centre button on the value row; no render, which would destroy the edit and close the keyboard. */
-    if (id == KEYBOARD) { widget_set_focused(ui.edit, 1); return 0; }
+    if (id == KEYBOARD) {
+        widget_set_focused(ui.edit, 1);
+        /* Done can close T9 while the edit stays focused; focus alone won't reopen it, nor send
+         * EVT_FOCUS, so the number page and selection are asked for here too. */
+        input_method_request(input_method(), ui.edit);
+        if (ui.screen == ADJUST) focused(0, 0);
+        return 0;
+    }
     peq_band *b = &ui.draft.bands[ui.band];
     ui.status[0] = 0;
     ui.tabs = 0;
@@ -425,7 +463,7 @@ static int action(void *ctx, void *event) {
             *picked() = ui.pick == PREAMP && !id
                             ? autos()[1]
                             : picks[ui.pick - BALANCE].first + picks[ui.pick - BALANCE].step * id;
-            if (ui.pick == PREAMP) ui.draft.automatic = id ? 2 : 1;
+            if (ui.pick == PREAMP) ui.draft.automatic = id ? 2 : 1, remember_preamp();
             if (ui.pick == GAIN && !b->enabled) b->enabled = 1; /* picking a gain is using the band */
             ui.dirty = 1;
             ui.screen = ui.pick == GAIN ? BAND : HOME;
@@ -483,6 +521,12 @@ static int e3_touch(void *ctx, void *event);
 static int render(const void *unused) {
     ui.timer = 0;
     if (!ui.page) return 7;
+    stop_timer(&ui.keyboard_timer);
+    /* Release T9 before replacing its editing target, as the search fields do. */
+    if (ui.edit) {
+        ui.edit = 0; /* Ignore blur callbacks from the field being replaced. */
+        input_method_request(input_method(), 0);
+    }
     if (ui.tab == SIMPLE) { /* the sliders' view, under the tabs */
         ui.view = ui.graph = ui.edit = 0;
         ui.rendered = -1;
@@ -531,54 +575,44 @@ static int render(const void *unused) {
     if (ui.screen == HOME) {
         row(view, n++, ui.dirty ? "Apply changes" : "Nothing to apply", ui.dirty ? APPLY : -1);
         row(view, n++, "Reset to defaults", RESET);
-        row_dim(view, n++, "Enabled", ui.draft.bypass ? "Off" : "On", BYPASS, 0);
+        list_toggle(row(view, n++, "", BYPASS), "Enabled", !ui.draft.bypass);
         /* Balance turns one side down: R 1.0 dB is the left 1 dB quieter. */
         snprintf(value, sizeof(value), __builtin_fabs(ui.draft.balance) >= 0.05 ? "%s %.1f dB" : "Centre",
                  ui.draft.balance > 0 ? "R" : "L", __builtin_fabs(ui.draft.balance));
-        row_dim(view, n++, "Balance", value, BALANCE, 0);
+        row_dim(view, n++, "Balance", value, BALANCE, INTO);
         if (on_auto())
             auto_text(value, sizeof(value));
         else
             snprintf(value, sizeof(value), "%.1f dB", ui.draft.preamp);
-        void *shown = row_dim(view, n++, "Preamp", value, PREAMP, 0);
-        /* At 20px two double-digit cuts overrun the iPod's 303px column beside the caption; at 18
-         * the longest, -60.0 at both, leaves 6px (the stock font's widths). */
-        if (on_auto()) widget_set_prop_int(shown, "style:normal:font_size", 18);
-        row_dim(view, n++, "Presets", ui.name[0] ? ui.name : 0, MENU, 0); /* the draft's preset */
-        /* Ten rows, then one spare past the last used band to add another. */
+        void *shown = row_dim(view, n++, "Preamp", value, PREAMP, INTO);
+        /* At 20px two double-digit cuts overrun the iPod's 280px column beside the caption and
+         * chevron; at 16 the longest, -60.0 at both, leaves 6px (the stock font's widths). */
+        if (on_auto()) widget_set_prop_int(shown, "style:normal:font_size", 16);
+        row_dim(view, n++, "Presets", ui.name[0] ? ui.name : 0, MENU, INTO); /* the draft's preset */
+        /* 16px band captions leave room for the gain and chevron, even at 20000 Hz on one channel. */
         for (int i = 0; i < PEQ_BANDS && (i < 10 || i <= ui.draft.count); ++i) {
             peq_band *b = &ui.draft.bands[i];
             snprintf(text, sizeof(text), "%d  %s %.0f Hz%s", i + 1, types[b->type], b->frequency,
                      (const char *[]){"", "", " L", " R"}[b->enabled]);
             snprintf(value, sizeof(value), b->enabled ? "%+.1f dB" : "Off", b->gain);
-            row_dim(view, n++, text, value, i, !b->enabled);
+            row_dim(view, n++, text, value, i, (b->enabled ? 0 : DIM) | INTO | SMALL);
         }
     } else if (ui.screen == BAND) {
         peq_band *b = &ui.draft.bands[ui.band];
         /* Imported missing bands already have valid defaults from peq_default. */
         if (ui.draft.count <= ui.band) ui.draft.count = ui.band + 1;
-        row_dim(view, n++, "Band", b->enabled ? "On" : "Off", ENABLE, 0);
+        list_toggle(row(view, n++, "", ENABLE), "Band", b->enabled);
         if (b->enabled) row_dim(view, n++, "Channels", (const char *[]){0, "Both", "Left", "Right"}[b->enabled], CHANNEL, 0);
         row_dim(view, n++, "Type", types[b->type], TYPE, 0);
-        snprintf(value, sizeof(value), "%.0f Hz", b->frequency); row_dim(view, n++, "Frequency", value, FREQUENCY, 0);
-        snprintf(value, sizeof(value), "%+.1f dB", b->gain); row_dim(view, n++, "Gain", value, GAIN, 0);
-        snprintf(value, sizeof(value), "%.2f", b->q); row_dim(view, n++, "Q", value, QUALITY, 0);
+        snprintf(value, sizeof(value), "%.0f Hz", b->frequency); row_dim(view, n++, "Frequency", value, FREQUENCY, INTO);
+        snprintf(value, sizeof(value), "%+.1f dB", b->gain); row_dim(view, n++, "Gain", value, GAIN, INTO);
+        snprintf(value, sizeof(value), "%.2f", b->q); row_dim(view, n++, "Q", value, QUALITY, INTO);
     } else if (ui.screen == ADJUST) {
-        /* Row 0 is the value in an edit, styled and keyed as the stock playlist dialogs' (T9 keyboard, 123 page
-         * for digits); a tap or the centre button opens the keyboard and the value applies when it closes. Its
-         * action text is "done", as stock edit_on_event only acts on the keyboard's OK for "done" (close the
-         * keyboard, then EVT_VALUE_CHANGED) or "next"; the dialogs' "OK" is handled by their own EVT_IM_ACTION
-         * handlers. The keyboard's OK key shows an image, not the text. */
-        void *item = list_item_create(view, 0, 0, UI_W, 48);
-        widget_use_style(item, STYLE_LISTITEM_BLACK);
-        widget_on(item, EVT_CLICK, action, (void *)(long)KEYBOARD);
-        ui.edit = edit_create(item, "ufloat", 4, 40);
-        peq_band *b = &ui.draft.bands[ui.band];
-        snprintf(text, sizeof(text), ui.adjust == QUALITY ? "%.2f" : "%.0f", ui.adjust == QUALITY ? b->q : b->frequency);
-        widget_set_text_utf8(ui.edit, text);
-        widget_on(ui.edit, EVT_VALUE_CHANGED, typed, 0);
-        widget_on(ui.edit, EVT_FOCUS, focused, 0);
-        n = 1;
+        /* Row 0 names the value; it and the centre button open the keyboard on the edit over the
+         * title (below). */
+        snprintf(text, sizeof(text), ui.adjust == QUALITY ? "Band %d Q" : "Band %d Frequency (Hz)",
+                 ui.band + 1);
+        row(view, n++, text, KEYBOARD);
         if (ui.adjust == QUALITY) snprintf(value, sizeof(value), "0.05");
         else snprintf(value, sizeof(value), "%d Hz", steps[ui.step]);
         row_dim(view, n++, "Raise", value, RAISE, 0);
@@ -594,15 +628,10 @@ static int render(const void *unused) {
             else snprintf(text, sizeof(text), "%+.1f dB", v);
             row(view, n++, text, i);
         }
-    } else if (ui.screen == NAMING) { /* the name in an edit, as the value menu's, on the keyboard's letters */
-        void *item = list_item_create(view, 0, 0, 375, 48);
-        widget_use_style(item, "s_listitem_black");
-        widget_on(item, EVT_CLICK, action, (void *)(long)KEYBOARD);
-        ui.edit = edit_create(item, "text", 4, 40);
-        snprintf(text, sizeof(text), "%.*s", (int)strlen(deleting()) - 4, deleting());
-        widget_set_text_utf8(ui.edit, text);
-        widget_on(ui.edit, EVT_VALUE_CHANGED, named, 0);
-        n = 1;
+    } else if (ui.screen == NAMING) { /* the name in the edit over the title, as the value menu's,
+                                         on the keyboard's letters */
+        snprintf(text, sizeof(text), "Rename %.*s", (int)strlen(deleting()) - 4, deleting());
+        row(view, n++, text, KEYBOARD);
     } else if (ui.screen == CONFIRM && ui.previous == DELETES) {
         snprintf(text, sizeof(text), "Delete %.100s? Confirm", deleting()); row(view, n++, text, YES);
         row(view, n++, "Cancel", CANCEL);
@@ -617,11 +646,11 @@ static int render(const void *unused) {
         }
     } else {
         if (ui.screen == PRESETS) {
-            row(view, n++, "Stock presets", STOCK);
-            row(view, n++, "Import from SD /EQ", IMPORT);
-            row(view, n++, "Save editor preset", SAVE);
-            row(view, n++, "Rename a preset", RENAME);
-            row(view, n++, "Delete a preset", DELETE);
+            row_dim(view, n++, "Stock presets", 0, STOCK, INTO);
+            row_dim(view, n++, "Import from SD /EQ", 0, IMPORT, INTO);
+            row_dim(view, n++, "Save editor preset", 0, SAVE, INTO);
+            row_dim(view, n++, "Rename a preset", 0, RENAME, INTO);
+            row_dim(view, n++, "Delete a preset", 0, DELETE, INTO);
         }
         list_files(ui.screen == IMPORTS ? PEQ_IMPORT : PEQ_SAVED, ui.screen == IMPORTS ? ".txt" : ".peq");
         int last = ui.count ? (ui.count - 1) / FILE_PAGE : 0;
@@ -651,16 +680,35 @@ static int render(const void *unused) {
     ui.bar = ui.screen == HOME ? title : 0;
     text[0] = 0;
     if (ui.status[0]) snprintf(text, sizeof(text), "%s", ui.status);
-    else if (ui.screen == BAND) snprintf(text, sizeof(text), "Band %d", ui.band + 1);
-    else if (ui.screen == ADJUST) snprintf(text, sizeof(text), ui.adjust == QUALITY ? "Band %d Q" : "Band %d Frequency (Hz)", ui.band + 1);
+    else if (ui.screen == BAND)
+        snprintf(text, sizeof(text), "Band %d", ui.band + 1);
     else if (ui.screen == PICK && ui.pick == GAIN) snprintf(text, sizeof(text), "Band %d Gain", ui.band + 1);
-    else if (ui.screen == PICK) snprintf(text, sizeof(text), ui.pick == PREAMP ? "Preamp" : "Balance");
-    else if (ui.screen == NAMING) snprintf(text, sizeof(text), "Rename %.*s", (int)strlen(deleting()) - 4, deleting());
+    else if (ui.screen == PICK)
+        snprintf(text, sizeof(text), ui.pick == PREAMP ? "Preamp" : "Balance");
     else if ((ui.screen == IMPORTS || ui.screen == PRESETS || ui.screen == DELETES || ui.screen == RENAMES) &&
              ui.count > FILE_PAGE)
         snprintf(text, sizeof(text), "Presets %d/%d", ui.file_page + 1, (ui.count - 1) / FILE_PAGE + 1);
-    else if (ui.screen != HOME) snprintf(text, sizeof(text), "Presets");
+    else if (ui.screen != HOME && ui.screen != ADJUST && ui.screen != NAMING)
+        snprintf(text, sizeof(text), "Presets");
     widget_set_text_utf8(title, text);
+    /* The value or name in an edit over the title, after it so a tap reaches the edit, as the
+     * search fields': its bottom (page y 28) clears T9's top (page y 30), so the keyboard neither
+     * covers it nor moves the page. Under T9, as row 0, it showed nothing the user typed and lost
+     * the keys. Action text "done": stock edit_on_event acts on the keyboard's OK only for "done"
+     * (close the keyboard, then EVT_VALUE_CHANGED) or "next". Text input: typed() validates on
+     * Done, as stock's numeric edit rewrites unfinished decimals. */
+    if (ui.screen == ADJUST || ui.screen == NAMING) {
+        peq_band *b = &ui.draft.bands[ui.band];
+        ui.edit = edit_create(ui.page, "text", 2, 26);
+        if (ui.screen == NAMING)
+            snprintf(text, sizeof(text), "%.*s", (int)strlen(deleting()) - 4, deleting());
+        else
+            snprintf(text, sizeof(text), ui.adjust == QUALITY ? "%.2f" : "%.0f",
+                     ui.adjust == QUALITY ? b->q : b->frequency);
+        widget_set_text_utf8(ui.edit, text);
+        widget_on(ui.edit, EVT_VALUE_CHANGED, ui.screen == NAMING ? named : typed, 0);
+        if (ui.screen == ADJUST) widget_on(ui.edit, EVT_FOCUS, focused, 0);
+    }
     widget_invalidate_force(ui.page, 0);
     return 7; /* RET_REMOVE */
 }
@@ -766,7 +814,12 @@ static int closed(void *ctx, void *event) {
     memset(&e3, 0, sizeof e3);
     ui.bar = 0;
     stop_timer(&ui.timer);
+    stop_timer(&ui.keyboard_timer);
     ui.page = 0;
+    if (ui.edit) {
+        ui.edit = 0;
+        input_method_request(input_method(), 0);
+    }
     ui.view = 0;
     ui.graph = 0;
     free(ui.names);

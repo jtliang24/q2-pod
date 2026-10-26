@@ -228,3 +228,4 @@ stay flat or fall.
 | U3 step 4: sync to 1.3.9 (Oct 24) | 1.3.9 (`41844cc`) | +1,421/−285 over 30 files: the hold menu's `yslidable` (3 lines, `qm_open`) |
 | U3 step 5: sync to 1.4.2 (Oct 24) | 1.4.2 (`7efbff5`) | +1,429/−287 over 30 files: MQA's icon name, the Apps row's `!M1PLUS`, `peq_boot` at `BOOT_MODE_RET` |
 | The fork's README, left out (Oct 26) | 1.4.2 (`7efbff5`) | +1,468/−300 over 31 files: the polish and catch-up's seams since step 5; `README.md` had +7/−7 |
+| Merge step: sync to 1.4.5 (Oct 26) | 1.4.5 (`6d50dc6`) | +1,494/−310 over 31 files: `list_toggle`'s `#if !M1PLUS`, the App Store's Rockbox rows, q2remote's `M1_GLOBALS` and its M1 rows in `remote.md` |

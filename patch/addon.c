@@ -11,9 +11,12 @@
  * each row's kind says what a press does (a local row plays a song or folder from the card,
  * navigation.c's songs_open). Its status file /tmp/q2-<id>.state says whether to hold standby off
  * (hold=1: files moving, a phone using its page) and carries its web page's QR code, address and
- * PIN, which qr_open's page draws. A TERM to the loop's pid asks it to end. */
+ * PIN, which qr_open's page draws. A TERM to the loop's pid asks it to end. An app that plays as well
+ * (q2-deezer's Stream mode) names a card folder of songs in /tmp/q2-<id>.play, which stream_poll
+ * plays as it fills. */
 #include "offsets.inc"
 #include "peq.h"
+#include "playback.h"
 #include "stock.h"
 
 #define ADDON_POLL_MS 500
@@ -25,7 +28,6 @@
 #define REPLY_MAX (64 << 10) /* Q2SPOT/1's limits */
 #define REQ_MAX (8 << 10)
 #define AWAY_MS 3000 /* USB storage waits at most this long for an app to let the card go */
-#define APPS_MAX 8
 #define APP_ID 16  /* an id's bytes, its NUL included */
 #define QR_PX 186  /* the code's white plate: 5 px modules up to a 33-module code */
 #define QR_COL 214 /* the text beside it */
@@ -99,6 +101,7 @@ int addon_scan(void) {
 }
 
 const char *addon_name(int k) { return k >= 0 && k < ap.shown ? ap.a[ap.order[k]].name : 0; }
+const char *addon_id(int k) { return k >= 0 && k < ap.shown ? ap.a[ap.order[k]].id : 0; }
 
 /* A pid file whose loop is gone (crashed, or killed) is removed, so no wait spends AWAY_MS on it.
  * ponytail: trusts the pid in the file; a loop that died without removing it, its pid since reused,
@@ -113,6 +116,115 @@ static void launch(app_t *a) {
     a->launched = 1;
     a->launch_at = time_now_ms();
     system(a->run); /* exits at once when the app runs already */
+}
+
+/* Stream mode (q2-deezer's stream.go): an app's /tmp/q2-<id>.play holds "<seq> <folder>", a hidden
+ * card folder it fills with a list's songs, named in play order ("01 - Title [id].flac"), as they
+ * download. A new one is played from its first song once one is there (the folder's songs in name
+ * order, as a local row's album is: songs_open), Now Playing opening as for a press. While the queue
+ * is still that folder's, songs that come later (named after the last one queued) join its end, as Add
+ * to Queue adds them (playback_queue_insert); the path of the one playing is left in
+ * /tmp/q2-<id>.playing, so the app fetches only a few ahead and deletes the ones long played. */
+static struct {
+    char play[192];    /* the .play file as read last */
+    char dir[160];     /* its folder */
+    char last[192];    /* the name of the last of its songs queued */
+    char playing[256]; /* the .playing path written last */
+    int state;         /* S_WAIT for its first song, S_PLAY its queue playing, S_DONE another queue */
+    unsigned timer;    /* the first song's start, on a timer (a window opens) */
+    long seen;         /* the folder's mtime at the last scan that came well after it */
+} sm __attribute__((section(".scratch")));
+enum { S_WAIT, S_PLAY, S_DONE };
+
+/* An audio file in dir named after last ("": any), not a hidden one or a download's .part. */
+static int stream_newer(const char *dir, const char *last) {
+    /* ponytail: only once the folder changes (o32 stat, st_mtime word 16), not a scan every poll; a
+     * scan in the second of a change is not trusted, as a file could land later in that second. */
+    unsigned st[36];
+    if (__xstat(3, dir, st)) return 0;
+    if ((long)st[16] == sm.seen) return 0;
+    if ((long)st[16] < time((void *)0) - 1) sm.seen = (long)st[16];
+    void *d = opendir(dir);
+    int found = 0;
+    for (struct dirent *e; d && !found && (e = readdir(d));) {
+        const char *n = e->d_name, *dot = strrchr(n, '.');
+        found = n[0] != '.' && dot && (!strcasecmp(dot, ".flac") || !strcasecmp(dot, ".mp3")) &&
+                strcmp(n, last) > 0;
+    }
+    if (d) closedir(d);
+    return found;
+}
+
+static int stream_start(const void *unused) {
+    (void)unused;
+    sm.timer = 0;
+    void *songs = app_album_songs(sm.dir);
+    unsigned n = deque_size(songs);
+    if (n && sm.state == S_WAIT) {
+        tk_snprintf(sm.last, sizeof sm.last, "%s", (const char *)P(deque_at(songs, n - 1), REC_NAME));
+        sm.state = S_PLAY;
+        play_folder(songs, 0, 0xf001); /* playing_page copies the queue at once */
+    }
+    deque_destroy(songs);
+    return 0;
+}
+
+/* Whether the queue playing is the session's: its first song in its folder. */
+static void *stream_queue(void) {
+    void *q = P(mcl_pdeqplaylist, 0);
+    const char *p = q && deque_size(q) ? P(deque_at(q, 0), REC_PATH) : 0;
+    return p && tk_str_start_with(p, sm.dir) && p[strlen(sm.dir)] == '/' ? q : 0;
+}
+
+static void stream_poll(app_t *a) {
+    char path[48], raw[sizeof sm.play];
+    tk_snprintf(path, sizeof path, "/tmp/q2-%s.play", a->id);
+    if (!state_read(path, raw, sizeof raw)) return;
+    if (strcmp(raw, sm.play)) { /* a new session */
+        const char *dir = strstr(raw, " ");
+        tk_snprintf(sm.play, sizeof sm.play, "%s", raw);
+        tk_snprintf(sm.dir, sizeof sm.dir, "%s", dir ? dir + 1 : "");
+        for (char *c = sm.dir; *c; ++c)
+            if (*c == '\n' || *c == '\r') *c = 0;
+        sm.last[0] = sm.playing[0] = 0;
+        sm.seen = 0;
+        /* a hidden folder of the card, as the app's own are */
+        sm.state = tk_str_start_with(sm.dir, CARD "/.") && !strstr(sm.dir, "..") ? S_WAIT : S_DONE;
+        stop_timer(&sm.timer);
+    }
+    if (sm.state == S_WAIT) {
+        if (!sm.timer && stream_newer(sm.dir, "")) sm.timer = timer_add(stream_start, 0, 0);
+        return;
+    }
+    void *q = sm.state == S_PLAY ? stream_queue() : 0;
+    if (!q) {
+        sm.state = S_DONE; /* something else plays now: the session is left */
+        return;
+    }
+    if (stream_newer(sm.dir, sm.last)) {
+        void *songs = app_album_songs(sm.dir), *add = _create_deque("stSongInfo");
+        deque_init(add);
+        for (unsigned i = 0, n = deque_size(songs); i < n; ++i) {
+            void *r = deque_at(songs, i);
+            if (strcmp(P(r, REC_NAME), sm.last) > 0) _deque_push_back(add, r);
+        }
+        if (deque_size(add)) {
+            void *r = deque_at(add, deque_size(add) - 1);
+            tk_snprintf(sm.last, sizeof sm.last, "%s", (const char *)P(r, REC_NAME));
+            playback_queue_insert(q, add, 0);
+        }
+        deque_destroy(add);
+        deque_destroy(songs);
+    }
+    unsigned pos = (unsigned)I(MCL_POS, 0);
+    const char *now = pos < deque_size(q) ? P(deque_at(q, pos), REC_PATH) : 0;
+    if (now && strcmp(now, sm.playing)) {
+        char line[sizeof sm.playing + 1];
+        int n = tk_snprintf(line, sizeof line, "%s\n", now);
+        tk_snprintf(sm.playing, sizeof sm.playing, "%s", now);
+        tk_snprintf(path, sizeof path, "/tmp/q2-%s.playing", a->id);
+        blob_io(path, "/tmp/q2-stream.tmp", line, (unsigned)n, 1);
+    }
 }
 
 /* ringnav_sleep, every UI loop pass, paced to ADDON_POLL_MS once its row started it: standby and
@@ -132,6 +244,7 @@ static void poll_one(app_t *a) {
     state_read(a->state, raw, sizeof raw); /* addr= and hold= sort before the long qr= */
     a->hold = number(raw, "hold") == 1;
     if (a->hold) reset_poweroptions_timer(1, 1, 0); /* standby, auto power-off; not the screen's */
+    stream_poll(a);
     if (access(a->pid, 0) && now - a->launch_at > ADDON_START_MS) a->launched = a->hold = 0;
 }
 
@@ -171,7 +284,7 @@ void addon_card_away(void) {
     }
 }
 
-/* The Apps page (netupdate.c) replaces or removes the files in dir (".deezer"): the app there, if
+/* The Apps page (netupdate.c) replaces or removes the files in dir (".<id>"): the app there, if
  * one, forgotten on the UI thread, so its row starts the new one (or none); then, on the Apps
  * page's worker, asked to end and waited for, so its files are closed before they move. */
 void addon_forget(const char *dir) {
@@ -289,6 +402,7 @@ enum { G_ROW, G_SHOW, G_SEARCH };
 
 typedef struct {
     int state, n, sel, live, retry;
+    unsigned base;     /* args' bytes before a More…'s cursor: the list's own */
     unsigned id, hash; /* id: the fetch whose reply this level takes; hash: its rows' bytes */
     char *buf;         /* the reply (the top level's), or 0 */
     char *f[4 + 6 * ADDON_ROWS];
@@ -332,6 +446,14 @@ static void action(const char *op, const char *ctx) {
 
 static int clicked(void *ctx, void *event);
 
+/* Whether row i opens a page (go()): a list, the phone remote's QR page or a folder on the card. Its
+ * row has a chevron. */
+static int opens(lv_t *l, int i) {
+    const char *kind = cell(l, i, 0), *uri = cell(l, i, 1);
+    return !strcmp(kind, "list") || !strcmp(kind, "remote") ||
+           (!strcmp(kind, "local") && *uri && uri[strlen(uri) - 1] == '/');
+}
+
 /* The top level: its rows, or what it waits for. */
 static void show(void) {
     lv_t *l = top();
@@ -353,8 +475,8 @@ static void show(void) {
         int more = l->f[3][0] != 0;
         pg.view = page_list(pg.page, pg.page, 0, l->title, n = l->n + more, 64);
         for (int i = 0; i < l->n; ++i)
-            page_row_detail(pg.view, i, cell(l, i, 2), cell(l, i, 3), clicked);
-        if (more) page_row_detail(pg.view, l->n, "More…", 0, clicked);
+            (opens(l, i) ? page_row_detail_into : page_row_detail)(pg.view, i, cell(l, i, 2), cell(l, i, 3), clicked);
+        if (more) page_row_detail(pg.view, l->n, "More…", "", clicked);
     }
     if (n) ringnav_select(pg.view, l->sel < n ? l->sel : n - 1, n);
 }
@@ -363,12 +485,14 @@ static void keep_sel(void) {
     if (pg.view) top()->sel = widget_get_prop_int(pg.view, "_ringnav_index", 0);
 }
 
-/* A level over the top one, which lets its reply go (Back asks for it again). */
-static void push(const char *op, const char *args, const char *title) {
+/* A level over the top one, which lets its reply go (Back asks for it again); base: args' bytes that
+ * name its list, before a More…'s cursor. */
+static void push(const char *op, const char *args, unsigned base, const char *title) {
     lv_t next = { 0 };
     tk_snprintf(next.op, sizeof next.op, "%s", op);
     tk_snprintf(next.args, sizeof next.args, "%s", args);
     tk_snprintf(next.title, sizeof next.title, "%s", title);
+    next.base = base < sizeof next.args ? base : 0;
     keep_sel();
     if (pg.depth == ADDON_DEPTH) { /* the oldest past the base forgotten */
         for (int i = 1; i < ADDON_DEPTH - 1; ++i) pg.lv[i] = pg.lv[i + 1];
@@ -487,20 +611,20 @@ static int go(const void *unused) {
     if (pg.next == G_SHOW)
         show();
     else if (pg.next == G_SEARCH) {
-        if (put(a, sizeof a, pg.term)) push("search", a, pg.term);
+        if (put(a, sizeof a, pg.term)) push("search", a, strlen(a), pg.term);
     } else if (l->state == K_ERROR) {
         if (l->retry) {
             if (!app()->launched || access(app()->pid, 0)) launch(app());
             l->state = K_LOAD, show();
         }
     } else if (l->state != K_READY) {
-    } else if (i == l->n) { /* More… */
-        tk_snprintf(a, sizeof a, "%s", l->args);
-        if (put(a, sizeof a, l->f[3])) push(l->op, a, l->title);
+    } else if (i == l->n) { /* More…: the list's arguments and the cursor, as Q2SPOT/1's last */
+        tk_snprintf(a, sizeof a, "%.*s", (int)l->base, l->args);
+        if (put(a, sizeof a, l->f[3])) push(l->op, a, l->base, l->title);
     } else {
         const char *kind = cell(l, i, 0), *uri = cell(l, i, 1), *ctx = cell(l, i, 4);
-        if (!strcmp(kind, "list")) {
-            if (!ctx[0] || put(a, sizeof a, ctx)) push(uri, a, cell(l, i, 2));
+        if (!strcmp(kind, "list")) { /* with remote and a local folder, opens()'s pages */
+            if (!ctx[0] || put(a, sizeof a, ctx)) push(uri, a, strlen(a), cell(l, i, 2));
         } else if (!strcmp(kind, "action"))
             action(uri, ctx);
         else if (!strcmp(kind, "remote"))

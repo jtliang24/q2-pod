@@ -130,7 +130,7 @@ so parents and order are free to change. Every tick it re-shows the volume,
 EQ, Bluetooth, SyncLink and Wi-Fi widgets and sets their images and text, but
 never their geometry. `system_bar.bin` (iPod) therefore keeps the play state
 and EQ in `view_left`, as stock does, and puts Bluetooth/codec, Wi-Fi and the
-battery in `view_right`. EQ uses an explicit 16 px font and a 28 px cell: its text is 24 px wide in the shipped font, so stock's 20 px cell clips it. A 16 px `Q2` label at the left inset appears only when both playback state and EQ are hidden. `bar_sync` updates its visibility without moving the centred clock. The volume icon and number and SyncLink move to `x = -200`, where they
+battery in `view_right`. EQ uses an explicit 16 px font and a 28 px cell: its text is 24 px wide in the shipped font, so stock's 20 px cell clips it. A 16 px `Q2` label at the left inset appears only when both playback state and EQ are hidden. Stock's tick also hides `img_state` whenever its own player is stopped, as it is under Spotify, radio or a video; `ringnav_showface` (iPod only) runs `bar_state_sync`, the play state and the `Q2` label alone, straight after the tick, so the payload's play state is back before any paint, dark or not (no file reads; a relayout waits for the paint); the codec badge, accent, Rockbox check and battery wait for paint (`bar_sync`). Correcting it at paint time instead relaid the row twice a second, and EQ was drawn for a frame in the play icon's place. `bar_sync` updates its visibility without moving the centred clock. The volume icon and number and SyncLink move to `x = -200`, where they
 draw off-screen. Both groups sit 54 pixels
 from the edges (`STATUS_MARGIN`): the 50 where the 16-pixel icons clear the top corners
 ([Rounded corners](#rounded-corners)) plus 2 (`STATUS_PAD`) so they don't crowd the glass. A new
@@ -187,12 +187,18 @@ tabs 50 pixels lower ([internals.md](internals.md#artist-albums-in-coverflow)).
 
 ## Settings
 
-Settings, Playback, Audio settings and Streaming lists hold four complete 68-pixel rows
+Settings, Playback, Audio settings and Streaming lists use 68-pixel controls
 (`SET_ROW`, `SET_ROWS`). Minimal starts 8 pixels (`SET_TOP`) below the status bar; Classic
 starts directly below it. The list stays 272 pixels high in both themes, preserving scrolling
 and full-row tap targets. The `navbar_only` assets set their
 `list_view`'s `default_item_height` from 78 to 68, which no stock asset uses, and nothing else.
 Constants are `SET_*` in `patch/offsets.inc`.
+
+System Settings puts Wireless and Network first, then personal and daily controls, then device
+maintenance, with Reset last; neither list has headings. Play Mode, EQ, Gapless and Crossfade come first; specialist output controls come last. Added binary settings
+use Shanling's `switch_on` / `switch_off` images with the whole row as the tap target. Settings
+that cycle between named choices retain their value labels. Crossfade, Resume Songs, Wheel
+Sensitivity and App Store show a chevron, as do the added Library browsing rows.
 
 Every row is built natively, about 60 builders in all, one pattern throughout: a
 `list_item_create(view, 0, 0, 0, 0)` (some pass 78 as the height) holding a `button_create(item,
@@ -284,7 +290,7 @@ in the top 210 pixels of the page. The album name sits under them (`CF_TEXT_Y`) 
 the artist under that in 20-pixel grey (`#AAAAAA`, stock secondary text), and both, like the
 track list's title and rows and the progress and empty messages, keep 36 pixels (`CF_EDGE`) from
 each side, where the lowest visible track row's text clears the bottom corners. Long names still
-scroll within that. The Refresh card uses the album line.
+scroll within that. A card (an artist's All albums, the rated albums' Sort) uses the album line.
 Values are `CF_*` in `patch/offsets.inc`; Legacy keeps its track list layout.
 
 ## Rounded corners
@@ -360,6 +366,16 @@ have no icon: the build gives the icon no width and stretches the label across t
 centred `s_scrlabel_white24c` (`tools/ipod.py`). The artist page's Albums tab drills but has no
 stock chevron or payload row layouter, so it has none.
 
+The payload's own pages (`page_list`, in both builds) draw the same `list_into` at x 302 on every row
+that opens another page or screen: Spotify's menu, its Downloads hub and Storage Management, its
+albums, playlists, artists, saved playlists and download jobs, and Download Controls; a card app's
+lists, folders and phone-remote rows; Internet Radio's lists, Games, Photos, Ratings, Era's decades and
+albums; Books; and the equalizer's Balance, Preamp, Presets, band, Frequency, Gain and Q rows and the
+Presets menu, the value moved left of it (`patch/peq_ui.c` `INTO`). A 64 px row with an empty detail
+centres its caption beside it. Rows that act in place (play, toggle, cycle a value) have none; on/off
+rows (EQ Enabled, a band's Band, Spotify's Shuffle, Streaming Configuration's services) carry stock's
+`switch_on`/`switch_off` (`list_toggle`), as Shanling's settings rows do.
+
 ## Fast-scroll letter
 
 Spinning quickly through a list of more than 16 rows shows the first character of the selected
@@ -383,11 +399,11 @@ album, and a four-pixel progress line:
     | 3 of 12 (16,0 287x40)                          more 303 |  icon 50x40
  40 +---------------------------------------------------------+
     |  .-----------.                                          |  slide_view 0,40 375x186
-    |  |    art    |  Title   (194,75 165x28, white 22)       |
-    |  |   16,50   |  Artist  (194,107 165x20, grey 16)       |
-    |  |  166x166  |  Album   (194,131 165x20, grey 16)       |
-    |  '-----------'              mode 270  fav 320 (y 176)   |  icons 50x50
-228 |                     . o .   (page dots)                 |
+    |  |    art    |  Title   (194,58 165x28, white 22)       |
+    |  |   16,42   |  Artist  (194,92 165x22, grey 18)        |
+    |  |  166x166  |  Album   (194,120 165x22, grey 18)       |
+    |  '-----------'              mode 247  fav 303 (y 158)   |  icons 50x50
+222 |                     . o .   (page dots)                 |
 253 |  (=========================------------------------)   |  line 21,253 333x4
 265 |      01:23 (46 80x16)           -02:34 (249 80x16)      |  grey 14
 290 +---------------------------------------------------------+
@@ -395,8 +411,9 @@ album, and a four-pixel progress line:
 
 The art and the metadata keep 16 pixels from the sides (`NP_MARGIN`) and 12 from each other; the
 art is 166 pixels, as large as that leaves while the text column keeps its 165 pixels, and
-"3 of 12" starts in line with it. Each band has its own space: the top row, then the art 10
-pixels below it, the page dots 12 pixels under the art, the bar with the stock A-B markers
+"3 of 12" starts in line with it. Each band has its own space: the top row, then the art 2
+pixels below it, so it has 14 pixels to "3 of 12"'s text above and to the page dots below
+(`NP_ART_Y`), the bar with the stock A-B markers
 (y 250 to 260) and the quiet time labels at y 265.
 
 The art's corners are rounded at 12 pixels (`NP_ART_RADIUS`), the radius of stock's own
@@ -434,8 +451,11 @@ The asset holds Graphite's; `ringnav_playing` sets the current accent's. Tap or 
 is stock's label; the remaining time replaces stock's total. Sizes are `NP_*` constants in
 `tools/ipod.py`; see [internals.md](internals.md#now-playing-ipod).
 
-A tap on the art opens stock's full-screen art (`bigcover_page`; any tap closes it). Its song name
-and the shade band behind it show for `BC_MS` (3 s), then fade out together over `BC_STEPS` steps
+A tap on the art opens stock's full-screen art (`bigcover_page`; any tap closes it). Stock fits the
+cover to the whole screen, 320 pixels high, so the glass hid its corners; iPod centres it on black as
+the largest square whose corners clear the glass by `CORNER_SLACK` (`BC_ART` in `tools/ipod.py`, 292
+pixels with the defaults: 41 from the sides, 14 from the top and bottom), so the whole cover shows,
+rounded as Now Playing's is. Its song name and the shade band behind it sit on the art's foot, show for `BC_MS` (3 s), then fade out together over `BC_STEPS` steps
 `BC_STEP_MS` apart (`ringnav_bigcover`, after stock's init). They show again for each new song while it is open.
 
 **Scrub.** A double press of the centre button starts scrubbing, as on an iPod classic (with the screen off it only
@@ -596,14 +616,15 @@ status bar asset's own background (`#000000`, not `#161616`), which the payload'
 
 ## Games
 
-**Library → Games** opens Sudoku, Vortex and Solitaire ([internals](internals.md#games)). A game
+**Library → Games** opens Sudoku, Vortex, Solitaire and Snake ([internals](internals.md#games)). A game
 takes every key but Power and a held Return, so the music keeps playing untouched.
 
-| Game      | Wheel                                    | Centre                                          | Play/Pause            | Previous/Next    | Return                              |
-| --------- | ---------------------------------------- | ----------------------------------------------- | --------------------- | ---------------- | ----------------------------------- |
-| Sudoku    | Moves through the cells; picks the digit | Opens the digit, then writes it                 | New game (asks first) | Up or down a row | Cancels the digit; back to Games    |
-| Vortex    | Turns the paddle                         | Launches; plays again after a game              | Pauses and resumes    |                  | Pause menu: Continue or Quit        |
-| Solitaire | Moves between the piles                  | Draws; picks up, drops; twice sends a card home | New game (asks first) | Up or down a row | Drops the held cards; back to Games |
+| Game      | Wheel                                    | Centre                                          | Play/Pause            | Previous/Next                                                           | Return                              |
+| --------- | ---------------------------------------- | ----------------------------------------------- | --------------------- | ----------------------------------------------------------------------- | ----------------------------------- |
+| Sudoku    | Moves through the cells; picks the digit | Opens the digit, then writes it                 | New game (asks first) | Up or down a row                                                        | Cancels the digit; back to Games    |
+| Vortex    | Turns the paddle                         | Launches; plays again after a game              | Pauses and resumes    |                                                                         | Pause menu: Continue or Quit        |
+| Solitaire | Moves between the piles                  | Draws; picks up, drops; twice sends a card home | New game (asks first) | Up or down a row                                                        | Drops the held cards; back to Games |
+| Snake     | Disabled                                 | Plays again after a crash                       | Pauses and resumes    | Turn left/right; wheel or Previous/Next picks Continue/Quit in the menu | Pause menu: Continue or Quit        |
 
 ## Review sheets
 

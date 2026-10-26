@@ -16,4 +16,21 @@ static void *list_row_core(void *view, const char *icon, int (*click)(void *, vo
     if (into) image_base_set_image(image_create(item, 295, 21, 13, 22), ROW_CHEVRON);
     return label;
 }
+
+/* A row's switch as V2.1's settings rows draw theirs (powermanager_page's imgswitch_standby: 57x28
+ * at x 251, centred in the row), the label narrowed clear of it and left at its height. A
+ * list_row_core row is 0x0 until its list lays it out at the list's 64 px; a page_list row has its
+ * own height. */
+void list_toggle(void *label, const char *title, int on) {
+    void *item = P(label, W_PARENT);
+    void *image = widget_lookup(item, "_setting_switch", 0);
+    if (!image) {
+        int h = I(item, W_H) ? I(item, W_H) : PAGE_ROW_H;
+        image = image_create(item, 251, (h - 28) / 2, 57, 28);
+        widget_set_name(image, "_setting_switch");
+        widget_move_resize(label, I(label, W_X), I(label, W_Y), 251 - 8 - I(label, W_X), I(label, W_H));
+    }
+    widget_set_text_utf8(label, title);
+    image_base_set_image(image, on ? ICON_SWITCH_ON : ICON_SWITCH_OFF);
+}
 #endif

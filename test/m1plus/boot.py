@@ -261,7 +261,9 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('lockscreen_end', DOWN_LIST, 4, ('not', 'lockscreen_on')),
                 ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
                 ('lockscreen_back', BACK, 4, ('as', 'display')),
-                ('knob_row', tap(160, 430), 3, ('as', 'display', (30, 398), (398, 462))),  # Knob: Navigation
+                # Display's end: 1.4.5's Coverflow Sort and Refresh Coverflow push the knob's two rows below the screen.
+                ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
+                ('knob_row', tap(160, 384), 3, ('as', 'display_end', (30, 352), (352, 416))),  # Knob: Navigation
                 ('display_back', BACK, 4, ('as', 'knob_sysset')),
                 ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
                 # With Knob: Navigation, Previous is Back: System Setting closes to Home, where it
@@ -301,9 +303,9 @@ MENU_WALK = [('menu_page2', NEXT_PAGE, 4, ('not', 'home')),
 # ext4, a 32-bit guest's readdir under qemu-user fails on 64-bit directory offsets (EOVERFLOW), so
 # the payload would find it empty. The walk, patched only: Long Songs measures and lists both songs;
 # a tap opens the book and the photo (a hidden reader or viewer must not take it); a swipe moves to
-# the next photo and back; Spotify and Internet Radio open from their rows; Coverflow's covers (one album, then the Sort
-# and Refresh cards) turn by swipe and open by a tap on the centre cover; Shuffle Songs saves stock's
-# Shuffle play mode.
+# the next photo and back; Spotify and Internet Radio open from their rows; Coverflow's covers (each song an album
+# of its own: since 1.4.5 the ring is the albums alone) turn by swipe and open by a tap on the centre cover;
+# Shuffle Songs saves stock's Shuffle play mode.
 LONG_S = 660
 MEDIA_SONGS = ('long.flac', 'long.mp3')
 def media_card(card):
@@ -333,7 +335,7 @@ def media_db(path):
                'time_create INTEGER, Initial INTEGER, bitdepth INTEGER, samprate INTEGER)')
     for i, n in enumerate(MEDIA_SONGS):
         db.execute('insert into songtable values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                   (i + 1, n, f'/mnt/mmc/Music/{n}', 'Long', 'Tester', '', f'Long {n}', '', 'Tester', 2024, i + 1, 1,
+                   (i + 1, n, f'/mnt/mmc/Music/{n}', ('Long', 'Longer')[i], 'Tester', '', f'Long {n}', '', 'Tester', 2024, i + 1, 1,
                     0, 0, 0, 0, 16, 44100))
     db.commit()
     db.close()
@@ -360,7 +362,7 @@ MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 
               ('photos_back', BACK, 4, ('as', 'media_q2pod')),
               ('q2pod_end', DOWN_LIST, 4, ('not', 'media_q2pod')),
               ('coverflow', q2pod_end_row(6), 10, ('not', 'q2pod_end')),
-              ('cover_next', swipe(220, 150, 120, 150), 4, ('not', 'coverflow')),  # one cover: the Sort card
+              ('cover_next', swipe(220, 150, 120, 150), 4, ('not', 'coverflow')),  # one cover: the second album
               ('cover_prev', swipe(120, 150, 220, 150), 4, ('as', 'coverflow')),
               ('cover_open', tap(160, 120), 5, ('not', 'coverflow')),               # the centre cover's tracks
               ('cover_back', BACK, 4, ('as', 'coverflow')),

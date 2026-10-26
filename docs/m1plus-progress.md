@@ -1959,6 +1959,86 @@ new playlist of "The 1", "22 (Taylor's Version)" and "26", Move Down on "The 1" 
 each moved the song with no error, and after Done V2.1's own playlist page showed "22 (Taylor's
 Version)", "26", "The 1".
 
+## 48. Merge step: sync to upstream 1.4.5 (Oct 26)
+
+The first step of the [cadence](m1plus-sync.md#cadence): `drift.py` found 1.4.8, 85 commits past 1.4.2
+and 4,257 surface lines, over the trigger, and planned 1.4.2 → 1.4.5 → 1.4.8. 1.4.5 has 38 commits
+past 1.4.2, through 1.4.3 and 1.4.4:
+- settings in grouped lists, a switch for each on/off row (`list_toggle`) and a chevron on each row
+  that opens a page (`list_row_into`, `row_into`); Play/Pause's hold at 700 ms;
+- Library > Era, albums by decade; Coverflow's Sort and Refresh moved to Display settings, and Go to
+  Album opens the album's tracks in Coverflow;
+- Latin-1 and Windows-1252 tags and CUE sheets kept out of GBK, hidden folders out of the scan, and
+  lyrics tags in LRC form timed;
+- the App Store (System settings' Apps) lists `sources.list`'s apps; Spotify's Downloads hub;
+  Streaming's per-service switches, and Baidu Netdisk's row gone; Tidal Downloads' Clear All;
+- the PEQ's value and name edits over the title, the first key replacing the value;
+- battery: Tidal's start poll, stock's pollers idle while dark, hciplayer's pause loop;
+- Snake (iPod), and q2remote's exit status, `state`, `wake`, `push`, `pull`, `install`, `log`, `find`.
+
+| Commit | Change | Why |
+|---|---|---|
+| `f1d8998` | Merge upstream 1.4.5 | 32 hunks in 9 files. `navigation.c` (13): Coverflow Sort and Refresh before the M1's knob rows in the enum, `pod_values`, `pod_keys` and the names; the new rows and `list_row_into` take the `VIEW_`/`ICON_` names (no icons on V2.1's Display); App Store keeps `apps_before_update`; `rate_saved`'s one argument; `svc_row` and `shows_image` inside the M1's Streaming `#if !M1PLUS`; `ple_tick` returns its tick at `PLE_TICK_X`; Go to Album's `GOTO_ALBUM_PAGE` beside `coverflow_shows_album`. `netupdate.c`: `sources.list`'s `check()`, `sh_rows` skipping Rockbox on M1. `peq_ui.c`: `row_dim`'s flags with `UI_W` and `STYLE_` names. `radio.c`: the heart at `SPOT_HEART_X/Y`, whose iPod Y `m1plus_q2.inc` follows. `build.py`: `VERSION` and `REPO` beside `Q2_TAR_SHA`, `build(repo=)` before the hand-off. `q2remote.py` (7): upstream's rework with the M1's knob, held tap, Goodix-CTP tap and swipe, and `peek`; `event_writer` takes both its 0 and the M1's delay lists. `README.md` kept ours; `internals.md` and `remote.md` took upstream's text with the M1 notes and rows. |
+| `023f6da` | Compile and link | `IM_KEYBOARD` is V2.1's 0x08: its keyboard-close handler compares and closes that field (`0x69430c`), where V1.32's is 0x0c. V2.1 has no `edit_set_select`: `m1plus_peq.h` calls `text_edit_set_select` on the edit's model at +0xbc, where `edit_set_cursor` reads it (`0x62a28c`). `ALBUM_YEAR`, `ALBUM_GROUP`, `DARK_POLL_US` copied; `Q2POD_REPO` is the M1's repo; `row_into` and `page_row_detail_into` in V2.1's rows. |
+| `297a5bd` | The new sites | `PLAY_HOLD`, `TAG_TEXT`, `CUE_TEXT`, `SCAN_DIRS`, `STREAM_POLLS`, `DARK_POLLS` mirrored in `CALL_SITES['q2']` and `unported` on M1. V2.1 has the routines (`toolsFixId3ErrorCode`, `toolsIconvConvert`, `toolsLoadAllFile`, `mclSyncPlayerStatus`, the cover threads); the words are to be found. |
+| `317286b` | The switches | Upstream's `list_toggle` names the Q2's `switch_on`/`switch_off` and sizes from the row's height, which a V2.1 row only gets from its list: on M1 Mono, Swap, MQA, Charge Limit, Low Power, Resume on Connect, the PEQ's Enabled and Band showed no state. The M1's draws V2.1's 57x28 `sset_on`/`sset_off` at x 251, as `powermanager_page` does. |
+| `8ade123` | Go to Album's body | `coverflow_goto_album` made a 375x290 body; the M1's hold menu reaches it before `m1plus_goto`. Now `UI_W` x `BOTTOM`, the Q2's same numbers. |
+| `4f9515c` | q2remote `state` on M1 | 1.4.5's `state` (and `wake`, `shot`'s warning) read V1.32's addresses; an M1 reads `M1_GLOBALS`, V2.1's. |
+| `0f82765` | App Store on M1 | The merge's seam skipped only Rockbox: Rockbox Themes would show with a Q2 Rockbox on the card, and the check asked GitHub for both. |
+| `ad18beb` | Q2 Pod page chevrons | Most Played, Long Songs and the media rows open pages, so `m1plus_nav_library.c` takes 1.4.5's `library_into`; `page_row_detail_into` keeps an empty detail's label, as the Q2's. |
+| `1cf48f2` | 1.4.5's test cases | `suitemerge.py`: `playback` clean, 7 hunks of `build` and 33 of `patch` by hand. New `NOT PORTED`: Era, `TAG_TEXT`, `CUE_TEXT`, `SCAN_DIRS`, `quick_stuck`, Streaming's Baidu row and switches, Tidal's Clear All. The switch cases read V2.1's images by upstream's names. |
+| `c4d2969` | `test/coverflow.py` | The fork's ranking case (`315e805`) reads the year orders through `ALBUM_YEAR`. |
+| `547b08c` | Boot walk | Display's two new rows pushed Knob: Navigation below the screen; the walk scrolls to it. |
+| `f823ca1` | Media walk | Coverflow's ring is the albums alone, so the media card's one album gave the swipe nothing to turn to: its two songs are an album each. |
+
+Checked by hand:
+- **`q2only.py 1.4.5`** lists 71 lines: `row_into` and `page_row_detail_into` (`023f6da`), Streaming's
+  Baidu row and `svc_row` (V2.1 has no Streaming page; the switches are U4 with Configuration), and
+  `offsets.inc`'s `IM_KEYBOARD`, `DARK_POLL_US`, `ALBUM_YEAR`, `ALBUM_GROUP` (`023f6da`) and
+  `NP_ART_TOP` (iPod only).
+- **`offsets.inc`, `build.py`, `peq.py`:** the new sites and `PAUSE_SLEEP` are U4 rows, as are
+  `english_ui` and `system_prove`'s label, and `LOG_HOOK` (q2remote's `log`). `systembar_showface` is an
+  iPod hook. `PAYLOAD_WINDOWS`' Era pages and the Era icon wait with Era.
+- **V1.32 numbers in the tag's C:** `0x5bccac` (`toolsIconvConvert`) only in `ringnav_cue_text`, which
+  nothing calls on M1; the play class 0xf001 and 0xff10, which the M1 already uses; the rest colours.
+- **Names by string in shared C:** `switch_on`/`switch_off` (`317286b`), `list_into` (the M1's
+  `row_into`), `select` (`ple_tick`'s `CHOICE_CHECK`); `s_label_white20l` and `scroll_view_streamsset`
+  only in Streaming's code. A 375x290 body (`8ade123`).
+
+Results:
+- **`test/q2compare.py 1.4.5 --suites`:** Legacy `bd571bdb…` and iPod `ba5174d4…` are byte-identical to
+  1.4.5's build, and all 22 suite runs pass (`patch` 1373 and 1805 scenarios). `coverflow`, `peq` and
+  `remote` differ in text from 1.4.5's, by the fork's seams.
+- **The M1** (`work/sync/1.4.5`, 1.4.5 dev 1, `V001s`, `update.bin` `8f42236d…`): these pass:
+  - `build --build`;
+  - `patch`: 1251 scenarios, no `KNOWN GAP`, 24 `NOT PORTED`;
+  - `boot` and its two walks;
+  - `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa`.
+
+  The gates first ran on `1cf48f2`: the Q2's `coverflow` suite failed (`c4d2969`), then the boot
+  and media walks (`547b08c`, `f823ca1`), all test-only, so the build stands.
+- **`test/m1plus/ports.py`:** 578 rows.
+- **`fndiff.py` from dev 10** (`work/u3/1.4.2-catchup3`), the build on the device: 201 changed, 47
+  added, 1 removed, of 946. For the next device pass:
+  - the settings switches: Playback's Mono, Swap L/R and MQA, Power's Charge Limit and Low Power,
+    Bluetooth's Resume on Connect, the PEQ's Enabled and Band, Spotify's Shuffle (`list_toggle`,
+    `pod_text`, `*_text`);
+  - chevrons on the Q2 Pod page's rows, Playback's Crossfade and Resume Songs, the PEQ's rows
+    (`library_open`, `list_row_into`, `row_into`, `row_dim`);
+  - Display's Coverflow Sort and Refresh Coverflow, Coverflow's ring of albums alone, and Go to Album
+    from a Coverflow song or with Artist Albums on Coverflow (`coverflow_sort_*`,
+    `coverflow_refresh_art`, `coverflow_goto_album`);
+  - the PEQ's Frequency, Q and Rename edits over the title with V2.1's keyboard, the first key
+    replacing the value (`render`, `numbers`, `focused`, `edit_set_select`): the edit's place is the
+    Q2's (page y 2-28), unchecked against V2.1's keyboard;
+  - lyrics tags in LRC form (`ringnav_lyric`);
+  - the App Store from `sources.list`, without Rockbox rows (`check`, `sh_rows`);
+  - Spotify's Downloads hub and a quiet Add to Queue (`spotify.c`);
+  - quiet favourite and queue actions in the hold menu (`qm_run`). `time_click` acts on the Q2's
+    `manualtime_page` only; V2.1's is `datetime_page`.
+- **Footprint over 1.4.5's files:** +1,494/−310 over 31. The new seams are `list_toggle`'s
+  `#if !M1PLUS`, the App Store's Rockbox lines, q2remote's `M1_GLOBALS` and its rows in `remote.md`.
+
 ## How to check a build now
 
 ```sh

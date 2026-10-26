@@ -27,10 +27,11 @@
 #define MIN_FREE_MB 16 /* no new cache files below this much free space on the card */
 #define ART_NEAR 3 /* real art only this many covers either side, like PictureFlow's cache */
 #define HOME_PLACEHOLDER "default_album_home" /* Classic Home's, at 290px (stock's: 110) */
-enum { ARTIST_ALBUMS = 1, RATED_ALBUMS }; /* cf.scoped */
-/* after the albums: Sort, then Refresh library; an artist's All albums (two or more), the rated
- * albums' Sort alone */
-#define CARDS (cf.scoped == ARTIST_ALBUMS ? deque_size(cf.albums) > 1 : cf.scoped ? 1 : 2)
+enum { ARTIST_ALBUMS = 1, RATED_ALBUMS, ALBUM_TRACKS }; /* cf.scoped */
+/* after the albums: an artist's All albums (two or more), the rated albums' Sort; none after the
+ * library's, whose Sort and Refresh are Display settings' Coverflow Sort and Refresh Coverflow
+ * (coverflow_sort_step, coverflow_refresh_art) */
+#define CARDS (cf.scoped == ARTIST_ALBUMS ? deque_size(cf.albums) > 1 : cf.scoped ? 1 : 0)
 
 extern int stock_home_trampoline(void *win, void *ctx), stock_scan_all_trampoline(void *, void *),
     stock_scan_folder_trampoline(void *, void *), stock_delete_song_trampoline(void *, void *);
@@ -46,17 +47,19 @@ static struct {
     void *albums, *tracks; /* our copies of the stock query results; albums in the Sort's order */
     void *stock;           /* the albums in stock order, which albums is, or is sorted from */
     int sort, sort_read;   /* the Sort card's order (SORT_*), from SORT_FILE once */
-    int year_old;          /* the Year order setting albums was sorted in */
+    int year_old, artists; /* the Year order and Artists settings albums was sorted in */
     int on_sort;           /* the next load centres the Sort card */
+    int resort;            /* Display settings changed the library's order: the next load reads it */
     job_t *jobs;
     unsigned long thread;
     unsigned timer;
     unsigned saved_album, albums_gen; /* albums_gen: library_gen when albums was queried */
     int screen, album, running, text_albums;
     volatile int done, total, cancel;
-    /* Scoped (ARTIST_ALBUMS or RATED_ALBUMS, else 0): an artist's albums (coverflow_artist), albums
-     * holding them, or the rated ones (coverflow_rated), stock holding them in the library's order
-     * and sort their own order; all_albums, all_stock and all_sort the library's, back on close.
+    /* Scoped (ARTIST_ALBUMS, RATED_ALBUMS or ALBUM_TRACKS, else 0): an artist's albums
+     * (coverflow_artist), albums holding them, the rated ones (coverflow_rated), stock holding them
+     * in the library's order and sort their own order, or one album's tracks alone
+     * (coverflow_goto_album); all_albums, all_stock and all_sort the library's, back on close.
      * No saved album; hearts gives a rated album's. */
     int scoped, all_sort;
     void *all_albums, *all_stock;
@@ -84,7 +87,7 @@ void *coverflow_tracks(void *page) {
     return page == cf.page && cf.screen == TRACKS ? cf.tracks : 0;
 }
 
-/* Only a live album card, never Sort, Refresh or a pending screen change. */
+/* Only a live album card, never a Sort or All albums card or a pending screen change. */
 void *coverflow_album(void *page) {
     if (page != cf.page || cf.screen != COVERS || !cf.slide || cf.timer) return 0;
     unsigned i = (unsigned)I(cf.slide, SLIDE_INDEX);
@@ -107,6 +110,14 @@ static unsigned tags_key(const char *artist, const char *album) {
 }
 
 static unsigned album_key(void *r) { return tags_key(P(r, REC_ARTIST), P(r, REC_ALBUM)); }
+
+/* An album's artist as Artists sets it: with Album Artist (artist_type 1), its album artist tag
+ * when set, so a compilation reads "Various Artists" or its compiler, not its last track's artist.
+ */
+static const char *cover_artist(void *r) {
+    const char *aa = P(r, REC_ALBUM_ARTIST);
+    return I(artist_type, 0) == 1 && aa && *aa ? aa : P(r, REC_ARTIST);
+}
 
 /* Track selection uses ringnav's existing position memory, keyed by this album. */
 unsigned coverflow_scope(void *page) {
@@ -261,7 +272,7 @@ int coverflow_album_cover(const char *track, const char *dst, int w, int h) {
 
 /* One album: embedded art, then beside_art, then ffmpeg's read of the embedded art, last as it
  * costs a process for every album without art; written to .tmp and renamed. An empty file marks
- * "no art", so the placeholder shows and the album is not retried until Refresh. */
+ * "no art", so the placeholder shows and the album is not retried until Refresh Coverflow. */
 static void build_art(const job_t *j) {
     char dst[512], tmp[512];
     if (access(j->track, 0)) return; /* storage gone: no marker, the next open retries */
@@ -427,7 +438,8 @@ static void drop_unknown(void) {
     deque_destroy(songs);
 }
 
-/* Sort, the card before Refresh (docs/internals.md#coverflow-sort): Album is the stock order;
+/* Sort, Display settings' Coverflow Sort and the rated albums' card
+ * (docs/internals.md#coverflow-sort): Album is the stock order;
  * Artist sorts by artist without a leading article, as every library list does (ringnav_sort_key),
  * then year, then album; Year in Playback settings' Year order (year_sql), undated last; Recently Added by the newest song's time_create; Most Played by the
  * album's listens (navigation.c album_plays); Random by playback.c's rand_below, reshuffled whenever
@@ -435,13 +447,13 @@ static void drop_unknown(void) {
  * matched back to the rows by album_cmp. */
 enum { SORT_ALBUM, SORT_ARTIST, SORT_ADDED, SORT_PLAYED, SORT_RANDOM, SORT_RATING, SORT_YEAR };
 #define SORT_FILE PEQ_ROOT "/mnt/data/ringnav-coversort"
-/* The rated albums' Sort: most hearts first, Album, Artist, then Year. */
+/* The rated albums' Sort: most hearts first, Album, Artist, Year, then Most Played. */
 #define RATED_SORT_FILE PEQ_ROOT "/mnt/data/ringnav-ratedsort"
-static const unsigned char rated_sorts[] = { SORT_RATING, SORT_ALBUM, SORT_ARTIST, SORT_YEAR };
+static const unsigned char rated_sorts[] = { SORT_RATING, SORT_ALBUM, SORT_ARTIST, SORT_YEAR,
+                                             SORT_PLAYED };
 /* The library's Sort: Year after Artist; saved values are the enum's. */
-static const unsigned char all_sorts[] = { SORT_ALBUM, SORT_ARTIST, SORT_YEAR, SORT_ADDED, SORT_PLAYED, SORT_RANDOM };
-#define ALBUM_GROUP " group by album COLLATE NOCASE," \
-    "ifnull(albumsonger,'') COLLATE NOCASE,case ifnull(albumsonger,'') when '' then rtrim(fileurl,replace(fileurl,'/','')) end"
+static const unsigned char all_sorts[] = { SORT_ALBUM, SORT_ARTIST, SORT_YEAR,
+                                           SORT_ADDED, SORT_PLAYED, SORT_RANDOM };
 #define ALBUM_SQL "select id,album,songer,fileurl,albumsonger from songtable" ALBUM_GROUP
 #define MUSIC_ALBUM_SQL "select case when ifnull(album,'')='' then -1 else id end," \
     "case when ifnull(album,'')='' then 'Unknown Album' else album end," \
@@ -451,8 +463,8 @@ static const unsigned char all_sorts[] = { SORT_ALBUM, SORT_ARTIST, SORT_YEAR, S
 extern int ringnav_year_old(void);
 /* Albums by year, Playback settings' Year order (navigation.c): newest or oldest first, undated last. */
 static const char *year_sql(void) {
-    return ringnav_year_old() ? SORT_SQL "ifnull(max(year),0)=0,max(year),album COLLATE NOCASE"
-                              : SORT_SQL "ifnull(max(year),0)=0,max(year) desc,album COLLATE NOCASE";
+    return ringnav_year_old() ? SORT_SQL ALBUM_YEAR "=0," ALBUM_YEAR ",album COLLATE NOCASE"
+                              : SORT_SQL ALBUM_YEAR "=0," ALBUM_YEAR " desc,album COLLATE NOCASE";
 }
 static const char *const sort_names[] = { "Sort: Album", "Sort: Artist", "Sort: Recently Added",
                                           "Sort: Most Played", "Sort: Random", "Sort: Rating", "Sort: Year" };
@@ -776,7 +788,7 @@ static const unsigned initial_misc[][2] = {
 static unsigned initial(int i) {
     void *r = deque_at(cf.albums, (unsigned)i);
     if (I(r, REC_ID) == -1) return '#';
-    const char *name = P(r, cf.sort == SORT_ARTIST ? REC_ARTIST : REC_ALBUM);
+    const char *name = cf.sort == SORT_ARTIST ? cover_artist(r) : P(r, REC_ALBUM);
     char key[ARTIST_KEY];
     snprintf(key, sizeof key, "%s", name ? name : "");
     ringnav_sort_key(key);
@@ -810,7 +822,7 @@ int coverflow_jump(void *w, int from, int dir, unsigned *letter) {
         if (to < n) *letter = initial(to);
     } else {
         while (to >= 0 && initial(to) == c) --to;
-        if (to < 0) return from + 1; /* Refresh, across the wrap */
+        if (to < 0) return from + 1; /* the last album, across the wrap */
         c = initial(to);
         while (to > 0 && initial(to - 1) == c) --to;
         *letter = c;
@@ -988,7 +1000,8 @@ static void *sorted(void) {
     unsigned n = deque_size(cf.stock);
     int artist = cf.sort == SORT_ARTIST, played = cf.sort == SORT_PLAYED;
     order_t *v = cf.sort == SORT_ALBUM ? 0 : calloc(n + 1, sizeof *v);
-    if (!cf.scoped) cf.year_old = ringnav_year_old(); /* the rated page's sort is its own */
+    if (!cf.scoped) /* the rated page's sort is its own */
+        cf.year_old = ringnav_year_old(), cf.artists = I(artist_type, 0);
     unsigned *sum = v && played ? calloc(n + 1, sizeof *sum) : 0;
     char *keys = v && artist ? calloc(n + 1, ARTIST_KEY) : 0;
     int ranked = cf.sort != SORT_RATING && cf.sort != SORT_RANDOM; /* uses album_index */
@@ -1002,7 +1015,7 @@ static void *sorted(void) {
         void *r = v[i].r = deque_at(cf.stock, i);
         v[i].rank = ~0u, v[i].idx = (int)i;
         if (keys) {
-            const char *a = P(r, REC_ARTIST);
+            const char *a = cover_artist(r);
             snprintf(keys + i * ARTIST_KEY, ARTIST_KEY, "%s", a ? a : "");
             ringnav_sort_key(keys + i * ARTIST_KEY);
             v[i].artist = keys + i * ARTIST_KEY;
@@ -1140,10 +1153,29 @@ void *page_row_detail(void *view, int index, const char *caption, const char *de
     return item;
 }
 
-/* A page_list row that opens another list: iPod adds stock's list_into chevron, as the Library's. */
+/* Stock's list_into chevron at the right of a full-width row h high, as the Library's (its glyph
+ * at x 322 to 332), the row's labels narrowed to end before it. Shared with peq_ui.c. */
+void row_into(void *item, int h) {
+    for (unsigned i = 0, n = widget_count_children(item); i < n; ++i) {
+        void *label = widget_get_child(item, i);
+        widget_move_resize(label, I(label, W_X), I(label, W_Y), 316 - I(label, W_X), I(label, W_H));
+    }
+    image_base_set_image(image_create(item, 302, 0, 50, h), "list_into");
+}
+
+/* A page_row_detail row that opens another page, with row_into's chevron. An empty detail centres
+ * the caption in its 64px row, beside the chevron. */
+void *page_row_detail_into(void *view, int index, const char *caption, const char *detail,
+                           int (*click)(void *, void *)) {
+    void *item = page_row_detail(view, index, caption, detail, click);
+    int h = detail ? 64 : 48;
+    if (detail && !*detail) widget_move_resize(widget_get_child(item, 0), CF_ROW_X, 0, CF_ROW_W, h);
+    row_into(item, h);
+    return item;
+}
+
 void page_row_into(void *view, int index, const char *caption, int (*click)(void *, void *)) {
-    void *item = page_row_detail(view, index, caption, 0, click);
-    if (IPOD) image_base_set_image(image_create(item, 302, 0, 50, 48), "list_into");
+    page_row_detail_into(view, index, caption, 0, click);
 }
 #endif
 #include "m1plus_coverflow_rows.c"
@@ -1457,7 +1489,7 @@ static int fx_open(void) {
     return 1;
 }
 
-/* Album a's cached art in buf, else the placeholder (no art, or the Refresh card). */
+/* Album a's cached art in buf, else the placeholder (no art, or a card). */
 static const unsigned *fx_load(int a, unsigned *buf) {
     char url[600] = "file://";
     if ((unsigned)a < deque_size(cf.albums)) {
@@ -1551,11 +1583,12 @@ static int changed(void *ctx, void *event) {
     }
     void *r = c + CARDS < n ? deque_at(cf.albums, c) : (void *)0;
     if (r && !cf.scoped) cf.saved_album = album_key(r);
-    widget_set_text_utf8(cf.name, r ? P(r, REC_ALBUM)
-                                  : c + CARDS != n ? "Refresh library"
-                                  : cf.scoped == ARTIST_ALBUMS ? "All albums" : sort_names[cf.sort]);
-    widget_set_text_utf8(cf.artist, r ? P(r, REC_ARTIST) : ""); /* NULL leaves the old one */
-    /* Stock draws even a centred caption at -xoffset: a long one's scroll would shift the next left. */
+    widget_set_text_utf8(cf.name, r                            ? P(r, REC_ALBUM)
+                                  : cf.scoped == ARTIST_ALBUMS ? "All albums"
+                                                               : sort_names[cf.sort]);
+    widget_set_text_utf8(cf.artist, r ? cover_artist(r) : ""); /* NULL leaves the old one */
+    /* Stock draws even a centred caption at -xoffset: a long one's scroll would shift the next
+     * left. */
     widget_set_prop_int(cf.name, "xoffset", 0);
     widget_set_prop_int(cf.artist, "xoffset", 0);
     return 0;
@@ -1638,12 +1671,17 @@ static int poll(const void *unused) {
     return 0;
 }
 
-/* On open and Refresh: the albums, then art for the ones with no cache file (PictureFlow's
- * first-launch build; later opens resume). The albums are queried again only on Refresh or after
- * the library changed: stock's sort converts both names to pinyin on every comparison. */
+/* On open: the albums, then art for the ones with no cache file (PictureFlow's first-launch build;
+ * later opens resume). The albums are queried again only after the library changed (or Refresh
+ * Coverflow): stock's sort converts both names to pinyin on every comparison. */
 static void load(void) {
     int on_sort = cf.on_sort; /* taken whatever this load shows */
     cf.on_sort = 0;
+    if (cf.resort && !cf.scoped) { /* Coverflow Sort changed: its order read again */
+        cf.resort = cf.sort_read = 0;
+        if (cf.albums && cf.albums != cf.stock) deque_destroy(cf.albums);
+        cf.albums = 0;
+    }
     drop();
     widget_destroy_children(cf.page);
     cf.covers = cf.slide = cf.name = cf.artist = 0; /* destroyed with the page's children */
@@ -1664,7 +1702,8 @@ static void load(void) {
         n = (int)deque_size(cf.stock);
     }
     if (cf.albums && !cf.scoped && (cf.sort == SORT_YEAR || cf.sort == SORT_ARTIST) &&
-        cf.year_old != ringnav_year_old()) { /* Year order changed */
+        (cf.year_old != ringnav_year_old() || /* Year order changed, or Artists for its names */
+         (cf.sort == SORT_ARTIST && cf.artists != I(artist_type, 0)))) {
         if (cf.albums != cf.stock) deque_destroy(cf.albums);
         cf.albums = 0;
     }
@@ -1839,8 +1878,10 @@ static int play_all(const void *unused) {
     return 0;
 }
 
-static int refresh(const void *unused) {
-    cf.timer = 0;
+/* Display settings' Refresh Coverflow (navigation.c): the art cache emptied and the albums queried
+ * again, both at Coverflow's next open (a page open under Settings keeps what it shows). The
+ * library generation's step is a songtable write's, which Most Played reads again too. */
+void coverflow_refresh_art(void) {
     void *dir = opendir(ART_DIR);
     for (struct dirent *e; dir && (e = readdir(dir));) {
         char path[600];
@@ -1848,13 +1889,32 @@ static int refresh(const void *unused) {
         unlink(path); /* "." and ".." fail harmlessly */
     }
     if (dir) closedir(dir);
-    drop_albums();
-    load();
-    return 0;
+    ++library_gen;
 }
 
-/* The Sort card: the next order, saved, and the covers again in it, still on the Sort card. The
- * stock list is kept, so nothing is queried but the order's own ranking. */
+/* The library's order as SORT_FILE holds it, Album when it holds none of all_sorts. */
+static int sort_saved(void) {
+    int sort = SORT_ALBUM;
+    BLOB_IO(SORT_FILE, sort, 0);
+    for (unsigned i = 0; i < sizeof all_sorts; ++i)
+        if (all_sorts[i] == sort) return sort;
+    return SORT_ALBUM;
+}
+
+/* Display settings' Coverflow Sort: its label ("Sort: Album"), and a press's next order, saved,
+ * which Coverflow takes at its next open (load). */
+const char *coverflow_sort_name(void) { return sort_names[sort_saved()]; }
+void coverflow_sort_step(void) {
+    int sort = sort_saved();
+    unsigned i = 0;
+    while (all_sorts[i] != sort) ++i;
+    sort = all_sorts[(i + 1) % sizeof all_sorts];
+    BLOB_IO(SORT_FILE, sort, 1);
+    cf.resort = 1;
+}
+
+/* The rated albums' Sort card: the next order, saved, and the covers again in it, still on the Sort
+ * card. The stock list is kept, so nothing is queried but the order's own ranking. */
 static int resort(const void *unused) {
     cf.timer = 0;
     cf.sort = sort_next(1);
@@ -1872,8 +1932,6 @@ static int pick(void *ctx, void *event) {
     int i = (int)(long)ctx, n = (int)deque_size(cf.albums);
     if (i == n && cf.scoped == ARTIST_ALBUMS)
         rearm(&cf.timer, play_all, 0);
-    else if (i == n + 1)
-        rearm(&cf.timer, refresh, 0);
     else if (i == n)
         rearm(&cf.timer, resort, 0);
     else {
@@ -1894,10 +1952,10 @@ static void *artist_under(void) {
 }
 
 /* Return: tracks -> covers (the slide_menu kept its album), preparing -> cancel and covers,
- * covers or the message -> Home, or back out of a scoped page. */
+ * covers or the message -> Home, or back out of a scoped page (one album's tracks too). */
 static int keyup(void *ctx, void *event) {
     if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
-    if (cf.screen == TRACKS || cf.screen == PREPARING)
+    if ((cf.screen == TRACKS && cf.scoped != ALBUM_TRACKS) || cf.screen == PREPARING)
         rearm(&cf.timer, to_covers, 0);
     else if (cf.scoped) {
         /* An artist's covers: the unseen artist page under them closes first, unanimated (its
@@ -1975,6 +2033,34 @@ int coverflow_artist(void *albums) {
     cf.text_albums = ringnav_artist_view() == 2;
     load();
     return 1;
+}
+
+/* Go to Album from a Coverflow song (navigation.c's qm_goto) and Era's albums: r's tracks alone, no
+ * covers under them, so Return closes the page; 0 when it has none. */
+int coverflow_goto_album(void *r) {
+    void *t = coverflow_album_tracks(r), *one;
+    unsigned n = deque_size(t);
+    deque_destroy(t);
+    if (!n || !(one = _create_deque("stSongInfo"))) return 0;
+    deque_init(one);
+    _deque_push_back(one, r);
+    if (!scoped_open()) {
+        deque_destroy(one);
+        return 0;
+    }
+    cf.all_albums = cf.albums;
+    cf.albums = one;
+    cf.scoped = ALBUM_TRACKS;
+    cf.covers = cf.slide = cf.name = cf.artist = 0;
+    cf.album = 0;
+    cf.body = widget_factory_create_widget(widget_factory(), "view", cf.page, 0, 0, UI_W, BOTTOM);
+    to_tracks(0);
+    return 1;
+}
+
+/* The open page shows r's album alone (coverflow_goto_album): Go to Album has nowhere new to go. */
+int coverflow_shows_album(void *r) {
+    return cf.page && cf.scoped == ALBUM_TRACKS && !album_cmp(deque_at(cf.albums, 0), r);
 }
 
 /* Library Ratings' Albums (navigation.c): the albums hearts gives 1 to 5 hearts, as covers with the

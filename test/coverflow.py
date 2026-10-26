@@ -27,6 +27,8 @@ extern void *shim_dir;
 #define parse_cover_mutex ((const unsigned char *)&shim_parse)
 #define g_playcover_mutex ((const unsigned char *)&shim_play)
 #define tools_pdeq_directory ((const unsigned char *)&shim_dir)
+static unsigned char shim_artist_type[4] __attribute__((unused)); /* Artists: Artist */
+#define artist_type shim_artist_type
 #define pthread_mutex_lock shim_lock
 #define pthread_mutex_unlock shim_unlock
 #define statfs shim_statfs
@@ -689,22 +691,22 @@ static void depth(void) {
     /* Refresh and close release the frame and every texture. */
     close_page();
     assert(frames == 0 && loads == unloads);
-    /* Small libraries: two albums and the Sort and Refresh cards wrap round the ring, each album decoded
-       once however often it repeats; missing art shows the placeholder. */
+    /* Small libraries: two albums wrap round the ring (no Sort or Refresh card: Display settings' rows
+       now), each album decoded once however often it repeats; missing art shows the placeholder. */
     int keep = albums;
     albums = 2; rescan();
     open_page();
     s = slide(); raw = s->raw;
     loads = unloads = 0;
     coverflow_paint(s, canvas);
-    assert(s->nkids == 4 && loads <= 2 && loads == unloads);
+    assert(s->nkids == 2 && loads <= 2 && loads == unloads);
     render(0, (const unsigned *const[7]){ 0 }); /* nothing to draw: all black */
     for (int i = 0; i < CF_VIEW_W; ++i) assert(px(i, CF_TOP + 80) == 0xff000000u);
     close_page();
     albums = 1; rescan();
     open_page(); s = slide();
     coverflow_paint(s, canvas);
-    assert(s->nkids == 3);
+    assert(s->nkids == 1);
     capture("one-album");
     close_page();
     albums = keep; rescan();
@@ -723,8 +725,8 @@ static void depth(void) {
     tex_fail = 0;
 }
 
-/* Sort (the card before Refresh): each press takes the next order, saved for the next open and kept
-   on the Sort card; ties keep the stock order. */
+/* Display settings' Coverflow Sort (coverflow_sort_step): each press takes the next order, saved and
+   taken at the next open; ties keep the stock order. */
 static const char *album_at(int i) {
     static char got[160];
     widget *s = slide();
@@ -743,12 +745,11 @@ static int saved_sort(void) {
     if (f) assert(fread(&v, sizeof v, 1, f) == 1), fclose(f);
     return v;
 }
+extern void coverflow_sort_step(void), coverflow_refresh_art(void);
 static void press_sort(void) {
-    widget *s = slide();
-    int n = s->nkids - 2;
-    w[s->kids[n]].click(w[s->kids[n]].ctx, 0);
-    run();
-    assert(*(int *)(slide()->raw + SLIDE_INDEX) == n); /* still on the Sort card */
+    coverflow_sort_step();
+    close_page();
+    open_page();
 }
 extern int coverflow_jump(void *, int, int, unsigned *);
 
@@ -761,7 +762,7 @@ static void sorting(void) {
     rescan();
     open_page();
     widget *s = slide();
-    assert(s->nkids == albums + 2);
+    assert(s->nkids == albums);
     order_is((const char *const[]){ "Cover", "Folder", "Embedded", "None", "New", "A", "B", "C", "Tight", 0 });
     int q = queries;
     /* Artist, articles aside (The Beatles under B), then year (the query: None, Folder), then stock. */
@@ -779,12 +780,12 @@ static void sorting(void) {
     assert(saved_sort() == 6);
     order_is((const char *const[]){ "New", "A", "Cover", "Folder", "Embedded", "None", "B", "C", "Tight", 0 });
     assert(coverflow_jump(slide(), 0, 1, &letter) == 1 && !letter);
-    assert(strstr(rank_sql, "max(year) desc"));
+    assert(strstr(rank_sql, "else 0 end) desc"));
     /* Year order: Oldest first: the next open ranks again, ascending (the query's order still). */
     close_page();
     year_old = 1, q = queries;
     open_page();
-    assert(queries == q + 1 && strstr(rank_sql, "max(year),album") && !strstr(rank_sql, "desc"));
+    assert(queries == q + 1 && strstr(rank_sql, "else 0 end),album") && !strstr(rank_sql, "desc"));
     order_is((const char *const[]){ "New", "A", "Cover", 0 });
     q = queries;
     close_page();
@@ -890,13 +891,13 @@ static void unknown_card(void) {
     unknown_row = 1;
     rescan();
     open_page();
-    assert(slide()->nkids == albums + 2 && unknown_queries == 0);
+    assert(slide()->nkids == albums && unknown_queries == 0);
     close_page();
     unknown_songs = 1;
     rescan();
     open_page();
     widget *s = slide();
-    assert(s->nkids == albums + 3 && !strcmp(album_at(albums), "Unknown Album"));
+    assert(s->nkids == albums + 1 && !strcmp(album_at(albums), "Unknown Album"));
     ranked[0] = "Unknown Album", ranked[1] = "None", ranked[2] = 0; /* Artist, then year */
     press_sort();
     assert(!strcmp(album_at(albums), "Unknown Album") && !strcmp(album_at(0), "None"));
@@ -925,7 +926,7 @@ static void same_name(void) {
     free_blocks = 1 << 20;
     open_page();
     widget *s = slide();
-    assert(s->nkids == albums + 2);
+    assert(s->nkids == albums);
     for (int i = albums - 2; i < albums; ++i) {
         char art[600];
         snprintf(art, sizeof art, PEQ_ROOT "/mnt/mmc/.coverflow/%08x.jpg",
@@ -968,7 +969,7 @@ static void audiobooks(void) {
 
     rescan();
     open_page();
-    assert(slide()->nkids == music + 2);
+    assert(slide()->nkids == music);
     close_page();
     deque *artist = _create_deque(0);
     artist->at[artist->n++] = records[music + 1];
@@ -1030,7 +1031,7 @@ static void disc_folders(void) {
     rescan();
     open_page();
     widget *s = slide();
-    assert(s->nkids == albums - 1 + 2);
+    assert(s->nkids == albums - 1);
     for (int i = 0; i < 2; ++i) {
         w[s->kids[albums - 3 + i]].click(w[s->kids[albums - 3 + i]].ctx, 0);
         run();
@@ -1165,20 +1166,19 @@ int main(void) {
     assert(calls == 2 && !strcmp(made[0], "cover.jpg") && !strcmp(made[1], "folder.jpg"));
     assert(size("Cover") == 9 && size("Folder") == 10 && size("Embedded") == 0 && !tmp_files());
     widget *s = slide();
-    assert(s && s->nkids == 5 && !strncmp(w[s->kids[0]].image, "file://", 7));
+    assert(s && s->nkids == 3 && !strncmp(w[s->kids[0]].image, "file://", 7));
     close_page();
     album("None", 0);
     rescan();
     open_page();
     assert(calls == 2 && size("None") == 0 && !tmp_files());
-    s = slide(); /* Cover and Folder have art; Embedded and None the placeholder; Sort, Refresh too */
+    s = slide(); /* Cover and Folder have art; Embedded and None the placeholder; nothing after them */
     int with_art = 0, bare = 0;
     for (int i = 0; i < 4; ++i) {
         if (!strncmp(w[s->kids[i]].image, "file://", 7)) ++with_art;
         else if (!strcmp(w[s->kids[i]].image, PLACEHOLDER)) ++bare;
     }
-    assert(with_art == 2 && bare == 2);
-    assert(!strcmp(w[s->kids[4]].image, PLACEHOLDER) && !strcmp(w[s->kids[5]].image, PLACEHOLDER)); /* Sort, Refresh */
+    assert(with_art == 2 && bare == 2 && s->nkids == 4);
     close_page();
 
     /* A later open builds only the albums with no cache file; the marker is not retried. */
@@ -1212,10 +1212,13 @@ int main(void) {
     open_page();
     assert(size("C") == 9 && !strcmp(made[calls - 1], "cover.jpg"));
 
-    /* Refresh (the last card) clears the cache and rebuilds every album. */
+    /* Display settings' Refresh Coverflow (coverflow_refresh_art) clears the cache and, at the next
+       open, queries the albums again and rebuilds every one. */
     int before = calls, q = queries;
-    s = slide();
-    w[s->kids[s->nkids - 1]].click(w[s->kids[s->nkids - 1]].ctx, 0);
+    close_page();
+    coverflow_refresh_art();
+    assert(size("Cover") == -1 && size("None") == -1);
+    open_page();
     run();
     assert(calls == before + albums - 2 && size("None") == 0 && size("Embedded") == 0 && size("Cover") == 9);
     assert(queries == q + 1); /* Refresh always queries again */
@@ -1425,7 +1428,9 @@ def main():
         assert not db.execute(sql).fetchall()
     # The rankings (Sort, and an artist's albums) as SQLite runs them on stock's songtable: each
     # year order with ties by name and undated last, the newest song first, and by name.
-    orders = re.findall(r'SORT_SQL "((?:[^"\\]|\\.)*)"', source)
+    album_year = macro('ALBUM_YEAR')  # a tag's year, from a full date too (1.4.5)
+    orders = [''.join(album_year if t == 'ALBUM_YEAR' else ast.literal_eval(t) for t in re.findall(r'"(?:[^"\\]|\\.)*"|ALBUM_YEAR', o))
+              for o in re.findall(r'SORT_SQL((?:\s*(?:"(?:[^"\\]|\\.)*"|ALBUM_YEAR))+)', source)]
     assert len(orders) == 4, orders
     with sqlite3.connect(':memory:') as db:
         db.execute('create table songtable(id INTEGER PRIMARY KEY AUTOINCREMENT,filename,fileurl,album,songer,style,'
@@ -1434,13 +1439,13 @@ def main():
                                    ('Undated', 0, 4), ('Also 2020', 2020, 0)):
             db.execute('insert into songtable(fileurl,album,albumsonger,year,time_create) values (?,?,"A",?,?)',
                        (f'/mnt/mmc/{album}/{added}.flac', album, year, added))
-        want = {'max(year) desc,album COLLATE NOCASE': ['Also 2020', 'New', 'Mid', 'old', 'Undated'],  # Newest First
-                'max(year),album COLLATE NOCASE': ['old', 'Mid', 'Also 2020', 'New', 'Undated'],  # Oldest First
+        want = {album_year + ' desc,album COLLATE NOCASE': ['Also 2020', 'New', 'Mid', 'old', 'Undated'],  # Newest First
+                album_year + ',album COLLATE NOCASE': ['old', 'Mid', 'Also 2020', 'New', 'Undated'],  # Oldest First
                 'max(time_create) desc': ['old', 'Undated', 'Mid', 'New', 'Also 2020'],  # Recently Added
                 'album COLLATE NOCASE': ['Also 2020', 'Mid', 'New', 'old', 'Undated']}  # Artist Album Order: A-Z
         for o in orders:
             got = [r[1] for r in db.execute(macro('ALBUM_SQL') + macro('ALBUM_GROUP') + ' order by ' + o)]
-            assert got == want.pop(o.removeprefix('ifnull(max(year),0)=0,')), (o, got)
+            assert got == want.pop(o.removeprefix(album_year + '=0,')), (o, got)
         assert not want, want
 
     with tempfile.TemporaryDirectory(prefix='q2-coverflow-check-') as directory:
