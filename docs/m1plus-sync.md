@@ -114,7 +114,9 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
      them: the suite run on M1 names those that need a guard. A case for code the M1 doesn't run, or one that needs V1.32 code,
      goes behind its hook or site (`if 'NAME' in HOOKS`) with a `not_ported` line. Then run the copies
      on a fresh M1 build: they find the rest.
-   - **A conflict in a doc** takes upstream's text. The M1 docs are the `m1plus-*.md` files.
+   - **A conflict in a doc** takes upstream's text. The M1 docs are the `m1plus-*.md` files. `README.md`
+     is the fork's own front page, so its conflicts keep ours; read upstream's changes to it for
+     anything the M1 section should say. An upstream PR of the port takes upstream's README back.
 3. **Gates, in order.**
    1. **Q2 output and suites.** `TMPDIR=/tmp python3 test/q2compare.py <tag> --suites`, inside the
       shell: `nix develop` sets its own `TMPDIR` over one set outside it. Under that long `TMPDIR`,
@@ -160,11 +162,12 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
 How much of upstream's own files the M1 changes, after U1 and after each sync:
 
 ```sh
-git diff --stat <UPSTREAM_BASE> -- $(git ls-tree -r --name-only <UPSTREAM_BASE> | grep -v '^docs/m1plus') | tail -1
+git diff --stat <UPSTREAM_BASE> -- $(git ls-tree -r --name-only <UPSTREAM_BASE> | grep -v '^docs/m1plus\|^README.md$') | tail -1
 ```
 
 `<UPSTREAM_BASE>` is the commit in `UPSTREAM_BASE`. Before the 1.2.2 pilot sync it was the fork point,
-compared through `main`, whose M1 docs are the fork's and are left out.
+compared through `main`, whose M1 docs are the fork's and are left out. `README.md` is left out
+since Oct 26, when it became the fork's front page.
 
 Each changed line in an upstream file is a possible conflict in the next sync, so this number should
 stay flat or fall.
@@ -184,3 +187,4 @@ stay flat or fall.
 | U3 step 3: sync to 1.3.8 (Oct 24) | 1.3.8 (`3744dac`) | +1,418/−285 over 30 files: `ringnav_input` and `library_music` lost a seam each |
 | U3 step 4: sync to 1.3.9 (Oct 24) | 1.3.9 (`41844cc`) | +1,421/−285 over 30 files: the hold menu's `yslidable` (3 lines, `qm_open`) |
 | U3 step 5: sync to 1.4.2 (Oct 24) | 1.4.2 (`7efbff5`) | +1,429/−287 over 30 files: MQA's icon name, the Apps row's `!M1PLUS`, `peq_boot` at `BOOT_MODE_RET` |
+| The fork's README, left out (Oct 26) | 1.4.2 (`7efbff5`) | +1,468/−300 over 31 files: the polish and catch-up's seams since step 5; `README.md` had +7/−7 |
