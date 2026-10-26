@@ -36,11 +36,12 @@ void row_into(void *item, int h) {
     image_base_set_image(image_create(item, 295, (h - 22) / 2, 13, 22), ROW_CHEVRON);
 }
 
-/* A row that opens another list, with row_into's chevron. An empty detail centres the caption, as a
- * row without one. */
+/* A row that opens another list, with row_into's chevron. An empty detail centres the caption where
+ * a row without one has it. */
 void *page_row_detail_into(void *view, int index, const char *caption, const char *detail,
                            int (*click)(void *, void *)) {
-    void *item = page_row_detail(view, index, caption, detail && *detail ? detail : 0, click);
+    void *item = page_row_detail(view, index, caption, detail, click);
+    if (detail && !*detail) widget_move_resize(widget_get_child(item, 0), PAGE_ROW_X, 20, PAGE_ROW_W, 24);
     row_into(item, PAGE_ROW_H);
     return item;
 }

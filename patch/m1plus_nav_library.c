@@ -18,10 +18,10 @@ int library_open(void *ctx, void *event) {
     void *view = page_list(st.lib_page, st.lib_page, 0, "Q2 Pod", n, 64);
     library_into(view, "local_shuffle", shuffle_menu, 0, "Shuffle");
     library_into(view, "local_fav", ratings_menu, 0, "Ratings");
-    library_row(view, "local_frequentplay", most_played, 0, "Most Played");
-    library_row(view, "local_longsongs", long_songs, 0, "Long Songs");
+    library_into(view, "local_frequentplay", most_played, 0, "Most Played");
+    library_into(view, "local_longsongs", long_songs, 0, "Long Songs");
     for (int k = 0; k < VIDEOS; k++)
-        if (media[k]) library_row(view, icons[k], media_click, (void *)(long)(k + 1), MEDIA[k]);
+        if (media[k]) library_into(view, icons[k], media_click, (void *)(long)(k + 1), MEDIA[k]);
     library_row(view, "local_coverflow", coverflow_row, 0, "Coverflow");
     library_into(view, "row_spotify", spot_open, 0, "Spotify"); /* stream_*'s at 40 px (tools/m1plus.py) */
     for (int k = 0; k < apps; ++k) /* the card apps on the card (addon.c), as Streaming lists them */
