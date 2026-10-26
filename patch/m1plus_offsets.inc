@@ -558,6 +558,7 @@ static inline int arc_out(int r, int y) {
  * its exports, and demo's GOT slot for taglib_file_new (-0x94c($gp)). */
 #define MCL_LYRICS 0xa0aae4
 #define MCL_LYRIC_LOCK 0xa0aaf0
+#define LYRIC_ROW_BUILDER 0x53a240 /* show_player_face's (0x53bed0); V2.1's one mclGetLyricTime reader */
 #define TAGLIB_NEW_GOT 0xa03584
 #define TAGLIB_FILE_NEW 0x98a0
 #define TAGLIB_PROPERTY_GET 0xb48c
@@ -568,6 +569,24 @@ static inline int arc_out(int r, int y) {
  * then branches to loadLocalClassList (0x4ee930, 0x4ee9a8), where V1.32 loads 0xff11 (ringnav_localclass's
  * artist_tab). */
 #define CLASS_ARTIST_ALBUMS 0xff01
+#define CLASS_ARTISTS 0xf004     /* the Artists list: a row opens album_page with {0xf004, record} (0x535d04) */
+/* The hold menu's Go to (m1plus_nav_goto.c): albuminfo_page is the album's, and an artist's albums are
+ * album_page with classinfo CLASS_ARTIST_ALBUMS, the Albums list's own page too */
+#define GOTO_ALBUM_PAGE "albuminfo_page"
+#define GOTO_ARTIST_SHOWN (I(g_local_classinfo_save, 0) == CLASS_ARTIST_ALBUMS)
+/* playlist_page_init's context >> 16 (0x53eb9c): Add to Playlist's mode, 0 when browsing; its row
+ * click adds in a mode > 0 (0x53d470), as V1.32's 0xa27894 */
+#define PLAYLIST_ADD_MODE 0xa06f50
+/* The playlist editor's tick (ple_tick) at the end of V2.1's PAGE_ROW_H row, before the scroll bar */
+#define PLE_TICK_X 284
+#define PLE_ROW_H PAGE_ROW_H
+/* ple_mutate's temporary id. V2.1's libsqlite3 is 3.19.3, which refuses HAVING without GROUP BY ("a
+ * GROUP BY clause is required before HAVING"), so Move Up/Down said "Could not save playlist": a CASE
+ * gives NULL at the top id instead, which ple_number refuses as the Q2's empty result is */
+#define PLE_TEMP_ID_SQL                                                                                \
+    "select case when ifnull(max(id),100)<2147483647 then max(100,ifnull(max(id),100))+1 end "         \
+    "from playlist"
+#define QR_NO_WIFI "Connect the M1 Plus to Wi-Fi"
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
@@ -639,6 +658,9 @@ static inline int arc_out(int r, int y) {
 #define SCAN_THREAD 0xa03a44
 #define SCAN_DONE 0xa03a40
 #define BT_PAIRLIST 0xa041c0 /* stock pdeq_btpairlist (a symbol in V2.1) */
+#define BTLINKMAC 0xa041d0 /* readBtLinkMac's buffer (0x4d2800: GOT page 0xa00000 + 0x41d0) */
+#define BT_STATUS_CB 0x4d4738 /* openBluetooth's status callback (0x4d2cf0), V1.32's 0x4f1a50 */
+#define BT_PROMPT_CB 0x4d2310 /* openBluetooth's prompt callback (0x4d2cd8), V1.32's 0x4ef600 */
 /* Coverflow text: iPod keeps every label CF_EDGE from the sides, where the lowest track row's text
  * clears the bottom corners; both builds keep the captions there. Album names and artists scroll
  * within that. Under the covers (CF_TEXT_Y), the album name is CF_NAME_PX white and the artist

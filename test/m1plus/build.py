@@ -350,6 +350,42 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # stores 0xff01 in classinfo_save (ori $v0, 0xff01; sw $v0, 0($s0)) and branches to loadLocalClassList.
     assert words(0x4ee930, 1) == (0x3402ff01,) and words(0x4ee93c, 1) == (0xae020000,)
     assert words(0x4ee9a8, 1)[0] == 0x10000000 | ((stock_syms['loadLocalClassList'] - 0x4ee9ac) >> 2) & 0xffff
+    # SCAN_REFRESH: toolsLoadAllFile's bal toolsCheckItemExist, V1.32's word.
+    assert bal(0x5eff54, 'toolsCheckItemExist') and stock_syms['toolsLoadAllFile'] < 0x5eff54
+    # FOLDER_NAME: the folder row's text (0x532e34, a PIC entry bal'd from 0x533124, V1.32's 0x522304):
+    # tk_snprintf at -0x5798, tk_strncpy at -0x3300 from V2.1's GOT base.
+    def slot(offset): return struct.unpack_from('<I', stock, fileoff(stock, M1PLUS_GP + offset))[0]
+    assert got(0x532ec0) == stock_syms['tk_snprintf'] and slot(-0x3300) == stock_syms['tk_strncpy']
+    assert words(0x533124, 1)[0] == 0x04110000 | ((0x532e34 - 0x533128) >> 2) & 0xffff
+    assert words(0x532e34, 3) == (0x3c1c004d, 0x279c109c, 0x0399e021)  # gp = 0xa03ed0
+    # ID3_PATH: get_id3info's strcpy(playsong_id3info, record->path), the id3 info ringnav_id3_path fills.
+    assert got(0x4dff40) == stock_syms['strcpy@GLIBC_2.0'] and got(0x4dff44) == stock_syms['playsong_id3info']
+    assert stock_syms['get_id3info'] < 0x4dff4c and words(0x4dff50, 1) == (0x8e05000c,)  # lw $a1, REC_PATH($s0)
+    # GRID_COVER: the Albums grid's toolsGetAlbumCover (0x4dd6a4's lw) goes on to toolsGetExternCover, Folder view's don't.
+    assert got(0x4dd6c0) == stock_syms['toolsGetExternCover'] and words(0x4de8a4, 1) == words(0x4de960, 1) == (0x0320f809,)
+    # PLAYER_COVER: parseplaycover_thd's toolsGetExternCover after its toolsGetAlbumCover (0x4df1e8) missed.
+    assert got(0x4df218) == stock_syms['toolsGetExternCover'] and stock_syms['parseplaycover_thd'] < 0x4df1e8 < 0x4df218
+    # LYRIC_FOLLOW: Now Playing's timer's scroll_view_scroll_to(scroll_lrc, 0, y, 10).
+    assert got(0x53ad54) == stock_syms['scroll_view_scroll_to'] and words(0x53ad58, 1) == (0x2407000a,)  # li $a3, 10
+    # LYRIC_ROWS: show_player_face's bal to the lyric row builder, a PIC entry that zeroes scroll_lrc's
+    # offset (scroll_view_set_offset) before it reads the lyrics.
+    assert words(0x53bed0, 1)[0] == 0x04110000 | ((0x53a240 - 0x53bed4) >> 2) & 0xffff and stock_syms['show_player_face'] < 0x53bed0
+    assert pic_gp(stock, 0x53a240) == M1PLUS_GP and got(0x53a3e4) == stock_syms['scroll_view_set_offset']
+    assert got(0x53a42c) == stock_syms['mclGetLyricBuffer'] and got(0x53a568) == stock_syms['mclGetLyricTime']
+    # BT_INIT, BT_PARAMS, BT_STATUS and BT_AUTOLINK: V1.32's calls in V2.1's platform_init, config_bt_init,
+    # openBluetooth (its two callbacks PIC entries, the a2dp one btrecvA2dpFunc) and autoLinkBluetooth.
+    assert got(0x50be24) == stock_syms['btctl_create_daemon_thread'] and stock_syms['platform_init'] < 0x50be28
+    assert bal(0x4d6ae4, 'initBluetoothParam') and stock_syms['config_bt_init'] < 0x4d6ae4
+    assert got(0x4d2cec) == stock_syms['btctl_device_status_callback'] and got(0x4d2cd4) == stock_syms['btctl_set_prompt_callback']
+    assert slot(-0x4d4c) + 0x4738 == 0x4d4738 and words(0x4d2cdc, 1) == (0x24842310,) and stock_syms['openBluetooth'] < 0x4d2cd8
+    assert pic_gp(stock, 0x4d4738) == pic_gp(stock, 0x4d2310) == M1PLUS_GP and got(0x4d2d04) == stock_syms['btrecvA2dpFunc']
+    assert bal(0x4d44e4, 'checkPairDev') and stock_syms['autoLinkBluetooth'] < 0x4d44e4
+    # BTLINKMAC: readBtLinkMac's buffer, its GOT page and offset
+    assert words(0x4d2800, 1) == (0x8f9082c0,) and slot(-0x7d40) == 0xa00000 and words(0x4d280c, 1) == (0x261041d0,)
+    # FOLDER_PLAY: the Folder file click's navigator_to_with_context("playing_page", ...), after its loadSongList.
+    def cstr(at): return stock[fileoff(stock, at):stock.index(b'\0', fileoff(stock, at))]
+    assert got(0x531e7c) == stock_syms['navigator_to_with_context'] and got(0x531e48) == stock_syms['loadSongList']
+    assert words(0x531e88, 1) == (0x24845b14,) and cstr(slot(-0x58f8) + 0x5b14) == b'playing_page'  # $a0 from -0x58f8's page
     # Coverflow's covers and the photo viewer take the touch on their own view (navigation.c
     # slide_swipe): V2.1's slide_menu steps by its height, not an item and a spacer. Its scroll-done
     # (0x6123f4, through 0x612360) commits round(xoffset @0x88 / h @0xc); its own drag stores
@@ -468,6 +504,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
                                                                     'books', 'videos', 'longsongs')} | {
              xx+f'stream_{n}.png' for n in ('spotify', 'radio', 'airplay')} | {HELPER, SCROBBLE_CA, BOOT} | ({REMOTE} if manifest['dev'] else set())
     added |= {xx+f'row_{n}.png' for n in ('spotify', 'radio')}  # the Q2 Pod page's Streaming rows, at 40 px
+    added |= {xx+'stream_app.png'}  # its card apps' rows (addon.c), at 40 px too
     # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
     added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C}

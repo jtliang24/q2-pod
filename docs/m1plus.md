@@ -229,7 +229,7 @@ and pinned in `test/m1plus/build.py`. This section says what they cover. For eac
 and name the M1 doesn't take, and why (V2.1 has it already, Q2 only, or not ported yet), run
 `python3 test/m1plus/ports.py`.
 
-### 5.1 Hooks (`M1PLUS_HOOKS`: 42, and one leaf hook)
+### 5.1 Hooks (`M1PLUS_HOOKS`: 52, and one leaf hook)
 
 > [!IMPORTANT]
 > **PIC Prologue Constraint:**
@@ -279,12 +279,22 @@ and name the M1 doesn't take, and why (V2.1 has it already, Q2 only, or not port
 | `change_music` | `ringnav_change` | `player_change_music` |
 | `mclSetVol` | `ringnav_btvol` | `mclSetBtVol` |
 | `dialog_sortselect_dialog_init` | `qm_sortselect_init` | M1 only |
+| `toolsQueryDbTableAndSort` | `ringnav_sorted_query` | same |
+| `start_playqueue` | `ringnav_start_queue` | `player_start_queue` |
+| `mclLoadExLyric` | `ringnav_lyric` | same |
+| `kugou_obtainlyric` | `ringnav_lyric_search` | same |
+| `kugou_obtaincover` | `ringnav_cover_search` | same |
+| `networkGetWifiSignal` | `ringnav_wifi_signal` | same |
+| `toolsIntoStandby` | `ringnav_standby` | same |
+| `play_pause_music` | `ringnav_play_pause` | `player_play_pause` |
+| `toolsGetMusicInfo` | `ringnav_music_info` | same |
+| `usbmode_page_init` | `ringnav_usbmode` | same |
 | `window_manager_paint` (leaf: its first words, pinned) | `ringnav_wm_paint` | same |
 
 ### 5.2 Call Sites, Private Functions and Names
 
-- **Call sites** (`CALL_SITES['m1plus']`, 10): single instructions the build rewrites, each checked against its stock word: `ALBUM_ART` (same-named albums apart in art), `AUDIO_EXTENSION_CALLS` (recognize M4B alongside existing audio extensions), `BT_CONNECT_START` (Bluetooth: Resume on connect), `COVER_DONE` (discard stale cover completion), `COVER_PAUSE` (album grids never pause the cover worker), `DROP_CACHES` (keep the page cache), `LDAC_HQ` (LDAC HQ sends 990 kbps), `SCAN_LIMIT` (scan up to 65,000 songs), `SHUFFLE_CALL` (shuffle honours Play next), `SORT_TRIMS` (sort without a leading article).
-- **Private functions** (`M1PLUS_PRIVATE_FUNCTIONS`, 10): static V2.1 functions the payload calls, found by their code: `album_row`, `btmenu_rows`, `folder_refresh`, `gif_image_create`, `mcl_open_preload`, `mcl_preload`, `mcl_shuffle_pick`, `saver_pick`, `slide_menu_on_scroll_done`, `volume_refresh`.
+- **Call sites** (`CALL_SITES['m1plus']`, 25): single instructions the build rewrites, each checked against its stock word: `ALBUM_ART` (same-named albums apart in art), `AUDIO_EXTENSION_CALLS` (recognize M4B alongside existing audio extensions), `BT_AUTOLINK` (Bluetooth: auto-link keeps an incoming link), `BT_CONNECT_START` (Bluetooth: Resume on connect), `BT_INIT` (Bluetooth callbacks before control thread), `BT_PARAMS` (Bluetooth state initialized before control thread), `BT_STATUS` (Bluetooth: incoming link during a connect), `COVER_DONE` (discard stale cover completion), `COVER_PAUSE` (album grids never pause the cover worker), `DROP_CACHES` (keep the page cache), `FOLDER_NAME` (folder names are literal text), `FOLDER_PLAY` (a Folder play replaces the open Now Playing), `GRID_COVER` (Ogg art in Albums and Folder view), `ID3_PATH` (a CUE track's file tags), `LDAC_HQ` (LDAC HQ sends 990 kbps), `LOCKSCREEN_ACCESS` (a built-in wallpaper survives a reboot), `LYRIC_FOLLOW` (lyric rows whole at the top), `LYRIC_ROWS` (lyrics keep their place on a refresh), `LYRIC_SOURCES` (a found lyric isn't overwritten by NetEase's), `NP_INFO_CALL` (Now Playing's info lines), `PLAYER_COVER` (Now Playing art through ffmpeg), `SCAN_LIMIT` (scan up to 65,000 songs), `SCAN_REFRESH` (folder scan refreshes existing tags), `SHUFFLE_CALL` (shuffle honours Play next), `SORT_TRIMS` (sort without a leading article).
+- **Private functions** (`M1PLUS_PRIVATE_FUNCTIONS`, 11): static V2.1 functions the payload calls, found by their code: `album_row`, `btmenu_rows`, `folder_refresh`, `gif_image_create`, `mcl_open_preload`, `mcl_preload`, `mcl_shuffle_pick`, `np_info`, `saver_pick`, `slide_menu_on_scroll_done`, `volume_refresh`.
 - **Names.** `patch/offsets.inc` is upstream's, with the Q2's values. Its `#if M1PLUS` side includes [`patch/m1plus_offsets.inc`](../patch/m1plus_offsets.inc), which gives V2.1's value for every name the M1 build uses, or `M1_UNPORTED` for a name whose code can't run on M1. [`patch/m1plus_q2.inc`](../patch/m1plus_q2.inc) gives the Q2's value for the names the port added to shared code (a `STYLE_*` or `VIEW_*` string, a layout constant). Stock functions with dynamic symbols, such as the library queries (`getAllAlbum`, `getMusicByAlbum`), are resolved by name (`FUNCTIONS`).
 
 ### 5.3 The Player (`/usr/bin/hciplayer`)

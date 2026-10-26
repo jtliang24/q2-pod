@@ -24,10 +24,14 @@ static int previous_back(const void *info) {
         qm_close();
         return 0;
     }
-    void *button = back_of(window_manager_get_top_window(window_manager()), 0);
+    void *top = window_manager_get_top_window(window_manager()), *button = back_of(top, 0);
     char click[0x30];
     if (button && widget_get_prop_bool(button, "enable", 1))
         stock_dispatch_trampoline(button, pointer_event_init(click, EVT_CLICK, button, 0, 0));
+    /* A V2.1 dialog without one (Now Playing's ⋯ menu and its queue) closes, as its tap outside does:
+     * the queue's own close is navigator_back (dialog_playqueue_dialog_init). */
+    else if (!button && top && !tk_strcmp(widget_get_type(top), "dialog"))
+        navigator_back();
     return 0; /* not RET_REPEAT: one shot */
 }
 

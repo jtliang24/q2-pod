@@ -227,12 +227,12 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   the record for 1.2.2. One row per feature from the port report: its hooks and sites, and what V2.1
   has. Porting follows the ground rules: find it in V2.1's code, then pin it in a test.
   - **Found by the port report** (U2), in 1.2.2's hooks and names:
-    - **A manual Play/Pause and the headset** (`player_play_pause` → `ringnav_play_pause`). On the Q2
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **A manual Play/Pause and the headset** (`player_play_pause` → `ringnav_play_pause`). On the Q2
       it calls `headset_manual`, so a headset's automatic resume doesn't undo a pause the user made.
       V2.1's `play_pause_music` is aliased but not hooked. Find its callers in V2.1's `demo` first.
     - **Folder's roots without OTG** (`folder_load_top` → `ringnav_folder_top`). Without a drive, the
       Q2 lists the card alone. Check whether V2.1's Folder lists OTG at all before porting.
-    - **A FLAC's ALBUM ARTIST** (`toolsGetMusicInfo` → `ringnav_music_info`, new in 1.2.2). The Q2 reads
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **A FLAC's ALBUM ARTIST** (`toolsGetMusicInfo` → `ringnav_music_info`, new in 1.2.2). The Q2 reads
       foobar2000's spelling when stock's libtag finds no `ALBUMARTIST`. V2.1's `toolsGetMusicInfo`
       keeps the album artist at `+0x580` too (`MUSIC_INFO_ALBUM_ARTIST`, pinned since the 1.2.9 step),
       so only the hook is left.
@@ -244,7 +244,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   - **Found by the 1.2.9 step** (U3, Oct 23):
     - **An artist's albums tab's album-artist rewrite** (`toolsQueryContentDbTable`): V2.1 has no such
       function, so find what V2.1's `getAlbumByAlbumArtist` queries through first.
-    - **Now Playing's art through ffmpeg** (`PLAYER_COVER`), **Bluetooth's callbacks before the radio
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **Now Playing's art through ffmpeg** (`PLAYER_COVER`), **Bluetooth's callbacks before the radio
       powers on** (`BT_POWER`) and **a folder scan refreshing existing tags** (`SCAN_REFRESH`): call
       sites, each to find in V2.1's `player_parsecover_thd`, `openBluetooth` and `toolsLoadAllFile`.
     - **`check_mem_thd` returning at once** (`DROP_CACHES`' 1.2.9 form, a battery fix). The M1 keeps
@@ -259,8 +259,8 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `config_playmode` symbol to stand for the user's mode choice). Both features run on M1.
     - Q2 only: Hold Return: Home (the M1 has no Return key) and Volume Guard (the touch wheel's).
   - **Found by the polish pass** (Oct 25, progress section 46):
-    - **Knob: Navigation outside System Setting.** The knob turns the volume on V2.1 pages ringnav
-      doesn't list: stock's View Queue dialog (`playmore_dialog`), the Home editor (`homemenu_dialog`),
+    - *Partly done (Oct 25, progress section 47): the stock pages have rows; the Tidal and HiFi pages wait for an account to check them on.* **Knob: Navigation outside System Setting.** The knob turns the volume on V2.1 pages ringnav
+      doesn't list: stock's View Queue dialog (`playqueue_dialog`; `playmore_dialog` is Now Playing's ⋯ menu), the Home editor (`homemenu_dialog`),
       search (`search_page`, `onlinesearch_page`), CD Ripper (`cdripper_page`, `searchcdripper_page`),
       Recent and Frequent's `guide_page`, and the Tidal and HiFi store pages. Each needs a check on the
       device before its `m1plus_contexts.inc` row.
@@ -281,20 +281,20 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
       `rtwpriv wlan0 pm_set lps=0` string, so it's a string patch to port.
     - **The Wi-Fi transfer page** (`WEB`: English, folder uploads): V2.1 has `/usr/share/web`; check its
       files against the patch's strings.
-    - **Folder names with `%`** (`FOLDER_NAME`): stock's row formatter crashes on them; check V2.1's
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **Folder names with `%`** (`FOLDER_NAME`): stock's row formatter crashes on them; check V2.1's
       `folder_create_tablerow` (`0x5331fc`).
-    - **A CUE track's file tags** (`ID3_PATH`) and **Ogg art in the grids** (`GRID_COVER`).
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **A CUE track's file tags** (`ID3_PATH`) and **Ogg art in the grids** (`GRID_COVER`).
   - **Found by the 1.3.8 step** (U3, Oct 24):
     - **Network Update** (`systemset_fwupdate_page_init`, `netupdate.c`): it fetches DiamondBond's Q2
       `update.tar`, so it stays off until it points at the fork's M1 releases. Its `fwupdate_tf`, stock's
       TF card update, is `M1PLUS_UNRESOLVED`: V2.1's twin is to be found from its updater thread
       (`0x471070`, which calls `update_firmware`) back to the System Update row's click.
-    - **Playlist editing, and a playlist row's hold** (`localmusic_playlistsmore_page_init`,
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **Playlist editing, and a playlist row's hold** (`localmusic_playlistsmore_page_init`,
       `PLAYLIST_ADD_MODE`): V2.1 has `playlist_page` but no `playlistsmore_page`. The hold stays in
       `qm_hold`'s Q2 branch, and `more_image` is named from `m1plus_nav_library.c`.
-    - **Bluetooth's boot and incoming links** (`BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`, in place
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **Bluetooth's boot and incoming links** (`BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`, in place
       of 1.2.9's `BT_POWER`): V2.1's `platform_init`, `openBluetooth` and `autoLinkBluetooth` to check.
-    - **The lyrics' top row whole** (`LYRIC_FOLLOW`): V2.1's Now Playing timer to check. With it, 1.3.9's
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **The lyrics' top row whole** (`LYRIC_FOLLOW`): V2.1's Now Playing timer to check. With it, 1.3.9's
       **lyrics keeping their place on a refresh** (`LYRIC_ROWS`): V2.1's page refresh and its lyric row
       builder to find. `ringnav_lyric_rows` calls V1.32's builder by its address (`0x529f0c`), so it
       needs an `offsets.inc` name before the site is ported. On M1 it links (the build keeps the
@@ -305,18 +305,18 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - Q2 only: Return closing a search's keyboard (`search_key`), and `ringnav_input`'s USB prompt keys and
       Now Playing's transition volume ticks (the wheel's). The M1's input include hands a key to stock first.
   - **Found on the device** (1.3.8 dev 1, Oct 24; progress section 42):
-    - **Quick Settings' knob stays volume.** `knob_nav_active` leaves the pull-down to stock, so 1.3.8's
+    - *Q2 only (the user's choice, Oct 25): the knob stays volume there.* **Quick Settings' knob stays volume.** `knob_nav_active` leaves the pull-down to stock, so 1.3.8's
       Play/Pause hold there (the wheel's brightness or volume, `QSVOLUME`) changes nothing on the M1.
       Either take the knob in Quick Settings when Knob: Navigation is on, or mark the hold Q2 only.
-    - **A Now Playing under a folder play doesn't refresh.** Go to Folder from Now Playing, then a play
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **A Now Playing under a folder play doesn't refresh.** Go to Folder from Now Playing, then a play
       from the folder, opens a second Now Playing. Back past the folders reaches the first, which still
       shows the old track and position beside the new track's time. Check whether V2.1's own playing_page
       refreshes when another one is on top, or close the lower one on a new play.
   - **Found on the device** (1.4.2 dev 1, Oct 24; progress section 44), all older than 1.2.2:
-    - **The hold menu's Go to Artist does nothing**, from a song's menu and from Cover Flow's.
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **The hold menu's Go to Artist does nothing**, from a song's menu and from Cover Flow's.
       `qm_goto` opens `localmusic/artistinfo_page` with V1.32's `{cls, record}` context. Find what
       V2.1's own callers hand `artistinfo_page`.
-    - **Its Go to Album opens the playing song's album.** `qm_goto` fills V1.32's
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **Its Go to Album opens the playing song's album.** `qm_goto` fills V1.32's
       `g_local_classinfo_save` and opens `playerjumpinfo_page`, which on V2.1 reads the playing song.
       Open the row's album as Album's list does instead.
     - ~~The hold menu closes only by OK.~~ Done (progress section 46): a tap outside and Previous close it.
@@ -324,7 +324,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
     - ~~The rating picker has no way out but a rating.~~ Done (progress section 46): a tap outside it, or
       Now Playing's back button, closes the picker alone.
   - **Found on the device** (dev 21, Oct 23):
-    - **A touch hold on an album's tracks plays the track.** On Album's list the hold menu opens for the
+    - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* **A touch hold on an album's tracks plays the track.** On Album's list the hold menu opens for the
       row held. On an album's track list (16 tracks), `load` counted 17 rows (`g_menu.rows`, read over
       q2remote), so `qm_hold`'s check against the showlist's size fails and the release's click plays the
       row. The hold code is the same as V1221's, so the gap is likely older than 1.2.2. Find what the
@@ -337,7 +337,7 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
         V2.1 stand-in found first. (`player_start_queue` is V2.1's `start_playqueue`: ported in the batch.)
       - Network update fetches DiamondBond's Q2 `update.tar`. It stays off on M1 until it points at
         the fork's M1 releases.
-      - The card app host (`addon.c`, `usbmode_page_init`, 1.4.2) runs over librespot: it goes with
+      - *Done (Oct 25, [progress section 47](m1plus-progress.md)).* The card app host (`addon.c`, `usbmode_page_init`, 1.4.2) runs over librespot: it goes with
         section 3. So does System settings' **Apps** (1.4.0's Q2 Shelf, `netupdate.c`), which installs
         the card apps, Rockbox and Spotify from their GitHub releases: its row is off on M1 (`!M1PLUS`
         in `ringnav_systemset`). Whether what it downloads runs on the M1 is to be checked first.
@@ -521,9 +521,14 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   - **The M1 target itself (later).** Once a few syncs have gone cleanly, offer the M1 target upstream.
     The squash-and-split note in [m1plus-integration.md](m1plus-integration.md#decision-finish-on-this-tree)
     covers its history.
-- **Latent Q2 bugs found through M1.** Both were fixed only behind `M1PLUS`, to keep the Q2 build
-  byte-identical (ground rules). Fixing them on the Q2 is a deliberate Q2 change, best made
-  upstream, with a Q2 device check:
+- **Latent Q2 bugs found through M1.** Each was fixed only for M1 (behind `M1PLUS`, or a name with
+  each model's value), to keep the Q2 build byte-identical (ground rules). Fixing them on the Q2 is a
+  deliberate Q2 change, best made upstream, with a Q2 device check:
+  - Edit Playlist's Move Up and Move Down always fail with "Could not save playlist": `ple_mutate`'s
+    temporary id is a HAVING with no GROUP BY, which both firmwares' SQLite 3.19.3 refuses. The M1's
+    `PLE_TEMP_ID_SQL` is a CASE instead ([m1plus-progress.md](m1plus-progress.md) section 47). The draft
+    pull request [DiamondBond/q2-pod#107](https://github.com/DiamondBond/q2-pod/pull/107) has the same
+    CASE (`fix/playlist-move-sqlite319`, off upstream `main`); the seam goes at the sync after it lands;
   - Long Songs' `taglib_file_new` call passes no `readAudioProperties`, so it reads whatever `$a1`
     holds; when that is 0, every length reads as 0 and is cached as measured;
   - AWTK's hit test doesn't skip hidden views, so the hidden book reader and photo viewer take taps
@@ -587,6 +592,8 @@ These are skipped on M1 on purpose (marked `Q2 only` in the tests), not gaps:
 - Home's Coverflow card: V2.1's Home is a grid of its own cards, and Coverflow opens from the Q2 Pod
   page;
 - Key Tone: V2.1 has no buzzer command, and binds no key-down handler to hook.
+- Quick Settings' brightness/volume switch on a Play/Pause hold (1.3.8): the M1's knob stays volume
+  in Quick Settings, which Knob: Navigation leaves to stock (the user's choice, Oct 25).
 
 The Rockbox dual boot stays: there is no Rockbox for the M1 Plus yet, but the hook serves as a boot-time
 diagnostic.

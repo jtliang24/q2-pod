@@ -521,7 +521,7 @@ static void *sh_worker(void *unused) {
     int i = sh.app;
     if (sh.job == JOB_CHECK) {
         int ok = 1;
-        for (int k = 0; k < SH_APPS && !sh.cancel; ++k) ok &= !release(k, tag, url, &size);
+        for (int k = M1PLUS ? SH_SPOTIFY : 0; k < SH_APPS && !sh.cancel; ++k) ok &= !release(k, tag, url, &size);
         if (ok && !sh.cancel) sh.checked = now_ms();
     } else if (sh.job == JOB_INSTALL)
         sh.result = install(i);
@@ -671,8 +671,8 @@ static int sh_closed(void *ctx, void *event) {
  * the card apps; built again when a job ends changes which. */
 static void sh_rows(void) {
     int map[SH_APPS + 1] = { 0 }, n = 0;
-    map[n++] = SH_ROCKBOX;
-    if (rockbox_available()) map[n++] = SH_THEMES;
+    if (!M1PLUS) map[n++] = SH_ROCKBOX; /* M1 Plus: no Rockbox for it, and S90play would boot the Q2's */
+    if (!M1PLUS && rockbox_available()) map[n++] = SH_THEMES;
     map[n++] = SH_SPOTIFY;
     if (file_mode(SPOT_DIR) == 0040000) map[n++] = SH_APPS;
     for (int i = SH_DEEZER; i < SH_APPS; ++i) map[n++] = i;

@@ -200,6 +200,38 @@ CALL_SITES = {
         # Now Playing's info page: show_player_face's bal to its fill (np_info, 0x539c40; $t9 is set
         # before it), as the Q2's one call.
         'NP_INFO_CALL': ((0x53bebc, 0x0411f760, 'ringnav_np_info'),),
+        # platform_init's jalr btctl_create_daemon_thread: the callbacks before the control thread, and
+        # config_bt_init's bal initBluetoothParam moves before it too (headset_bt_init), as V1.32's.
+        'BT_INIT': ((0x50be24, 0x8f99f2c0, None), (0x50be28, 0x0320f809, 'headset_bt_init')),
+        'BT_PARAMS': ((0x4d6ae4, 0x0411f51d, 0),),
+        # openBluetooth's btctl_device_status_callback(BT_STATUS_CB, 0) registers headset_bt_status, and
+        # autoLinkBluetooth's bal checkPairDev also skips while the link list holds a connected link.
+        'BT_STATUS': ((0x4d2cec, 0x8f99f888, None), (0x4d2cf0, 0x0320f809, 'headset_status_register'),
+                      (0x4d2cf4, 0x24844738, None)),
+        'BT_AUTOLINK': ((0x4d44e4, 0x0411fd04, 'headset_bt_autolink'),),
+        # Now Playing's timer: scroll_view_scroll_to(scroll_lrc, 0, y, 10), its lyric follow, as V1.32's.
+        'LYRIC_FOLLOW': ((0x53ad54, 0x8f99acfc, None), (0x53ad64, 0x0320f809, 'ringnav_lyric_follow')),
+        # show_player_face's bal to the lyric row builder (LYRIC_ROW_BUILDER, $t9 set before it), after
+        # NP_INFO_CALL's: the rebuild ends at offset 0.
+        'LYRIC_ROWS': ((0x53bed0, 0x0411f8db, 'ringnav_lyric_rows'),),
+        # The Folder file click's navigator_to_with_context("playing_page", ...) (0x531c38's), which doesn't
+        # look for an open one as the album track click does: m1plus_play_page closes it first.
+        'FOLDER_PLAY': ((0x531e7c, 0x8f99a980, None), (0x531e94, 0x0320f809, 'm1plus_play_page')),
+        # toolsLoadAllFile's existing-song check (bal toolsCheckItemExist), folder scans only: V1.32's word.
+        'SCAN_REFRESH': ((0x5eff54, 0x0411fd88, 'ringnav_scan_refresh'),),
+        # The folder row's text (0x532e34, bal'd from 0x533124; V1.32's 0x522304): tk_snprintf(buf, 512,
+        # name) becomes tk_strncpy(buf, name, 511), its GOT slot -0x3300.
+        'FOLDER_NAME': ((0x532eb4, 0x24050200, 0x240601ff), (0x532ec0, 0x8f99a868, 0x8f99cd00),
+                        (0x532ec8, 0x8e260008, 0x8e250008)),
+        # get_id3info's strcpy(playsong_id3info, record->path), its lw $t9 pinned.
+        'ID3_PATH': ((0x4dff40, 0x8f99f324, None), (0x4dff4c, 0x0320f809, 'ringnav_id3_path')),
+        # parse_albumcovertask_thd's toolsGetAlbumCover calls, under parse_cover_mutex: the Albums grid's,
+        # before its toolsGetExternCover, then Folder view's two (40 px).
+        'GRID_COVER': ((0x4dd6a8, 0x0320f809, 'coverflow_album_cover'), (0x4de8a4, 0x0320f809, 'coverflow_grid_cover'),
+                       (0x4de960, 0x0320f809, 'coverflow_grid_cover')),
+        # parseplaycover_thd's toolsGetExternCover after a local track's embedded art failed (0x4df1e8),
+        # under parse_cover_mutex: m1plus_player_cover drops it for ffmpeg (patch/m1plus_player_cover.c).
+        'PLAYER_COVER': ((0x4df218, 0x8f99b880, None), (0x4df228, 0x0320f809, 'm1plus_player_cover')),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -234,6 +266,7 @@ CALL_SITE_PURPOSES = {
     'COVER_DONE': 'discard stale cover completion',
     'LOCKSCREEN_ACCESS': 'a built-in wallpaper survives a reboot',
     'LYRIC_SOURCES': "a found lyric isn't overwritten by NetEase's",
+    'FOLDER_PLAY': 'a Folder play replaces the open Now Playing',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
@@ -261,11 +294,7 @@ M1PLUS_PORTS = {
     'dialog_statusbar_dialog_init': ('native', "quick settings' lock label, which goes with quick_lock (roadmap 4)"),
     'read_artistype_value': ('native', "V2.1's Artists page has its own Artist/Album Artist switch (roadmap 4)"),
     'saver_cover': ('native', "V2.1's image_base_set_image always invalidates (progress 29)"),
-    'player_play_pause': ('unported', "a manual Play/Pause isn't marked (headset_manual), so a headset's automatic "
-                          "resume can undo it; V2.1's play_pause_music is unhooked"),
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
-    'toolsGetMusicInfo': ('unported', "a FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST (1.2.2); V2.1's "
-                          'info keeps it at +0x580 too'),
     'select_timezone': ('unported', "the extra time zones (1.2.9); V2.1's select_timezone is 0x4d6b2c, but its 27 "
                         'labels are a pointer table (0x97c810) its row layout (0x4a21c8) copies to the stack, and '
                         "its counts are at 0x4a246c, 0x4a2604, 0x4e65dc and 0x4d6b68 (roadmap U4)"),
@@ -275,12 +304,10 @@ M1PLUS_PORTS = {
                          '(m1plus_nav_btvol.c)'),
     'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
                         "btsource_volume while the output is Bluetooth"),
-    'localmusic_playlistsmore_page_init': ('unported', "a playlist's More page: editing, song search, a row hold "
-                                           "(1.3.8); V2.1 has no playlistsmore_page"),
+    'localmusic_playlistsmore_page_init': ('ported', "V2.1 has no playlistsmore_page: a playlist row's hold opens "
+                                           'its editor (m1plus_nav_playlist_hold.inc)'),
     'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
-    'usbmode_page_init': ('unported', "card apps end before USB storage unmounts the card (1.4.2); the card app "
-                          'host (addon.c) waits for U4, with Apps'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -290,20 +317,6 @@ M1PLUS_PORTS = {
     'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
-    'PLAYER_COVER': ('unported', "Now Playing's art through ffmpeg when stock's decoder refuses it (1.2.9)"),
-    'BT_INIT': ('unported', "Bluetooth's callbacks before the control thread discovers boot links (1.3.8, "
-                "1.2.9's BT_POWER); V2.1's platform_init and openBluetooth not checked yet"),
-    'BT_PARAMS': ('unported', "config_bt_init's reset before the control thread (1.3.8), with BT_INIT"),
-    'BT_STATUS': ('unported', 'a headset that connects during the reconnect to the last device is kept (1.3.8)'),
-    'BT_AUTOLINK': ('unported', "auto-link skips while a link is connected (1.3.8), with BT_STATUS"),
-    'LYRIC_FOLLOW': ('unported', "the lyrics' top row never shows cut (1.3.8); V2.1's Now Playing timer to check"),
-    'LYRIC_ROWS': ('unported', "Play/Pause no longer flicks the lyrics to the top (1.3.9); V2.1's page refresh to "
-                   'check, with LYRIC_FOLLOW'),
-    'SCAN_REFRESH': ('unported', 'a folder scan refreshes existing songs\' tags (1.2.9)'),
-    'FOLDER_NAME': ('unported', "a folder named with % no longer crashes Folder's rows (1.3.0); V2.1's "
-                    'folder_create_tablerow (0x5331fc) to check'),
-    'ID3_PATH': ('unported', "a CUE track without sheet tags takes its file's (1.3.0)"),
-    'GRID_COVER': ('unported', 'Ogg covers in the album grids and Folder (1.3.0)'),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
@@ -357,6 +370,7 @@ M1PLUS_CONTEXT_ALIASES = {
     'g_class_type': 'cur_classtype',
     'g_local_classinfo_save': 'classinfo_save',
     'p_deque_showlist': 'pdeq_showlist',
+    'p_deque_playlist': 'pdeq_playlist',  # the playlists getAllPlayList loads (loadLocalClassList, 0x4ee634)
     'p_vector_select_record': 'pvec_selectrecord',
     'g_play_id3_info': 'playsong_id3info',
     'p_deque_screensaverlist': 'pdeq_screensaverlist',
@@ -480,6 +494,15 @@ M1PLUS_HOOKS = {
     'mclSetVol': (0x5d4cb0, 'ringnav_btvol', 'btvol'),
     # The hold menu: its sortselect_dialog opens non-modal, as V1.32's init leaves it
     'dialog_sortselect_dialog_init': (0x47d358, 'qm_sortselect_init', 'sortselect'),
+    # A manual Play/Pause (V2.1's playpause_quick_click, DLNA, the payload's own) is marked, so a
+    # headset's automatic resume doesn't undo it: V1.32's player_play_pause, (void) -> int as V2.1's
+    'play_pause_music': (0x4e43b4, 'ringnav_play_pause', 'pause'),
+    # A FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST; V2.1's (a, info, path), V1.32's
+    # instruction for instruction, keeps the album artist at +0x580
+    'toolsGetMusicInfo': (0x5ec6a8, 'ringnav_music_info', 'music_info'),
+    # USB mode's page, as a cable to a computer opens it, before stock unmounts the card for USB
+    # storage: the card apps end first (addon_card_away). V2.1's init binds its window as V1.32's.
+    'usbmode_page_init': (0x545dd8, 'ringnav_usbmode', 'usbmode'),
 }
 
 def m1plus_symbols(syms, symbol_table):
@@ -987,6 +1010,8 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     for n in ('home_q2pod', 'home_q2pod_down'):
         icons[f'{n}.png'] = ('mymusic.png', (ROOT/'assets/icons'/f'{n}.png').read_bytes())
     icons['stream_airplay.png'] = ('airplay.png', cat(xx+'airplay.png'))
+    # the card apps' rows on the Q2 Pod page (addon.c), at V2.1's 40 px as row_spotify
+    icons['stream_app.png'] = ('tidal.png', sized_art((ROOT/'assets/icons/stream_app.png').read_bytes(), 40))
     added = []
     helper_items = {
         HELPER: (HELPER_LIKE, compile_helper(out, cat, 'video', 'q2video', HELPER_LIBS)),

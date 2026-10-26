@@ -2720,7 +2720,7 @@ int ringnav_lyric_follow(void *lrc, int x, int y, int ms) {
  * The offset stays; the follow moves it if the line did. */
 int ringnav_lyric_rows(void *win) {
     void *lrc = widget_lookup(win, "scroll_lrc", 1);
-    int y = lrc ? I(lrc, SCROLL_Y) : 0, ret = ((int (*)(void *))0x529f0c)(win);
+    int y = lrc ? I(lrc, SCROLL_Y) : 0, ret = ((int (*)(void *))LYRIC_ROW_BUILDER)(win);
     if (y) scroll_view_set_offset(lrc, I(lrc, SCROLL_X), y);
     return ret;
 }
@@ -3842,11 +3842,15 @@ static int boot_click(void *label, void *event) {
     boot_text(label);
     return 0;
 }
+#include "m1plus_nav_sysset.c"
 int ringnav_systemset(void *win, void *ctx) {
     int result = stock_systemset_trampoline(win, ctx);
     void *view = win ? widget_lookup(win, VIEW_SYSSET, 1) : (void *)0;
-    if (view && !M1PLUS) /* the card app host waits for U4 on M1 */
+    if (view)
         widget_set_text_utf8(list_row(view, "system_update", shelf_open, 0), "Apps");
+#if M1PLUS
+    apps_before_update(view);
+#endif
     if (view && rockbox_available()) {
         char value[16];
         void *f = fopen(BOOT_TARGET, "rb");
@@ -6294,12 +6298,7 @@ static int ple_mutate(int dest, void *a, void *b) {
                 dest, I(a, REC_ID), b ? I(b, REC_ID) : I(a, REC_ID));
     if (sqlite3_exec(db, sql, ple_checked, &check, 0) || check.seen != (b ? 2 : 1)) goto rollback;
     if (b) {
-        if (sqlite3_exec(db,
-                         "select max(100,ifnull(max(id),100))+1 from playlist "
-                         "having max(100,ifnull(max(id),100))<2147483647",
-                         ple_number, &temp, 0) ||
-            temp <= 100)
-            goto rollback;
+        if (sqlite3_exec(db, PLE_TEMP_ID_SQL, ple_number, &temp, 0) || temp <= 100) goto rollback;
         tk_snprintf(sql, sizeof sql,
                     "update playlist set id=%d where cd_num=%d and id=%d;select changes();"
                     "update playlist set id=%d where cd_num=%d and id=%d;select changes();"
@@ -6357,8 +6356,8 @@ static void ple_filter(void) {
 static void ple_tick(void *item) {
     void *label = item ? widget_get_child(item, 0) : 0;
     if (!label) return;
-    widget_move_resize(label, I(label, W_X), I(label, W_Y), 330 - I(label, W_X), I(label, W_H));
-    image_base_set_image(image_create(item, 340, 0, 24, 48), "select");
+    widget_move_resize(label, I(label, W_X), I(label, W_Y), PLE_TICK_X - 10 - I(label, W_X), I(label, W_H));
+    image_base_set_image(image_create(item, PLE_TICK_X, 0, 24, PLE_ROW_H), CHOICE_CHECK);
 }
 static void ple_show(void);
 static int ple_closed(void *ctx, void *event) {
@@ -6611,6 +6610,8 @@ int ringnav_playlistsmore(void *win, void *ctx) {
     return result;
 }
 
+#include "m1plus_nav_goto.c"
+
 /* Go to album/artist reuse g_local_classinfo_save, which the pages underneath reload from when
  * they come back, so it is put back as the page opened here closes. */
 static int qm_restore(void *page, void *event) {
@@ -6624,6 +6625,9 @@ static void qm_goto(void *r, int album) {
     unsigned char *info = (unsigned char *)g_local_classinfo_save;
     void *wm = window_manager(), *page = window_manager_get_top_window(wm);
     memcpy(st.qm_classinfo, info, sizeof st.qm_classinfo);
+#if M1PLUS
+    m1plus_goto(r, album);
+#else
     if (album) {
         info[9] = 0;
         tk_snprintf((char *)info + 0xd, 0x100, "%s", (const char *)P(r, REC_ALBUM));
@@ -6638,6 +6642,7 @@ static void qm_goto(void *r, int album) {
         } context = { (int)st.qm_cls, r };
         navigator_to_with_context("localmusic/artistinfo_page", &context);
     }
+#endif
     void *top = window_manager_get_top_window(wm);
     if (top != page) widget_on(top, EVT_WINDOW_CLOSE, qm_restore, top);
 }
@@ -6909,10 +6914,9 @@ static int qm_open(const void *unused) {
     if (aid) acts[n++] = album_hearts == 5 ? QA_UNFAV : QA_FAV, acts[n++] = QA_RATE;
     if (st.qm_kind < QM_COVERFLOW || st.qm_kind == QM_PLAYING) acts[n++] = QA_PLAYLIST;
     if ((st.qm_kind == QM_SONG || st.qm_kind == QM_PLAYING) && album && *album &&
-        (cls & 0xfff0) != 0xff10 && !navigator_window_is_exist("playerjumpinfo_page"))
+        (cls & 0xfff0) != 0xff10 && !navigator_window_is_exist(GOTO_ALBUM_PAGE))
         acts[n++] = QA_ALBUM;
-    if ((song || cls == CLASS_ALBUMS) && artist && *artist &&
-        !navigator_window_is_exist("artistinfo_page"))
+    if ((song || cls == CLASS_ALBUMS) && artist && *artist && !GOTO_ARTIST_SHOWN)
         acts[n++] = QA_ARTIST;
     /* ponytail: hidden while a folder_page is open (as Go to's single-instance pages), so a folder
      * play's Now Playing has none; Back reaches that folder_page instead. */
@@ -7035,6 +7039,7 @@ static int qm_hold(void) {
 #if M1PLUS
     int cur = LP_TOUCH ? lp_entry(&g_menu) : reconcile(&g_menu, !moving(&g_menu));
     if (cur < 0) return 0;
+#include "m1plus_nav_playlist_hold.inc"
 #else
     int cur = reconcile(&g_menu, !moving(&g_menu));
     if (cur < 0) return 0;
@@ -7052,8 +7057,11 @@ static int qm_hold(void) {
     }
 #endif
     if (!coverflow) list = P(p_deque_showlist, 0);
+#if !M1PLUS
     if (!list || deque_size(list) != (unsigned)g_menu.rows) return 0;
     void *r = deque_at(list, g_menu.id[cur]);
+#endif
+#include "m1plus_nav_hold_head.inc"
     /* An artist's tabs reload the showlist with load_localartist_list, which sets classinfo +0
      * (0xff07 songs, 0xff01 albums) but not g_class_type. */
     unsigned cls = (unsigned)(tk_strcmp(name, "artistinfo_page") ? I(g_class_type, 0)
@@ -7072,6 +7080,9 @@ static int qm_hold(void) {
     st.qm_cls = cls;
     st.qm_idx = (unsigned)g_menu.id[cur];
     st.qm_rows = (unsigned)g_menu.rows;
+#if M1PLUS /* the showlist's, after the album page's head (m1plus_nav_hold_head.inc) */
+    st.qm_idx -= head, st.qm_rows -= head;
+#endif
     st.qm_hash = rec_hash(r);
     st.qm_browse = browse_hash();
     st.qm_press = LP_TOUCH ? 0 : *(unsigned long long *)((char *)key + INPUT_KEY_TIME);

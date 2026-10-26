@@ -1867,6 +1867,98 @@ Left for later (roadmap section 7 and U4): Coverflow's back arrow over its left 
 reaching into the scroll bar; Knob: Navigation on V2.1 pages outside System Setting and on Set Time
 Manually.
 
+## 47. The last of the 1.4.2 catch-up: U4's fixes, playlist editing and card apps (Oct 25)
+
+Before 1.4.2-m1.1, the user chose the U4 rows to finish: the open device bugs, the fix call sites,
+lyrics, Bluetooth, playlist editing, and card apps with System settings' Apps. Quick Settings' knob
+became Q2 only. The battery and settings rows, time zones, Network Update, games and the iPod UI wait.
+On `catchup/1.4.2`, with each commit gated. Every address is V2.1's, pinned in `test/m1plus/build.py`.
+
+| Commit | Port | What V2.1 needed |
+|---|---|---|
+| `21b04e7` | Coverflow's track titles left-aligned | `to_tracks` restyled `page_row_detail`'s caption with the Q2's centred style, centred in a 270 px box at x 12 (x 147). The restyle is the Q2's alone. |
+| `d79d5da` | A manual Play/Pause is marked (`player_play_pause`) | V2.1's `play_pause_music` (`0x4e43b4`), `(void) -> int` as V1.32's: hooked. |
+| `2f83b21` | A FLAC's `ALBUM ARTIST` (`toolsGetMusicInfo`) | V2.1's `0x5ec6a8`, `(a, info, path)` and `+0x580`, as V1.32's: hooked. |
+| `51631d5` | A folder scan refreshes tags (`SCAN_REFRESH`) | `toolsLoadAllFile`'s bal `toolsCheckItemExist` at `0x5eff54`, V1.32's word; the same `songtable` schema and `+0x680..0x688`. |
+| `bf470a6` | A folder named with `%` (`FOLDER_NAME`) | The row text is a private PIC routine, `0x532e34` (bal'd from `0x533124`), not `folder_create_tablerow`: V1.32's three words, `tk_strncpy` at GOT −0x3300. |
+| `b35a790` | A CUE track's file tags (`ID3_PATH`) | `get_id3info`'s `strcpy(playsong_id3info, path)` at `0x4dff4c`. |
+| `bea081d` | Ogg and Opus art in the grids (`GRID_COVER`) | `parse_albumcovertask_thd`'s `toolsGetAlbumCover` jalrs `0x4dd6a8` (the Albums grid's), `0x4de8a4`, `0x4de960`, all under `parse_cover_mutex`. |
+| `60af6ff` | Now Playing's art through ffmpeg (`PLAYER_COVER`) | `parseplaycover_thd`'s `toolsGetExternCover` at `0x4df228`, under `parse_cover_mutex`, which the grids and Coverflow share: `m1plus_player_cover` drops it around ffmpeg. |
+| `9455e93` | The lyrics' top row whole (`LYRIC_FOLLOW`) | The timer's `scroll_view_scroll_to(scroll_lrc, 0, y, 10)` at `0x53ad64`. |
+| `1dca7e7` | The lyrics keep their place (`LYRIC_ROWS`) | The builder is `0x53a240`, bal'd from `show_player_face` at `0x53bed0`; `LYRIC_ROW_BUILDER` names the shared literal. |
+| `b0f47b0`, `210f695` | Bluetooth's boot and incoming links (`BT_INIT`, `BT_PARAMS`, `BT_STATUS`, `BT_AUTOLINK`) | V1.32's words in `platform_init`, `config_bt_init`, `openBluetooth` and `autoLinkBluetooth`. `BTLINKMAC` `0xa041d0` (`readBtLinkMac`), the callbacks `0x4d4738` and `0x4d2310`. |
+| `0c5d88a` | The hold menu's Go to Album and Go to Artist | No `artistinfo_page`, and V2.1's `playerjumpinfo_page` shows the playing album: `album_page` with `{0xf004, record}` and `albuminfo_page` with the record copied last into the showlist. `cur_classtype` is put back as the page closes. |
+| `c3b908b` | A hold on an album's tracks | `albuminfo_page`'s head (cover, Play All) is a tap target: its entries go before the showlist's rows. |
+| `ef403a6` | A Folder play's Now Playing (`FOLDER_PLAY`) | The folder file click (`0x531e94`) opened a second `playing_page`: the open one closes first, unanimated, so Back goes to the folder. |
+| `e47f232` | Knob: Navigation on V2.1's other lists | `m1plus_contexts.inc` rows: View Queue's dialog, the Home editor, `guide_page`, search, online search, CD Ripper's pages. |
+| `864a3b6` | Quick Settings' wheel switch: Q2 only | The user's choice. |
+| `282cd90` | Playlist editing | No `playlistsmore_page`: a playlist row's hold opens the editor. The row's `list_item` is named its `pdeq_playlist` index (`0x53e6d0`); add mode is `playlist_page_init`'s context >> 16 (`0xa06f50`). V2.1 deletes playlists itself and renames none. |
+| `5efb249` | Card apps and Apps | `usbmode_page_init` (`0x545dd8`) hooked. Apps sits before System Update and offers no Rockbox. The Q2 Pod page lists the apps; the QR page is upright. The apps are static Go binaries (MIPS32, soft float), and q2-librespot needs only V2.1's glibc 2.28. |
+
+Results (`catchup/1.4.2` at `5efb249`): Q2 Legacy and iPod byte-identical to 1.4.2's build; the M1's
+suites pass, `patch` with 1222 scenarios and 17 `NOT PORTED`, and the three qemu walks, `boot.py`'s
+System Setting end now with Apps. The port report has 52 hooks and 25 call sites on M1.
+
+**On the device**, dev 8 (`V01As`, `update.bin` `dd9044ff…`), over q2remote, Screen Off set to Off for
+the pass and back to 1 min after:
+- **Passed:**
+  - Coverflow's track titles are left at x 14.
+  - From Coverflow's tracks, Go to Artist opens Carly Rae Jepsen's albums, and Back returns.
+  - From Recent, Go to Album on "Porsche (feat. MØ)" opens Pop 2.
+  - A hold on Pop 2's "Lucky" opens Lucky's menu (`st.qm_rows` 10, `st.qm_idx` 2).
+  - After Go to Folder from Now Playing, a play of "Tell Me" leaves one Now Playing. Back goes to the
+    folder, up the folders, and Home.
+  - The knob moves Recent's list and the ⋯ menu's rows, and on search the volume stays.
+  - Lyrics fetched from LRCLIB: the top row shows whole as the song follows, and stays through
+    Play/Pause.
+  - A folder "Q2Pod Test 99% Invisible" draws as written (made for the check and deleted after).
+  - Apps lists Spotify and the card apps, no Rockbox; its GitHub check marks Spotify's update.
+  - File Browser installs (`q2-v1.2`) and gets a row after Spotify. It opens its upright QR page and
+    serves `http://192.168.1.210:8000` (200), then turns off and is removed. Its leftovers are deleted.
+  - Deezer, Soulseek and File Browser each run on the M1's kernel (`-h`, exit 0).
+  - The user checked Bluetooth: a headset linking during the boot reconnect, and a manual pause kept.
+- **Found, then fixed:**
+  - Back after a Go to showed the opened page's list in Recent (`2a2de53`): albuminfo_page's load
+    replaces `pdeq_showlist`, which Recent draws from as it comes back.
+  - The knob turned the volume on Now Playing's queue panel, `playqueue_dialog` (`96ed037`); the
+    `playmore_dialog` row is the ⋯ menu.
+  - Previous didn't close those two dialogs, which have no back button (`a416e9a`).
+- **Not checked:**
+  - Playlist editing and the Home editor's knob (the Playlists card isn't on the user's Home).
+  - CD Ripper's pages, and `datetime_page`'s knob.
+  - Ogg/Opus, CUE, WebP and rescans (the card has none).
+  - A card app ending as USB storage takes the card.
+
+**On the device**, dev 9 (`V01Bs`, `update.bin` `b59edb5e…`), a testing-only pass over q2remote, Screen
+Off, the volume and the Home cards back to the user's values after:
+- **Passed:**
+  - The three dev 8 fixes: after Go to Album and Go to Artist from Recent, Back shows Recent's own
+    list, and a hold on it reads it; the knob moves the queue panel's rows; Previous closes the queue
+    panel, the ⋯ menu and the Home editor.
+  - The Home editor (a swipe past the last page): its knob works.
+  - The Playlist card opens V2.1's playlist page, and a hold on a playlist's row opens "Editing: tad".
+  - Add Songs ticks rows with V2.1's "selected", and its Search filters. Remove from Playlist works,
+    Done closes, and the playlist holds the result. The test playlist was deleted after.
+- **Found, then fixed:** Move Up and Move Down said "Could not save playlist" (`c5f85c9`).
+  `ple_mutate`'s temporary id came from a HAVING with no GROUP BY. V2.1's libsqlite3 is 3.19.3, as
+  V1.32's is, and refuses that query ("a GROUP BY clause is required before HAVING"). Only SQLite 3.39
+  and later accept it, and the harness runs the host's. On M1, `PLE_TEMP_ID_SQL` is a CASE that gives
+  NULL at the top id, and the harness now refuses HAVING without GROUP BY there, which fails the old
+  query's touch Move Down. The Q2 has the same bug: an upstream pull request is drafted (roadmap
+  section 6).
+- **Not checked:**
+  - `datetime_page`'s knob: Set Time Manually is greyed while Automatic Time Set is on, and the user's
+    setting was left alone.
+  - CD Ripper's pages.
+  - Ogg/Opus, CUE, WebP and rescans (the card has none).
+  - A card app ending as USB storage takes the card.
+
+**Dev 10** (`V01Cs`, `update.bin` `4cb5773a…`, at `e992c9b`, full gates passed), a testing-only pass of
+the Move fix, with Screen Off, the Home cards and the playlist table back as they were after: in a
+new playlist of "The 1", "22 (Taylor's Version)" and "26", Move Down on "The 1" and Move Up on "26"
+each moved the song with no error, and after Done V2.1's own playlist page showed "22 (Taylor's
+Version)", "26", "The 1".
+
 ## How to check a build now
 
 ```sh
