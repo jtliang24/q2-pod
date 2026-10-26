@@ -1,7 +1,8 @@
 # Syncing with upstream
 
-How to bring one upstream Q2 Pod release (DiamondBond/q2-pod) into `feature/m1plus-port`. Why the branch
-works this way, and what has to be in place first, is in the roadmap's section U
+How to bring one upstream Q2 Pod release (DiamondBond/q2-pod) into `staging`, where the next M1
+release is made (`main` is the last one). It was `feature/m1plus-port` until Oct 26, as the progress log
+still calls it. Why the branch works this way, and what has to be in place first, is in the roadmap's section U
 ([m1plus-roadmap.md](m1plus-roadmap.md#u-tracking-upstream)). The Q2 rule a sync must keep is in
 [m1plus-integration.md](m1plus-integration.md#rule-for-future-work-dont-break-q2).
 
@@ -72,7 +73,7 @@ release, or at once after a structural step.
 
    ```sh
    git fetch upstream --tags
-   git switch -c sync/<tag> feature/m1plus-port
+   git switch -c sync/<tag> staging
    git merge <tag>
    ```
 
@@ -192,7 +193,7 @@ release, or at once after a structural step.
    start, dead touch input). Keep the screen awake for touch checks: touch still works on a dark
    screen, but the hold menu and other gated input refuse it. Set System Setting → Display setting →
    Screen Off to Off for the pass (`[SYSSET] LIGHTTIME` 0), and put the user's value back after.
-6. **Land.** Merge `sync/<tag>` into `feature/m1plus-port` with `--no-ff`.
+6. **Land.** Merge `sync/<tag>` into `staging` with `--no-ff`.
 7. **Release.** Add a `- **<tag>-m1.1**:` entry to [m1plus-changelog.md](m1plus-changelog.md), then
    release by [m1plus-releasing.md](m1plus-releasing.md).
 

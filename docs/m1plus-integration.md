@@ -1,6 +1,6 @@
 # One tree for Q2 and M1 Plus
 
-What it takes for `feature/m1plus-port` to build the Q2 Pod firmware exactly as upstream's release in
+What it takes for `staging` to build the Q2 Pod firmware exactly as upstream's release in
 `UPSTREAM_BASE` does, and the M1 Plus firmware, from one `tools/build.py`. It also sets the rule that keeps it that way. What
 the port has done is in [m1plus-progress.md](m1plus-progress.md), and what it still lacks on M1 is in
 [m1plus-roadmap.md](m1plus-roadmap.md).
@@ -166,7 +166,7 @@ build then takes stock's times, as without Nix. This is an environment fix, and 
 
 ## Decision: finish on this tree
 
-Q2 support is finished on `feature/m1plus-port`, not reimplemented on a fresh branch from `main`.
+Q2 support is finished on `staging`, not reimplemented on a fresh branch from `main`.
 
 **Why not restart.**
 - **The M1 work is large and proven.** It is about 5,000 lines, most of them V2.1 addresses, struct offsets
