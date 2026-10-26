@@ -261,7 +261,9 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('lockscreen_end', DOWN_LIST, 4, ('not', 'lockscreen_on')),
                 ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
                 ('lockscreen_back', BACK, 4, ('as', 'display')),
-                ('knob_row', tap(160, 430), 3, ('as', 'display', (30, 398), (398, 462))),  # Knob: Navigation
+                # Display's end: 1.4.5's Coverflow Sort and Refresh Coverflow push the knob's two rows below the screen.
+                ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
+                ('knob_row', tap(160, 384), 3, ('as', 'display_end', (30, 352), (352, 416))),  # Knob: Navigation
                 ('display_back', BACK, 4, ('as', 'knob_sysset')),
                 ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
                 # With Knob: Navigation, Previous is Back: System Setting closes to Home, where it
