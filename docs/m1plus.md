@@ -6,7 +6,7 @@ Technical exploration, hardware breakdown, and reverse-engineered architecture f
 
 ## 1. Summary
 
-The port carries over Q2 Pod's 30-band PEQ, ReplayGain, crossfade, visualizer, Spotify Connect and Internet Radio, CUE and audiobook resume points, ratings, the Coverflow 3D renderer and View Queue. The iPod Classic interface is not ported yet ([m1plus-roadmap.md](m1plus-roadmap.md) section 5), and the Q2 hooks the M1 doesn't take are listed by `test/m1plus/ports.py`.
+The port carries over Q2 Pod's 30-band PEQ, ReplayGain, crossfade, visualizer, Spotify Connect and Internet Radio, CUE and audiobook resume points, ratings, the Coverflow 3D renderer and View Queue. The iPod Classic interface is not ported and not planned: its landscape, touch-wheel design doesn't fit the M1's portrait touchscreen ([m1plus-roadmap.md](m1plus-roadmap.md) section 5), and the Q2 hooks the M1 doesn't take are listed by `test/m1plus/ports.py`.
 
 While the industrial design and hardware controls differ (an upright 3.2" portrait touchscreen, a side rotary encoder knob, and no physical Back/Return button instead of a landscape-mounted rounded panel with a capacitive front touch wheel), the underlying software stack comes from the same Shanling X2000 codebase family as the Q2:
 

@@ -30,7 +30,7 @@ now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
 U3's `<tag>-m1.1`), and U1 (the M1 code beside upstream's: +1,417/−279 lines over upstream's files,
 from +6,417/−2,036). The M1 feature work waits until U3 lands: Spotify on the
-device (section 3), the iPod UI (section 5) and the final pass (section 7). Section 4 is done for 1.2.2;
+device (section 3) and the final pass (section 7); the iPod UI (section 5) is unplanned. Section 4 is done for 1.2.2;
 one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes
 first: items that only change how something looks wait for the final pass (section 7).
 
@@ -345,13 +345,16 @@ Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 Now Playing's info lines (`NP_INFO_CALL`) only change how the lines read, so they are in section 7.
 Their V2.1 site is the fill's one call, `0x53bebc` (`0x0411f760`, the fill at `0x539c40`).
 
-## 5. The iPod UI on M1 (L, after U3 and sections 1–4)
+## 5. The iPod UI on M1: unplanned
+
+Unplanned (the user's choice, Oct 26): the form factors are too different for a straightforward port,
+so the M1 keeps V2.1's own look ([m1plus-unported.md](m1plus-unported.md#the-ipod-ui)). The reasons:
 
 `--ipod` is refused for M1 Plus. The iPod UI patches V1.32's UI assets, styles and code layout, and
 assumes the Q2's 375x320 landscape screen and touch wheel. An M1 version would be a redesign for a
-320x480 portrait touchscreen with a knob, not a port. Decide whether it is wanted before starting.
-Two `test/m1plus/patch.py` checks go with it: the library rows' title bounds (`compact_row_layout`) and the
-info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own code as a control.
+320x480 portrait touchscreen with a knob, not a port. If it is ever taken up, two `test/m1plus/patch.py`
+checks go with it: the library rows' title bounds (`compact_row_layout`) and the info pages' unwind
+(`navigator_close`). In the Stock UI each runs V1.32's own code as a control.
 
 ## 6. Tooling and release
 

@@ -19,7 +19,7 @@ to its [progress](m1plus-progress.md) section.
 
 | Feature | Since | Q2 Pod's pieces | Status |
 |---|---|---|---|
-| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic` | Planned |
+| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic` | Unplanned |
 | [Games](#games) | 1.3.9 | `games.c`, the iPod UI's Games row | Unplanned |
 | [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone` | Planned |
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
@@ -56,13 +56,16 @@ These features run on the M1, but a few of their suite cases can't run there:
 
 ### The iPod UI
 
-Roadmap section 5 (L). It comes after the catch-up's ports. Its six hooks are `q2only` in the port
-report until then.
+Unplanned (the user's choice, Oct 26): the form factors are too far apart for a straightforward port.
+The iPod UI is built for the Q2's 375x320 landscape screen and touch wheel, and patches V1.32's UI
+assets, styles and code layout. On the M1 Plus's 320x480 portrait touchscreen and knob it would be a
+redesign, not a port, and the M1 keeps V2.1's own look instead (roadmap section 5). Its six hooks stay
+`q2only` in the port report.
 
 ### Games
 
-Games are the iPod UI's: their Library row is `#if IPOD` (`patch/navigation.c`), and they changed
-again in 1.4.2. They use the Return key, which the M1 lacks, so they need a touch design first.
+Games are the iPod UI's: their Library row is `#if IPOD` (`patch/navigation.c`), the iPod UI is
+unplanned, and they changed again in 1.4.2. They use the Return key, which the M1 lacks, so they need a touch design first.
 
 ### The extra time zones
 
