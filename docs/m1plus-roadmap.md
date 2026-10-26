@@ -526,9 +526,9 @@ info pages' unwind (`navigator_close`). In the Stock UI each runs V1.32's own co
   deliberate Q2 change, best made upstream, with a Q2 device check:
   - Edit Playlist's Move Up and Move Down always fail with "Could not save playlist": `ple_mutate`'s
     temporary id is a HAVING with no GROUP BY, which both firmwares' SQLite 3.19.3 refuses. The M1's
-    `PLE_TEMP_ID_SQL` is a CASE instead ([m1plus-progress.md](m1plus-progress.md) section 47). A pull
-    request with the same CASE is drafted on `fix/playlist-move-sqlite319`, off upstream `main`; the
-    seam goes at the sync after it lands;
+    `PLE_TEMP_ID_SQL` is a CASE instead ([m1plus-progress.md](m1plus-progress.md) section 47). The draft
+    pull request [DiamondBond/q2-pod#107](https://github.com/DiamondBond/q2-pod/pull/107) has the same
+    CASE (`fix/playlist-move-sqlite319`, off upstream `main`); the seam goes at the sync after it lands;
   - Long Songs' `taglib_file_new` call passes no `readAudioProperties`, so it reads whatever `$a1`
     holds; when that is 0, every length reads as 0 and is cached as measured;
   - AWTK's hit test doesn't skip hidden views, so the hidden book reader and photo viewer take taps

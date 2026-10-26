@@ -1953,6 +1953,12 @@ Off, the volume and the Home cards back to the user's values after:
   - Ogg/Opus, CUE, WebP and rescans (the card has none).
   - A card app ending as USB storage takes the card.
 
+**Dev 10** (`V01Cs`, `update.bin` `4cb5773a…`, at `e992c9b`, full gates passed), a testing-only pass of
+the Move fix, with Screen Off, the Home cards and the playlist table back as they were after: in a
+new playlist of "The 1", "22 (Taylor's Version)" and "26", Move Down on "The 1" and Move Up on "26"
+each moved the song with no error, and after Done V2.1's own playlist page showed "22 (Taylor's
+Version)", "26", "The 1".
+
 ## How to check a build now
 
 ```sh
