@@ -1428,7 +1428,9 @@ def main():
         assert not db.execute(sql).fetchall()
     # The rankings (Sort, and an artist's albums) as SQLite runs them on stock's songtable: each
     # year order with ties by name and undated last, the newest song first, and by name.
-    orders = re.findall(r'SORT_SQL "((?:[^"\\]|\\.)*)"', source)
+    album_year = macro('ALBUM_YEAR')  # a tag's year, from a full date too (1.4.5)
+    orders = [''.join(album_year if t == 'ALBUM_YEAR' else ast.literal_eval(t) for t in re.findall(r'"(?:[^"\\]|\\.)*"|ALBUM_YEAR', o))
+              for o in re.findall(r'SORT_SQL((?:\s*(?:"(?:[^"\\]|\\.)*"|ALBUM_YEAR))+)', source)]
     assert len(orders) == 4, orders
     with sqlite3.connect(':memory:') as db:
         db.execute('create table songtable(id INTEGER PRIMARY KEY AUTOINCREMENT,filename,fileurl,album,songer,style,'
@@ -1437,13 +1439,13 @@ def main():
                                    ('Undated', 0, 4), ('Also 2020', 2020, 0)):
             db.execute('insert into songtable(fileurl,album,albumsonger,year,time_create) values (?,?,"A",?,?)',
                        (f'/mnt/mmc/{album}/{added}.flac', album, year, added))
-        want = {'max(year) desc,album COLLATE NOCASE': ['Also 2020', 'New', 'Mid', 'old', 'Undated'],  # Newest First
-                'max(year),album COLLATE NOCASE': ['old', 'Mid', 'Also 2020', 'New', 'Undated'],  # Oldest First
+        want = {album_year + ' desc,album COLLATE NOCASE': ['Also 2020', 'New', 'Mid', 'old', 'Undated'],  # Newest First
+                album_year + ',album COLLATE NOCASE': ['old', 'Mid', 'Also 2020', 'New', 'Undated'],  # Oldest First
                 'max(time_create) desc': ['old', 'Undated', 'Mid', 'New', 'Also 2020'],  # Recently Added
                 'album COLLATE NOCASE': ['Also 2020', 'Mid', 'New', 'old', 'Undated']}  # Artist Album Order: A-Z
         for o in orders:
             got = [r[1] for r in db.execute(macro('ALBUM_SQL') + macro('ALBUM_GROUP') + ' order by ' + o)]
-            assert got == want.pop(o.removeprefix('ifnull(max(year),0)=0,')), (o, got)
+            assert got == want.pop(o.removeprefix(album_year + '=0,')), (o, got)
         assert not want, want
 
     with tempfile.TemporaryDirectory(prefix='q2-coverflow-check-') as directory:
