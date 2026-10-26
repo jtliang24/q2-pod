@@ -227,8 +227,9 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   [m1plus-unported.md](m1plus-unported.md): a row per feature that the M1 lacks, each marked planned or
   unplanned, with what V2.1 has. Its done rows are in [progress section 47](m1plus-progress.md) and
   those before it. Section 4 is the record for 1.2.2.
-- **U5. Each later release (S–M each).** Sync each upstream release tag soon after it ships, by the same
-  runbook as U3. Its new features go into U4.
+- **U5. Each later release (S–M each).** Merge upstream by the drift, about every 100 commits, and
+  release about weekly ([the cadence](m1plus-sync.md#cadence), `test/m1plus/drift.py`), by the same
+  runbook as U3. A merge past due leapfrogs in steps, as U3 did. New features go into U4.
 
 ## 1. Small fixes (S)
 

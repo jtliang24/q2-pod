@@ -14,7 +14,9 @@ sync (U2):
 - `test/m1plus/q2only.py` lists the tag's changes inside Q2-only branches, whose M1 side the merge
   leaves as it was;
 - `test/m1plus/fndiff.py` lists the payload functions two M1 builds differ in, for the device checklist;
-- `test/m1plus/suitemerge.py` brings a tag's new test cases into an M1 suite copy.
+- `test/m1plus/suitemerge.py` brings a tag's new test cases into an M1 suite copy;
+- `test/m1plus/drift.py` measures upstream's drift past `UPSTREAM_BASE` and plans the next merge by the
+  [cadence](#cadence).
 
 ## Once
 
@@ -26,9 +28,45 @@ git remote add upstream https://github.com/DiamondBond/q2-pod.git
 (`Q2 Firmware V1.32.zip`). It is at `stock/Q2 Firmware V1.32.zip`, beside `stock/M1 Plus Firmware V2.1.zip`; `--zip`
 takes another path.
 
+## Cadence
+
+Upstream tags several patch releases a day: 1.4.2 to 1.4.9 took three days, 111 commits. A minor
+version doesn't mark a size or a risk (1.3.9, a patch release, moved the payload's scratch state), so
+merges follow the drift, and releases the calendar. The user chose this on Oct 26.
+
+- **Merge** about every 100 commits, two or three times a week. `python3 test/m1plus/drift.py --fetch`
+  says whether a merge is due and to which tag. A merge is due when the drift to the newest settled tag
+  reaches 100 commits or 2,000 conflict-surface lines, when a structural change has come, or 14 days
+  after the base's tag. The surface is the lines upstream changed in its files that the M1 also changes
+  (the [footprint](#footprint)'s files, but `README.md`): those are where conflicts come from. A
+  change to an upstream file the M1 doesn't touch merges by itself.
+- **Merge settled tags.** A tag is settled 12 hours after it, if no tag followed it sooner. A tag
+  followed within 12 hours is superseded: upstream fixed it fast (1.4.0, 1.4.1 and 1.4.2 came the same
+  day).
+- **A step** goes to the furthest settled tag within 150 commits and 3,000 surface lines: a little past
+  the trigger, so it doesn't leave a stub behind. Each step is a full pass of [the runbook
+  below](#each-release) up to landing (steps 1–4 and 6), with no feature ports. It is gated and its
+  `--dev` build kept in `work/sync/<tag>/`. It isn't flashed.
+- **A merge past due**, more than one step to the newest settled tag, leapfrogs: `drift.py` lists the
+  steps, and each lands before the next starts. U3 did this by hand (1.2.9 → 1.3.0 → 1.3.8 → 1.3.9 →
+  1.4.2); `drift.py` over a 1.2.2 base plans nearly the same.
+- **A structural change** gets a step of its own, flashed once it is gated: the memory layout
+  (`patch/link.ld`: each scratch move so far, 1.3.9's among them) or the toolchain (`flake.nix`,
+  `flake.lock`). The step before it stops at the last settled tag ahead of it. A change reverted
+  before its step ends isn't one.
+- **Release** about weekly, from the last landed step, never from upstream's head: port the U4 rows
+  whose upstream code didn't change across the last two merges, then one `--dev` build and device pass
+  ([step 5](#each-release), the function diff against the build on the device), then
+  `<tag>-m1.1` (step 7). A dev build that passed on the device with nothing landed since counts as the
+  week's pass. Skip a week when nothing that reaches the M1 has landed.
+
+`TRIGGER`, `LIMIT`, `SETTLE`, `MAX_DAYS` and `STRUCTURAL` at the top of `drift.py` hold these numbers.
+
 ## Each release
 
-Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.3.9`.
+Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.3.9`. A merge step of
+the [cadence](#cadence) runs steps 1–4 and 6; the device pass (5) and release (7) come at the weekly
+release, or at once after a structural step.
 
 1. **Merge.**
 
@@ -137,7 +175,8 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
    4. **Port report.** `python3 test/m1plus/ports.py` passes: every hook, site and name is classified
       (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for
       [m1plus-unported.md](m1plus-unported.md).
-   5. **What changed on M1.** Keep the gated `--dev` build (U3: `work/u3/<tag>/`), and list
+   5. **What changed on M1.** Keep the gated `--dev` build (`work/sync/<tag>/`; U3's are in
+      `work/u3/<tag>/`), and list
       `python3 test/m1plus/fndiff.py <the last flashed build> <this build>`: the payload functions the
       device checklist covers.
 4. **Record.**
