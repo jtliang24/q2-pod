@@ -6298,12 +6298,7 @@ static int ple_mutate(int dest, void *a, void *b) {
                 dest, I(a, REC_ID), b ? I(b, REC_ID) : I(a, REC_ID));
     if (sqlite3_exec(db, sql, ple_checked, &check, 0) || check.seen != (b ? 2 : 1)) goto rollback;
     if (b) {
-        if (sqlite3_exec(db,
-                         "select max(100,ifnull(max(id),100))+1 from playlist "
-                         "having max(100,ifnull(max(id),100))<2147483647",
-                         ple_number, &temp, 0) ||
-            temp <= 100)
-            goto rollback;
+        if (sqlite3_exec(db, PLE_TEMP_ID_SQL, ple_number, &temp, 0) || temp <= 100) goto rollback;
         tk_snprintf(sql, sizeof sql,
                     "update playlist set id=%d where cd_num=%d and id=%d;select changes();"
                     "update playlist set id=%d where cd_num=%d and id=%d;select changes();"

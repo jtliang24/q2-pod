@@ -580,6 +580,12 @@ static inline int arc_out(int r, int y) {
 /* The playlist editor's tick (ple_tick) at the end of V2.1's PAGE_ROW_H row, before the scroll bar */
 #define PLE_TICK_X 284
 #define PLE_ROW_H PAGE_ROW_H
+/* ple_mutate's temporary id. V2.1's libsqlite3 is 3.19.3, which refuses HAVING without GROUP BY ("a
+ * GROUP BY clause is required before HAVING"), so Move Up/Down said "Could not save playlist": a CASE
+ * gives NULL at the top id instead, which ple_number refuses as the Q2's empty result is */
+#define PLE_TEMP_ID_SQL                                                                                \
+    "select case when ifnull(max(id),100)<2147483647 then max(100,ifnull(max(id),100))+1 end "         \
+    "from playlist"
 #define QR_NO_WIFI "Connect the M1 Plus to Wi-Fi"
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
