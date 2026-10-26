@@ -2053,7 +2053,7 @@ int coverflow_goto_album(void *r) {
     cf.scoped = ALBUM_TRACKS;
     cf.covers = cf.slide = cf.name = cf.artist = 0;
     cf.album = 0;
-    cf.body = widget_factory_create_widget(widget_factory(), "view", cf.page, 0, 0, 375, 290);
+    cf.body = widget_factory_create_widget(widget_factory(), "view", cf.page, 0, 0, UI_W, BOTTOM);
     to_tracks(0);
     return 1;
 }
