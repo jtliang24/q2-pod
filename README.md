@@ -31,7 +31,8 @@ The M1 Plus runs software from the same family (the same CPU, GUI toolkit, audio
 so this fork builds Q2 Pod's features into the M1 Plus's stock firmware V2.1.
 
 The M1 Plus keeps **V2.1's own look**: its Home grid, settings and Now Playing. Q2 Pod's features are added to it,
-most of them behind a **Q2 Pod** card on Home. The iPod interface isn't ported yet.
+most of them behind a **Q2 Pod** card on Home. Q2 Pod's iPod interface isn't planned for the M1 Plus: it is built
+for the Q2's landscape screen and touch wheel, and the M1 Plus's portrait touchscreen and knob would need a redesign.
 
 Each release carries an upstream Q2 Pod release and an M1 revision: `1.4.2-m1.1` is Q2 Pod 1.4.2's first M1 Plus build.
 The fork follows upstream by merging each of its release tags.
@@ -51,7 +52,8 @@ The fork follows upstream by merging each of its release tags.
 - **Bluetooth:** LDAC HQ at 990 kbps, and Resume on Connect.
 - **Battery:** Standby Limit powers the player off after a long Standby.
 
-Not on the M1 Plus yet: the iPod UI, Network Update, Streaming's Configuration, Games and the extra time zones.
+Not on the M1 Plus yet: Network Update, Streaming's Configuration and the extra time zones. The iPod UI and its Games
+aren't planned.
 The [roadmap](docs/m1plus-roadmap.md) has what is planned.
 
 ## Install
