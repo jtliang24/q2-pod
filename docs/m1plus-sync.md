@@ -133,13 +133,15 @@ Run these in `nix develop`. `<tag>` is the upstream release tag, for example `1.
       `test/m1plus/boot.py` on a fresh M1 build. Edit no source between the build and its gates: they
       check its `source_sha256` against the tree, and a table edit after the build fails every one.
    4. **Port report.** `python3 test/m1plus/ports.py` passes: every hook, site and name is classified
-      (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for U4.
+      (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for
+      [m1plus-unported.md](m1plus-unported.md).
    5. **What changed on M1.** Keep the gated `--dev` build (U3: `work/u3/<tag>/`), and list
       `python3 test/m1plus/fndiff.py <the last flashed build> <this build>`: the payload functions the
       device checklist covers.
 4. **Record.**
    - Set `UPSTREAM_BASE` to `<tag>` and its commit.
-   - Add a row to the roadmap's U4 for each new `NOT PORTED` feature.
+   - Add a row to [m1plus-unported.md](m1plus-unported.md) (roadmap U4) for each new `NOT PORTED`
+     feature, with its status.
    - Add the footprint to the [table below](#footprint).
    - Add a section to [m1plus-progress.md](m1plus-progress.md) naming the tag, the conflicts and how
      each was resolved.
