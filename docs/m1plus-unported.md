@@ -32,8 +32,8 @@ to its [progress](m1plus-progress.md) section.
 | [The Wi-Fi transfer page](#the-wi-fi-transfer-page) | 1.3.0 | `WEB` | Planned |
 | [Quick Settings' brightness through a swipe up](#quick-settings-brightness) | 1.3.8 | `g_dropdown_menu_state` | Planned |
 | [Knob: Navigation on Set Time Manually](#set-time-manually) | the M1's own | an `m1plus_contexts.inc` row | Planned |
-| [Tidal's cache and Tidal Downloads](#tidal) | 1.2.2 | `tidal_play`, `tidal_downloads`, `REC_TIDAL_ID` | Unplanned |
-| [Knob: Navigation on the Tidal and HiFi store pages](#tidal) | the M1's own | `m1plus_contexts.inc` rows | Unplanned |
+| [Tidal's cache and Tidal Downloads](#tidal) | 1.2.2 | `tidal_play`, `tidal_downloads`, `REC_TIDAL_ID` | Planned |
+| [Knob: Navigation on the Tidal and HiFi store pages](#tidal) | the M1's own | `m1plus_contexts.inc` rows | Planned |
 
 ## Ported, not yet checked on the device
 
@@ -135,4 +135,11 @@ On the M1, `tidal_start` passes no song id, because neither of V2.1's two caller
 `get_tidal_trackurl` (`0x512ed0`) hands its URL thread (`0x51c288`) the queue row, so the id is to
 be found there. The store pages' knob rows wait for the same check.
 
-Both are unplanned until there is a Tidal account to check them on.
+Nothing in the M1's hardware blocks either. The way in:
+1. Read both callers and the URL thread for where the id is and how long it stays valid.
+2. Find the id's offset in V2.1's queue row for `REC_TIDAL_ID`.
+3. Port [Streaming's Configuration](#streamings-configuration) first, since its cache size caps
+   `trim`.
+4. Put the Downloads row on the Q2 Pod page, as V2.1 has no Streaming page.
+
+Steps 1 and 2 can be done from the code. The device check needs a signed-in Tidal account.
