@@ -808,7 +808,8 @@ int video_start(const char *file, int radio) {
 static int play_video(void *ctx, void *event) {
     if (vid.pid) return 0;
     headset_manual();
-    radio_stop(); /* it holds the PCM too */
+    spot_yield(); /* librespot and radio hold the PCM too, as for local music */
+    radio_stop();
     const char *path = bk.path[(int)(long)ctx];
     vid.key = fnv(FNV_SEED, (const unsigned char *)path);
     vid.key |= !vid.key;
@@ -944,8 +945,8 @@ void books_open(const char *root, int videos) {
                         videos ? bk.n ? "Videos" : "No videos" : bk.n ? "Books" : "No books", bk.n, 48);
     char name[256];
     for (int k = 0; k < bk.n; ++k)
-        page_row_detail(bk.view, k, title(bk.path[k], name), 0,
-                        videos ? play_video : open_book);
+        (videos ? page_row_detail : page_row_detail_into)(bk.view, k, title(bk.path[k], name), 0,
+                                                          videos ? play_video : open_book);
 }
 int video_status(void) { return vid.pid ? (vid.paused ? 3 : 2) : 0; }
 unsigned video_session(void) { return (unsigned)vid.pid; }

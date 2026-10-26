@@ -37,8 +37,8 @@ void child_exit(int status) __attribute__((noreturn));
  * enabled: 0 off, 1 both channels, 2 left only, 3 right only (v1 files hold 0 or 1).
  * balance: dB, above 0 turns the left channel down, below 0 the right (v2 only).
  * automatic: the preamp is 1 Auto (the player cuts each rate's own peak; preamp holds the 48 kHz
- * cut), 2 picked, 0 never picked (an import, or saved before 1.3.6: PEQ_PRESET_V2 bytes), which the
- * UI and PEQ playback also take as Auto. */
+ * cut), 2 picked (an import's own preamp too), 0 never picked (saved before 1.3.6: PEQ_PRESET_V2
+ * bytes, or imported before 1.4.4), which the UI and PEQ playback also take as Auto. */
 typedef struct { int enabled, type; double frequency, gain, q; } peq_band;
 typedef struct {
     int count, bypass;
@@ -132,7 +132,13 @@ void *page_title(void *body, const char *caption);
 void *page_list(void *page, void *body, void **title, const char *caption, int n, int item_h);
 void *page_row_detail(void *view, int index, const char *caption, const char *detail,
                       int (*click)(void *, void *));
+void *page_row_detail_into(void *view, int index, const char *caption, const char *detail,
+                           int (*click)(void *, void *));
 void page_row_into(void *view, int index, const char *caption, int (*click)(void *, void *));
+void row_into(void *item, int h);
+void list_toggle(void *label, const char *title, int on); /* navigation.c: a row's switch */
+char *csv_find(char *list, const char *item);                /* navigation.c: comma lists */
+int csv_toggle(char *list, unsigned size, const char *item);
 void *bottom_caption(void *parent, int h);
 int text_differs(void *w, const char *s);
 long file_size(const char *path); /* coverflow.c: -1 when it can't be opened */
@@ -163,15 +169,17 @@ int clip_within(void *canvas, int *old, int *clip, int x, int y, int w, int h);
 void play_folder(void *dq, int idx, int cls);
 int directory(void *path); /* playback.c: toolsLoadDirectory, for staged */
 #define TIDAL_DIR "/mnt/mmc/.tidal" /* tidal.c's cache, Tidal Downloads' list */
+void tidal_clear(void);
 #define SPOT_DIR "/mnt/mmc/.spotify" /* librespot and its launcher, spotify.c's */
 /* addon.c: card apps, each a card folder .<id> holding its manifest q2app, its
  * launcher run and its binary q2-<id>. addon_scan finds them again (how many slots: a slot's index
- * stays its app's), addon_name is one's while it is on the card (else 0), addon_open its Streaming
- * row's click (ctx: the slot). addon_forget and addon_quit: the Apps page replaces or removes the
- * files of the app in folder dir (".deezer"): forgotten on the UI thread, then asked to end and
- * waited for on the Apps page's worker. */
+ * stays its app's), addon_name and addon_id are one's while it is on the card (else 0), addon_open
+ * its Streaming row's click (ctx: the slot). addon_forget and addon_quit: the Apps page replaces or
+ * removes the files of the app in folder dir (".<id>"): forgotten on the UI thread, then asked to
+ * end and waited for on the Apps page's worker. */
+#define APPS_MAX 8 /* card apps on the card at once */
 int addon_scan(void), addon_open(void *ctx, void *event), addon_hold(void *top);
-const char *addon_name(int a);
+const char *addon_name(int a), *addon_id(int a);
 void addon_poll(void), addon_stop(void), addon_paint(void *w, void *canvas), addon_card_away(void);
 void addon_forget(const char *dir), addon_quit(const char *dir);
 /* spotify.c's Q2SPOT/1 framing (docs/librespot.md), which the card apps speak too */
@@ -182,6 +190,7 @@ void spot_shut(int fd);
  * opens its list, a file plays its folder from it; album, in track order (by name), else newest
  * first. */
 int songs_open(const char *path, const char *title, int album);
+void *app_album_songs(const char *dir); /* navigation.c: a folder's songs by name, for addon.c */
 int stream_cache(int spotify); /* navigation.c: Streaming's Configuration, a cap of 512 << it MB */
 void album_memory(void *r);
 void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, unsigned px, unsigned color);
@@ -213,7 +222,10 @@ int spot_status(void), radio_status(void), video_status(void);
 unsigned spot_session(void), radio_session(void), video_session(void);
 void spot_set_playing(int playing), radio_set_playing(int playing), video_set_playing(int playing);
 int video_start(const char *file, int radio); /* books.c */
-void *edit_create(void *item, const char *input_type, int y, int h); /* peq_ui.c */
+/* peq_ui.c's T9 edit, named EDIT_NAME: navigation.c's search_key cancels it on Return while its
+ * keyboard is up. */
+#define EDIT_NAME "q2_edit"
+void *edit_create(void *item, const char *input_type, int y, int h);
 const char *output_device(char *vol);         /* books.c */
 void dac_take(void);                          /* books.c */
 #if IPOD
@@ -225,6 +237,8 @@ int ipod_classic(void); /* navigation.c: Theme: Classic */
 #define SPOT_GREY 0xffaaaaaau
 void radio_search(void);       /* radio.c */
 void toast(const char *text); /* navigation.c */
+const char *coverflow_sort_name(void); /* coverflow.c */
+void coverflow_sort_step(void), coverflow_refresh_art(void);
 int rockbox_available(void);  /* navigation.c: a regular Rockbox binary on the card */
 int page_keyup(void *ctx, void *event); /* navigation.c: Return leaves a payload page */
 int shelf_open(void *ctx, void *event); /* netupdate.c: System settings' Apps page */

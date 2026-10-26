@@ -313,7 +313,7 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
   <ul>
     <li><b>List ends:</b> Library lists, Playback settings and System settings stop at the end; pause, then turn again to wrap around.</li>
     <li><b>Position memory:</b> recent folders, albums, searches and menus reopen where you were, until power-off.</li>
-    <li><b>Wheel-adjusted settings:</b> brightness, volume limits, balance, date and time and the sleep timer take the wheel: turn to change, press Centre to go back or move to the next field, and then OK.</li>
+    <li><b>Wheel-adjusted settings:</b> brightness, volume limits, balance, date and time and the sleep timer take the wheel: turn to change, press Centre to go back or move to the next field, and then OK. Next and Previous also move between the fields. The date and time's OK goes back to the Time settings.</li>
     <li><b>Key Tone:</b> the Q2’s speaker clicks, playing or not, whenever no headphones (3.5/4.4 mm), Bluetooth or USB DAC are connected; once per row, not per tick.</li>
   </ul>
 
@@ -369,7 +369,7 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
   </div>
   <div class="sec">
   <h2 id="tagging">Tagging your music</h2>
-  <p>Q2 Pod builds the library from your files’ tags, so a few tag habits decide how albums and songs show up. Fix tags on a computer (Mp3tag, MusicBrainz Picard or foobar2000), then run <b>Update Local Music</b> and press <b>Refresh library</b> in Coverflow.</p>
+  <p>Q2 Pod builds the library from your files’ tags, so a few tag habits decide how albums and songs show up. Fix tags on a computer (Mp3tag, MusicBrainz Picard or foobar2000), then run <b>Update Local Music</b> and press <b>System settings → Display → Refresh Coverflow</b>.</p>
   <ul>
     <li><b>An album is its name plus its Album Artist.</b> Coverflow, <b>Library → Albums</b>, Album groups, Crossfade and album ratings all go by these two tags. Give every track on an album the same Album Artist. A track with a different one, for example “Artist; Guest” where the rest say “Artist”, becomes an album of its own. So does a track that has no Album Artist when the others do. Put guests in the track’s <b>Artist</b> or <b>Title</b> instead, and use one Album Artist such as “Various Artists” for a compilation.</li>
     <li><b>No Album Artist on any track:</b> the album’s folder tells it apart instead, and disc folders (<code>CD1</code>, <code>Disc 2</code>) count as one album. Two albums with the same name in one folder then become one album, so give each album its own folder or an Album Artist.</li>
@@ -417,7 +417,7 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
   <p>Albums have 0 to 5 hearts of their own, separate from their songs’.</p>
   <ul>
     <li><b>Rate an album:</b> in Coverflow (also an artist’s), <b>Library → Album</b> or an artist’s albums, hold <b>Play/Pause</b> on the album. <b>Add to Favourites</b> gives it five hearts, <b>Remove from Favourites</b> takes them away, and <b>Rate Album</b> opens the same picker. The row shows the album’s hearts.</li>
-    <li><b>Library → Ratings → Albums</b> shows the rated albums in Coverflow, most hearts first. Its <b>Sort</b> card cycles <b>Rating</b>, <b>Album</b>, <b>Artist</b> and <b>Year</b> (as <b>Year Order</b>), and is remembered. Return goes back to Ratings.</li>
+    <li><b>Library → Ratings → Albums</b> shows the rated albums in Coverflow, most hearts first. Its <b>Sort</b> card cycles <b>Rating</b>, <b>Album</b>, <b>Artist</b>, <b>Year</b> (as <b>Year Order</b>) and <b>Most Played</b>, and is remembered. Return goes back to Ratings.</li>
     <li>An album is its name with its album artist, or its folder when it has none (disc folders count as one), so a rating survives Update Local Music, but retagging or moving the album starts it unrated.</li>
   </ul>
 
@@ -428,6 +428,7 @@ p:has(+ ul), p:has(+ ol), p:has(+ table), p:has(+ pre), .task, h2, h3 { break-af
   <p>While <b>Editing</b>, turn the wheel to select a song. <b>Previous</b> moves it up one place; <b>Next</b> moves it down. Centre or a tap opens <b>Move Up</b>, <b>Move Down</b> and <b>Remove from Playlist</b>; removal asks for confirmation and removes only that entry. <b>Add Songs</b> opens a local song picker for this playlist. Its <b>Search</b> row finds songs by title, artist or album and keeps the search while you add several; each selection adds a song and leaves the picker open; Back returns to editing. Hold <b>Play/Pause</b> on a playlist row, or use its three dots, to open that playlist’s More menu. <b>Done</b> or Back leaves the editor.</p>
   <p>Every completed edit saves immediately. There is no undo or Save/Discard step. Changes apply the next time the playlist loads; the current playback queue keeps its order. This editor is available in both editions and edits local playlists only.</p>
   <p>Playlist import, a stock feature, reads M3U files only from the <code>_explaylist_data</code> folder at the card’s root, the folder playlist export creates. Export a playlist once to create it, or make the folder yourself, then put your <code>.m3u</code> files in it and import.</p>
+  <p><b>Library → Era</b> (after Genre) lists each decade that has dated albums, oldest first, with how many albums it holds. A decade opens <b>Play All</b> (its albums by year, each in track order), <b>Shuffle</b> (all their songs, as Shuffle Songs) and its albums, each shown with its artist and year; press Centre on one to see its tracks in Coverflow. An album’s year is its latest track’s, from the <b>Year</b> tag; untagged years leave an album out.</p>
   <p><b>Library → Long Songs</b> (after Hi-Res) lists the songs over 10 minutes, longest first, with their length. The first open measures every song once (“Measuring songs… n/N”); later opens measure only new ones. <b>Cancel</b> keeps what was measured.</p>
 
   </div>
@@ -523,9 +524,11 @@ ALBUM_ARTIST=1</pre>
   <h2 id="cf"><img class="hicon" src="../../assets/icons/menu_coverflow.png" alt="">Browsing with Coverflow</h2>
   <ul>
     <li>Run <b>Update Local Music</b> first.</li>
-    <li><b>First open</b> prepares artwork once; <b>Cancel</b> keeps progress. Later opens add only new albums; <b>Refresh library</b>, the last card, rebuilds everything.</li>
-    <li><b>Sort</b>, the card before it: press to switch between <b>Album</b>, <b>Artist</b> (then year), <b>Year</b> (newest or oldest first, as <b>Year Order</b>), <b>Recently Added</b>, <b>Most Played</b> and <b>Random</b>. The choice is kept; Random reshuffles each time you pick it.</li>
+    <li><b>First open</b> prepares artwork once; <b>Cancel</b> keeps progress. Later opens add only new albums; <b>System settings → Display → Refresh Coverflow</b> rebuilds everything at the next open.</li>
+    <li><b>System settings → Display → Coverflow Sort</b> switches between <b>Album</b>, <b>Artist</b> (then year), <b>Year</b> (newest or oldest first, as <b>Year Order</b>), <b>Recently Added</b>, <b>Most Played</b> and <b>Random</b>. The choice is kept and applies the next time Coverflow opens; Random reshuffles each time you pick it.</li>
     <li><b>An artist’s albums as Coverflow:</b> <b>System settings → Display → Artist Albums: Coverflow</b> switches <b>Library → Artists → artist → Albums</b> from the default Grid to Coverflow; <b>List</b> shows the album names alone. It contains only that artist’s albums, also when Artists is set to Album Artist. With two or more, the last card, <b>All albums</b>, plays all of them: the albums in the order shown, each in disc and track order, from the first song. Return goes straight back to the Artists list.</li>
+    <li><b>Go to Album</b> in the hold menu of a song you played from Coverflow (or with Artist Albums set to Coverflow) opens that album’s tracks in Coverflow. Return goes back to where you were.</li>
+    <li>With <b>Artists</b> set to <b>Album Artist</b>, each cover shows its album artist, so a compilation reads “Various Artists” or whoever compiled it.</li>
     <li><b>Audiobooks</b> stay out of Coverflow: an album whose tracks are all <code>.m4b</code> files or sit under the card’s <code>Audiobooks/</code> folder. Library Artists, Albums and Shuffle exclude them too; Podcasts keep their current listings.</li>
     <li><b>Artwork:</b> embedded art first, then a <code>cover</code> or <code>folder</code> image (<code>.jpg</code>, <code>.png</code> or <code>.webp</code>); otherwise a placeholder. A folder shared by several albums skips its cover and folder images, since they’d be another album’s art. Now Playing shows the same WebP and large or unusual PNG covers.</li>
   </ul>
@@ -610,8 +613,10 @@ ALBUM_ARTIST=1</pre>
   <h2 id="spuse">Using Spotify on the Q2</h2>
   <p><b>Browsing:</b> pick a song to play it in its playlist or album; Now Playing opens, and Return goes back to the list. <b>More…</b> at the end of a list loads the next part. <b>Search</b> asks for the words first, then Tracks, Albums, Artists or Playlists. Hold Play/Pause on a song to add it to the queue. Queue and Playback Settings appear while something plays.</p>
   <p>Now Playing shows <b>Loading…</b> while a song starts, including a downloaded song. If no track arrives within 15 seconds, it says “Playback didn’t start”; go back to try again. The phone instructions appear when Spotify confirms that pairing is needed. Long titles, artists and albums scroll so you can read them.</p>
-  <p><b>Downloaded Tracks</b> lists the songs you’ve played whose download finished, newest first, and plays them without Wi-Fi. Spotify keeps up to 2 GB of them on the card (see Configuration, below); signing out deletes them. It needs q2-librespot v1.4. Tidal’s are under <b>Streaming → Tidal Downloads</b>, which plays them as local music.</p>
-  <p><b>Download Playlist</b>, at the end of a playlist, saves all its tracks for offline listening in the background, without interrupting playback; <b>Downloads</b> on Spotify’s menu shows its progress, and finished tracks join Downloaded Tracks. A playlist larger than the Spotify Cache can push out its earlier tracks. Stop Streaming Services or signing out stops a download. It needs q2-librespot v1.6.</p>
+  <p><b>Downloads</b> contains <b>Downloaded Playlists</b>, <b>Downloaded Tracks</b>, <b>Download Progress</b> and <b>Storage Management</b>. <b>Download Playlist</b> (also available by holding Play/Pause on a playlist) and <b>Download Liked Songs</b> save named collections in their original order, including repeated songs. Partial collections stay browsable and skip missing songs during offline playback without streaming them.</p>
+  <p><b>Download Controls</b> offers <b>Update Download</b> to refresh a collection manually, <b>Retry Failed</b>, <b>Pause</b>, <b>Resume</b> and <b>Cancel Download</b>. Collections queue one at a time. After a restart choose Resume; downloads never resume automatically. Cancel keeps finished songs. Progress shows completion counts and errors, including unavailable songs, Wi-Fi trouble and card space/write-access problems.</p>
+  <p>Explicit downloads stay protected until removal; <b>Spotify Cache</b> limits temporary playback storage. Existing cached songs still appear in Downloaded Tracks, but their original playlists cannot be recovered: download the playlist again to save its grouping. In Storage Management, select multiple playlists/tracks across pages, then <b>Remove Selected…</b>, or choose <b>Clear All Downloads…</b>; confirm the count before deletion. Playlist removal keeps shared songs, while track removal can make saved playlists incomplete. Clear All keeps login/settings. Signing out removes login and offline music.</p>
+  <p>Collection controls need matching firmware and a Spotify add-on advertising saved-download capabilities (q2-v1.9 development build). Older add-ons retain the flat downloaded-track list and an update explanation. Tidal Downloads works as before.</p>
   <table>
     <thead><tr><th>Control</th><th>What it does</th></tr></thead>
     <tbody>
@@ -666,10 +671,11 @@ http://stream.radioparadise.com/mp3-128</pre>
   </div>
   <div class="sec">
   <h2 id="stream-config">Configuration</h2>
-  <p><b>Streaming → Configuration</b> holds three rows; turn the wheel to pick one and press Centre, or tap it:</p>
+  <p><b>Streaming → Configuration</b> holds these rows; turn the wheel to pick one and press Centre, or tap it:</p>
   <ul>
     <li><b>Tidal Cache</b> and <b>Spotify Cache:</b> how much of the card each service’s downloads may use: 512 MB, 1 GB, 2 GB (the default), 4 GB or 8 GB; press to step to the next. When Tidal’s folder is over the new size, its oldest downloads are deleted after the next download. Spotify’s takes effect the next time Spotify starts (after <b>Stop Streaming Services</b>, or the next power-on), with q2-librespot v1.5 or later.</li>
     <li><b>Stop Streaming Services:</b> stops Spotify, Internet Radio and a playing Tidal queue at once, so the playback buttons and the output are free for local music; pick something in your library to play. Use it when local music misbehaves after streaming. Open Streaming → Spotify to start Spotify again.</li>
+    <li><b>The services:</b> one row per service in Streaming (TIDAL, Spotify, your card apps, Tidal Downloads, Internet Radio and AirPlay), each ticked. Press one to untick it and hide it from Streaming; press again to bring it back. Configuration itself always stays.</li>
   </ul>
   </div>
 </section>
@@ -719,13 +725,14 @@ http://stream.radioparadise.com/mp3-128</pre>
   </div>
   <div class="sec">
   <h2 id="games">Games</h2>
-  <p><b>Library → Games</b> (iPod) has Sudoku, Vortex and Solitaire. The music keeps playing, and the game’s keys don’t change it: use Now Playing for that.</p>
+  <p><b>Library → Games</b> (iPod) has Sudoku, Vortex, Solitaire and Snake. The music keeps playing, and the game’s keys don’t change it: use Now Playing for that.</p>
   <table class="three">
     <thead><tr><th>Game</th><th>Wheel</th><th>Centre</th><th>Other</th></tr></thead>
     <tbody>
       <tr><td>Sudoku</td><td>Moves through the cells, or picks the digit</td><td>Opens the digit, then writes it</td><td><b>Previous/Next</b> move a row, <b>Play/Pause</b> starts a new game, <b>Return</b> cancels the digit or goes back</td></tr>
       <tr><td>Vortex</td><td>Turns the paddle</td><td>Launches the ball</td><td><b>Play/Pause</b> pauses, <b>Return</b> offers Continue or Quit</td></tr>
       <tr><td>Solitaire</td><td>Moves between the piles</td><td>Draws from the stock, picks cards up, then drops them where they fit; twice on the same pile sends its top card to a foundation</td><td><b>Previous/Next</b> move between the top row and the columns, <b>Play/Pause</b> starts a new game, <b>Return</b> puts the cards back or goes back</td></tr>
+      <tr><td>Snake</td><td>Disabled</td><td>Plays again after a crash</td><td><b>Previous/Next</b> turn left/right and pick Continue/Quit; in the pause menu the wheel picks too, <b>Play/Pause</b> pauses, <b>Return</b> offers Continue or Quit. Each apple makes it longer and a little faster; walls and its own body end the game</td></tr>
     </tbody>
   </table>
   <p>Sudoku clues are on grey; a digit that clashes with its row, column or box turns red and is underlined. Solitaire is Klondike, drawing one card at a time; picking up a column takes all its face-up cards, and dropping them moves the part that fits. Your Sudoku, your Solitaire and Vortex’s best score are kept when you leave or turn the Q2 off. Turning the screen off pauses Vortex.</p>
@@ -852,12 +859,12 @@ http://stream.radioparadise.com/mp3-128</pre>
   <p>Or, over Wi-Fi: <b>System settings → System Update → Network Update</b> downloads the newest release to the card’s <code>update.tar</code>, replacing any that’s there, then opens the TF card update’s confirmation. Press the row again to cancel the download.</p>
   <div class="sub">
   <h3 id="apps">Installing apps over Wi-Fi</h3>
-  <p><b>System settings → Apps</b> installs and updates Rockbox, the Rockbox themes, Spotify, Deezer, Soulseek and File Browser from their GitHub releases, instead of unzipping them by hand. Each row shows <b>Install</b>, <b>Update</b> or <b>Installed</b>; with Wi-Fi on, the page checks for newer releases when it opens (at most every 10 minutes). Rockbox Themes appears once Rockbox is on the card.</p>
+  <p><b>System settings → Apps</b> installs and updates Rockbox, the Rockbox themes, Spotify and the card apps from their GitHub releases, instead of unzipping them by hand. Its list of apps is fetched over Wi-Fi and kept on the card, so the first time it needs Wi-Fi to show any; until then its one row, <b>App list</b>, loads it when pressed. Each row shows <b>Install</b>, <b>Update</b> or <b>Installed</b>; with Wi-Fi on, the page fetches the list again and checks for newer releases when it opens (at most every 10 minutes). Rockbox Themes appears once Rockbox is on the card. An installed app that leaves the list keeps its row, so you can still remove it.</p>
   <ul>
     <li><b>Install or update:</b> press Centre on the row. It shows the download’s progress; press it again to cancel. You can leave the page meanwhile: a message says when it’s done, such as “Spotify is ready in Streaming”. Updates keep your Rockbox settings and Spotify’s login and cache size.</li>
     <li><b>Rockbox</b> becomes what the Q2 starts at power-on, as when you unzip it, so the first press says so and a second one installs it. <b>System settings → Boot to</b> changes that.</li>
     <li><b>Remove:</b> press an <b>Installed</b> row twice. Removing Rockbox removes the themes too. Removing Spotify keeps its login and cache; <b>Erase Spotify Data</b> (press twice) deletes them.</li>
-    <li><b>Deezer, Soulseek and File Browser</b> each get a row in <b>Streaming</b> once installed; updates keep their saved settings (Deezer’s login, Soulseek’s settings and downloads list). File Browser’s row shows a QR code to scan with a phone on the same Wi-Fi. Plugging in USB storage stops them; they start again after, and <b>Stop Streaming Services</b> stops them too.</li>
+    <li><b>Card apps</b> each get a row in <b>Streaming</b> once installed; updates keep the settings they save. One with a phone page shows a QR code to scan with a phone on the same Wi-Fi. Plugging in USB storage stops them; they start again after, and <b>Stop Streaming Services</b> stops them too.</li>
     <li>The card needs room for the download and what it unpacks to, plus 64 MB; otherwise it says how much more space it needs. Keep USB storage unplugged until it finishes.</li>
   </ul>
   </div>
@@ -926,7 +933,7 @@ http://stream.radioparadise.com/mp3-128</pre>
     <li><b>Wheel too fast or slow?</b> <b>System settings → Display → Wheel Sensitivity</b>.</li>
     <li><b>More playing time per charge:</b> <b>System settings → Power → Low Power</b>. <b>Battery longevity:</b> <b>Charge Limit</b> on the same page.</li>
     <li><b>Guest artists splitting albums?</b> <b>Audio settings → Artists → Album Artist</b> (the default unless you picked Artist).</li>
-    <li><b>Coverflow order:</b> the <b>Sort</b> card, just before Refresh library, switches to Artist, Year, Recently Added, Most Played or Random.</li>
+    <li><b>Coverflow order:</b> <b>System settings → Display → Coverflow Sort</b> switches to Artist, Year, Recently Added, Most Played or Random.</li>
     <li><b>Screen waking in your pocket?</b> <b>System settings → Power → Wake: Double Press</b>.</li>
     <li><b>Want stock’s EQ presets?</b> <b>EQ → Advanced → Presets → Stock presets</b> has Pop, Rock, Jazz and the rest; the ten default bands work as a 10-band graphic EQ.</li>
     <li><b>Wheel click gone?</b> Key Tone is the Q2’s own speaker, so it stays quiet while headphones, Bluetooth or a USB DAC are connected.</li>
@@ -941,7 +948,7 @@ http://stream.radioparadise.com/mp3-128</pre>
   <ul>
     <li><b>A song is missing.</b> Check it’s in a folder the Q2 scans, with a supported format (<a href="#card">What goes on the microSD card</a>), then run <b>Library → Update Local Music</b>. DRM-protected files don’t appear. Still missing? Check its tags with <a href="#tagging">Tagging your music</a>.</li>
     <li><b>An album is split in two.</b> Give every track the same Album Artist (<a href="#tagging">Tagging your music</a>). Then run <b>Update Local Music</b> again.</li>
-    <li><b>Artwork is missing.</b> Add a <code>cover</code> or <code>folder</code> image (<code>.jpg</code>, <code>.png</code> or <code>.webp</code>) next to the songs, unless several albums share that folder. Then press <b>Refresh library</b> in Coverflow (<a href="#cf">Browsing with Coverflow</a>).</li>
+    <li><b>Artwork is missing.</b> Add a <code>cover</code> or <code>folder</code> image (<code>.jpg</code>, <code>.png</code> or <code>.webp</code>) next to the songs, unless several albums share that folder. Then press <b>System settings → Display → Refresh Coverflow</b> (<a href="#cf">Browsing with Coverflow</a>).</li>
     <li><b>No sound, or sound from the wrong output.</b> Unplug and reconnect the headphones, and check <b>Volume</b> and the status bar. Playback uses whichever output is active when it starts: headphone jack, Bluetooth or a USB DAC. For Spotify, pause and play again after switching. If local music stays silent after streaming, use <b>Streaming → Configuration → Stop Streaming Services</b> (<a href="#stream-config">Configuration</a>).</li>
     <li><b>Bluetooth headphones drop out.</b> Set the quality to <b>LDAC Connection (auto)</b>, which adapts to the link. HQ is the most likely to break up (<a href="#bt">Bluetooth headphones</a>).</li>
     <li><b>Spotify won’t pair or download.</b> The phone and the Q2 must be on the same Wi-Fi, and the Spotify app’s device list must show Q2. New tracks need Wi-Fi; downloaded songs play without it. Browsing needs q2-librespot v1.3 or later, and <b>Download Playlist</b> needs v1.6 (<a href="#spinstall">Installing and pairing Spotify</a>). <b>Playback didn’t start</b> means no track arrived within 15 seconds: go back and try again.</li>

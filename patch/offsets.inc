@@ -14,6 +14,8 @@
 #define W_FOCUS 0x24            /* stock focused flag byte (tests) */
 #define W_PARENT 0x48
 #define IM_WIDGET 0x04 /* input_method_t's editing target, input_method_request @0x645758 */
+#define IM_KEYBOARD                                                                                \
+    0x0c /* the default input method's open keyboard window, 0 once it closes (@0x68bbec) */
 #define W_EMITTER 0x60
 #define W_CHILDREN_LAYOUT 0x68
 #define CHILDREN_LAYOUT_VTABLE 0x10
@@ -237,7 +239,9 @@ static inline int arc_out(int r, int y) {
 /* Spotify's and Internet Radio's Now Playing layout (tools/ipod.py NP_*, which checks they match):
  * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners. */
 #define SPOT_ART_X 16
-#define SPOT_ART_Y 50
+/* iPod: Now Playing's art top, clear of the page dots (tools/ipod.py NP_ART_Y) */
+#define NP_ART_TOP 42
+#define SPOT_ART_Y (IPOD ? NP_ART_TOP : 50)
 #define SPOT_ART_PX 166
 #define SPOT_TEXT_X 194
 #define SPOT_TEXT_W 165
@@ -290,6 +294,9 @@ static inline int arc_out(int r, int y) {
 /* With the screen off the UI loop idles this long a turn instead of stock's 8 ms, about 10 turns a
  * second; screen-off keys (volume, play/pause, wake) wait at most this much longer. */
 #define SCREEN_OFF_SLEEP_MS 100
+/* Stock's player status sync (5 a second) and cover pollers (20 and 10) sleep at least this long a
+ * turn while ringnav_sleep finds the Q2 dark and quiet (ringnav_dark_usleep, DARK_POLLS in tools/build.py). */
+#define DARK_POLL_US 1000000
 /* Screen off, nothing playing (media_playing) and the DAC already off (check_dacoff_state, about 31
  * s after playback stops; g_dacoff_time -1): the turn idles DARK_IDLE_SLEEP_MS, about 4 turns a
  * second, so a Q2 left dark without Standby stops waking the CPU for nothing. The first key waits
@@ -428,6 +435,11 @@ static inline int arc_out(int r, int y) {
  * 0 when browsing the Playlists list, whose rows' trailing dots open playlistsmore_page. */
 #define PLAYLIST_ADD_MODE 0xa27894
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
+/* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */
+#define ALBUM_YEAR "max(case when cast(year as text) glob '[1-9][0-9][0-9][0-9]*' then cast(substr(year,1,4) as integer) else 0 end)"
+/* One row per album, as album_cmp tells them apart (coverflow.c; navigation.c's Era). */
+#define ALBUM_GROUP " group by album COLLATE NOCASE," \
+    "ifnull(albumsonger,'') COLLATE NOCASE,case ifnull(albumsonger,'') when '' then rtrim(fileurl,replace(fileurl,'/','')) end"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
 #define ALBUMINFO_ROW 0xa27200  /* the albums row localmusic_albuminfo_page_init opened (0x4a7ab4) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */

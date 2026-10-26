@@ -164,8 +164,11 @@ def parser_check(lib, tmp):
     assert [b.enabled for b in scoped.bands[:4]] == [2, 3, 1, 0]
     assert parse(lib, single * 30 + 'Filter: OFF PK Fc 0 Hz Gain 0 dB Q 0').count == 30  # blank slots do not count
     assert scoped.preamp == -3.5 and scoped.balance == 1  # left 1 dB below right
+    # A file's Preamp line is kept as picked (2); without one the preamp stays Auto (1), so boosts never clip.
+    assert scoped.automatic == 2 and parse(lib, single).automatic == 1
     # v1 files (no balance) still load, with the balance centred.
     v1 = tmp/'v1'
+    q.automatic = 0  # older files lack it; parse sets 2
     v1.write_bytes(b'Q2PEQ01\0' + bytes(q)[:16 + 10*32])
     assert lib.peq_load(bytes(v1), C.byref(p)) and bytes(p) == bytes(q)  # q's bands 11-30 are the defaults
     v1.write_bytes(b'Q2PEQ02\0' + bytes(q)[:V2])  # 1.3.5's, before automatic: unknown (0)
@@ -225,6 +228,7 @@ def dsp_check(lib):
     e = Engine(); assert lib.peq_compile(C.byref(p), 8000, C.byref(e)) and not e.bypass
     assert (e.c[9].b0, e.c[9].a1) == (1, 0)  # only the unrepresentable band is skipped
     p = parse(lib, '\n'.join(f'Filter: ON PK Fc {100+i*1000} Hz Gain 6 dB Q 1' for i in range(10)))
+    p.automatic = 2  # a picked 0 dB preamp, not the file's Auto: the boosts pass full scale unclamped
     d = DSP(); lib.peq_reset(C.byref(d), 48000, 2, C.byref(p))
     boosted = process(lib, d, [1., -1.] * 20000, 2)
     assert all(math.isfinite(x) for x in boosted) and max(boosted) > 1 and min(boosted) < -1
@@ -270,7 +274,7 @@ def dsp_check(lib):
     fade = [1 - (1 - 10**(-6/20)) * min(i + 1, 960) / 960 for i in range(10000)]
     assert max(abs(x - r*f) for x, r, f in zip(after, reference, fade)) < 1e-6
     # A band switched off mid-play drains its carried memory before it is skipped, then passes x through.
-    p = parse(lib, 'Filter: ON PK Fc 100 Hz Gain 6 dB Q 1')
+    p = parse(lib, 'Filter: ON PK Fc 100 Hz Gain 6 dB Q 1'); p.automatic = 2  # 0 dB picked, as below
     lib.peq_reset(C.byref(a), 48000, 1, C.byref(p))
     process(lib, a, tone[:10000])
     p.bands[0].gain = 0; assert lib.peq_update(C.byref(a), C.byref(p))
@@ -278,7 +282,7 @@ def dsp_check(lib):
     assert all(a.current.z[0][i][j] == 0 for i in range(30) for j in range(2)) and a.current.used == 1
     assert process(lib, a, tone) == list((C.c_float * len(tone))(*tone))
     # One-channel bands and balance: left gets the band and 2 dB less, right neither.
-    p = parse(lib, 'Channel: L\nFilter: ON PK Fc 1000 Hz Gain 6 dB Q 1'); p.balance = 2
+    p = parse(lib, 'Channel: L\nFilter: ON PK Fc 1000 Hz Gain 6 dB Q 1'); p.balance, p.automatic = 2, 2
     e = Engine(); assert lib.peq_compile(C.byref(p), 48000, C.byref(e))
     assert abs(20*math.log10(response(e, 48000, 1000, 0)) - 4) < 1e-7
     assert abs(20*math.log10(response(e, 48000, 1000, 1))) < 1e-12
@@ -377,7 +381,7 @@ def headroom_check(lib, ui):
         # A set preamp plays as set at every rate, though it is the saved preset's -8.5 dB.
         manual.preamp = -8.5; lib.peq_reset(C.byref(b), rate, 2, C.byref(manual))
         assert all(b.current.gain[ch] == 10**(-8.5/20) for ch in range(2)) and bytes(b.current.c) == bytes(e.c)
-    p.automatic = 0  # as imported
+    p.automatic = 2  # as imported
     assert bytes(p) == before
     ui.check_headroom.argtypes = [C.POINTER(Preset)]
     ui.check_headroom.restype = C.c_double
@@ -403,6 +407,7 @@ def headroom_check(lib, ui):
 
 # Host stand-ins for the stock services peq_platform.h maps on the device.
 SHIM_H = r"""
+#include <assert.h>
 #include <dirent.h>
 #include <sys/stat.h>
 typedef int (*handler)(void *, void *);
@@ -412,7 +417,8 @@ list_item_create label_create list_view_create scroll_view_create widget_use_sty
 widget_set_text_utf8 widget_on widget_get_prop_int widget_set_prop_int widget_destroy_children
 widget_resize scroll_view_set_offset widget_invalidate_force timer_add timer_remove
 navigator_back write_int_config widget_factory widget_factory_create_widget widget_set_prop_str
-widget_get_text_utf8 widget_set_focused widget_lookup window_manager pages_set_active_by_name
+widget_get_text_utf8 widget_set_focused widget_lookup window_manager pages_set_active_by_name edit_set_select
+input_method input_method_request widget_set_name
 canvas_set_fill_color canvas_fill_rect canvas_get_vgcanvas vgcanvas_save vgcanvas_restore vgcanvas_translate
 vgcanvas_begin_path vgcanvas_close_path vgcanvas_move_to vgcanvas_line_to vgcanvas_arc vgcanvas_fill vgcanvas_stroke
 vgcanvas_set_fill_color vgcanvas_set_stroke_color vgcanvas_set_fill_linear_gradient vgcanvas_set_line_width
@@ -421,21 +427,35 @@ widget_to_local on_wm_keyup_fun
 """
 SHIM = r"""
 static struct { int parent, h, bg; char text[160]; handler click, destroy, keyup, change, focus, down, move, up; void *ctx; } w[4096];
-static int count = 1, timers, removed, backs;
+static int count = 1, timers, removed, backs, chevrons[4096];
 static int (*timer_fn)(const void *);
 volatile unsigned char g_equalizer_flag, g_backlight_status = 1;
 int stock_eq_trampoline(int mode) { return mode; }
 static void *make(void *parent, int h) {
     ++count; w[count].parent = (int)(long)parent; w[count].h = h;
-    w[count].text[0] = 0; w[count].click = w[count].change = w[count].focus = w[count].down = 0; w[count].bg = 0; return (void *)(long)count;
+    w[count].text[0] = 0; chevrons[count] = 0; w[count].click = w[count].change = w[count].focus = w[count].down = 0; w[count].bg = 0; return (void *)(long)count;
 }
 /* The value menu's edit: its text, the keyboard it asks for, whether it took focus. */
-static int edit_widget, focused;
-static char keyboard[32];
+static int edit_widget, edit_parent, edit_bottom, focused, keyboard_owner;
+#include "offsets.inc"
+/* The input method's editing target (IM_WIDGET) and open keyboard (IM_KEYBOARD, stock's window 4000). */
+static unsigned char im[32];
+static char edit_name[16];
+void *input_method(void) { return im; }
+int input_method_request(void *x, void *edit) {
+    keyboard_owner = (int)(long)edit;
+    P(im, IM_WIDGET) = edit, P(im, IM_KEYBOARD) = edit ? (void *)4000L : 0;
+    return 0;
+}
+int widget_set_name(void *x, const char *name) { if ((long)x == edit_widget) snprintf(edit_name, sizeof edit_name, "%s", name); return 0; }
+const char *shim_edit_name(void) { return edit_name; }
+int shim_keyboard_owner(void) { return keyboard_owner; }
+void shim_dismiss_keyboard(void) { input_method_request(im, 0); }
+static char keyboard[32], input_type[16];
 void *widget_factory(void) { return 0; }
 void *widget_factory_create_widget(void *f, const char *type, void *p, int x, int y, int ww, int h) {
     void *e = make(p, h);
-    if (!strcmp(type, "edit")) { edit_widget = (int)(long)e; keyboard[0] = 0; focused = 0; }
+    if (!strcmp(type, "edit")) { edit_name[0] = 0; edit_widget = (int)(long)e; edit_parent = (int)(long)p; edit_bottom = y + h; keyboard[0] = 0; focused = 0; }
     return e;
 }
 /* The curve's vgcanvas drawing (peq_paint) is checked on the device; here it only has to link. Filled
@@ -476,6 +496,7 @@ unsigned accent_tone(int tone) { return shim_classic_on ? 0x6e6e6e : 0xeeeeec; }
 void shim_classic(int on) { shim_classic_on = on; }
 int widget_set_prop_str(void *x, const char *k, const char *v) {
     if ((long)x == edit_widget && !strcmp(k, "keyboard")) snprintf(keyboard, sizeof(keyboard), "%s", v);
+    if ((long)x == edit_widget && !strcmp(k, "input_type")) snprintf(input_type, sizeof(input_type), "%s", v);
     return 0;
 }
 int widget_get_text_utf8(void *x, char *s, unsigned size) {
@@ -484,7 +505,11 @@ int widget_get_text_utf8(void *x, char *s, unsigned size) {
     return 0;
 }
 int widget_set_focused(void *x, int v) {
-    if ((long)x == edit_widget && (focused = v) && w[edit_widget].focus) w[edit_widget].focus(0, 0);
+    if ((long)x == edit_widget && focused != v) {
+        focused = v;
+        input_method_request(input_method(), v ? x : 0);
+        if (v && w[edit_widget].focus) w[edit_widget].focus(0, 0);
+    }
     return 0;
 }
 /* The stock keyboard window (4000) and its page panel (4001); the page it was switched to. */
@@ -496,17 +521,59 @@ void *widget_lookup(void *x, const char *name, int recursive) {
 }
 int pages_set_active_by_name(void *x, const char *name) { if ((long)x == 4001) snprintf(page, sizeof(page), "%s", name); return 0; }
 const char *shim_page(void) { return page; }
+void shim_page_reset(void) { page[0] = 0; }
+/* The edit's selection, as start and end (stock's ufloat refuses "." where its text less this has one). */
+static unsigned selected[2];
+int edit_set_select(void *x, unsigned start, unsigned end) { selected[0] = start, selected[1] = end; return 0; }
+unsigned shim_selected(int i) { return selected[i]; }
+void shim_select_reset(void) { selected[0] = selected[1] = 0; }
 const char *shim_edit(void) { return edit_widget ? w[edit_widget].text : ""; }
 const char *shim_keyboard(void) { return keyboard; }
+const char *shim_input_type(void) { return input_type; }
 int shim_focused(void) { return focused; }
-/* Typing a value and closing the keyboard: the edit reports EVT_VALUE_CHANGED. */
+/* The edit on the page itself, its bottom in page y: T9's window starts at page y 30. */
+int shim_edit_clear(void) { return edit_parent == 1 && edit_bottom <= 30; }
 void shim_run(void);
+/* Return with the keyboard up, as navigation.c's search_key does to an EDIT_NAME edit: emptied, then
+ * blurred, which shuts the keyboard and reports EVT_VALUE_CHANGED. */
+void shim_cancel(void) {
+    w[edit_widget].text[0] = 0, focused = 0;
+    input_method_request(im, 0);
+    w[edit_widget].change(0, 0); shim_run();
+}
+/* Typing a value and closing the keyboard: the edit reports EVT_VALUE_CHANGED. */
 void shim_type(const char *text) {
+    assert(keyboard_owner == edit_widget);
     snprintf(w[edit_widget].text, 160, "%s", text);
+    input_method_request(input_method(), 0); /* stock Done closes T9 before reporting the value */
     w[edit_widget].change(0, 0); shim_run();
 }
 void *list_item_create(void *p, int x, int y, int ww, int h) { return make(p, h); }
 void *label_create(void *p, int x, int y, int ww, int h) { return make(p, h); }
+/* coverflow.c's chevron: a textless child, marked. */
+void row_into(void *item, int h) { chevrons[(long)make(item, h)] = 1; }
+/* Whether the row reading text (as shim_click finds it) ends in list_into. */
+int shim_chevron(const char *text) {
+    for (int p = 2; p <= count; ++p) {
+        char joined[400] = "";
+        int into = 0;
+        for (int i = p + 1; i <= count; ++i)
+            if (w[i].parent == p) {
+                into |= chevrons[i];
+                if (w[i].text[0]) snprintf(joined + strlen(joined), sizeof(joined) - strlen(joined), "%s%s", *joined ? " " : "", w[i].text);
+            }
+        if (w[p].click && *joined && !strncmp(joined, text, strlen(text))) return into;
+    }
+    return -1;
+}
+/* navigation.c's switch beside label: here a child after it reading On or Off, so a row reads
+ * "Enabled On" as the value rows read. */
+void list_toggle(void *label, const char *title, int on) {
+    int row = w[(long)label].parent, sw = (long)label + 1;
+    if (sw > count || w[sw].parent != row) sw = (int)(long)make((void *)(long)row, 48);
+    snprintf(w[(long)label].text, 160, "%s", title);
+    snprintf(w[sw].text, 160, "%s", on ? "On" : "Off");
+}
 void *list_view_create(void *p, int x, int y, int ww, int h) { return make(p, h); }
 void *scroll_view_create(void *p, int x, int y, int ww, int h) { return make(p, h); }
 int widget_use_style(void *x, const char *s) { return 0; }
@@ -532,7 +599,7 @@ int widget_set_prop_int(void *x, const char *k, int v) {
     if (!strcmp(k, "_ringnav_index")) selection = v;
     return 0;
 }
-int widget_destroy_children(void *x) { count = 1; return 0; }
+int widget_destroy_children(void *x) { assert(!keyboard_owner); count = 1; return 0; }
 int widget_resize(void *x, int ww, int h) { w[(long)x].h = h; return 0; }
 int scroll_view_set_offset(void *x, int a, int b) { offset = b; return 0; }
 int shim_selection(void) { return selection; }
@@ -557,7 +624,7 @@ int shim_click(const char *text, int run) {
     for (int p = 2; p <= count; ++p) {
         char joined[400] = "";
         for (int i = p + 1; i <= count; ++i)
-            if (w[i].parent == p) snprintf(joined + strlen(joined), sizeof(joined) - strlen(joined), "%s%s", *joined ? " " : "", w[i].text);
+            if (w[i].parent == p && w[i].text[0]) snprintf(joined + strlen(joined), sizeof(joined) - strlen(joined), "%s%s", *joined ? " " : "", w[i].text);
         if (w[p].click && *joined && !strncmp(joined, text, strlen(text))) {
             if (run == 2) return 1; /* only look */
             w[p].click(w[p].ctx, 0);
@@ -576,7 +643,6 @@ const char *shim_title(void) {
 int shim_list_height(void) { return w[2].h; } /* the list view is the page's first child */
 /* The Simple tab: its view the page's child with a press handler, the tab bar the 48px one. Centre's
  * single press runs at once; a double press is the screen's. */
-#include "offsets.inc"
 static int screen_off;
 static int child(int bar) {
     for (int i = count; i > 1; --i) if (w[i].parent == 1 && w[i].down && (w[i].h == 48) == bar) return i;
@@ -703,6 +769,12 @@ def editor_check(lib, tmp):
     assert not ui.shim_pending() and ui.shim_removed() == removed + 1
     advanced()
     assert named('HD650')  # the applied preset's name survives the page
+    # Renaming: Return with the keyboard up keeps the name and the file.
+    ui.shim_edit.restype = C.c_char_p; name = lambda: ui.shim_edit().decode()
+    click('Presets'); click('Rename a preset'); click('HD650.peq'); assert name() == 'HD650'
+    click('Rename HD650'); assert ui.shim_keyboard_owner(); ui.shim_cancel()
+    assert name() == 'HD650' and (saved/'HD650.peq').exists() and title() == ''
+    ui.shim_return(); ui.shim_return()
     # Deleting asks first, removes only the saved copy and leaves the active EQ alone.
     before = active.read_bytes()
     click('Presets'); click('Delete a preset'); click('HD650.peq'); click('Cancel')
@@ -727,7 +799,11 @@ def editor_check(lib, tmp):
     assert auto(read()) == 'Auto (44.1: -12.5 / 48: -12.5)'
     click(auto(read())); click('Apply changes')
     assert abs(read().preamp + 12.5) < 0.05 and read().automatic == 1, read().preamp
-    click('1  '); click('Band On'); ui.shim_return(); click('2  '); click('Band On'); ui.shim_return(); click('Apply changes')
+    # Rows that open a screen or picker end in list_into; the switches and cyclers don't.
+    got = [ui.shim_chevron(t) for t in (b'Balance', b'Preamp', b'Presets', b'1  ', b'Enabled', b'Reset')]; assert got == [1, 1, 1, 1, 0, 0], got
+    click('1  ')
+    assert [ui.shim_chevron(t) for t in (b'Band', b'Type', b'Frequency', b'Gain', b'Q ')] == [0, 0, 1, 1, 1]
+    click('Band On'); ui.shim_return(); click('2  '); click('Band On'); ui.shim_return(); click('Apply changes')
     assert math.copysign(1, read().preamp) == 1 and read().preamp == 0, read().preamp  # +0: shown as 0.0
     # Channels cycle on enabled bands; headroom takes the louder side, balance only turns one down.
     click('1  Peaking 31 Hz Off'); click('Gain +6.5 dB'); click('+7.5 dB'); click('Channels Both')  # picking a gain turns the band on
@@ -742,28 +818,51 @@ def editor_check(lib, tmp):
     r = read(); assert (r.bands[0].enabled, r.balance) == (3, -0.5) and abs(r.preamp + 7.5) < 0.05, (r.bands[0].enabled, r.balance)
     assert ui.shim_click(b'1  Peaking 31 Hz R +7.5 dB', 0) and ui.shim_click(b'Balance L 0.5 dB', 0)
     # Frequency and Q open a value menu: an edit with the value (keyboard on tap or centre), then Raise/Lower.
-    ui.shim_edit.restype = ui.shim_keyboard.restype = C.c_char_p
+    ui.shim_edit.restype = ui.shim_keyboard.restype = ui.shim_input_type.restype = C.c_char_p
     edit = lambda: ui.shim_edit().decode()
+    def type_value(text):
+        click('Band 1 '); assert ui.shim_keyboard_owner()  # row 0, the caption
+        ui.shim_type(text)
     ui.shim_close(); advanced(); click('1  Peaking 31 Hz R'); click('Frequency 31 Hz')
-    assert title() == 'Band 1 Frequency (Hz)' and edit() == '31' and ui.shim_keyboard() == b'kb_default_t9'
+    assert ui.shim_click(b'Band 1 Frequency (Hz)', 2) and edit() == '31' and ui.shim_keyboard() == b'kb_default_t9'
+    assert ui.shim_edit_clear() and title() == ''  # over the title, above T9: what is typed shows, the page stays put
+    assert ui.shim_input_type() == b'text'  # keep unfinished input out of stock's numeric auto-fix
     click('Lower 1 Hz'); click('Lower 1 Hz'); assert edit() == '29'
     click('Step 1 Hz'); click('Lower 10 Hz'); assert edit() == '20'  # clamped at 20 Hz
     click('Step 10 Hz'); click('Raise 100 Hz'); assert edit() == '120'
     ui.shim_page.restype = C.c_char_p
-    assert not ui.shim_focused(); click('120'); assert ui.shim_focused()  # the centre button opens the keyboard
-    assert ui.shim_page() == b'symnum'  # on its number keys
-    ui.shim_type(b'2500'); assert edit() == '2500'
-    ui.shim_type(b'abc'); assert edit() == '2500'      # not a number: unchanged
-    ui.shim_type('\u0131'.encode()); assert edit() == '2500'  # low wchar byte is ASCII '1', still not a number
-    ui.shim_type(b'9'*16); assert edit() == '2500'    # stock conversion refuses a value that cannot fit
-    ui.shim_type(b'99999'); assert edit() == '20000'   # clamped like Raise
-    ui.shim_type(b'1000.5'); assert edit() == '1000'   # kept exactly, shown whole
+    assert not ui.shim_focused(); click('Band 1 '); assert ui.shim_focused()  # the centre button opens the keyboard
+    assert ui.shim_keyboard_owner()
+    ui.shim_dismiss_keyboard(); assert ui.shim_focused()  # stock keeps focus after T9 closes
+    ui.shim_page_reset(); ui.shim_select_reset()
+    click('Band 1 '); assert ui.shim_keyboard_owner()  # reopen the same focused field, no EVT_FOCUS
+    assert ui.shim_page() == b'symnum' and (ui.shim_selected(0), ui.shim_selected(1)) == (0, 3)  # numbers, value selected
+    type_value(b'2500'); assert edit() == '2500'
+    ui.shim_edit_name.restype = C.c_char_p; assert ui.shim_edit_name() == b'q2_edit'  # search_key's cancel
+    click('Band 1 '); ui.shim_cancel()  # Return with the keyboard up: the value and the screen stay
+    assert edit() == '2500' and ui.shim_click(b'Band 1 Frequency (Hz)', 2) and not ui.shim_keyboard_owner()
+    type_value(b'abc'); assert edit() == '2500'      # not a number: unchanged
+    type_value('\u0131'.encode()); assert edit() == '2500'  # low wchar byte is ASCII '1', still not a number
+    type_value(b'9'*16); assert edit() == '2500'    # stock conversion refuses a value that cannot fit
+    type_value(b'99999'); assert edit() == '20000'   # clamped like Raise
+    type_value(b'1000.5'); assert edit() == '1000'   # kept exactly, shown whole
+    type_value(b'0'); assert edit() == '20'  # zero is entered, then clamped to the frequency minimum
+    type_value(b'1000.5')
     ui.shim_return(); assert title() == 'Band 1'
-    click('Q 1.41'); assert title() == 'Band 1 Q' and edit() == '1.41'
+    click('Q 1.41'); assert ui.shim_click(b'Band 1 Q', 2) and edit() == '1.41'
+    assert ui.shim_input_type() == b'text'
     click('Raise 0.05'); assert edit() == '1.46'
-    ui.shim_type(b'0.7'); assert edit() == '0.70'
+    click('Band 1 '); assert (ui.shim_selected(0), ui.shim_selected(1)) == (0, 4)  # selected: a key replaces it, "." too
+    type_value(b'0.7'); assert edit() == '0.70'
+    for text, want in ((b'0.05', '0.10'), (b'0', '0.10'), (b'10', '10.00'),
+                       (b'0,70', '0.70'), (b'NaN', '0.70'), (b'', '0.70')):
+        type_value(text); assert edit() == want, (text, edit())
     ui.shim_return(); ui.shim_return(); click('Apply changes')
     r = read(); assert (r.bands[0].frequency, round(r.bands[0].q, 9)) == (1000.5, 0.7), (r.bands[0].frequency, r.bands[0].q)
+    click('1  Peaking 1000 Hz R'); click('Frequency 1000 Hz'); click('Band 1 ')
+    assert ui.shim_keyboard_owner()
+    ui.shim_close(); assert not ui.shim_keyboard_owner() and not ui.shim_pending()
+    advanced()  # reopen the EQ page after closing it with its keyboard attached
     # Reset replaces the draft with peq_default's ten flat bands and leaves what plays alone until
     # Apply changes; Advanced's On/Off is live state and stays as it was.
     before = active.read_bytes()
@@ -808,16 +907,22 @@ def editor_check(lib, tmp):
     reopen(-1, 0, v2=True)  # 1.3.5's state loads; never picked, so Auto, in the editor and playing
     assert lib.eq_load(C.byref(t)) and t.peq.automatic == 0 and bytes(t.eq3) == bytes(s.eq3) and shown(True)
     assert ui.shim_click(b'Nothing to apply', 2) and read().automatic == 1
-    # An import's own preamp gives way to Auto; picking a preamp afterwards sticks across a restart.
+    # An import plays its own preamp; Auto, once picked, sticks to the saved preset, not the card's file.
     (tmp/'root/mnt/mmc/EQ').mkdir(parents=True, exist_ok=True)
-    (tmp/'root/mnt/mmc/EQ/Imp.txt').write_text('Preamp: -2 dB\nFilter 1: ON PK Fc 1000 Hz Gain 6 dB Q 1.41\n')
+    text = 'Preamp: -2 dB\nFilter 1: ON PK Fc 1000 Hz Gain 6 dB Q 1.41\n'
+    (tmp/'root/mnt/mmc/EQ/Imp.txt').write_text(text)
     click('Presets'); click('Import from SD /EQ'); click('Imp.txt'); ui.shim_close(); advanced()
+    click('Presets'); click('Imp.peq'); assert ui.shim_click(b'Preamp -2.0 dB', 2)
+    click('Preamp -2.0 dB'); click(auto(p)); assert shown(True)
+    r = Preset(); assert lib.peq_load(bytes(saved/'Imp.peq'), C.byref(r)) and r.automatic == 1
+    assert (tmp/'root/mnt/mmc/EQ/Imp.txt').read_text() == text
     click('Presets'); click('Imp.peq'); assert shown(True)
     click(f'Preamp {auto(p)}'); click('-3.0 dB'); click('Apply changes')
     ui.shim_close(); advanced(); assert ui.shim_click(b'Preamp -3.0 dB', 2) and not shown(True)
     (tmp/'root/mnt/mmc/EQ/Imp.txt').unlink(); (saved/'Imp.peq').unlink()
     # The reported preset: the Preamp row and its picker label the 44.1 and 48 kHz cuts; an edit refreshes them.
-    rep = parse(lib, REPORTED_PRESET); assert lib.peq_save(bytes(saved/'Rep.peq'), C.byref(rep), 1) == 1
+    rep = parse(lib, REPORTED_PRESET); assert rep.automatic == 2  # an import's preamp is set
+    rep.automatic = 1; assert lib.peq_save(bytes(saved/'Rep.peq'), C.byref(rep), 1) == 1
     click('Presets'); click('Rep.peq'); assert ui.shim_click(b'Preamp Auto (44.1: -9.2 / 48: -8.8)', 2)
     click('Preamp Auto'); assert ui.shim_selection() == 0 and ui.shim_click(b'Auto (44.1: -9.2 / 48: -8.8)', 2)
     ui.shim_return(); click('7  Peaking 10160 Hz L'); click('Band On'); ui.shim_return()
@@ -1908,7 +2013,7 @@ def books_check(tmp):
 def games_check(tmp):
     """Games (games.c): every bundled Sudoku and 200 shuffled ones have one solution, clues stay,
     conflicts and completion; saves' magic and checksum; Vortex's paddle, bricks, lives, levels,
-    speed cap, no tunnelling and determinism."""
+    speed cap, no tunnelling and determinism; Snake's turns, growth, collisions and food."""
     import random
     lib = compile_host(tmp, 'games.so', ROOT/'patch/games.c')
     class Sudoku(C.Structure):
@@ -2019,6 +2124,51 @@ def games_check(tmp):
             lib.vortex_step(C.byref(w), rng.randrange(-9, 10))
         return bytes(w)
     assert play(1) == play(1) and play(1) != play(2)
+    # Snake: 20 x 20, a cell y * 20 + x; the body a ring from the tail, the head last; dir 0 up, 1 right, 2 down, 3 left
+    class Snake(C.Structure):
+        _fields_ = [('body', C.c_ushort * 400), ('tail', C.c_ushort), ('len', C.c_ushort), ('food', C.c_ushort),
+                    ('dir', C.c_ubyte), ('turned', C.c_ubyte), ('state', C.c_ubyte), ('next', C.c_byte), ('score', C.c_int)]
+    assert C.sizeof(Snake) == 816
+    body = lambda s: [s.body[(s.tail + i) % 400] for i in range(s.len)]
+    def fresh(food=0):
+        s = Snake(); lib.snake_new(C.byref(s)); s.food = food; return s
+    s = fresh(); assert (body(s), s.dir, s.state, s.score) == ([207, 208, 209], 1, 1, 0)
+    assert s.food not in body(s) and lib.snake_ms(C.byref(s)) == 160
+    # one turn a step and one waiting for the next, any more dropped: a quick spin U-turns into the next lane,
+    # never back into itself
+    for _ in range(3): lib.snake_turn(C.byref(s), 1)
+    assert (s.dir, s.next) == (2, 1)
+    assert lib.snake_step(C.byref(s)) == 0 and body(s) == [208, 209, 229] and (s.dir, s.next, s.state) == (3, 0, 1)
+    lib.snake_turn(C.byref(s), 1); assert s.dir == 3 and s.next == 1
+    assert lib.snake_step(C.byref(s)) == 0 and body(s) == [209, 229, 228] and s.dir == 0
+    assert lib.snake_step(C.byref(s)) == 0 and body(s)[-1] == 208 and s.state == 1 and s.dir == 0  # the waiting turn was spent
+    lib.snake_turn(C.byref(s), -1); assert s.dir == 3 and lib.snake_step(C.byref(s)) == 0 and body(s)[-1] == 207
+    # an apple grows it by one, scores and speeds it up; the next apple is off the body
+    s = fresh(210); assert lib.snake_step(C.byref(s)) == 1 and body(s) == [207, 208, 209, 210] and s.score == 1
+    assert s.food not in body(s) and lib.snake_ms(C.byref(s)) == 156
+    s.score = 99; assert lib.snake_ms(C.byref(s)) == 70
+    # walls: off the right edge it dies, and a dead snake stays put
+    s = fresh(); s.body[2] = 219
+    assert lib.snake_step(C.byref(s)) == -1 and s.state == 2 and lib.snake_step(C.byref(s)) == -1 and body(s)[-1] == 219
+    for d, head in ((0, 5), (3, 20), (2, 395)):
+        s = fresh(); s.body[2] = head; s.dir = d; assert lib.snake_step(C.byref(s)) == -1 and s.state == 2, d
+    # its own body kills, but the cell the tail is leaving doesn't
+    s = fresh(); s.len = 5; s.body[:5] = [209, 189, 188, 208, 228]; s.dir = 0  # head 228 under 208
+    assert lib.snake_step(C.byref(s)) == -1 and s.state == 2
+    s = fresh(); s.len = 4; s.body[:4] = [208, 188, 189, 209]; s.dir = 3  # into 208, the tail's cell
+    assert lib.snake_step(C.byref(s)) == 0 and body(s) == [188, 189, 209, 208]
+    # food never lands on the body: eating with one cell left free puts the apple there, whichever it is
+    for n, free in enumerate((2, 57, 399, 380)):
+        seed.value = n + 1; s = fresh(0); cells = [c for c in range(400) if c not in (0, 1, free)] + [1]
+        s.tail = 0; s.len = 398; s.body[:398] = cells; s.dir = 3  # the head at 1 eats the apple at 0
+        assert lib.snake_step(C.byref(s)) == 1 and s.len == 399 and s.food == free and s.state == 1
+    rng = random.Random(3)
+    for trial in range(200):
+        seed.value = trial + 1; s = fresh()
+        for _ in range(400):
+            lib.snake_turn(C.byref(s), rng.choice((-1, 0, 0, 1)))
+            if lib.snake_step(C.byref(s)) < 0: break
+            assert s.food not in body(s) and len(set(body(s))) == s.len
     # Solitaire: piles 0 stock, 1 waste, 2-5 foundations, 6-12 the columns; a card suit * 13 + rank, 64 face up
     class Sol(C.Structure):
         _fields_ = [('magic', C.c_uint), ('card', (C.c_ubyte * 24) * 13), ('len', C.c_ubyte * 13), ('cur', C.c_ubyte),
@@ -2081,7 +2231,7 @@ def games_check(tmp):
             lib.sol_finish(C.byref(s)); sound(s)
             if lib.sol_won(C.byref(s)): won += 1; break
     assert won > 10, won
-    print('Games: Sudoku uniqueness, clues, conflicts, completion and saves; Vortex paddle, bricks, lives, levels, speed, tunnelling and determinism; Solitaire deal, draw, moves, finish and random play passed.')
+    print('Games: Sudoku uniqueness, clues, conflicts, completion and saves; Vortex paddle, bricks, lives, levels, speed, tunnelling and determinism; Solitaire deal, draw, moves, finish and random play; Snake turns, growth, walls, self collision and food placement passed.')
 
 def video_check(tmp):
     """Videos' player (video.c): ffmpeg's argv for the Q2's framebuffer, frame pacing and BT volume."""
@@ -2352,6 +2502,14 @@ int main(void) {
     finish(5); assert(!has("D") && has("E"));
     gate = 1; play("F"); wait_for(&performing, 1); /* G's job overtaken by a cached play: dropped */
     play("G"); play("A"); finish(6); usleep(50000); assert(!has("F") && !has("G") && performs == 6);
+    /* Clear All under a running download: every file but .cache-size goes, and the copy that then
+     * finishes is dropped, not renamed into place. */
+    FILE *f = fopen(TIDAL_DIR "/.cache-size", "w"); fputs("2048M", f); fclose(f);
+    gate = 1; play("H"); wait_for(&performing, 1);
+    tidal_clear(); int e = ended; finish(e + 1);
+    int left = 0; DIR *d = opendir(TIDAL_DIR);
+    for (struct dirent *x; (x = readdir(d));) left += strcmp(x->d_name, ".") && strcmp(x->d_name, "..");
+    closedir(d); assert(left == 1 && !access(TIDAL_DIR "/.cache-size", 0) && !has("H"));
     return 0;
 }
 '''
@@ -2435,7 +2593,27 @@ def shelf_check(tmp, lib):
                                               ('__MACOSX/.rockbox/._wps', b'mac')]),
                  2: zip_of(tmp/'spotify.zip', [('.spotify/run', b'#!/bin/sh'), ('.spotify/librespot', b'ELF'),
                                                ('.spotify/cache/credentials.json', b'theirs'), ('.spotify/.cache-size', b'1M')])}
-    ids = ('rockbox', 'themes', 'spotify', 'deezer', 'soulseek', 'filebrowser')  # netupdate.c's apps
+    # sources.list's lines into the apps: the id less "q2-", Q2 Pod's own by their repo's name.
+    class App(C.Structure):
+        _fields_ = [('name', C.c_char * 32), ('id', C.c_char * 16), ('repo', C.c_char * 80), ('dir', C.c_char * 17),
+                    ('bin', C.c_char * 40), ('latest', C.c_char * 32), ('keep', C.c_char_p)]
+    apps = (App * 16).in_dll(lib, 'shelf_apps')
+    def sources(text, into=apps):
+        n = lib.shelf_sources(text.encode(), into, 16)
+        return [(a.repo.decode(), a.name.decode(), a.id.decode(), a.dir.decode(), a.bin.decode(), a.keep.decode()) for a in into[:n]]
+    scratch = (App * 16)()
+    assert sources('# a comment\n\n  me/q2-foo  Foo Bar \r\nme/plain\nx/q2-librespot\nx/q2-rockbox-themes Themes\n', scratch) == [
+        ('me/q2-foo', 'Foo Bar', 'foo', '.foo', '.foo/q2-foo', ''), ('me/plain', 'plain', 'plain', '.plain', '.plain/q2-plain', ''),
+        ('x/q2-librespot', 'q2-librespot', 'spotify', '.spotify', '.spotify/librespot', "'.spotify/cache/*' .spotify/.cache-size"),
+        ('x/q2-rockbox-themes', 'Themes', 'themes', '.rockbox', '', '.rockbox/config.cfg')]
+    for bad in ('me/q2-Foo', 'me/q2-a;b', 'me/q2-' + 'a' * 16, 'me', '/q2-x', 'm e/q2-x', 'me/q2-x/y', 'me/q2-x a\x01b',
+                'me/q2-spotify', 'me/q2-x N' + 'n' * 31, 'a.b/q2-x', 'me/..'):
+        assert sources(bad, scratch) == [], bad
+    assert [a[2] for a in sources('a/q2-x\nb/q2-x\nc/x\n', scratch)] == ['x']  # a repeated id: the first
+    assert len(sources(''.join(f'me/q2-a{i}\n' for i in range(20)), scratch)) == 16
+    C.c_int.in_dll(lib, 'shelf_n').value = len(sources((ROOT/'sources.list').read_text()))
+    ids = [a.id.decode() for a in apps[:6]]
+    assert ids == ['rockbox', 'themes', 'spotify', 'deezer', 'soulseek', 'filebrowser'], ids
     def install(i, zip_path):
         shutil.rmtree(staging, ignore_errors=True); staging.mkdir(parents=True); (card/'.q2/apps').mkdir(exist_ok=True)
         shutil.copy(zip_path, staging/f'{ids[i]}.part')
@@ -2477,8 +2655,10 @@ def shelf_check(tmp, lib):
 
     # The card apps (patch/addon.c), zipped as their releases are: the app, its launcher and manifest.
     # What each saved (Deezer's sign-in, settings and queue; Soulseek's settings, transfers and
-    # share index; File Browser's settings) survives an install over it, an update and a remove.
-    saved = {3: ['.deezer/arl', '.deezer/quality', '.deezer/organize', '.deezer/queue.json'],
+    # share index; File Browser's settings), never in a release, survives an install over it, an
+    # update and a remove.
+    saved = {3: ['.deezer/arl', '.deezer/quality', '.deezer/organize', '.deezer/mode', '.deezer/layout',
+                 '.deezer/queue.json'],
              4: ['.soulseek/config.json', '.soulseek/downloads.json', '.soulseek/shares.cache'],
              5: ['.filebrowser/config.json']}
     shutil.rmtree(card); card.mkdir(parents=True)
@@ -2486,8 +2666,7 @@ def shelf_check(tmp, lib):
         d = '.' + ids[i]
         for f in kept: (card/f).parent.mkdir(exist_ok=True); (card/f).write_bytes(b'mine')
         z = zip_of(tmp/f'{ids[i]}.zip', [(f'{d}/q2-{ids[i]}', b'ELF'), (f'{d}/run', b'#!/bin/sh'),
-                                         (f'{d}/q2app', b'name=x\n'), (f'{d}/README.txt', b'r'),
-                                         *[(f, b'release') for f in kept]])  # a careless release's
+                                         (f'{d}/q2app', b'name=x\n'), (f'{d}/README.txt', b'r')])
         assert install(i, z) == 0 and install(i, z) == 0, i
         assert sorted(files(i)) == sorted(f'{d}/{n}' for n in (f'q2-{ids[i]}', 'run', 'q2app', 'README.txt'))
         assert all((card/f).read_bytes() == b'mine' for f in kept), i
@@ -2585,7 +2764,7 @@ int main(void) {
     subprocess.run(['cc', '-pthread', '-D_GNU_SOURCE', f'-DTIDAL_DIR="{tmp}/tidal"', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
                     str(tmp/'tidal_dl.c'), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=30)
-    print('Tidal cache: stream file extensions, eviction at the chosen cap, failed deletion, Stop, re-fetch and skip downloads passed.')
+    print('Tidal cache: stream file extensions, eviction at the chosen cap, failed deletion, Stop, re-fetch and skip downloads, Clear All under a download passed.')
 
 if __name__ == '__main__':
     import argparse
