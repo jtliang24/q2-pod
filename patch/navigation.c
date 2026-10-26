@@ -2098,6 +2098,7 @@ static void *list_row_into(void *view, const char *icon, int (*click)(void *, vo
     return list_row_core(view, icon, click, ctx, 202, 1);
 }
 
+#if !M1PLUS /* M1 Plus: V2.1's switch (m1plus_nav_rows.c) */
 /* Use the same trailing switch images and hit target as Shanling's settings rows: at screen x 302
  * whether the label sits in a settings button (x 20) or a full-width page row (page_row_detail,
  * peq_ui.c's). */
@@ -2114,6 +2115,7 @@ void list_toggle(void *label, const char *title, int on) {
     widget_set_text_utf8(label, title);
     image_base_set_image(image, on ? "switch_on" : "switch_off");
 }
+#endif
 
 /* item's place in list, comma separated, or 0; an empty item is never in it. Shared with
  * spotify.c. */
