@@ -929,6 +929,13 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     sq = out/'stock.squashfs'; sq.write_bytes(blobs['recovery-update/rootfs.squashfs'])
     def cat(path): return subprocess.check_output(['unsquashfs', '-cat', str(sq), path])
     raw_demo = cat('release/bin/demo')
+    # peq.h tls_untimed writes OpenSSL 1.1.1f's SSL_CTX->param (0x100) and its ->flags (0xc) itself, as
+    # build.py audits on the Q2: V2.1's rootfs has the same 1.1.1f, and these must still read those fields.
+    for lib, fn, at, word in (('libssl.so.1.1', 'SSL_CTX_get0_param', 4, 0x8c820100),         # lw v0, 0x100(a0)
+                              ('libcrypto.so.1.1', 'X509_VERIFY_PARAM_set_flags', 0, 0x8c86000c)):  # lw a2, 0xc(a0)
+        data = cat('usr/lib/'+lib); (out/lib).write_bytes(data)
+        address = symbols(out/lib)[fn+'@@OPENSSL_1_1_0']
+        check(struct.unpack_from('<I', data, address + at)[0] == word, f'{lib}: {fn} layout changed')
     from ipod import SETTINGS_ICONS, imagemagick, patch_word, sized_art
     m1plus_names(sq, out)  # every V2.1 name the payload uses is in V2.1's rootfs
     demo = out/'stock-demo'; demo.write_bytes(raw_demo)
