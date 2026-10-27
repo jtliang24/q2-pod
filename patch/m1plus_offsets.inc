@@ -60,6 +60,7 @@
 #define EVENT_TYPE 0x00
 #define EVENT_KEY 0x18
 #define EVENT_TARGET 0x10
+#define EVENT_TIME 0x08 /* low word of the uint64 time_now_ms stamp: V2.1's event_init (0x6f4c40) stores it at 8 */
 #define EVENT_X 0x18           /* pointer_event_init @0x640298 */
 #define EVENT_Y 0x1c
 #define EVT_POINTER_DOWN 0x100 /* wm registers on_wm_tsdown_before_fun for this type @0x523ef0 */
@@ -197,8 +198,13 @@
                 { 0xe8123f, 0xe8123f, 0xeb2f56, 0xff1448, 0xeb2f56 }, /* Crimson */ \
                 { 0x13838d, 0x13838d, 0x30929b, 0x30929b, 0x30929b }, /* Tidal */ \
                 { 0x8c732c, 0x8c732c, 0x9a8446, 0x9a8446, 0x9a8446 }, /* Champagne */ \
-                { 0x2a6ad8, 0x2a6ad8, 0x447cdd, 0x447cdd, 0x447cdd }  /* Cobalt, the iPod's blue */
+                { 0x2a6ad8, 0x2a6ad8, 0x447cdd, 0x447cdd, 0x447cdd }, /* Cobalt, the iPod's blue */ \
+                { 0xc45400, 0xc45400, 0xcb681e, 0xcb681e, 0xcb681e }, /* Tangerine, the orange Q2 */ \
+                { 0x903868, 0x903868, 0x9d4f7a, 0x9d4f7a, 0x9d4f7a }, /* Plum, the purple Q2 */ \
+                { 0x424242, 0x424242, 0x6e6e6e, 0xd8d8d8, 0x555555 }, /* Ivory: Graphite, MINIMAL_FILL fills */ \
+                { 0x647f34, 0x647f34, 0x778e4c, 0x778e4c, 0x778e4c }  /* Green, the green Q2 (#119: the shell's sage, darkened for white text); after Ivory so saved values keep */
 #define CRIMSON 1
+#define MINIMAL_ACCENT 7 /* Minimal theme only; its default */
 /* The confirm pop-up's stock red discs (confirm_ok, confirm_cancel and their pressed images) take
  * this dark surface under every accent, Crimson included, through the same red-blend mapping: the
  * OK disc becomes CONFIRM_SURFACE, Cancel's lighter tint a mid grey, and the near-white glyphs stay
@@ -220,6 +226,7 @@
 /* bitmap_t (docs/internals.md#accent): format u16 @0xe, 1 RGBA, 2 ABGR, 3 BGRA, 4 ARGB, 4 bytes a pixel
  * by bitmap_get_bpp_of_format; per format, the byte offsets of r, g, b and a. */
 #define BITMAP_RGBA_AT { { 0, 1, 2, 3 }, { 3, 2, 1, 0 }, { 2, 1, 0, 3 }, { 1, 2, 3, 0 } }
+#define BITMAP_PREMULTI 16 /* AWTK's BITMAP_FLAG_PREMULTI_ALPHA in bitmap_t's u16 flags @0xc */
 #define STOCK_RED 0xff1448
 #define RED_TOLERANCE 8 /* per channel, 0-255: how far a color may sit from a red/neutral blend */
 /* iPod black status chrome, in both Themes; TRACK_COLOR is Now Playing's progress track. */
@@ -305,6 +312,20 @@ static inline int arc_out(int r, int y) {
 #define NP_BAR_MINIMAL 4
 #define MINIMAL_FILL 0xeeeeec
 #define MINIMAL_CHEVRON 0x777777
+/* iPod Light Mode (IPOD/LIGHT 1, docs/ipod.md#light-mode): every neutral colour (channels within
+ * LIGHT_SPREAD) flips per channel, black to LIGHT_PAPER and white to LIGHT_INK; hues are kept.
+ * Accents keep their colours, and ink on a coloured selection stays white. A theme image without
+ * colour flips too when it is mostly glyph: under LIGHT_SURFACE (1/n of its area) opaque and darker
+ * than LIGHT_GLYPH, so a grey or dark disc keeps its white glyph. The M1 has no iPod build, so the
+ * Q2's white chevron is never loaded. */
+#define LIST_INTO_WHITE M1_UNPORTED
+#define LIGHT_PAPER 0xf4
+#define LIGHT_INK 0x16
+#define LIGHT_SPREAD 16
+#define LIGHT_CHROMA 40
+#define LIGHT_GLYPH 0xa0
+#define LIGHT_SURFACE 4
+#define LIGHT_BAR 0xdedede      /* Classic's status bar in Light Mode, as an iPod's, flat */
 /* Minimal's small capitals are SUDO_TRACK px apart (draw_spaced); secondary text is SUDO_MUTED. */
 #define SUDO_TRACK 2
 #define SUDO_MUTED 0x8c8c8c
@@ -327,6 +348,16 @@ static inline int arc_out(int r, int y) {
 #define NP_TITLE_PX 22
 #define NP_META_PX 18
 #define NP_ALBUM_RGB 0xbbbbbb
+/* iPod Now Playing's lyrics (lyrics.c, docs/ipod.md#lyrics): a line of one row is LYRIC_SLOT high,
+ * its text and the gap to the next, a longer one more; the first after a blank LYRIC_SLOT
+ * (tools/ipod.py's list layout) so it can sit in the middle as the playing line does; text LYRIC_X
+ * from the left, as the art. The sung part LYRIC_LIT, the rest of the playing line LYRIC_DIM, the
+ * other lines LYRIC_REST. */
+#define LYRIC_SLOT 59
+#define LYRIC_X 16
+#define LYRIC_LIT 0xffffff
+#define LYRIC_DIM 0x808080
+#define LYRIC_REST 0x5f5f5f
 /* Spotify's and Internet Radio's Now Playing layout (tools/ipod.py NP_*, which checks they match):
  * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners.
  * The title, artist and album beside the art on the Q2; on the M1's portrait screen, under it, with
@@ -401,6 +432,7 @@ static inline int arc_out(int r, int y) {
  * hold, or after the headset refused it (bt_volume_poll); 400 ms otherwise. A headset's own volume
  * keys show on the M1 that late. */
 #define BT_VOLUME_SLOW_MS 2000
+#define BT_VOLUME_LIMIT_MS 1000
 /* Screen on, once IDLE_MS pass without input or a window animation, each turn idles IDLE_SLEEP_MS
  * (about 30 passes a second; the first input after waits at most that). */
 #define IDLE_MS 2000
@@ -545,6 +577,7 @@ static inline int arc_out(int r, int y) {
 #define REC_ALBUM 0x14
 #define REC_ARTIST 0x18
 #define REC_ALBUM_ARTIST 0x24   /* albumsonger; empty or null in folder-queue records */
+#define REC_COVER 0x28          /* an online row's cover, as V2.1's get_id3info reads it (0x4e0038) */
 #define REC_TYPE 0x34           /* 8 song, 4 directory */
 #define REC_TRACK 0x3c          /* the tag's track and disc numbers, 0 when untagged */
 #define REC_DISC 0x40
@@ -569,6 +602,11 @@ static inline int arc_out(int r, int y) {
 #define TAGLIB_FILE_NEW 0x98a0
 #define TAGLIB_PROPERTY_GET 0xb48c
 #define TAGLIB_PROPERTY_FREE 0xb6b0
+/* Now Playing's ⋯ page's rows (1.5.0's Download Album Lyrics): its hook, playermore_page_init, is
+ * unported */
+#define PLAYMORE_ROWS M1_UNPORTED_ADDR
+#define PLAYMORE_COUNT M1_UNPORTED
+#define PLAYMORE_SEARCH M1_UNPORTED
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
 /* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */

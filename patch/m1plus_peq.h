@@ -7,6 +7,11 @@
 #define tk_strcmp strcmp
 #endif
 #endif
+#if M1PLUS && !defined canvas_stroke_rounded_rect
+/* V2.1 has only the per-corner form (V1.32's wrapper calls it so); peq.h's Light Mode ink wraps this */
+#define canvas_stroke_rounded_rect(c, rect, s, color, radius, width)                              \
+    canvas_stroke_rounded_rect_ex(c, rect, s, color, radius, radius, radius, radius, width, 0xffff)
+#endif
 #ifndef set_hscroll_label_attribute
 static inline void set_hscroll_label_attribute(void *w) { (void)w; }
 #endif

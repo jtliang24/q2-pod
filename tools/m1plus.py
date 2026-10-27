@@ -5,7 +5,7 @@ build.py keeps upstream's Q2 code; its build() hands an M1 Plus input to build()
 (docs/m1plus-roadmap.md U1). The pipeline reuses build.py's helpers and tables where V2.1 matches V1.32,
 and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
-from build import (ROOT, EXTRA_TIMEZONES, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
+from build import (ROOT, TIMEZONES, TIMEZONE_ORDER, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
                    REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, ICONS,
                    STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
@@ -721,7 +721,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=0', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -900,8 +900,11 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     symbol_table = run('readelf', '-Ws', demo)
     syms = symbols(demo, symbol_table)
     header = [f'#define RING_STEP {RING_STEP}']
-    # navigation.c's ringnav_timezone names them; its hook, select_timezone, is unported (M1PLUS_PORTS)
-    header.append('#define EXTRA_TIMEZONE_NAMES {' + ','.join(json.dumps(zone) for _, zone in EXTRA_TIMEZONES) + '}')
+    # navigation.c's ringnav_timezone and ringnav_timezone_row name them; their hooks, select_timezone and
+    # timezone_row, are unported (M1PLUS_PORTS)
+    header.append('#define TIMEZONE_NAMES {' + ','.join(json.dumps(zone) for _, zone in TIMEZONES) + '}')
+    header.append('#define TIMEZONE_ORDER {' + ','.join(map(str, TIMEZONE_ORDER)) + '}')
+    header.append('#define TIMEZONE_CITIES {' + ','.join(json.dumps(label.split(' ', 1)[1]) for label, _ in TIMEZONES) + '}')
     syms, stubs = m1plus_symbols(syms, symbol_table)
     stubbed = dict(stubs)
     for name in [*CONTEXT_DATA, *M1PLUS_CONTEXT_DATA]:
