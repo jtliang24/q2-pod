@@ -30,9 +30,9 @@ SUITES = {
     'mcu_park': lambda fs, builds, tmp: [fs/MCU], 'mcu_sleep': lambda fs, builds, tmp: [fs/MCU],
     'rotator': lambda fs, builds, tmp: [fs/'module_driver/soc_rotator.ko'],
     'rotator_build': lambda fs, builds, tmp: builds,
-    # flac_build fails on 1.5.0's own tree: its release-gate case predates the fast paths on by default
-    # (69a9cbf) and reads a ZIP that isn't there. flac_frame takes upstream's FLAC fixture corpus.
-    'flac_build': None, 'flac_frame': None, 'flac_lpc': lambda fs, builds, tmp: [fs/HCIPLAYER],
+    # flac_frame takes upstream's FLAC fixture corpus.
+    'flac_build': lambda fs, builds, tmp: [fs/HCIPLAYER, '--out', tmp],
+    'flac_frame': None, 'flac_lpc': lambda fs, builds, tmp: [fs/HCIPLAYER],
     'flac_output': lambda fs, builds, tmp: [fs/HCIPLAYER, '--work', tmp],
     'flac_sync': lambda fs, builds, tmp: ['--stock', fs/HCIPLAYER, '--out', tmp],
     'module_mips': None, 'module_regions': None,
@@ -156,11 +156,18 @@ def suites(commit, src, builds, out):
     (out/'logs').mkdir(exist_ok=True)
     def run(job):
         n, v, args = job
+        def suite(tree, log):
+            with open(log, 'w') as f:
+                return subprocess.run([sys.executable, f'test/{n}.py', *map(str, args)], cwd=tree, stdout=f,
+                                      stderr=subprocess.STDOUT, env={**os.environ, **ENVS.get(n, {})}).returncode
         log = out/'logs'/f'{v or "host"}-{n}.log'
-        with open(log, 'w') as f:
-            rc = subprocess.run([sys.executable, f'test/{n}.py', *map(str, args)], cwd=src, stdout=f,
-                                stderr=subprocess.STDOUT, env={**os.environ, **ENVS.get(n, {})}).returncode
+        rc = suite(src, log)
         last = (log.read_text().strip().splitlines() or [''])[-1][:100]
+        # A suite that runs once, failing here, runs again in the base's own tree: failing there too, it is
+        # the base's (1.5.0's chapters on host -Werror; aic_build, pwm_build, rotator_build and flac_build,
+        # whose release guards predate the options on by default, 69a9cbf), shown and not counted.
+        if rc and v is None and suite(CACHE/commit/'src', out/'logs'/f'base-{n}.log'):
+            return 0, f'BASE   host {n}: fails on the base\'s own tree too: {last}'
         return rc, f'{"ok    " if rc == 0 else "FAILED"} {v or "host"} {n}: {last}'
     with concurrent.futures.ThreadPoolExecutor(max(1, (os.cpu_count() or 2) // 2)) as pool:
         results = list(pool.map(run, jobs))
