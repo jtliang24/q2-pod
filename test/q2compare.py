@@ -12,8 +12,10 @@ ZIPS = [ROOT/'stock/Q2 Firmware V1.32.zip']
 CACHE = ROOT/'work/q2compare'  # the base's builds, by commit: a base never changes
 # source_sha256 hashes tools/*.py and patch/*, which the M1 files are in; tools is the toolchain's versions.
 IGNORED = {'source_sha256', 'tools'}
-# How each of the base's test/*.py runs: on each Q2 build ('build' as --build), once, or not here. A suite
-# the base adds fails the run until it is listed, so a sync can't skip it unseen.
+# How each of the base's test/*.py runs: on each Q2 build ('build' as --build), once, once with the
+# arguments a function gives from the stock rootfs (stock_fs), the builds and a scratch directory, or not
+# here. A suite the base adds fails the run until it is listed, so a sync can't skip it unseen.
+HCIPLAYER, MCU = 'usr/bin/hciplayer', 'usr/data/libmcu-bare.bin'
 SUITES = {
     'build': 'each', 'patch': 'each', 'playback': 'each', 'id3': 'each', 'm4b': 'each',
     'headset_io': 'each', 'ldac': 'each', 'bluealsa': 'each',
@@ -21,7 +23,22 @@ SUITES = {
     'chapters': 'host',  # 1.3.8; --stock-root and --qemu add its bundled-FFmpeg checks
     'alsa': None,  # takes a qemu-mipsel binary as well as a build
     'ui_preview': None,  # draws review sheets of two builds; it checks nothing
+    # 1.5.0's power and FLAC suites, on the stock files they patch; module_* are the others' libraries
+    'aic': lambda fs, builds, tmp: [fs], 'aic_build': lambda fs, builds, tmp: [fs, *builds],
+    'pwm': lambda fs, builds, tmp: [fs], 'pwm_mcu': lambda fs, builds, tmp: [fs],
+    'pwm_build': lambda fs, builds, tmp: [fs, *builds], 'mcu_sleep_host': lambda fs, builds, tmp: [fs],
+    'mcu_park': lambda fs, builds, tmp: [fs/MCU], 'mcu_sleep': lambda fs, builds, tmp: [fs/MCU],
+    'rotator': lambda fs, builds, tmp: [fs/'module_driver/soc_rotator.ko'],
+    'rotator_build': lambda fs, builds, tmp: builds,
+    # flac_build fails on 1.5.0's own tree: its release-gate case predates the fast paths on by default
+    # (69a9cbf) and reads a ZIP that isn't there. flac_frame takes upstream's FLAC fixture corpus.
+    'flac_build': None, 'flac_frame': None, 'flac_lpc': lambda fs, builds, tmp: [fs/HCIPLAYER],
+    'flac_output': lambda fs, builds, tmp: [fs/HCIPLAYER, '--work', tmp],
+    'flac_sync': lambda fs, builds, tmp: ['--stock', fs/HCIPLAYER, '--out', tmp],
+    'module_mips': None, 'module_regions': None,
 }
+# A suite's own environment: flac_sync's MIPS compile takes $CC, which the devShell sets to gcc.
+ENVS = {'flac_sync': {'CC': 'clang'}}
 
 
 def git(*args, **kw):
@@ -108,6 +125,18 @@ def differences(a, b):
     return lines
 
 
+def stock_fs(build):
+    """V1.32's rootfs, unpacked once from a build's stock.squashfs into work/q2compare/stockfs."""
+    d = CACHE/'stockfs'
+    if not d.is_dir():
+        tmp = CACHE/'stockfs.tmp'
+        shutil.rmtree(tmp, ignore_errors=True); tmp.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['unsquashfs', '-no-xattrs', '-ignore-errors', '-d', tmp, build/'stock.squashfs'], check=True,
+                       stdout=subprocess.DEVNULL)
+        tmp.rename(d)
+    return d
+
+
 def suites(commit, src, builds, out):
     """The base's suites, from this tree's test/ (upstream's text there), on this tree's builds."""
     names = [p[len('test/'):-3] for p in git('ls-tree', '--name-only', commit, 'test/', text=True).split()
@@ -119,13 +148,18 @@ def suites(commit, src, builds, out):
     jobs = [(n, None, []) for n in names if SUITES[n] == 'host']
     jobs += [(n, v, ['--build', d] if n == 'build' else [d]) for v, d in builds.items()
              for n in names if SUITES[n] == 'each']
+    if any(callable(SUITES[n]) for n in names):
+        fs = stock_fs(next(iter(builds.values())))
+        for n in names:
+            if callable(SUITES[n]): (out/'scratch'/n).mkdir(parents=True, exist_ok=True)
+        jobs += [(n, None, SUITES[n](fs, list(builds.values()), out/'scratch'/n)) for n in names if callable(SUITES[n])]
     (out/'logs').mkdir(exist_ok=True)
     def run(job):
         n, v, args = job
         log = out/'logs'/f'{v or "host"}-{n}.log'
         with open(log, 'w') as f:
             rc = subprocess.run([sys.executable, f'test/{n}.py', *map(str, args)], cwd=src, stdout=f,
-                                stderr=subprocess.STDOUT).returncode
+                                stderr=subprocess.STDOUT, env={**os.environ, **ENVS.get(n, {})}).returncode
         last = (log.read_text().strip().splitlines() or [''])[-1][:100]
         return rc, f'{"ok    " if rc == 0 else "FAILED"} {v or "host"} {n}: {last}'
     with concurrent.futures.ThreadPoolExecutor(max(1, (os.cpu_count() or 2) // 2)) as pool:
