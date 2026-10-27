@@ -57,7 +57,7 @@
 #define SPOT_ALBUM_Y (SPOT_ART_Y + 103)
 #define SPOT_TAG_X 16
 #define SPOT_HEART_X (UI_W - (IPOD ? 72 : 55)) /* local Now Playing's heart (tools/ipod.py img_fav) */
-#define SPOT_HEART_Y (IPOD ? SPOT_ART_Y + SPOT_ART_PX - 50 : 176)
+#define SPOT_HEART_Y (IPOD ? SPOT_ART_Y + SPOT_ART_PX - 50 + NP_ICON_PAD : 176)
 /* Now Playing's heart and its stock click, which toggles My Fav for the playing track (manage_myfav)
  * and the heart with it; playing_page_init binds it with the window. */
 #define VIEW_FAV "img_fav"
@@ -119,6 +119,7 @@
     "select max(100,ifnull(max(id),100))+1 from playlist "                                             \
     "having max(100,ifnull(max(id),100))<2147483647"
 #define QR_NO_WIFI "Connect the Q2 to Wi-Fi" /* a card app's QR page, without an address (addon.c) */
+#define SPOT_REFUSED_SUB "Its tracks can't play on the Q2" /* Spotify's refused account, under its note (spotify.c) */
 #define PH_GRID_H 240
 #define VIS_H 186
 #define BOOK_ROWS 10

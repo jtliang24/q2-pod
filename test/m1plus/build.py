@@ -96,23 +96,31 @@ def logo_check(s11logo=None):
     """S11logo_display_shell's splash choice under the host sh: build.py's LOGO_HOOK, or a built
     rootfs's whole script (its /dev/fb0 wait and ROTATEMODE choice included)."""
     import subprocess, tempfile, pathlib
-    from build import LOGO_HOOK
+    from build import LOGO_HOOK, LOGO, LOGO_LIGHT
     with tempfile.TemporaryDirectory(prefix='q2-logo-') as tmp:
-        user, config = pathlib.Path(tmp)/'boot-logo.jpg', pathlib.Path(tmp)/'config.ini'
+        tmp = pathlib.Path(tmp)
+        user, config, dark, light = tmp/'boot-logo.jpg', tmp/'config.ini', tmp/'logo.jpg', tmp/'logo-light.jpg'
         script = (s11logo or LOGO_HOOK[1]).decode()
         if s11logo:
             assert script.count('"/dev/fb0"') <= 1
-            script = script.replace(' &\n', '\n').replace('"/dev/fb0"', '/').replace('/mnt/data/config.ini', str(config))
-        script = script.replace('/mnt/data/boot-logo.jpg', str(user)).replace('display_logo', 'echo')
-        def shown(rotate=0):
-            config.write_text(f'ROTATEMODE={rotate}\n')
+            script = script.replace(' &\n', '\n').replace('"/dev/fb0"', '/')
+        script = (script.replace('/mnt/data/boot-logo.jpg', str(user)).replace('/mnt/data/config.ini', str(config))
+                  .replace('/'+LOGO_LIGHT, str(light)).replace('/'+LOGO, str(dark)).replace('display_logo', 'echo'))
+        def shown(rotate=0, ipod=''):
+            config.write_text(f'ROTATEMODE={rotate}\n' + ipod)
             return subprocess.run(['sh', '-c', script, 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip()
-        assert shown() == '/release/assets/default/raw/images/xx/logo.jpg'  # no card logo: the built-in splash
+        assert shown() == str(dark)  # no card logo, no config: the built-in splash
+        assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(dark)  # Light Mode, but no light twin (Legacy, custom --logo)
+        light.write_bytes(b'')
+        assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(light)
+        assert shown(ipod='[IPOD]\nLIGHT=0\nBACKLIGHT=1\n') == str(dark)
         user.write_bytes(b'')
         assert shown() == str(user)
+        assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(user)  # the card's logo wins in either mode
         if 'logo180.jpg' in script:  # M1 Plus: a flipped screen keeps the stock flipped splash
             assert shown(1) == '/release/assets/default/raw/images/xx/logo180.jpg'
-    print(f'Boot logo ({"built S11logo" if s11logo else "LOGO_HOOK"}): the saved card logo, else the built-in splash, passed.')
+    print(f'Boot logo ({"built S11logo" if s11logo else "LOGO_HOOK"}): the saved card logo, else the light splash under '
+          'Light Mode, else the built-in one, passed.')
 logo_check()
 
 def shared_checks(directory, manifest, stock, demo, read):
@@ -211,9 +219,15 @@ def shared_checks(directory, manifest, stock, demo, read):
     start, size = int(text[1], 16), int(text[2], 16)
     off = fileoff(old, profile['vbr_scan'])
     gates = [fileoff(old, a) for a in (*(a for a, _, _ in profile['eq_rate_gates']), *profile['id3_calls'])]
+    # The Q2's FLAC fast paths (tools/flac.py, on by default) patch hciplayer's sync calls and LPC/output
+    # pointers; unported on M1.
+    from flac import patch_words as flac_words
+    flac = () if m1plus else flac_words('sync,lpc,output', symbols(directory/'peq'/'peq.elf'))
+    gates += [fileoff(old, a) for a, _, _ in flac]
     differ = [i for i in range(start, start+size) if old[i] != new[i]]
     assert set(differ) <= {*range(off, off+4), *(i for g in gates for i in range(g, g+4))} and not any(new[off:off+4])
     assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in profile['eq_rate_gates']] == [p for _, _, p in profile['eq_rate_gates']]
+    assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in flac] == [p for _, _, p in flac]
     id3_gain = symbols(directory/'peq'/'peq.elf')['id3_gain']
     assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in profile['id3_calls']} == {0x0c000000 | id3_gain >> 2}
     names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
@@ -546,7 +560,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
 
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
-    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLLS, DARK_POLLS, WHEEL_TS_READ, PDR
+    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, LOGO_LIGHT, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLL_CALLS, DARK_POLLS, WHEEL_TS_READ, PDR
     from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, BIGCOVER, BC_ART, BC_TITLE_PAD, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_TOUCH, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
@@ -679,6 +693,10 @@ def validate_assets(directory):
     paths = [l.removeprefix('squashfs-root/') for l in run('unsquashfs', '-l', directory/'stock.squashfs').splitlines()
              if ('/raw/ui/' in l or '/raw/styles/' in l) and l.endswith('.bin') or l.endswith('/config.ini')]
     names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
+    # Light Mode's splash ships with the default logo in iPod builds only (build.py LOGO_HOOK)
+    light = (ROOT/'assets/boot-logo-light.jpg').read_bytes()
+    default = ipod and manifest['logo_sha256'] == sha((ROOT/'assets/boot-logo.jpg').read_bytes())
+    assert ('squashfs-root/'+LOGO_LIGHT in names) == default and (not default or read('rootfs.squashfs', LOGO_LIGHT) == light)
     # iPod drops the carousel images and adds no Coverflow icons; Stock keeps both.
     icons = {'squashfs-root/release/assets/default/raw/images/xx/'+n for n in ICONS}
     carousel = {'squashfs-root/'+rel for rel in CAROUSEL}
@@ -894,6 +912,7 @@ def validate_assets(directory):
             continue
         if short == STATUS_BAR:  # iPod only: play state left, title between, four icons right
             left, right, *rest = root[3]
+            assert all(root[2][f'style:{s}:border_color'] == '#00000000' for s in ('normal', 'disable', 'focused'))  # Light Mode: no paper line
             assert [n[2]['name'] for n in left[3]] == STATUS_LEFT and [n[2]['name'] for n in right[3]] == STATUS_RIGHT
             title = rest.pop()
             assert title[0] == 'hscroll_label' and title[2]['name'] == 'label_clock'
@@ -925,10 +944,10 @@ def validate_assets(directory):
             assert [n[2]['name'] for n in album] == ['img_cover', 'img_playstate', 'scrlabel_title', 'scrlabel_artist', 'label_ipod_album',
                                                      'img_playmode', 'img_fav']
             # 16px outer margins, 12px from the art to the text, the text column 165px wide; the title larger.
-            # Order and favourite level with the art's foot; favourite centred below More. The art's gap to
+            # Order and favourite glyphs level with the art's foot (frames NP_ICON_PAD lower); favourite centred below More. The art's gap to
             # the dots below (y 182) matches its gap to "3 of 12"'s text above.
             assert [n[1] for n in album] == [[16, 2, 166, 166], [39, 25, 120, 120], [194, 18, 165, 28], [194, 52, 165, 22], [194, 80, 165, 22],
-                                             [247, 118, 50, 50], [303, 118, 50, 50]]
+                                             [247, 133, 50, 50], [303, 133, 50, 50]]
             assert album[-1][1][0] == named['img_more'][1][0] and album[-1][1][2] == named['img_more'][1][2] == 50
             assert album[-1][1][0] - (album[-2][1][0] + album[-2][1][2]) == 6 and 80 + 22 < 118 + 13
             assert album[1][2]['opacity'] == '0'  # playback gestures retain their original target
@@ -939,7 +958,16 @@ def validate_assets(directory):
             # Distinct bands: top row, art, page dots, bar (A-B markers y 250 to 260), then the times.
             dots = named['slide_indicator1'][1]
             assert NP_TOP + 10 + 166 < NP_TOP + dots[1] and NP_TOP + dots[1] + 10 < NP_BAR[1] - 1
-            assert named['slide_view'][1] == [0, 0, 375, 186] and named['view_lrc'][2]['self_layout'].startswith('default(x=75,')
+            # The dots' own anchor, the slide_view's centre: stock's, with none, followed a swipe's offset.
+            anchor = named['slide_indicator1'][2]
+            assert anchor['anchor_x'] == f'{375 // 2 - dots[0]}px' and anchor['anchor_y'] == '0px' and 0 < dots[3] // 2
+            assert named['slide_view'][1] == [0, 0, 375, 186]
+            # The lyrics page (patch/lyrics.c): its rows span the page, a LYRIC_SLOT each after a blank one,
+            # three to its 178px; the text, LYRIC_X in, clears the glass's corners, as the art does.
+            lrc, slot = named['view_lrc'][3][0][2], inc('LYRIC_SLOT')
+            assert named['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=375,h=178)' and 3 * slot <= 178 < 4 * slot
+            assert lrc['self_layout'] == 'default(x=0,y=0,w=100%,h=100%)' and lrc['children_layout'] == f'list_view(x=0,y={slot},s=0)'
+            assert inc('LYRIC_X') == NP_MARGIN >= corner_x(30 + NP_TOP, 178)
             slider = named['slider_play']
             assert slider[1] == [NP_BAR[0], 233, NP_BAR[2], NP_TOUCH] and NP_TOUCH >= 44
             assert slider[2]['bar_size'] == '4' and slider[2]['slide_with_bar'] == 'true'

@@ -424,6 +424,8 @@ vgcanvas_begin_path vgcanvas_close_path vgcanvas_move_to vgcanvas_line_to vgcanv
 vgcanvas_set_fill_color vgcanvas_set_stroke_color vgcanvas_set_fill_linear_gradient vgcanvas_set_line_width
 widget_to_local on_wm_keyup_fun
 """.split() for r, a in [PROTOTYPES[n]]) + r"""
+/* peq_ui.c paints through the stock wrapper, which firmware maps to the real call. */
+#define stock_canvas_set_fill_color canvas_set_fill_color
 """
 SHIM = r"""
 static struct { int parent, h, bg; char text[160]; handler click, destroy, keyup, change, focus, down, move, up; void *ctx; } w[4096];
@@ -1728,7 +1730,7 @@ int toolsReadConfig(const char *path, const char *section, const char *key, char
 /* libcurl: every request is dumped as url, headers, verify, body; replies are scripted. */
 typedef unsigned (*writer)(const char *, unsigned, unsigned, void *);
 typedef struct node { const char *s; struct node *next; } node;
-static struct { const char *url, *body; node *h; writer w; void *ctx; long verify, code; } easy;
+static struct { const char *url, *body; node *h; writer w; void *ctx; long verify, code; int untimed; } easy;
 static int requests, fail_at = -1, no_key, append_at = -1;
 static FILE *dump;
 void *curl_easy_init(void) { memset(&easy, 0, sizeof easy); return &easy; }
@@ -1753,11 +1755,18 @@ int curl_easy_setopt(void *c, int opt, ...) {
     else if (opt == 64) { easy.verify = va_arg(a, long); assert(easy.verify == 1); }
     else if (opt == 81) assert(va_arg(a, long) == 2);
     else if (opt == 10065) assert(strstr(va_arg(a, const char *), "/etc/scrobble-ca.pem"));
-    else assert(opt == 99 || opt == 13 || opt == 78 || opt == 81);
+    else if (opt == 20108) { /* SSL_CTX_FUNCTION: X509_V_FLAG_NO_CHECK_TIME into SSL_CTX->param->flags */
+        unsigned flags[4] = {0, 0, 0, 1};
+        void *ctx[0x100 / sizeof(void *) + 1];
+        ctx[0x100 / sizeof(void *)] = flags;
+        assert(!va_arg(a, int (*)(void *, void *, void *))(c, ctx, 0) && flags[3] == 0x200001);
+        easy.untimed = 1;
+    } else assert(opt == 99 || opt == 13 || opt == 78 || opt == 81);
     va_end(a);
     return 0;
 }
 int curl_easy_perform(void *c) {
+    assert(easy.untimed);
     int i = requests++;
     if (i == append_at) scrobble_append("New\tB\tListen\t\t100\tL\t1700009999\t\n", 33); /* a listen meanwhile */
     fprintf(dump, "%s\t", easy.url);
@@ -2428,7 +2437,10 @@ def spotify_check(tmp):
 
 TIDAL_DL = r'''#include <assert.h>
 #include <dirent.h>
+#include <errno.h>
+#include <sys/wait.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -2439,11 +2451,20 @@ TIDAL_DL = r'''#include <assert.h>
 #define tk_snprintf snprintf
 #define pthread_mutex_lock(m) pthread_mutex_lock((pthread_mutex_t *)(m))
 #define pthread_mutex_unlock(m) pthread_mutex_unlock((pthread_mutex_t *)(m))
+#define sem_wait(s) sem_wait((sem_t *)(s))
+#define sem_post(s) sem_post((sem_t *)(s))
+#define ringnav_dark_usleep usleep
 #define I(p, o) (*(int *)((char *)(p) + (o)))
 #define P(p, o) (*(void **)((char *)(p) + (o)))
 #define REC_TIDAL_ID 0
 #define REC_TITLE 0
 #define REC_ARTIST 0
+#define REC_ALBUM 0
+#define REC_COVER 0
+#define fork() (-1) /* tag's ffmpeg: no remux here, the copy stays as downloaded */
+#define child_exit _exit
+static int thumb(const char *s, const char *d, int w, int h) { return 0; }
+static long file_size(const char *p) { return -1; }
 static int quality = 27; static void *queue;
 #define tidalStreamingLevelNow (&quality)
 #define mcl_pdeqplaylist (&queue)
@@ -2452,12 +2473,48 @@ static _Atomic unsigned long long clk = 1000;
 static char last[64];
 static int mclGetPlayStatus(void) { return status; }
 static unsigned long long now_ms(void) { return clk; }
-static int deque_size(void *q) { return 0; }
+/* stTidalTracks as on MIPS: total, limit, offset and the deque at byte 12, here rows' address. */
+static unsigned char tracks[24], tidal_albuminfo_thread_run, tidal_collection_thread_run;
+static int rows, runs, fail_at, reopen_at;
+#define stTidalTracks tracks
+static int deque_size(void *q) { return q == &rows ? rows : 0; }
 static void *deque_at(void *q, unsigned i) { return 0; }
+/* a stock list thread only saves the reply; its page's parser appends what the file holds, so a
+ * reply left from the last page would append that page again */
+static int page(void) { /* the page at the offset, unless scripted to fail */
+    if (++runs == reopen_at) I(tracks, 8) = 0;
+    char p[32]; snprintf(p, sizeof p, "/tmp/tidal_%u", (unsigned)pthread_self());
+    FILE *f = runs != fail_at ? fopen(p, "w") : 0;
+    if (f) fputs("{}", f), fclose(f);
+    return 0;
+}
+static int parse(const char *path) {
+    char want[32]; snprintf(want, sizeof want, "/tmp/tidal_%u", (unsigned)pthread_self()); assert(!strcmp(path, want));
+    if (access(path, 0)) return -1;
+    rows = I(tracks, 8) + I(tracks, 4) < I(tracks, 0) ? I(tracks, 8) + I(tracks, 4) : I(tracks, 0);
+    return 1;
+}
+#define parseTidalPlaylistDetailJson parse
+#define parseTidalAlbumDetailJson parse
+#define parseTidalColTracksJson parse
+static int stubbed(void) { /* the page's own parse is left an empty reply; removes it */
+    char p[32], b[32] = ""; snprintf(p, sizeof p, "/tmp/tidal_%u", (unsigned)pthread_self());
+    FILE *f = fopen(p, "r"); if (!f) return 0;
+    fgets(b, sizeof b, f); fclose(f); remove(p); return !strcmp(b, "{\"items\":[]}");
+}
+int stock_tidalplaylist_trampoline(void *id) { assert(id == &runs); return page(); }
+int stock_tidalalbum_trampoline(void *id) { return page(); }
+int stock_tidalfavs_trampoline(void *offset) { assert((long)offset == I(tracks, 8)); return page(); }
+static void list(int total, int offset, int fail, int reopen) {
+    I(tracks, 0) = total, I(tracks, 4) = 50, I(tracks, 8) = offset, P(tracks, 12) = &rows;
+    rows = offset, runs = 0, fail_at = fail, reopen_at = reopen;
+    tidal_albuminfo_thread_run = tidal_collection_thread_run = 1;
+}
 static void headset_manual(void) {}
 static int card_space(const char *d) { return 1; }
 static int stream_cache(int s) { return 2; }
 int stock_tidal_trampoline(const char *u) { return 0; }
+int stock_tidaltrack_trampoline(void *a, void *b, void *c, void *d) { return 0; }
 static int __xstat(int v, const char *p, unsigned *st) {
     struct stat s; if (stat(p, &s)) return -1; st[12] = s.st_size, st[16] = s.st_mtime; return 0;
 }
@@ -2510,6 +2567,17 @@ int main(void) {
     int left = 0; DIR *d = opendir(TIDAL_DIR);
     for (struct dirent *x; (x = readdir(d));) left += strcmp(x->d_name, ".") && strcmp(x->d_name, "..");
     closedir(d); assert(left == 1 && !access(TIDAL_DIR "/.cache-size", 0) && !has("H"));
+    /* Track lists: every page, then the done flag; a failed page or a re-open ends the run. */
+    list(120, 0, 0, 0); ringnav_tidal_playlist(&runs);
+    assert(rows == 120 && runs == 3 && I(tracks, 8) == 100 && tidal_albuminfo_thread_run == 2 && stubbed());
+    list(50, 0, 0, 0); ringnav_tidal_album(0); assert(rows == 50 && runs == 1 && I(tracks, 8) == 0 && stubbed());
+    list(300, 0, 2, 0); ringnav_tidal_album(0); assert(rows == 50 && runs == 2 && tidal_albuminfo_thread_run == 2 && stubbed());
+    list(300, 0, 1, 0); ringnav_tidal_album(0); assert(rows == 0 && runs == 1 && !stubbed()); /* stock's own error */
+    list(300, 0, 0, 2); ringnav_tidal_playlist(&runs); assert(runs == 2 && stubbed());
+    list(5000, 0, 0, 0); ringnav_tidal_playlist(&runs); assert(rows == 2000 && runs == 40 && stubbed());
+    /* favourites from the scroll handler's second page: the offset is the thread's argument */
+    list(175, 50, 0, 0); ringnav_tidal_favs((void *)50L);
+    assert(rows == 175 && runs == 3 && I(tracks, 8) == 150 && tidal_collection_thread_run == 2 && stubbed());
     return 0;
 }
 '''
@@ -2703,6 +2771,130 @@ def online_check(tmp):
     assert body(sung) == sung.encode() and body('[offset:+200]\n[00:00.00] A : B\n' + sung).startswith(b'[offset')  # tags stay
     assert body('[00:00.00]男：你好\n') == '[00:00.00]男：你好\n'.encode()  # a duet's label is sung
     assert body('[00:00.00] Lyrics : X\n[00:01.00]\n') == b''  # nothing sung: lrclib tries the next result
+    def fold(s, n=256):
+        out = C.create_string_buffer(n)
+        return out.value.decode() if lib.lrc_fold(out, n, s.encode()) else None
+    # Each folded code point against Python's own NFD base letters, strokes and ligatures spelled out.
+    import unicodedata
+    special = dict(zip('ÆæÞþßĲĳŒœ', ('AE', 'ae', 'TH', 'th', 'ss', 'IJ', 'ij', 'OE', 'oe')))
+    special |= dict(zip('ÐðØøĐđĦħıĸĿŀŁłŉŊŋŦŧſ', 'DdOoDdHhikLlLlnNnTts'))
+    for cp in [*range(0xc0, 0x180), *range(0x1e00, 0x1f00), 0x1a0, 0x1a1, 0x1af, 0x1b0]:
+        ch = chr(cp); base = unicodedata.normalize('NFD', ch)[0]
+        want = special.get(ch, base if base.isascii() and base.isalpha() else ch)
+        assert fold(ch) == want, (hex(cp), fold(ch), want)
+    assert fold('ẹ́x') == 'ex' and fold('×÷ẞ') == '×÷ẞ'  # combining marks dropped; no letter kept
+    assert fold('Hataałii') == 'Hataalii' and fold('Rains Over Dził') == 'Rains Over Dzil' and fold('Sjøen') == 'Sjoen'
+    assert fold('Straße') == 'Strasse' and fold('Æon') == 'AEon' and fold('Nơi Này Có Anh') == 'Noi Nay Co Anh'
+    assert fold('Sơn Tùng M-TP') == 'Son Tung M-TP' and fold('東京 🎵 Ñu') == '東京 🎵 Nu' and fold('plain') == 'plain'
+    assert fold('Hataałii', 9) == 'Hataalii' and fold('Hataałii', 8) is None  # folds into n, never longer
+
+
+class LyrTrack(C.Structure):
+    _fields_ = [('path', C.c_char * 0x200), ('title', C.c_char * 0x200), ('artist', C.c_char * 0x100),
+                ('shadow', C.c_char * (len('/mnt/mmc/.downpic/') + 1 + 0x200))]
+
+class LyrJob(C.Structure):
+    _fields_ = [(n, C.c_int) for n in ('cancel', 'done', 'total', 'saved', 'had', 'none', 'failed', 'state')]
+
+LRC_CANCELLED, LRC_CARD, LRC_OFFLINE, LRC_BUSY, LRC_NONE, LRC_SAVED = range(-4, 2)
+LJ_DONE, LJ_OFFLINE, LJ_CARD, LJ_CANCELLED = range(4)
+
+
+def album_check(tmp):
+    """Download Album Lyrics (onlinematch.c): the .lrc beside a song, each track of an incomplete
+    album on its own (gone, already with a .lrc, not found), LRCLIB's busy replies asked again, the
+    retry once LRCLIB has answered, offline, busy and card-full ends, a cancel, no .part left behind,
+    and the summary toast."""
+    lib = compile_host(tmp, 'onlinematch.so', ROOT/'patch/onlinematch.c')
+    def lrc(path, ext=b'.lrc', n=256):
+        out = C.create_string_buffer(n)
+        return out.value if lib.lrc_path(out, n, path, ext) else None
+    assert lrc(b'/mnt/mmc/A/01 x.flac') == b'/mnt/mmc/A/01 x.lrc' and lrc(b'/mnt/mmc/A/b.mp3', b'.LRC') == b'/mnt/mmc/A/b.LRC'
+    assert lrc(b'/mnt/mmc/A.b/song') == b'/mnt/mmc/A.b/song.lrc' and lrc(b'/mnt/mmc/.hidden') == b'/mnt/mmc/.hidden.lrc'
+    assert lrc(b'a.tar.gz') == b'a.tar.lrc' and lrc(b'/x/song.flac', n=11) is None and lrc(b'/x/song.flac', n=12)
+    def name(file, n=256):  # stock's .downpic name (modifystringtolrcsuffix): the last '.' on, else as it is
+        out = C.create_string_buffer(n)
+        return out.value if lib.lrc_name(out, n, file) else None
+    assert name(b'01 x.flac') == b'01 x.lrc' and name(b'a.tar.gz') == b'a.tar.lrc' and name(b'.hidden') == b'.lrc'
+    assert name(b'song') == b'song' and name(b'song.mp3', 8) is None and name(b'song.mp3', 9) == b'song.lrc'
+
+    FETCH = C.CFUNCTYPE(C.c_int, C.POINTER(LyrTrack), C.c_char_p, C.POINTER(C.c_int))
+    def run(name, songs, answers, cancel_at=None, shadows=()):
+        """songs: (file, extra files beside it, on the card); answers: title -> fetch results, in turn;
+        shadows: files with a .downpic copy of their lyrics."""
+        album = tmp/name
+        (album/'downpic').mkdir(parents=True)
+        tracks = (LyrTrack * len(songs))()
+        for t, (file, extra, present) in zip(tracks, songs):
+            t.path, t.title, t.artist = str(album/file).encode(), file.split('.')[0].encode(), b'Artist'
+            t.shadow = str(album/'downpic'/(file.rsplit('.', 1)[0] + '.lrc')).encode()
+            if file in shadows: pathlib.Path(t.shadow.decode()).write_text('[00:00.00]Kugou')
+            if present: (album/file).write_bytes(b'audio')
+            for e in extra: (album/e).write_bytes(b'[00:01.00]mine\n')
+        calls, left = [], {k: list(v) for k, v in answers.items()}
+        def fetch(t, out, cancel):
+            title = t.contents.title.decode(); calls.append((title, t.contents.artist.decode(), out.decode()))
+            got = left[title].pop(0)
+            if got == LRC_SAVED: pathlib.Path(out.decode()).write_text(f'[00:00.10]{title}\n')
+            if got == LRC_CARD: pathlib.Path(out.decode()).write_text('[00:0')  # a write cut short
+            if title == cancel_at: cancel[0] = 1; got = LRC_CANCELLED
+            return got
+        job, cb = LyrJob(), FETCH(fetch)
+        state = lib.album_lyrics(C.byref(job), tracks, len(songs), cb)
+        assert not [p for p in album.iterdir() if p.name.endswith('.part')], name
+        assert all(not left[k] for k in left), (name, left)  # every scripted answer asked for
+        return state, job, calls, album
+    # An incomplete album: a file gone since the scan, two with a .lrc (either case).
+    songs = [('01 Intro.flac', (), True), ('02 Song.flac', (), True), ('03 Gone.flac', (), False),
+             ('04 Had.flac', ('04 Had.lrc',), True), ('05 Upper.mp3', ('05 Upper.LRC',), True),
+             ('06 Tagged.m4a', (), True), ('07 NoExt', (), True)]
+    state, job, calls, album = run('incomplete', songs, {'01 Intro': [LRC_NONE], '02 Song': [LRC_SAVED],
+                                   '06 Tagged': [LRC_SAVED], '07 NoExt': [LRC_SAVED]})
+    assert state == LJ_DONE and (job.total, job.done, job.saved, job.had, job.none, job.failed) == (7, 7, 3, 2, 1, 0)
+    assert [c[0] for c in calls] == ['01 Intro', '02 Song', '06 Tagged', '07 NoExt'] and calls[1] == ('02 Song', 'Artist', str(album/'02 Song.lrc.part'))
+    assert (album/'02 Song.lrc').read_text() == '[00:00.10]02 Song\n' and (album/'07 NoExt.lrc').exists()
+    assert (album/'04 Had.lrc').read_text() == '[00:01.00]mine\n' and not (album/'01 Intro.lrc').exists()
+    # A .downpic copy, which stock's loader would show first, goes once the song's own .lrc is saved;
+    # a song LRCLIB lacks keeps its copy.
+    state, job, calls, album = run('shadowed', [('0 T0.flac', (), True), ('1 T1.flac', (), True)],
+                                   {'0 T0': [LRC_SAVED], '1 T1': [LRC_NONE]}, shadows={'0 T0.flac', '1 T1.flac'})
+    assert state == LJ_DONE and (job.saved, job.none) == (1, 1) and (album/'0 T0.lrc').exists()
+    assert not (album/'downpic'/'0 T0.lrc').exists() and (album/'downpic'/'1 T1.lrc').exists()
+    # Offline from the start: no retry before LRCLIB has answered; two tracks unanswered end it.
+    three = [(f'{i} T{i}.flac', (), True) for i in range(3)]
+    state, job, calls, _ = run('offline', three, {'0 T0': [LRC_OFFLINE], '1 T1': [LRC_OFFLINE]})
+    assert state == LJ_OFFLINE and (job.saved, job.failed, job.done) == (0, 2, 1) and len(calls) == 2
+    # LRCLIB gone mid-album: each unanswered track retried once, then the job ends.
+    state, job, calls, _ = run('drop', three, {'0 T0': [LRC_SAVED], '1 T1': [LRC_OFFLINE] * 2, '2 T2': [LRC_OFFLINE] * 2})
+    assert state == LJ_OFFLINE and (job.saved, job.failed) == (1, 2) and len(calls) == 5
+    # A blip: the retry answers.
+    state, job, calls, album = run('blip', three, {'0 T0': [LRC_SAVED], '1 T1': [LRC_OFFLINE, LRC_SAVED], '2 T2': [LRC_NONE]})
+    assert state == LJ_DONE and (job.saved, job.none, job.failed) == (2, 1, 0) and (album/'1 T1.lrc').exists()
+    # LRCLIB busy (its 503): asked again, three requests at most; still busy counts as failed. A busy
+    # reply is an answer, so the next unanswered request is retried too.
+    state, job, calls, album = run('busy', three, {'0 T0': [LRC_BUSY, LRC_SAVED], '1 T1': [LRC_BUSY] * 3,
+                                   '2 T2': [LRC_OFFLINE, LRC_SAVED]})
+    assert state == LJ_DONE and (job.saved, job.failed) == (2, 1) and len(calls) == 7
+    assert (album/'0 T0.lrc').exists() and not (album/'1 T1.lrc').exists() and (album/'2 T2.lrc').exists()
+    # Busy for two tracks in a row ends the job.
+    state, job, calls, _ = run('overloaded', three, {'0 T0': [LRC_BUSY] * 3, '1 T1': [LRC_BUSY] * 3})
+    assert state == LJ_OFFLINE and (job.saved, job.failed, job.done) == (0, 2, 1) and len(calls) == 6
+    # A card that can't be written ends the job, its cut-short .part removed.
+    state, job, calls, album = run('card', three, {'0 T0': [LRC_CARD]})
+    assert state == LJ_CARD and job.saved == 0 and len(calls) == 1 and not (album/'0 T0.lrc').exists()
+    # A cancel mid-transfer keeps what was saved before it.
+    state, job, calls, album = run('cancel', three, {'0 T0': [LRC_SAVED], '1 T1': [LRC_SAVED]}, cancel_at='1 T1')
+    assert state == LJ_CANCELLED and job.saved == 1 and job.done == 1 and (album/'0 T0.lrc').exists() and not (album/'1 T1.lrc').exists()
+
+    def note(state, saved=0, none=0, had=0, failed=0):
+        job, out = LyrJob(state=state, saved=saved, none=none, had=had, failed=failed), C.create_string_buffer(96)
+        lib.album_note(out, 96, C.byref(job))
+        return out.value.decode()
+    assert note(LJ_DONE, 9, 2, 1) == 'Album lyrics: 9 saved, 2 not found, 1 already had lyrics'
+    assert note(LJ_DONE, had=12) == 'Album lyrics: 12 already had lyrics' and note(LJ_DONE) == 'Album lyrics: no songs on the card'
+    assert note(LJ_OFFLINE, failed=2) == "Can't reach LRCLIB" and note(LJ_OFFLINE, 1, failed=2) == 'LRCLIB stopped answering: 1 saved, 2 failed'
+    assert note(LJ_CARD, 3) == "Can't write to the card: 3 saved" and note(LJ_CANCELLED) == 'Cancelled'
+    print('Album lyrics: .lrc paths, incomplete albums, busy retries, offline, card and cancel ends, and summaries passed.')
 
 
 def tidal_check(tmp):
@@ -2764,7 +2956,7 @@ int main(void) {
     subprocess.run(['cc', '-pthread', '-D_GNU_SOURCE', f'-DTIDAL_DIR="{tmp}/tidal"', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
                     str(tmp/'tidal_dl.c'), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=30)
-    print('Tidal cache: stream file extensions, eviction at the chosen cap, failed deletion, Stop, re-fetch and skip downloads, Clear All under a download passed.')
+    print('Tidal cache: stream file extensions, eviction at the chosen cap, failed deletion, Stop, re-fetch and skip downloads, Clear All under a download, Tidal lists paged to the end passed.')
 
 if __name__ == '__main__':
     import argparse
@@ -2790,6 +2982,7 @@ if __name__ == '__main__':
         tidal_check(tmp)
         shelf_check(tmp, netupdate_check(tmp))
         online_check(tmp)
+        album_check(tmp)
         if args.captures:
             args.captures.mkdir(parents=True, exist_ok=True)
             (tmp/'captures').mkdir()

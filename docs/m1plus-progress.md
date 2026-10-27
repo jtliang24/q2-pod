@@ -2039,6 +2039,73 @@ Results:
 - **Footprint over 1.4.5's files:** +1,494/−310 over 31. The new seams are `list_toggle`'s
   `#if !M1PLUS`, the App Store's Rockbox lines, q2remote's `M1_GLOBALS` and its rows in `remote.md`.
 
+## 49. Merge step: sync to upstream 1.5.0 (Oct 27)
+
+`drift.py` found 1.5.0 104 commits and 2,449 surface lines past 1.4.5, over the trigger, and planned one
+step; 1.5.1, 11 hours old, wasn't settled. No structural change (`patch/link.ld`, `flake.nix`,
+`flake.lock` as 1.4.5's), so the step isn't flashed. 1.5.0 has, through 1.4.6 to 1.4.9:
+- Display in sub-pages (Appearance, Coverflow, Controls); About the last System row; Bluetooth's Control
+  Device Volume, off by default; time zones relabelled, sorted and shown at their offset now;
+- lyrics: LRCLIB alone, a `.lrc` read again as a tag (milliseconds, word stamps), Download Album Lyrics,
+  Download Cover & Lyrics beside the song, iPod's large word-lit lyrics page;
+- Library's Videos row opening Folder view, where a video plays; a reboot keeping the place; playlists by
+  name, Move Up/Down without `HAVING`; SyncLink's keys past the Buttons lock;
+- Tidal's lists past 50, its stream thread parked, downloads tagged; HTTPS past 2038 (`tls_untimed`);
+- power: the kernel modules' idle clocks (AIC, rotator, PWM, MCU sleep), the FLAC fast paths, Key Tone on
+  a worker; iPod Light Mode, Corners and four accents; Wheel QS.
+
+| Commit | Change | Why |
+|---|---|---|
+| `b686bc6` | Merge upstream 1.5.0 | 19 hunks in 7 files. `navigation.c` (9): Wheel QS before the M1's knob rows in the enum, `pod_values`, `pod_keys` and the names; Control Device Volume with `VIEW_BLUETOOTH`, `widget_get_window` and `BT_ROW_H`; the lyric rows' iPod pass through `LYRIC_ROW_BUILDER`; `accent_row` gone with upstream's; Move Up/Down takes upstream's `CASE`, the M1's own `PLE_TEMP_ID_SQL`; the SyncLink posts after `m1plus_nav_touch.c`; Display's sub-pages under `#if !M1PLUS`, the M1's one list in `m1plus_nav_display.c`. `books.c`: the Books-only `books_open`, the 30 s pause quit beside `VIDEO_QUIT_MS`. `peq_ui.c`: `UI_W` with `stock_canvas_set_fill_color`. `radio.c`: the heart at `SPOT_HEART_X/Y`, `m1plus_q2.inc`'s iPod Y with `NP_ICON_PAD`. `build.py`: `VERSION` beside `Q2_TAR_SHA`; the hand-off before the new options. `building.md` and `internals.md` took upstream's text with the M1's lines. |
+| `0bba2a0` | Compile and link | The time zones' three tables in the M1's header; peq.h's Light Mode ink wraps `canvas_stroke_rounded_rect`, so the M1's `_ex` stand-in moved to `m1plus_peq.h`; `lyrics.c` among the sources. `EVENT_TIME` 0x08 (V2.1's `event_init`, `0x6f4c40`), `REC_COVER` 0x28 (`get_id3info`, `0x4e0038`); the tunables copied; `LIST_INTO_WHITE` (iPod Light Mode) and `PLAYMORE_*` `M1_UNPORTED`. |
+| `c44705f` | The new hooks and sites | `CALL_SITES['q2']` mirrors `LYRIC_OPEN`, `LYRIC_SAVE`, `TIDAL_PAGE_DONE`, `STREAM_POLL_CALLS` (was `STREAM_POLLS`) and `DARK_POLLS`' cover usleeps; they and the ten new hooks are `unported`. V2.1 has `device_reboot`, `get_tidal_trackurl`, the Tidal list threads and `main_loop_post_key_event` by name. `kugou_obtainlyric` takes no trampoline, as the Q2's. |
+| `884c3fd` | Videos | 1.5.0's Videos row opens Folder view, whose video click (`folder_click`) is unported: the Q2 Pod page's row opens `videos_open`, 1.4.5's list. |
+| `3f9d30b` | OpenSSL | `tls_untimed` writes `SSL_CTX` fields by offset in every fetch the M1 runs; V2.1's libssl is the same 1.1.1f, and the M1 build audits the two words as build.py does. |
+| `7eb58f5` | Spotify's refused account | Its note said the Q2: `SPOT_REFUSED_SUB`, as `QR_NO_WIFI`. The text came from our own upstream PR: a model-neutral one there would drop the seam. |
+| `89688bb` | 1.5.0's test cases | `suitemerge.py`: `playback` 1 hunk by hand, `build` 9, `patch` 20. The lyrics search seeds V2.1's `keyinfo` (`0xa0f6f4`). Seven new `NOT PORTED`. |
+| `9986837`, `12d1179` | `q2compare.py` | 1.5.0's 17 new suites: those on stock files take V1.32's unpacked rootfs (`stock_fs`); a run-once suite failing here runs again in the base's tree and, failing there too, counts as the base's. 1.5.0's own `chapters` (`tls_untimed`'s unused parameters under host `-Werror`) and its `aic_build`, `pwm_build`, `rotator_build`, `flac_build` (release guards older than 69a9cbf's options on by default) do. `flac_frame` takes upstream's fixture corpus. |
+| `91edbc1` | A missing input | `takes()` passes anything but a file on to build.py's checks, as upstream's `build()` reaches them. |
+
+Checked by hand:
+- **`q2only.py 1.5.0`** lists 197 lines: Display's sub-pages (`m1plus_nav_display.c`), Streaming's
+  per-app icon (#88, U4), `offsets.inc`'s new names (`0bba2a0`), the wheel's Quick Settings swipe
+  (Q2 only).
+- **`offsets.inc`, `build.py`, `peq.py`:** the new options (aic, rotator, PWM, MCU, FLAC), the light
+  splash (iPod) and `LYRIC_SAVE_CALL`'s pin are U4 or Q2 only; `LOGO_HOOK`'s light branch finds no
+  light logo on the M1 and shows V2.1's.
+- **V1.32 numbers in the tag's C:** none outside comments, `tls_untimed`'s offsets (checked above) and
+  the wheel swipe's ioctl; the lyric builder at `LYRIC_ROW_BUILDER`.
+- **Names and sizes in shared C:** Streaming's `addon_icon` (the M1 keeps `stream_app`), Light Mode's
+  `list_into` (iPod), Display's names (Q2 only now); `lyrics.c`'s 375 under `#if IPOD`; Configuration's
+  375 gap row, unreachable on M1.
+- **Functions the M1 stands in for:** only `ringnav_stream`'s `addon_icon` changed.
+
+Results:
+- **`test/q2compare.py 1.5.0 --suites`:** Legacy `d9ece51c…` and iPod `5936f755…` are byte-identical to
+  1.5.0's build, and all 36 suite runs pass (`patch` 1417 and 1933 scenarios), five of them failing on
+  1.5.0's own tree too.
+- **The M1** (`work/sync/1.5.0`, 1.5.0 dev 2, `V002s`, `update.bin` `e469c954…`): these pass:
+  - `build --build`;
+  - `patch`: 1266 scenarios, no `KNOWN GAP`, 31 `NOT PORTED`;
+  - `boot` and its two walks;
+  - `playback`, `id3`, `m4b`, `headset_io`, `ldac` and `bluealsa`.
+- **`test/m1plus/ports.py`:** 614 rows.
+- **`fndiff.py` from dev 10** (`work/u3/1.4.2-catchup3`), the build on the device: 236 changed, 82
+  added, 3 removed, of 979; from 1.4.5's gated build, 115 changed, 36 added, 3 removed. For the next
+  device pass, beside section 48's list:
+  - Bluetooth's Control Device Volume, off by default: the headset's own volume is left alone and the
+    M1's volume is its gain alone (`bt_audio_ready`, `pod_rows`); both switches at rows 4 and 5;
+  - the Q2 Pod page's Videos row, a list that plays (`videos_open`, `video_play`), and a paused video
+    quitting after 30 s;
+  - lyrics from a track's LRC-form tag with milliseconds and word stamps (`ringnav_lyric`, `lrc_parse`),
+    and the lyrics match from LRCLIB alone (`ringnav_lyric_search`, `lrclib_search`);
+  - HTTPS fetches (`tls_untimed`): Internet Radio, scrobbles, the App Store, lyrics and covers;
+  - the App Store's card apps: stop rows and Retry (`app_stop`, `stop_row`);
+  - the PEQ's 3EQ and Advanced pages drawn through the ink wrappers (`e3_*`, `render`);
+  - Spotify's pages and its refused-account note (`spot_paint`, `spot_poll`).
+- **Footprint over 1.5.0's files:** +1,474/−295 over 31. The playlist editor's SQL seam and the Accent
+  row's went; new are Display's `#if !M1PLUS`, the Bluetooth row's names and `SPOT_REFUSED_SUB`.
+
 ## How to check a build now
 
 ```sh

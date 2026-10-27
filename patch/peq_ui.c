@@ -754,7 +754,7 @@ void peq_paint(void *w, void *canvas) {
         canvas_fill_rect(canvas, x, PEQ_PLOT_TOP, 1, PEQ_PLOT_BOTTOM - PEQ_PLOT_TOP);
         caption(canvas, labels[i], x - 16, PEQ_PLOT_BOTTOM + 2, 32, PEQ_GRAPH_H - PEQ_PLOT_BOTTOM - 2, 12, CF_GREY);
     }
-    canvas_set_fill_color(canvas, fill);
+    stock_canvas_set_fill_color(canvas, fill);
     void *vg = canvas_get_vgcanvas(canvas);
     if (!vg) return;
     int split = 0;
@@ -1086,7 +1086,7 @@ static void e3_paint(void *canvas) {
         caption(canvas, text, x - E3_BAND / 2, e3_bottom() + 8, E3_BAND, 24, 18, focus && e3.adjusting ? 0xffffffffu : CF_GREY);
     }
     e3_box(canvas, 12, zero, UI_W - 24, 1, 0x8a8a8a); /* 0 dB */
-    canvas_set_fill_color(canvas, fill);
+    stock_canvas_set_fill_color(canvas, fill);
 }
 
 /* The tab bar, unless a message has it: the open tab white over an accent line, the other grey,
@@ -1101,5 +1101,5 @@ static void tabs_paint(void *canvas) {
         caption(canvas, i ? "Advanced" : "Simple", x, 4, TAB_W, 40, 20, shown ? 0xffffffffu : CF_GREY);
         if (shown) e3_box(canvas, x + (TAB_W - 96) / 2, 42, 96, 3, TONE);
     }
-    canvas_set_fill_color(canvas, fill);
+    stock_canvas_set_fill_color(canvas, fill);
 }

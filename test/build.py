@@ -88,20 +88,29 @@ boot_check()
 def logo_check():
     """S11logo_display_shell's splash choice (build.py LOGO_HOOK) under the host sh."""
     import subprocess, tempfile, pathlib
-    from build import LOGO_HOOK
+    from build import LOGO_HOOK, LOGO, LOGO_LIGHT
     with tempfile.TemporaryDirectory(prefix='q2-logo-') as tmp:
-        user = pathlib.Path(tmp)/'boot-logo.jpg'
-        script = LOGO_HOOK[1].decode().replace('/mnt/data/boot-logo.jpg', str(user)).replace('display_logo', 'echo')
+        tmp = pathlib.Path(tmp)
+        user, config, dark, light = tmp/'boot-logo.jpg', tmp/'config.ini', tmp/'logo.jpg', tmp/'logo-light.jpg'
+        script = (LOGO_HOOK[1].decode().replace('/mnt/data/boot-logo.jpg', str(user)).replace('/mnt/data/config.ini', str(config))
+                  .replace('/'+LOGO_LIGHT, str(light)).replace('/'+LOGO, str(dark)).replace('display_logo', 'echo'))
         def shown(): return subprocess.run(['sh', '-c', script], check=True, capture_output=True, text=True).stdout.strip()
-        assert shown() == '/release/assets/default/raw/images/xx/logo.jpg'  # no card logo: the built-in splash
+        assert shown() == str(dark)  # no card logo, no config: the built-in splash
+        config.write_text('[IPOD]\nLIGHT=1\n')
+        assert shown() == str(dark)  # Light Mode, but no light twin (Legacy, custom --logo)
+        light.write_bytes(b'')
+        assert shown() == str(light)
+        config.write_text('[IPOD]\nLIGHT=0\nBACKLIGHT=1\n')
+        assert shown() == str(dark)
         user.write_bytes(b'')
-        assert shown() == str(user)
-    print('Boot logo: the saved card logo, else the built-in splash, passed.')
+        config.write_text('[IPOD]\nLIGHT=1\n')
+        assert shown() == str(user)  # the card's logo wins in either mode
+    print('Boot logo: the saved card logo, else the light splash under Light Mode, else the built-in one, passed.')
 logo_check()
 
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
-    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLLS, DARK_POLLS, WHEEL_TS_READ, PDR
+    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, LOGO_LIGHT, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLL_CALLS, DARK_POLLS, WHEEL_TS_READ, PDR
     from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, BIGCOVER, BC_ART, BC_TITLE_PAD, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_TOUCH, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
@@ -111,13 +120,12 @@ def validate_assets(directory):
     ipod = manifest['variant'] == 'ipod'
     stock = (directory/'stock-demo').read_bytes()
     demo = (directory/'demo').read_bytes()
-    from build import patch_timezones, EXTRA_TIMEZONES, CJK, english_ui
+    from build import patch_timezones, TIMEZONES, CJK, english_ui
     zones = bytearray(stock)
     patch_timezones(zones)
     start = fileoff(stock, 0x76b5d0)
-    labels = [zones[start+i*32:start+(i+1)*32].split(b'\0')[0] for i in range(28+len(EXTRA_TIMEZONES))]
-    assert labels[:28] == [stock[start+i*64:start+(i+1)*64].split(b'\0')[0] for i in range(28)]
-    assert labels[28:] == [label.encode() for label, _ in EXTRA_TIMEZONES]
+    labels = [zones[start+i*32:start+(i+1)*32].split(b'\0')[0] for i in range(1+len(TIMEZONES))]
+    assert labels == [b'timedate_auto'] + [label.encode() for label, _ in TIMEZONES]
     assert demo[start:start+28*64] == zones[start:start+28*64]
     for address in (0x4bce34, 0x4bd090, 0x4bd4d0, 0x4fa5dc):
         off = fileoff(stock, address)
@@ -302,14 +310,19 @@ def validate_assets(directory):
     # The crash watchdog only sleeps longer; check_mem_thd returns on entry, so it never drops caches.
     old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
     assert new == old.replace(*WATCHDOG_SLEEP) and new != old
-    for address, word, patched in DROP_CACHES + STREAM_POLLS:
+    for address, word, patched in DROP_CACHES:
         off = fileoff(stock, address)
         assert struct.unpack_from('<I', stock, off)[0] == word and struct.unpack_from('<I', demo, off)[0] == patched
-    # Stock's status sync and cover pollers sleep through ringnav_dark_usleep.
-    for address in DARK_POLLS:
+    # The stream threads' idle polls (usleep, jalr $25) park in tidal.c instead, which is the only way out of them.
+    for address, name in STREAM_POLL_CALLS:
         off = fileoff(stock, address)
         assert struct.unpack_from('<I', stock, off)[0] == 0x0320f809
-        assert struct.unpack_from('<I', demo, off)[0] == jal(symbols(directory/'patch.elf')['ringnav_dark_usleep'])
+        assert struct.unpack_from('<I', demo, off)[0] == jal(symbols(directory/'patch.elf')[name])
+    # Stock's status sync and cover pollers sleep through the dark usleeps (navigation.c).
+    for address, name in DARK_POLLS:
+        off = fileoff(stock, address)
+        assert struct.unpack_from('<I', stock, off)[0] == 0x0320f809
+        assert struct.unpack_from('<I', demo, off)[0] == jal(symbols(directory/'patch.elf')[name])
     # The encoder thread's ts_read call goes through ringnav_ts_read (playback.c wheel_sample).
     off = fileoff(stock, WHEEL_TS_READ[0])
     assert struct.unpack_from('<I', stock, off)[0] == WHEEL_TS_READ[1]
@@ -322,15 +335,24 @@ def validate_assets(directory):
     off = fileoff(old, VBR_SCAN)
     words = (*EQ_RATE_GATES, *MQA_GATE, *MQA_PROBE, PAUSE_SLEEP)
     gates = [fileoff(old, a) for a in (*(a for a, _, _ in words), *ID3_CALLS)]
+    # The FLAC fast paths (tools/flac.py, on by default) patch hciplayer's sync calls and LPC/output pointers.
+    from flac import patch_words as flac_words
+    flac = flac_words('sync,lpc,output', symbols(directory/'peq'/'peq.elf'))
+    gates += [fileoff(old, a) for a, _, _ in flac]
     differ = [i for i in range(0x3e40, 0x485250) if old[i] != new[i]]
     assert set(differ) <= {*range(off, off+4), *(i for g in gates for i in range(g, g+4))} and not any(new[off:off+4])
     assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in words] == [p for _, _, p in words]
+    assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in flac] == [p for _, _, p in flac]
     id3_gain = symbols(directory/'peq'/'peq.elf')['id3_gain']
     assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in ID3_CALLS} == {jal(id3_gain)}
     # Include every excluded UI screen and saved-preference defaults in byte parity checks.
     paths = [l.removeprefix('squashfs-root/') for l in run('unsquashfs', '-l', directory/'stock.squashfs').splitlines()
              if ('/raw/ui/' in l or '/raw/styles/' in l) and l.endswith('.bin') or l.endswith('/config.ini')]
     names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
+    # Light Mode's splash ships with the default logo in iPod builds only (build.py LOGO_HOOK)
+    light = (ROOT/'assets/boot-logo-light.jpg').read_bytes()
+    default = ipod and manifest['logo_sha256'] == sha((ROOT/'assets/boot-logo.jpg').read_bytes())
+    assert ('squashfs-root/'+LOGO_LIGHT in names) == default and (not default or read('rootfs.squashfs', LOGO_LIGHT) == light)
     assert not {'squashfs-root/'+rel for rel in STOCK_EQ} & names, 'Stock EQ assets remain'
     # The Library's rows, stock's and list_row_core's alike, draw each local_* icon centred in one 52px
     # box (iPod x 8, Legacy x 10): each disc's alpha-weighted centre must sit on its image's.
@@ -555,6 +577,7 @@ def validate_assets(directory):
             continue
         if short == STATUS_BAR:  # iPod only: play state left, title between, four icons right
             left, right, *rest = root[3]
+            assert all(root[2][f'style:{s}:border_color'] == '#00000000' for s in ('normal', 'disable', 'focused'))  # Light Mode: no paper line
             assert [n[2]['name'] for n in left[3]] == STATUS_LEFT and [n[2]['name'] for n in right[3]] == STATUS_RIGHT
             title = rest.pop()
             assert title[0] == 'hscroll_label' and title[2]['name'] == 'label_clock'
@@ -586,10 +609,10 @@ def validate_assets(directory):
             assert [n[2]['name'] for n in album] == ['img_cover', 'img_playstate', 'scrlabel_title', 'scrlabel_artist', 'label_ipod_album',
                                                      'img_playmode', 'img_fav']
             # 16px outer margins, 12px from the art to the text, the text column 165px wide; the title larger.
-            # Order and favourite level with the art's foot; favourite centred below More. The art's gap to
+            # Order and favourite glyphs level with the art's foot (frames NP_ICON_PAD lower); favourite centred below More. The art's gap to
             # the dots below (y 182) matches its gap to "3 of 12"'s text above.
             assert [n[1] for n in album] == [[16, 2, 166, 166], [39, 25, 120, 120], [194, 18, 165, 28], [194, 52, 165, 22], [194, 80, 165, 22],
-                                             [247, 118, 50, 50], [303, 118, 50, 50]]
+                                             [247, 133, 50, 50], [303, 133, 50, 50]]
             assert album[-1][1][0] == named['img_more'][1][0] and album[-1][1][2] == named['img_more'][1][2] == 50
             assert album[-1][1][0] - (album[-2][1][0] + album[-2][1][2]) == 6 and 80 + 22 < 118 + 13
             assert album[1][2]['opacity'] == '0'  # playback gestures retain their original target
@@ -600,7 +623,16 @@ def validate_assets(directory):
             # Distinct bands: top row, art, page dots, bar (A-B markers y 250 to 260), then the times.
             dots = named['slide_indicator1'][1]
             assert NP_TOP + 10 + 166 < NP_TOP + dots[1] and NP_TOP + dots[1] + 10 < NP_BAR[1] - 1
-            assert named['slide_view'][1] == [0, 0, 375, 186] and named['view_lrc'][2]['self_layout'].startswith('default(x=75,')
+            # The dots' own anchor, the slide_view's centre: stock's, with none, followed a swipe's offset.
+            anchor = named['slide_indicator1'][2]
+            assert anchor['anchor_x'] == f'{375 // 2 - dots[0]}px' and anchor['anchor_y'] == '0px' and 0 < dots[3] // 2
+            assert named['slide_view'][1] == [0, 0, 375, 186]
+            # The lyrics page (patch/lyrics.c): its rows span the page, a LYRIC_SLOT each after a blank one,
+            # three to its 178px; the text, LYRIC_X in, clears the glass's corners, as the art does.
+            lrc, slot = named['view_lrc'][3][0][2], inc('LYRIC_SLOT')
+            assert named['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=375,h=178)' and 3 * slot <= 178 < 4 * slot
+            assert lrc['self_layout'] == 'default(x=0,y=0,w=100%,h=100%)' and lrc['children_layout'] == f'list_view(x=0,y={slot},s=0)'
+            assert inc('LYRIC_X') == NP_MARGIN >= corner_x(30 + NP_TOP, 178)
             slider = named['slider_play']
             assert slider[1] == [NP_BAR[0], 233, NP_BAR[2], NP_TOUCH] and NP_TOUCH >= 44
             assert slider[2]['bar_size'] == '4' and slider[2]['slide_with_bar'] == 'true'

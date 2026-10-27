@@ -506,18 +506,18 @@ static int book_kind(const char *name) {
     return !strcasecmp(dot + 1, "txt") ? 1 : !strcasecmp(dot + 1, "epub") ? 2 : 0;
 }
 
-/* dir's books (with videos, its videos), and with depth those of its subfolders, as full paths. */
-static void scan(const char *dir, int depth, int videos) {
+/* dir's books, and with depth those of its subfolders, as full paths. */
+static void scan(const char *dir, int depth) {
     void *d = opendir(dir);
     char path[600];
     for (struct dirent *e; d && bk.n < BOOKS_MAX && (e = readdir(d));) {
         if (e->d_name[0] == '.') continue;
         tk_snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
         int kind = book_kind(e->d_name);
-        if ((e->d_type == 8 || !e->d_type) && kind && (kind == 3) == videos) {
+        if ((e->d_type == 8 || !e->d_type) && kind && kind != 3) {
             if ((bk.path[bk.n] = strdup(path))) ++bk.n;
         } else if ((e->d_type == 4 || !e->d_type) && depth)
-            scan(path, 0, videos);
+            scan(path, 0);
     }
     if (d) closedir(d);
 }
@@ -715,7 +715,7 @@ void books_paint(void *w, void *canvas) {
                                  draw_line, canvas);
     bk.prev =
         bk.base + book_back(bk.buf, bk.len, bk.pos - bk.base, BOOK_ROWS, width, measure, canvas);
-    canvas_set_text_color(canvas, color);
+    stock_canvas_set_text_color(canvas, color);
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
     int y = BOOK_Y + BOOK_ROWS * BOOK_LH + 6, span = UI_W - 16;
     unsigned end = bk.end, size = bk.size;
@@ -725,7 +725,7 @@ void books_paint(void *w, void *canvas) {
     canvas_fill_rect(canvas, 8, y, span, 2);
     canvas_set_fill_color(canvas, rgba(BOOK_TONE, 255));
     canvas_fill_rect(canvas, 8, y, done > span ? span : done, 2);
-    canvas_set_fill_color(canvas, fill);
+    stock_canvas_set_fill_color(canvas, fill);
 }
 
 /* Videos (docs/internals.md#videos): patch/video.c draws on /dev/fb0 and plays the sound while
@@ -735,7 +735,7 @@ void books_paint(void *w, void *canvas) {
 #define VIDEO_SOCK "/tmp/q2video.sock" /* video.c Q2VIDEO_SOCK */
 #define VIDEO_PLACE "/tmp/q2video.place" /* video.c Q2VIDEO_PLACE: the second to start at, then left */
 #define VIDEO_QUIT_MS 3000 /* M1 Plus: a quit not done by then is forced */
-#define VIDEO_PAUSE_QUIT_MS 300000 /* a pause this long without a key quits, as Return, so the device can sleep */
+#define VIDEO_PAUSE_QUIT_MS 30000 /* paused this long, no key: quit as Return, so it sleeps */
 static struct {
     int paused, volume, gain, pid, sock, seek; /* seek: the wheel seeks, since seek_at (time_now_ms) */
     unsigned polled, control_at, seek_at, key, at; /* key: the video's in BOOK_MARKS, at its second there */
@@ -805,12 +805,13 @@ int video_start(const char *file, int radio) {
     return pid > 0 ? pid : 0;
 }
 
-static int play_video(void *ctx, void *event) {
-    if (vid.pid) return 0;
+/* path played from its saved place, from the Videos list or Folder view (books_video). */
+static void video_play(const char *path) {
+    if (vid.pid) return;
     headset_manual();
     spot_yield(); /* librespot and radio hold the PCM too, as for local music */
     radio_stop();
-    const char *path = bk.path[(int)(long)ctx];
+    if (!bk.page) BLOB_IO(BOOK_MARKS, bk.marks, 0); /* Folder view: no list read them */
     vid.key = fnv(FNV_SEED, (const unsigned char *)path);
     vid.key |= !vid.key;
     vid.at = 0;
@@ -827,7 +828,14 @@ static int play_video(void *ctx, void *event) {
     vid.gain = headset_gain();
     unlink("/tmp/q2video.state");
     if (vid.pid) vid.sock = socket(1, 1, 0); /* AF_UNIX, SOCK_DGRAM (MIPS numbering) */
-    return 0;
+}
+/* Folder view's file (navigation.c ringnav_folder_click): a video plays as from the Videos list;
+ * 0 for anything else, left to stock. */
+int books_video(const char *path) {
+    const char *name = path ? strrchr(path, '/') : 0;
+    if (!name || book_kind(name + 1) != 3) return 0;
+    video_play(path);
+    return 1;
 }
 
 /* the helper's soft volume and gain (its bar), and what it was last sent */
@@ -876,8 +884,12 @@ void video_poll(void) {
     vid.quit_at = 0;
 #endif
     unsigned at;
-    /* where it stopped; a video never resumed takes no slot from the books */
-    if (bk.page && BLOB_IO(VIDEO_PLACE, at, 0) && (at || vid.at)) mark(vid.key, at);
+    /* where it stopped; a video never resumed takes no slot from the books. From Folder view no
+     * page holds the marks, so they are read again first: mark writes them whole. */
+    if (BLOB_IO(VIDEO_PLACE, at, 0) && (at || vid.at)) {
+        if (!bk.page) BLOB_IO(BOOK_MARKS, bk.marks, 0);
+        mark(vid.key, at);
+    }
     widget_invalidate_force(window_manager(), 0);
 }
 
@@ -921,8 +933,8 @@ void video_key(unsigned key) {
 
 #include "m1plus_books_video.c"
 
-/* Local Music's Books and Videos rows (navigation.c media_click): the books or videos, by path. */
-void books_open(const char *root, int videos) {
+/* Local Music's Books row (navigation.c media_click): the books, by path. */
+void books_open(const char *root) {
     if (bk.page) return;
     void *page = bk.page = page_open("books_page", closed, keyup);
     if (!page) return;
@@ -939,14 +951,12 @@ void books_open(const char *root, int videos) {
     view_show(bk.reader, 0);
     bk.buf = calloc(BOOK_WIN, 1);
     bk.path = calloc(BOOKS_MAX, sizeof *bk.path);
-    if (bk.buf && bk.path) scan(root, 1, videos);
+    if (bk.buf && bk.path) scan(root, 1);
     if (bk.n) qsort(bk.path, (unsigned)bk.n, sizeof *bk.path, by_string);
-    bk.view = page_list(page, bk.list, 0,
-                        videos ? bk.n ? "Videos" : "No videos" : bk.n ? "Books" : "No books", bk.n, 48);
+    bk.view = page_list(page, bk.list, 0, bk.n ? "Books" : "No books", bk.n, 48);
     char name[256];
     for (int k = 0; k < bk.n; ++k)
-        (videos ? page_row_detail : page_row_detail_into)(bk.view, k, title(bk.path[k], name), 0,
-                                                          videos ? play_video : open_book);
+        page_row_detail_into(bk.view, k, title(bk.path[k], name), 0, open_book);
 }
 int video_status(void) { return vid.pid ? (vid.paused ? 3 : 2) : 0; }
 unsigned video_session(void) { return (unsigned)vid.pid; }

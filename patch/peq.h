@@ -23,6 +23,57 @@
 #define PEQ_ROOT "" /* host tests pass a scratch directory */
 #include "m1plus_peq.h" /* stand-ins for routines V2.1 lacks (docs/m1plus-roadmap.md U1c) */
 void child_exit(int status) __attribute__((noreturn));
+#ifdef canvas_set_fill_color
+/* Light Mode: every colour the payload draws passes ui_ink (navigation.c) on its way to these stock
+ * setters, as stock's own colours pass the style and image hooks. stock_* sets a colour read back
+ * from the LCD, which has passed already. */
+unsigned ui_ink(unsigned rgba);
+static inline int stock_canvas_set_fill_color(void *c, unsigned x) {
+    return canvas_set_fill_color(c, x);
+}
+static inline int stock_canvas_set_text_color(void *c, unsigned x) {
+    return canvas_set_text_color(c, x);
+}
+static inline int stock_canvas_set_stroke_color(void *c, unsigned x) {
+    return canvas_set_stroke_color(c, x);
+}
+static inline int ink_canvas_fill_rounded_rect(void *c, const void *r, const void *g,
+                                               const void *color, unsigned radius) {
+    unsigned v = ui_ink(*(const unsigned *)color);
+    return canvas_fill_rounded_rect(c, r, g, &v, radius);
+}
+static inline int ink_canvas_stroke_rounded_rect(void *c, const void *r, const void *g,
+                                                 const void *color, unsigned radius, unsigned w) {
+    unsigned v = ui_ink(*(const unsigned *)color);
+    return canvas_stroke_rounded_rect(c, r, g, &v, radius, w);
+}
+static inline int ink_vgcanvas_set_fill_color(void *vg, unsigned x) {
+    return vgcanvas_set_fill_color(vg, ui_ink(x));
+}
+static inline int ink_vgcanvas_set_stroke_color(void *vg, unsigned x) {
+    return vgcanvas_set_stroke_color(vg, ui_ink(x));
+}
+static inline int ink_vgcanvas_set_fill_linear_gradient(void *vg, float sx, float sy, float ex,
+                                                        float ey, unsigned from, unsigned to) {
+    return vgcanvas_set_fill_linear_gradient(vg, sx, sy, ex, ey, ui_ink(from), ui_ink(to));
+}
+#undef canvas_set_fill_color
+#undef canvas_set_text_color
+#undef canvas_set_stroke_color
+#undef canvas_fill_rounded_rect
+#undef canvas_stroke_rounded_rect
+#undef vgcanvas_set_fill_color
+#undef vgcanvas_set_stroke_color
+#undef vgcanvas_set_fill_linear_gradient
+#define canvas_set_fill_color(c, x) stock_canvas_set_fill_color(c, ui_ink(x))
+#define canvas_set_text_color(c, x) stock_canvas_set_text_color(c, ui_ink(x))
+#define canvas_set_stroke_color(c, x) stock_canvas_set_stroke_color(c, ui_ink(x))
+#define canvas_fill_rounded_rect ink_canvas_fill_rounded_rect
+#define canvas_stroke_rounded_rect ink_canvas_stroke_rounded_rect
+#define vgcanvas_set_fill_color ink_vgcanvas_set_fill_color
+#define vgcanvas_set_stroke_color ink_vgcanvas_set_stroke_color
+#define vgcanvas_set_fill_linear_gradient ink_vgcanvas_set_fill_linear_gradient
+#endif
 #endif
 
 #define PEQ_BANDS 30 /* 10 per side plus 10 shared, as L/R APO files use */
@@ -172,14 +223,16 @@ int directory(void *path); /* playback.c: toolsLoadDirectory, for staged */
 void tidal_clear(void);
 #define SPOT_DIR "/mnt/mmc/.spotify" /* librespot and its launcher, spotify.c's */
 /* addon.c: card apps, each a card folder .<id> holding its manifest q2app, its
- * launcher run and its binary q2-<id>. addon_scan finds them again (how many slots: a slot's index
- * stays its app's), addon_name and addon_id are one's while it is on the card (else 0), addon_open
+ * launcher run, its binary q2-<id> and its icons. addon_scan finds them again (how many slots: a
+ * slot's index stays its app's), addon_name, addon_id and addon_icon (an image name: file://… or the
+ * shared stream_app) are one's while it is on the card (else 0), addon_open
  * its Streaming row's click (ctx: the slot). addon_forget and addon_quit: the Apps page replaces or
  * removes the files of the app in folder dir (".<id>"): forgotten on the UI thread, then asked to
  * end and waited for on the Apps page's worker. */
 #define APPS_MAX 8 /* card apps on the card at once */
 int addon_scan(void), addon_open(void *ctx, void *event), addon_hold(void *top);
-const char *addon_name(int a), *addon_id(int a);
+const char *addon_name(int a), *addon_id(int a), *addon_icon(int a);
+int addon_is_icon(const char *name); /* a card app's Streaming icon, by its file:// name */
 void addon_poll(void), addon_stop(void), addon_paint(void *w, void *canvas), addon_card_away(void);
 void addon_forget(const char *dir), addon_quit(const char *dir);
 /* spotify.c's Q2SPOT/1 framing (docs/librespot.md), which the card apps speak too */
@@ -194,7 +247,30 @@ void *app_album_songs(const char *dir); /* navigation.c: a folder's songs by nam
 int stream_cache(int spotify); /* navigation.c: Streaming's Configuration, a cap of 512 << it MB */
 void album_memory(void *r);
 void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, unsigned px, unsigned color);
-unsigned accent_tone(int tone); /* iPod: the Accent's ACCENTS column (Minimal: MINIMAL_FILL) */
+unsigned book_char(const unsigned char *t, unsigned n, unsigned *i); /* books.c: UTF-8, else Latin-1 */
+/* Lyrics as lyrics.c's loader reads them: each line's start (ms, LRC_FAR unsynced), the order it
+ * came in, its UTF-8 text and its word stamps (A2's <mm:ss.xx>), each the ms a word starts and its
+ * byte offset in the text. */
+#define LRC_FAR 0x7fffffff
+typedef struct {
+    int ms;
+    unsigned at;
+} lrc_mark;
+typedef struct {
+    int time, at;
+    const char *text;
+    unsigned mark, marks;
+} lrc_line;
+/* lyrics.c, iPod: Now Playing's lyrics page, three large lines lit word by word (docs/internals.md#
+ * word-timed-lyrics). lyrics_publish takes each load's lines; lyrics_rows turns stock's rows of lrc
+ * into the page's (whether it is on, as lyrics_on asks); lyrics_now is the playing position in ms,
+ * lyrics_sec its whole second (off the page), lyrics_line the playing line there (-1 before the
+ * first), repainting it while page shows; lyrics_paint draws a row's line. */
+void lyrics_publish(const lrc_line *l, unsigned n, const lrc_mark *m);
+int lyrics_rows(void *lrc), lyrics_on(void *lrc), lyrics_now(void), lyrics_sec(void),
+    lyrics_line(void *lrc, int ms, int page);
+void lyrics_paint(void *row, void *canvas), lyrics_gone(void);
+unsigned accent_tone(int tone); /* iPod: the Accent's ACCENTS column (Minimal's own: MINIMAL_FILL) */
 unsigned rgba(unsigned rgb, unsigned alpha), mix(unsigned from, unsigned to, int j, int n);
 void caption(void *canvas, const char *s, int x, int y, int w, int h, unsigned px, unsigned color);
 void peq_paint(void *w, void *canvas);
@@ -230,6 +306,7 @@ const char *output_device(char *vol);         /* books.c */
 void dac_take(void);                          /* books.c */
 #if IPOD
 int ipod_classic(void); /* navigation.c: Theme: Classic */
+int ipod_light(void);   /* navigation.c: Light Mode */
 #define np_bar_h() (ipod_classic() ? NP_BAR_CLASSIC : NP_BAR_MINIMAL)
 #else
 #define np_bar_h() SPOT_BAR_H
@@ -243,5 +320,23 @@ int rockbox_available(void);  /* navigation.c: a regular Rockbox binary on the c
 int page_keyup(void *ctx, void *event); /* navigation.c: Return leaves a payload page */
 int shelf_open(void *ctx, void *event); /* netupdate.c: System settings' Apps page */
 const char *shelf_busy(void);           /* netupdate.c: the app folder a job replaces */
+void album_lyrics_stop(void);           /* onlinematch.c: Download Album Lyrics before USB storage */
+
+/* 2038 (docs/internals.md#2038). glibc 2.28's time() truncates the kernel's 64-bit seconds to 32
+ * bits, so read unsigned it is right until 2106; -1 still means it failed. */
+static inline long long wall_time(void) {
+    long t = time((void *)0);
+    return t == -1 ? -1 : (long long)(unsigned long)t;
+}
+/* CURLOPT_SSL_CTX_FUNCTION: sets X509_V_FLAG_NO_CHECK_TIME on the SSL_CTX's X509_VERIFY_PARAM, so
+ * chains still verify against the pinned roots after they expire (2035 on) and after the 32-bit
+ * clock wraps. The rootfs's OpenSSL 1.1.1f exports these but demo does not import them, so this
+ * writes its fields: SSL_CTX->param at 0x100, ->flags at 0xc, which tools/build.py audits.
+ * ponytail: an expired server certificate is accepted too; the firmware has no revocation anyway.
+ */
+static inline int tls_untimed(void *curl, void *ctx, void *unused) {
+    (*(unsigned **)((char *)ctx + 0x100))[3] |= 0x200000;
+    return 0; /* CURLE_OK */
+}
 
 #endif

@@ -6,6 +6,13 @@ static int airplay_open(void *ctx, void *event);
  * menu for (its Home is the library, and its categories stay there), in V2.1's rows and the Library's
  * order, with Coverflow, Q2's own Home card, after the media. Then Streaming's rows: V2.1 has no
  * Streaming page (its Tidal is a Home card), so Spotify, Internet Radio and AirPlay are here. */
+extern void videos_open(const char *root); /* m1plus_books_video.c */
+/* The Videos row lists the videos, as on 1.4.5 (videos_open); the Q2's opens Folder view. */
+static int videos_click(void *ctx, void *event) {
+    char root[sizeof st.media_root];
+    if (media_find(VIDEOS, root)) videos_open(root);
+    return 0;
+}
 int library_open(void *ctx, void *event) {
     (void)ctx;
     (void)event;
@@ -21,7 +28,9 @@ int library_open(void *ctx, void *event) {
     library_into(view, "local_frequentplay", most_played, 0, "Most Played");
     library_into(view, "local_longsongs", long_songs, 0, "Long Songs");
     for (int k = 0; k < VIDEOS; k++)
-        if (media[k]) library_into(view, icons[k], media_click, (void *)(long)(k + 1), MEDIA[k]);
+        if (media[k])
+            library_into(view, icons[k], k + 1 == VIDEOS ? videos_click : media_click, (void *)(long)(k + 1),
+                         MEDIA[k]);
     library_row(view, "local_coverflow", coverflow_row, 0, "Coverflow");
     library_into(view, "row_spotify", spot_open, 0, "Spotify"); /* stream_*'s at 40 px (tools/m1plus.py) */
     for (int k = 0; k < apps; ++k) /* the card apps on the card (addon.c), as Streaming lists them */
