@@ -875,8 +875,9 @@ def patch_m4b_cover(raw):
 
 
 def takes(path):
-    """Whether path is an audited M1 Plus input (build.py's build() hands it here)."""
-    return hashlib.sha256(path.read_bytes()).hexdigest() in INPUTS
+    """Whether path is an audited M1 Plus input (build.py's build() hands it here). Anything else, a
+    missing file too, goes on to build.py's own checks, as upstream's tests expect."""
+    return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() in INPUTS
 
 def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     """m1_release: an M1 Plus release's (name, tag), from tools/release_m1.py: the tag instead of
