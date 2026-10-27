@@ -636,6 +636,7 @@ static inline int arc_out(int r, int y) {
     "select case when ifnull(max(id),100)<2147483647 then max(100,ifnull(max(id),100))+1 end "         \
     "from playlist"
 #define QR_NO_WIFI "Connect the M1 Plus to Wi-Fi"
+#define SPOT_REFUSED_SUB "Its tracks can't play on the M1 Plus"
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
