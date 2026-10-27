@@ -249,3 +249,4 @@ stay flat or fall.
 | U3 step 5: sync to 1.4.2 (Oct 24) | 1.4.2 (`7efbff5`) | +1,429/−287 over 30 files: MQA's icon name, the Apps row's `!M1PLUS`, `peq_boot` at `BOOT_MODE_RET` |
 | The fork's README, left out (Oct 26) | 1.4.2 (`7efbff5`) | +1,468/−300 over 31 files: the polish and catch-up's seams since step 5; `README.md` had +7/−7 |
 | Merge step: sync to 1.4.5 (Oct 26) | 1.4.5 (`6d50dc6`) | +1,494/−310 over 31 files: `list_toggle`'s `#if !M1PLUS`, the App Store's Rockbox rows, q2remote's `M1_GLOBALS` and its M1 rows in `remote.md` |
+| Merge step: sync to 1.5.0 (Oct 27) | 1.5.0 (`d774d76`) | +1,474/−295 over 31 files: Display's sub-pages under `#if !M1PLUS`, Control Device Volume's row names, `SPOT_REFUSED_SUB`; the playlist editor's SQL seam gone |

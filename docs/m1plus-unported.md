@@ -1,6 +1,6 @@
 # M1 Plus: unported features
 
-The upstream Q2 Pod features that the M1 Plus doesn't have yet, as of the merge of 1.4.5 (`staging`;
+The upstream Q2 Pod features that the M1 Plus doesn't have yet, as of the merge of 1.5.0 (`staging`;
 `1.4.2-m1.1` is the last release). Each row has a status:
 
 - **Planned:** to be ported. Most have a known way in on V2.1, or a check to make first.
@@ -19,17 +19,27 @@ to its [progress](m1plus-progress.md) section.
 
 | Feature | Since | Q2 Pod's pieces | Status |
 |---|---|---|---|
-| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5) | Unplanned |
+| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0) | Unplanned |
 | [Games](#games) | 1.3.9 | `games.c`, the iPod UI's Games row | Unplanned |
-| [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone` | Planned |
+| [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone`; `timezone_row`, `TIMEZONES` (1.5.0) | Planned |
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
 | [Battery: `check_mem_thd` returning at once](#battery-fixes) | 1.2.9 | `DROP_CACHES` | Planned |
 | [Battery: the MQA side chain](#battery-fixes) | 1.2.9 | `MQA_GATE`, `MQA_PROBE` (`tools/peq.py`) | Planned |
 | [Battery: Wi-Fi power save](#battery-fixes) | 1.3.0 | `WIFI_LPS` | Planned |
-| [Battery: Tidal's start poll](#battery-fixes) | 1.4.5 | `STREAM_POLLS` | Planned |
-| [Battery: stock's pollers idle while dark](#battery-fixes) | 1.4.5 | `DARK_POLLS`, `ringnav_dark_usleep` | Planned |
+| [Battery: Tidal's stream thread parked](#battery-fixes) | 1.4.5 | `STREAM_POLL_CALLS` and `get_tidal_trackurl` (1.5.0; 1.4.5's `STREAM_POLLS`) | Planned |
+| [Battery: stock's pollers idle while dark](#battery-fixes) | 1.4.5 | `DARK_POLLS`, `ringnav_dark_usleep`, `ringnav_dark_cover_usleep` (1.5.0) | Planned |
 | [Battery: hciplayer's pause loop](#battery-fixes) | 1.4.5 | `PAUSE_SLEEP` (`tools/peq.py`) | Planned |
+| [Battery: the kernel modules' idle clocks](#battery-fixes) | 1.5.0 | `tools/aic.py`, `rotator.py`, `pwm.py`, `mcu_park.py` (`--aic-idle-wait`, `--rotator-lazy-clock`, `--pwm-idle-clock`, `--mcu-idle-sleep`) | Planned |
+| [FLAC fast paths](#flac-fast-paths) | 1.5.0 | `tools/flac.py`, `patch/flac_*.c` (`tools/peq.py`, `--flac-experiments`) | Planned |
 | [Era](#era) | 1.4.5 | `era_menu`, the Library's Era row | Planned |
+| [Display's sub-pages](#displays-sub-pages) | 1.5.0 | `ringnav_display`'s Appearance, Coverflow and Controls, `display_sub` | Planned |
+| [Videos in Folder view](#videos-in-folder-view) | 1.5.0 | `folder_click`, `books_video` | Planned |
+| [Lyrics: a .lrc read as a tag](#lyrics) | 1.5.0 | `LYRIC_OPEN`, `ringnav_lrc_open` | Planned |
+| [Lyrics: Download Album Lyrics](#lyrics) | 1.5.0 | `playermore_page_init`, `PLAYMORE_*` | Planned |
+| [Lyrics: Download Cover & Lyrics beside the song](#lyrics) | 1.5.0 | `LYRIC_SAVE`, `ringnav_lyric_save` | Planned |
+| [A reboot keeping the place](#a-reboot-keeping-the-place) | 1.5.0 | `device_reboot`, `dialog_checkfw_dialog_init` | Planned |
+| [SyncLink's keys past the Buttons lock](#synclinks-keys) | 1.5.0 | `main_loop_post_key_event` | Planned |
+| [A card app's own Streaming icon](#a-card-apps-own-icon) | 1.5.0 | `addon_icon` (#88) | Planned |
 | [Tag and CUE text out of GBK](#tag-and-cue-text) | 1.4.5 | `TAG_TEXT`, `CUE_TEXT`, `ringnav_gbk_tag`, `ringnav_cue_text` | Planned |
 | [The library scan skipping hidden folders](#hidden-folders) | 1.4.5 | `SCAN_DIRS`, `ringnav_scan_dir` | Planned |
 | [Play/Pause's hold at 700 ms](#playpauses-hold) | 1.4.5 | `PLAY_HOLD` | Planned |
@@ -42,6 +52,7 @@ to its [progress](m1plus-progress.md) section.
 | [Quick Settings' brightness through a swipe up](#quick-settings-brightness) | 1.3.8 | `g_dropdown_menu_state`; `quick_stuck` (1.4.5) | Planned |
 | [Knob: Navigation on Set Time Manually](#set-time-manually) | the M1's own | an `m1plus_contexts.inc` row | Planned |
 | [Tidal's cache and Tidal Downloads](#tidal) | 1.2.2 | `tidal_play`, `tidal_downloads`, `REC_TIDAL_ID` | Planned |
+| [Tidal's lists past 50](#tidal) | 1.5.0 | `tidalPlaylistDetailThd`, `tidalAlbumDetailThd`, `tidalColTracksThd`, `TIDAL_PAGE_DONE` | Planned |
 | [Knob: Navigation on the Tidal and HiFi store pages](#tidal) | the M1's own | `m1plus_contexts.inc` rows | Planned |
 
 ## Ported, not yet checked on the device
@@ -93,6 +104,11 @@ The counts to raise by 11:
 `set_systime` (`0x4d77b0`) and `networktime_adjust_thd` (`0x4d9454`) each have a `sltiu 28` to read
 first.
 
+1.5.0 rewrote the table: `TIMEZONES` relabels every row, stock's 27 included ("GMT-12 Baker Island"),
+adds five, and `timezone_row` (`autotime_page`'s row builder) shows each row the offset in effect now,
+sorted west to east (`TIMEZONE_ORDER`). The M1's header carries the tables; V2.1's row builder is to be
+found beside `timezone_listitem_layout`.
+
 ### Network Update
 
 It fetches DiamondBond's Q2 `update.tar`, so it stays off until it points at this fork's M1
@@ -108,14 +124,65 @@ row's click.
   detector. V2.1's `hciplayer` takes `PLAYER_PROFILE`'s words, which don't have these yet.
 - **Wi-Fi power save.** V2.1's demo has the same `rtwpriv wlan0 pm_set lps=0` string, so this is a
   string patch to port.
-- **Tidal's start poll** (1.4.5). V1.32's Baidu Pan and Tidal URL workers poll a start flag with
-  `usleep(10000)`; V2.1 has no Baidu Pan, and its Tidal worker's call is to be found.
+- **Tidal's stream thread parked** (1.4.5, 1.5.0). V1.32's Baidu Pan and Tidal URL workers poll a
+  start flag with `usleep(10000)`. 1.4.5 slowed the poll; 1.5.0 parks both threads on a semaphore
+  (`STREAM_POLL_CALLS`), which `get_tidal_trackurl` posts once a track is asked for. V2.1 has no Baidu
+  Pan; its `get_tidal_trackurl` is `0x512ed0`, and its Tidal worker's call is to be found.
 - **Stock's pollers idle while dark** (1.4.5). `ringnav_dark_usleep` stretches the `usleep` of the
   player status sync and the two cover threads while `ringnav_sleep` finds the player dark and quiet.
   V2.1 has `mclSyncPlayerStatus` (`0x5d144c`), `parse_albumcovertask_thd` (`0x4dd450`) and
   `parseplaycover_thd` (`0x4ded84`); their `jalr usleep` words are to be found.
 - **hciplayer's pause loop** (1.4.5). MPlayer's pause loop's `li $4,20000` becomes 50000; V2.1's
   `hciplayer` needs its address in `PLAYER_PROFILE`.
+- **The kernel modules' idle clocks** (1.5.0). The Q2 build patches V1.32's `soc_aic.ko` (the stopped
+  PCM notifier sleeps), `soc_rotator.ko` (its clock taken at first use) and the PWM driver and MCU
+  image (idle clocks gated; MCU sleep, dev only). Each pins the stock module's SHA-256. V2.1's
+  modules are to be compared with V1.32's first: the M1's pipeline swaps none.
+
+### FLAC fast paths
+
+1.5.0 patches the Q2's `hciplayer` FLAC decoder (frame sync, LPC and output, on by default) through
+`tools/flac.py`. V2.1's `hciplayer` is another build: `PLAYER_PROFILE` takes none of its words, and its
+decoder's routines are to be found by the same callers.
+
+### Display's sub-pages
+
+1.5.0 splits Display into Appearance (iPod), Coverflow and Controls, each reopening stock's page with its
+own rows. The M1 keeps one list (`m1plus_nav_display.c`): its Controls would hold the knob rows alone,
+with no Return key for Hold Return and no wheel for Wheel QS or Wheel Sensitivity. Worth porting only if
+Display grows; V2.1's page reopened over itself is to be checked first.
+
+### Videos in Folder view
+
+1.5.0's Library Videos row opens Folder view, where `folder_click` (V1.32's `0x521bc4`) plays a video
+row in q2video. The M1's Videos row keeps 1.4.5's list (`videos_open`). V2.1's folder row click, bound in
+`folder_page_init`'s refresh (`0x5318ac`), is to be found, and whether V2.1's Folder lists video files.
+
+### Lyrics
+
+- **A .lrc read as a tag** (`LYRIC_OPEN`): stock's .lrc loader's `fopen` keeps a copy that
+  `ringnav_lyric` reads again, with milliseconds, word stamps and no blank lines. V2.1's loader, inside
+  `mclLoadExLyric` (`0x5d41e4`), is to be found; without it the M1 keeps stock's .lrc lines.
+- **Download Album Lyrics** on Now Playing's ⋯ page: V2.1 has no `playermore_page_init` by name.
+- **Download Cover & Lyrics beside the song** (`LYRIC_SAVE`): V2.1's accept and its `cp` format are to
+  be found.
+
+### A reboot keeping the place
+
+Restart and the firmware update's dialog save the queue first, as power-off does. V2.1's
+`device_reboot` is `0x4e743c`; V2.1 has no `dialog_checkfw_dialog_init` by name, and its updates come
+from the card.
+
+### SyncLink's keys
+
+Eddict Player's play/pause and track keys pass the Buttons lock with the screen off. V2.1's
+`main_loop_post_key_event` is `0x693d9c`, but its Buttons lock is its own (`keylock_rows` is native):
+check how V2.1's lock treats posted keys first.
+
+### A card app's own icon
+
+A card app shipping `icon.png` or `icon-40.png` shows it on its Streaming row (#88). The M1's Q2 Pod
+page draws V2.1's 40 px `stream_app` for every app; `addon_icon` would need the 40 px edition.
 
 ### Streaming's Configuration
 
@@ -195,6 +262,11 @@ On the M1, `tidal_start` passes no song id, because neither of V2.1's two caller
 `0x51c7b0`) keeps one. So Tidal streams uncached, and there is no Downloads row. V2.1's
 `get_tidal_trackurl` (`0x512ed0`) hands its URL thread (`0x51c288`) the queue row, so the id is to
 be found there. The store pages' knob rows wait for the same check.
+
+1.5.0 loads Tidal's playlists, albums and favourite tracks past stock's first 50: the three list
+threads run once a page, their done store nopped (`TIDAL_PAGE_DONE`), and the hooks set the page's flag
+after the last. V2.1 has the threads (`0x516b9c`, `0x5178cc`, `0x51b2d4`) and parsers by name, but no
+`tidal_albuminfo_thread_run` or `tidal_collection_thread_run`: their flags are to be found.
 
 Nothing in the M1's hardware blocks either. The way in:
 1. Read both callers and the URL thread for where the id is and how long it stays valid.
