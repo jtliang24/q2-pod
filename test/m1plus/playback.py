@@ -488,7 +488,7 @@ m.advance_song(0); m.fn('playback_poll')
 assert m.write_opens==writes+3
 checks+=1
 
-# Failed writes preserve the prior snapshot and retry even if playback has since paused.
+# Failed writes preserve the prior snapshot and retry, every 30 s, even if playback has since paused.
 # Repeated UI passes do not hammer allocation/storage while the checkpoint is pending.
 for failure in ('alloc','open','write','close','rename'):
     m=PlaybackMachine(); m.options(4,5,0)
@@ -496,7 +496,7 @@ for failure in ('alloc','open','write','close','rename'):
     m.fail=failure; m.fn('playback_poll')
     attempts=(m.allocations,m.write_opens)
     assert m.files['/mnt/data/ringnav-queue']==previous
-    for delta in (1,100,1000,3000,898):
+    for delta in (1,100,1000,3000,898,25000):
         m.now+=delta; m.fn('playback_poll')
         assert (m.allocations,m.write_opens)==attempts
     m.fail=''; m.now+=1; m.fn('playback_poll')
@@ -779,6 +779,10 @@ if not is_m1plus:
         m=PlaybackMachine()
         assert wheel([raw(1),(195,1),(5,1),(5+2*U,1),(5+U,1),(5+U,0)],m)==([],[195]*5) and m.get(ps['wheel_travel'])==10+U
         assert wheel([raw(0),(10,1),(10+U,1)],m)[0]==[P] and m.get(ps['wheel_travel'])==10+U
+        # wheel_held: set from a finger's first sample to its lift, raw or not (the lyrics' snap).
+        for on in (0,1):
+            held=[]; h=lambda m: held.append(m.get(ps['wheel_held']))
+            wheel([raw(on),(10,0),h,(10,1),h,(10+U,1),h,(10+U,0),h],m); assert held==[0,1,1,0],(on,held)
         checks+=1
     # Wheel sensitivity (Q2POD WHEELSENSITIVITY, 50-200% in tens, 1.0.6's key and scale): the travel
     # per tick is 50/pct of U, in sixteenths of a unit, so 50% is exactly U (28), the wheel before the
@@ -846,8 +850,9 @@ if not is_m1plus:
     view=m.node('scroll_view','scroll_view_display'); lst=m.node('list_view','list_view_display',[view])
     m.top=m.node('window','display_page',[lst]); m.stack=[m.top]
     for child,parent in ((view,lst),(lst,m.top),(m.top,m.wm)): m.word(child+O['W_PARENT'],parent)
+    m.word(ps['display_sub'],3)  # Display's Controls page
     assert m.fn('ringnav_display',m.top,0)==0
-    assert [n['text'] for n in m.nodes.values() if 'Wheel' in str(n.get('text'))]==['Wheel Sensitivity: 50%']  # the row, test/m1plus/patch.py's
+    assert [n['text'] for n in m.nodes.values() if 'Wheel Sensitivity' in str(n.get('text'))]==['Wheel Sensitivity: 50%']  # the row, test/m1plus/patch.py's
     checks+=1
 
 # Manual Next/Prev at the queue ends runs stock player_change_music through ringnav_change. Stock
