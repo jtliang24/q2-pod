@@ -67,16 +67,18 @@ unchanged; Classic keeps its existing colour handling.
 The pinned style edits in `patch/ipod.json` remove list fills and corners and make pressed
 feedback neutral grey. Playing titles keep the separate playing glyph.
 
-In Minimal, wheel selection is consistently off-white (`#EEEEEC`), with no accent: a card inset
-`SEL_INSET` (6) pixels from each side of the row with `SEL_RADIUS` (6) corners, as Sudo Music's,
-drawn with the anti-aliased rounded fill (square without a vgcanvas). Minimal's unselected
+In Minimal, wheel selection under its own accent (**Accent: Ivory**, the default) is off-white (`#EEEEEC`): a card, under **Corners: Rounded** inset
+`SEL_INSET` (6) pixels from each side of the row, a pill (corners half its height; grid tiles `SEL_RADIUS`, 6), and under **Corners: Square** (the default) a full-width square bar with square tiles,
+drawn with the anti-aliased rounded fill (square without a vgcanvas). Any other accent fills the
+card with its colour and leaves the rows' own (white) ink, as Classic's bar does. Minimal's unselected
 secondary text, stock's `#AAAAAA`, is the quieter `SUDO_MUTED` (`#8C8C8C`) everywhere. **Theme:
-Classic** draws the accent's full-width bar instead and leaves the rows' own (white) ink. The background
+Classic** draws the accent's gradient bar instead, full width, or under **Corners: Rounded** the same inset pill (its ends in whole-pixel bands, not anti-aliased), and leaves the rows' own (white) ink. The background
 hook resolves the selected row; the color hook maps its title to `#171717` and metadata to
 `#484848`, preserving alpha. Paint ancestry determines the colors, so no style overrides can
 remain on recycled rows or stale scrolling labels. Selected backgrounds stay transparent over
 the selection. Touch hides wheel selection until wheel/centre input; the native pressed state
-remains visible. The same hooks cover settings, streaming, dialogs, PEQ rows and media browser
+remains visible. Under **Corners: Rounded** a pressed list row (`s_btn_listitem`) is that grey as the
+selection's inset pill instead (`pressed_pill`); other pressed widgets keep stock's box. The same hooks cover settings, streaming, dialogs, PEQ rows and media browser
 chrome. Photos, video, book content, EQ plots and visualizers keep their own drawing.
 
 ## Home
@@ -87,7 +89,7 @@ selection rectangle or chevron. **Theme: Classic** styles the menu as before 1.0
 (below).
 
 The seven destinations remain Now Playing, Library, Coverflow, Folder, Rockbox, Streaming and
-Settings. Rockbox is visible only when its binary is on the card, unless Display's **Shortcut**
+Settings. Rockbox is visible only when its binary is on the card, unless Display → Controls' **Shortcut**
 (`IPOD/SHORTCUT` 0-6) turns that row into Artists, Albums, Favorites, Rated Albums, Shuffle or Games (`home_shortcut_open`; Rated Albums is Ratings → Albums, `rated_albums`; Shuffle is the Library's Shuffle page, `shuffle_menu`); with no key it is Rockbox when the card has it, else Favorites. Centre cycles Rockbox, Favorites, Shuffle, Rated Albums, Artists, Albums, Games. Settings opens Playback and
 System; Return restores the menu's previous selection, and a short Return on the main menu selects
 Now Playing; a short Return with Now Playing selected opens it without changing playback. Return there goes back to Home. The wheel bumps at either end of both lists and wraps after a pause, as ring lists do ([internals.md](internals.md#wheel-movement)).
@@ -130,7 +132,7 @@ so parents and order are free to change. Every tick it re-shows the volume,
 EQ, Bluetooth, SyncLink and Wi-Fi widgets and sets their images and text, but
 never their geometry. `system_bar.bin` (iPod) therefore keeps the play state
 and EQ in `view_left`, as stock does, and puts Bluetooth/codec, Wi-Fi and the
-battery in `view_right`. EQ uses an explicit 16 px font and a 28 px cell: its text is 24 px wide in the shipped font, so stock's 20 px cell clips it. A 16 px `Q2` label at the left inset appears only when both playback state and EQ are hidden. Stock's tick also hides `img_state` whenever its own player is stopped, as it is under Spotify, radio or a video; `ringnav_showface` (iPod only) runs `bar_state_sync`, the play state and the `Q2` label alone, straight after the tick, so the payload's play state is back before any paint, dark or not (no file reads; a relayout waits for the paint); the codec badge, accent, Rockbox check and battery wait for paint (`bar_sync`). Correcting it at paint time instead relaid the row twice a second, and EQ was drawn for a frame in the play icon's place. `bar_sync` updates its visibility without moving the centred clock. The volume icon and number and SyncLink move to `x = -200`, where they
+battery in `view_right`. EQ uses an explicit 16 px font and a 28 px cell: its text is 24 px wide in the shipped font, so stock's 20 px cell clips it. A 16 px `Q2` label at the left inset appears only when both playback state and EQ are hidden. Stock's tick also hides `img_state` whenever its own player is stopped, as it is under Spotify, radio or a video; `ringnav_showface` (iPod only) runs `bar_state_sync`, the play state and the `Q2` label alone, straight after the tick, so the payload's play state is back before any paint, dark or not (no file reads; a relayout waits for the paint); the codec badge, accent, Rockbox check and battery wait for paint (`bar_sync`). Correcting it at paint time instead relaid the row twice a second, and EQ was drawn for a frame in the play icon's place. When `bar_sync` changes `img_state` while another window paints (Now Playing paints every 250 ms, so it usually sees a Play/Pause first), it arms a 0 ms timer that runs `widget_invalidate_force` on the bar after the frame: an invalidate made mid-paint is dropped with that frame's dirty rects, and `img_state` keeps its dirty flag (`+0x24` bit `0x200`), which makes stock `widget_invalidate` return early, so the 1 s tick's own invalidates skipped it until something else repainted the bar (#116). `bar_sync` updates its visibility without moving the centred clock. The volume icon and number and SyncLink move to `x = -200`, where they
 draw off-screen. Both groups sit 54 pixels
 from the edges (`STATUS_MARGIN`): the 50 where the 16-pixel icons clear the top corners
 ([Rounded corners](#rounded-corners)) plus 2 (`STATUS_PAD`) so they don't crowd the glass. A new
@@ -195,7 +197,7 @@ and full-row tap targets. The `navbar_only` assets set their
 Constants are `SET_*` in `patch/offsets.inc`.
 
 System Settings puts Wireless and Network first, then personal and daily controls, then device
-maintenance, with Reset last; neither list has headings. Play Mode, EQ, Gapless and Crossfade come first; specialist output controls come last. Added binary settings
+maintenance, with About last; neither list has headings. Play Mode, EQ, Gapless and Crossfade come first; specialist output controls come last. Added binary settings
 use Shanling's `switch_on` / `switch_off` images with the whole row as the tap target. Settings
 that cycle between named choices retain their value labels. Crossfade, Resume Songs, Wheel
 Sensitivity and App Store show a chevron, as do the added Library browsing rows.
@@ -332,7 +334,7 @@ Playing and the first short Return reaches the stock Back path, with position
 memory restoring the browsing page and its selection. No short-Return callback or
 other long-key destination changes.
 
-**System settings → Display → Hold Return** (`Q2POD HOLDRETURN`, both builds) picks the
+**System settings → Display → Controls → Hold Return** (`Q2POD HOLDRETURN`, both builds) picks the
 destination: Recent (0, the default) is the behaviour above; Home (1) calls the stock Home
 destination from any page but Home, Now Playing included, and clears `np_origin`. On Home the hold
 still opens Now Playing, as does iPod's short Return on Home's first row (on any other row it first
@@ -414,7 +416,8 @@ art is 166 pixels, as large as that leaves while the text column keeps its 165 p
 "3 of 12" starts in line with it. Each band has its own space: the top row, then the art 2
 pixels below it, so it has 14 pixels to "3 of 12"'s text above and to the page dots below
 (`NP_ART_Y`), the bar with the stock A-B markers
-(y 250 to 260) and the quiet time labels at y 265.
+(y 250 to 260) and the quiet time labels at y 265. The page dots keep their place while a swipe
+moves the pages: they are anchored on their own row, at the slide_view's centre.
 
 The art's corners are rounded at 12 pixels (`NP_ART_RADIUS`), the radius of stock's own
 placeholder cover at this size, so real art and the placeholder match. The payload paints them
@@ -429,8 +432,8 @@ keeps its existing artist color. Long lines scroll, as stock.
 the label. There is no on-screen transport row: the buttons play, pause and skip.
 
 The art, title, artist and album are the slide_view's first page, so a swipe replaces all of them
-with the stock lyrics or info page. Those keep their stock 225-pixel column, centred: stock creates
-each lyric line 225 pixels wide. The info page's lines read `Label: value`, with spaced units
+with the lyrics or info page. The info page keeps its stock 225-pixel column, centred; the lyrics
+page spans the screen (**Lyrics** below). The info page's lines read `Label: value`, with spaced units
 (`35.92 MB`, `16-bit`, `950 kbps`, `44.1 kHz`), **Genre** and **Year** for stock's Genres and Era,
 `Unknown` for a missing value and `Location:` before the folder (`ringnav_np_info`, both builds). The play/pause overlay has zero opacity, retaining its original gesture target without
 a transport glyph; stock may update its visibility without making it appear. The loading
@@ -474,14 +477,31 @@ scrub ends, instead of after each pause between ticks. Values are `SCRUB_*` in
 The top row's text and icons, the bar's ends and the times keep clear of the corners
 ([Rounded corners](#rounded-corners)).
 
-**Lyrics.** Stock already highlights the current line and scrolls to keep it in view. The top row is
-always whole: near the end the lines stop with up to a row of space below the last, not with the top
-one cut. On the
-lyrics page, while the track has lyrics, the wheel scrolls them a row
-per tick, to the next row's top, instead of changing the volume or scrubbing; a scrub under way ends first, as any other end
-does. Both times, the bar and the highlight wait meanwhile, and 3 seconds (`SCRUB_MS`) after the
-last tick, or at a touch, the page follows the current line again; see
-[internals.md](internals.md#scrub-ipod).
+**Lyrics.** The lyrics page shows the lyrics large, for reading at a glance, as Apple Music's do:
+the playing line centred, the one before above it and the next below, its text `LYRIC_X` (16
+pixels, as the art) from the left.
+Every line is 34 pixels, as large as reads well in the page's width; a long one wraps, at a space
+or beside a CJK character, onto as many rows as it takes, up to four, which still fit the page
+(the rest cut). Every line is set in the system font, drawn three times a pixel apart for a heavy
+weight like Apple Music's. A line's row is its rows
+(38 pixels apart) plus 21 pixels between lines: `LYRIC_SLOT` (59 pixels) for one row, so three
+such lines fill the 178-pixel page. A line the page's edge cuts fades with the square of the share
+of it out of view, so no sliver of a line shows. The playing line lights white (`LYRIC_LIT`); the other lines are darker (`LYRIC_REST`,
+`#5F5F5F`). A line with word stamps (A2's enhanced LRC, `<mm:ss.xx>` before a word, in a .lrc or a
+LYRICS tag) lights word by word as it is sung, each word from its stamp to the next (the last, with
+no stamp after it, at `LYRIC_UNIT_MS`, 90 ms, a letter, done by the next line), its unsung part
+grey (`LYRIC_DIM`, `#808080`); a line timed by the line alone, as LRCLIB's are, lights whole as it
+starts. Lines that start together, as a line and its translation, play
+together. Blank lines in the lyrics (empty lines between verses, a stamp with no words, lines of
+spaces) are left out and the spaces at a line's ends trimmed, so the lines keep an even spacing. Before the first line the first waits in the middle, unlit. Lines change at their
+hundredths of a second, by a clock of the page's own between the player's whole seconds. On the
+lyrics page, while the track has lyrics, the wheel scrolls them smoothly, a pixel at a time as it
+turns and as far a turn as a line a tick, instead of changing the volume or scrubbing; a scrub
+under way ends first, as any other end does. While the finger stays on the wheel they stay
+exactly where it put them; let go, they glide to the nearest whole line. On the page, the follow
+to a new line glides too. Lyrics moved by the wheel or a finger stay where they are, while the bar and the
+highlight go on, until the page swipes away from them; back on the lyrics page they are on the
+current line again. Another song starts at the top. See [internals.md](internals.md#scrub-ipod) and [Word-timed lyrics](internals.md#word-timed-lyrics).
 
 ### Visualizer
 
@@ -552,29 +572,43 @@ builds three rows with `0x4c19bc`: a `list_item_create(view, 0, 0, 0, 0)` in `s_
 `s_btn_listitem` with a click handler, and in it a 52-pixel icon at x 10, a
 `s_scrlabel_white24l` `hscroll_label` at (72, 0, 210, 70) and `list_into` at x 282. The rows
 show no value; each opens a sub-page (iPod's [settings rows](#settings) then lay them out 68
-pixels high). iPod runs the stock init, then adds seven rows the same way: "Theme: Minimal" and
-"Accent: Graphite" with the System settings Display icon (`system_display`), "Home: Split" with Play settings' cover
-mode icon (`playset_covermode`), "Artist Albums: Coverflow" (`Q2POD ARTISTCF`, the default; Grid and List, same icon; Coverflow ends with an All albums card, see [internals.md](internals.md#artist-albums-in-coverflow)),
-"Battery: Icon" (Icon, Percent, Icon + Percent, Percent Inside; see
-[Status bar and clock](#status-bar-and-clock)) with the power manager icon
-(`system_powermanager`), then "Shortcut: Rockbox" and "Hold Return: Recent" (`Q2POD HOLDRETURN`,
-[Hold Return](#hold-return); Play settings' folder jump icon, `playset_folderjump`), all among the [settings icons](#settings-icons)
-the build pre-sizes. The value is in the label (260 pixels wide, to where the chevron ends) and there is no
-chevron, since Centre or a tap changes them in place.
+pixels high). Both builds then add, the same way with stock's `list_into` chevron, **Appearance**
+(iPod only, `system_display`), **Coverflow** (Play settings' cover mode icon, `playset_covermode`)
+and **Controls** (Play settings' folder jump icon, `playset_folderjump`). Each opens stock's
+Display page again (`display_open`, `display_sub` naming the sub-page while its init runs), which
+drops the stock rows, takes the sub-page's title and builds only its own rows:
+
+- Appearance: "Theme: Minimal", "Light Mode: Off" ([Light Mode](#light-mode)), "Accent: Graphite"
+  and "Corners: Square" with the System settings Display icon (`system_display`), "Home: Split" (`playset_covermode`) and "Battery: Icon" (Icon,
+  Percent, Icon + Percent, Percent Inside; see [Status bar and clock](#status-bar-and-clock)) with
+  the power manager icon (`system_powermanager`).
+- Coverflow: "Artist Albums: Coverflow" (`Q2POD ARTISTCF`, the default; Grid and List, same icon;
+  Coverflow ends with an All albums card, see
+  [internals.md](internals.md#artist-albums-in-coverflow)), "Coverflow Sort: Album" and "Refresh
+  Coverflow" (`system_update`).
+- Controls: "Shortcut: Rockbox" (iPod, `playset_covermode`), "Hold Return: Recent"
+  (`Q2POD HOLDRETURN`, [Hold Return](#hold-return), `playset_folderjump`) and Wheel Sensitivity,
+  which opens its slider page.
+
+All are among the [settings icons](#settings-icons) the build pre-sizes. A value row has its value
+in the label (260 pixels wide, to where the chevron ends) and no chevron, since Centre or a tap
+changes it in place. Theme, Accent and Home share the Appearance page, so a new theme relabels the
+other two in place.
 Both variants also append **Boot to: Rockbox / Q2 Pod** to System settings when Rockbox is present; see [Boot](boot.md#rockbox).
 The page is `CTX_FIXED`, so the wheel walks onto them like the stock rows.
 
 A change is saved at once with the stock `write_int_config(value, "IPOD", key)` (`0x4f3f4c`):
 `sprintf("%d")`, then `toolsWriteConfig("/mnt/data/config.ini", section, key, text)`, which
-rewrites the key or appends `[IPOD]` with it (`"[%s]\n%s=%s\n"`). The keys are `ACCENT`, `HOME`, `BATTERY` and `THEME`. The values are read once,
+rewrites the key or appends `[IPOD]` with it (`"[%s]\n%s=%s\n"`). The keys are `ACCENT` (Classic's accent), `MINIMAL_ACCENT` (Minimal's), `ROUNDED` (Corners: 0 Square, 1 Rounded), `LIGHT` (Light Mode: 0 Off, 1 On; missing is Off), `HOME`, `BATTERY` and `THEME`. The values are read once,
 on the payload's first use (after stock `config_init`: `application_init` runs `platform_init`, which
 calls it, before it opens any window), with `toolsReadConfig` (`0x5bd464`), in the order stock `config_init`
 calls it: `(path, section, key, out, default)`. It reads the file line by line
 (`strcasecmp` on the section and the key), copies the trimmed value to `out` and returns 1; a
 missing key copies the default and returns -1. The default must not be null (stock reads its
 first byte). The payload passes `"0"`, so a missing or unreadable entry, or any value that is not
-one valid digit, is Graphite, Split, Icon and Minimal: a card from 1.0.1 or earlier, which has
-no `THEME`, keeps 1.0.1's look.
+one valid digit, is Graphite, Split, Icon and Minimal; a missing `MINIMAL_ACCENT` is Minimal (7), and a missing `ROUNDED` is Square in both themes. A
+card from 1.0.1 or earlier, which has no `THEME`, keeps 1.0.1's look, and a Minimal card from before
+1.4.6 keeps its off-white look whatever `ACCENT` holds.
 
 | Accent                | Progress / active-control light tone | Red text / marks |
 | --------------------- | ------------------------------------ | ---------------- |
@@ -583,6 +617,17 @@ no `THEME`, keeps 1.0.1's look.
 | Tidal (2)             | `#30929B`                            | `#30929B`        |
 | Champagne (3)         | `#9A8446`                            | `#9A8446`        |
 | Cobalt (4)            | `#447CDD`                            | `#447CDD`        |
+| Tangerine (5)         | `#CB681E`                            | `#CB681E`        |
+| Plum (6)              | `#9D4F7A`                            | `#9D4F7A`        |
+| Ivory (7)             | `#EEEEEC` (Graphite's elsewhere)     | `#D8D8D8`        |
+| Green (8)             | `#778E4C`                            | `#778E4C`        |
+
+The bars are Graphite `#424242`, Crimson `#E8123F`, Tidal `#13838D`, Champagne `#8C732C`, Cobalt
+`#2A6AD8`, Tangerine `#C45400` (the orange Q2), Plum `#903868` (the purple Q2) and Green `#647F34`
+(the green Q2). Tangerine, Plum and Green are as close to the shells as white text at 4.5:1 allows,
+and no shade of theirs reads as stock red to the mapper, so nothing is mapped twice. Ivory (7) is
+Minimal's only: Classic's cycle goes from Plum to Green, and a Classic `ACCENT` of 7 reads as
+Graphite. Green is row 8, after Ivory, so cards that saved 7 keep Ivory.
 
 Existing accent preference values and the red-tone mapping stay compatible; greys and artwork
 remain unchanged by the live accent mapper. See [internals.md](internals.md#accent) for the mapping.
@@ -596,23 +641,61 @@ Now Playing uses 24 px monochrome control glyphs on 28 px canvases inside the ex
 full-width selection bar under white text, with Home's chevron on its bar, coloured settings icons and the stock `list_into`, and Now Playing's 8-pixel capsule and play/pause
 glyph. Its status bar is black, as Minimal's.
 
-Minimal has no accent: the Accent row hides (the list's layout skips a hidden row, so it leaves
-no gap) and the stored accent is kept for Classic. Its drawing takes Graphite's greys,
-whatever `ACCENT` holds, and its own fills (the progress bars, Spotify's, the PEQ curve and the
-visualizer) are `MINIMAL_FILL`, white on the dark track; a scrub's fill is pure white. In Classic
-the Accent row follows Theme and every accent applies as before. Now Playing's bar has no thumb:
+Corners is one setting for both themes, Square until chosen, and Theme leaves it alone. Both themes inset an album grid's cover inside the tile (`album_children`), so the selection card frames it.
+
+Each theme keeps its own accent, and the Accent row follows Theme in both. Minimal's
+(`MINIMAL_ACCENT`) cycles Ivory, Graphite, Crimson, Tidal, Champagne, Cobalt, Tangerine, Plum, Green;
+its default, Ivory, draws Graphite's greys with its own fills (the progress bars, Spotify's, the
+PEQ curve and the visualizer) in `MINIMAL_FILL`, white on the dark track; a scrub's fill is pure
+white. Another accent colours the selection card, those fills and every mapped red, as in Classic,
+and the card keeps the rows' own ink and stock's `#AAAAAA` metadata. Minimal's grey icons and
+codec badges stay grey, but `list_into`, the Bluetooth marks and `list_delete` stay white, as
+their grey copies were only for the off-white card; the edit pages' OK stays off-white in both
+themes. Classic's (`ACCENT`) skips Ivory, so switching
+to Classic shows Classic's own accent, Graphite until another is chosen. Now Playing's bar has no thumb:
 stock draws its dragger (a box and knob, the stock theme's blue) unless `border_color` is clear,
 so `playing_page` clears it in every state. 1.3.9 first painted it white, which drew the box at rest.
 
 A change applies at once, as Accent does: the image cache is dropped and the screen repaints
 (icons and chevrons reload in the new theme's colours), Home re-lays its menus and art, and all
 open settings lists (including cached pages behind Display) take the new top inset. An open
-Now Playing gets its bar and glyph, and the Display page shows or hides the Accent row, the
+Now Playing gets its bar and glyph, and the Accent row shows the new theme's accent, the
 selection staying on Theme. Nothing needs a restart.
 
 What Classic does not restore: the pinned theme edit of `s_btn_listitem`'s pressed colour
 (`#3D1920` to `#333333`), so a touched row flashes grey rather than an accent tint, and the
 status bar asset's own background (`#000000`, not `#161616`), which the payload's fill covers.
+
+### Light Mode
+
+**Light Mode: On** (`LIGHT=1`) turns both themes light at runtime, over the same assets. Every
+neutral colour (channels within `LIGHT_SPREAD`) flips per channel, black to `LIGHT_PAPER` (`#F4F4F4`)
+and white to `LIGHT_INK` (`#161616`), alpha kept; other hues are left as they are. Stock's colours
+flip in the style hooks (`accent_map`, after the accent), the payload's own in `ui_ink`, which
+`patch/peq.h` puts in front of every canvas and vgcanvas colour setter. A colour read back from the
+LCD to restore it goes through `stock_canvas_set_*`, since it has flipped already. Only the outermost
+style hook call maps: a mutable style (inline `style:*`) answers from its default style through
+`style_get_color` again, and the flip is not idempotent. A clear colour (`#00000000`) stays clear,
+because stock tests for it (Now Playing's dragger).
+
+Coloured accents keep their tones. A neutral one (Graphite, Ivory) takes its silver red tone for
+fills as well, so it flips dark on paper; Minimal's own card (`MINIMAL_FILL`) flips to a dark card
+under light ink. On a coloured bar or card the rows' ink stays white, as on an iPod's blue bar
+(`sel_accent`), and so does the `>`: Classic Home's and drill rows' from `LIST_INTO_WHITE`, stock's own
+`list_into` drawn again over the bar (`paint_into`). A red tint over black (stock's pressed tints)
+becomes the same tint of the tone over paper.
+
+A theme image without colour (no pixel more than `LIGHT_CHROMA` saturated) flips too when it is
+mostly glyph: under 1/`LIGHT_SURFACE` of its area opaque and darker than `LIGHT_GLYPH`. White marks,
+chevrons, spinners and status icons turn dark, while a grey or dark disc keeps its white glyph.
+Quick Settings' inactive discs (`drop_*`) flip whole, to light discs under dark glyphs, and the
+active ones keep the accent. An image the accent mapped is final, and `switch_off` keeps its white
+knob, as `switch_on` does. Cover Flow's frame composites over paper instead of black, its side covers and reflections fading to paper. Solitaire's face-up cards stay light with black suits (`unflipped`). Classic's status bar is an iPod's flat
+grey (`LIGHT_BAR`), its stock black border cleared so it does not flip to a paper line; Minimal's is paper. Album art,
+photos, wallpapers and videos are never changed.
+
+ponytail: a non-square or transparent cover in Cover Flow keeps black bars and a black background
+inside its square (`decode`).
 
 ## Games
 

@@ -47,6 +47,21 @@ On Q2, rebuilt firmware uses `assets/boot-logo.jpg` (320x375) as the boot splash
 
 Both variants replace the stock equalizer page with a 30-band PEQ editor (bands, shelves, preamp, on/off, presets, stock's built-in genre presets, `/EQ` import) and patch `hciplayer`'s equalizer filter with the matching DSP. Both also clear the 44.1 kHz AAC capability bit in `bluealsa` (see [internals.md](internals.md#bluetooth-aac)).
 
+### Stopped-audio notifier wait
+
+On by default. The audited audio driver's stopped-state 10 ms polling is replaced by an
+event wait, woken by start/resume and teardown. Active PCM notification timing, period and
+buffer limits are unchanged. `--no-aic-idle-wait` keeps the stock module. See
+[audio-notifier.md](audio-notifier.md) for the exact scope.
+
+```sh
+python3 tools/build.py 'Q2 Firmware V1.32.zip' --out /tmp/q2-stock-audio --no-aic-idle-wait
+```
+
+### FLAC fast paths
+
+On by default: `--flac-experiments sync,lpc,output` (all three). Pass a subset to build only some, or `--flac-experiments ""` for the stock decoder paths. Each is checked against the pinned V1.32 player.
+
 ### Versioning
 
 The updater refuses only a firmware whose version literal is identical to the installed one (`update_firmware`, `0x4f8440`; the online check `check_otginfo`, `0x4f8968`). So each build carries a 5-character tag, `VERSION` (`x.y.z`, single digits) packed as `V<xyz>S` (Legacy) or `V<xyz>I` (iPod). For example, 1.0.0 is `V100I`. The mod installs over stock and over any other build, and stock V1.32 installs back over it.
@@ -58,6 +73,12 @@ About's **FW. Version** row reads the same literal, so it shows the stock firmwa
 `--update-repo OWNER/NAME` points **Network Update** at another GitHub repo's latest release, so a fork's test builds update from the fork's own releases. It defaults to `DiamondBond/q2-pod`, so a build without it is unchanged. The manifest records it as `update_repo`, and `tools/release.py` refuses a build that points anywhere else.
 
 Development builds also start `q2remote`, a key-gated root shell with screenshots and input over Wi-Fi, for developers and agents; see [remote.md](remote.md).
+
+On by default: the rotator clock is held only from its first conversion (`--no-rotator-lazy-clock` keeps the stock module byte for byte). See [clock gating](clock-gating.md) for the exact module guard and tests.
+
+On by default: `--pwm-idle-clock`, the paired PWM/MCU clock gating. It needs all three matching files and a reboot (`--no-pwm-idle-clock` for stock). See [PWM clock gating](pwm-clock-gating.md) for its ownership protocol and fallbacks.
+
+`--dev --mcu-idle-sleep` is off in release builds. It adds an interruptible MCU sleep with an explicit wake handshake. See [MCU sleep](mcu-sleep.md).
 
 ## Tests
 
@@ -71,7 +92,11 @@ python3 test/build.py                      # JPEG header checks; no emulator req
 python3 test/build.py 'Q2 Firmware V1.32.zip'   # packaging checks (custom logo, quoted paths)
 python3 test/m1plus/build.py 'M1 Plus Firmware V2.1.zip'  # the same for M1 Plus (and its --ipod refusal)
 python3 test/m1plus/build.py --build /tmp/m1plus-build    # audit a build: hook jumps, demo and rootfs diffs, boot scripts
+python3 test/aic.py STOCKFS               # stopped audio notifier: actual MIPS hooks and modeled wait races
+python3 test/aic_build.py STOCKFS BUILD    # notifier development guard, ABI, default/experimental packaging
 python3 test/remote.py                     # q2remote protocol, auth, event and framebuffer checks
+python3 test/rotator.py STOCK_MODULE        # actual MIPS rotator clock ownership and failure paths
+python3 test/rotator_build.py BUILD...      # dev-only guard and packed/default module isolation
 python3 test/playback.py /tmp/q2-build     # grouped traversal, snapshots and the wheel's ticks
 python3 test/patch.py /tmp/q2-build        # the patched MIPS payload, wheel and UI scenarios
 python3 test/chapters.py                   # embedded chapter parsing, both MP4 formats and async extraction

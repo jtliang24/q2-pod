@@ -41,6 +41,7 @@
 #define VIEW_ANIMATOR 0xe8
 #define EVENT_TYPE 0x00
 #define EVENT_KEY 0x18
+#define EVENT_TIME 0x08 /* low word of the uint64 time_now_ms stamp */
 #define EVENT_TARGET 0x10
 #define EVENT_X 0x18           /* pointer_event_init @0x640298 */
 #define EVENT_Y 0x1c
@@ -98,8 +99,13 @@
                 { 0xe8123f, 0xe8123f, 0xeb2f56, 0xff1448, 0xeb2f56 }, /* Crimson */ \
                 { 0x13838d, 0x13838d, 0x30929b, 0x30929b, 0x30929b }, /* Tidal */ \
                 { 0x8c732c, 0x8c732c, 0x9a8446, 0x9a8446, 0x9a8446 }, /* Champagne */ \
-                { 0x2a6ad8, 0x2a6ad8, 0x447cdd, 0x447cdd, 0x447cdd }  /* Cobalt, the iPod's blue */
+                { 0x2a6ad8, 0x2a6ad8, 0x447cdd, 0x447cdd, 0x447cdd }, /* Cobalt, the iPod's blue */ \
+                { 0xc45400, 0xc45400, 0xcb681e, 0xcb681e, 0xcb681e }, /* Tangerine, the orange Q2 */ \
+                { 0x903868, 0x903868, 0x9d4f7a, 0x9d4f7a, 0x9d4f7a }, /* Plum, the purple Q2 */ \
+                { 0x424242, 0x424242, 0x6e6e6e, 0xd8d8d8, 0x555555 }, /* Ivory: Graphite, MINIMAL_FILL fills */ \
+                { 0x647f34, 0x647f34, 0x778e4c, 0x778e4c, 0x778e4c }  /* Green, the green Q2 (#119: the shell's sage, darkened for white text); after Ivory so saved values keep */
 #define CRIMSON 1
+#define MINIMAL_ACCENT 7 /* Minimal theme only; its default */
 /* The confirm pop-up's stock red discs (confirm_ok, confirm_cancel and their pressed images) take
  * this dark surface under every accent, Crimson included, through the same red-blend mapping: the
  * OK disc becomes CONFIRM_SURFACE, Cancel's lighter tint a mid grey, and the near-white glyphs stay
@@ -121,6 +127,7 @@
 /* bitmap_t (docs/internals.md#accent): format u16 @0xe, 1 RGBA, 2 ABGR, 3 BGRA, 4 ARGB, 4 bytes a pixel
  * by bitmap_get_bpp_of_format; per format, the byte offsets of r, g, b and a. */
 #define BITMAP_RGBA_AT { { 0, 1, 2, 3 }, { 3, 2, 1, 0 }, { 2, 1, 0, 3 }, { 1, 2, 3, 0 } }
+#define BITMAP_PREMULTI 16 /* AWTK's BITMAP_FLAG_PREMULTI_ALPHA in bitmap_t's u16 flags @0xc */
 #define STYLE_COLOR_GRADIENT_RET 0x649ff0 /* style_get_color's bal style_get_gradient (0x649fe8) returns here */
 #define STOCK_RED 0xff1448
 #define RED_TOLERANCE 8 /* per channel, 0-255: how far a color may sit from a red/neutral blend */
@@ -201,8 +208,8 @@ static inline int arc_out(int r, int y) {
  * chevron's glyph (x 20 to 30 of list_into) sits close to the panel edge without touching the
  * glass on the bottom row. Labels start at HOME_CLASSIC_TEXT_X and leave room for the glyph.
  * The progress bar is an NP_BAR_CLASSIC capsule
- * (Minimal's NP_BAR_MINIMAL line). Minimal has no accent: its fills are MINIMAL_FILL, its
- * settings icons grey and list_into MINIMAL_CHEVRON. */
+ * (Minimal's NP_BAR_MINIMAL line). Minimal's settings icons are grey and list_into
+ * MINIMAL_CHEVRON under every accent; its own accent (MINIMAL_ACCENT) fills with MINIMAL_FILL. */
 #define HOME_SPLIT_W 187
 #define HOME_CLASSIC_ROW 369
 #define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
@@ -214,6 +221,19 @@ static inline int arc_out(int r, int y) {
 #define NP_BAR_MINIMAL 4
 #define MINIMAL_FILL 0xeeeeec
 #define MINIMAL_CHEVRON 0x777777
+/* iPod Light Mode (IPOD/LIGHT 1, docs/ipod.md#light-mode): every neutral colour (channels within
+ * LIGHT_SPREAD) flips per channel, black to LIGHT_PAPER and white to LIGHT_INK; hues are kept.
+ * Accents keep their colours, and ink on a coloured selection stays white. A theme image without
+ * colour flips too when it is mostly glyph: under LIGHT_SURFACE (1/n of its area) opaque and darker
+ * than LIGHT_GLYPH, so a grey or dark disc keeps its white glyph. */
+#define LIST_INTO_WHITE "file:///release/assets/default/raw/images/xx/list_into.png"
+#define LIGHT_PAPER 0xf4
+#define LIGHT_INK 0x16
+#define LIGHT_SPREAD 16
+#define LIGHT_CHROMA 40
+#define LIGHT_GLYPH 0xa0
+#define LIGHT_SURFACE 4
+#define LIGHT_BAR 0xdedede      /* Classic's status bar in Light Mode, as an iPod's, flat */
 /* Minimal's small capitals are SUDO_TRACK px apart (draw_spaced); secondary text is SUDO_MUTED. */
 #define SUDO_TRACK 2
 #define SUDO_MUTED 0x8c8c8c
@@ -236,13 +256,27 @@ static inline int arc_out(int r, int y) {
 #define NP_TITLE_PX 22
 #define NP_META_PX 18
 #define NP_ALBUM_RGB 0xbbbbbb
+/* iPod Now Playing's lyrics (lyrics.c, docs/ipod.md#lyrics): a line of one row is LYRIC_SLOT high,
+ * its text and the gap to the next, a longer one more; the first after a blank LYRIC_SLOT
+ * (tools/ipod.py's list layout) so it can sit in the middle as the playing line does; text LYRIC_X
+ * from the left, as the art. The sung part LYRIC_LIT, the rest of the playing line LYRIC_DIM, the
+ * other lines LYRIC_REST. */
+#define LYRIC_SLOT 59
+#define LYRIC_X 16
+#define LYRIC_LIT 0xffffff
+#define LYRIC_DIM 0x808080
+#define LYRIC_REST 0x5f5f5f
 /* Spotify's and Internet Radio's Now Playing layout (tools/ipod.py NP_*, which checks they match):
- * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners. */
+ * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's
+ * corners. */
 #define SPOT_ART_X 16
 /* iPod: Now Playing's art top, clear of the page dots (tools/ipod.py NP_ART_Y) */
 #define NP_ART_TOP 42
 #define SPOT_ART_Y (IPOD ? NP_ART_TOP : 50)
 #define SPOT_ART_PX 166
+/* iPod: the 50px heart/play-mode frame sits this far below the art's bottom edge, so the centred
+ * 28px glyph (4px clear at its foot) ends level with the art (tools/ipod.py NP_ICON_PAD) */
+#define NP_ICON_PAD 15
 #define SPOT_TEXT_X 194
 #define SPOT_TEXT_W 165
 #define SPOT_BAR_X 21
@@ -251,8 +285,8 @@ static inline int arc_out(int r, int y) {
 #define SPOT_BAR_H 8 /* the bar's view; iPod's Minimal paints its 4px line at the top (np_bar_h) */
 #define SPOT_TIMES_Y 265
 #define SPOT_TIME_X 46
-/* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic flush, and
- * holds SET_ROWS complete SET_ROW rows. Stock builds each row as a list_item holding a
+/* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic
+ * flush, and holds SET_ROWS complete SET_ROW rows. Stock builds each row as a list_item holding a
  * SET_STOCK_W x SET_STOCK_BODY button at x SET_STOCK_X with a SET_STOCK_ICON icon, a label and a
  * 50px trailing image (chevron, tick or switch); items made SET_STOCK_ROW high are normalised to
  * SET_ROW. The icon shrinks to SET_ICON at SET_ICON_X, the text starts SET_GAP after it (or at
@@ -286,7 +320,8 @@ static inline int arc_out(int r, int y) {
 #define LETTER_PX 60
 #define LETTER_MS 400
 /* iPod Now Playing scrub: SCRUB_STEP seconds per detent times the list ramp, previewed until
- * centre or Return commits it, or SCRUB_MS without input commits it and puts the wheel back on volume. */
+ * centre or Return commits it, or SCRUB_MS without input commits it and puts the wheel back on
+ * volume. */
 #define SCRUB_STEP 5
 #define DOUBLE_CLICK_MS 250 /* a second centre press within this is a double press */
 #define WAKE_MS 500 /* Wake: Double press, the screen-off double press; looser, done blind in a hand */
@@ -294,8 +329,9 @@ static inline int arc_out(int r, int y) {
 /* With the screen off the UI loop idles this long a turn instead of stock's 8 ms, about 10 turns a
  * second; screen-off keys (volume, play/pause, wake) wait at most this much longer. */
 #define SCREEN_OFF_SLEEP_MS 100
-/* Stock's player status sync (5 a second) and cover pollers (20 and 10) sleep at least this long a
- * turn while ringnav_sleep finds the Q2 dark and quiet (ringnav_dark_usleep, DARK_POLLS in tools/build.py). */
+/* Stock's player status sync (5 a second) and Tidal's stream poll sleep at least this long a turn
+ * while ringnav_sleep finds the Q2 dark and quiet (ringnav_dark_usleep), its cover pollers (20 and
+ * 10) whenever it is dark (ringnav_dark_cover_usleep); DARK_POLLS in tools/build.py. */
 #define DARK_POLL_US 1000000
 /* Screen off, nothing playing (media_playing) and the DAC already off (check_dacoff_state, about 31
  * s after playback stops; g_dacoff_time -1): the turn idles DARK_IDLE_SLEEP_MS, about 4 turns a
@@ -306,6 +342,7 @@ static inline int arc_out(int r, int y) {
  * hold, or after the headset refused it (bt_volume_poll); 400 ms otherwise. A headset's own volume
  * keys show on the Q2 that late. */
 #define BT_VOLUME_SLOW_MS 2000
+#define BT_VOLUME_LIMIT_MS 1000
 /* Screen on, once IDLE_MS pass without input or a window animation, each turn idles IDLE_SLEEP_MS
  * (about 30 passes a second; the first input after waits at most that). */
 #define IDLE_MS 2000
@@ -378,7 +415,8 @@ static inline int arc_out(int r, int y) {
 /* The poster's target is the info's main loop, whose input queue (stock event_queue_t: u16 r, w,
  * full, capacity) holds 20 events and drops its oldest when full. A tick is two events, so a fast
  * turn while the UI is busy evicted a touch's release and left the pointer pressed, which stops the
- * wheel until the next tap. wheel_post drops ticks that would leave under WHEEL_QUEUE_FREE slots. */
+ * wheel until the next tap. wheel_post drops ticks that would leave under WHEEL_QUEUE_FREE slots.
+ */
 #define WHEEL_INFO_LOOP 0x10
 #define LOOP_QUEUE 0x38
 #define WHEEL_QUEUE_FREE 8
@@ -419,6 +457,7 @@ static inline int arc_out(int r, int y) {
 #define REC_ALBUM 0x14
 #define REC_ARTIST 0x18
 #define REC_ALBUM_ARTIST 0x24   /* albumsonger; empty or null in folder-queue records */
+#define REC_COVER 0x28          /* an online row's cover, a Tidal row's a jpg in /tmp/tidal (player_get_id3info 0x5149d8) */
 #define REC_TYPE 0x34           /* 8 song, 4 directory */
 #define REC_TRACK 0x3c          /* the tag's track and disc numbers, 0 when untagged */
 #define REC_DISC 0x40
@@ -454,6 +493,12 @@ static inline int arc_out(int r, int y) {
 #define TAGLIB_FILE_NEW 0x98e0
 #define TAGLIB_PROPERTY_GET 0xb4dc
 #define TAGLIB_PROPERTY_FREE 0xb700
+/* Now Playing's ⋯ page (playermore_page_init @0x528c14): its 8 rows' kinds by position, which the
+ * row click (0x528a70) reads at the button name's atoi, and Download Cover & Lyrics' kind
+ * (get_playmore_showinfo @0x501208: player_onlinesearch). */
+#define PLAYMORE_ROWS 0x7728a0
+#define PLAYMORE_COUNT 8
+#define PLAYMORE_SEARCH 4
 #define MCL_LASTPOS 0xa3be90    /* shuffle "previous" index, -1 none */
 #define MCL_PREPOS 0xa3be94
 #define MCL_PRELOAD 0xa3be98    /* 1 preloaded, 0 none, -1 closed for this track */

@@ -86,6 +86,7 @@ HOME_LIST_W = 375
 # leaves while the text column keeps NP_TEXT_W, and "3 of 12" starts in line with the art.
 NP_TOP = 40
 NP_ICON = 50                     # the stock 50px control icons, centred in the top row
+NP_ICON_PAD = inc('NP_ICON_PAD')  # play_fav/play_order: 28px, centred, glyph ends 4px above
 NP_MARGIN = 16
 NP_POS_X = max(NP_MARGIN, corner_x(30 + (NP_TOP - 16) // 2, 16)) + 6  # "3 of 12", 16px text
 NP_ICONS_END = 375 - corner_x(30, NP_TOP)  # the 50px icon images fill the row's height
@@ -323,6 +324,8 @@ CLOCK_GAP = 4
 def status_bar(root):
     left, right = root[3]
     root[2]['style:normal:bg_color'] = '#000000'
+    # Clear, not black: AWTK draws the border over the bar's fill, and Light Mode flips black to paper.
+    root[2].update({f'style:{s}:border_color': '#00000000' for s in ('normal', 'disable', 'focused')})
     check([left[2].get('name'), right[2].get('name')] == ['view_left', 'view_right'], 'Unexpected status bar')
     widgets = {n[2]['name']: n for n in left[3] + right[3]}
     check(sorted([*widgets, 'view_battery']) == sorted(STATUS_LEFT + STATUS_RIGHT + STATUS_HIDDEN), 'Unexpected status bar widgets')
@@ -366,8 +369,9 @@ def status_bar(root):
 
 # iPod only. Stock finds every Now Playing widget by name, recursively, so they can move: title, artist
 # and a new album label join the art on the slide_view's first page, so a swipe still swaps all of it for
-# the lyrics or info page. Those keep their stock 225px column (stock creates 225px lyric lines),
-# centred. The payload fills the label_ipod_* labels (ringnav_playing); label_playlen, the total, hides.
+# the lyrics or info page. The info page keeps its stock 225px column, centred; the lyrics page is the
+# payload's (patch/lyrics.c). The payload fills the label_ipod_* labels (ringnav_playing); label_playlen,
+# the total, hides.
 PLAYING_PAGE = 'playing_page.bin'
 
 
@@ -404,13 +408,13 @@ def playing_page(root):
     art_y = NP_ART_Y
     text_w = 375 - NP_MARGIN - NP_TEXT_X
     # Favourite centres beneath More; leave 6px between its target and shuffle/order. The row ends
-    # with the art, clear of the dots.
-    icons_y = art_y + NP_ART - NP_ICON
+    # with the art, clear of the dots: the 28px glyphs, centred, end 15px above their frame's bottom.
+    icons_y = art_y + NP_ART - NP_ICON + NP_ICON_PAD
     fav_x = named['img_more'][1][0]
     for name, x in (('img_playmode', fav_x - NP_ICON - 6), ('img_fav', fav_x)):
         buttons[3].remove(named[name])
         named[name][1] = [x, icons_y, NP_ICON, NP_ICON]
-    top = art_y + (icons_y - art_y - (28 + 6 + 22 + 6 + 22)) // 2
+    top = art_y + (icons_y - NP_ICON_PAD - art_y - (28 + 6 + 22 + 6 + 22)) // 2
     title[1] = [NP_TEXT_X, top, text_w, 28]
     # every state: the labels are disabled (enable false), so a lone normal size would not apply
     title[2].update({'style': 's_scrlabel_white20l', **{f'style:{s}:font_size': str(NP_TITLE_PX) for s in ('normal', 'disable', 'focused')}})
@@ -434,9 +438,15 @@ def playing_page(root):
     named['view_album'][3] += [title, artist, album, named['img_playmode'], named['img_fav']]
     column = (375 - 225) // 2
     named['label_lyricmsg'][1][0] += column
-    # scroll_lrc is the list less 10px (w=-10): 235 leaves it the rows' 225, so no line is cut on the right
-    check(named['view_lrc'][3][0][2]['self_layout'].startswith('default(x=0,y=0,w=-10,'), 'Unexpected lyrics scroll view')
-    named['view_lrc'][2]['self_layout'] = f'default(x={column},y=0,w=235,h=178)'
+    # The payload paints each lyric line over its stock row, a blank label LYRIC_SLOT high for a line of one
+    # row (patch/lyrics.c): the rows span the page, and the list layout (stock's list_view(m=0,s=0) otherwise,
+    # the payload's own once it opens) starts them a slot down, so the first line can sit in the middle.
+    lrc = named['view_lrc'][3][0][2]
+    check(lrc['self_layout'].startswith('default(x=0,y=0,w=-10,') and 'children_layout' not in lrc, 'Unexpected lyrics scroll view')
+    check(3 * inc('LYRIC_SLOT') <= 178, 'Three lyric lines must fit the page')
+    lrc['self_layout'] = 'default(x=0,y=0,w=100%,h=100%)'
+    lrc['children_layout'] = f'list_view(x=0,y={inc("LYRIC_SLOT")},s=0)'
+    named['view_lrc'][2]['self_layout'] = 'default(x=0,y=0,w=375,h=178)'
     for n in named['view_info'][3]:
         n[1][0] += column
     named['slide_view_view'][1] = [0, NP_TOP, 375, NP_SLIDE_H + 6]
@@ -447,6 +457,11 @@ def playing_page(root):
         elif key.endswith(':fg_color'): dots[2][key] = '#555555'
     dots[1][1] = NP_DOTS_Y
     dots[2]['self_layout'] = f'default(x=0,y={NP_DOTS_Y},w=100%,h=10)'
+    # Without an anchor, stock's indicator centres its dots on the slide_view as widget_to_screen places it,
+    # which takes away the view's own xoffset, a swipe's drag: dots laid out mid-swipe (any relayout lays them
+    # out) slid with the page until the next layout. The same point as the indicator's own anchor: the
+    # slide_view's centre, and above the indicator's middle, which puts the dots on its top edge.
+    dots[2].update(anchor_x=f'{375 // 2}px', anchor_y='0px')
     named['image_wait'][1] = [NP_MARGIN + (NP_ART - 54) // 2, NP_TOP + art_y + (NP_ART - 54) // 2, 54, 54]
 
     slider = named['slider_play']
@@ -652,9 +667,10 @@ def row_icon(data):
 
 
 # Each stock placeholder's replacement size: stock's own, but Now Playing's and the full-screen art's at
-# the art they fill (stock's 188 scaled down there on the device, jagged).
+# the art they fill (stock's 188 scaled down there on the device, jagged), and the album grids' at
+# album_children's inset cover (110 less TILE_INSET + TILE_CLEARANCE a side), drawn 1:1 by its scale-down.
 # The square ones keep the disc's transparent corners, so a selected row's bar shows through them.
-ART_PLACEHOLDERS = {'default_album_big.png': 110, 'default_album_small.png': 52,
+ART_PLACEHOLDERS = {'default_album_big.png': 110 - 2 * (inc('TILE_INSET') + inc('TILE_CLEARANCE')), 'default_album_small.png': 52,
                     'play_defaultcover.png': NP_ART, 'scrsaver_playcover.png': 60,
                     'default_smallcover.png': 140, 'default_bigcover.png': BC_ART}
 

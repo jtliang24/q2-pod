@@ -37,6 +37,9 @@ char *tidal_name(char *out, unsigned n, const char *key, const char *artist, con
 extern int stock_tidal_trampoline(const char *url);
 
 #define TIDAL_STOP_MS 3000 /* stopped this long, the player was stopped, not between tracks */
+#define TIDAL_FFMPEG "/usr/bin/ffmpeg"
+#define TIDAL_COVER "/tmp/.tidal_cover.jpg" /* the running download's cover, the worker's alone */
+#define TIDAL_TAG 200                       /* a tag's bytes, with "artist=" and its NUL */
 
 static struct {
     unsigned lock[16]; /* a zeroed pthread mutex, 24 bytes on MIPS glibc */
@@ -45,6 +48,8 @@ static struct {
     unsigned cleared; /* tidal_clear's count, under lock */
     unsigned long thread;
     char id[48], url[2048], path[296];
+    /* the job's "title=", "artist=" and "album=" tags and cover file */
+    char tags[3][TIDAL_TAG], cover[128];
 } td __attribute__((section(".scratch")));
 
 /* mcl_tidalStartPlayer's only caller, the stream-URL thread (0x486d88), keeps its own copy of the
@@ -93,17 +98,49 @@ static int progress(void *stopped_at, long long a, long long b, long long c, lon
     return td.gen != td.want || (*at && (int)(now - *at) >= TIDAL_STOP_MS);
 }
 
+/* tmp remuxed by stock ffmpeg with the queue row's tags and, into a FLAC, its cover: Tidal's files
+ * carry none, so played from the card (Tidal Downloads) a copy showed Unknown Artist and no art.
+ * On any failure tmp stays as downloaded. ponytail: no cover in an .m4a, as ffmpeg 4.2's mp4 muxer
+ * writes none; the remux rewrites the whole file once more on the card. */
+static void tag(const char *tmp, char (*tags)[TIDAL_TAG], int pic) {
+    char out[sizeof td.path + 12];
+    int flac = strstr(tmp, ".flac.tmp") != 0, status = -1;
+    tk_snprintf(out, sizeof out, "%s.tag.tmp", tmp);
+    int pid = fork();
+    if (!pid) {
+        if (pic && flac)
+            execl(TIDAL_FFMPEG, TIDAL_FFMPEG, "-nostdin", "-v", "quiet", "-i", tmp, "-i",
+                  TIDAL_COVER, "-map", "0:a", "-map", "1:v", "-disposition:v", "attached_pic", "-c",
+                  "copy", "-metadata", tags[0], "-metadata", tags[1], "-metadata", tags[2], "-f",
+                  "flac", "-y", out, (char *)0);
+        else
+            execl(TIDAL_FFMPEG, TIDAL_FFMPEG, "-nostdin", "-v", "quiet", "-i", tmp, "-map", "0:a",
+                  "-c", "copy", "-metadata", tags[0], "-metadata", tags[1], "-metadata", tags[2],
+                  "-f", flac ? "flac" : "ipod", "-y", out, (char *)0);
+        child_exit(127);
+    }
+    while (pid > 0 && waitpid(pid, &status, 0) < 0 &&
+           *__errno_location() == 4) { /* EINTR: reap it */
+    }
+    if (!status && file_size(out) > 0 && !rename(out, tmp)) return;
+    if (!access(out, 0)) unlink(out);
+}
+
 /* Downloads tidal_play's job, then the job a track started meanwhile left, until none waits. */
 static void *download(void *unused) {
-    char url[sizeof td.url], path[sizeof td.path], tmp[sizeof td.path + 4];
+    char url[sizeof td.url], path[sizeof td.path], tmp[sizeof td.path + 4], tags[3][TIDAL_TAG],
+        cover[sizeof td.cover];
     for (;;) {
         pthread_mutex_lock(td.lock);
         int job = td.job && td.job_gen == td.gen; /* a later track's start drops it */
         unsigned cleared = td.cleared;
         td.busy = job, td.job = 0;
         if (job) memcpy(url, td.url, sizeof url), memcpy(path, td.path, sizeof path), td.want = td.job_gen;
+        if (job) memcpy(tags, td.tags, sizeof tags), memcpy(cover, td.cover, sizeof cover);
         pthread_mutex_unlock(td.lock);
         if (!job) return 0;
+        /* now, while it's there: stock removes a page's covers as another opens */
+        int pic = *cover == '/' && thumb(cover, TIDAL_COVER, 640, 640);
         tk_snprintf(tmp, sizeof tmp, "%s.tmp", path);
         unsigned stopped_at = 0;
         long code = 0;
@@ -132,6 +169,7 @@ static void *download(void *unused) {
             ok = ok && !fflush(f) && !fsync(fileno(f)) && !ferror(f);
             ok = !fclose(f) && ok;
         }
+        if (ok && tags[0][6]) tag(tmp, tags, pic); /* a title past "title=": a queue row named it */
         pthread_mutex_lock(td.lock); /* a Clear All since the job began drops it */
         ok = ok && cleared == td.cleared && !rename(tmp, path);
         pthread_mutex_unlock(td.lock);
@@ -190,14 +228,19 @@ int tidal_play(const char *url, const char *id) {
     if ((!td.busy || td.want != td.gen) && strlen(url) < sizeof td.url && (mkdir(TIDAL_DIR, 0755), card_space(TIDAL_DIR))) {
         /* The queue record this id came from (as get_tidal_trackurl finds it) names the file.
          * ponytail: read off the UI thread, as stock's URL thread reads it; copied at once. */
-        const char *title = 0, *artist = 0;
+        const char *title = 0, *artist = 0, *album = 0, *cover = 0;
         void *q = P(mcl_pdeqplaylist, 0);
         for (unsigned i = 0, n = q ? deque_size(q) : 0; i < n && !title; ++i) {
             void *r = deque_at(q, i);
             if (r && P(r, REC_TIDAL_ID) && !strcmp(P(r, REC_TIDAL_ID), id))
-                title = P(r, REC_TITLE) ? P(r, REC_TITLE) : "", artist = P(r, REC_ARTIST);
+                title = P(r, REC_TITLE) ? P(r, REC_TITLE) : "", artist = P(r, REC_ARTIST),
+                album = P(r, REC_ALBUM), cover = P(r, REC_COVER);
         }
         tidal_name(name, sizeof name, key, artist, title, ext);
+        tk_snprintf(td.tags[0], TIDAL_TAG, "title=%s", title ? title : "");
+        tk_snprintf(td.tags[1], TIDAL_TAG, "artist=%s", artist ? artist : "");
+        tk_snprintf(td.tags[2], TIDAL_TAG, "album=%s", album ? album : "");
+        tk_snprintf(td.cover, sizeof td.cover, "%s", cover ? cover : "");
         tk_snprintf(td.id, sizeof td.id, "%s", id);
         tk_snprintf(td.url, sizeof td.url, "%s", url);
         tk_snprintf(td.path, sizeof td.path, TIDAL_DIR "/%s", name);
@@ -210,5 +253,74 @@ int tidal_play(const char *url, const char *id) {
     else if (start)
         pthread_detach(td.thread);
     return stock_tidal_trampoline(url);
+}
+
+/* Stock's stream thread (docs/internals.md#tidal-cache) and Baidu's both polled a flag every 10 ms
+ * from power-on. Now each parks on a semaphore with no timer: only get_tidal_trackurl sets Tidal's
+ * flag, and ringnav_tidal_track posts once it has, so the thread wakes per track asked for and parks
+ * again after it. A post never gets lost (it counts), so one made mid-fetch only adds a pass.
+ * Baidu's is never posted, so it parks for good. A zeroed sem_t is a semaphore at 0. */
+static unsigned stream_gate[8], baidu_gate[8];
+
+int ringnav_tidal_poll(unsigned us) { return sem_wait(stream_gate); }
+int ringnav_baidu_poll(unsigned us) { return sem_wait(baidu_gate); }
+
+/* Tidal track lists (docs/internals.md#tidal-track-lists): stock's playlist, album and favourite-tracks
+ * threads each fetch one page of stTidalTracks (total, limit 50, offset, deque) into
+ * /tmp/tidal_<thread>, which the page parses once the done flag is 2; the build drops their done
+ * store, so each runs here once per page, parsed here, until the list is whole. The page then
+ * parses an empty reply, so the last page isn't added twice. A page that adds nothing (a failed
+ * request) or an offset moved under it (the page opened again, which resets it) ends the run; a
+ * failed first page is left for the page's own parse, as stock. ponytail: TIDAL_MAX_TRACKS caps a
+ * list at 40 requests, the wait before it shows; raise it if long lists load quickly enough. */
+#define TIDAL_MAX_TRACKS 2000
+extern int stock_tidalplaylist_trampoline(void *id);
+extern int stock_tidalalbum_trampoline(void *id);
+extern int stock_tidalfavs_trampoline(void *offset);
+
+static void tidal_pages(int (*page)(void *), int (*parse)(const char *), void *arg, int offset, int by_offset) {
+    int *t = (int *)stTidalTracks;
+    char path[32];
+    snprintf(path, sizeof path, "/tmp/tidal_%u", (unsigned)pthread_self());
+    unsigned first = P(t, 12) ? deque_size(P(t, 12)) : 0;
+    for (unsigned had = first;;) {
+        unlink(path); /* a failed request must not leave the last page to parse again */
+        page(by_offset ? (void *)(long)offset : arg);
+        unsigned n = parse(path) > 0 && P(t, 12) ? deque_size(P(t, 12)) : 0;
+        if (n <= had && had == first) return;
+        if (n <= had || t[1] <= 0 || offset + t[1] >= t[0] || n >= TIDAL_MAX_TRACKS || t[2] != offset) {
+            void *f = fopen(path, "w");
+            if (f) fputs("{\"items\":[]}", f), fclose(f);
+            return;
+        }
+        had = n, t[2] = offset += t[1];
+    }
+}
+
+int ringnav_tidal_playlist(void *id) {
+    tidal_pages(stock_tidalplaylist_trampoline, parseTidalPlaylistDetailJson, id, I(stTidalTracks, 8), 0);
+    tidal_albuminfo_thread_run = 2;
+    return 0;
+}
+int ringnav_tidal_album(void *id) {
+    tidal_pages(stock_tidalalbum_trampoline, parseTidalAlbumDetailJson, id, I(stTidalTracks, 8), 0);
+    tidal_albuminfo_thread_run = 2;
+    return 0;
+}
+/* My Collection's Tracks: stock pages these on a touch scroll to the list's end, which the wheel
+ * evidently doesn't reach (inferred from #101, not traced); after the whole list stTidalTracks' offset is the last page's, so that check finds no more. */
+int ringnav_tidal_favs(void *offset) {
+    tidal_pages(stock_tidalfavs_trampoline, parseTidalColTracksJson, 0, (int)(long)offset, 1);
+    tidal_collection_thread_run = 2;
+    return 0;
+}
+
+extern int stock_tidaltrack_trampoline(void *a, void *b, void *c, void *d);
+/* get_tidal_trackurl: any Tidal track asked for (a queue restored at power-on, a pick in Now
+ * Playing) wakes the stream thread, after stock has set its flag (0x483278). */
+int ringnav_tidal_track(void *a, void *b, void *c, void *d) {
+    int r = stock_tidaltrack_trampoline(a, b, c, d);
+    sem_post(stream_gate);
+    return r;
 }
 #endif
