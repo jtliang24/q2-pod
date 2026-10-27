@@ -100,6 +100,8 @@ CALL_SITES = {
         'LYRIC_FOLLOW': ((0x52bed0, 0x0320f809, 'ringnav_lyric_follow'),),
         # The page refresh's bal to the lyric row builder: the lyrics keep their place on a refresh.
         'LYRIC_ROWS': ((0x52b8f8, 0x0411f984, 'ringnav_lyric_rows'),),
+        # Stock's .lrc loader's jalr fopen: a copy that ringnav_lyric reads again, as a tag's.
+        'LYRIC_OPEN': ((0x5a9c5c, 0x0320f809, 'ringnav_lrc_open'),),
         # parse_albumcovertask_thd's jalr toolsGetAlbumCover calls: Ogg pictures through ffmpeg.
         'GRID_COVER': ((0x4edf1c, 0x0320f809, 'coverflow_album_cover'), (0x4ef018, 0x0320f809, 'coverflow_grid_cover'),
                        (0x4ef0d4, 0x0320f809, 'coverflow_grid_cover')),
@@ -168,12 +170,16 @@ CALL_SITES = {
         # The library scan's folder walk: its first strcmp (jalr, "." in its delay slot, pinned) skips
         # every hidden folder.
         'SCAN_DIRS': ((0x5c3c0c, 0x0320f809, 'ringnav_scan_dir'), (0x5c3c10, 0x24a55110, None)),
-        # Baidu Pan's and Tidal's start-flag polls: li $4,10000 -> lui $4,3 (196 ms).
-        'STREAM_POLLS': ((0x47f828, 0x24042710, 0x3c040003), (0x486408, 0x24042710, 0x3c040003)),
-        # mclSyncPlayerStatus', parse_albumcovertask_thd's and player_parsecover_thd's jalr usleep: at
-        # least DARK_POLL_US while the Q2 is dark and quiet.
-        'DARK_POLLS': ((0x5a958c, 0x0320f809, 'ringnav_dark_usleep'), (0x4edbe0, 0x0320f809, 'ringnav_dark_usleep'),
-                       (0x512fac, 0x0320f809, 'ringnav_dark_usleep')),
+        # Baidu Pan's and Tidal's start-flag polls' jalr usleep: their threads park (tidal.c).
+        'STREAM_POLL_CALLS': ((0x47f824, 0x0320f809, 'ringnav_baidu_poll'), (0x486404, 0x0320f809, 'ringnav_tidal_poll')),
+        # mclSyncPlayerStatus' jalr usleep: at least DARK_POLL_US while the Q2 is dark and quiet;
+        # parse_albumcovertask_thd's and player_parsecover_thd's whenever it is dark.
+        'DARK_POLLS': ((0x5a958c, 0x0320f809, 'ringnav_dark_usleep'), (0x4edbe0, 0x0320f809, 'ringnav_dark_cover_usleep'),
+                       (0x512fac, 0x0320f809, 'ringnav_dark_cover_usleep')),
+        # Download Cover & Lyrics' accept: its jalr snprintf of the cp command, its format's addiu pinned.
+        'LYRIC_SAVE': ((0x525484, 0x0320f809, 'ringnav_lyric_save'), (0x525480, 0x24c62630, None)),
+        # Tidal's playlist, album and favourite-tracks threads' done store: sb $3,0($2) -> nop.
+        'TIDAL_PAGE_DONE': ((0x48b57c, 0xa0430000, 0), (0x48b70c, 0xa0430000, 0), (0x488434, 0xa0430000, 0)),
     },
     # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
     'm1plus': {
@@ -292,8 +298,11 @@ CALL_SITE_PURPOSES = {
     'TAG_TEXT': 'tag text GBK only when it reads as GBK',
     'CUE_TEXT': 'CUE text read as UTF-8, GBK or Windows-1252',
     'SCAN_DIRS': 'the library scan skips hidden folders',
-    'STREAM_POLLS': 'stream start polls 5 a second',
+    'STREAM_POLL_CALLS': 'stream threads park while idle',
     'DARK_POLLS': 'stock polls idle while dark',
+    'LYRIC_OPEN': 'lyric files read as tags are',
+    'LYRIC_SAVE': 'lyrics saved beside the song',
+    'TIDAL_PAGE_DONE': 'Tidal lists load every page',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
@@ -352,10 +361,36 @@ M1PLUS_PORTS = {
                  "toolsIconvConvert (0x5e39b0), its call sites not yet found, and ringnav_cue_text calls V1.32's"),
     'SCAN_DIRS': ('unported', "the library scan skips hidden folders (1.4.5); V2.1's toolsLoadAllFile (0x5efd98) "
                   'walks with the same exclusions, its strcmp not yet found'),
-    'STREAM_POLLS': ('unported', "Tidal's start-flag poll at 5 a second (1.4.5); V2.1 has no Baidu Pan, and its "
-                     "Tidal worker's usleep(10000) is not yet found"),
+    'STREAM_POLL_CALLS': ('unported', "Tidal's stream thread parked till a track is asked for (1.5.0; 1.4.5's "
+                          "slower poll before it); V2.1 has no Baidu Pan, and its Tidal worker's usleep(10000) is not "
+                          'yet found'),
     'DARK_POLLS': ('unported', "stock's pollers idle while dark (1.4.5): V2.1's mclSyncPlayerStatus (0x5d144c) and "
                    'cover threads, their usleep calls not yet found'),
+    'LYRIC_OPEN': ('unported', "a .lrc's milliseconds, word stamps and blank lines (1.5.0); V2.1's .lrc loader in "
+                   "mclLoadExLyric (0x5d41e4) not yet found. Without it ringnav_lyric keeps stock's .lrc lines, as "
+                   'on 1.4.5'),
+    'LYRIC_SAVE': ('unported', "Download Cover & Lyrics saved beside the song (1.5.0); V2.1's accept not yet found"),
+    'TIDAL_PAGE_DONE': ('unported', 'Tidal lists past 50 (1.5.0): goes with the Tidal list threads'),
+    'timezone_row': ('unported', "the time zone rows' offsets in effect now (1.5.0): goes with select_timezone"),
+    'folder_click': ('unported', "videos played from Folder view (1.5.0), where the Q2's Videos row now opens; "
+                     "V2.1's folder row click is not yet found. The M1's Videos row keeps 1.4.5's list "
+                     '(m1plus_books_video.c videos_open)'),
+    'main_loop_post_key_event': ('unported', "SyncLink's keys past the Buttons lock (1.5.0); V2.1's is 0x693d9c, "
+                                 'and its Buttons lock is its own (keylock_rows native): not yet checked'),
+    'device_reboot': ('unported', "a reboot saves the queue first (1.5.0); V2.1's device_reboot is 0x4e743c, its "
+                      'queue on a reboot not yet checked'),
+    'dialog_checkfw_dialog_init': ('unported', "the firmware update's dialog saves the queue (1.5.0); V2.1 has no "
+                                   'dialog_checkfw_dialog_init by name'),
+    'playermore_page_init': ('unported', "Download Album Lyrics on Now Playing's ⋯ page (1.5.0); V2.1 has no "
+                             'playermore_page_init by name'),
+    'get_tidal_trackurl': ('unported', "wakes Tidal's parked stream thread (1.5.0); V2.1's is 0x512ed0: goes with "
+                           'STREAM_POLL_CALLS'),
+    'tidalPlaylistDetailThd': ('unported', "Tidal playlists past 50 (1.5.0); V2.1's is 0x516b9c, but V2.1 has no "
+                               'tidal_albuminfo_thread_run, its done flag not yet found'),
+    'tidalAlbumDetailThd': ('unported', "Tidal albums past 50 (1.5.0); V2.1's is 0x5178cc, its done flag not yet "
+                            'found'),
+    'tidalColTracksThd': ('unported', "Tidal favourite tracks past 50 (1.5.0); V2.1's is 0x51b2d4, but V2.1 has no "
+                          'tidal_collection_thread_run, its done flag not yet found'),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
@@ -502,7 +537,7 @@ M1PLUS_HOOKS = {
     'mclLoadExLyric': (0x5d41e4, 'ringnav_lyric', 'lyric'),
     # Online lyric and cover search: LRCLIB, then MusicBrainz and iTunes, before stock's Kugou. Both,
     # online_getkeyword_info and online_setkeyword_info are V1.32's but for their data addresses.
-    'kugou_obtainlyric': (0x509ee4, 'ringnav_lyric_search', 'kugou'),
+    'kugou_obtainlyric': (0x509ee4, 'ringnav_lyric_search', None),  # LRCLIB alone (1.5.0): no stock trampoline
     'kugou_obtaincover': (0x50aa78, 'ringnav_cover_search', 'kugoucover'),
     # The status bar's Wi-Fi signal from rtl8733bs's rx_signal, which keeps the radio's power save;
     # V2.1's asks the radio (SIOCGIWSTATS), as V1.32's does
