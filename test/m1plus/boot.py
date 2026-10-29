@@ -341,19 +341,23 @@ def media_db(path):
     db.close()
 
 # The Q2 Pod page's rows, 64 px under the 48 px title: Shuffle, Ratings, Most Played, Long Songs,
-# Photos, Books (with their folders), Coverflow, Spotify, Internet Radio, AirPlay; six show. Scrolled
-# to its end (four rows on), Coverflow is the third showing.
+# Era, Photos, Books (with their folders), Coverflow, Spotify, Internet Radio and AirPlay; six show.
+# Scrolled to its end (five rows on), Photos is the first showing.
 def q2pod_row(i): return tap(160, 80 + 64 * i)
-def q2pod_end_row(i): return tap(160, 80 + 64 * (i - 4))
+def q2pod_end_row(i): return tap(160, 80 + 64 * (i - 5))
 MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
               ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
               ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
               ('long_songs_back', BACK, 4, ('as', 'media_q2pod')),
-              ('books', q2pod_row(5), 4, ('not', 'media_q2pod')),
+              ('era', q2pod_row(4), 4, ('not', 'media_q2pod')),
+              ('era_decade', tap(160, 102), 4, ('not', 'era')),
+              ('era_decade_back', BACK, 4, ('as', 'era')),
+              ('era_back', BACK, 4, ('as', 'media_q2pod')),
+              ('books', DOWN_LIST + ['wait 800'] + q2pod_end_row(6), 4, ('not', 'media_q2pod')),
               ('book', tap(160, 102), 5, ('not', 'books')),          # the first book's row
               ('book_back', BACK, 4, ('not', 'book')),
-              ('books_back', BACK, 4, ('as', 'media_q2pod')),
-              ('photos', q2pod_row(4), 6, ('not', 'media_q2pod')),
+              ('books_back', BACK + UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
+              ('photos', q2pod_row(5), 6, ('not', 'media_q2pod')),
               ('photo', tap(56, 126), 5, ('not', 'photos')),         # the first tile
               # qemu's demo decodes neither photo ("Can't open this photo"), so the move to the
               # second and back shows only in the trace (photos.c moved); the viewer stays open.
@@ -361,7 +365,7 @@ MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 
               ('photo_back', BACK, 4, ('not', 'photo')),
               ('photos_back', BACK, 4, ('as', 'media_q2pod')),
               ('q2pod_end', DOWN_LIST, 4, ('not', 'media_q2pod')),
-              ('coverflow', q2pod_end_row(6), 10, ('not', 'q2pod_end')),
+              ('coverflow', q2pod_end_row(7), 10, ('not', 'q2pod_end')),
               ('cover_next', swipe(220, 150, 120, 150), 4, ('not', 'coverflow')),  # one cover: the second album
               ('cover_prev', swipe(120, 150, 220, 150), 4, ('as', 'coverflow')),
               ('cover_open', tap(160, 120), 5, ('not', 'coverflow')),               # the centre cover's tracks
@@ -369,11 +373,11 @@ MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 
               ('coverflow_back', BACK, 4, ('as', 'q2pod_end')),
               # Streaming's rows (V2.1 has no Streaming page): Spotify, not on the card, says so on its
               # Now Playing page; Internet Radio opens its menu. Each closes with its back button.
-              ('spotify', q2pod_end_row(7), 4, ('not', 'q2pod_end')),
+              ('spotify', q2pod_end_row(8), 4, ('not', 'q2pod_end')),
               ('spotify_back', BACK, 4, ('as', 'q2pod_end')),
-              ('radio', q2pod_end_row(8), 5, ('not', 'q2pod_end')),
+              ('radio', q2pod_end_row(9), 5, ('not', 'q2pod_end')),
               ('radio_back', BACK, 4, ('as', 'q2pod_end')),
-              ('q2pod_top', UP_LIST, 4, ('as', 'media_q2pod')),
+              ('q2pod_top', UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
               ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
               ('shuffle_songs', tap(160, 101), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
 
@@ -529,6 +533,7 @@ if __name__ == '__main__':
             assert hits['swiped'] and hits['moved'], 'photo_swipes: the swipes never moved the viewer to another photo'
             assert hits['touched'], 'cover_next: no touch reached the covers'
             assert hits['to_tracks'], 'cover_open: the tap on the centre cover never opened its tracks'
+            assert hits['era_menu'] and hits['era_open_decade']
             assert hits['spot_np'] and hits['radio_open'], 'spotify, radio: the rows never opened their pages'
             config = (data/'config.ini').read_text(errors='replace')
             assert re.search(r'^PLAYMODE=2$', config, re.M), 'shuffle_songs: Shuffle (2) not saved as the play mode'

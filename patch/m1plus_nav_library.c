@@ -20,13 +20,14 @@ int library_open(void *ctx, void *event) {
     static const char *const icons[] = { "local_podcasts", "local_audiobooks", "local_photos",
                                          "local_books", "local_videos" };
     char path[sizeof st.media_root];
-    int media[VIDEOS], scrobbles = scrobble_ready(), apps = addon_scan(), n = 8 + scrobbles + apps;
+    int media[VIDEOS], scrobbles = scrobble_ready(), apps = addon_scan(), n = 9 + scrobbles + apps;
     for (int k = 0; k < VIDEOS; k++) n += media[k] = media_find(k + 1, path);
     void *view = page_list(st.lib_page, st.lib_page, 0, "Q2 Pod", n, 64);
     library_into(view, "local_shuffle", shuffle_menu, 0, "Shuffle");
     library_into(view, "local_fav", ratings_menu, 0, "Ratings");
     library_into(view, "local_frequentplay", most_played, 0, "Most Played");
     library_into(view, "local_longsongs", long_songs, 0, "Long Songs");
+    library_into(view, "local_era", era_menu, 0, "Era");
     for (int k = 0; k < VIDEOS; k++)
         if (media[k])
             library_into(view, icons[k], k + 1 == VIDEOS ? videos_click : media_click, (void *)(long)(k + 1),

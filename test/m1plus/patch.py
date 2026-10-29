@@ -7250,69 +7250,66 @@ else:
     # On the device: a long press on the second album, the one under the finger (Rate Album, rated as
     # its album).
     m,shown=artist_years(); assert long_press(m,60)==(('Mid',[*COVER_ALBUM,'Add to Playlist']),False); passed()
-if not is_m1plus:
-    # Library > Era: a row per decade with dated music, oldest first, its albums counted (an album's year its tracks'
-    # latest); undated albums, audiobooks, podcasts and M4B left out. A decade's page: Play All, Shuffle, then its
-    # albums by year, each "Artist • year".
-    class EraMachine(PlaylistEditMachine):
-        def __init__(self,songs=()):
-            super().__init__()
-            self.db.execute('create table songtable(id integer primary key,album,songer,albumsonger,fileurl,year)')
-            self.db.executemany('insert into songtable(album,songer,albumsonger,fileurl,year) values(?,?,?,?,?)',songs)
-        def open_era(self):
-            self.call(address=payload_syms['era_menu'],args=(0,self.event,0,0),gap=0); self.page=self.top
-            return self.texts()
-        def decade(self,i):
-            row=self.nodes[self.find('scroll_view')]['children'][i]; f,ctx=self.handler(row,O['EVT_CLICK'])
-            self.call(address=f,args=(ctx,self.event,0,0),gap=0); self.page=self.top
-            return self.texts()
-    SONGS=[('Alpha','A1','','/mnt/mmc/m/a/1.mp3',1990),('Beta','B1','Beta Band','/mnt/mmc/m/b/1.mp3',1998),
-           ('Beta','B2','Beta Band','/mnt/mmc/m/b/2.mp3',1999),('Gamma','C1','','/mnt/mmc/m/c/1.mp3',2000),
-           ('Delta','D1','','/mnt/mmc/m/d/1.mp3',0),('Eta','E1','','/mnt/mmc/m/e/1.mp3',1989),
-           ('Book','W1','','/mnt/mmc/audiobooks/w/1.mp3',1995),('Tale','T1','','/mnt/mmc/m/t.m4b',1993),
-           ('Pod','P1','','/mnt/mmc/podcasts/p/1.mp3',1996),('','U1','','/mnt/mmc/m/u.mp3',1994)]
-    m=EraMachine(SONGS); assert m.open_era()==['Era','80s','1 album','90s','2 albums','2000s','1 album']
-    assert m.nodes[m.top]['name']=='era_page' and m.closed_db==1; passed()
-    into=lambda: [m.nodes[m.nodes[r]['children'][-1]].get('image')=='list_into' for r in m.nodes[m.find('scroll_view')]['children']]
-    assert into()==[True]*3  # a decade opens its albums
-    assert m.decade(1)==['90s','Play All','2 albums','Shuffle','Every song, shuffled','Alpha','A1 \u2022 1990','Beta','Beta Band \u2022 1999']
-    assert m.nodes[m.top]['name']=='era_albums_page' and into()==[False,False,True,True]; passed()  # an album opens Coverflow
-    # The full library is counted past stock's old 20,000-song limit, with a bounded SQLite cache.
-    m=EraMachine((f'Large {i//10}','Artist','Artist',f'/mnt/mmc/music/large/{i}.flac',2020) for i in range(65000))
-    assert m.open_era()==['Era','2020s','6500 albums']
-    assert m.db.execute('PRAGMA cache_size').fetchone()==(64,)
-    assert m.db.execute('PRAGMA temp_store').fetchone()==(1,); passed()
-    for failure in ('open','PRAGMA','select'):
-        m=EraMachine(SONGS); m.fail=failure; top=m.top; m.open_era()
-        assert m.top==top and m.toasts[-1][3]=='Era unavailable' and m.closed_db==1; passed()
-    # Full-date tags belong to their year; normalize each track before picking the album's latest.
-    dates=[('Dates','Artist','','/mnt/mmc/music/d1.flac',20220510),
-           ('Dates','Artist','','/mnt/mmc/music/d2.flac',2023),
-           ('ISO','Artist','','/mnt/mmc/music/i.flac','2021-05-10'),
-           ('Month','Artist','','/mnt/mmc/music/m.flac',202004),
-           ('Bad','Artist','','/mnt/mmc/music/b.flac','unknown')]
-    m=EraMachine(dates); assert m.open_era()==['Era','2020s','3 albums']
-    assert m.decade(0)==['2020s','Play All','3 albums','Shuffle','Every song, shuffled',
-                         'Month','Artist \u2022 2020','ISO','Artist \u2022 2021','Dates','Artist \u2022 2023']; passed()
-    # Play All plays the decade's albums from the first song, each in album order; an album opens its tracks in Coverflow.
-    class EraPlay(EraMachine):
-        def hook(self,u,address,size,unused):
-            if self.handlers.get(address)=='q:getMusicByAlbum': self.found=self.by_album.get(self.text(u.reg_read(REGS[0])),[])
-            return super().hook(u,address,size,unused)
-    def era_track(m,album,aa,*t):
-        r=track(m,*t); m.word(r+O['REC_ALBUM'],m.string(album)); m.word(r+O['REC_ALBUM_ARTIST'],m.string(aa)); return r
-    m=EraPlay(SONGS); m.by_album={'Alpha':[era_track(m,'Alpha','','a1','/mnt/mmc/m/a/1.mp3',1,1)],
-                                  'Beta':[era_track(m,'Beta','Beta Band','b2','/mnt/mmc/m/b/2.mp3',1,2),era_track(m,'Beta','Beta Band','b1','/mnt/mmc/m/b/1.mp3',1,1)]}
-    m.open_era(); m.decade(1); albums=m.page
-    row=lambda i: m.handler(m.nodes[m.find('scroll_view',albums)]['children'][i],O['EVT_CLICK'])
-    f,ctx=row(0); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    assert m.plays[-1][2:]==(0,0xf001,2) and m.play_names==['a1','b1','b2']; passed()
-    f,ctx=row(3); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.page=m.top
-    assert m.nodes[m.top]['name']=='coverflow_page' and m.texts()[:3]==['Beta','b1','b2']; passed()
-    m=EraMachine(); top=m.top; assert m.open_era() is not None and m.top==top and m.toasts[-1][3]=='No dated albums yet'; passed()
-    m=EraMachine([s for s in SONGS if s[4]==0]); top=m.top; m.open_era(); assert m.top==top and m.toasts[-1][3]=='No dated albums yet'; passed()
-else:
-    not_ported("Library > Era (1.4.5): the M1's Q2 Pod page has no Era row")
+# Library > Era: a row per decade with dated music, oldest first, its albums counted (an album's year its tracks'
+# latest); undated albums, audiobooks, podcasts and M4B left out. A decade's page: Play All, Shuffle, then its
+# albums by year, each "Artist • year".
+class EraMachine(PlaylistEditMachine):
+    def __init__(self,songs=()):
+        super().__init__()
+        self.db.execute('create table songtable(id integer primary key,album,songer,albumsonger,fileurl,year)')
+        self.db.executemany('insert into songtable(album,songer,albumsonger,fileurl,year) values(?,?,?,?,?)',songs)
+    def open_era(self):
+        self.call(address=payload_syms['era_menu'],args=(0,self.event,0,0),gap=0); self.page=self.top
+        return self.texts()
+    def decade(self,i):
+        row=self.nodes[self.find('scroll_view')]['children'][i]; f,ctx=self.handler(row,O['EVT_CLICK'])
+        self.call(address=f,args=(ctx,self.event,0,0),gap=0); self.page=self.top
+        return self.texts()
+SONGS=[('Alpha','A1','','/mnt/mmc/m/a/1.mp3',1990),('Beta','B1','Beta Band','/mnt/mmc/m/b/1.mp3',1998),
+       ('Beta','B2','Beta Band','/mnt/mmc/m/b/2.mp3',1999),('Gamma','C1','','/mnt/mmc/m/c/1.mp3',2000),
+       ('Delta','D1','','/mnt/mmc/m/d/1.mp3',0),('Eta','E1','','/mnt/mmc/m/e/1.mp3',1989),
+       ('Book','W1','','/mnt/mmc/audiobooks/w/1.mp3',1995),('Tale','T1','','/mnt/mmc/m/t.m4b',1993),
+       ('Pod','P1','','/mnt/mmc/podcasts/p/1.mp3',1996),('','U1','','/mnt/mmc/m/u.mp3',1994)]
+m=EraMachine(SONGS); assert m.open_era()==['Era','80s','1 album','90s','2 albums','2000s','1 album']
+assert m.nodes[m.top]['name']=='era_page' and m.closed_db==1; passed()
+into=lambda: [m.nodes[m.nodes[r]['children'][-1]].get('image')==('right_arrow' if is_m1plus else 'list_into') for r in m.nodes[m.find('scroll_view')]['children']]
+assert into()==[True]*3  # a decade opens its albums
+assert m.decade(1)==['90s','Play All','2 albums','Shuffle','Every song, shuffled','Alpha','A1 \u2022 1990','Beta','Beta Band \u2022 1999']
+assert m.nodes[m.top]['name']=='era_albums_page' and into()==[False,False,True,True]; passed()  # an album opens Coverflow
+# The full library is counted past stock's old 20,000-song limit, with a bounded SQLite cache.
+m=EraMachine((f'Large {i//10}','Artist','Artist',f'/mnt/mmc/music/large/{i}.flac',2020) for i in range(65000))
+assert m.open_era()==['Era','2020s','6500 albums']
+assert m.db.execute('PRAGMA cache_size').fetchone()==(64,)
+assert m.db.execute('PRAGMA temp_store').fetchone()==(1,); passed()
+for failure in ('open','PRAGMA','select'):
+    m=EraMachine(SONGS); m.fail=failure; top=m.top; m.open_era()
+    assert m.top==top and m.toasts[-1][3]=='Era unavailable' and m.closed_db==1; passed()
+# Full-date tags belong to their year; normalize each track before picking the album's latest.
+dates=[('Dates','Artist','','/mnt/mmc/music/d1.flac',20220510),
+       ('Dates','Artist','','/mnt/mmc/music/d2.flac',2023),
+       ('ISO','Artist','','/mnt/mmc/music/i.flac','2021-05-10'),
+       ('Month','Artist','','/mnt/mmc/music/m.flac',202004),
+       ('Bad','Artist','','/mnt/mmc/music/b.flac','unknown')]
+m=EraMachine(dates); assert m.open_era()==['Era','2020s','3 albums']
+assert m.decade(0)==['2020s','Play All','3 albums','Shuffle','Every song, shuffled',
+                     'Month','Artist \u2022 2020','ISO','Artist \u2022 2021','Dates','Artist \u2022 2023']; passed()
+# Play All plays the decade's albums from the first song, each in album order; an album opens its tracks in Coverflow.
+class EraPlay(EraMachine):
+    def hook(self,u,address,size,unused):
+        if self.handlers.get(address)=='q:getMusicByAlbum': self.found=self.by_album.get(self.text(u.reg_read(REGS[0])),[])
+        return super().hook(u,address,size,unused)
+def era_track(m,album,aa,*t):
+    r=track(m,*t); m.word(r+O['REC_ALBUM'],m.string(album)); m.word(r+O['REC_ALBUM_ARTIST'],m.string(aa)); return r
+m=EraPlay(SONGS); m.by_album={'Alpha':[era_track(m,'Alpha','','a1','/mnt/mmc/m/a/1.mp3',1,1)],
+                              'Beta':[era_track(m,'Beta','Beta Band','b2','/mnt/mmc/m/b/2.mp3',1,2),era_track(m,'Beta','Beta Band','b1','/mnt/mmc/m/b/1.mp3',1,1)]}
+m.open_era(); m.decade(1); albums=m.page
+row=lambda i: m.handler(m.nodes[m.find('scroll_view',albums)]['children'][i],O['EVT_CLICK'])
+f,ctx=row(0); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+assert m.plays[-1][2:]==(0,0xf001,2) and m.play_names==['a1','b1','b2']; passed()
+f,ctx=row(3); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.page=m.top
+assert m.nodes[m.top]['name']=='coverflow_page' and m.texts()[:3]==['Beta','b1','b2']; passed()
+m=EraMachine(); top=m.top; assert m.open_era() is not None and m.top==top and m.toasts[-1][3]=='No dated albums yet'; passed()
+m=EraMachine([s for s in SONGS if s[4]==0]); top=m.top; m.open_era(); assert m.top==top and m.toasts[-1][3]=='No dated albums yet'; passed()
 # Library > Ratings > Albums: the rated albums as Coverflow, most hearts first, with the rated Sort card alone
 # (Rating, Album, Artist, Year, kept); closing it brings the library's covers back, with no card.
 def ratings_albums(m):
@@ -9069,17 +9066,17 @@ def q2pod_page():
     labels=[m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]
     icons=[m.nodes[m.nodes[r]['children'][0]]['image'] for r in rows]
     STREAMS=['Spotify','Internet Radio','AirPlay']  # Streaming's rows: V2.1 has no Streaming page
-    assert labels==['Shuffle','Ratings','Most Played','Long Songs','Podcasts','Photos','Videos','Coverflow',*STREAMS],labels
-    assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_podcasts','local_photos','local_videos',
+    assert labels==['Shuffle','Ratings','Most Played','Long Songs','Era','Podcasts','Photos','Videos','Coverflow',*STREAMS],labels
+    assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_era','local_podcasts','local_photos','local_videos',
                    'local_coverflow','row_spotify','row_radio','stream_airplay']
-    assert [len(m.nodes[r]['children']) for r in rows]==[3,3,3,3,3,3,3,2,3,3,3]  # rows opening pages (as the Q2's): the chevron
+    assert [len(m.nodes[r]['children']) for r in rows]==[3,3,3,3,3,3,3,3,2,3,3,3]  # rows opening pages (as the Q2's): the chevron
     # Each row's click is the Library's handler; Shuffle's opens its menu, Coverflow's the carousel.
     f,ctx=m.handler(rows[0],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='shuffle_page'
-    m.top=page; f,ctx=m.handler(rows[7],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
+    m.top=page; f,ctx=m.handler(rows[8],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
     m,slides,dots=v21_home(17); m.config['TOKEN']='tok'; m.card=[('Audiobooks',4),('Books',4)]
     f,ctx=m.handler(m.nodes[card(m,slides)]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     m.page=m.top; rows=m.nodes[m.find('scroll_view')]['children']
-    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==['Shuffle','Ratings','Most Played','Long Songs','Audiobooks','Books','Coverflow',*STREAMS,'Upload Scrobbles']; passed()
+    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==['Shuffle','Ratings','Most Played','Long Songs','Era','Audiobooks','Books','Coverflow',*STREAMS,'Upload Scrobbles']; passed()
 if is_m1plus: q2pod_page()  # its own names: the Library's machine (m, top) is used again below
 def q2pod_real_grid():
     # The same card on V2.1's own grid: its real home_page asset, and its real builder (0x534064, with

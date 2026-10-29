@@ -1073,7 +1073,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     mapping = dict(
         shuffle='pset_playmode.png', scrobble='drop_wifi.png', podcasts='dlna.png',
         audiobooks='playset_foldercover.png', photos='pset_covermode.png', books='system_language.png',
-        videos='sset_display.png', longsongs='system_time.png')
+        videos='sset_display.png', longsongs='system_time.png', era='genre.png')
     icons = {n: ('system_language.png', (ROOT/'assets/icons'/n).read_bytes()) for n in ICONS}
     drawn = ('podcasts', 'audiobooks', 'books', 'videos')
     icons.update({f'local_{n}.png': (like, (ROOT/'assets/icons'/f'local_{n}.png').read_bytes() if n in drawn
@@ -1091,6 +1091,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     icons['local_coverflow.png'] = ('pset_playmode.png', sized_art((ROOT/'assets/icons/menu_coverflow.png').read_bytes(), 40))
     # V1.32's Local Music icons Ratings and Most Played name, which V2.1 lacks: its Favourites and
     # Frequent cards' art at the rows' size.
+    icons['local_era.png'] = ('pset_playmode.png', sized_art(cat(xx+'genre.png'), 40))
     icons['local_fav.png'] = ('pset_playmode.png', sized_art(cat(xx+'fav.png'), 40))
     icons['local_frequentplay.png'] = ('pset_playmode.png', sized_art(cat(xx+'many.png'), 40))
     for n in ('home_q2pod', 'home_q2pod_down'):
