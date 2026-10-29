@@ -602,11 +602,11 @@ static inline int arc_out(int r, int y) {
 #define TAGLIB_FILE_NEW 0x98a0
 #define TAGLIB_PROPERTY_GET 0xb48c
 #define TAGLIB_PROPERTY_FREE 0xb6b0
-/* Now Playing's ⋯ page's rows (1.5.0's Download Album Lyrics): its hook, playermore_page_init, is
- * unported */
-#define PLAYMORE_ROWS M1_UNPORTED_ADDR
-#define PLAYMORE_COUNT M1_UNPORTED
-#define PLAYMORE_SEARCH M1_UNPORTED
+/* V2.1's seven options rows are in playmore_dialog.bin, with search at index 3.
+ * No kind table: the M1 hook uses the native asset's order, pinned by the build suite. */
+#define PLAYMORE_ROWS 0
+#define PLAYMORE_COUNT 7
+#define PLAYMORE_SEARCH 3
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
 /* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */

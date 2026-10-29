@@ -278,7 +278,13 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert manifest['variant'] == 'stock' and manifest['compact_code'] == []
     assert set(manifest['changed_assets']) == {TAG_C}
     stock_syms = symbols(directory/'stock-demo')
-    # Native on-demand Tidal and drop-caches-only thread instruction pins.
+    # Native evidence for this batch: options are asset rows, not V1.32's kind table;
+    # Tidal creates its URL worker on demand, and check_cpumem does only drop_caches work.
+    from ipod import decode, walk
+    more = list(walk(decode(read('stock.squashfs', 'release/assets/default/raw/ui/dialog/playmore_dialog.bin'))))
+    assert [n[2]['name'] for n in more if n[0] == 'list_item'] == [f'listitem{i}' for i in range(7)]
+    assert next(n for n in more if n[2].get('name') == 'image3')[2]['image'] == 'p_onlinesearch'
+    assert next(n for n in more if n[2].get('name') == 'playmore_listview')[2]['item_height'] == '50'
     pins = {0x512f98: 0x0320f809, 0x512fac: 0x0320f809, 0x512fd0: 0x0320f809,
             0x512fd4: 0x24c6c288, 0x512fe0: 0x0320f809, 0x51c2f8: 0xa1230000,
             0x50b844: 0x0320f809, 0x50b878: 0x0320f809, 0x50b894: 0x0320f809,

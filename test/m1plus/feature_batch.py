@@ -22,18 +22,6 @@ rows2=streaming(n)
 assert all(not n.nodes[rows2[label]]['visible'] for label in ('Spotify','Deezer','Internet Radio','AirPlay'))
 assert n.nodes[rows2['AAA']]['visible'] and n.nodes[rows2['Configuration']]['visible']; passed()
 m.row(4); assert m.nodes[rows['Spotify']]['visible'] and 'SPOTIFY' not in m.config['STREAMHIDE'].split(','); passed()
-# Native empty-default semantics: a missing STREAMHIDE key does not write the output buffer.
-# Poison the stack first so zero-initialized emulator memory cannot conceal an uninitialized read.
-class MissingStreamHide(AppMachine):
-    def hook(self,u,address,size,unused):
-        if self.handlers.get(address)=='toolsReadConfig' and self.text(u.reg_read(REGS[2]))=='STREAMHIDE' and 'STREAMHIDE' not in self.config:
-            return self.returns(0,clobber=True)
-        return super().hook(u,address,size,unused)
-m=MissingStreamHide(); m.u.mem_write(0x70000000,b'\xa5'*0x10000)
-rows=streaming(m); assert m.nodes[rows['Spotify']]['visible']
-m.click(rows['Configuration']); m.page=m.top; m.row(4)
-assert m.config['STREAMHIDE']=='SPOTIFY' and not m.nodes[rows['Spotify']]['visible']; passed()
-
 # Memory housekeeping has no job beyond dropping caches: the patched native entry returns
 # before opening any file or scheduling a periodic wake.
 m=Machine(); assert m.call(address=0x50b810,args=(0,0,0,0),gap=0)==0 and not m.calls; passed()
@@ -72,6 +60,55 @@ m=NativeTidal(1); m.call(address=syms['get_tidal_trackurl'],args=(0,0,0,0),gap=0
 assert m.lifecycle==['create','detach']; m.lifecycle=[]
 m.call(address=syms['get_tidal_trackurl'],args=(0,0,0,0),gap=0)
 assert m.lifecycle==['cancel','join','create','detach']; passed()
+# Downloaded cover saving keeps stock's native thumbnail return, resolves the search's song,
+# writes atomically beside it, and leaves CUE tracks and failures to stock.
+class CoverSave(LyricSaveMachine):
+    def __init__(self,**rec):
+        super().__init__({'/tmp/accepted.jpg':b'jpeg'}); self.thumb=1
+        r=self.playing()
+        for off,v in dict(REC_NAME='01 Yellow.flac',REC_PATH='/mnt/mmc/Coldplay/01 Yellow.flac',**rec).items():
+            self.word(r+O[off],self.string(v) if isinstance(v,str) else v)
+        self.handlers[syms['toolsThumbSpecCover']]='cv:thumb'; self.handlers[syms['online_getkeyword_info']]='cv:key'
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if name=='cv:thumb': return self.returns(self.thumb,clobber=True)
+        if name=='cv:key':
+            u.mem_write(u.reg_read(REGS[0]),b'01 Yellow.flac\0'); return self.returns(0,clobber=True)
+        return super().hook(u,address,size,unused)
+    def save_cover(self):
+        return self.call(address=payload_syms['m1plus_cover_save'],args=(self.string('/tmp/source'),self.string('/tmp/accepted.jpg'),254,254),gap=0)
+m=CoverSave(); assert m.save_cover()==1 and m.files['/mnt/mmc/Coldplay/01 Yellow.jpg']==b'jpeg'; passed()
+m=CoverSave(REC_CUE_END=90); assert m.save_cover()==1 and '/mnt/mmc/Coldplay/01 Yellow.jpg' not in m.files; passed()
+m=CoverSave(); m.thumb=0; assert m.save_cover()==0 and '/mnt/mmc/Coldplay/01 Yellow.jpg' not in m.files; passed()
+m=CoverSave(); m.fail_write=True; assert m.save_cover()==1 and '/mnt/mmc/Coldplay/01 Yellow.jpg' not in m.files; passed()
+# A failed external read, empty replacement or malformed timestamp preserves stock's usable list.
+for data in (None,b'',b'[00:bad]broken\n'):
+    m=LrcMachine(path='/mnt/mmc/fallback.lrc',files={} if data is None else {'/mnt/mmc/fallback.lrc':data},lrc=[(3,'Stock fallback')])
+    assert m.load()==1 and m.lines==[(3,'Stock fallback')]; passed()
+# A failed thread start leaves no stuck progress state; a later press can start the job.
+class AlbumNoThread(AlbumLyricsMachine):
+    refuse=True
+    def hook(self,u,address,size,unused):
+        if address==syms['pthread_create@GLIBC_2.2'] and self.refuse: return self.returns(1,clobber=True)
+        return super().hook(u,address,size,unused)
+m=AlbumNoThread(); row=m.more()[4]; m.found=[m.song('T1')]
+f,ctx=m.handler(row,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+assert not m.threads and m.toasts[-1][3]=="Can't start the download"; passed()
+m.refuse=False; m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+assert len(m.threads)==1; passed()
+
+# Native empty-default semantics: a missing STREAMHIDE key does not write the output buffer.
+# Poison the stack first so zero-initialized emulator memory cannot conceal an uninitialized read.
+class MissingStreamHide(AppMachine):
+    def hook(self,u,address,size,unused):
+        if self.handlers.get(address)=='toolsReadConfig' and self.text(u.reg_read(REGS[2]))=='STREAMHIDE' and 'STREAMHIDE' not in self.config:
+            return self.returns(0,clobber=True)
+        return super().hook(u,address,size,unused)
+m=MissingStreamHide(); m.u.mem_write(0x70000000,b'\xa5'*0x10000)
+rows=streaming(m); assert m.nodes[rows['Spotify']]['visible']
+m.click(rows['Configuration']); m.page=m.top; m.row(4)
+assert m.config['STREAMHIDE']=='SPOTIFY' and not m.nodes[rows['Spotify']]['visible']; passed()
+
 # Execute V2.1's complete CUE parser with byte-oriented stdio mocks. Its eighth conversion
 # is a shared jalr (the seven direct calls alone miss Windows-1252 track titles).
 class CueNative(TagTextMachine):

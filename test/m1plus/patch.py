@@ -45,6 +45,7 @@ if is_m1plus:
     inc_m1 = run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c', '-I', '.', str(ROOT/'patch/offsets.inc'))
     O = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b', inc_m1, re.M)}
     HOOKS = dict(M1PLUS_HOOKS)
+    HOOKS['playermore_page_init'] = HOOKS['dialog_playmore_dialog_init']
     HOOKS['on_wm_keyup_before_fun'] = M1PLUS_HOOKS['on_wm_keyup_fun']
     HOOKS['on_wm_tsdown_before_fun'] = M1PLUS_HOOKS['on_wm_before_tsdown_fun']
     HOOKS['load_localclass_list'] = M1PLUS_HOOKS['loadLocalClassList']
@@ -6432,7 +6433,7 @@ if 'mclLoadExLyric' in HOOKS:
         # A .lrc (stock's loader mocked: its fopen comes here, LYRIC_OPEN, then its parse) is read again, as a tag:
         # its synced lines replace stock's whole seconds, word stamps cut out, blank lines gone, a UTF-8 mark at its
         # start skipped; unsynced, stock's stay.
-        from build import LYRIC_OPEN
+        LYRIC_OPEN = (SITES['LYRIC_OPEN'][0][0],)
         assert struct.unpack_from('<I',demo,fileoff(demo,LYRIC_OPEN[0]))[0]==jal(payload_syms['ringnav_lrc_open'])
         class LrcMachine(LyricMachine):
             def __init__(self,tags={},lrc=(),path=None,files={}):
@@ -6610,7 +6611,7 @@ if 'playermore_page_init' in HOOKS:
     # track left out) and starts the worker; the row shows its progress, a press while it runs cancels, the
     # page's end leaves it running, and the timer joins it and toasts the summary. USB storage stops it quietly.
     # The job's own steps are test/peq.py's album_check.
-    assert [m.get(O['PLAYMORE_ROWS']+4*i) for i in range(O['PLAYMORE_COUNT'])]==[2,3,4,5,6,7,0,1]  # Download Cover & Lyrics third
+    if not is_m1plus: assert [m.get(O['PLAYMORE_ROWS']+4*i) for i in range(O['PLAYMORE_COUNT'])]==[2,3,4,5,6,7,0,1]  # Download Cover & Lyrics third
     class AlbumLyricsMachine(CoverflowMachine):
         def __init__(self,**queue):
             super().__init__(**queue); self.wifi=3; self.restack=True; self.accessed=[]
@@ -6622,27 +6623,27 @@ if 'playermore_page_init' in HOOKS:
             if name!='al:get_wifisignal': return super().hook(u,address,size,unused)
             self.returns(self.wifi,clobber=True)
         def playing(self): return self.items(self.get(syms['mcl_pdeqplaylist']))[0]
-        def more(self,rows=8):
+        def more(self,rows=O['PLAYMORE_COUNT']):
             self.stock=[self.node('list_item') for _ in range(rows)]
-            view=self.node('scroll_view','scroll_view_more',list(self.stock)); self.top=self.node('window','playermore_page',[view])
+            view=self.node('scroll_view',('playmore_scrollview' if is_m1plus else 'scroll_view_more'),list(self.stock)); self.top=self.node('window','playermore_page',[view])
             assert self.call(address=HOOKS['playermore_page_init'][0],args=(self.top,0,0,0),gap=0)==0
             assert self.calls[0][:2]==('stock_playermore',self.top)
             return self.nodes[view]['children']
-    m=AlbumLyricsMachine(); kids=m.more(); row=kids[3]
-    assert len(kids)==9 and [k for k in kids if k!=row]==m.stock and m.nodes[row]['style']=='s_listitem_black'
-    button=m.nodes[row]['children'][0]; icon,label=m.nodes[button]['children']
-    assert m.nodes[button]['style']=='s_btn_listitem' and not m.nodes[button].get('name')
-    assert [m.get(button+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,70]
-    assert m.nodes[icon]['image']=='player_onlinesearch' and [m.get(icon+O[k]) for k in ('W_X','W_W','W_H')]==[10,52,70]
-    assert m.nodes[label]['style']=='s_scrlabel_white20l' and m.nodes[label]['text']=='Download Album Lyrics'
-    assert [m.get(label+O[k]) for k in ('W_X','W_W','W_H')]==[72,253,70]; passed()
-    m=AlbumLyricsMachine(cls=0xf1); assert len(m.more())==8; passed()  # an online queue
-    for off,v in (('REC_TYPE',4),('REC_ALBUM',0),('REC_PATH',0)):  # a folder, no album tag, no path
-        m=AlbumLyricsMachine(); m.word(m.playing()+O[off],v); assert len(m.more())==8,off; passed()
-    m=AlbumLyricsMachine(); m.word(m.playing()+O['REC_PATH'],m.string('http://x/y')); assert len(m.more())==8; passed()
-    m=AlbumLyricsMachine(); assert len(m.more(7))==7; passed()  # not stock's rows: left as they are
+    m=AlbumLyricsMachine(); kids=m.more(); row=kids[4 if is_m1plus else 3]
+    assert len(kids)==O['PLAYMORE_COUNT']+1 and [k for k in kids if k!=row]==m.stock
+    button=row if is_m1plus else m.nodes[row]['children'][0]
+    icon,label=m.nodes[button]['children'][:2]
+    assert not m.nodes[button].get('name') and m.nodes[label]['text']=='Download Album Lyrics'
+    assert m.nodes[icon]['image']==('p_onlinesearch' if is_m1plus else 'player_onlinesearch')
+    assert m.nodes[label]['style']==('srlabel_item_white_style' if is_m1plus else 's_scrlabel_white20l')
+    assert [m.get(label+O[k]) for k in ('W_X','W_W','W_H')]==([48,250,20] if is_m1plus else [72,253,70]); passed()
+    m=AlbumLyricsMachine(cls=0xf1); assert len(m.more())==O['PLAYMORE_COUNT']; passed()
+    for off,v in (('REC_TYPE',4),('REC_ALBUM',0),('REC_PATH',0)):
+        m=AlbumLyricsMachine(); m.word(m.playing()+O[off],v); assert len(m.more())==O['PLAYMORE_COUNT']; passed()
+    m=AlbumLyricsMachine(); m.word(m.playing()+O['REC_PATH'],m.string('http://x/y')); assert len(m.more())==O['PLAYMORE_COUNT']; passed()
+    m=AlbumLyricsMachine(); assert len(m.more(2))==2; passed()
     def album_lyrics_page(**queue):
-        m=AlbumLyricsMachine(**queue); button=m.nodes[m.more()[3]]['children'][0]; label=m.nodes[button]['children'][1]
+        m=AlbumLyricsMachine(**queue); row=m.more()[4 if is_m1plus else 3]; button=row if is_m1plus else m.nodes[row]['children'][0]; label=m.nodes[button]['children'][1]
         cue=m.song('Cue'); m.word(cue+O['REC_CUE_END'],90)
         m.found=[m.song('T1'),cue,m.song('T2')]
         def press():
@@ -10916,7 +10917,8 @@ assert m.search('','Coldplay',found)==1 and not m.written and not m.urls; passed
 # saves, the .downpic copy stock's loader would show first goes, and system() gets ":". The song is the queue's
 # whose file name stock turns into name. Not in the queue, a CUE track's, or a card that can't be written: stock's.
 if 'LYRIC_SAVE' in SITES:
-    from build import LYRIC_SAVE_CALL
+    LYRIC_SAVE_CALL = SITES['LYRIC_SAVE'][0][0]
+    LYRIC_SAVE_FMT = 0x751b90 if is_m1plus else 0x772630
     class LyricSaveMachine(AlbumLyricsMachine):
         def __init__(self,files):
             super().__init__(); self.files=dict(files); self.open_files={}; self.unlinked=[]; self.fail_write=False
@@ -10940,10 +10942,10 @@ if 'LYRIC_SAVE' in SITES:
             elif name=='unlink': self.unlinked.append(self.text(a)); self.files.pop(self.text(a),None)
             self.returns(ret,clobber=True)
         def save(self,name):
-            cmd=self.alloc(0x400); fmt=0x772630  # stock's cp -rf %s "/mnt/mmc/.downpic/%s"
+            cmd=self.alloc(0x400); fmt=LYRIC_SAVE_FMT  # stock's cp -rf %s "/mnt/mmc/.downpic/%s"
             self.call(address=payload_syms['ringnav_lyric_save'],args=(cmd,0x400,fmt,self.string('/tmp/oslyric_7')),stack=(self.string(name),),gap=0)
             return self.text(cmd)
-    assert m.text(0x772630)=='cp -rf %s "/mnt/mmc/.downpic/%s"' and m.get(LYRIC_SAVE_CALL)==jal(payload_syms['ringnav_lyric_save'])
+    assert m.text(LYRIC_SAVE_FMT)=='cp -rf %s "/mnt/mmc/.downpic/%s"' and m.get(LYRIC_SAVE_CALL)==jal(payload_syms['ringnav_lyric_save'])
     LRC=b'\xef\xbb\xbf[00:12.00]Look at the stars\n'*700  # over one 4 KB read
     def lyric_save(**rec):
         m=LyricSaveMachine({'/tmp/oslyric_7':LRC,'/mnt/mmc/.downpic/01 Yellow.lrc':b'[00:00.00]Kugou'}); r=m.playing()

@@ -19,6 +19,8 @@ M1PLUS_GP = 0xa03ed0
 INPUTS = {M1PLUS_ZIP_SHA: ('M1 Plus Firmware V2.1/update.bin', M1PLUS_BIN_SHA), M1PLUS_BIN_SHA: (None, M1PLUS_BIN_SHA)}
 # Stock routines only the M1 Plus payload calls, beside build.py's FUNCTIONS (compile_common merges them).
 M1PLUS_FUNCTIONS = {
+ 'toolsThumbSpecCover': ('int', 'const char *, const char *, int, int'),
+ 'set_hscroll_label_attribute': ('void', 'void *'),
  'view_create': ('void *', 'void *, int, int, int, int'),  # the Home card's page and card views
  'label_set_line_wrap': ('int', 'void *, int'),
  'slide_indicator_set_max': ('int', 'void *, unsigned'),
@@ -197,6 +199,12 @@ CALL_SITES = {
                      (0x5e7f18, 0x0411eea5, 'ringnav_cue_text')),
         # toolsLoadAllFile's recursive directory walk (0x5ea364), first directory strcmp, ".".
         'SCAN_DIRS': ((0x5ea6a8, 0x0320f809, 'ringnav_scan_dir'), (0x5ea6ac, 0x24a53ed4, None)),
+        # mclLoadExLyric's private loader: fopen of the final (possibly converted) .lrc.
+        'LYRIC_OPEN': ((0x5d3bdc, 0x0320f809, 'ringnav_lrc_open'),),
+        # onlinesearch's accept: snprintf(cp -rf tmp, .downpic/name), after both access checks.
+        'LYRIC_SAVE': ((0x537ca0, 0x0320f809, 'ringnav_lyric_save'), (0x537c9c, 0x24c61b90, None)),
+        # Cover accept: preserve its native thumbnail and also save the JPEG beside the song.
+        'COVER_SAVE': ((0x537b10, 0x0320f809, 'm1plus_cover_save'),),
         # mclNextSong's bal to the shuffle pick (0x5d03b0).
         'SHUFFLE_CALL': ((0x5d5a28, 0x0411ea61, 'ringnav_shuffle'),),
         # V2.1's check_cpumem is the complete detached memory thread: open drop_caches,
@@ -321,6 +329,7 @@ CALL_SITE_PURPOSES = {
     'DARK_POLLS': 'stock polls idle while dark',
     'LYRIC_OPEN': 'lyric files read as tags are',
     'LYRIC_SAVE': 'lyrics saved beside the song',
+    'COVER_SAVE': 'covers saved beside the song',
     'TIDAL_PAGE_DONE': 'Tidal lists load every page',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
@@ -376,10 +385,6 @@ M1PLUS_PORTS = {
                   'M1 opens the hold menu with a touch long-press too'),
     'STREAM_POLL_CALLS': ('native', "V2.1 creates a Tidal URL worker per request (get_tidal_trackurl, 0x512ed0); "
                           "no boot worker or idle start-flag poll, and no Baidu Pan"),
-    'LYRIC_OPEN': ('unported', "a .lrc's milliseconds, word stamps and blank lines (1.5.0); V2.1's .lrc loader in "
-                   "mclLoadExLyric (0x5d41e4) not yet found. Without it ringnav_lyric keeps stock's .lrc lines, as "
-                   'on 1.4.5'),
-    'LYRIC_SAVE': ('unported', "Download Cover & Lyrics saved beside the song (1.5.0); V2.1's accept not yet found"),
     'TIDAL_PAGE_DONE': ('unported', 'Tidal lists past 50 (1.5.0): goes with the Tidal list threads'),
     'timezone_row': ('unported', "the time zone rows' offsets in effect now (1.5.0): goes with select_timezone"),
     'folder_click': ('unported', "videos played from Folder view (1.5.0), where the Q2's Videos row now opens; "
@@ -391,8 +396,6 @@ M1PLUS_PORTS = {
                       'queue on a reboot not yet checked'),
     'dialog_checkfw_dialog_init': ('unported', "the firmware update's dialog saves the queue (1.5.0); V2.1 has no "
                                    'dialog_checkfw_dialog_init by name'),
-    'playermore_page_init': ('unported', "Download Album Lyrics on Now Playing's ⋯ page (1.5.0); V2.1 has no "
-                             'playermore_page_init by name'),
     'get_tidal_trackurl': ('native', "V2.1 launches an on-demand URL worker instead of waking a polling worker"),
     'tidalPlaylistDetailThd': ('unported', "Tidal playlists past 50 (1.5.0); V2.1's is 0x516b9c, but V2.1 has no "
                                'tidal_albuminfo_thread_run, its done flag not yet found'),
@@ -585,6 +588,7 @@ M1PLUS_HOOKS = {
     'toolsGetMusicInfo': (0x5ec6a8, 'ringnav_music_info', 'music_info'),
     # USB mode's page, as a cable to a computer opens it, before stock unmounts the card for USB
     # storage: the card apps end first (addon_card_away). V2.1's init binds its window as V1.32's.
+    'dialog_playmore_dialog_init': (0x479cc4, 'ringnav_playermore', 'playermore'),
     'usbmode_page_init': (0x545dd8, 'ringnav_usbmode', 'usbmode'),
 }
 

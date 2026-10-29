@@ -555,6 +555,9 @@ static int al_gone(void *ctx, void *event) {
  * row click (an atoi of the name) never sees it. Only for a playing song on the card; a page
  * without stock's rows is left as it built it. */
 extern int stock_playermore_trampoline(void *win, void *ctx);
+#if M1PLUS
+#include "m1plus_playermore.c"
+#else
 int ringnav_playermore(void *win, void *ctx) {
     int result = stock_playermore_trampoline(win, ctx);
     void *view = win ? widget_lookup(win, "scroll_view_more", 1) : (void *)0;
@@ -571,6 +574,8 @@ int ringnav_playermore(void *win, void *ctx) {
     al_show();
     return result;
 }
+
+#endif
 
 /* The Cover Art Archive's 500 px front (a JPEG thumbnail) of release group id, as the archive.org URL
  * its 307 names, to out (0x200, online_addcoverlist's size); 0 without one (404). */
