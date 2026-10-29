@@ -2106,6 +2106,37 @@ Results:
 - **Footprint over 1.5.0's files:** +1,474/−295 over 31. The playlist editor's SQL seam and the Accent
   row's went; new are Display's `#if !M1PLUS`, the Bluetooth row's names and `SPOT_REFUSED_SUB`.
 
+## 50. Five-feature batch on 1.5.0 (Oct 28)
+
+Era browsing, hidden-folder exclusions and Western tag/CUE decoding, Streaming Configuration,
+user-space battery changes and lyrics improvements are implemented on `staging`. The detailed
+[validation record](m1plus-validation-1.5.0.md) tracks the build, automated gates and combined device
+checklist from sections 48–49. No release is published by this batch.
+
+The native trace changes one implementation choice: V2.1's `get_tidal_trackurl` creates its URL
+worker per request, rather than setting a boot worker's start flag. The native on-demand worker
+stays; the M1 does not add a semaphore to a thread that does not poll. Emulation executes the
+launcher with mocked network/thread endpoints, checking offline refusal and cancel/join/create/
+detach ordering across track changes. Live Tidal checks still need a signed-in account.
+
+V2.1's complete `check_cpumem` thread (`0x50b810`, platform_init's detached memory worker) opens
+`drop_caches`, writes `3` every five one-second sleeps and does nothing else. Its entry now returns
+NULL, replacing the old write-only bypass. The inner playback/seek settling wait in
+`mclSyncPlayerStatus` stays native; only its outer wait and the cover workers' idle waits stretch.
+No runtime battery-life claim is made.
+
+The tested 1.5.0 dev 13 image (`V01Vs`, `work/batch-five/dev13`) passes all automated gates:
+1,351 MIPS scenarios, build/rootfs audit, all three boot walks, playback, M4B, ID3, headset I/O,
+LDAC, Bluetooth and the 615-entry port report. Both Q2 images remain byte-identical to upstream
+1.5.0; the 36 suite runs retain explicit reporting of five failures reproduced in upstream's tree.
+Device checks on dev 11 found a missing-key Configuration buffer and an eighth native CUE
+conversion call; both are fixed and regression-tested in dev 13. The verified candidate is on the
+card as `update.bin` and was flashed through the menu updater. The installed demo matches.
+The CUE and Configuration fixes, persistence, playback and screen off/wake passed; temporary
+media/settings are restored, and the library is back to its original 419 paths. The user also
+reports the Bluetooth checklist passed on dev 13. Remaining earlier checklist items and coverage
+limits are recorded separately in the validation record.
+
 ## How to check a build now
 
 ```sh
