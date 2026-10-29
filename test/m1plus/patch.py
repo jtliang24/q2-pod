@@ -11140,6 +11140,43 @@ m.advance(0,clear=False); assert m.labels()==MENU and not m.find('edit')
 search('50%\toff'); assert len(m.threads)==asked and m.labels()==['50%\toff','Tracks','Albums','Artists','Playlists']
 m.row(1); assert m.asked()==('search','albums','50%25%09off'); m.answer(*OK,[('album','spotify:album:q','Q','R','','')])
 assert m.labels()==['Albums','Q','R']; m.back(); m.back(); assert m.labels()==MENU; passed()
+# Model stock's keyboard close/destruction callbacks nested inside widget destruction.
+# The editor's text can already be empty, and delayed events can arrive after rebuilding.
+if is_m1plus:
+    saved_search_machine = m
+    class SearchTeardownMachine(BrowseMachine):
+        def hook(self,u,address,size,unused):
+            if self.handlers.get(address,'').endswith('widget_destroy_children') and getattr(self,'search_editor',0):
+                edit,self.search_editor = self.search_editor,0
+                self.teardowns += 1
+                self.nodes[edit]['text']=''
+                for event in ('EVT_VALUE_CHANGED','EVT_IM_ACTION','EVT_BLUR'):
+                    f,ctx=self.handler(edit,O[event])
+                    self.nested(f,ctx,self.event,0,0)
+            return super().hook(u,address,size,unused)
+    for cat,caption in zip(('tracks','albums','artists','playlists'),('Tracks','Albums','Artists','Playlists')):
+        m=SearchTeardownMachine(); m.teardowns=0; m.open(); m.answer(*ME)
+        m.row(4); edit=m.find('edit'); m.search_editor=edit
+        term='音楽 %\t\n\rBjörk'; escaped='音楽 %25%09%0A%0DBjörk'
+        m.nodes[edit]['text']=term
+        f,ctx=m.handler(edit,O['EVT_IM_ACTION'])
+        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
+        m.advance(0,clear=False)
+        assert m.teardowns==1 and m.labels()==[term,'Tracks','Albums','Artists','Playlists'],(m.teardowns,m.labels())
+        # Events from the now inactive editor must neither change the term nor rebuild its page.
+        for event in ('EVT_VALUE_CHANGED','EVT_IM_ACTION','EVT_BLUR'):
+            f,ctx=m.handler(edit,O[event]); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+        m.advance(0,clear=False)
+        m.row(('tracks','albums','artists','playlists').index(cat))
+        assert m.asked()==('search',cat,escaped),m.asked()
+        m.answer('ok','','next%251',[]); m.row(0)
+        assert m.asked()==('search',cat,escaped,'next%251')
+        m.answer(*OK,[]); m.back(); m.back()
+        assert m.labels()==[term,'Tracks','Albums','Artists','Playlists']
+        m.row(0); assert m.asked()==('search','tracks',escaped)
+        m.answer(*OK,[]); m.back(); m.back(); assert m.labels()==MENU
+        m.destroy(m.page); passed()
+    m=saved_search_machine
 # Holding Play/Pause on a track row adds it to the queue, on a playlist row downloads it, its reply
 # toasted; on another row, or another page, the hold is stock's.
 m.row(0); m.answer(*OK,[track('spotify:track:1','One','c','0'),('album','spotify:album:a','A','B','',''),

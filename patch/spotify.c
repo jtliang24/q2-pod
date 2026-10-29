@@ -1005,6 +1005,11 @@ static int clicked(void *ctx, void *event) {
 /* The search box's OK, or its keyboard closed with text: its categories, Return going back to the
  * menu. An empty OK closes the keyboard with no other event, so it is taken here too. */
 static int searched(void *ctx, void *event) {
+#if M1PLUS
+    /* show() invalidates the editor before destruction, which can emit these events again.
+     * An accepted OK also owns its pending timer across the keyboard's close callbacks. */
+    if (!br.edit || ctx != br.edit || (br.go && br.next == G_SEARCH)) return 0;
+#endif
     if (widget_get_text_utf8(br.edit, br.term, sizeof br.term)) br.term[0] = 0;
     later(br.term[0] ? G_SEARCH : G_SHOW, 0);
     return 0;
@@ -1012,6 +1017,9 @@ static int searched(void *ctx, void *event) {
 
 /* The box left without a search: the menu as it was. */
 static int search_left(void *ctx, void *event) {
+#if M1PLUS
+    if (!br.edit || ctx != br.edit) return 0;
+#endif
     if (!br.go) later(G_SHOW, 0);
     return 0;
 }
@@ -1045,13 +1053,24 @@ static int go(const void *unused) {
             widget_destroy_children(br.page), br.view = 0; /* the box alone: the keyboard leaves no room for the rows */
             br.edit = edit_create(br.page, "text", 2, 26);
             widget_set_prop_str(br.edit, "tips", "Search Spotify");
+#if M1PLUS
+            widget_on(br.edit, EVT_VALUE_CHANGED, searched, br.edit);
+            widget_on(br.edit, EVT_IM_ACTION, searched, br.edit);
+            widget_on(br.edit, EVT_BLUR, search_left, br.edit);
+#else
             widget_on(br.edit, EVT_VALUE_CHANGED, searched, 0);
             widget_on(br.edit, EVT_IM_ACTION, searched, 0);
             widget_on(br.edit, EVT_BLUR, search_left, 0);
+#endif
             widget_set_focused(br.edit, 1);
         }
     } else if (l->kind == L_CATS) {
+#if M1PLUS
+        /* L_CATS owns the accepted query in its title, through Back and continuation. */
+        if (put(a, sizeof a, cats[i]) && put(a, sizeof a, l->title)) push(L_LIST, "search", a, "", CATS[i]);
+#else
         if (put(a, sizeof a, cats[i]) && put(a, sizeof a, br.term)) push(L_LIST, "search", a, "", CATS[i]);
+#endif
     } else if (l->kind == L_DOWNLOADS) {
         if (!br.downloads) {
             if (!i) push(L_LIST, "downloaded", "", "", "Downloaded Tracks");
