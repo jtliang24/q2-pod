@@ -208,8 +208,8 @@ def shared_checks(directory, manifest, stock, demo, read):
     old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
     assert new == old.replace(*WATCHDOG_SLEEP) and new != old
     # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates,
-    # the ID3v2 walker calls, now id3_gain (MP3 ReplayGain), and the Q2's pause loop's sleep (PAUSE_SLEEP,
-    # unported on M1); each model's at its own addresses.
+    # the ID3v2 walker calls, now id3_gain (MP3 ReplayGain), and the pause loop's sleep (PAUSE_SLEEP);
+    # each model's at its own addresses.
     old, new = read('stock.squashfs', 'usr/bin/hciplayer'), read('rootfs.squashfs', 'usr/bin/hciplayer')
     profile = m1.PLAYER_PROFILE if m1plus else dict(vbr_scan=peq.VBR_SCAN, eq_rate_gates=(*peq.EQ_RATE_GATES, peq.PAUSE_SLEEP),
                                                     id3_calls=peq.ID3_CALLS)
@@ -218,6 +218,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     text = re.search(r'\.text +PROGBITS +[0-9a-f]+ ([0-9a-f]+) ([0-9a-f]+) ', run('readelf', '-SW', directory/'peq'/'stock-hciplayer'))
     start, size = int(text[1], 16), int(text[2], 16)
     off = fileoff(old, profile['vbr_scan'])
+    if m1plus: profile = dict(profile, eq_rate_gates=(*profile['eq_rate_gates'], profile['pause_sleep']))
     gates = [fileoff(old, a) for a in (*(a for a, _, _ in profile['eq_rate_gates']), *profile['id3_calls'])]
     # The Q2's FLAC fast paths (tools/flac.py, on by default) patch hciplayer's sync calls and LPC/output
     # pointers; unported on M1.
@@ -266,7 +267,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     identity strings, and its rootfs only in the files build.py names; and V2.1 still provides
     what the boot hook relies on."""
     import filecmp, os, pathlib, re, struct, subprocess, tarfile, tempfile
-    from build import (sha, run, fileoff, segments, symbols, BASE, RTC_WRITE, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ,
+    from build import (sha, run, fileoff, segments, symbols, BASE, RTC_WRITE, WIFI_LPS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ,
                        OBSOLETE, HELPER, BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO)
     from m1plus import (pic_gp, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS, PDR_M1PLUS, RTC_READ_M1PLUS,
                         call_site_words, M1PLUS_PRIVATE_FUNCTIONS)
@@ -277,6 +278,12 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert manifest['variant'] == 'stock' and manifest['compact_code'] == []
     assert set(manifest['changed_assets']) == {TAG_C}
     stock_syms = symbols(directory/'stock-demo')
+    # Native on-demand Tidal and drop-caches-only thread instruction pins.
+    pins = {0x512f98: 0x0320f809, 0x512fac: 0x0320f809, 0x512fd0: 0x0320f809,
+            0x512fd4: 0x24c6c288, 0x512fe0: 0x0320f809, 0x51c2f8: 0xa1230000,
+            0x50b844: 0x0320f809, 0x50b878: 0x0320f809, 0x50b894: 0x0320f809,
+            0x5d1818: 0x24840d40}
+    assert all(struct.unpack_from('<I', stock, fileoff(stock, a))[0] == word for a, word in pins.items())
     for n in ('local_era', 'row_stream_config'):
         assert struct.unpack('>II', read('rootfs.squashfs', f'release/assets/default/raw/images/xx/{n}.png')[16:24]) == (40,40)
     # Every page m1plus_contexts.inc lets ringnav navigate is a window V2.1's assets name, as build.py
@@ -489,7 +496,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert not setters & {got(a) for a in range(sortselect, sortselect + 720, 4) if words(a, 1)[0] >> 16 == 0x8f99}
     asset = read('rootfs.squashfs', 'release/assets/default/raw/ui/dialog/sortselect_dialog.bin')
     assert b'to_modal' not in asset and b'default(x=c,y=m,w=260,h=360)' in asset
-    for old, new in (RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H):  # same-length literals in place
+    for old, new in (RTC_WRITE, RTC_READ_M1PLUS, LOCK_CLOCK_12H, WIFI_LPS):  # same-length literals in place
         at = stock.index(old)
         assert stock.count(old) == 1 and len(new) == len(old) and demo[at:at+len(old)] == new, old
         allowed.update(range(at, at+len(old)))

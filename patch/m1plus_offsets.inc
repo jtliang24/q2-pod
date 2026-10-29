@@ -426,7 +426,7 @@ static inline int arc_out(int r, int y) {
  * at most that; Wake's second press is timed at the screen-off pace. */
 #define DARK_IDLE_SLEEP_MS 250
 /* Stock's player status sync and cover pollers sleep at least this long a turn while ringnav_sleep finds
- * the player dark and quiet (ringnav_dark_usleep; tools/build.py DARK_POLLS, unported on M1). */
+ * the player dark and quiet (ringnav_dark_usleep; tools/m1plus.py DARK_POLLS). */
 #define DARK_POLL_US 1000000
 /* Bluetooth absolute volume is read back this often with the screen off and no volume limit to
  * hold, or after the headset refused it (bt_volume_poll); 400 ms otherwise. A headset's own volume

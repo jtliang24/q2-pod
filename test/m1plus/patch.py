@@ -13737,7 +13737,7 @@ if 'STREAM_POLL_CALLS' in SITES:
     assert stream_calls('ringnav_tidal_track')==['stock_tidaltrack','sem_post']
     assert stream_calls('ringnav_baidu_poll',10000)==['sem_wait']
     passed()
-else:
+elif not is_m1plus:
     not_ported("Tidal's stream thread parked till a track is asked for (STREAM_POLL_CALLS, get_tidal_trackurl, 1.5.0)")
 
 if is_m1plus:

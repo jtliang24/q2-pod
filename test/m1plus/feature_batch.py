@@ -34,6 +34,44 @@ rows=streaming(m); assert m.nodes[rows['Spotify']]['visible']
 m.click(rows['Configuration']); m.page=m.top; m.row(4)
 assert m.config['STREAMHIDE']=='SPOTIFY' and not m.nodes[rows['Spotify']]['visible']; passed()
 
+# Memory housekeeping has no job beyond dropping caches: the patched native entry returns
+# before opening any file or scheduling a periodic wake.
+m=Machine(); assert m.call(address=0x50b810,args=(0,0,0,0),gap=0)==0 and not m.calls; passed()
+# The status poll stretches only while dark and quiet. Cover workers stretch whenever dark;
+# waking restores their original pace, and already-long waits stay long.
+for quiet,lit in ((0,1),(0,0),(1,0),(1,1)):
+    m=Machine(); m.mock('usleep@GLIBC_2.0'); m.word(payload_syms['dark_quiet'],quiet); m.byte(syms['g_backlight_status'],lit)
+    for name,on in (('ringnav_dark_usleep',quiet),('ringnav_dark_cover_usleep',not lit)):
+        for delay in (50000,200000,2000000):
+            m.call(address=payload_syms[name],args=(delay,0,0,0),gap=0)
+            assert [c[1] for c in m.calls if c[0].startswith('usleep')]==[max(delay,O['DARK_POLL_US']) if on else delay]
+    passed()
+# V2.1's Tidal launcher creates a worker on demand. There is no idle boot worker needing a
+# semaphore post. Execute the real launcher with only network/thread endpoints mocked.
+class NativeTidal(QueueMachine):
+    def __init__(self,online):
+        super().__init__(); self.online=online; self.lifecycle=[]
+        for name in ('networkGetConnectStatus','mclGetPlayPos','tidal_playurl','pthread_cancel@GLIBC_2.0',
+                     'pthread_join@GLIBC_2.0','pthread_create@GLIBC_2.2','pthread_detach@GLIBC_2.0'):
+            self.handlers[syms[name]]='nt:'+name
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if not name.startswith('nt:'): return super().hook(u,address,size,unused)
+        name=name[3:]; a,b,c,d=[u.reg_read(r) for r in REGS]; ret=0
+        if name=='networkGetConnectStatus': ret=self.online
+        elif name=='mclGetPlayPos': ret=0
+        elif name.startswith('pthread_create'):
+            assert c==0x51c288 and d==self.items(self.get(syms['mcl_pdeqplaylist']))[0]
+            self.word(a,77); self.lifecycle.append('create')
+        elif name.startswith('pthread_detach'): assert a==77; self.lifecycle.append('detach')
+        elif name.startswith('pthread_cancel'): self.lifecycle.append('cancel')
+        elif name.startswith('pthread_join'): self.lifecycle.append('join')
+        self.returns(ret,clobber=True)
+m=NativeTidal(0); m.call(address=syms['get_tidal_trackurl'],args=(0,0,0,0),gap=0); assert not m.lifecycle; passed()
+m=NativeTidal(1); m.call(address=syms['get_tidal_trackurl'],args=(0,0,0,0),gap=0)
+assert m.lifecycle==['create','detach']; m.lifecycle=[]
+m.call(address=syms['get_tidal_trackurl'],args=(0,0,0,0),gap=0)
+assert m.lifecycle==['cancel','join','create','detach']; passed()
 # Execute V2.1's complete CUE parser with byte-oriented stdio mocks. Its eighth conversion
 # is a shared jalr (the seven direct calls alone miss Windows-1252 track titles).
 class CueNative(TagTextMachine):

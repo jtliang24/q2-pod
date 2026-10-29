@@ -7,7 +7,7 @@ and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
 from build import (ROOT, TIMEZONES, TIMEZONE_ORDER, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
-                   REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, ICONS,
+                   REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, WIFI_LPS, ICONS,
                    STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
                    run, segments, sha, source_sha256, symbols)
 
@@ -199,9 +199,14 @@ CALL_SITES = {
         'SCAN_DIRS': ((0x5ea6a8, 0x0320f809, 'ringnav_scan_dir'), (0x5ea6ac, 0x24a53ed4, None)),
         # mclNextSong's bal to the shuffle pick (0x5d03b0).
         'SHUFFLE_CALL': ((0x5d5a28, 0x0411ea61, 'ringnav_shuffle'),),
-        # check_cpumem's "open failed, skip the write" beq: 1.2.2's form. Upstream 1.2.9 returns from the
-        # Q2's thread at once instead (roadmap U3's batch).
-        'DROP_CACHES': ((0x50b868, 0x12220006, 0x10000006),),
+        # V2.1's check_cpumem is the complete detached memory thread: open drop_caches,
+        # write "3" every five one-second sleeps, forever; no other work. Return NULL at entry.
+        'DROP_CACHES': ((0x50b810, 0x3c1c0050, 0x03e00008), (0x50b814, 0x279c86c0, 0x00001025)),
+        # mclSyncPlayerStatus's outer 200 ms wait, and both cover workers' idle waits.
+        # Its inner 10 ms playback/seek settling wait stays native.
+        'DARK_POLLS': ((0x5d1814, 0x0320f809, 'ringnav_dark_usleep'),
+                       (0x4dd4b4, 0x0320f809, 'ringnav_dark_cover_usleep'),
+                       (0x4deef0, 0x0320f809, 'ringnav_dark_cover_usleep')),
         # toolsLoadAllFile's count check, the count at -0x4f7c($fp).
         'SCAN_LIMIT': ((0x5efeb4, 0x8fc2b084, 'ringnav_scan_room'), (0x5efeb8, 0x28424e20, 0x8fc4b084)),
         # toolsLoadDirectory's and the recursive scan's (0x5ea364) extension checks.
@@ -369,11 +374,8 @@ M1PLUS_PORTS = {
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
     'PLAY_HOLD': ('unported', "Play/Pause's hold at 700 ms (1.4.5); V2.1's input_device_status is unnamed, and the "
                   'M1 opens the hold menu with a touch long-press too'),
-    'STREAM_POLL_CALLS': ('unported', "Tidal's stream thread parked till a track is asked for (1.5.0; 1.4.5's "
-                          "slower poll before it); V2.1 has no Baidu Pan, and its Tidal worker's usleep(10000) is not "
-                          'yet found'),
-    'DARK_POLLS': ('unported', "stock's pollers idle while dark (1.4.5): V2.1's mclSyncPlayerStatus (0x5d144c) and "
-                   'cover threads, their usleep calls not yet found'),
+    'STREAM_POLL_CALLS': ('native', "V2.1 creates a Tidal URL worker per request (get_tidal_trackurl, 0x512ed0); "
+                          "no boot worker or idle start-flag poll, and no Baidu Pan"),
     'LYRIC_OPEN': ('unported', "a .lrc's milliseconds, word stamps and blank lines (1.5.0); V2.1's .lrc loader in "
                    "mclLoadExLyric (0x5d41e4) not yet found. Without it ringnav_lyric keeps stock's .lrc lines, as "
                    'on 1.4.5'),
@@ -391,8 +393,7 @@ M1PLUS_PORTS = {
                                    'dialog_checkfw_dialog_init by name'),
     'playermore_page_init': ('unported', "Download Album Lyrics on Now Playing's ⋯ page (1.5.0); V2.1 has no "
                              'playermore_page_init by name'),
-    'get_tidal_trackurl': ('unported', "wakes Tidal's parked stream thread (1.5.0); V2.1's is 0x512ed0: goes with "
-                           'STREAM_POLL_CALLS'),
+    'get_tidal_trackurl': ('native', "V2.1 launches an on-demand URL worker instead of waking a polling worker"),
     'tidalPlaylistDetailThd': ('unported', "Tidal playlists past 50 (1.5.0); V2.1's is 0x516b9c, but V2.1 has no "
                                'tidal_albuminfo_thread_run, its done flag not yet found'),
     'tidalAlbumDetailThd': ('unported', "Tidal albums past 50 (1.5.0); V2.1's is 0x5178cc, its done flag not yet "
@@ -679,6 +680,8 @@ PLAYER_PROFILE = {
     'vbr_scan': 0x48f5fc,
     'eq_rate_gates': ((0x42ce34, 0x10400098, 0),
                       (0x42e6fc, 0x10400015, 0)),
+    # MPlayer pause loop: usec_sleep(20000) in its command/event loop, 50 ms as upstream.
+    'pause_sleep': (0x42ff2c, 0x24044e20, 0x3404c350),
     'seek_slot': 0x89f76c,
     'stock_seek': 0x48cc6c,
     'id3_calls': (0x48ee74, 0x492028, 0x492ab4),
@@ -806,6 +809,7 @@ def patch_player(raw, out):
     patch_word(data, prof['vbr_scan'], 0x144008a8, 0, 'VBR scan')  # bnez $v0, ... -> nop
     for address, stock, patched in prof['eq_rate_gates']:
         patch_word(data, address, stock, patched, 'Equalizer rate gate')
+    patch_word(data, *prof['pause_sleep'], 'pause loop sleep')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')
@@ -1027,7 +1031,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     check(patched.count(b'V2.1\0') == 1, 'Version literal is not unique')
     off = patched.find(b'V2.1\0')
     patched[off:off+len(version)+1] = version.encode() + b'\0'
-    for rtc in [RTC_WRITE, RTC_READ_M1PLUS]:
+    for rtc in [RTC_WRITE, RTC_READ_M1PLUS, WIFI_LPS]:
         check(patched.count(rtc[0]) == 1, f'Unexpected RTC command {rtc[0]!r}')
         patched = patched.replace(*rtc)
     check(patched.count(LOCK_CLOCK_12H[0]) == 1, 'Unexpected lock clock formats')
