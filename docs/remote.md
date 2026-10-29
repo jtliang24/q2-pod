@@ -135,6 +135,17 @@ Plus (dev 11). The Q2's payload is built and linked the same way, but `peek` has
 
 - **`authentication rejected`:** the key differs from the card's file, the file is malformed, or the key is new and the USB cable is still connected (setup step 3).
 - **`cannot reach Q2` / `No route to host`:** the Q2 isn't on the network yet (after a boot or a reboot it can take a few minutes), or is in Rockbox, which has no q2remote. Make sure the PC is on the same network and not still on wired Ethernet.
+- **`cannot reach Q2` from WSL on Windows (Mobile Hotspot):** when the player connects to a Windows Mobile Hotspot (`192.168.137.x`), Windows isolates the hotspot on a virtual Wi-Fi Direct adapter that WSL 2 cannot route to directly. Run the relay to bridge port 2302 through the Windows host:
+  ```sh
+  python3 tools/wsl_relay.py [DEVICE_IP]
+  ```
+  *(The relay automatically detects Windows Python and discovers connected hotspot devices if the IP is omitted).*
+  Then in WSL, point `Q2_HOST` to localhost (with WSL mirrored networking) or the default gateway (in standard NAT mode):
+  ```sh
+  export Q2_HOST=127.0.0.1   # or $(ip route show default | awk '{print $3}')
+  export Q2_KEY="$(cat q2remote.key)"
+  python3 tools/q2remote.py sh id
+  ```
 - **`no md-gpio-keys input device`:** run `devices`; the firmware may name its devices differently.
 
 ## Protocol
