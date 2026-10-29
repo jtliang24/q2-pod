@@ -776,3 +776,6 @@ static inline int arc_out(int r, int y) {
 #define VIS_FLOOR_DB 60
 #define VIS_VU_REF_DB -14
 #define VIS_LED_DB -1
+
+/* The CUE parser's in-place charset converter, native to this firmware. */
+#define CUE_CONVERT_ADDR 0x5e39b0

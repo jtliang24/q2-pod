@@ -183,6 +183,20 @@ CALL_SITES = {
     },
     # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
     'm1plus': {
+        # V2.1 toolsFixId3ErrorCode's round-trip strcmp, with the Latin-1 source in a1.
+        'TAG_TEXT': ((0x5ec5e4, 0x0320f809, 'ringnav_gbk_tag'),),
+        # V2.1's CUE parser has seven bal conversions plus a shared jalr for track titles.
+        # The jalr can call toolsIconvConvert or toolsIconvConvertNew (UTF-8 <- GBK).
+        'CUE_TEXT': ((0x5e72dc, 0x0411f1b4, 'ringnav_cue_text'),
+                     (0x5e73a0, 0x0411f183, 'ringnav_cue_text'),
+                     (0x5e7458, 0x0411f155, 'ringnav_cue_text'),
+                     (0x5e7514, 0x0411f126, 'ringnav_cue_text'),
+                     (0x5e77d4, 0x0411f076, 'ringnav_cue_text'),
+                     (0x5e7b90, 0x0411ef87, 'ringnav_cue_text'),
+                     (0x5e7de4, 0x0320f809, 'ringnav_cue_text'),
+                     (0x5e7f18, 0x0411eea5, 'ringnav_cue_text')),
+        # toolsLoadAllFile's recursive directory walk (0x5ea364), first directory strcmp, ".".
+        'SCAN_DIRS': ((0x5ea6a8, 0x0320f809, 'ringnav_scan_dir'), (0x5ea6ac, 0x24a53ed4, None)),
         # mclNextSong's bal to the shuffle pick (0x5d03b0).
         'SHUFFLE_CALL': ((0x5d5a28, 0x0411ea61, 'ringnav_shuffle'),),
         # check_cpumem's "open failed, skip the write" beq: 1.2.2's form. Upstream 1.2.9 returns from the
@@ -355,12 +369,6 @@ M1PLUS_PORTS = {
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
     'PLAY_HOLD': ('unported', "Play/Pause's hold at 700 ms (1.4.5); V2.1's input_device_status is unnamed, and the "
                   'M1 opens the hold menu with a touch long-press too'),
-    'TAG_TEXT': ('unported', "Latin-1 tags kept out of GBK (1.4.5); V2.1's toolsFixId3ErrorCode is 0x5ec460, its "
-                 'round trip strcmp not yet found'),
-    'CUE_TEXT': ('unported', "CUE sheets read as UTF-8, GBK or Windows-1252 (1.4.5); V2.1's CUE parser calls "
-                 "toolsIconvConvert (0x5e39b0), its call sites not yet found, and ringnav_cue_text calls V1.32's"),
-    'SCAN_DIRS': ('unported', "the library scan skips hidden folders (1.4.5); V2.1's toolsLoadAllFile (0x5efd98) "
-                  'walks with the same exclusions, its strcmp not yet found'),
     'STREAM_POLL_CALLS': ('unported', "Tidal's stream thread parked till a track is asked for (1.5.0; 1.4.5's "
                           "slower poll before it); V2.1 has no Baidu Pan, and its Tidal worker's usleep(10000) is not "
                           'yet found'),

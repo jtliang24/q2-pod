@@ -125,3 +125,6 @@
 #define BOOK_ROWS 10
 /* tidal_start: the register mcl_tidalStartPlayer's caller keeps its song id in (patch/tidal.c) */
 #define TIDAL_ID_REG "$s2"
+
+/* The CUE parser's in-place charset converter, native to this firmware. */
+#define CUE_CONVERT_ADDR 0x5bccac

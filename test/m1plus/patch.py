@@ -6675,12 +6675,12 @@ else:
 # showed Chinese; now only when they also read as GBK (ringnav_gbk_tag): a GBK-tagged MP3's Latin-1 frame
 # still shows Chinese, Western text its UTF-8 copy. Either is stored through its tidy-up (0x5b5a30) into
 # the 256-byte field.
-from build import TAG_TEXT, CUE_TEXT, SCAN_DIRS
+TAG_TEXT, CUE_TEXT, SCAN_DIRS = (SITES[n] for n in ('TAG_TEXT', 'CUE_TEXT', 'SCAN_DIRS'))
 class TagTextMachine(Machine):
     def __init__(self):
         super().__init__()
-        self.word(0xa26cc0-0xabc,0x1000014); self.handlers[0x1000014]='t:malloc'  # lazy-bound, as RolloverMachine's
-        self.word(0xa2638c,0x1000010); self.handlers[0x1000010]='t:free'
+        self.word((0xa03ed0-0xd4c) if is_m1plus else (0xa26cc0-0xabc),0x1000014); self.handlers[0x1000014]='t:malloc'  # lazy-bound, as RolloverMachine's
+        self.word((0xa03ed0-0xbdc) if is_m1plus else 0xa2638c,0x1000010); self.handlers[0x1000010]='t:free'
         self.handlers[syms['strcpy@GLIBC_2.0']]='t:strcpy'; self.handlers[syms['toolsIconvConvert']]='t:iconv'
         self.handlers[syms['strcmp@GLIBC_2.0']]='t:strcmp'  # on bytes: GBK isn't UTF-8
         self.mock('snprintf@GLIBC_2.0'); self.iconv=0
@@ -6697,21 +6697,21 @@ class TagTextMachine(Machine):
             except UnicodeError: pass
         self.returns(ret,clobber=True)
 if 'TAG_TEXT' in SITES:
-    assert struct.unpack_from('<I',demo,fileoff(demo,TAG_TEXT[0]))[0]==jal(payload_syms['ringnav_gbk_tag'])
+    assert struct.unpack_from('<I',demo,fileoff(demo,TAG_TEXT[0][0]))[0]==jal(payload_syms['ringnav_gbk_tag'])
     for utf8,raw in (('Lo que la música me enseñó',None),('Ciencia Ficción',None),('Mateo Nieto',None),('今','今'.encode()),
                      ('Ölüdeniz',None),('Canção do Mar',None),('Informações',None),('Grüße',None),('周杰伦','周杰伦'.encode('gbk')),('Jay 周杰伦 - 晴天','Jay 周杰伦 - 晴天'.encode('gbk'))):
         m=TagTextMachine(); out=m.alloc(0x100); latin1=raw is None or raw!=utf8.encode()
         raw=utf8.encode('latin-1') if raw is None else raw  # taglib_tag_<field>(tag, 0): its Latin-1 bytes
         copy=raw.decode('latin-1') if latin1 else utf8  # (tag, 1): TagLib's UTF-8, of the bytes as Latin-1
         rawp=m.alloc(len(raw)+4); m.u.mem_write(rawp,raw+b'\0')
-        m.call(address=0x5c5cf8,args=(int(latin1),rawp,m.string(copy),out),stack=(1,),gap=0)
+        m.call(address=syms['toolsFixId3ErrorCode'],args=(int(latin1),rawp,m.string(copy),out),stack=(1,),gap=0)
         assert m.raw(out).decode()==utf8,(utf8,m.raw(out)); passed()
 else:
     not_ported('Latin-1 tags kept out of GBK (TAG_TEXT, 1.4.5)')
 if 'CUE_TEXT' in SITES:
     # CUE sheets (CUE_TEXT): its seven field conversions go to ringnav_cue_text: UTF-8 stays, GBK goes through
     # stock's conversion, any other text is Windows-1252 re-encoded as UTF-8, cut at a whole character to 511 bytes.
-    for address in CUE_TEXT: assert struct.unpack_from('<I',demo,fileoff(demo,address))[0]==jal(payload_syms['ringnav_cue_text'])
+    for address,_,_ in CUE_TEXT: assert struct.unpack_from('<I',demo,fileoff(demo,address))[0]==jal(payload_syms['ringnav_cue_text'])
     for given,want in ((b'Caf\xc3\xa9 \xc3\x91and\xc3\xba','Café Ñandú'),(b'Caf\xe9 \x93Hi\x94 \x80','Café “Hi” €'),
                        (b'\xc3(','Ã('),(b'a\xe9'*200,'aé'*170+'a'),(b'plain','plain'),(b'\xed\xa0\x80','í\xa0€'),
                        ('周杰伦 晴天'.encode('gbk'),'周杰伦 晴天'),('Lo que la música'.encode('cp1252'),'Lo que la música'),
@@ -6722,7 +6722,7 @@ else:
     not_ported('CUE sheets read as UTF-8, GBK or Windows-1252 (CUE_TEXT, 1.4.5)')
 if 'SCAN_DIRS' in SITES:
     # The library scan (SCAN_DIRS) skips every hidden folder: q2-deezer's .deezer/stream never joins the Library.
-    assert struct.unpack_from('<I',demo,fileoff(demo,SCAN_DIRS[0]))[0]==jal(payload_syms['ringnav_scan_dir'])
+    assert struct.unpack_from('<I',demo,fileoff(demo,SCAN_DIRS[0][0]))[0]==jal(payload_syms['ringnav_scan_dir'])
     m=Machine(); dot=m.string('.')
     assert [m.call(address=payload_syms['ringnav_scan_dir'],args=(m.string(n),dot,0,0),gap=0)!=0 for n in ('.','..','.deezer','.Trashes','Music','Deezer')]==[False,False,False,False,True,True]; passed()
 else:
@@ -7447,7 +7447,7 @@ class RolloverMachine(CoverflowMachine):
         self.handlers[0x5c29bc]='r:directory'; self.handlers[0x5c2c8c]='r:directory'
         self.handlers[0x5ace14]='r:decoder_start'
         # Lazy-bound malloc, as used by stock player_refresh_playqueue.
-        self.word(0xa26cc0-0xabc,0x1000014); self.handlers[0x1000014]='r:malloc'
+        self.word((0xa03ed0-0xd4c) if is_m1plus else (0xa26cc0-0xabc),0x1000014); self.handlers[0x1000014]='r:malloc'
         for name in ('strcpy@GLIBC_2.0','strncmp@GLIBC_2.0','strstr@GLIBC_2.0','strchr@GLIBC_2.0',
                      'toolsGetMusicInfo','toolsGetFileSize','toolsGetAlbumCover','toolsGetExternCover',
                      'access@GLIBC_2.0','remove@GLIBC_2.0','usleep@GLIBC_2.0','fork@GLIBC_2.0'):
@@ -13738,6 +13738,9 @@ if 'STREAM_POLL_CALLS' in SITES:
     passed()
 else:
     not_ported("Tidal's stream thread parked till a track is asked for (STREAM_POLL_CALLS, get_tidal_trackurl, 1.5.0)")
+
+if is_m1plus:
+    exec(compile((ROOT/"test/m1plus/feature_batch.py").read_text(), str(ROOT/"test/m1plus/feature_batch.py"), "exec"))
 
 print(f'{checks} MIPS execution scenarios passed; toolkit services mocked, stock lock filter executed.')
 if is_m1plus:

@@ -2657,7 +2657,7 @@ int ringnav_cue_text(char *s, const char *to, const char *from) {
     /* stock's conversion writes back over s unbounded: GBK grows by half as UTF-8, so 340 bytes at
      * most fill the 512; a longer field reads as Windows-1252 */
     if (strlen(s) <= 340 && gbk_text(s))
-        return ((int (*)(char *, const char *, const char *))0x5bccac)(s, to, from);
+        return ((int (*)(char *, const char *, const char *))CUE_CONVERT_ADDR)(s, to, from);
     static const unsigned short cp1252[32] = {
         0x20ac, '?',    0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
         0x2039, 0x0152, '?',    0x017d, '?',    '?',    0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
