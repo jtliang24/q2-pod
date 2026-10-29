@@ -341,10 +341,10 @@ def media_db(path):
     db.close()
 
 # The Q2 Pod page's rows, 64 px under the 48 px title: Shuffle, Ratings, Most Played, Long Songs,
-# Era, Photos, Books (with their folders), Coverflow, Spotify, Internet Radio and AirPlay; six show.
-# Scrolled to its end (five rows on), Photos is the first showing.
+# Era, Photos, Books (with their folders), Coverflow, Spotify, Internet Radio, AirPlay and
+# Configuration; six show. Scrolled to its end (six rows on), Books is the first showing.
 def q2pod_row(i): return tap(160, 80 + 64 * i)
-def q2pod_end_row(i): return tap(160, 80 + 64 * (i - 5))
+def q2pod_end_row(i): return tap(160, 80 + 64 * (i - 6))
 MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
               ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
               ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
@@ -377,6 +377,8 @@ MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 
               ('spotify_back', BACK, 4, ('as', 'q2pod_end')),
               ('radio', q2pod_end_row(9), 5, ('not', 'q2pod_end')),
               ('radio_back', BACK, 4, ('as', 'q2pod_end')),
+              ('configuration', q2pod_end_row(11), 4, ('not', 'q2pod_end')),
+              ('configuration_back', BACK, 4, ('as', 'q2pod_end')),
               ('q2pod_top', UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
               ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
               ('shuffle_songs', tap(160, 101), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
@@ -533,7 +535,7 @@ if __name__ == '__main__':
             assert hits['swiped'] and hits['moved'], 'photo_swipes: the swipes never moved the viewer to another photo'
             assert hits['touched'], 'cover_next: no touch reached the covers'
             assert hits['to_tracks'], 'cover_open: the tap on the centre cover never opened its tracks'
-            assert hits['era_menu'] and hits['era_open_decade']
+            assert hits['era_menu'] and hits['era_open_decade'] and hits['stream_config']
             assert hits['spot_np'] and hits['radio_open'], 'spotify, radio: the rows never opened their pages'
             config = (data/'config.ini').read_text(errors='replace')
             assert re.search(r'^PLAYMODE=2$', config, re.M), 'shuffle_songs: Shuffle (2) not saved as the play mode'

@@ -6073,6 +6073,9 @@ int songs_open(const char *path, const char *title, int album) {
  * --cache-size-limit form, which the card's Spotify launcher reads when it starts librespot. Files,
  * not config.ini: tidal.c's trim reads Tidal's on its download thread, and blob_io renames it into
  * place, so a half-written one is never read. And a row that stops every stream and add-on. */
+#if M1PLUS
+#include "m1plus_nav_stream.c"
+#else
 static const char *const sc_dirs[] = { TIDAL_DIR, SPOT_DIR };
 
 /* The choice i, the cap being 512 << i MB: 2 (2 GB) when the file is missing or holds another. */
@@ -6182,6 +6185,8 @@ static int stream_config(void *ctx, void *event) {
     }
     return 0;
 }
+
+#endif
 
 /* Ratings (docs/internals.md#ratings): 0 to 5 hearts a song. 5 is stock's My Fav, so Now Playing's
  * heart, the queue menu's Favourites rows and Loved stay one; 1 to 4 are kept here by listen_key,

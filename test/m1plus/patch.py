@@ -9065,11 +9065,11 @@ def q2pod_page():
     assert 'Q2 Pod' in m.texts()
     labels=[m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]
     icons=[m.nodes[m.nodes[r]['children'][0]]['image'] for r in rows]
-    STREAMS=['Spotify','Internet Radio','AirPlay']  # Streaming's rows: V2.1 has no Streaming page
+    STREAMS=['Spotify','Internet Radio','AirPlay','Configuration']  # Streaming's rows: V2.1 has no Streaming page
     assert labels==['Shuffle','Ratings','Most Played','Long Songs','Era','Podcasts','Photos','Videos','Coverflow',*STREAMS],labels
     assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_era','local_podcasts','local_photos','local_videos',
-                   'local_coverflow','row_spotify','row_radio','stream_airplay']
-    assert [len(m.nodes[r]['children']) for r in rows]==[3,3,3,3,3,3,3,3,2,3,3,3]  # rows opening pages (as the Q2's): the chevron
+                   'local_coverflow','row_spotify','row_radio','stream_airplay','row_stream_config']
+    assert [len(m.nodes[r]['children']) for r in rows]==[3,3,3,3,3,3,3,3,2,3,3,3,3]  # rows opening pages (as the Q2's): the chevron
     # Each row's click is the Library's handler; Shuffle's opens its menu, Coverflow's the carousel.
     f,ctx=m.handler(rows[0],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='shuffle_page'
     m.top=page; f,ctx=m.handler(rows[8],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
@@ -11445,7 +11445,7 @@ if 'usbmode_page_init' in HOOKS:
     for f in ('/mnt/mmc/.deezer/icon.png','/mnt/mmc/.deezer/icon-40.png','/mnt/mmc/.soulseek/icon.png'): m.files[f]=bytearray()
     rows=streaming(m) if is_m1plus else stream_rows(m)
     if is_m1plus:  # the Q2 Pod page: Spotify, the card apps by name, Internet Radio and AirPlay after Coverflow
-        assert list(rows)[list(rows).index('Coverflow')+1:]==['Spotify','Deezer','File Browser','Soulseek','Internet Radio','AirPlay'],list(rows)
+        assert list(rows)[list(rows).index('Coverflow')+1:]==['Spotify','Deezer','File Browser','Soulseek','Internet Radio','AirPlay','Configuration'],list(rows)
     else: assert list(rows)==['Spotify','Deezer','File Browser','Soulseek','Tidal Downloads','Internet Radio','AirPlay','Configuration'],list(rows)
     icons={'Deezer':'file:///mnt/mmc/.deezer/'+('icon-40.png' if variant=='ipod' else 'icon.png'),
            'Soulseek':'file:///mnt/mmc/.soulseek/icon.png','File Browser':'stream_app'}
@@ -11495,7 +11495,7 @@ if 'usbmode_page_init' in HOOKS:
         assert streaming()==[1,'Deezer','Tidal Downloads','Internet Radio','Configuration']
         m.click(rows['Configuration']); m.page=m.top; assert ticks()==[True,False,True,False,True,True,False]; passed()
     else:
-        not_ported("Streaming's Baidu row removed, and Configuration's Show in Streaming switches (1.4.5): V2.1 has no Streaming page; Configuration is unported")
+        passed()  # V2.1 has no Baidu row; its service switches run in feature_batch.py.
     # Soulseek: q2-soulseek from the card's .soulseek folder.
     SBIN,SBROWSE,SSTATE,SPID='/mnt/mmc/.soulseek/q2-soulseek','/tmp/q2-soulseek.browse.sock','/tmp/q2-soulseek.state','/tmp/q2-soulseek'
     class SlskMachine(AppMachine): pass
@@ -13384,26 +13384,27 @@ passed()
 # Spotify's cache caps cycle 512 MB to 8 GB from 2 GB, kept in their folders' .cache-size in
 # librespot's form, which tidal.c's trim and the Spotify launcher read. Stop Streaming Services ends
 # librespot and its loop, a station and a stock stream, and the keys are local music's again.
-if not is_m1plus:
-    TCAP,SCAP='/mnt/mmc/.tidal/.cache-size','/mnt/mmc/.spotify/.cache-size'
-    m=RadioMachine({BIN:bytearray()}); spot_open(m,stream_page(m)); m.state('paused'); m.poll()
-    radio_open(m); m.row(1); m.row(0); assert endpoint(m,'radio_status')==2
-    m.top=m.node('window','home_page'); m.stream(); view=m.nodes[m.top]['children'][0]
-    conf=m.nodes[m.nodes[view]['children'][5]]['children'][0]; icon,label=m.nodes[conf]['children'][:2]
-    assert m.nodes[icon]['image']=='stream_config' and m.nodes[label]['text']=='Configuration'
-    m.click(conf); m.page=m.top; assert m.nodes[m.page]['name']=='streamconf_page'
-    assert m.labels()==['Configuration','Tidal Cache: 2 GB','Spotify Cache: 2 GB','Stop Streaming Services','TIDAL','Spotify','Tidal Downloads','Internet Radio','AirPlay']
-    m.row(0); assert m.files[TCAP]==b'4096M' and m.labels()[1]=='Tidal Cache: 4 GB' and endpoint(m,'stream_cache',0)==3
-    m.row(0); m.row(0); assert m.files[TCAP]==b'512M' and m.labels()[1]=='Tidal Cache: 512 MB'
-    m.row(1); assert m.files[SCAP]==b'4096M' and m.labels()[2]=='Spotify Cache: 4 GB' and endpoint(m,'stream_cache',1)==3
-    m.files[SCAP]=bytearray(b'9G'); assert endpoint(m,'stream_cache',1)==2  # not a choice: 2 GB
-    m.word(O['MCL_TYPE'],5); m.play=2; m.waited=m.forked
-    m.row(2); m.top=m.node('window','home_page')
-    assert 'killall -9 librespot aplay' in m.systems[-1] and 'player_stop' in [c[0] for c in m.calls]
-    assert [m.text(c[2]+8) for c in m.calls if c[0]=='navigator_to_with_context']==['Streaming stopped']
-    assert endpoint(m,'radio_status')==0 and endpoint(m,'spot_status')==0 and m.key(O['KEY_PLAY'])!=11; m.close(); passed()
+TCAP,SCAP='/mnt/mmc/.tidal/.cache-size','/mnt/mmc/.spotify/.cache-size'
+m=RadioMachine({BIN:bytearray()}); spot_open(m,stream_page(m)); m.state('paused'); m.poll()
+radio_open(m); m.row(1); m.row(0); assert endpoint(m,'radio_status')==2
+if is_m1plus:
+    conf=streaming(m)['Configuration']
 else:
-    not_ported("Streaming's Configuration (stream_config: no row on M1 Plus, its icon is the Q2's)")
+    m.top=m.node('window','home_page'); m.stream(); view=m.nodes[m.top]['children'][0]
+    conf=m.nodes[m.nodes[view]['children'][5]]['children'][0]
+icon,label=m.nodes[conf]['children'][:2]
+assert m.nodes[icon]['image']==('row_stream_config' if is_m1plus else 'stream_config') and m.nodes[label]['text']=='Configuration'
+m.click(conf); m.page=m.top; assert m.nodes[m.page]['name']=='streamconf_page'
+assert m.labels()==['Configuration','Tidal Cache: 2 GB','Spotify Cache: 2 GB','Stop Streaming Services',*(['Spotify','Internet Radio','AirPlay'] if is_m1plus else ['TIDAL','Spotify','Tidal Downloads','Internet Radio','AirPlay'])]
+m.row(0); assert m.files[TCAP]==b'4096M' and m.labels()[1]=='Tidal Cache: 4 GB' and endpoint(m,'stream_cache',0)==3
+m.row(0); m.row(0); assert m.files[TCAP]==b'512M' and m.labels()[1]=='Tidal Cache: 512 MB'
+m.row(1); assert m.files[SCAP]==b'4096M' and m.labels()[2]=='Spotify Cache: 4 GB' and endpoint(m,'stream_cache',1)==3
+m.files[SCAP]=bytearray(b'9G'); assert endpoint(m,'stream_cache',1)==2  # not a choice: 2 GB
+m.word(O['MCL_TYPE'],5); m.play=2; m.waited=m.forked
+m.row(2); m.top=m.node('window','home_page')
+assert 'killall -9 librespot aplay' in m.systems[-1] and 'player_stop' in [c[0] for c in m.calls]
+assert [m.text(c[2]+8) for c in m.calls if c[0]=='navigator_to_with_context']==['Streaming stopped']
+assert endpoint(m,'radio_status')==0 and endpoint(m,'spot_status')==0 and m.key(O['KEY_PLAY'])!=11; m.close(); passed()
 # The wheel drives only allowlisted windows (patch/contexts.inc), so every runtime list page needs an
 # entry; the two streaming Now Playing pages and a card app's QR code page (no list) handle their own keys.
 pages=set(re.findall(r'page_open\("(\w+)"',''.join(p.read_text() for p in (ROOT/'patch').glob('*.c'))))

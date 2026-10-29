@@ -1104,6 +1104,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     icons['local_frequentplay.png'] = ('pset_playmode.png', sized_art(cat(xx+'many.png'), 40))
     for n in ('home_q2pod', 'home_q2pod_down'):
         icons[f'{n}.png'] = ('mymusic.png', (ROOT/'assets/icons'/f'{n}.png').read_bytes())
+    icons['row_stream_config.png'] = ('pset_playmode.png', sized_art(cat(xx+'sset_netservice.png'), 40))
     icons['stream_airplay.png'] = ('airplay.png', cat(xx+'airplay.png'))
     # the card apps' rows on the Q2 Pod page (addon.c), at V2.1's 40 px as row_spotify
     icons['stream_app.png'] = ('tidal.png', sized_art((ROOT/'assets/icons/stream_app.png').read_bytes(), 40))

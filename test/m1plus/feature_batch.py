@@ -1,4 +1,39 @@
 """Extra V2.1 scenarios, executed in patch.py's MIPS harness namespace."""
+# Configuration changes the Q2 Pod page beneath it, using persistent service ids. Tidal's Home
+# card and unavailable Downloads have no switches; Configuration itself always remains visible.
+m=AppMachine(); card_app(m,'deezer','name=Deezer\n')
+rows=streaming(m); lib=m.top
+m.click(rows['Configuration']); m.page=m.top
+assert m.labels()==['Configuration','Tidal Cache: 2 GB','Spotify Cache: 2 GB','Stop Streaming Services',
+                    'Spotify','Deezer','Soulseek','Internet Radio','AirPlay'],m.labels()
+gap=m.rows()[3]
+assert m.nodes[gap]['style']==NAMES['ROW_STYLE'] and m.nodes[gap]['style:normal:bg_color']==-16777216
+for index,key,label in ((4,'SPOTIFY','Spotify'),(5,'deezer','Deezer'),(7,'RADIO','Internet Radio'),(8,'AIRPLAY','AirPlay')):
+    m.row(index)
+    assert key in m.config['STREAMHIDE'].split(',') and not m.nodes[rows[label]]['visible'], (key,m.config,m.nodes[rows[label]])
+    switch=m.nodes[m.rows()[index]]['children'][-1]
+    assert m.nodes[switch]['image']==NAMES['ICON_SWITCH_OFF']
+assert m.nodes[rows['Configuration']]['visible']
+saved=dict(m.config); m.close(); m.top=lib; m.click(rows['Configuration']); m.page=m.top
+assert m.config==saved and m.nodes[m.nodes[m.rows()[4]]['children'][-1]]['image']==NAMES['ICON_SWITCH_OFF']; passed()
+# A fresh payload instance models reboot; adding another app cannot shift the hidden app's key.
+n=AppMachine(); card_app(n,'deezer','name=Deezer\n'); card_app(n,'aaa','name=AAA\n'); n.config.update(saved)
+rows2=streaming(n)
+assert all(not n.nodes[rows2[label]]['visible'] for label in ('Spotify','Deezer','Internet Radio','AirPlay'))
+assert n.nodes[rows2['AAA']]['visible'] and n.nodes[rows2['Configuration']]['visible']; passed()
+m.row(4); assert m.nodes[rows['Spotify']]['visible'] and 'SPOTIFY' not in m.config['STREAMHIDE'].split(','); passed()
+# Native empty-default semantics: a missing STREAMHIDE key does not write the output buffer.
+# Poison the stack first so zero-initialized emulator memory cannot conceal an uninitialized read.
+class MissingStreamHide(AppMachine):
+    def hook(self,u,address,size,unused):
+        if self.handlers.get(address)=='toolsReadConfig' and self.text(u.reg_read(REGS[2]))=='STREAMHIDE' and 'STREAMHIDE' not in self.config:
+            return self.returns(0,clobber=True)
+        return super().hook(u,address,size,unused)
+m=MissingStreamHide(); m.u.mem_write(0x70000000,b'\xa5'*0x10000)
+rows=streaming(m); assert m.nodes[rows['Spotify']]['visible']
+m.click(rows['Configuration']); m.page=m.top; m.row(4)
+assert m.config['STREAMHIDE']=='SPOTIFY' and not m.nodes[rows['Spotify']]['visible']; passed()
+
 # Execute V2.1's complete CUE parser with byte-oriented stdio mocks. Its eighth conversion
 # is a shared jalr (the seven direct calls alone miss Windows-1252 track titles).
 class CueNative(TagTextMachine):

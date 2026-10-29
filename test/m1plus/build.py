@@ -277,7 +277,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert manifest['variant'] == 'stock' and manifest['compact_code'] == []
     assert set(manifest['changed_assets']) == {TAG_C}
     stock_syms = symbols(directory/'stock-demo')
-    for n in ('local_era',):
+    for n in ('local_era', 'row_stream_config'):
         assert struct.unpack('>II', read('rootfs.squashfs', f'release/assets/default/raw/images/xx/{n}.png')[16:24]) == (40,40)
     # Every page m1plus_contexts.inc lets ringnav navigate is a window V2.1's assets name, as build.py
     # checks contexts.inc's against V1.32's.
@@ -523,7 +523,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added = {xx+n for n in ICONS} | {xx+f'local_{n}.png' for n in ('shuffle', 'scrobble', 'podcasts', 'audiobooks', 'photos',
                                                                     'books', 'videos', 'longsongs', 'era')} | {
              xx+f'stream_{n}.png' for n in ('spotify', 'radio', 'airplay')} | {HELPER, SCROBBLE_CA, BOOT} | ({REMOTE} if manifest['dev'] else set())
-    added |= {xx+f'row_{n}.png' for n in ('spotify', 'radio')}  # the Q2 Pod page's Streaming rows, at 40 px
+    added |= {xx+f'row_{n}.png' for n in ('spotify', 'radio', 'stream_config')}  # the Q2 Pod page's Streaming rows, at 40 px
     added |= {xx+'stream_app.png'}  # its card apps' rows (addon.c), at 40 px too
     # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
     added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
