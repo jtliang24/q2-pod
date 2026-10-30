@@ -12830,7 +12830,7 @@ else:  # M1 Plus: Wheel Sensitivity is Q2 only; Crossfade's row opens the same p
     assert not [x for x in every(page) for t,f,ctx in m.nodes[x].get('handlers',[]) if f in stock_handlers]
     assert bound(m.back)==V21['btn_return']  # the title bar's Back closes it, as stock
     assert (m.nodes[w('bootvol_view')]['visible'],m.nodes[w('bootvol_view')]['enable'],m.nodes[m.switch]['visible'])==(1,1,1)
-    assert (m.nodes[m.slider]['min'],m.nodes[m.slider]['max'],m.nodes[m.slider]['step'],m.nodes[m.slider]['value'])==(0,10,1,0)
+    assert (m.nodes[m.slider]['min'],m.nodes[m.slider]['max'],m.nodes[m.slider]['step'],m.nodes[m.slider]['value'])==(0,15,1,0)
     assert m.nodes[m.vol]['text']=='Off' and m.nodes[m.switch_icon]['image']==NAMES['ICON_SWITCH_OFF']
     def press(x,kind=CLICK):
         m.calls=[]; f,ctx=m.handler(x,kind); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
@@ -12843,12 +12843,12 @@ else:  # M1 Plus: Wheel Sensitivity is Q2 only; Crossfade's row opens the same p
     m.nodes[m.slider]['value']=0; assert press(m.slider,CHANGING)==X(0,3) and m.nodes[m.vol]['text']=='Off'
     assert m.nodes[m.switch_icon]['image']==NAMES['ICON_SWITCH_OFF'] and texts()[3]=='Crossfade: Off'
     assert press(m.add)==X(1,1) and press(m.dec)==X(0,1) and press(m.dec)==[]  # Off is the bottom
-    m.nodes[m.slider]['value']=15; assert press(m.slider,O['EVT_VALUE_CHANGED'])==X(1,10) and press(m.add)==[]
-    assert m.nodes[m.vol]['text']=='10 s' and texts()[3]=='Crossfade: 10 s'
+    m.nodes[m.slider]['value']=20; assert press(m.slider,O['EVT_VALUE_CHANGED'])==X(1,15) and press(m.add)==[]
+    assert m.nodes[m.vol]['text']=='15 s' and texts()[3]=='Crossfade: 15 s'
     # Closed (stock's Back destroys it), the row opens it afresh, at the saved length.
     f,ctx=m.handler(page,O['EVT_DESTROY']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
     m.stack.remove(page); m.top=audio; page=m.prepare_bootvol()
-    assert click(3)==[] and m.top==page and m.nodes[m.vol]['text']=='10 s' and m.nodes[m.slider]['value']==10; passed()
+    assert click(3)==[] and m.top==page and m.nodes[m.vol]['text']=='15 s' and m.nodes[m.slider]['value']==15; passed()
     # Resume Songs' row (1.3.0) opens the same page: no switch, Off below 20, then 20-120 min in fives,
     # live and saved.
     m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],stock_rows=15)
