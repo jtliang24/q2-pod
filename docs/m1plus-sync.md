@@ -251,3 +251,4 @@ stay flat or fall.
 | Merge step: sync to 1.4.5 (Oct 26) | 1.4.5 (`6d50dc6`) | +1,494/−310 over 31 files: `list_toggle`'s `#if !M1PLUS`, the App Store's Rockbox rows, q2remote's `M1_GLOBALS` and its M1 rows in `remote.md` |
 | Merge step: sync to 1.5.0 (Oct 27) | 1.5.0 (`d774d76`) | +1,474/−295 over 31 files: Display's sub-pages under `#if !M1PLUS`, Control Device Volume's row names, `SPOT_REFUSED_SUB`; the playlist editor's SQL seam gone |
 | Five-feature batch (Oct 28; dev 13 device checks, manual exceptions recorded) | 1.5.0 (`d774d76`) | +1,485/−296 over 32 files: the CUE converter address and M1-only Streaming/Now Playing seams |
+| Merge step: sync to 1.5.5 (Oct 30) | 1.5.5 (`4a23606`) | +1,533/−314 over 32 files: model-specific Folder video return address; existing navigation/seek include seams retained |

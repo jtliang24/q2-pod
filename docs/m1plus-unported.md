@@ -1,6 +1,6 @@
 # M1 Plus: unported features
 
-The upstream Q2 Pod features still unported or awaiting validation after the five-feature batch (`staging`;
+The upstream Q2 Pod features still unported or awaiting validation after the 1.5.5 sync (`staging`;
 `1.4.2-m1.1` is the last release). Each row has a status:
 
 - **Planned:** to be ported. Most have a known way in on V2.1, or a check to make first.
@@ -29,11 +29,14 @@ to its [progress](m1plus-progress.md) section.
 | [Battery: the kernel modules' idle clocks](#battery-fixes) | 1.5.0 | `tools/aic.py`, `rotator.py`, `pwm.py`, `mcu_park.py` (`--aic-idle-wait`, `--rotator-lazy-clock`, `--pwm-idle-clock`, `--mcu-idle-sleep`) | Planned |
 | [FLAC fast paths](#flac-fast-paths) | 1.5.0 | `tools/flac.py`, `patch/flac_*.c` (`tools/peq.py`, `--flac-experiments`) | Planned |
 | [Display's sub-pages](#displays-sub-pages) | 1.5.0 | `ringnav_display`'s Appearance, Coverflow and Controls, `display_sub` | Planned |
-| [Videos in Folder view](#videos-in-folder-view) | 1.5.0 | `folder_click`, `books_video` | Planned |
+| [Videos in Folder view](#videos-in-folder-view) | 1.5.0 | `folder_click`, `books_video`, `LOAD_DIRECTORY_RET` (1.5.5) | Planned |
 | [A reboot keeping the place](#a-reboot-keeping-the-place) | 1.5.0 | `device_reboot`, `dialog_checkfw_dialog_init` | Planned |
 | [SyncLink's keys past the Buttons lock](#synclinks-keys) | 1.5.0 | `main_loop_post_key_event` | Planned |
 | [A card app's own Streaming icon](#a-card-apps-own-icon) | 1.5.0 | `addon_icon` (#88) | Planned |
-| [Play/Pause's hold at 700 ms](#playpauses-hold) | 1.4.5 | `PLAY_HOLD` | Planned |
+| [Play/Pause's hold at 700 ms](#playpauses-hold) | 1.4.5 | `HOLD_KEYS` (replaces `PLAY_HOLD` in 1.5.5) | Planned |
+| [Playlist allocation and deletion](#playlist-allocation-and-deletion) | 1.5.5 | `createPlayListItem`, `playlist_delete_click` | Planned |
+| [Battery: paced player scheduling and command waits](#battery-fixes) | 1.5.5 | `MAINSCHEDULING_CALL`, `PAUSE_WAIT`, `IDLE_WAIT`, `CMD_DONE` | Planned |
+| [MP3 encoder delay and padding](#mp3-encoder-delay-and-padding) | 1.5.5 | `mp3_gapless.c`, `MP3_ALLOC`, `MP3_FILTER`, `MP3_CLOSE`, `MP3_READ` | Planned |
 | [Stock's Chinese UI text in English](#stocks-chinese-ui-text) | 1.4.5 | `english_ui`, the `system_prove` label (`tools/build.py`) | Planned |
 | [q2remote's demo log](#q2remotes-demo-log) | 1.4.5 | `LOG_HOOK` (`tools/build.py`) | Planned |
 | [An artist's albums tab's album-artist rewrite](#an-artists-albums-tab) | 1.2.9 | `toolsQueryContentDbTable` | Planned |
@@ -124,6 +127,10 @@ row's click.
   image (idle clocks gated; MCU sleep, dev only). Each pins the stock module's SHA-256. V2.1's
   modules are to be compared with V1.32's first: the M1's pipeline swaps none.
 
+- **Paced player scheduling and command waits** (1.5.5). `MAINSCHEDULING_CALL` needs V2.1's UI
+  scheduler call site; `PAUSE_WAIT`, `IDLE_WAIT` and `CMD_DONE` need its command state and player
+  sites. The M1 keeps its existing pause sleep and native scheduler.
+
 ### FLAC fast paths
 
 1.5.0 patches the Q2's `hciplayer` FLAC decoder (frame sync, LPC and output, on by default) through
@@ -142,6 +149,8 @@ Display grows; V2.1's page reopened over itself is to be checked first.
 1.5.0's Library Videos row opens Folder view, where `folder_click` (V1.32's `0x521bc4`) plays a video
 row in q2video. The M1's Videos row keeps 1.4.5's list (`videos_open`). V2.1's folder row click, bound in
 `folder_page_init`'s refresh (`0x5318ac`), is to be found, and whether V2.1's Folder lists video files.
+1.5.5's new Folder video listing stays disabled through `LOAD_DIRECTORY_RET = M1_UNPORTED`
+until that click handler is ported; shared queue filtering still excludes video records.
 
 ### A reboot keeping the place
 
@@ -225,3 +234,15 @@ Nothing in the M1's hardware blocks either. The way in:
 4. Put the Downloads row on the Q2 Pod page, as V2.1 has no Streaming page.
 
 Steps 1 and 2 can be done from the code. The device check needs a signed-in Tidal account.
+
+### Playlist allocation and deletion
+
+1.5.5 allocates playlist IDs under the database lock, independently of display sort order, and
+makes deletion transactional. V2.1's allocator and delete callback need their own pinned entry
+points before these hooks run. The existing M1 playlist editor remains available.
+
+### MP3 encoder delay and padding
+
+1.5.5 trims an MP3 encoder's delay and padding through four hciplayer sites. V2.1's sites and
+private decoder state need to be established before adding the source and hooks to its player
+pipeline. The shared seek notification is inert on M1 until then.
