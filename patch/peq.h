@@ -173,7 +173,13 @@ typedef struct af_instance {
     struct af_instance *next, *prev;
     double delay, mul;
 } af_instance;
-typedef struct { peq_dsp dsp; peq_preset preset; int id; } player_state; /* id: one per filter instance, for crossfade */
+/* id: one per filter instance, for crossfade and the carried filter memory; fresh: negotiated, not
+ * yet played; ending: its last block was filtered near the track's end */
+typedef struct {
+    peq_dsp dsp;
+    peq_preset preset;
+    int id, fresh, ending;
+} player_state;
 
 /* The payload's shared helpers: coverflow.c's pages, hashes and worker, photos.c's, navigation.c's. */
 void *text(void *parent, int x, int y, int w, int h);
@@ -335,6 +341,7 @@ static inline long long wall_time(void) {
  * ponytail: an expired server certificate is accepted too; the firmware has no revocation anyway.
  */
 static inline int tls_untimed(void *curl, void *ctx, void *unused) {
+    (void)curl, (void)unused;
     (*(unsigned **)((char *)ctx + 0x100))[3] |= 0x200000;
     return 0; /* CURLE_OK */
 }

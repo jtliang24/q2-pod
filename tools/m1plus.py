@@ -158,10 +158,12 @@ CALL_SITES = {
         # at the key as the others do.
         'COVER_DONE': ((0x4edd9c, 0x8f99b6d4, 0x27a61688), (0x4edda0, 0x0411ff44, 'ringnav_cover_done'),
                        (0x4eeddc, 0x1000fbf0, 0x1000fbef)),
-        # Hold Play/Pause: input_device_status' long press for key 232 (500 ms) moves to Play/Pause (171)
-        # at PLAY_HOLD_MS, the key-down's timer interval and the callback's threshold both.
-        'PLAY_HOLD': ((0x6a007c, 0x240201f4, 0x240202bc), (0x6a008c, 0x3a7300e8, 0x3a7300ab),
-                      (0x6a0404, 0x240401f4, 0x240402bc), (0x6a0408, 0x384200e8, 0x384200ab)),
+        # input_device_status' timer and threshold lookup: Play/Pause and Return hold at 700 ms.
+        'HOLD_KEYS': ((0x6a0088, 0x8f99b1a4, 0x02603825),
+                      (0x6a0098, 0x0320f809, 'ringnav_hold_timer'),
+                      (0x6a03e8, 0x0411ffa4, 'ringnav_hold_info')),
+        # on_wm_idle_status' player_mainscheduling call, paced by the payload.
+        'MAINSCHEDULING_CALL': ((0x4e9d28, 0x0320f809, 'ringnav_mainscheduling'),),
         # toolsFixId3ErrorCode's jalr strcmp of the GBK round trip: GBK only when the bytes read as GBK.
         'TAG_TEXT': ((0x5c5e7c, 0x0320f809, 'ringnav_gbk_tag'),),
         # The CUE sheet parser's seven bal toolsIconvConvert: UTF-8, GBK or Windows-1252.
@@ -321,7 +323,8 @@ CALL_SITE_PURPOSES = {
     'LOCKSCREEN_ACCESS': 'a built-in wallpaper survives a reboot',
     'LYRIC_SOURCES': "a found lyric isn't overwritten by NetEase's",
     'FOLDER_PLAY': 'a Folder play replaces the open Now Playing',
-    'PLAY_HOLD': 'Play/Pause hold time',
+    'HOLD_KEYS': 'Play/Pause and Return hold time',
+    'MAINSCHEDULING_CALL': 'pace player scheduling',
     'TAG_TEXT': 'tag text GBK only when it reads as GBK',
     'CUE_TEXT': 'CUE text read as UTF-8, GBK or Windows-1252',
     'SCAN_DIRS': 'the library scan skips hidden folders',
@@ -345,6 +348,8 @@ def call_site_words(m1plus, ps):
 # new upstream hook or site it doesn't port, and the report fails until it has one.
 M1PLUS_PORTS = {
     # Hooks
+    'createPlayListItem': ('unported', 'playlist ID allocation (1.5.5); V2.1 allocator not yet pinned'),
+    'playlist_delete_click': ('unported', 'transactional playlist deletion (1.5.5); V2.1 delete callback not yet pinned'),
     'on_wm_keydown_before_fun': ('q2only', "Key Tone's click on the wheel's press; V2.1 has no buzzer command (progress 15)"),
     'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
     'localmusic_page_init': ('ported', "the Library's rows are the Q2 Pod page's Library page (progress 17)"),
@@ -381,7 +386,8 @@ M1PLUS_PORTS = {
     'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
-    'PLAY_HOLD': ('unported', "Play/Pause's hold at 700 ms (1.4.5); V2.1's input_device_status is unnamed, and the "
+    'MAINSCHEDULING_CALL': ('unported', 'paced player scheduling (1.5.5); V2.1 call site not yet pinned'),
+    'HOLD_KEYS': ('unported', "Play/Pause's hold at 700 ms (1.4.5); V2.1's input_device_status is unnamed, and the "
                   'M1 opens the hold menu with a touch long-press too'),
     'STREAM_POLL_CALLS': ('native', "V2.1 creates a Tidal URL worker per request (get_tidal_trackurl, 0x512ed0); "
                           "no boot worker or idle start-flag poll, and no Baidu Pan"),
@@ -728,6 +734,27 @@ def compile_common(out, binary, player=False):
     for name, (ret, args) in m1plus_libc(LIBC).items():
         # Unused I/O is removed by --gc-sections in the player payload.
         alias = {'fopen': 'fopen64', 'readdir': 'readdir64', 'pow': '__pow_finite'}.get(name, name) if player else name
+        if name == 'localtime_r' and not player:
+            libc = symbols(out/'libc-2.28.so')
+            delta = libc['localtime_r@@GLIBC_2.0'] - libc['tzset@@GLIBC_2.0']
+            check(delta == -7724, 'Unexpected libc localtime_r offset')
+            header.append(f'extern {ret} peq_lib_{name}({args});')
+            header.append(f'#define {name} peq_lib_{name}')
+            address = got['tzset']
+            asm += ['.section .scratch,"aw",@nobits', '.align 2',
+                    'localtime_r_target: .space 4', f'.section .text.peq_lib_{name},"ax",@progbits',
+                    f'.globl peq_lib_{name}', f'peq_lib_{name}:',
+                    'lui $t8, %hi(localtime_r_target)', 'lw $t9, %lo(localtime_r_target)($t8)',
+                    'bnez $t9, 1f', 'nop',
+                    # Resolve tzset's lazy GOT entry once: unlike localtime, it writes no shared buffer.
+                    'addiu $sp, $sp, -32', 'sw $ra, 28($sp)', 'sw $a0, 20($sp)', 'sw $a1, 24($sp)',
+                    'jal peq_lib_tzset', 'nop', 'lw $ra, 28($sp)', 'lw $a0, 20($sp)',
+                    'lw $a1, 24($sp)', 'addiu $sp, $sp, 32',
+                    f'lui $t8, {address >> 16}', f'ori $t8, $t8, {address & 65535}',
+                    'lw $t9, 0($t8)', f'addiu $t9, $t9, {delta}',
+                    'lui $t8, %hi(localtime_r_target)', 'sw $t9, %lo(localtime_r_target)($t8)',
+                    '1:', 'jr $t9', 'nop']
+            continue
         if alias not in got:
             header.append(f'extern {ret} {name}({args});')
             continue
@@ -946,6 +973,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     sq = out/'stock.squashfs'; sq.write_bytes(blobs['recovery-update/rootfs.squashfs'])
     def cat(path): return subprocess.check_output(['unsquashfs', '-cat', str(sq), path])
     raw_demo = cat('release/bin/demo')
+    (out/'libc-2.28.so').write_bytes(cat('lib/libc-2.28.so'))
     # peq.h tls_untimed writes OpenSSL 1.1.1f's SSL_CTX->param (0x100) and its ->flags (0xc) itself, as
     # build.py audits on the Q2: V2.1's rootfs has the same 1.1.1f, and these must still read those fields.
     for lib, fn, at, word in (('libssl.so.1.1', 'SSL_CTX_get0_param', 4, 0x8c820100),         # lw v0, 0x100(a0)

@@ -2137,6 +2137,237 @@ media/settings are restored, and the library is back to its original 419 paths. 
 reports the Bluetooth checklist passed on dev 13. Remaining earlier checklist items and coverage
 limits are recorded separately in the validation record.
 
+## 51. Merge step: sync to upstream 1.5.5 (Oct 30)
+
+`drift.py --fetch` found settled 1.5.8 96 commits and 3,026 conflict-surface lines beyond 1.5.0,
+past the 2,000-line trigger and the 3,000-line step limit. Its initial plan was 1.5.0 → 1.5.5 →
+1.5.8. This first step takes 47 commits and 1,278 surface lines. `patch/link.ld`, `flake.nix` and
+`flake.lock` did not change, so this is not a structural step and has not been flashed.
+
+| Commit | Work |
+|---|---|
+| `01d94a7` | Merge upstream 1.5.5. Eight conflicted files: README keeps the M1 front page; internals takes the 15-second Crossfade range and retains the M1 explanation; remote docs keep the M1 commands and add upstream's profiler; Coverflow keeps the M1 row height and `BOTTOM` while taking iPod's page-list sizing; navigation keeps touch holds and adds the video exclusion; the player keeps the M1 seek include beside the new gapless declaration; build.py keeps the input hash beside upstream's version; q2remote keeps knob, held taps and peek alongside prof. |
+| `eaf2558` | M1 build integration: import `localtime_r` through V2.1's pinned libc/tzset delta, mirror Q2's replacement hold sites and new scheduling site, classify the two playlist hooks and scheduler as unported, keep their scheduler and MP3 seek notifications inert on M1, and move Folder video's return address into the model tables (`M1_UNPORTED` on M1). |
+| `9d639db` | Register upstream's new MP3 host, MP3 player and command-wait suites in q2compare. |
+| `aee95fb`, `7519f54`, `de01649` | Merge upstream's build, patch and playback cases into the M1 copies. Keep new playlist and scheduler cases behind their hooks/sites, and stock-specific video/CUE cases explicit. Correct M1-only App Store title and Crossfade range/clamp expectations after the execution suite found them. |
+
+`a2cf5cd` centers the media walk's Library and first-row taps. Its first run missed the reader
+trace; a capture run showed the reader and its text opening correctly. The old Library taps sat
+only two pixels below each row's top. This test-only correction leaves the gated firmware intact.
+
+**Runbook review.** `q2only.py 1.5.5 --base 1.5.0` reports eleven lines: the Streaming spacer is
+already styled and explicitly black on M1; the other ten are iPod-only constants/comments. All five
+new offsets are used only on Q2. The copied M1 page-row, Library and `qm_goto` replacements have
+no upstream functional changes to mirror; shared `page_list` takes its update directly. New shared
+image names and screen sizes are confined to iPod, Games (unplanned) and the already-handled spacer.
+The new V1.32 player and hold addresses remain behind unported sites; MP3's source is not in the M1
+player pipeline. Folder video's V1.32 return address is now a per-model constant, disabled on M1.
+The Bluetooth silence patch applies to the identical SHA-pinned bluealsa binary on both models.
+`build.py`'s new libc extraction is in the M1 pipeline; its shared boot-logo/bluealsa changes are
+inherited. Playlist failure wording belongs to the still-unported playlist hooks/English rewrite.
+`tools/peq.py`'s new MP3 sites and command waits are recorded as unported; its carried PEQ filter
+memory and longer Crossfade buffer are shared player code and compile on M1.
+
+**New unported rows.** Playlist ID allocation and transactional deletion; paced player scheduling
+and command-driven idle/pause waits; MP3 encoder delay/padding trim. `HOLD_KEYS` replaces the
+already-unported `PLAY_HOLD`. Folder video listing remains disabled until `folder_click` is ported.
+
+**Verification.**
+
+- Q2 Legacy `60dc0bc8ba85…` and iPod `e4e175644a87…` are byte-identical to 1.5.5's own images.
+  All 41 q2compare suite runs are accounted for; `patch` passes 1,477 Legacy and 1,996 iPod
+  scenarios. Four host build-negative tests fail on upstream's own tree too (`aic_build`,
+  `flac_build`, `pwm_build`, `rotator_build`). The new MP3 host suite initially lacked development
+  libraries on both trees; it passes separately with FFmpeg, libmad and LAME in a temporary Nix
+  shell, including 16 real encoded files. The repository toolchain files are unchanged.
+- M1 `work/sync/1.5.5`, `V003s` (`update.bin` `5fd6ce131e0b…`,
+  payload 376,648 bytes): `build --build`, `patch` (1,368 scenarios, zero known
+  gaps, 26 explicit not-ported checks), all three `boot` modes, `playback` (341 advanced checks,
+  MP4 admission and checkpoint checks), `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports`
+  pass. The build source hash is `7b97279fea8c70801fa778e8efa7a82ef01d6c942ae80a24ba10bc065b23bb2b`.
+- Test-only fixes retained the image: the patch gate restarted after each expectation fix;
+  after the media tap correction, the media gate and all gates after it passed. Q2 logs and
+  the supplemental MP3 host result are in `work/sync/1.5.5-logs/` beside the M1 gate logs.
+
+
+**Device checklist.** Compare with the recorded dev 13 device build (`work/batch-five/dev13`,
+`V01Vs`): `work/sync/1.5.5-fndiff.txt` keeps the full function list. Cover the queue and missing/oversize
+MP4 refusal, chapters, Era shuffle, Crossfade (through 15 seconds) and PEQ track transitions,
+Bluetooth skips/pause, Coverflow/knob/hold navigation, Streaming and Apps, Spotify search teardown,
+Books, boot logo, and ordinary playback/resume. The diff also lists retained unhooked Q2 functions;
+those are not new M1 entry points. No device pass was performed by this merge step.
+
+<details>
+<summary>Function diff against the dev 13 device build</summary>
+
+```text
+~ books.c.o: book_kind
++ books.c.o: ext_kind
+~ books.c.o: measure
++ books.c.o: video_ext
++ chapters.c.o: be
++ chapters.c.o: mp4_fits
++ chapters.c.o: mp4_index_bytes
++ chapters.c.o: mp4_samples
+~ coverflow.c.o: fx_close
+~ crossfade.c.o: set_value
+~ crossfade.c.o: settings
+~ navigation.o: album_plays
+~ navigation.o: artist_cf_gone
+~ navigation.o: artist_cf_open
+~ navigation.o: artist_key
+~ navigation.o: artist_keys_free
+~ navigation.o: artist_tab
+~ navigation.o: audioset_rows
+~ navigation.o: bounds
+~ navigation.o: chapter_pick
+~ navigation.o: chapter_poll
+~ navigation.o: compact_now_playing
+~ navigation.o: empty_toast
++ navigation.o: era_key_cmp
++ navigation.o: era_key_row
+~ navigation.o: era_pick
+~ navigation.o: folder_tracks
++ navigation.o: folder_videos
+~ navigation.o: fx_cancel
+~ navigation.o: fx_expire
+~ navigation.o: fx_live
+~ navigation.o: hold_wheel
+~ navigation.o: knob_nav_active
+~ navigation.o: library_open
+~ navigation.o: load
+~ navigation.o: logo_sync
+~ navigation.o: long_songs
+~ navigation.o: lp_entry
+~ navigation.o: lp_fire
+~ navigation.o: ls_poll
+~ navigation.o: ls_show
+~ navigation.o: media_click
+~ navigation.o: most_played
+~ navigation.o: mp_find
+~ navigation.o: mp_play
+~ navigation.o: page_closed
+~ navigation.o: page_tracks
++ navigation.o: playlist_used
+~ navigation.o: plays_load
+~ navigation.o: pod_click
+~ navigation.o: pod_rows
+~ navigation.o: pod_settings
+~ navigation.o: pod_text
+~ navigation.o: position
+~ navigation.o: previous_back
+~ navigation.o: pull_cancel
+~ navigation.o: pull_event
+~ navigation.o: pull_live
+~ navigation.o: qm_album_id
+~ navigation.o: qm_back
+~ navigation.o: qm_gone
+~ navigation.o: qm_hold
+~ navigation.o: qm_list
+~ navigation.o: qm_open
+~ navigation.o: qm_pick
+~ navigation.o: qm_playlist_gone
+~ navigation.o: qm_playlist_pick
+~ navigation.o: qm_query
+~ navigation.o: qm_record
+~ navigation.o: qm_restore
+~ navigation.o: qm_run
+~ navigation.o: qm_sortselect_init
+~ navigation.o: quick_volume
+~ navigation.o: rate_badge
+~ navigation.o: rate_close
+~ navigation.o: rate_down
+~ navigation.o: rate_fav_click
+~ navigation.o: rate_gone
+~ navigation.o: rate_io
+~ navigation.o: rate_long
+~ navigation.o: rate_open
+~ navigation.o: rate_paint
+~ navigation.o: rate_panel_gone
+~ navigation.o: rate_show
+~ navigation.o: rate_tap
+~ navigation.o: rated_open
+~ navigation.o: rates
+~ navigation.o: ratings_menu
+~ navigation.o: reconcile
+~ navigation.o: replay_wheel
+~ navigation.o: ringnav
+~ navigation.o: ringnav_about
+~ navigation.o: ringnav_album_detail
+~ navigation.o: ringnav_artist_az
+~ navigation.o: ringnav_artist_covers
+~ navigation.o: ringnav_artist_view
+~ navigation.o: ringnav_bt_resume
+~ navigation.o: ringnav_dispatch
+~ navigation.o: ringnav_folder
+~ navigation.o: ringnav_folder_back
++ navigation.o: ringnav_hold_info
++ navigation.o: ringnav_hold_timer
+~ navigation.o: ringnav_input
+~ navigation.o: ringnav_keylong
+~ navigation.o: ringnav_localclass
+~ navigation.o: ringnav_lock_clock
++ navigation.o: ringnav_mainscheduling
+~ navigation.o: ringnav_paint
+~ navigation.o: ringnav_playing
+~ navigation.o: ringnav_playlist
++ navigation.o: ringnav_playlist_create
++ navigation.o: ringnav_playlist_delete
+~ navigation.o: ringnav_playlistsmore
+~ navigation.o: ringnav_shuffle
+~ navigation.o: ringnav_sleep
+~ navigation.o: ringnav_standby
+~ navigation.o: ringnav_start_player
+~ navigation.o: ringnav_timezone
+~ navigation.o: ringnav_timezone_row
+~ navigation.o: ringnav_touch
+~ navigation.o: ringnav_wheel_qs
+~ navigation.o: ringnav_year_old
+~ navigation.o: root_text
+~ navigation.o: rt_play
+~ navigation.o: sc_click
+~ navigation.o: sc_text
+~ navigation.o: select
+~ navigation.o: shuffle_menu
+~ navigation.o: slide_swipe
+~ navigation.o: song_folder
+~ navigation.o: songs_open
+~ navigation.o: songs_rows
+~ navigation.o: spot_at
+~ navigation.o: spot_save
+~ navigation.o: stream_config
+~ navigation.o: svc
+~ navigation.o: td_clear
+~ navigation.o: td_play
+~ navigation.o: td_show
+~ netupdate.c.o: sh_rows
+~ onlinematch.c.o: easy
+~ playback.c.o: playback_poll
++ playback.c.o: playback_start_fits
++ playback.c.o: playback_video
+~ playback.c.o: ringnav_audio_extension
+~ playback.c.o: ringnav_load
+~ playback.c.o: ringnav_open_preload
++ playback.c.o: track_fits
+~ spotify.c.o: go
+~ spotify.c.o: search_left
+~ spotify.c.o: searched
+133 changed, 18 added, 0 removed, of 1024 functions
+```
+
+</details>
+
+**Footprint over 1.5.5's files:** +1,533/−314 over 32 files.
+
+**Resume checkpoint.** The requested target remains 1.5.8 even though its remaining drift is below
+cadence (49 commits, 1,770 surface lines). Work is paused after the 1.5.5 landing, before creating
+`sync/1.5.8`. Preliminary review found V2.1's animator easing callback at `0x44`:
+`widget_animator_init` (`0x6734b0`) stores it at `0x673548` (`0xae120044`) after calling `easing_get`
+through GOT `0xa0109c` (native entry `0x6f4108`). Q2's new `ANIM_EASING = 0x38` must not be copied.
+Retain M1's existing Coverflow touch implementation; the new player resampler slot needs an
+unported row. Other 1.5.8 integration work and every 1.5.8 gate remain to be done.
+
+
 ## How to check a build now
 
 ```sh
