@@ -51,6 +51,7 @@ Each connection rereads `/mnt/mmc/q2remote.key` while the card is mounted, so re
 | `devices`                    | Lists the input devices and their key and axis codes.                                                                                                                                                                                      |
 | `find`                       | Lists the addresses on this network where q2remote answers.                                                                                                                                                                                |
 | `reboot [--wait]`            | Syncs and reboots into the saved boot target; q2remote answers again once the Q2 rejoins Wi-Fi, which can take a few minutes. `--wait` returns once it does.                                                                               |
+| `prof S [--all] [--build DIR]` | Samples demo's main thread (`--all`: every thread, at 20 Hz) at 100 Hz for `S` seconds through `q2remote --prof`, which stops each thread for an instant with ptrace, and prints the most frequent stacks by state (running, blocked in D, sleeping). `--build` (or `Q2_BUILD`) names the installed build's directory for demo's and the payload's symbols; libraries are pulled once into `~/.cache/q2-prof`. Callers past `$ra` come from a scan of the stack and may include a stale word. `Q2_PROF_BIN` runs another copy of the helper. |
 
 ## Input
 

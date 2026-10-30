@@ -1,5 +1,51 @@
 # Changelog
 
+- **1.5.5**:
+  - Bluetooth: skipping a track no longer crackles. The Q2 sent the headset nothing for about 0.4 s during a skip, so its buffer ran dry and the next song played on with it near-empty. After 0.1 s it now keeps the stream going with silence until the next song starts.
+  - Search: in Light Mode, the letter you are typing in the search box is readable. It was white on light blue.
+  - Now Playing: the full-screen art takes the cover's own shape, so a wide or tall cover fills the screen instead of shrinking into a square.
+  - Coverflow: a fast spin starts jumping by letter a little later, after about 0.7 s of turning.
+  - Crossfade: up to 15 s, was 10.
+  - App Store: the page is titled **App Store**, was **Q2 App Store**.
+
+- **1.5.4**:
+  - Player: starting playback from stopped, and resuming from pause, answer at once instead of waiting up to a second.
+  - Player: a track change without Gapless, and a folder's move to its next track, start as soon as stock's did.
+  - Player: a CUE track's change is no longer delayed by the player's status checks.
+  - EQ: the filter memory carries over only between gapless tracks, so a normal track change starts clean.
+  - Playlists: a name already used by another playlist is refused as a whole name.
+
+- **1.5.3**:
+  - EQ: gapless albums no longer click between tracks while EQ or PEQ is on. Each track's filter started with empty memory instead of carrying on from the last one (#137).
+  - MP3: gapless albums no longer tick between tracks. The player dropped each MP3's last frame, cutting the end of the track short (#135).
+  - Now Playing: the wheel highlight on More's playback-speed buttons fits the visible button instead of covering the note below it (#135).
+  - Clock: prevents background time conversions from briefly corrupting the status bar time, Auto Light Mode and timezone offsets.
+  - Battery: the player sleeps while paused or stopped instead of checking for a command 50 or 100 times a second; it wakes for the command itself. Play, Pause and skips answer as before.
+  - Battery: the status bar's clock and Auto Light Mode read the time once a minute instead of on every frame.
+  - Performance and battery: with Gapless on, the interface asks the player for its status 10 times a second instead of on every frame, up to 125 times a second, waiting for each answer. Scrolling and animations no longer stall on it.
+  - Playlists: creating a playlist no longer reuses an occupied ID after sorting by name, and database failures show an error.
+  - Playlists: Delete Playlist removes the playlist and its entries in one step, keeps More open on Cancel, refreshes the list after success and reports failures. Music files and the current playback queue stay intact.
+
+- **1.5.2**:
+  - MP3: removes encoder delay and trailing padding from files with supported Xing/Info and LAME-compatible tags, preserving intentional silence. Keep Audio settings → Gapless on for continuous playback between tracks. Files without usable tags keep stock playback.
+
+- **1.5.1**:
+  - iPod: Light Mode has a third setting, **Auto**: the interface is light from 7:00 to 19:00 by the clock and dark the rest of the day, switching by itself. The Light Mode row cycles Off, On and Auto on each click. The boot logo follows it too, by the UTC hour at power-on.
+  - iPod: Corners, under Settings → Display → Appearance, is now a **Rounded Corners** switch, like stock's on/off settings, instead of a row reading Square or Rounded.
+  - Audiobooks: a book too long for the Q2's memory, such as a single 40-hour `.m4b`, no longer freezes the Q2, at start or again at boot (#121). It isn't played, and a message asks you to split it into parts. Opening its Chapters is refused the same way.
+  - iPod: under Rounded Corners, a selected or pressed row's pill no longer cuts across its cover's corners, as it did in Search's results; the pill's ends round less on those rows.
+  - Era: a decade's **Shuffle** starts in about the time Shuffle Songs takes, instead of looking frozen for a long while on a decade with many albums.
+  - Controls: holding Return now acts after 0.7 seconds, the same as holding Play/Pause, instead of a full second.
+  - iPod: a selected row now fills its whole row, so with the last row of a list selected no strip of background shows at the bottom of the screen (Library, Folders, Cover Flow's tracks and the apps' lists, #127).
+  - iPod: a touched row's grey now has the selection's shape in every list: the whole row, or the rounded pill under Rounded Corners. The Library and Folders showed a narrower box, and Shuffle, Games and the apps' lists showed none (#127).
+  - iPod: Light Mode fixes (#127): the Shut Down prompt's highlighted row reaches both edges of the screen; the Now Playing More menu's Speed row no longer shows a rounded box under Square corners; Cover Flow's no-cover disc has no dark specks at its corners.
+  - iPod: the Shut Down prompt's text is larger and centred above Cancel (#127).
+  - iPod: Folder view's album and track thumbnails have rounded corners, as the Library's do (#127).
+  - iPod: Quick Settings' brightness slider uses Now Playing's colours, filled with your Highlight Colour (#127).
+  - Games: tapping a game in the list opens it. Only the wheel and Centre did (#127).
+  - iPod: Light Mode fixes (#127): the selected row's `>` in Games, Spotify, Configuration and the other app lists no longer shows a small box at its top edge; Configuration's gap above the service switches is no longer a black bar.
+  - Videos: videos play again (#128). The Videos folder, from the Library or Folder view, showed "File Not Found" because Folder view didn't list video files; it now lists them in the Videos folder and its subfolders.
+
 - **1.5.0**:
   - Quick Settings from the wheel: swipe straight across the wheel, as on a touchpad, to open or close Quick Settings. The pull-down follows the speed of your swipe. Turning the wheel never triggers it. Turn it on under Settings → Display → Controls → Wheel QS. It is off by default.
   - FLAC: local FLAC files play through faster decode paths, on by default.
