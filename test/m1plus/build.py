@@ -117,6 +117,11 @@ def logo_check(s11logo=None):
         user.write_bytes(b'')
         assert shown() == str(user)
         assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(user)  # the card's logo wins in either mode
+        user.unlink()
+        config.write_text('[IPOD]\nLIGHT=2\n')
+        def at(hour): return subprocess.run(['sh', '-c', script.replace('$(date +%H)', hour), 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip()
+        assert at('06') == str(dark) and at('07') == str(light) and at('18') == str(light) and at('19') == str(dark)
+        user.write_bytes(b'')
         if 'logo180.jpg' in script:  # M1 Plus: a flipped screen keeps the stock flipped splash
             assert shown(1) == '/release/assets/default/raw/images/xx/logo180.jpg'
     print(f'Boot logo ({"built S11logo" if s11logo else "LOGO_HOOK"}): the saved card logo, else the light splash under '
@@ -177,14 +182,14 @@ def shared_checks(directory, manifest, stock, demo, read):
     assert read('rootfs.squashfs', S90PLAY) == expected_start
     assert read('rootfs.squashfs', S11LOGO) == read('stock.squashfs', S11LOGO).replace(*LOGO_HOOK)  # the card's logo, if saved
     assert read('rootfs.squashfs', BLUEALSA2) == read('stock.squashfs', BLUEALSA2).replace(*BT_KEEPALIVE)  # keep-alive 5 s
-    # bluealsa: AAC capability, the two DROP jumps, and one appended LOAD payload.
-    from build import BT_DROP, BT_DROP_HANDLER, BT_DROP_PAYLOAD, patch_bluealsa, segments
+    # bluealsa: AAC capability, DROP jumps, silence sites and one appended LOAD payload.
+    from build import BT_DROP, BT_DROP_HANDLER, BT_DROP_PAYLOAD, BT_SILENCE_SITES, patch_bluealsa, segments
     old, new = read('stock.squashfs', BLUEALSA), read('rootfs.squashfs', BLUEALSA)
     header = segments(old)[-1][0]
     allowed = {AAC_44K1, *range(header, header+32)}
-    for address in (BT_DROP, BT_DROP_HANDLER):
+    for address, size in ((BT_DROP, 8), (BT_DROP_HANDLER, 8), *((a, 4) for a, *_ in BT_SILENCE_SITES)):
         off = fileoff(old, address)
-        allowed.update(range(off, off+8))
+        allowed.update(range(off, off+size))
     assert {i for i in range(len(old)) if old[i] != new[i]} <= allowed
     assert new == patch_bluealsa(old)
     assert segments(new)[-1][1][2] == BT_DROP_PAYLOAD
@@ -211,7 +216,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     # the ID3v2 walker calls, now id3_gain (MP3 ReplayGain), and the pause loop's sleep (PAUSE_SLEEP);
     # each model's at its own addresses.
     old, new = read('stock.squashfs', 'usr/bin/hciplayer'), read('rootfs.squashfs', 'usr/bin/hciplayer')
-    profile = m1.PLAYER_PROFILE if m1plus else dict(vbr_scan=peq.VBR_SCAN, eq_rate_gates=(*peq.EQ_RATE_GATES, peq.PAUSE_SLEEP),
+    profile = m1.PLAYER_PROFILE if m1plus else dict(vbr_scan=peq.VBR_SCAN, eq_rate_gates=peq.EQ_RATE_GATES,
                                                     id3_calls=peq.ID3_CALLS)
     assert manifest['peq']['stock_sha256'] == sha(old) and manifest['peq']['sha256'] == sha(new)
     assert (directory/'peq'/'stock-hciplayer').read_bytes() == old
@@ -220,6 +225,15 @@ def shared_checks(directory, manifest, stock, demo, read):
     off = fileoff(old, profile['vbr_scan'])
     if m1plus: profile = dict(profile, eq_rate_gates=(*profile['eq_rate_gates'], profile['pause_sleep']))
     gates = [fileoff(old, a) for a in (*(a for a, _, _ in profile['eq_rate_gates']), *profile['id3_calls'])]
+    if not m1plus:
+        from peq import IDLE_WAIT, PAUSE_WAIT, CMD_DONE, MP3_ALLOC, MP3_FILTER, MP3_CLOSE, MP3_READ
+        gates += [fileoff(old, a) for a in (IDLE_WAIT[0], PAUSE_WAIT[0], CMD_DONE[0], MP3_ALLOC, MP3_FILTER, MP3_READ)]
+        ps = symbols(directory/'peq'/'peq.elf')
+        for address, value in ((IDLE_WAIT[0], jal(ps['hci_idle_wait'])),
+                               (PAUSE_WAIT[0], jal(ps['hci_pause_wait'])), (CMD_DONE[0], jal(ps['hci_command'])),
+                               (MP3_ALLOC, jal(ps['mp3_private_alloc'])),
+                               (MP3_FILTER, jal(ps['mp3_filter_entry'])), (MP3_CLOSE, ps['mp3_close'])):
+            assert struct.unpack_from('<I', new, fileoff(old, address))[0] == value
     # The Q2's FLAC fast paths (tools/flac.py, on by default) patch hciplayer's sync calls and LPC/output
     # pointers; unported on M1.
     from flac import patch_words as flac_words
@@ -834,7 +848,21 @@ def validate_assets(directory):
             gone = [n for n in walk(root) if n[2].get('name') in before and before[n[2]['name']][2].get('image')]
             assert len(gone) == 2 and all(n[1][2:] == [0, 0] and n[1][:2] == before[n[2]['name']][1][:2] for n in gone)
             for n in walk(root):
-                if n[0] == 'slider' or n[2].get('name') in ('img_add', 'img_dec'):
+                if n[0] == 'slider':
+                    props = n[2]
+                    old = before[props['name']]
+                    assert n[1] == old[1] and props['bar_size'] == '8'
+                    assert not [k for k in props if k.endswith((':bg_image', ':fg_image', ':icon', ':y_offset'))]
+                    assert props['style'] == 's_ipod_progress'
+                    for state in ('normal', 'pressed', 'over', 'disable', 'focused'):
+                        assert props[f'style:{state}:bg_color'] == '#1c1c1c'
+                        assert props[f'style:{state}:fg_color'] == '#6e6e6e'
+                        assert props[f'style:{state}:round_radius'] == '4'
+                        assert props[f'style:{state}:border_color'] == '#00000000'
+                    assert {k: v for k, v in props.items() if not k.startswith('style') and k != 'bar_size'} == {
+                        k: v for k, v in old[2].items() if not k.startswith('style') and k != 'bar_size'}
+                    continue
+                if n[2].get('name') in ('img_add', 'img_dec'):
                     assert n == before[n[2]['name']]  # ranges, touch and wheel controls stay stock
         if short == VOLUME:  # Hidden before the first paint, including transition snapshots.
             plain = decode(original); del plain[2]['highlight']
@@ -1005,7 +1033,7 @@ def validate_assets(directory):
         if short == ARTIST_PAGE:
             assert [n[2]['value'] for n in walk(root) if n[0] == 'pages'] == ['1'], 'Artist page must show Albums'
         if short in AUDIT['slide_only'] or short in TOOLBAR_SWITCHES:
-            # nothing but the hint changes (and Startup volume's slider glyphs go)
+            # Only the hint and settings slider styling change.
             root[2].pop('anim_hint')
             kept = decode(original)
             slider_plain(short, kept)
@@ -1035,6 +1063,8 @@ def validate_assets(directory):
         assert len(old_nodes) == len(new_nodes)
         for old, node in zip(old_nodes, new_nodes):
             for key, value in old[2].items():
+                if ipod and short in SETTINGS_SLIDERS and node[0] == 'slider' and key == 'style':
+                    value = 's_ipod_progress'
                 if 'font' in key or key == 'style': assert node[2][key] == value
         if short in ('folder_page.bin', 'localmusic_page.bin', 'localmusic/localclass_page.bin', 'localmusic/playlist_page.bin'):
             surface = next(n for n in root[3] if n[0] in ('list_view', 'table_view'))
