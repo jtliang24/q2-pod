@@ -343,18 +343,19 @@ def media_db(path):
 # The Q2 Pod page's rows, 64 px under the 48 px title: Shuffle, Ratings, Most Played, Long Songs,
 # Era, Photos, Books (with their folders), Coverflow, Spotify, Internet Radio, AirPlay and
 # Configuration; six show. Scrolled to its end (six rows on), Books is the first showing.
-def q2pod_row(i): return tap(160, 80 + 64 * i)
-def q2pod_end_row(i): return tap(160, 80 + 64 * (i - 6))
+# Tap row centres, 30 px below the old edge coordinates: a settling scroll must not pick the row above.
+def q2pod_row(i): return tap(160, 110 + 64 * i)
+def q2pod_end_row(i): return tap(160, 110 + 64 * (i - 6))
 MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
               ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
               ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
               ('long_songs_back', BACK, 4, ('as', 'media_q2pod')),
               ('era', q2pod_row(4), 4, ('not', 'media_q2pod')),
-              ('era_decade', tap(160, 102), 4, ('not', 'era')),
+              ('era_decade', tap(160, 110), 4, ('not', 'era')),
               ('era_decade_back', BACK, 4, ('as', 'era')),
               ('era_back', BACK, 4, ('as', 'media_q2pod')),
               ('books', DOWN_LIST + ['wait 800'] + q2pod_end_row(6), 4, ('not', 'media_q2pod')),
-              ('book', tap(160, 102), 5, ('not', 'books')),          # the first book's row
+              ('book', tap(160, 110), 5, ('not', 'books')),          # the first book's row
               ('book_back', BACK, 4, ('not', 'book')),
               ('books_back', BACK + UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
               ('photos', q2pod_row(5), 6, ('not', 'media_q2pod')),
@@ -381,7 +382,7 @@ MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 
               ('configuration_back', BACK, 4, ('as', 'q2pod_end')),
               ('q2pod_top', UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
               ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
-              ('shuffle_songs', tap(160, 101), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
+              ('shuffle_songs', tap(160, 110), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
