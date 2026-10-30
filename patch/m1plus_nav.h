@@ -7,4 +7,7 @@ extern void video_touch(void *e);          /* books.c */
 static int home_key(void *top, unsigned key);
 static void home_input(void *e);
 static void home_paint(void *w, void *canvas);
+/* Upstream 1.5.5's scheduling wrapper has no V2.1 call site yet (MAINSCHEDULING_CALL).
+ * It remains inert until that port; V2.1 still runs its native scheduler. */
+#define player_mainscheduling() 0
 #endif

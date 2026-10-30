@@ -4,6 +4,7 @@
 #if M1PLUS /* the M1 Plus's V2.1 values: patch/m1plus_offsets.inc (docs/m1plus-roadmap.md U1b) */
 #include "m1plus_offsets.inc"
 #else
+#define LOAD_DIRECTORY_RET 0x5c205c /* toolsLoadDirectory's (build.py AUDIO_EXTENSION_CALLS) */
 #define I(p, o) (*(int *)((char *)(p) + (o)))
 #define P(p, o) (*(void **)((char *)(p) + (o)))
 #define FNV_SEED 2166136261u /* FNV-1a offset basis */

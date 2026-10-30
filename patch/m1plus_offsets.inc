@@ -779,3 +779,6 @@ static inline int arc_out(int r, int y) {
 
 /* The CUE parser's in-place charset converter, native to this firmware. */
 #define CUE_CONVERT_ADDR 0x5e39b0
+
+/* Folder videos stay off until folder_click is ported; no V2.1 return address matches zero. */
+#define LOAD_DIRECTORY_RET M1_UNPORTED
