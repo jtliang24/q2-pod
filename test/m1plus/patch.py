@@ -12110,9 +12110,9 @@ if 'usbmode_page_init' in HOOKS:
         m=M1ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                           '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
-        assert m.labels()==['Q2 App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install'] and not m.threads; passed()
+        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install'] and not m.threads; passed()
         m.close(); m.wifi=3; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
-        assert m.labels()==['Q2 App Store','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install']
+        assert m.labels()==['App Store','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install']
         m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
         assert m.urls==['https://raw.githubusercontent.com/DiamondBond/q2-pod/main/sources.list']+[f'https://api.github.com/repos/{r}/releases/latest' for r in
                         ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser')],m.urls
