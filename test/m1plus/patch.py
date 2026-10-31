@@ -14441,6 +14441,12 @@ assert m.get(buf+8)==7 and m.get(buf+4)==30; passed()
 if is_m1plus:
     not_ported('MP3 encoder delay/padding trim and command-driven player waits (1.5.5)')
 
+if is_m1plus:
+    not_ported("Bluetooth gapless resampler continuity (RS_OPEN_SLOT, 1.5.6)")
+    not_ported("Coverflow continuous flick/drag physics (existing M1 touch path retained, 1.5.7)")
+    not_ported("Simple EQ Presets shortcut (two-button M1 layout retained, 1.5.7)")
+    not_ported("Enlarged art reset default (V2.1 config asset not changed, 1.5.6)")
+
 print(f'{checks} MIPS execution scenarios passed; toolkit services mocked, stock lock filter executed.')
 if is_m1plus:
     print(f'M1 Plus: {len(GAPS)} known gaps, {len(NOT_PORTED)} checks not ported (listed above).')
