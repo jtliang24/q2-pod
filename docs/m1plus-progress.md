@@ -2368,6 +2368,379 @@ Retain M1's existing Coverflow touch implementation; the new player resampler sl
 unported row. Other 1.5.8 integration work and every 1.5.8 gate remain to be done.
 
 
+## 52. Merge step: sync to upstream 1.5.8 (Oct 30)
+
+The user explicitly requested 1.5.8, including after 1.5.5 put the remaining drift below the cadence
+trigger (49 commits, 1,770 conflict-surface lines). Resumed from the clean 1.5.5 checkpoint on
+`staging` (`7410215`), backed it up at `refs/backup/pre-sync-1.5.8`, and merged on `sync/1.5.8`.
+Upstream 1.5.8 is `d7c8594` (full commit recorded in `UPSTREAM_BASE`). No `link.ld` or toolchain
+change: this is not a structural step. No device flash or release is part of this merge.
+
+**Conflict-only merge:** `b37b3d2`. Nine files:
+
+- `README.md`: retained the M1 front page; upstream's new link is to the directory-marker feature,
+  which remains unported on M1.
+- `docs/internals.md`: upstream Crossfade drag/save description plus the existing V2.1 paragraph.
+- `patch/coverflow.c`: upstream retitle, hidden-view sensitivity and iPod art changes, retaining
+  the M1 touch include and native binding seam. The iPod-only Home implementation follows upstream.
+- `patch/crossfade.c`: upstream live drag/deferred-save logic, retaining V2.1's switch row, title,
+  widget names and event unbinding seams; enabling the view is now shared.
+- `patch/navigation.c`: retained M1 touch include alongside the upstream chord filter.
+- `patch/peq_ui.c`: upstream EQ state behavior with the existing model-width column/tab seams.
+- `patch/visualizer.c`: upstream page-width behavior with model width/style and height seams.
+- `test/coverflow.py`: union of upstream's new stubs/cases and the existing M1 host seams and SQL
+  ranking cases. A follow-up (`f9879af`) corrected fixture boundaries: the new Discovery cases
+  belong to the preceding in-memory database, before the ranking fixture starts.
+- `tools/build.py`: upstream version 1.5.8 plus the Q2 input-tar pin.
+
+**Compatibility follow-up:** `3ba13dc`.
+
+- `carousel_glide` keeps `slide_stride(w)`: V2.1 steps its slide-menu height. Its animator's easing
+  callback is `ANIM_EASING=0x44`, rather than V1.32's `0x38`. Native `widget_animator_init`
+  (`0x6734b0`) calls `easing_get` (`0x6f4108`) through GOT `0xa0109c`, then stores the callback at
+  `0x673548` (`0xae120044`); the build audit pins that word.
+- M1 retains its existing `m1plus_coverflow_touch.c`; the new continuous drag/flick handler, resets
+  and page events are Q2-only. Caption updates and the insensitive hidden-cover fix are shared.
+- M1 keeps its Simple EQ Enabled/Reset buttons and wheel order in `m1plus_peq_simple.inc`, with
+  portrait-width columns/tabs. The new Presets shortcut is deferred; Advanced still offers presets.
+- New library-scope calls link through `m1plus_library_scope.c`: SQL is unchanged and marker hiding
+  is inert. Existing `MUSIC_WHERE` spoken-word exclusions stay as they were. Automatic scrobble
+  uploads are disabled on M1; manual uploads retain upstream's generalized `scrobble_flag` API.
+- The new wheel Quick Settings release state is guarded with its Q2-only producer. V2.1's native
+  quick settings and existing brightness work are unaffected.
+
+**Audit beyond conflicts.** Reviewed `tools/build.py`, `tools/peq.py`, `offsets.inc`, all added shared
+C lines naming images/sizes or hex literals, and upstream's changes to M1 stand-in functions.
+
+- `easing_get` exists by name in V2.1. The new `g_slide_direction` context-data name is only used by
+  Q2 wheel Quick Settings on M1 and needs no native alias. `ui_loader_load_widget_with_parent` is
+  an iPod-only hook, automatically classified by the port report.
+- `RS_OPEN_SLOT=0x8a4554`, `RS_OPEN=0x4ac2c0`, and the direct `0x41e2d0`, `0x4ac35c`, `0x4ac534`
+  resampler callees are V1.32-only. No M1 player slot is patched and `rs_open` is discarded by the
+  linker. The feature has a new U4 row. No Q2 player address is installed into V2.1.
+- Bold font generation, `BOLD_RANGES`, Centred Now Playing's extra asset, Smart Awake, Home art
+  drift, marquee/lyric-push tunables and visualizer page widths are iPod-only. They do not need M1
+  assets or tunables. `DEFAULT_CONFIG`/`COVERMODE`'s new Q2 reset default is deferred with a U4 row.
+- `library_scope.c` is the new non-player source in `peq.compile_common`; the M1 uses its inert
+  stand-in for this merge. M1's `MUSIC_WHERE` deliberately lacks `LIBRARY_SCOPE_TOKEN` until ported.
+- `q2only.py 1.5.8 --base 1.5.5` lists the new guarded touch, EQ shortcut and wheel QS code plus the
+  iPod-only Display/tunables: each retained, deferred or ruled out above. No change to the Q2 Pod
+  page/Streaming rows, `list_row_core`, page-row stand-ins or `qm_goto` needs a separate M1 mirror.
+- New UI strings/sizes: Simple EQ remains model-width with two buttons; visualizer/Home/lyrics
+  literals are in iPod code. `np_more` returns null off iPod, so no M1 widget lookup is added. No
+  new Q2 image or style string reaches M1 without its existing model name.
+- New U4 rows: Bluetooth resampler continuity, Coverflow flick gestures, directory markers,
+  automatic scrobble uploads, Simple EQ Presets shortcut, enlarged-art reset default. Existing iPod
+  and Quick Settings rows cover the other additions. No new feature port was undertaken.
+
+**Suites.** `suitemerge.py 1.5.5 1.5.8` merged build (0 manual hunks), patch (2) and playback (1).
+The marker-walker hunk is retained behind an M1 guard with a `NOT PORTED` line; the other patch
+hunk updates the iPod-only Display expectation. Playback's View Queue ordering cases were brought
+in by hand (`1eb10a9`, completed before the playback gate). New marker tests for stored lists/SQL/Era, and deferred features, have named skips.
+`3f364f1` registers upstream's `library_scope` host suite and `bt_resample` per-build suite in
+`q2compare.py`. M1 test changes are `b97d42e` and `2bb43f9`.
+The first M1 gate run stopped at the old V2.1-specific Crossfade expectation of a config write
+on value-changing. `e376d38` updates Crossfade and Resume Songs to require no writes during a drag,
+one on release, and a save on close or a later unchanged step. It also checks the native page's
+close-mid-drag path. This was a test-only fix: the image was retained and the patch gate and all
+following gates resumed.
+
+**Q2 gates:** both `update.tar` files byte-identical to upstream 1.5.8:
+Legacy `09ef2412f036a3bf82924539c06cfdef3a451bc3ada94f6ced9cd30d791a73ce`,
+iPod `08e7cd2d928bc6490c396c30f029b4b668e897fcabd0fe71e3836192be1cc1c2`.
+All 44 registered suite runs accounted for: 39 passed in the comparison, Coverflow passed on rerun
+with the fixture fix, and four (`aic_build`, `flac_build`, `pwm_build`, `rotator_build`) reproduce
+upstream's missing-ZIP negative-test failures in its own tree. Q2 patch counts: 1,492 Legacy and
+2,024 iPod. `test/patch.py` is upstream's unchanged text; no Q2 scenarios were dropped. The only
+suite text differences remain `coverflow`, `peq`, `remote`. The host shell supplied FFmpeg,
+libmad and LAME (no repository toolchain change); the 16 real MP3 fixtures and both new
+library-scope/resampler suites passed. Logs: `work/sync/1.5.8-logs/q2.log`,
+`q2-suites/` (snapshots during the run), `coverflow-rerun.log` (the latter records the corrected host run).
+
+**Retained M1 candidate:** `work/sync/1.5.8`, `V004s`, dev 4, patch 380,248 bytes.
+Source SHA-256 `4be8c0964c0f5f61bae8e30e849909fade53d6dc71f45eec0ef423c27092dbe1`;
+update SHA-256 `d754bfd5f1a8d68b734ca8bc3781c8bc2c7cdcb7741c010d6cc932b2c457b9b7`.
+
+**M1 gates:** all passed from the gate worktree, with the retained image unchanged:
+
+- Build audit: hook jumps, demo/rootfs parity, boot scripts and V2.1 animator word pin passed.
+- Patch: 1,373 MIPS scenarios, zero known gaps, 35 named not-ported checks.
+- Boot default: stock/patched Home and the full settings/Knob/EQ/Crossfade/lock-screen walk passed;
+  17 hooks and 263 payload functions reached. Six-card Home passed (9 hooks, 128 functions).
+  Media passed through Era, Books, Photos, Coverflow touch/track list, Streaming and shuffle
+  (14 hooks, 374 functions). The three independent boot runs were grouped with first-failure
+  cancellation, each in its own QEMU root.
+- Playback: 345 advanced checks plus queue checkpoints/polling, MP4 admission and Folder speed.
+- `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`: passed.
+- Port report: 645 classified entries; 88 hooks (56 ported, 8 native, 10 Q2-only, 14 unported),
+  39 sites (28/5/3/3), 518 names (473 ported, 42 Q2-only, 3 unported).
+
+Logs: `work/sync/1.5.8-logs/`; orchestrator logs `m1-first.log` and `m1-resume1.log`.
+No firmware-source fixes were needed after the retained build. The test-only slider fix resumed
+at patch; the completed View Queue cases were checked out before the playback gate started.
+
+**Next device checklist:** the last device-tested build remains `work/batch-five/dev13` (V01Vs).
+No device pass was done for either merge step. Against that build, the retained candidate has
+194 changed, 34 added, 1 removed functions of 1,039. This includes retained unhooked Q2 code,
+so an added function does not imply a newly enabled native hook. `scrobble_album_artist` is replaced
+by `scrobble_flag`.
+
+On the next authorized device pass, check the combined 1.5.5/1.5.8 surface: Home/Knob navigation
+and animator completion/fallback; Coverflow touch, side/centre taps, captions and track-list swipes;
+Crossfade through 15 seconds with drag/release, +/- and close-mid-drag persistence; Simple EQ's
+Enabled/Reset and Advanced presets, switching modes and slider takeover; shuffle View Queue and
+Play Next; Era and existing spoken/hidden-folder exclusions; manual scrobbling; MP4/chapter
+admission; PEQ track transitions; Bluetooth skips, pause/resume and continuous playback; Streaming
+and Spotify search teardown; Books, boot-logo selection, playback and resume. Deferred U4 features
+are not expected to become active in this build.
+
+<details>
+<summary>Full payload function diff from the last device-tested build</summary>
+
+```text
+~ books.c.o: book_kind
++ books.c.o: ext_kind
+~ books.c.o: measure
++ books.c.o: video_ext
++ chapters.c.o: be
++ chapters.c.o: mp4_fits
++ chapters.c.o: mp4_index_bytes
++ chapters.c.o: mp4_samples
+~ coverflow.c.o: artist_under
+~ coverflow.c.o: changed
+~ coverflow.c.o: closed
+~ coverflow.c.o: coverflow_album
+~ coverflow.c.o: coverflow_artist
+~ coverflow.c.o: coverflow_bounded
+~ coverflow.c.o: coverflow_centre
+~ coverflow.c.o: coverflow_goto_album
+~ coverflow.c.o: coverflow_jump
++ coverflow.c.o: coverflow_lost_touch
+~ coverflow.c.o: coverflow_paint
+~ coverflow.c.o: coverflow_rated
+~ coverflow.c.o: coverflow_render
+~ coverflow.c.o: coverflow_row
+~ coverflow.c.o: coverflow_scope
+~ coverflow.c.o: coverflow_shows_album
+~ coverflow.c.o: coverflow_tracks
+~ coverflow.c.o: covers
+~ coverflow.c.o: fx_close
+~ coverflow.c.o: keyup
+~ coverflow.c.o: load
++ coverflow.c.o: open_page
+~ coverflow.c.o: pick
+~ coverflow.c.o: poll
++ coverflow.c.o: pose
+~ coverflow.c.o: resort
++ coverflow.c.o: retitle
+~ coverflow.c.o: scoped_open
+~ coverflow.c.o: sort_next
+~ coverflow.c.o: stop
++ coverflow.c.o: titles
+~ coverflow.c.o: to_tracks
+~ coverflow.c.o: touched
++ coverflow.c.o: unproject
+~ coverflow.c.o: worker
+~ crossfade.c.o: gone
+~ crossfade.c.o: mono_click
+~ crossfade.c.o: mono_on
+~ crossfade.c.o: mono_row
+~ crossfade.c.o: mono_sync
+~ crossfade.c.o: mqa_click
+~ crossfade.c.o: mqa_on
+~ crossfade.c.o: mqa_row
+~ crossfade.c.o: mqa_text
+~ crossfade.c.o: refresh
+~ crossfade.c.o: resume_min
+~ crossfade.c.o: set_value
+~ crossfade.c.o: settings
+~ crossfade.c.o: single
+~ crossfade.c.o: slid
+~ crossfade.c.o: step
+~ crossfade.c.o: swap_click
+~ crossfade.c.o: swap_on
+~ crossfade.c.o: swap_row
+~ crossfade.c.o: swap_text
+~ crossfade.c.o: toggle
+~ crossfade.c.o: xfade_key
+~ crossfade.c.o: xfade_open
+~ crossfade.c.o: xfade_poll
++ m1plus_library_scope.c.o: library_scope_hidden
++ m1plus_library_scope.c.o: library_scope_query
+~ navigation.o: album_plays
+~ navigation.o: artist_cf_gone
+~ navigation.o: artist_cf_open
+~ navigation.o: artist_key
+~ navigation.o: artist_keys_free
+~ navigation.o: artist_tab
+~ navigation.o: audioset_rows
+~ navigation.o: bounds
++ navigation.o: carousel_glide
+~ navigation.o: chapter_pick
+~ navigation.o: chapter_poll
+~ navigation.o: compact_now_playing
+~ navigation.o: empty_toast
++ navigation.o: era_key_cmp
++ navigation.o: era_key_row
+~ navigation.o: era_pick
+~ navigation.o: era_sql
+~ navigation.o: folder_tracks
++ navigation.o: folder_videos
+~ navigation.o: fx_cancel
+~ navigation.o: fx_expire
+~ navigation.o: fx_live
+~ navigation.o: hold_wheel
+~ navigation.o: knob_nav_active
+~ navigation.o: library_open
+~ navigation.o: library_query
+~ navigation.o: load
+~ navigation.o: logo_sync
+~ navigation.o: long_songs
+~ navigation.o: lp_entry
+~ navigation.o: lp_fire
+~ navigation.o: ls_poll
+~ navigation.o: ls_show
+~ navigation.o: media_click
+~ navigation.o: most_played
+~ navigation.o: mp_find
+~ navigation.o: mp_play
++ navigation.o: music_records
+~ navigation.o: page_closed
+~ navigation.o: page_tracks
++ navigation.o: playlist_used
+~ navigation.o: plays_load
+~ navigation.o: pod_click
+~ navigation.o: pod_rows
+~ navigation.o: pod_settings
+~ navigation.o: pod_text
+~ navigation.o: position
+~ navigation.o: previous_back
+~ navigation.o: pull_cancel
+~ navigation.o: pull_event
+~ navigation.o: pull_live
+~ navigation.o: qm_album_id
+~ navigation.o: qm_back
+~ navigation.o: qm_gone
+~ navigation.o: qm_hold
+~ navigation.o: qm_list
+~ navigation.o: qm_open
+~ navigation.o: qm_pick
+~ navigation.o: qm_playlist_gone
+~ navigation.o: qm_playlist_pick
+~ navigation.o: qm_query
+~ navigation.o: qm_record
+~ navigation.o: qm_restore
+~ navigation.o: qm_run
+~ navigation.o: qm_sortselect_init
+~ navigation.o: quick_volume
+~ navigation.o: rate_badge
+~ navigation.o: rate_close
+~ navigation.o: rate_down
+~ navigation.o: rate_fav_click
+~ navigation.o: rate_gone
+~ navigation.o: rate_io
+~ navigation.o: rate_long
+~ navigation.o: rate_open
+~ navigation.o: rate_paint
+~ navigation.o: rate_panel_gone
+~ navigation.o: rate_show
+~ navigation.o: rate_tap
+~ navigation.o: rated_open
+~ navigation.o: rates
+~ navigation.o: ratings_menu
+~ navigation.o: reconcile
+~ navigation.o: replay_wheel
+~ navigation.o: ringnav
+~ navigation.o: ringnav_about
+~ navigation.o: ringnav_album_detail
+~ navigation.o: ringnav_artist_az
+~ navigation.o: ringnav_artist_covers
+~ navigation.o: ringnav_artist_view
+~ navigation.o: ringnav_bt_resume
+~ navigation.o: ringnav_dispatch
+~ navigation.o: ringnav_folder
+~ navigation.o: ringnav_folder_back
++ navigation.o: ringnav_hold_info
++ navigation.o: ringnav_hold_timer
+~ navigation.o: ringnav_input
+~ navigation.o: ringnav_keylong
+~ navigation.o: ringnav_localclass
+~ navigation.o: ringnav_lock_clock
++ navigation.o: ringnav_mainscheduling
+~ navigation.o: ringnav_paint
+~ navigation.o: ringnav_playing
+~ navigation.o: ringnav_playlist
++ navigation.o: ringnav_playlist_create
++ navigation.o: ringnav_playlist_delete
+~ navigation.o: ringnav_playlistsmore
+~ navigation.o: ringnav_shuffle
+~ navigation.o: ringnav_sleep
+~ navigation.o: ringnav_standby
+~ navigation.o: ringnav_start_player
+~ navigation.o: ringnav_timezone
+~ navigation.o: ringnav_timezone_row
+~ navigation.o: ringnav_touch
+~ navigation.o: ringnav_wheel_qs
+~ navigation.o: ringnav_year_old
+~ navigation.o: root_text
+~ navigation.o: rt_play
+~ navigation.o: sc_click
+~ navigation.o: sc_text
++ navigation.o: scrobble_auto_ms
+~ navigation.o: select
+~ navigation.o: shuffle_menu
+~ navigation.o: slide_swipe
+~ navigation.o: song_folder
+~ navigation.o: songs_open
+~ navigation.o: songs_rows
+~ navigation.o: spot_at
+~ navigation.o: spot_save
+~ navigation.o: stream_config
+~ navigation.o: svc
+~ navigation.o: td_clear
+~ navigation.o: td_play
+~ navigation.o: td_show
+~ navigation.o: upload_wait
+~ netupdate.c.o: sh_rows
+~ onlinematch.c.o: easy
+~ peq_ui.c.o: action
++ peq_ui.c.o: apply
+~ peq_ui.c.o: caption
+~ peq_ui.c.o: closed
+~ peq_ui.c.o: e3_activate
++ peq_ui.c.o: e3_switch
++ peq_ui.c.o: e3_take
+~ peq_ui.c.o: e3_touch
+~ peq_ui.c.o: e3_y
+~ peq_ui.c.o: peq_paint
++ playback.c.o: playback_listable
+~ playback.c.o: playback_poll
++ playback.c.o: playback_start_fits
++ playback.c.o: playback_video
+~ playback.c.o: ringnav_audio_extension
+~ playback.c.o: ringnav_load
+~ playback.c.o: ringnav_open_preload
++ playback.c.o: track_fits
+~ playback.c.o: wheel_set_pct
+- scrobble.c.o: scrobble_album_artist
++ scrobble.c.o: scrobble_flag
+~ spotify.c.o: go
+~ spotify.c.o: search_left
+~ spotify.c.o: searched
+194 changed, 34 added, 1 removed, of 1039 functions
+```
+
+</details>
+
+**Footprint over 1.5.8's files:** +1,554/−310 over 32 files.
+
+Recorded `UPSTREAM_BASE=1.5.8 d7c8594c388948b2747a813d6ae6230ad4ff841b` and the U4/footprint
+rows, then landed `sync/1.5.8` on `staging` with `--no-ff`. The requested 1.5.8 target is complete;
+the retained `--dev` candidate awaits its next authorized device pass. The last release remains
+`1.4.2-m1.1` (Oct 25), five days ago: the weekly release is not due yet.
+The post-sync drift check leaves 1.5.9 at 83 commits and 1,770 conflict-surface lines, still new;
+verdict: **Not due**. The knowledge graph is refreshed with `graphify update .` after landing.
+
 ## How to check a build now
 
 ```sh
