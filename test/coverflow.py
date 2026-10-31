@@ -1639,6 +1639,13 @@ def main():
         assert not db.execute(sql).fetchall()
         db.execute("update songtable set fileurl='/mnt/mmc/PODCASTS/untagged.mp3' where id=10")
         assert not db.execute(sql).fetchall()
+        for path in ('/mnt/mmc/Discovery/weekly/01.flac', '/mnt/mmc/dIsCoVeRy/01.flac'):
+            db.execute('update songtable set fileurl=? where id=10', (path,))
+            assert db.execute(sql).fetchone()[:2] == (-1, 'Unknown Album')
+        for path in ('/mnt/mmc/Discovery Extra/01.flac', '/mnt/mmc/Music/Discovery/01.flac'):
+            db.execute('update songtable set fileurl=? where id=10', (path,))
+            assert db.execute(sql).fetchone()[:2] == (-1, 'Unknown Album')
+
     # The rankings (Sort, and an artist's albums) as SQLite runs them on stock's songtable: each
     # year order with ties by name and undated last, the newest song first, and by name.
     album_year = macro('ALBUM_YEAR')  # a tag's year, from a full date too (1.4.5)
@@ -1660,12 +1667,6 @@ def main():
             got = [r[1] for r in db.execute(macro('ALBUM_SQL') + macro('ALBUM_GROUP') + ' order by ' + o)]
             assert got == want.pop(o.removeprefix(album_year + '=0,')), (o, got)
         assert not want, want
-        for path in ('/mnt/mmc/Discovery/weekly/01.flac', '/mnt/mmc/dIsCoVeRy/01.flac'):
-            db.execute('update songtable set fileurl=? where id=10', (path,))
-            assert db.execute(sql).fetchone()[:2] == (-1, 'Unknown Album')
-        for path in ('/mnt/mmc/Discovery Extra/01.flac', '/mnt/mmc/Music/Discovery/01.flac'):
-            db.execute('update songtable set fileurl=? where id=10', (path,))
-            assert db.execute(sql).fetchone()[:2] == (-1, 'Unknown Album')
 
     with tempfile.TemporaryDirectory(prefix='q2-coverflow-check-') as directory:
         tmp = pathlib.Path(directory)
