@@ -1,6 +1,6 @@
 # M1 Plus: unported features
 
-The upstream Q2 Pod features still unported or awaiting validation after the 1.5.5 sync (`staging`;
+The upstream Q2 Pod features still unported or awaiting validation after the 1.5.8 sync (`staging`;
 `1.4.2-m1.1` is the last release). Each row has a status:
 
 - **Planned:** to be ported. Most have a known way in on V2.1, or a check to make first.
@@ -20,7 +20,7 @@ to its [progress](m1plus-progress.md) section.
 
 | Feature | Since | Q2 Pod's pieces | Status |
 |---|---|---|---|
-| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0) | Unplanned |
+| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8) | Unplanned |
 | [Games](#games) | 1.3.9 | `games.c`, the iPod UI's Games row | Unplanned |
 | [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone`; `timezone_row`, `TIMEZONES` (1.5.0) | Planned |
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
@@ -37,6 +37,12 @@ to its [progress](m1plus-progress.md) section.
 | [Playlist allocation and deletion](#playlist-allocation-and-deletion) | 1.5.5 | `createPlayListItem`, `playlist_delete_click` | Planned |
 | [Battery: paced player scheduling and command waits](#battery-fixes) | 1.5.5 | `MAINSCHEDULING_CALL`, `PAUSE_WAIT`, `IDLE_WAIT`, `CMD_DONE` | Planned |
 | [MP3 encoder delay and padding](#mp3-encoder-delay-and-padding) | 1.5.5 | `mp3_gapless.c`, `MP3_ALLOC`, `MP3_FILTER`, `MP3_CLOSE`, `MP3_READ` | Planned |
+| [Bluetooth resampler continuity](#bluetooth-resampler-continuity) | 1.5.6 | `RS_OPEN_SLOT`, `rs_open` (`tools/peq.py`, `peq_player.c`) | Planned |
+| [Coverflow flick gestures](#coverflow-flick-gestures) | 1.5.7 | `touch`, `carousel_glide`, `CF_DRAG_*` and `CF_*` gesture tunables | Planned |
+| [Directory markers](#directory-markers) | 1.5.8 | `library_scope.c`, `MUSIC_WHERE`, `music_records`, Era SQL | Planned |
+| [Automatic scrobble uploads](#automatic-scrobble-uploads) | 1.5.8 | `scrobble_auto`, `[SCROBBLE] AUTO` | Planned |
+| [Simple EQ's Presets shortcut](#simple-eqs-presets-shortcut) | 1.5.7 | `E3_PRESETS`, three-button Simple EQ layout | Planned |
+| [Enlarged art's reset default](#enlarged-arts-reset-default) | 1.5.6 | `DEFAULT_CONFIG`, `COVERMODE` (`tools/build.py`) | Planned |
 | [Stock's Chinese UI text in English](#stocks-chinese-ui-text) | 1.4.5 | `english_ui`, the `system_prove` label (`tools/build.py`) | Planned |
 | [q2remote's demo log](#q2remotes-demo-log) | 1.4.5 | `LOG_HOOK` (`tools/build.py`) | Planned |
 | [An artist's albums tab's album-artist rewrite](#an-artists-albums-tab) | 1.2.9 | `toolsQueryContentDbTable` | Planned |
@@ -77,7 +83,7 @@ These features run on the M1, but a few of their suite cases can't run there:
 Unplanned (the user's choice, Oct 26): the form factors are too far apart for a straightforward port.
 The iPod UI is built for the Q2's 375x320 landscape screen and touch wheel, and patches V1.32's UI
 assets, styles and code layout. On the M1 Plus's 320x480 portrait touchscreen and knob it would be a
-redesign, not a port, and the M1 keeps V2.1's own look instead (roadmap section 5). Its six hooks stay
+redesign, not a port, and the M1 keeps V2.1's own look instead (roadmap section 5). Its iPod hooks stay
 `q2only` in the port report.
 
 ### Games
@@ -246,3 +252,43 @@ points before these hooks run. The existing M1 playlist editor remains available
 1.5.5 trims an MP3 encoder's delay and padding through four hciplayer sites. V2.1's sites and
 private decoder state need to be established before adding the source and hooks to its player
 pipeline. The shared seek notification is inert on M1 until then.
+
+### Bluetooth resampler continuity
+
+1.5.6 replaces V1.32's lavcresample open slot (`0x8a4554`, stock `0x4ac2c0`) to retain its
+state across gapless changes. The M1 player's profile does not patch that slot; `rs_open` and its
+V1.32-only callees are discarded by the linker. Find and pin V2.1's descriptor and callbacks before
+porting. Q2's `test/bt_resample.py` covers the actual resampler; it cannot run on this M1 build.
+
+### Coverflow flick gestures
+
+M1 retains `m1plus_coverflow_touch.c` and the existing native `slide_swipe` path. Upstream's new
+continuous drag, velocity, rubber band and catch-a-glide handler are Q2-only until adapted to V2.1's
+portrait touch events and vertical `slide_menu` layout. Shared caption updates and the insensitive
+hidden-covers fix are inherited. The shared wheel animator uses V2.1's easing callback field at
+`0x44`, pinned in the build audit; this alone does not enable the new touch handler.
+
+### Directory markers
+
+The sync retains M1's existing spoken-word and hidden-folder filtering. The new `database.ignore`
+and `database.unignore` rules await an M1 port: `m1plus_library_scope.c` keeps ordinary SQL unchanged
+and leaves stored Favourites, Recent and Frequent lists intact. Its SQL and Era tests explicitly
+report `NOT PORTED`. Indexing and explicit playlists continue to use their existing rules.
+
+### Automatic scrobble uploads
+
+The existing manual upload path remains. `ringnav_sleep` does not call the new `scrobble_auto`
+scheduler on M1; `[SCROBBLE] AUTO=1` therefore does not start automatic uploads. Scheduling arithmetic
+can be tested without enabling the feature.
+
+### Simple EQ's Presets shortcut
+
+M1 keeps its two buttons (Enabled and Reset) and its existing wheel order in
+`m1plus_peq_simple.inc`. Presets remain available through Advanced. The new three-button shortcut
+needs a portrait layout and a device check; the other shared EQ state improvements are inherited.
+
+### Enlarged art's reset default
+
+1.5.6's Q2 build changes its default `COVERMODE` from 1 to 0 in the reset config. The M1 build does
+not copy that Q2 asset edit. Audit V2.1's own reset defaults before applying it; existing saved
+settings are unaffected.

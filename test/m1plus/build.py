@@ -2,7 +2,7 @@
 """JPEG and boot script checks; --build BUILD audits a build (Q2 or M1 Plus), and a stock firmware ZIP
 also tests packaging with a custom logo and quoted paths."""
 import io, sys; sys.path[1:1] = [sys.path[0] + '/..']; sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first: test/m1plus/build.py must import tools/build.py
-from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web
+from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web, DEFAULT_CONFIG, COVERMODE
 
 logo = (ROOT/'assets/boot-logo.jpg').read_bytes()
 assert jpeg_size(logo) == (320, 375)
@@ -302,7 +302,9 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     pins = {0x512f98: 0x0320f809, 0x512fac: 0x0320f809, 0x512fd0: 0x0320f809,
             0x512fd4: 0x24c6c288, 0x512fe0: 0x0320f809, 0x51c2f8: 0xa1230000,
             0x50b844: 0x0320f809, 0x50b878: 0x0320f809, 0x50b894: 0x0320f809,
-            0x5d1818: 0x24840d40}
+            0x5d1818: 0x24840d40,
+            # V2.1 animator easing callback, not Q2's 0x38 field.
+            0x673548: 0xae120044}
     assert all(struct.unpack_from('<I', stock, fileoff(stock, a))[0] == word for a, word in pins.items())
     for n in ('local_era', 'row_stream_config'):
         assert struct.unpack('>II', read('rootfs.squashfs', f'release/assets/default/raw/images/xx/{n}.png')[16:24]) == (40,40)
@@ -706,6 +708,14 @@ def validate_assets(directory):
         runtime = imagemagick('-size', f'{SET_ICON}x{SET_ICON}', '-depth', '8', 'rgba:-', '-define', 'png:color-type=6', 'png:-', data=bytes(px))
         values = mean(runtime, '#000000')  # Minimal's black list: neutral grey
         assert max(values) - min(values) < 0.001, name
+    if ipod:  # Classic's bold ships, cut to what BOLD_RANGES lists
+        from build import BOLD_TTF, bold_font
+        assert read('rootfs.squashfs', BOLD_TTF) == bold_font()[0]
+        # Centred Now Playing's page is English, as the iPod page is (english_ui)
+        from build import CJK
+        from ipod import PLAYING_STOCK
+        stock_page = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + PLAYING_STOCK))
+        assert not any(CJK.search(n[2].get('text', '')) for n in walk(stock_page))
     # Curly quotes draw the straight glyphs and ♡ takes ♥'s box and advance; other tables keep their
     # stock bytes (head: its checksum).
     from build import QUOTES
@@ -952,6 +962,9 @@ def validate_assets(directory):
             glyph_y = 30 + HOME_TOP + 6*HOME_ROW + (HOME_ROW - 50) // 2 + 16
             assert 375 - glyph_end == inc('HOME_CLASSIC_TEXT_X') >= corner_x(glyph_y, 34 - 16)
             assert inc('HOME_CLASSIC_TEXT_X') >= corner_x(30 + HOME_TOP + 6*HOME_ROW + 9, 20)
+            # Classic's labels stop short of Split's glyph (x 20 to 30 of list_into) and Full's.
+            for row, shift in ((inc('HOME_SPLIT_W'), inc('HOME_CHEVRON_SHIFT')), (inc('HOME_CLASSIC_ROW'), inc('HOME_FULL_CHEVRON_SHIFT'))):
+                assert row - inc('HOME_CLASSIC_LABEL_END') + 5 <= row - inc('CHEVRON_W') + shift + 20
             continue
         if short == STATUS_BAR:  # iPod only: play state left, title between, four icons right
             left, right, *rest = root[3]
