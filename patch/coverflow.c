@@ -1639,6 +1639,7 @@ void coverflow_paint(void *w, void *canvas) {
  * a side cover to the centre or opens the centre one. A touch while the covers move stops them.
  * The press is the covers' view's; the moves and the release are the page's, so a release off the
  * covers still ends the touch, and one never seen ends at the next key (coverflow_lost_touch). */
+#if !M1PLUS
 extern int carousel_glide(void *w, int goal, unsigned ms, int easing);
 #define CF_SAMPLES 8
 #define ABS(x) ((x) < 0 ? -(x) : (x))
@@ -1787,6 +1788,10 @@ static int touch(void *ctx, void *event) {
 /* ringnav, at a key with no finger down: a touch whose release went unseen ends, so the wheel
  * and Centre act on the cover the covers settle on. */
 void coverflow_lost_touch(void) { lift(1, 0); }
+#else
+/* M1 keeps its existing slide_swipe handler until the new touch physics are ported. */
+void coverflow_lost_touch(void) {}
+#endif
 
 
 static void cover(void *img, unsigned i, int near) {
@@ -1882,9 +1887,13 @@ static void covers(void) {
 #endif
         slide_menu_set_value(cf.slide, cf.album);
         widget_on(cf.slide, EVT_VALUE_CHANGED, changed, 0);
+#if !M1PLUS
         tc.down = 0; /* a touch on the covers these replace */
+#endif
         changed(0, 0);
+#if !M1PLUS
         widget_on(cf.covers, EVT_POINTER_DOWN, touch, 0); /* the rest: open_page */
+#endif
     }
     widget_set_visible(cf.covers, 1, 0);
     widget_set_sensitive(cf.covers, 1);
@@ -2223,7 +2232,9 @@ static int keyup(void *ctx, void *event) {
 static int closed(void *ctx, void *event) {
     if (ctx != cf.page) return 0; /* a page scoped_open closed already */
     stop_timer(&cf.title_timer);
+#if !M1PLUS
     tc.down = 0;
+#endif
     if (cf.saved_album) BLOB_IO(LAST_ALBUM, cf.saved_album, 1);
     drop();
     cf.page = cf.body = cf.covers = cf.slide = 0;
@@ -2243,8 +2254,10 @@ static int closed(void *ctx, void *event) {
 /* A Coverflow page: the covers' moves and release are taken here (touch). */
 static void *open_page(void) {
     void *page = page_open("coverflow_page", closed, keyup);
+#if !M1PLUS
     static const unsigned short kinds[] = { EVT_POINTER_MOVE_BEFORE, EVT_POINTER_UP_BEFORE, EVT_POINTER_ABORT };
     for (unsigned k = 0; page && k < sizeof kinds / sizeof *kinds; ++k) widget_on(page, kinds[k], touch, 0);
+#endif
     return page;
 }
 

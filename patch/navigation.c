@@ -820,7 +820,7 @@ int carousel_glide(void *w, int goal, unsigned ms, int easing) {
         P(w, SLIDE_ANIMATOR) = a;
         if (!a) {
             int n = (int)widget_count_children(w),
-                stride = slide_menu_item_width(w) + I(w, SLIDE_SPACER);
+                stride = slide_stride(w);
             int id = n && stride > 0 ? (I(w, SLIDE_INDEX) - goal / stride) % n : 0;
             I(w, SLIDE_OFFSET) = 0;
             slide_menu_set_value(w, id < 0 ? id + n : id);
@@ -5083,12 +5083,14 @@ int ringnav_dispatch(void *target, void *event) {
         /* Wheel QS taken back (playback.c qs_finish): its lift slides the pull-down back to how it
          * was, ahead of stock's release handler; a touch down other than its own finger's (which
          * may come after the turn) drops a stale one. */
+#if !M1PLUS /* wheel Quick Settings is unported on M1 */
         if (type == EVT_POINTER_DOWN - 1 && !qs_down)
             qs_back = 0;
         else if (type == EVT_POINTER_UP_BEFORE - 1) {
             if (qs_back) I(g_slide_direction, 0) = qs_back - 1;
             qs_back = qs_down = 0;
         }
+#endif
         /* Quick Settings' swipe up to close may start on its brightness slider. The slider gets
          * its press only once the touch has moved SLIDE_PX more sideways than up or down, or on a
          * tap's release; a touch that moves up or down first, or while stock slides the pull-down
@@ -9571,7 +9573,7 @@ int ringnav_sleep(void *loop) {
     addon_poll();
     playback_poll();
     resume_poll();
-    scrobble_auto();
+    if (!M1PLUS) scrobble_auto(); /* new automatic uploads await an M1 port */
     power_poll();
 #if IPOD
     lyric_poll();

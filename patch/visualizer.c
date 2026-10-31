@@ -13,7 +13,6 @@
 #ifndef VIS_H
 #define VIS_H 186            /* tools/ipod.py NP_SLIDE_H, the page's height */
 #endif
-#endif
 #define VIS_ART 88           /* the Halo's centre */
 #define TAU 6.2831853f
 enum { SPECTRUM, SCOPE, METERS, HALO, STYLES };

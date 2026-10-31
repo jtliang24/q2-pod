@@ -798,7 +798,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=0', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)

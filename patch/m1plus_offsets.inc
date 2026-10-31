@@ -549,6 +549,8 @@ static inline int arc_out(int r, int y) {
 #define ANIM_ELAPSED 0x14
 #define ANIM_START_TIME 0x1c
 #define ANIM_DURATION 0x24
+/* widget_animator_init (0x6734b0) stores easing_get's callback at 0x673548. */
+#define ANIM_EASING 0x44
 #define ANIM_X_TO 0x64
 #define ANIM_X_FROM 0x6c
 #define EVT_ANIM_END 0x127
@@ -608,6 +610,7 @@ static inline int arc_out(int r, int y) {
 #define PLAYMORE_COUNT 7
 #define PLAYMORE_SEARCH 3
 #define CLASS_ALBUMS 0xf003     /* all albums: rows open getMusicByAlbum (load_localclass_list 0xff10) */
+#include "library_scope.h"
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
 /* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */
 #define ALBUM_YEAR "max(case when cast(year as text) glob '[1-9][0-9][0-9][0-9]*' then cast(substr(year,1,4) as integer) else 0 end)"

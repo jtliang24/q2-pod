@@ -100,9 +100,17 @@ static const struct { double first, step; int rows; } picks[] = {{-12, 0.5, 49},
 #define TAB_W ((UI_W - TAB_LEFT - 15) / 2)
 #define TAB_RIGHT (UI_W - 8 - TAB_W)     /* Advanced's x */
 #define E3_SAVE_MS 250
+#if M1PLUS
+#include "m1plus_peq_simple.inc"
+#else
 enum { E3_TABS, E3_SWITCH, E3_PRESETS, E3_RESET, E3_LOW, E3_HIGH = E3_LOW + 2 };
 /* The three buttons' x and width: Enabled and Presets wide, Reset a small R box. */
 static const short e3_button[3][2] = { { 12, 140 }, { 161, 140 }, { 310, 53 } };
+#define E3_LAST E3_HIGH
+#define E3_BUTTON_COUNT 3
+#define E3_BUTTON_FOCUS(i) (E3_SWITCH + (i))
+#define E3_BUTTON_NAME(i) names[i]
+#endif
 static struct {
     void *view;
     unsigned save, press, press_at;
@@ -1079,7 +1087,7 @@ int eq_key(void *top, unsigned key) {
     if (key != KEY_NEXT && key != KEY_PREV) return 0;
     int dir = key == KEY_NEXT ? 1 : -1;
     if (e3.adjusting) e3_set(e3.focus - E3_LOW, e3.gain[e3.focus - E3_LOW] + 0.5 * dir);
-    else e3.focus = e3.focus + dir < E3_TABS ? E3_TABS : e3.focus + dir > E3_HIGH ? E3_HIGH : e3.focus + dir;
+    else e3.focus = e3.focus + dir < E3_TABS ? E3_TABS : e3.focus + dir > E3_LAST ? E3_LAST : e3.focus + dir;
     e3_show();
     return 1;
 }
@@ -1094,7 +1102,11 @@ static int e3_touch(void *ctx, void *event) {
         if (xy[1] < E3_BUTTONS) return 0;
         e3.status = 0;
         if (xy[1] < E3_SLIDERS) {
+#if M1PLUS
+            e3.focus = xy[0] < UI_W / 2 ? E3_SWITCH : E3_RESET;
+#else
             e3.focus = xy[0] < e3_button[1][0] - 4 ? E3_SWITCH : xy[0] < e3_button[2][0] - 4 ? E3_PRESETS : E3_RESET;
+#endif
             e3_activate();
             return 0;
         }
@@ -1133,11 +1145,11 @@ static void e3_paint(void *canvas) {
         preset[n] = 0;
     }
     const char *const names[] = { peq ? preset : e3.on ? "Enabled: On" : "Enabled: Off", "Presets", "R" };
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < E3_BUTTON_COUNT; ++i) {
         int x = e3_button[i][0], w = e3_button[i][1];
-        e3_box(canvas, x, E3_BUTTONS, w, 40, e3.focus == E3_SWITCH + i ? 0x333333 : 0x1a1a1a);
+        e3_box(canvas, x, E3_BUTTONS, w, 40, e3.focus == E3_BUTTON_FOCUS(i) ? 0x333333 : 0x1a1a1a);
         if (!i) e3_box(canvas, x, E3_BUTTONS + 36, w, 4, e3.on || peq ? TONE : 0x666666);
-        caption(canvas, names[i], x, E3_BUTTONS, w, 40, !i && peq && n > 9 ? 16 : 20, 0xffffffffu);
+        caption(canvas, E3_BUTTON_NAME(i), x, E3_BUTTONS, w, 40, !i && peq && n > 9 ? 16 : 20, 0xffffffffu);
     }
     for (int i = 0; i < 3; ++i) {
         static const char *const names[] = { "Low", "Mid", "High" };
