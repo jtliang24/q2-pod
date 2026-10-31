@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """JPEG checks; optionally pass the stock ZIP to test packaging with a custom logo and quoted paths too."""
 import io, sys; sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first: test/build.py must import tools/build.py
-from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web
+from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web, DEFAULT_CONFIG, COVERMODE
 
 logo = (ROOT/'assets/boot-logo.jpg').read_bytes()
 assert jpeg_size(logo) == (320, 375)
@@ -299,6 +299,14 @@ def validate_assets(directory):
     check_bluetooth_drop(directory)
     from build import SCROBBLE_CA
     assert read('rootfs.squashfs', SCROBBLE_CA) == (ROOT/'assets/scrobble-ca.pem').read_bytes()
+    if ipod:  # Classic's bold ships, cut to what BOLD_RANGES lists
+        from build import BOLD_TTF, bold_font
+        assert read('rootfs.squashfs', BOLD_TTF) == bold_font()[0]
+        # Centred Now Playing's page is English, as the iPod page is (english_ui)
+        from build import CJK
+        from ipod import PLAYING_STOCK
+        stock_page = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + PLAYING_STOCK))
+        assert not any(CJK.search(n[2].get('text', '')) for n in walk(stock_page))
     # Curly quotes draw the straight glyphs and ♡ takes ♥'s box and advance; other tables keep their
     # stock bytes (head: its checksum).
     from build import QUOTES
@@ -454,7 +462,7 @@ def validate_assets(directory):
                     and c[0] in ('list_view', 'list_item', 'scroll_view', 'table_view', 'table_client', 'view')]
             assert not bad, (rel, bad)
         if rel not in changed:
-            assert new == original, rel
+            assert new == (original.replace(*COVERMODE) if rel == DEFAULT_CONFIG else original), rel
             continue
         assert changed[rel] == dict(original_sha256=sha(original), sha256=sha(new))
         if '/raw/styles/' in rel:
@@ -600,6 +608,9 @@ def validate_assets(directory):
             glyph_y = 30 + 6*HOME_ROW + (HOME_ROW - 50) // 2 + 16
             assert 375 - glyph_end >= corner_x(glyph_y, 34 - 16)
             assert inc('HOME_CLASSIC_TEXT_X') >= corner_x(30 + HOME_TOP + 6*HOME_ROW + 9, 20)
+            # Classic's labels stop short of Split's glyph (x 20 to 30 of list_into) and Full's.
+            for row, shift in ((inc('HOME_SPLIT_W'), inc('HOME_CHEVRON_SHIFT')), (inc('HOME_CLASSIC_ROW'), inc('HOME_FULL_CHEVRON_SHIFT'))):
+                assert row - inc('HOME_CLASSIC_LABEL_END') + 5 <= row - inc('CHEVRON_W') + shift + 20
             continue
         if short == STATUS_BAR:  # iPod only: play state left, title between, four icons right
             left, right, *rest = root[3]

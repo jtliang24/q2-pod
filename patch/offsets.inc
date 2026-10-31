@@ -220,12 +220,25 @@ static inline int arc_out(int r, int y) {
  * (Minimal's NP_BAR_MINIMAL line). Minimal's settings icons are grey and list_into
  * MINIMAL_CHEVRON under every accent; its own accent (MINIMAL_ACCENT) fills with MINIMAL_FILL. */
 #define HOME_SPLIT_W 187
+/* Split's cover pans (docs/ipod.md#home): zoomed DRIFT_ZOOM_PCT, each axis a linear ping-pong of
+ * its own period across the zoom's margin (about 1.5 px/s on a square cover, as iPod.js's), drawn
+ * at sub-pixel positions every DRIFT_TICK_MS, a step at most DRIFT_MAX_STEP_MS. A cover whose zoomed
+ * fit passes DRIFT_TEXELS (four panels) stays still. Tuned by eye; 2 x DRIFT_X_MS x DRIFT_Y_MS must
+ * fit in 32 bits. */
+#define DRIFT_ZOOM_PCT 110
+#define DRIFT_X_MS 20000
+#define DRIFT_Y_MS 26000
+#define DRIFT_TICK_MS 200
+#define DRIFT_MAX_STEP_MS 500 /* 2.5 ticks: a late tick keeps its time */
+#define DRIFT_TEXELS 218080 /* four panels: 4 x 188 x 290 */
 #define HOME_CLASSIC_ROW 369
 #define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
 #define HOME_CHEVRON_SHIFT 15
 #define HOME_FULL_CHEVRON_SHIFT 10
 #define HOME_CLASSIC_TEXT_X 33
-#define HOME_CLASSIC_LABEL_END (CHEVRON_W - 10)
+/* Labels end 10 px before Split's chevron glyph (x 20 of list_into, HOME_CHEVRON_SHIFT in), 5 px
+ * before Full's, so Liberation Sans Bold's "Now Playing" (119 px) fits Split's row. */
+#define HOME_CLASSIC_LABEL_END 33
 #define NP_BAR_CLASSIC 8
 #define NP_BAR_MINIMAL 4
 #define MINIMAL_FILL 0xeeeeec
@@ -265,6 +278,9 @@ static inline int arc_out(int r, int y) {
 #define NP_TITLE_PX 22
 #define NP_META_PX 18
 #define NP_ALBUM_RGB 0xbbbbbb
+/* A line too long to fit holds MARQUEE_HOLD_MS at its start: the Minimal album marquee
+ * (navigation.c) and the stock title and artist labels' delay and lull (tools/ipod.py). */
+#define MARQUEE_HOLD_MS 1500
 /* iPod Now Playing's lyrics (lyrics.c, docs/ipod.md#lyrics): a line of one row is LYRIC_SLOT high,
  * its text and the gap to the next, a longer one more; the first after a blank LYRIC_SLOT
  * (tools/ipod.py's list layout) so it can sit in the middle as the playing line does; text LYRIC_X
@@ -396,6 +412,12 @@ static inline int arc_out(int r, int y) {
 #define BUMP_PX 6
 #define BUMP_MS 120
 #define EDGE_PAUSE_MS 300 /* well above WHEEL_RUN_MS, so a spin never counts as a pause */
+/* Following lyrics resist the wheel as a list's end does (lyric_poll): travel short of
+ * LYRIC_PUSH_DETENTS within LYRIC_PUSH_MS of the last only nudges them BUMP_PX.
+ * ponytail: fixed feel, tune these two if a stray touch still takes over or a deliberate one
+ * feels stuck. */
+#define LYRIC_PUSH_DETENTS 2
+#define LYRIC_PUSH_MS 1000
 #define BAR_VALUE 0x7c /* scroll_bar native value, maintained by list/table scroll callbacks */
 #define KEY_CENTER 218
 #define KEY_PREV 172
@@ -447,6 +469,8 @@ static inline int arc_out(int r, int y) {
 #define ANIM_DURATION 0x20
 #define ANIM_X_TO 0x60
 #define SLIDE_EASING 8          /* stock scroll_to easing */
+#define ANIM_EASING 0x38 /* widget_animator_init (0x665eb4) stores easing_get(type) here */
+#define EASE_CUBIC_OUT 5 /* AWTK easing_type_t: starts at 3x the mean speed, then decelerates */
 #define EVT_ANIM_END 0x125
 
 /* Play/Pause hold queue menu (docs/internals.md). AWTK input_device_status lives at
@@ -482,7 +506,9 @@ static inline int arc_out(int r, int y) {
 /* localmusic/playlist_page's add mode (g_play_info + 0x7894): non-zero while it is Add to Playlist;
  * 0 when browsing the Playlists list, whose rows' trailing dots open playlistsmore_page. */
 #define PLAYLIST_ADD_MODE 0xa27894
-#define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b'"
+/* Marked folders stay indexed for playlists; the wrappers expand this before grouping. */
+#include "library_scope.h"
+#define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b' and " LIBRARY_SCOPE_TOKEN
 /* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */
 #define ALBUM_YEAR "max(case when cast(year as text) glob '[1-9][0-9][0-9][0-9]*' then cast(substr(year,1,4) as integer) else 0 end)"
 /* One row per album, as album_cmp tells them apart (coverflow.c; navigation.c's Era). */
@@ -574,6 +600,16 @@ static inline int arc_out(int r, int y) {
 #define CF_REFLECT_TOP (IPOD ? 48 : 64)
 #define CF_STRIDE 110
 #define CF_TEXT_Y 212 /* the album caption's top, under the frame; the artist follows */
+/* Touch on the covers (coverflow.c, docs/internals.md#coverflow-touch) */
+#define CF_DRAG_PX 90      /* finger travel per album: about the centre cover's own on screen */
+#define CF_SLOP 8          /* px a touch moves before it is a drag, not a tap */
+#define CF_PROJECT_MS 400  /* a flick's reach: the finger's speed carried on for this long */
+#define CF_FLICK 250       /* px/s: a release this fast moves on at least to the next cover */
+#define CF_STILL_MS 60     /* a finger resting this long before it lifts throws nothing */
+#define CF_VMAX 6000       /* px/s, the fastest flick counted: about 27 albums' glide */
+#define CF_GLIDE_MAX 1400  /* ms, the longest glide */
+#define CF_SETTLE_MS 280   /* a release with no flick settles on the nearest cover */
+#define CF_TAP_MS 320      /* a tapped side cover's glide to the centre */
 /* Photos (patch/photos.c, docs/internals.md#photos): under a 48px title, PH_COLS columns of
  * PH_TILE_W x PH_TILE_H tiles from x PH_GRID_X, three whole rows in the 240px below it, each a
  * thumbnail of at most PH_THUMB_W x PH_THUMB_H centred in its tile, so the selection shows round
