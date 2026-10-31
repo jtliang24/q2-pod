@@ -198,6 +198,14 @@ else:  # M1 Plus: config_playmode is patch/m1plus_peq.h's inline, with no symbol
     print("NOT PORTED: Shuffle Songs is one-shot (the case calls V1.32's config_playmode)")
 
 # View Queue's order (playback_listable): stock Shuffle (MCL_MODE 2, no advanced play) becomes Shuffle
+# Songs, keeping no mode to restore; any other stock mode lists stock's queue. Advanced play keeps
+# its own settings: Shuffle off (MCL_MODE still 2) lists in queue order, unchanged.
+for mode_now,listed in ((2,1),(0,0),(3,0)):
+    m=PlaybackMachine(); m.word(O['MCL_MODE'],mode_now)
+    assert m.fn('playback_listable')==listed and m.fn('playback_option',0)==listed; checks+=1
+m=PlaybackMachine(); m.word(O['MCL_MODE'],2); assert m.fn('playback_listable')==1
+assert m.fn('playback_set',0,0)==1 and m.fn('playback_set',1,2)==1
+assert m.fn('playback_listable')==0 and [m.fn('playback_option',k) for k in range(2)]==[0,2]; checks+=1
 
 # Over SAVE_LIMIT (999) tracks nothing is saved, and an older snapshot goes.
 for n,kept in ((999,True),(1000,False)):
