@@ -13196,8 +13196,9 @@ else:  # M1 Plus: Wheel Sensitivity is Q2 only; Crossfade's row opens the same p
     assert press(m.switch)==X(1,7) and m.nodes[m.vol]['text']=='7 s' and m.nodes[m.slider]['value']==7
     assert m.nodes[m.switch_icon]['image']==NAMES['ICON_SWITCH_ON'] and texts()[3]=='Crossfade: 7 s'
     assert press(m.add)==X(1,8) and press(m.dec)==X(1,7) and texts()[3]=='Crossfade: 7 s'
-    m.nodes[m.slider]['value']=3; assert press(m.slider,CHANGING)==X(1,3) and m.nodes[m.vol]['text']=='3 s'
-    m.nodes[m.slider]['value']=0; assert press(m.slider,CHANGING)==X(0,3) and m.nodes[m.vol]['text']=='Off'
+    m.nodes[m.slider]['value']=3; assert press(m.slider,CHANGING)==[] and m.nodes[m.vol]['text']=='3 s'
+    assert press(m.slider,O['EVT_VALUE_CHANGED'])==X(1,3)
+    m.nodes[m.slider]['value']=0; assert press(m.slider,CHANGING)==[] and m.nodes[m.vol]['text']=='Off'
     assert m.nodes[m.switch_icon]['image']==NAMES['ICON_SWITCH_OFF'] and texts()[3]=='Crossfade: Off'
     assert press(m.add)==X(1,1) and press(m.dec)==X(0,1) and press(m.dec)==[]  # Off is the bottom
     m.nodes[m.slider]['value']=20; assert press(m.slider,O['EVT_VALUE_CHANGED'])==X(1,15) and press(m.add)==[]
@@ -13206,6 +13207,9 @@ else:  # M1 Plus: Wheel Sensitivity is Q2 only; Crossfade's row opens the same p
     f,ctx=m.handler(page,O['EVT_DESTROY']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
     m.stack.remove(page); m.top=audio; page=m.prepare_bootvol()
     assert click(3)==[] and m.top==page and m.nodes[m.vol]['text']=='15 s' and m.nodes[m.slider]['value']==15; passed()
+    # A V2.1 page closed mid-drag saves once; the drag updates the page without config writes.
+    m.nodes[m.slider]['value']=9; assert press(m.slider,CHANGING)==[] and m.nodes[m.vol]['text']=='9 s'
+    assert press(page,O['EVT_DESTROY'])==X(1,9); passed()
     # Resume Songs' row (1.3.0) opens the same page: no switch, Off below 20, then 20-120 min in fives,
     # live and saved.
     m,rows,texts,icons,click=settings_page('audioset',NAMES['VIEW_PLAYSET'],stock_rows=15)
@@ -13218,8 +13222,9 @@ else:  # M1 Plus: Wheel Sensitivity is Q2 only; Crossfade's row opens the same p
     assert press(m.dec)==[(30,*R)] and press(m.dec)==[(25,*R)] and press(m.dec)==[(20,*R)]
     assert press(m.dec)==[(0,*R)] and m.nodes[m.vol]['text']=='Off' and texts()[5]=='Resume Songs: Off'
     assert press(m.dec)==[] and press(m.add)==[(20,*R)]  # Off is the bottom; up from it is 20
-    m.nodes[m.slider]['value']=63; assert press(m.slider,CHANGING)==[(65,*R)] and m.nodes[m.vol]['text']=='65 min'
-    m.nodes[m.slider]['value']=300; assert press(m.slider,CHANGING)==[(120,*R)] and press(m.add)==[]
+    m.nodes[m.slider]['value']=63; assert press(m.slider,CHANGING)==[] and m.nodes[m.vol]['text']=='65 min'
+    assert press(m.slider,O['EVT_VALUE_CHANGED'])==[(65,*R)]
+    m.nodes[m.slider]['value']=300; assert press(m.slider,CHANGING)==[] and press(m.add)==[(120,*R)]
     m.nodes[m.slider]['value']=15; assert press(m.slider,O['EVT_VALUE_CHANGED'])==[(0,*R)] and texts()[5]=='Resume Songs: Off'; passed()
 # Bluetooth's list (btmenu_rows, rebuilt on every search) gains Resume on connect and Control Device Volume
 # with Bluetooth on, right after its fourth row, Bluetooth Headset Volume Control, as stock's rows: no icon,
