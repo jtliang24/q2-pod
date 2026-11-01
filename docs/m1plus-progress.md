@@ -2881,7 +2881,7 @@ build. `config.ini`, the 419-song database and the EQ files were backed up, Scre
 | 5 F3 | **Fixed** for playback: a scanned *Window* copy with `stsz` count 2³¹−1 gave "…o play on the M1 Plus: split it int…", and the playing track went on. The chapters toast is not reachable on the device: Chapters is offered only for the playing track, and an oversized M4B is refused before it plays (a held row in Audiobooks has no Chapters). The emulator case covers it. | `103-toast.png`, `117-hold.png` |
 | 6 q2remote | **Pass.** Every tap of the pass landed with no wrapper. | — |
 | 7 Regressions | **Pass.** Crossfade (1 s) with the EQ on faded *Lisrim* into *Nightmare* at 96 kHz with one DAC open. A Simple drag took over from Advanced (Enabled: On; Advanced's switch Off). | `53`/`54-*.png`, `45-takeover.png`, `46.png` |
-| 8 User | Pending: F5 power cycles and Bluetooth with the EQ on. | — |
+| 8 User | **Pass (F5 fixed).** By hand: after an era's Play All and after Most Played, a power cycle brought the same subset back on the same song. Bluetooth playback with the EQ on worked. | — |
 
 **New findings:**
 
