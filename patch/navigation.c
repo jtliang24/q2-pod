@@ -6362,7 +6362,7 @@ static int chapter_poll(const void *unused) {
 static void chapters_open(void *r) {
     if (st.ch || !chapter_file(P(r, REC_PATH))) return;
     if (!mp4_fits(P(r, REC_PATH))) {
-        toast("Too long to read chapters on the Q2");
+        toast(TOO_LONG_CHAPTERS);
         return;
     }
     st.ch_track = np_track();

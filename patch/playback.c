@@ -1500,7 +1500,7 @@ void playback_poll(void) {
     wheel_pct(); /* the saved sensitivity from the first UI pass */
     if (too_long) {
         too_long = 0;
-        toast("Too long to play on the Q2: split it into parts");
+        toast(TOO_LONG_PLAY);
     }
     xfade_poll(playback_next());
     mono_sync();
