@@ -2820,6 +2820,51 @@ The play queue is now the library, as F5 describes.
 
 **Next:** F4 blocks 1.5.8-m1.1. F1–F5 and the client parse go to a fix plan.
 
+## 54. Fixes for the 1.5.8 device pass (Nov 1)
+
+Branch `fix/1.5.8-pass` off `staging` (`fda5d83`), one item per commit, test first.
+
+| Finding | Cause | Fix | Commit |
+|---|---|---|---|
+| F4: FLAC with the EQ on never starts | Upstream 1.5.x's filter `play()` calls `decoded()` on every block. The M1 profile gave `written_audio_pts` as `0x4300f4`, which is `playing_audio_pts(sh, ds, ao)`: it calls `ao->get_delay` through a third argument the filter never passes. hciplayer crashed (SIGSEGV, seen on the device through a logging wrapper bound over `/usr/bin/hciplayer`), and demo restarted it every ~0.7 s. | `0x44600c`, the leaf `0x4300f4` calls. The build audit checks it is a leaf. Before flashing, the fixed hciplayer, bind-mounted on V004s, played the FLAC with Simple EQ on. | `1ec2890` |
+| EQ rate gate (found in the F4 search) | The second "hi-res gate" patched `0x42e6fc`, scaletempo's (speed modes, "only files below 48khz"), not the EQ's | The `bnez` at `0x42fa78` to the insert at `0x42fbc4` becomes a `b`. Scaletempo's gate stays stock. The audit checks the gate branches to a `jal`. | `d343e26` |
+| F2: Now Playing stale after a View Queue tap | Stock's queue row click sets `force_refreshflag` (`0xa05a63`) after `start_playqueue`; the hook's start did not | `ringnav_start_queue` sets `FORCE_REFRESH` (0 on the Q2) | `01c2688` |
+| F5: Era Play All back as the whole library after a power-off | Subsets load class `0xf001`; without advanced play nothing is kept, and V2.1's resume rebuilds the class as the library | Power-off keeps such a queue's tracks (`ringnav-subset`), and the restore narrows stock's rebuild to them (`patch/m1plus_playback_subset.inc`, M1 only) | `9d121d7`, `56fb464` |
+| F1: Play/Pause hold on a knob-focused View Queue row paused | Not reproduced on V004s with the pass's steps: paused, playing, and scrolled to row 10, the row moved next and nothing paused | Emulator coverage of the knob path. Back on the checklist. | `866274e` |
+| F3: "on the Q2" toasts | Upstream literals | `TOO_LONG_PLAY`, `TOO_LONG_CHAPTERS` | `d3729ba` |
+| q2remote dropped Goodix-CTP | Junk with blank lines in its `P: Phys=` value split the block | `parse_devices` drops a Phys value up to the next field | `caf38cb` |
+
+**Build:** `work/fix/1.5.8-pass`, `V02Bs`, patch 381,944 bytes,
+update SHA-256 `46bbee924966b24d7448a940e99e0fa1b944d42d3f82ede7c995bd6dd3d5aced`.
+Payload functions changed from V004s (`fndiff.py`): `qm_run` (the chapters toast), `ringnav_about`,
+`playback_poll`, `ringnav_savequeue`, `ringnav_start_queue`, `stock_memory`. hciplayer changes in
+`written_audio_pts` and the second EQ gate.
+
+**Gates:** all M1 gates passed:
+- build audit;
+- patch: 1,374 scenarios, zero known gaps, 35 not ported;
+- the three boots;
+- playback, m4b, id3, headset_io, ldac and bluealsa;
+- ports: 648 entries.
+
+`q2compare.py --suites`: both Q2 `update.tar` files are byte-identical to 1.5.8's. All 44 suite runs
+passed; the only failures were the four BASE missing-ZIP cases, which fail on upstream's own tree.
+Logs: `work/fix/logs/`.
+
+**Device checklist** (shots before taps; Screen Off to Off first and 5 min last; back up `config.ini`,
+the DB and the EQ files):
+1. F4: with Simple EQ on (flat, then Low +3 dB), a FLAC, an M4A, an MP3 and a hi-res track
+   (EMOTION SIDE B) start, play across a track change, and no `es9069q_hw_params` loop shows in kmsg.
+   Turn the EQ on and off mid-track. Repeat with Advanced.
+2. Speed modes: 1.25X on a 44.1 kHz track works, and a hi-res track still ignores it.
+3. F2: a View Queue tap shows the new title, artist and position.
+4. F1: a knob-focused Play/Pause hold on an Up Next row moves it next without a pause.
+5. F3: the two toasts say M1 Plus, if reachable (an oversized MP4, a huge book).
+6. q2remote: taps work without a wrapper.
+7. Regressions: Crossfade with the EQ on, Simple/Advanced takeover.
+8. By the user: after an era's Play All, and after Most Played, power off and on; the same subset
+   comes back on the same song. Then Bluetooth playback with the EQ on.
+
 ## How to check a build now
 
 ```sh
