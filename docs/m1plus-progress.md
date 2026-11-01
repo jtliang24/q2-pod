@@ -2741,6 +2741,85 @@ the retained `--dev` candidate awaits its next authorized device pass. The last 
 The post-sync drift check leaves 1.5.9 at 83 commits and 1,770 conflict-surface lines, still new;
 verdict: **Not due**. The knowledge graph is refreshed with `graphify update .` after landing.
 
+## 53. Device pass: 1.5.8 on the M1 (Nov 1)
+
+The retained 1.5.8 candidate (`work/sync/1.5.8`, `V004s`) is the first build since dev 13 on the
+device. It covers both the 1.5.5 and 1.5.8 merge steps. Its manifest says `dev: 4` (the global
+development tag) and `dev_count: 1`, so About reads "CFW. Version:1.5.8 dev 1". Section 52's
+"dev 4" means the tag. The pass found five issues, one of them serious (F4). No fixes were made
+during the pass, and the device stays on this build.
+
+**Flash.** The rebuilt `update.bin` matched its recorded SHA-256 (`d754bfd5…b9b7`). It went to the
+card over q2remote with a hash check. The dev 13 image stays on the card as
+`/mnt/mmc/.q2/update-dev13.bin` (MD5 `4065000f…`, unchanged). The user flashed through the menu
+updater. The running `/release/bin/demo` MD5 `2a8c250c28deb3f3721152e050bac32f` matches the build's
+`demo`. Before the pass, `config.ini` and the 419-song database were backed up, with Screen Off at 5 min
+(`LIGHTTIME=4`). The kernel logs had no fault for the whole session, and `demo` never restarted.
+Screenshots, logs and backups are in `work/sync/1.5.8-device/`.
+
+**Passed:**
+
+- Home/Knob: knob focus on Q2 Pod's list clamps at the top, moves row by row and scrolls past the
+  visible rows. Each glide landed on the expected row with no half-drawn frame. Era opened from the knob's centre key.
+- Era and View Queue: 2010s Shuffle played only that decade (124 songs). View Queue (the hold
+  menu's Up Next) listed the shuffle's order, and Next played its first row. V2.1's own queue
+  panel (the player's list button) lists queue order, as stock does.
+- Coverflow: drag, side tap, centre tap to the track list, list scroll and Back. The caption
+  followed each move. The sort stayed Artist.
+- Crossfade: + saved 1 s at once. During a drag to 15 s the config kept the old value, and the
+  release saved 15. − saved 14, and dragging to the left end restored Off/1 s. Resume Songs behaved
+  the same: a mid-drag read showed 40 min on screen and the old 90 in the file, and the release saved.
+  q2remote cannot close a page while a finger is down, so close-mid-drag stays with
+  `e376d38`'s gate.
+- EQ: Simple's Enabled/Reset, a Low drag (+3.5 dB), Advanced on, and Simple's slider taking
+  over from Advanced. `peq-active`'s `hold` stays 1 while the page is open and clears when it closes.
+  `peq-active`, `userequalizer` and `EQFLAG`/`EQMODE` then matched the backup. No preset files
+  are on the card ("Nothing to apply").
+- Library: a rescan with two temporary M4A files gave exactly 419 + 2, with nothing dropped, so the
+  spoken-word and hidden-folder exclusions hold. Long Songs (no audiobook) and Most Played open.
+- Scrobble (local only): fully played tracks were logged as `L` with this build's timestamps,
+  and quickly skipped ones were not. Without `.scrobble.ini`, there is no Upload Scrobbles row.
+- MP4 admission: a copy of *Window* with its `stsz` count set to 2³¹−1 was refused with the
+  too-long toast and did not start. A scanned copy deleted afterwards was a silent no-op.
+  The kernel is 5.10 and reports `MemAvailable` (84 MB).
+- Chapters and Books: the M4B lists its chapters, and a pick seeks to the chapter (50:37). After a
+  shell reboot, the M4B resumed at its saved point. The EPUB opened at its saved page.
+- Streaming and Apps: Configuration opened. Spotify Search → Tracks → Back twice while loading
+  returned safely. Liked Songs loaded, and a track showed the known refused-account note.
+  Soloist playback is not in this build. The App Store catalog loaded; nothing was installed.
+- Screen off/wake: with music playing and Screen Off at 15 s, the panel went dark. Centre woke it
+  to the lock screen with playback continuing, and a swipe unlocked it.
+- Bluetooth (user, by hand): skips, pause/resume, continuous playback, volume, screen off/wake
+  and reconnect had no issues. After a power cycle the boot logo was correct and the
+  song came back.
+
+**Findings:**
+
+| # | Finding | Evidence |
+|---|---|---|
+| F1 | A Play/Pause hold on a knob-focused View Queue (Up Next) row paused playback; the row did not move to next (`un_hold`). A touch long-press on a row plays it instead, like the known album-list gap. | `31-playnext.png`, `32.png`, `36.png` |
+| F2 | After playing a View Queue row, Now Playing showed the new cover and length but kept the previous title, artist and position (66/124) for 15 s or more. The Home bar was right. | `37.png`, `38-stale-title.png` |
+| F3 | On the M1, the MP4 refusal and chapter toasts say "on the Q2". | `83-w2b.png`, `navigation.c` `chapters_open` |
+| F4 | **With Simple EQ on, even flat, FLAC does not play.** The track stays at 00:00/00:00, and the DAC is reopened about every 0.7 s (`es9069q_hw_params`) until paused. Turning the EQ on stops a FLAC that was playing. With the EQ off, the same track plays. Not compared with dev 13; M4A/MP3 with the EQ on were not checked. | `129-peq-*.png`, `138-flat-b.png`, `kmsg-part2.log` |
+| F5 | After a power cycle, the 2010s Play All queue (6/124) came back as the whole library (274/419), on the same song. Not compared with dev 13. | `160-after-poweroff.png`, user report |
+
+The q2remote client also failed during the pass. Goodix-CTP's `P: Phys=` line in
+`/proc/bus/input/devices` sometimes holds garbage with blank lines. `parse_devices` then split its
+block and dropped the touch device ("no Goodix-CTP input device"). The pass used a scratchpad wrapper
+that strips `P:` lines first.
+
+**Not covered:** playlist Move Up/Down, app retry/stop and album sorting are still pending from
+1.5.0. A Play/Pause hold on Album with no highlight opened the first album's hold menu, not a
+sort dialog. Also not covered: closing a slider page mid-drag, Spotify audio, and a live Advanced
+preset.
+
+**Restored:** `config.ini` is byte-identical to the backup, with Screen Off back to 5 min through
+the UI. The database is back to 419 songs with the original path set, and the EQ files match.
+The temporary folder `MusicLibrary/M158Validation` and the card's kmsg logs are removed.
+The play queue is now the library, as F5 describes.
+
+**Next:** F4 blocks 1.5.8-m1.1. F1–F5 and the client parse go to a fix plan.
+
 ## How to check a build now
 
 ```sh
