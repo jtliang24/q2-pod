@@ -5,6 +5,21 @@ carries and an M1 revision, `<version>-m1.<n>`. `tools/release_m1.py` takes the 
 turns its text into the release notes, as `tools/release.py` does with [changelog.md](changelog.md).
 Upstream's changes are in that file.
 
+- **1.5.8-m1.1**:
+  - Q2 Pod 1.5.8 on the M1 Plus's stock firmware V2.1. Upstream's changes since 1.4.2 that run on the M1 Plus are below; Q2 Pod's own changelog has the rest.
+  - Library: **Era**, after Genre, lists each decade with dated albums. A decade has **Play All**, **Shuffle** and its albums by year.
+  - Library: titles, artists and albums with accented letters (Café, Canção) show as tagged instead of as Chinese characters, in tags and in CUE sheets. **Update Local Music** skips hidden folders, such as apps' caches.
+  - Streaming: **Configuration** lists the services, each with a tick. Untick the ones you don't use to hide them from Streaming.
+  - Lyrics: **Download Album Lyrics** saves synced lyrics from LRCLIB beside every song of the playing album. **Download Cover & Lyrics** saves the lyrics you accept in the song's own folder, and blank lines in lyrics no longer show as gaps.
+  - EQ: with the EQ on, FLAC plays again, and the EQ also applies to hi-res tracks. Gapless albums no longer click between tracks with the EQ or PEQ on.
+  - Crossfade goes up to 15 s. Skipping a track over Bluetooth no longer crackles.
+  - Spotify: when Spotify refuses to unlock your account's tracks, the player says so within a second instead of "Loading…".
+  - Battery: the player and the cover loaders wait longer between checks while paused or with the screen off, and a memory-cleaning thread that woke every few seconds is gone.
+  - View Queue: holding Play/Pause on a row moves it to play next instead of pausing, and Now Playing follows a tapped row at once.
+  - A queue started from Era, Most Played, Ratings or Long Songs comes back after a power-off as that queue, at the same song, instead of the whole library.
+  - Known issue: View Queue opens only while a shuffle is on.
+  - Not on the M1 Plus yet: the iPod UI, Network Update, the extra time zones, `database.ignore` folders, automatic scrobble uploads, Simple EQ's Presets button, Coverflow's flick gestures and games.
+
 - **1.4.2-m1.1**:
   - Q2 Pod 1.4.2 on the M1 Plus's stock firmware V2.1, in V2.1's own look: the first published M1 Plus release. A Q2 Pod card on Home opens its page: Shuffle, Ratings, Most Played, Long Songs, Podcasts, Audiobooks, Photos, Books, Videos, Coverflow, Spotify, Internet Radio and AirPlay.
   - Upstream's changes since 1.2.2 that run on the M1 Plus, among them EQ Advanced's Auto preamp for each sample rate, Audio and System settings wrapping at their ends, the MQA switch, and Mono Audio and Swap L/R. Q2 Pod's own changelog has the rest.
