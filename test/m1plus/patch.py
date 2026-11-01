@@ -9757,6 +9757,18 @@ m.deqs[q][1][4]=m.song('F'); m.call(O['KEY_NEXT']); toasts=len(m.toasts)
 m.press(40); assert m.hold()==11 and m.release()==0 and len(m.toasts)==toasts+1 and m.toasts[-1][3]=='Queue changed'
 fresh=m.texts()[1::2]; assert fresh[0]==up[1] and 'F' in fresh and 'E' not in fresh and m.selected(m.find('scroll_view'))==0
 m.close(); passed()
+if is_m1plus:  # Knob: Navigation: the knob's turns (volume keys) focus the row the hold moves; nothing pauses
+    m=CoverflowMachine(page='playing_page',pos=1); m.config['KNOB']='1'; q=m.deque([m.song(c) for c in 'ABCDE'])
+    m.word(syms['mcl_pdeqplaylist'],q); m.word(O['MCL_POOL'],m.deque(list(range(5)),'int'))
+    assert m.call(address=payload_syms['playback_set'],args=(0,1,0,0),gap=0)==1
+    m.press(10); assert m.hold()==11; m.release()
+    m.pick(m.labels().index('View Queue')); m.advance(0); m.page=m.top; up=m.texts()[1::2]
+    view=m.find('scroll_view'); m.paint(view)
+    sel=[]
+    for _ in range(3): m.call(O['KEY_VOLUMEDOWN'],gap=1000); sel.append(m.selected(view))
+    assert sel==[1,2,3] and m.top==m.page, (sel, m.nodes[m.top]['name'])
+    m.press(20); assert m.hold()==11 and m.release()==0 and not m.toasts and not m.playback()
+    assert m.texts()[1::2]==[up[3]]+up[:3]+up[4:] and m.selected(m.find('scroll_view'))==0; m.close(); passed()
 
 # Ratings (navigation.c rate_*): 5 hearts are stock's My Fav, 1-4 kept in /mnt/data/ringnav-ratings by listen_key with
 # the hearts in its low three bits. Now Playing's heart: stock's click (bound with the window: V1.32's 0x52b154 to the
@@ -14271,7 +14283,7 @@ for state in (2,3):
 # A book whose MP4 index would not fit in RAM: a toast, and no ffmpeg.
 m=ChapterMachine(); m.fits=0; m.press(6000); assert m.hold()==11; m.release()
 m.pick(m.labels().index('Chapters')); m.advance(0)
-assert m.nodes[m.top]['name']!='chapters_page' and m.toasts[-1][3]=='Too long to read chapters on the Q2'; passed()
+assert m.nodes[m.top]['name']!='chapters_page' and m.toasts[-1][3]=='Too long to read chapters on the '+('M1 Plus' if is_m1plus else 'Q2'); passed()
 m=ChapterMachine(); m.open_chapters(); m.advance(50); m.word(O['MCL_POS'],2); m.choose(1)
 assert not any(c[0] in ('player_seek_time','mclSetSeek') for c in m.calls)
 assert any(c[0]=='navigator_back' for c in m.calls); passed()

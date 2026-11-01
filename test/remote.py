@@ -96,6 +96,10 @@ B: ABS=2008000 1000003
 assert q.bits(m1["md-gpio-keys"]["KEY"]) == set(q.M1_KEYS.values()) == {116, 163, 164, 165}
 assert q.bits(m1[q.M1_KNOB]["KEY"]) == {q.KEY_VOLUMEUP, q.KEY_VOLUMEDOWN}
 assert {q.ABS_X, q.ABS_Y, q.ABS_PRESSURE} <= q.bits(m1["Goodix-CTP"]["ABS"]) and 330 not in q.bits(m1["Goodix-CTP"]["KEY"])
+# Goodix-CTP's Phys can hold junk, blank lines too (the 1.5.8 pass): the block stays whole.
+junk = q.parse_devices('N: Name="Goodix-CTP"\nP: Phys=\x01\x7f\n\n\x02junk\n\nS: Sysfs=/devices/virtual/input/input3\n'
+                       'H: Handlers=kbd event3\nB: ABS=2008000 1000003\n\nN: Name="md-rotary-knob"\nP: Phys=\nH: Handlers=kbd event2\n')
+assert [(d["name"], d["event"]) for d in junk] == [("Goodix-CTP", 3), ("md-rotary-knob", 2)] and junk[0]["ABS"]
 # A tap as the panel sent the user's: point, pressure 1 then 0, pressure 1, then 0 at the release.
 tap = [q.decode_events(b) for b in q.m1_tap(29, 462)]
 assert [[e[2:] for e in b] for b in tap] == [

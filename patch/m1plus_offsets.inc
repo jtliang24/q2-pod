@@ -640,6 +640,9 @@ static inline int arc_out(int r, int y) {
     "from playlist"
 #define QR_NO_WIFI "Connect the M1 Plus to Wi-Fi"
 #define SPOT_REFUSED_SUB "Its tracks can't play on the M1 Plus"
+#define TOO_LONG_PLAY "Too long to play on the M1 Plus: split it into parts"
+#define TOO_LONG_CHAPTERS "Too long to read chapters on the M1 Plus"
+#define FORCE_REFRESH 0xa05a63 /* force_refreshflag: the stock queue row click sets it after start_playqueue (0x47a0f4) */
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */

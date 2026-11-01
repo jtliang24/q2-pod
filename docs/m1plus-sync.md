@@ -253,3 +253,4 @@ stay flat or fall.
 | Five-feature batch (Oct 28; dev 13 device checks, manual exceptions recorded) | 1.5.0 (`d774d76`) | +1,485/−296 over 32 files: the CUE converter address and M1-only Streaming/Now Playing seams |
 | Merge step: sync to 1.5.5 (Oct 30) | 1.5.5 (`4a23606`) | +1,533/−314 over 32 files: model-specific Folder video return address; existing navigation/seek include seams retained |
 | Merge step: sync to 1.5.8 (Oct 30) | 1.5.8 (`d7c8594`) | +1,554/−310 over 32 files: deferred Coverflow gestures, Simple EQ shortcut and wheel QS seams; native animator easing field |
+| 1.5.8 device-pass fixes (Nov 1) | 1.5.8 (`d7c8594`) | +1,573/−313 over 32 files: `FORCE_REFRESH` after a queue start, the subset resume's three `M1PLUS` lines, `TOO_LONG_PLAY` and `TOO_LONG_CHAPTERS`, and q2remote's Phys parsing |

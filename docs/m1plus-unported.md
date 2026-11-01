@@ -59,6 +59,17 @@ changes and lyrics passed the combined device checks in [progress section 50](m1
 The [validation record](m1plus-validation-1.5.0.md) retains limits of the hardware pass, including
 album-worker cancellation and USB-storage shutdown covered in emulation, and the live Tidal exception.
 
+## Known issues on the M1
+
+Found on the device and not fixed yet. Each goes to a fix round of its own:
+- **G1. View Queue does nothing without a shuffle.** `qm_run` falls back to
+  `navigator_to("playerqueue_page")`, a Q2 page V2.1 does not have: its queue is the player's list
+  dialog. With a shuffle on, View Queue opens. This predates 1.5.8
+  ([progress section 54](m1plus-progress.md#54-fixes-for-the-158-device-pass-nov-1)).
+- **G2. Now Playing shows a refused track.** After the player refuses a file (the oversized copy in
+  section 54), Now Playing's position and the album list's highlight move to it while the previous
+  track keeps playing. Cosmetic.
+
 ## Ported, not yet checked on the device
 
 These are on the M1 and pass the suites, but the passes so far had nothing to check them on:

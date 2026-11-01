@@ -245,6 +245,14 @@ def shared_checks(directory, manifest, stock, demo, read):
     assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in flac] == [p for _, _, p in flac]
     id3_gain = symbols(directory/'peq'/'peq.elf')['id3_gain']
     assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in profile['id3_calls']} == {0x0c000000 | id3_gain >> 2}
+    if m1plus:  # the second gate branches to the EQ's insert (a jal), as peq.py's 0x42fd84, not past scaletempo's
+        insert, _, _ = profile['eq_rate_gates'][1]
+        target = insert + 4 + (struct.unpack_from('<h', old, fileoff(old, insert))[0] << 2)
+        assert struct.unpack_from('<I', old, fileoff(old, target))[0] >> 26 == 3, hex(target)
+    if m1plus:  # the filter's decoded() calls written_audio_pts(sh, ds) on every block: a leaf, as V1.32's 0x44641c
+        words = struct.unpack_from('<64I', old, fileoff(old, profile['written_audio_pts']))
+        body = words[:words.index(0x03e00008)]  # up to its first jr $ra
+        assert not [w for w in body if w >> 26 == 3 or w & 0xfc00003f == 9], 'written_audio_pts calls out (jal/jalr)'
     names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
     assert not {'squashfs-root/'+rel for rel in STOCK_EQ} & names, 'Stock EQ assets remain'
     # The kernel mounts the rootfs as it does stock's: build.py's mksquashfs options are stock's own.

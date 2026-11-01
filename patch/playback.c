@@ -769,7 +769,9 @@ int ringnav_start_queue(int at) {
         if (s.shuffle == 1 && pend_find(x) == s.npend) play_now(x);
         commit(x);
     }
-    return stock_start_queue_trampoline(at);
+    int r = stock_start_queue_trampoline(at);
+    if (FORCE_REFRESH) *(volatile unsigned char *)FORCE_REFRESH = 1;
+    return r;
 }
 /* A video Folder view lists in the Videos folder (ringnav_audio_extension) plays from its row in
  * q2video, never from a queue: stock gets a copy without them, at moved to the same track (or the
@@ -1190,10 +1192,14 @@ static int resume_before(const void *a, const void *b) {
     return cmp ? cmp : (x->ordinal > y->ordinal) - (x->ordinal < y->ordinal);
 }
 int directory(void *path) { return toolsLoadDirectory(path); }
+#include "m1plus_playback_subset.inc"
 /* Stock resume rebuilds an album queue (0xff10) from every album of its name (getMusicByAlbum):
  * the playing track's album alone. */
 static int stock_memory(void *out) {
     int at = stock_memory_trampoline(out);
+#if M1PLUS
+    if (at >= 0 && I(g_memory_info, 0) == 0xf001) return subset_only(out, at);
+#endif
     return at >= 0 && I(g_memory_info, 0) == 0xff10 ? album_only(out, deque_at(out, (unsigned)at), at) : at;
 }
 int ringnav_memory(void *out) {
@@ -1411,7 +1417,7 @@ void playback_poll(void) {
     wheel_pct(); /* the saved sensitivity from the first UI pass */
     if (too_long) {
         too_long = 0;
-        toast("Too long to play on the Q2: split it into parts");
+        toast(TOO_LONG_PLAY);
     }
     xfade_poll(playback_next());
     mono_sync();
@@ -1435,6 +1441,9 @@ void playback_poll(void) {
 
 int ringnav_savequeue(void) {
     playback_save();
+#if M1PLUS
+    subset_save();
+#endif
     return stock_savequeue_trampoline();
 }
 

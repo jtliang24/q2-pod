@@ -134,6 +134,8 @@ def run(script, timeout=TIMEOUT):
 def parse_devices(text):
     """Parse /proc/bus/input/devices; each result includes name, handlers, and capability bitsets."""
     result = []
+    # A Phys value can hold junk with blank lines (the M1's Goodix-CTP): drop it up to the next field.
+    text = re.sub(r"^P: Phys=.*?(?=^[SUHB]: )", "", text, flags=re.M | re.S)
     for block in re.split(r"\n\s*\n", text.strip()):
         name = re.search(r'^N: Name="(.*)"$', block, re.M)
         handlers = re.search(r"^H: Handlers=(.*)$", block, re.M)

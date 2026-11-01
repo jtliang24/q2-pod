@@ -318,6 +318,8 @@ if 'ringnav_start_queue' in ps:
     m.fn('ringnav_start_queue',old+1); assert m.sequence(limit=2)[1:]==[old+2,old+3]
     m=PlaybackMachine(); m.options(0,2,0); m.fn('ringnav_start_queue',4)  # ordered: the tracks after it follow
     assert m.sequence(limit=3)==[4,5]  # the play order is 2,6,0,1,3,4,5
+    # Now Playing redraws its title and position, as after stock's own row click (V2.1 0x47a0c4).
+    if O['FORCE_REFRESH']: assert m.u.mem_read(O['FORCE_REFRESH'],1)==b'\1'
     checks+=1
 else:  # M1 Plus: player_start_queue (V2.1's start_playqueue) isn't hooked: roadmap U3's batch
     print("NOT PORTED: View Queue's picks in a shuffle's play order (player_start_queue not hooked on M1 Plus)")
@@ -442,6 +444,26 @@ for cls,want in ((0xff10,(1,['a2','a1'])),(0xf001,(2,['a2','b1','a1']))):
     for e in rows: r.word(e+O['REC_ALBUM'],r.string('Album A'))
     r.stock_resume=(cls,rows,2); assert (r.fn('ringnav_memory',out),r.names(out))==want
 checks+=1
+
+if is_m1plus:  # patch/m1plus_playback_subset.inc
+    # Without advanced play, an all-songs class queue that is only some of the library (Play All of an era, Most
+    # Played, Ratings, Long Songs) is kept at power-off in order (SUBSET_FILE): stock rebuilds 0xf001 as the whole
+    # library, so the restore narrows it back to the saved tracks around stock's resumed one, its seek stock's.
+    def subset_machine(names,at,cls=0xf001):
+        m=PlaybackMachine(); rows={m.names()[i]:e for i,e in enumerate(m.library_rows)}
+        m.word(syms['mcl_pdeqplaylist'],m.deque([rows[n] for n in names])); m.word(O['MCL_POS'],at); m.word(O['MCL_TYPE'],cls)
+        assert m.fn('ringnav_savequeue')==0 and '/mnt/data/ringnav-queue' not in m.files; return m
+    def subset_restore(files,resumed,cls=0xf001):
+        r=PlaybackMachine(dict(files)); r.byte(syms['g_memory_play'],2); out=r.deque([])
+        r.stock_resume=(cls,r.library_rows,r.names().index(resumed)); return r.fn('ringnav_memory',out),r.names(out)
+    m=subset_machine(['solo','b1','cue1'],1)
+    assert subset_restore(m.files,'b1')==(1,['solo','b1','cue1'])
+    assert subset_restore(m.files,'a1')==(2,['a2','b1','a1','cue1','cue2','solo','dup'])  # another track: stock's
+    assert subset_restore(m.files,'b1',0xff10)[1]==['b1']  # another class: stock's (album_only's)
+    m=subset_machine(['solo','b1','cue1'],1,0xff10); assert subset_restore(m.files,'b1')[1]==['a2','b1','a1','cue1','cue2','solo','dup']
+    m=subset_machine(['solo','b1'],0); m.options(1,5,0); m.fn('ringnav_savequeue')  # advanced play's snapshot replaces it
+    assert sorted(m.files)==['/mnt/data/ringnav-queue','/mnt/data/ringnav-queue-elapsed']
+    checks+=1
 
 # Missing priority files retain the remaining Play Next block and a valid next-boot snapshot.
 m=PlaybackMachine(); m.options(1,5,0)
@@ -1022,7 +1044,7 @@ r=m.items(m.get(syms['mcl_pdeqplaylist']))[2]
 m.word(r+O['REC_PATH'],m.string('/A/book.m4b'))
 assert m.fn('ringnav_start_player')==-1 and m.mp4_checks==['/A/book.m4b']
 m.fn('playback_poll'); m.fn('playback_poll')
-assert m.toasts==['Too long to play on the Q2: split it into parts']
+assert m.toasts==['Too long to play on the '+('M1 Plus' if is_m1plus else 'Q2')+': split it into parts']
 m.fits=1; assert m.fn('playback_start_fits')==1
 m.word(r+O['REC_TYPE'],0)
 m.fits=0; m.mp4_checks=[]

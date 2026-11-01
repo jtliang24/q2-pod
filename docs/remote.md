@@ -148,6 +148,7 @@ Plus (dev 11). The Q2's payload is built and linked the same way, but `peek` has
   python3 tools/q2remote.py sh id
   ```
 - **`no md-gpio-keys input device`:** run `devices`; the firmware may name its devices differently.
+- **`no Goodix-CTP input device` on the M1 Plus:** its `P: Phys=` line in `/proc/bus/input/devices` can hold junk, blank lines too; `parse_devices` drops a Phys value up to the next field, so check `devices` lists the touch panel.
 
 ## Protocol
 

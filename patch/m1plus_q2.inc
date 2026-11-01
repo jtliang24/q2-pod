@@ -120,6 +120,10 @@
     "having max(100,ifnull(max(id),100))<2147483647"
 #define QR_NO_WIFI "Connect the Q2 to Wi-Fi" /* a card app's QR page, without an address (addon.c) */
 #define SPOT_REFUSED_SUB "Its tracks can't play on the Q2" /* Spotify's refused account, under its note (spotify.c) */
+/* The byte a queue start sets so Now Playing redraws (V2.1's stock row click does); 0: upstream sets none */
+#define FORCE_REFRESH 0
+#define TOO_LONG_PLAY "Too long to play on the Q2: split it into parts" /* an MP4 over the player's limit (playback.c) */
+#define TOO_LONG_CHAPTERS "Too long to read chapters on the Q2" /* a book's chapter list (navigation.c) */
 #define PH_GRID_H 240
 #define VIS_H 186
 #define BOOK_ROWS 10
