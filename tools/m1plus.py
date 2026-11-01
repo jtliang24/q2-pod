@@ -696,7 +696,7 @@ PLAYER_PROFILE = {
     'stock_seek': 0x48cc6c,
     'id3_calls': (0x48ee74, 0x492028, 0x492ab4),
     'stock_id3': 0x48b760,
-    'written_audio_pts': 0x4300f4,
+    'written_audio_pts': 0x44600c,
     'length_addr': 0xb10e5c,
     'av_dict_set': 0x6ea1a4,
     'av_dict_free': 0x6ea65c,
