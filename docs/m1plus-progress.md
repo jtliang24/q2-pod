@@ -2865,6 +2865,38 @@ the DB and the EQ files):
 8. By the user: after an era's Play All, and after Most Played, power off and on; the same subset
    comes back on the same song. Then Bluetooth playback with the EQ on.
 
+**Device pass (Nov 1, over q2remote).** The user flashed V02Bs through the menu updater; About read
+1.5.8 dev 12. The running `demo` (`9328d658…`) and `/usr/bin/hciplayer` (`bb51de52…`) match the
+build. `config.ini`, the 419-song database and the EQ files were backed up, Screen Off went to Off
+(the user's value was 5 min), and a kmsg logger ran on the card. `demo` (pid 1098) and hciplayer
+(pid 1109) never restarted, and the kernel log has no fault. Shots, logs and backups:
+`work/fix/1.5.8-device/`.
+
+| # | Result | Evidence |
+|---|---|---|
+| 1 F4 | **Fixed.** With Simple EQ on (flat): FLAC (*Picture*, 0:45 → 0:57), about 20 Next/Previous track changes over FLAC, MP3 and M4A (one `es9069q_hw_params` each), MP3 and M4A advancing, 24-bit/44.1 kHz and 96 kHz FLAC (DAC at 96000). Off and on mid-track, Low to +3 dB, and Advanced on all kept the stream running (`hw_ptr` ~96k frames/s). At 96 kHz the filter runs: 10 of 600 program-counter samples (simple) and 35 of 600 (Advanced, after a track change) have its code on hciplayer's stack, so the second gate opens. | `12-flac-eq.png`, `14-m4a.png`, `15-mp3.png`, `30-96k.png`, `38`–`43` |
+| 2 Speed | **Pass.** 1.25X on a 44.1 kHz MP3 played 26 s of track in 20.5 s, EQ on. On the 96 kHz track it played 20 s in 20 s. Set back to 1.0X. | `58-*.png`, `67-*.png` |
+| 3 F2 | **Fixed.** In a 2010s Shuffle, a View Queue tap on *Native Tongue* showed its title, artist, cover and 72/124 within 2 s. | `82-f2.png` |
+| 4 F1 | **Pass.** Knob: Navigation, three detents to *Rose-Colored Boy*, Play/Pause held 1 s: the row went to the top with the focus, the stream stayed RUNNING, and Next played it. | `84-knob.png`, `85-f1.png`, `87-next.png` |
+| 5 F3 | **Fixed** for playback: a scanned *Window* copy with `stsz` count 2³¹−1 gave "…o play on the M1 Plus: split it int…", and the playing track went on. The chapters toast is not reachable on the device: Chapters is offered only for the playing track, and an oversized M4B is refused before it plays (a held row in Audiobooks has no Chapters). The emulator case covers it. | `103-toast.png`, `117-hold.png` |
+| 6 q2remote | **Pass.** Every tap of the pass landed with no wrapper. | — |
+| 7 Regressions | **Pass.** Crossfade (1 s) with the EQ on faded *Lisrim* into *Nightmare* at 96 kHz with one DAC open. A Simple drag took over from Advanced (Enabled: On; Advanced's switch Off). | `53`/`54-*.png`, `45-takeover.png`, `46.png` |
+| 8 User | Pending: F5 power cycles and Bluetooth with the EQ on. | — |
+
+**New findings:**
+
+| # | Finding | Evidence |
+|---|---|---|
+| G1 | View Queue does nothing without a shuffle. `qm_run` falls back to `navigator_to("playerqueue_page")`, a Q2 page V2.1 does not have (its queue is the player's list dialog). Not new in this build. | `71-hold.png`, `72-vq.png`, `73.png` |
+| G2 | After the oversized copy was refused, Now Playing and the album list showed it (2/13, row 2 highlighted) while the previous *Window* (3/13) kept playing. Cosmetic. | `103-toast-b.png`, `104.png` |
+
+**Restored:** two rescans, with the test files removed before the second, left `songtable`
+row-for-row equal to the backup (419); `recentplay` and `oftenplay` changed only by the pass's
+plays. `peq-active` and `userequalizer` match the backup once the EQ page closed (`hold` clears
+then). Crossfade is Off and Screen Off is 5 min. `config.ini` matches except a new `PLAYSPEED=0`
+line, V2.1's own once a speed is picked (0 is 1.0X, its default). The temporary folder and the
+card's kmsg log are removed.
+
 ## How to check a build now
 
 ```sh
