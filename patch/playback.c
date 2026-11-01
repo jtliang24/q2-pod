@@ -769,7 +769,9 @@ int ringnav_start_queue(int at) {
         if (s.shuffle == 1 && pend_find(x) == s.npend) play_now(x);
         commit(x);
     }
-    return stock_start_queue_trampoline(at);
+    int r = stock_start_queue_trampoline(at);
+    if (FORCE_REFRESH) *(volatile unsigned char *)FORCE_REFRESH = 1;
+    return r;
 }
 /* A video Folder view lists in the Videos folder (ringnav_audio_extension) plays from its row in
  * q2video, never from a queue: stock gets a copy without them, at moved to the same track (or the

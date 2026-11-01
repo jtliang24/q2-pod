@@ -318,6 +318,8 @@ if 'ringnav_start_queue' in ps:
     m.fn('ringnav_start_queue',old+1); assert m.sequence(limit=2)[1:]==[old+2,old+3]
     m=PlaybackMachine(); m.options(0,2,0); m.fn('ringnav_start_queue',4)  # ordered: the tracks after it follow
     assert m.sequence(limit=3)==[4,5]  # the play order is 2,6,0,1,3,4,5
+    # Now Playing redraws its title and position, as after stock's own row click (V2.1 0x47a0c4).
+    if O['FORCE_REFRESH']: assert m.u.mem_read(O['FORCE_REFRESH'],1)==b'\1'
     checks+=1
 else:  # M1 Plus: player_start_queue (V2.1's start_playqueue) isn't hooked: roadmap U3's batch
     print("NOT PORTED: View Queue's picks in a shuffle's play order (player_start_queue not hooked on M1 Plus)")
