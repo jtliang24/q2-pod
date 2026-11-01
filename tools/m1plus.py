@@ -689,7 +689,7 @@ PLAYER_PROFILE = {
     'open_slot': 0x89381c,
     'vbr_scan': 0x48f5fc,
     'eq_rate_gates': ((0x42ce34, 0x10400098, 0),
-                      (0x42e6fc, 0x10400015, 0)),
+                      (0x42fa78, 0x14400052, 0x10000052)),  # bnez $v0 to the insert -> b
     # MPlayer pause loop: usec_sleep(20000) in its command/event loop, 50 ms as upstream.
     'pause_sleep': (0x42ff2c, 0x24044e20, 0x3404c350),
     'seek_slot': 0x89f76c,
