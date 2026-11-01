@@ -232,6 +232,8 @@ They stay off on M1 until ported (U4), so a sync never waits for them.
   `upstream-sync` skill (local) drives it.
   - **1.4.5 (Oct 26,** [progress section 48](m1plus-progress.md)**):** the first merge. `drift.py`
     planned 1.4.2 → 1.4.5 → 1.4.8; once 1.4.5 landed, 1.4.8 was 47 commits on and no longer due.
+  - **1.5.8-m1.1 (Nov 1,** [progress section 55](m1plus-progress.md)**):** the release of the 1.5.0, 1.5.5
+    and 1.5.8 merges, the five-feature batch and the device-pass fixes.
 
 ## 1. Small fixes (S)
 

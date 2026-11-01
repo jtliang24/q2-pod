@@ -1,7 +1,7 @@
 # M1 Plus: unported features
 
 The upstream Q2 Pod features still unported or awaiting validation after the 1.5.8 sync (`staging`;
-`1.4.2-m1.1` is the last release). Each row has a status:
+`1.5.8-m1.1` is the last release). Each row has a status:
 
 - **Planned:** to be ported. Most have a known way in on V2.1, or a check to make first.
 - **Native; live validation pending:** the firmware already provides the behavior; account-dependent checks remain.

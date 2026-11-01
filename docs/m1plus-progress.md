@@ -2897,6 +2897,36 @@ then). Crossfade is Off and Screen Off is 5 min. `config.ini` matches except a n
 line, V2.1's own once a speed is picked (0 is 1.0X, its default). The temporary folder and the
 card's kmsg log are removed.
 
+## 55. Release 1.5.8-m1.1 (Nov 1)
+
+The first release since 1.4.2-m1.1. It is `staging` at `f855ff0` (the changelog entry on top of
+`fix/1.5.8-pass`'s merge, `28ec456`), and `main` now points there.
+
+| What | Value |
+|---|---|
+| Name and tag | `1.5.8-m1.1`, `V1581` |
+| `update.bin` | `874a7963e2fa2e6c2c16fc6e5ab5d13f844dded65c3c617e9d3400c5dfcf174c` (patch 381,944 bytes) |
+| ZIP | `M1Plus.Firmware.1.5.8-m1.1.zip`, `56f30ad117d377dca8090599800d5f6b53b82be1683e853c8fd98de35d293c1f` |
+| Output | `work/release-1.5.8-m1.1` (built from a `git worktree`, `TMPDIR=/tmp`; log beside it) |
+| Packaging | two builds byte-identical; manifest, archive rule, `peq`, `build`, `patch`, `boot`, `playback`, `m4b`, `ldac` and `test/release_m1.py` passed |
+| Published | https://github.com/jtliang24/q2-pod/releases/tag/1.5.8-m1.1, by the user |
+
+**Against V02Bs (1.5.8 dev 12, the build the pass verified).** `fndiff.py` lists 3 changed functions
+and 1 removed, of 1,038: `ringnav_about` (the name), `netupdate.c`'s `worker` (the tag, unported) and
+`onlinematch.c`'s `easy` (the user-agent) changed, and q2remote's `line` is gone. `xImage`, `hciplayer`
+(`peq`), both `bluealsa` builds, `q2boot`, `q2video`, the watchdog and `S11logo` are byte-identical.
+The root filesystem differs in `demo`, `S90play` (the q2remote line) and the missing `q2remote`. So the
+release is V02Bs with its identity and without q2remote; the 27,000 differing bytes of `patch.bin` are
+shifted addresses.
+
+**Device check on V1581.** The user flashed and published it; the by-hand check (About, FLAC with the
+EQ, View Queue, Era resume, Bluetooth) was not reported to this log.
+
+**Known issues in the release:** G1 and G2 ([the porting page](m1plus-unported.md#known-issues-on-the-m1)).
+The changelog lists G1.
+
+**Next:** the next release is due about Nov 8 ([the cadence](m1plus-sync.md#cadence)).
+
 ## How to check a build now
 
 ```sh
