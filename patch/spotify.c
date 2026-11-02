@@ -66,8 +66,29 @@ int spot_reply(char *buf, unsigned len, char **f, int max) {
 
 #ifndef PEQ_HOST
 
+#if M1PLUS
+#include "m1plus_spotify_backend.inc" /* SPOT_BIN, SPOT_RUN (backgrounds itself, once per boot), SPOT_LOG and the texts by backend */
+#else
 #define SPOT_BIN SPOT_DIR "/librespot"
 #define SPOT_RUN "/bin/sh " SPOT_DIR "/run" /* backgrounds itself, once per boot */
+#define SPOT_LOG SPOT_DIR "/spot.log" /* librespot's stderr, which run appends to */
+#define SPOT_T_LABEL "Spotify"
+#define SPOT_T_MISSING_NOTE "Spotify isn't on the card"
+#define SPOT_T_MISSING_SUB "See the Q2 Pod guide to add it"
+#define SPOT_T_PAIR_NOTE "Open Spotify on your phone"
+#define SPOT_T_PAIR_SUB "and choose Q2"
+#define SPOT_T_PAIR_ROW "Open Spotify on your phone and choose Q2"
+#define SPOT_T_PAIR_ROW_SUB "Both on the same Wi-Fi"
+#define SPOT_T_OLD_NOTE "Update Spotify on the card"
+#define SPOT_T_OLD_SUB "See the Q2 Pod guide"
+#define SPOT_T_OLD_ROW_SUB "to browse on the Q2"
+#define SPOT_T_WAIT_SUB "Waiting for Spotify"
+#define SPOT_T_IDLE_SUB "Choose music in Spotify"
+#define SPOT_T_SIGNOUT "Sign Out of Spotify?"
+#define SPOT_T_TIPS "Search Spotify"
+#define SPOT_T_NO_SOCK "Spotify isn't running"
+#define SPOT_T_NO_ANSWER "Spotify didn't answer"
+#endif
 #define SPOT_STATE "/tmp/q2-librespot.state" /* the fork's --status-file */
 #define SPOT_COVER SPOT_STATE ".jpg"
 #define SPOT_SOCK "/tmp/q2-librespot.sock" /* its --control-socket */
@@ -90,7 +111,6 @@ int spot_reply(char *buf, unsigned len, char **f, int max) {
 #define SPOT_OLD_MS 3000   /* no browse socket this long after the start, but a state file: an old add-on */
 #define SPOT_SIGNOUT_MS 15000 /* librespot exits on signout; its launcher restarts it within this */
 #define SPOT_ALIVE_MS 10000   /* while it holds the timers, librespot's socket is checked this often */
-#define SPOT_LOG SPOT_DIR "/spot.log" /* librespot's stderr, which run appends to */
 #define SPOT_REFUSED "error audio key" /* Spotify refused a track's key: librespot-org/librespot#1649 */
 
 /* librespot as last read; kept for the life of demo. */
@@ -284,6 +304,11 @@ void spot_stop(void) {
     sp.sock = sock;
 }
 
+#if M1PLUS
+/* 1 while the Soloify backend runs: its settings (Streaming's Configuration) apply when it starts. */
+int spot_soloify_running(void) { return sp.launched && spot_be; }
+#endif
+
 /* librespot's control socket takes a connection (nothing sent): a crashed one leaves its state
  * and download files saying playing, which would hold the timers and the DAC for good. */
 static int spot_alive(void) {
@@ -425,14 +450,14 @@ static void spot_refresh(void) {
     widget_set_visible(ui.info, track, 0);
     widget_set_visible(ui.msg, !track, 0);
     if (!track) {
-        const char *note = "Loading…", *sub = "Waiting for Spotify";
-        if (!installed) note = "Spotify isn't on the card", sub = "See the Q2 Pod guide to add it";
-        else if (sp.auth < 0) note = "Open Spotify on your phone", sub = "and choose Q2";
+        const char *note = "Loading…", *sub = SPOT_T_WAIT_SUB;
+        if (!installed) note = SPOT_T_MISSING_NOTE, sub = SPOT_T_MISSING_SUB;
+        else if (sp.auth < 0) note = SPOT_T_PAIR_NOTE, sub = SPOT_T_PAIR_SUB;
         else if (sp.loading == 3) note = "Spotify refused this account", sub = SPOT_REFUSED_SUB;
         else if (sp.loading == 2) note = "Playback didn't start", sub = "Go back and try again";
         else if (sp.loading) sub = "Starting playback";
-        else if (sp.old) note = "Update Spotify on the card", sub = "See the Q2 Pod guide";
-        else if (sp.auth > 0) note = "Nothing playing", sub = "Choose music in Spotify";
+        else if (sp.old) note = SPOT_T_OLD_NOTE, sub = SPOT_T_OLD_SUB;
+        else if (sp.auth > 0) note = "Nothing playing", sub = SPOT_T_IDLE_SUB;
         widget_set_text_utf8(ui.note, note);
         widget_set_text_utf8(ui.sub, sub);
         return;
@@ -558,7 +583,7 @@ static void spot_np(void) {
     ui.info = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     ui.msg = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     widget_set_text_utf8(label(ui.info, SPOT_TAG_X, 12, 200, 16, STYLE_SCRLABEL_WHITE20L, 16, SPOT_GREY),
-                         "Spotify");
+                         SPOT_T_LABEL);
     ui.glyph = widget_factory_create_widget(f, "view", ui.info, UI_W - 38, 13, 14, 14); /* NP's top row */
     ui.art = image_create(ui.info, SPOT_ART_X, SPOT_ART_Y, SPOT_ART_PX, SPOT_ART_PX);
     image_set_draw_type(ui.art, 4); /* as Coverflow's covers */
@@ -738,7 +763,11 @@ static void fetch(level_t *l) {
 static int clicked(void *ctx, void *event);
 
 /* A list's row after its items: More…, or Sign out. */
+#if M1PLUS
+static int more(const level_t *l) { return l->f[3][0] || (SPOT_DOWNLOADS && !strcmp(l->op, "account")); } /* Soloify has no sign-out */
+#else
 static int more(const level_t *l) { return l->f[3][0] || !strcmp(l->op, "account"); }
+#endif
 
 static void *row(int i, const char *caption, const char *detail) {
     return page_row_detail(br.view, i, caption, detail, clicked);
@@ -770,17 +799,22 @@ static void show(void) {
         br.view = page_list(br.page, br.page, 0, l->note, n = l->retry, 48);
         if (n) row(0, "Retry", 0);
     } else if (l->state == S_PAIR) {
-        br.view = page_list(br.page, br.page, 0, "Spotify", n = 1, 64);
-        row(0, "Open Spotify on your phone and choose Q2", "Both on the same Wi-Fi");
+        br.view = page_list(br.page, br.page, 0, SPOT_T_LABEL, n = 1, 64);
+        row(0, SPOT_T_PAIR_ROW, SPOT_T_PAIR_ROW_SUB);
     } else if (l->state == S_OLD) {
-        br.view = page_list(br.page, br.page, 0, "Spotify", n = 2, 64);
+        br.view = page_list(br.page, br.page, 0, SPOT_T_LABEL, n = 2, 64);
         row(0, "Now Playing", "");
-        row(1, "Update Spotify on the card", "to browse on the Q2");
+        row(1, SPOT_T_OLD_NOTE, SPOT_T_OLD_ROW_SUB);
     } else if (l->kind == L_BASE) {
         br.playing = has_track();
         for (int r = M_PLAYING; r <= M_DOWNLOADS; ++r)
+#if M1PLUS
+            if ((SPOT_DOWNLOADS || (r != M_DOWNLOADED && r != M_DOWNLOADS)) && /* Soloify has no downloads */
+                (r != M_DOWNLOADED || !br.downloads) && ((r != M_PLAYING && r != M_QUEUE && r != M_SETTINGS) || br.playing)) br.rows[n++] = r;
+#else
             if ((r != M_DOWNLOADED || !br.downloads) && ((r != M_PLAYING && r != M_QUEUE && r != M_SETTINGS) || br.playing)) br.rows[n++] = r;
-        br.view = page_list(br.page, br.page, 0, "Spotify", n, 48);
+#endif
+        br.view = page_list(br.page, br.page, 0, SPOT_T_LABEL, n, 48);
         for (int i = 0; i < n; ++i) /* Now Playing and Search open no list */
             if (br.rows[i] == M_PLAYING || br.rows[i] == M_SEARCH)
                 row(i, MENU[br.rows[i]], 0);
@@ -816,7 +850,7 @@ static void show(void) {
         br.view = page_list(br.page, br.page, 0, l->title, n = 5, 48);
         for (int i = 0; i < n; ++i) row(i, actions[i], 0);
     } else if (l->kind == L_CONFIRM) {
-        br.view = page_list(br.page, br.page, 0, "Sign Out of Spotify?", n = 2, 48);
+        br.view = page_list(br.page, br.page, 0, SPOT_T_SIGNOUT, n = 2, 48);
         row(0, "Cancel", 0);
         row(1, "Sign Out", 0);
     } else {
@@ -909,9 +943,9 @@ static void got(void) {
     tk_snprintf(id, sizeof id, "%u", wk.id);
     if (n >= 0 && strcmp(f[0], id)) n = -1;
     const char *status = n < 0 ? "error" : f[1];
-    const char *msg = wk.fail == W_NOSOCK      ? "Spotify isn't running"
+    const char *msg = wk.fail == W_NOSOCK      ? SPOT_T_NO_SOCK
                       : n >= 0 && f[2][0] ? f[2]
-                                               : "Spotify didn't answer";
+                                               : SPOT_T_NO_ANSWER;
     int ok = !strcmp(status, "ok"), login = !strcmp(status, "login");
     if (login || (ok && act == A_SIGNOUT)) {
         sp.auth = -1;
@@ -933,6 +967,9 @@ static void got(void) {
             if (!strcmp(f[4 + 6 * i], "op") && !strcmp(f[5 + 6 * i], ops[j])) caps |= 1u << j;
         br.can_download = caps & 1;
         br.downloads = (caps & hub) == hub;
+#if M1PLUS
+        if (!SPOT_DOWNLOADS) br.can_download = br.downloads = 0; /* its relay offers none */
+#endif
         if (!br.edit) { /* the level shown again, a click on its old rows dropped, so rows and go() agree */
             stop_timer(&br.go);
             if (br.view) top()->sel = widget_get_prop_int(br.view, "_ringnav_index", 0);
@@ -1052,7 +1089,7 @@ static int go(const void *unused) {
             l->sel = widget_get_prop_int(br.view, "_ringnav_index", 0);
             widget_destroy_children(br.page), br.view = 0; /* the box alone: the keyboard leaves no room for the rows */
             br.edit = edit_create(br.page, "text", 2, 26);
-            widget_set_prop_str(br.edit, "tips", "Search Spotify");
+            widget_set_prop_str(br.edit, "tips", SPOT_T_TIPS);
 #if M1PLUS
             widget_on(br.edit, EVT_VALUE_CHANGED, searched, br.edit);
             widget_on(br.edit, EVT_IM_ACTION, searched, br.edit);
@@ -1200,6 +1237,12 @@ static int br_closed(void *ctx, void *event) {
 /* Streaming's Spotify row (navigation.c ringnav_stream): librespot started if it is not, and the
  * browser; without librespot on the card, Now Playing says so. */
 int spot_open(void *ctx, void *event) {
+#if M1PLUS
+    /* Streaming's Spotify row passes 0, its Soloify row 1; one backend runs at a time, so the other
+     * is stopped first (spot_launch would otherwise find sp.launched and start nothing). */
+    int be = ctx ? 1 : 0;
+    if (be != spot_be) spot_stop(), spot_be = be;
+#endif
     if (access(SPOT_BIN, 0) && !sp.launched) return spot_np(), 0;
     spot_launch();
     if (br.page || !(br.lv = calloc(SPOT_DEPTH, sizeof *br.lv))) return 0;
@@ -1222,6 +1265,9 @@ int spot_hold(void *w) {
     char a[sizeof l->args] = "";
     const char *kind = i >= 0 && i < l->n ? cell(l, i, 0) : "";
     int track = !strcmp(kind, "track");
+#if M1PLUS
+    if (!track && !SPOT_DOWNLOADS) return 0; /* a playlist downloads only on Spotify */
+#endif
     if ((!track && strcmp(kind, "playlist")) || !put(a, sizeof a, cell(l, i, 1))) return 0;
     /* a playlist downloads, as its own Download Playlist row; its reply is toasted */
     request(track ? "enqueue" : "download", a, track ? A_ENQUEUE : A_DOWNLOAD);

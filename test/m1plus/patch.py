@@ -27,6 +27,7 @@ if manifest.get('release'):  # an M1 Plus release (tools/release_m1.py): its tag
 assert v and manifest['version'] == (dev_tag(manifest['dev'], v[-1]) if manifest.get('dev') else v), 'Wrong variant/version'
 assert (manifest.get('compact_code') != []) == (variant == 'ipod')
 is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
+KILLALL = 'killall -9 librespot q2-soloify aplay' if is_m1plus else 'killall -9 librespot aplay'  # SPOT_KILL's: the Soloify relay shares librespot's pid file
 from m1plus import call_sites, call_site_words, M1PLUS_FUNCTIONS
 SITES = call_sites(is_m1plus)  # this model's call-site patches (m1plus.py CALL_SITES); a missing one is NOT PORTED
 def site_patched(name):
@@ -8854,7 +8855,7 @@ if variant=='ipod':
     texts={c[0]:m.text(c[1]) for c in m.calls if c[0] in ('fopen','system')}
     assert texts=={'fopen':'/tmp/q2pod-rockbox',
                    'system':'killall checkappprocess.sh; killall -9 hciplayer; kill -9 $(cat /tmp/q2-librespot); '
-                             'killall -9 librespot aplay; rm -f /tmp/q2-librespot /tmp/q2-librespot.state /tmp/q2-librespot.out /tmp/q2-librespot.download; sync; kill -9 $PPID'}
+                             +KILLALL+'; rm -f /tmp/q2-librespot /tmp/q2-librespot.state /tmp/q2-librespot.out /tmp/q2-librespot.download; sync; kill -9 $PPID'}
     assert [n for n in names if n in ('fclose','save_memoryplay_info','player_stop','system')]==['fclose','save_memoryplay_info','player_stop','system']; passed()
     m,names=rockbox(False)
     assert not {'fopen','player_stop','system'} & set(names)
@@ -11069,14 +11070,14 @@ m.state('playing'); m.poll(); m.state('paused'); m.poll(60000); assert len(m.sys
 m.close(); m.page=m.browser; m.close(); m.top=m.node('window','home_page')
 m.state('playing'); m.poll(); m.state('paused'); m.poll(20000); m.state('playing'); m.poll(); m.state('paused')
 m.poll(29000); assert len(m.systems)==1 and m.key(O['KEY_PLAY'])==11
-m.poll(1000); assert 'killall -9 librespot aplay' in m.systems[-1] and STATE in m.systems[-1]
+m.poll(1000); assert KILLALL in m.systems[-1] and STATE in m.systems[-1]
 assert m.key(O['KEY_PLAY'])!=11
 spot_open(m,button); assert m.systems[-1]=='/bin/sh /mnt/mmc/.spotify/run'; m.close(); passed()
 # Never played: the browser shut, SPOT_CAST_MS (150 s) leaves time to cast from the phone, then it stops.
 m=SpotMachine({BIN:bytearray()}); button=stream_page(m); page=spot_open(m,button); m.state('none'); m.poll()
 m.close(); m.page=m.browser; m.close(); m.top=m.node('window','home_page')
 m.poll(149000); assert len(m.systems)==1
-m.poll(1000); assert 'killall -9 librespot aplay' in m.systems[-1]; passed()
+m.poll(1000); assert KILLALL in m.systems[-1]; passed()
 
 # Internet Radio (patch/radio.c, docs/internals.md#internet-radio): favourites on the card and
 # radio-browser.info's directory, a station played by q2video -r, its tags from RADIO_STATE.
@@ -11671,13 +11672,13 @@ m.advance(2000); m.answer(*ME); m.row(1); m.answer('login','','',[]); assert m.l
 # Browsing keeps librespot: paused past SPOT_IDLE_MS with the browser open, it runs on; once the
 # browser is shut the wait starts, and the row starts it again, waiting for its socket.
 m.state('playing'); m.poll(); m.state('paused'); m.poll(60000); assert len(m.systems)==1
-m.destroy(m.page); m.poll(29500); assert len(m.systems)==1; m.poll(500); assert 'killall -9 librespot aplay' in m.systems[-1]
+m.destroy(m.page); m.poll(29500); assert len(m.systems)==1; m.poll(500); assert KILLALL in m.systems[-1]
 m.serve=None; m.open(); assert m.systems[-1]=='/bin/sh /mnt/mmc/.spotify/run'; m.worker(); assert m.labels()==['Loading…']
 m.advance(500); m.answer(*ME); assert m.labels()==MENU; passed()
 # Left open with the screen off, the browser holds nothing: SPOT_IDLE_MS on, it shuts and librespot stops.
 m.state('playing'); m.poll(); m.state('paused'); m.poll(); m.byte(syms['g_backlight_status'],0); kills=len(m.systems)
 m.poll(29500); assert len(m.systems)==kills
-names=m.poll(500); assert 'window_close' in names and 'killall -9 librespot aplay' in m.systems[-1]
+names=m.poll(500); assert 'window_close' in names and KILLALL in m.systems[-1]
 m.byte(syms['g_backlight_status'],1); m.destroy(m.page); passed()
 
 # Downloads outlive the browser without taking the audio output or stopping local playback.
@@ -11688,7 +11689,7 @@ m.play=2; names=m.poll(60000)
 assert len(m.systems)==1 and 'reset_poweroptions_timer' in names and 'player_stop' not in names
 assert not m.call(address=payload_syms['spot_status'],gap=0)
 m.files['/tmp/q2-librespot.download']=bytearray(b'downloading=0\n')
-m.poll(500); m.poll(30000); assert 'killall -9 librespot aplay' in m.systems[-1]; passed()
+m.poll(500); m.poll(30000); assert KILLALL in m.systems[-1]; passed()
 # A crashed librespot's files still say playing and downloading: once its socket refuses, no hold,
 # and it idles out; a new state (the restart) or a socket that answers again trusts them again.
 m=BrowseMachine(); m.open(); m.answer(*ME); m.state('playing'); m.poll(); m.destroy(m.page)
@@ -11698,7 +11699,7 @@ names=m.poll(); assert 'reset_poweroptions_timer' not in names
 m.state('playing',position=1); names=m.poll(); assert 'reset_poweroptions_timer' in names
 m.poll(10000); m.alive=True; names=m.poll(10000); assert 'reset_poweroptions_timer' in names
 m.alive=False
-m.alive=False; m.poll(10000); m.poll(30000); assert 'killall -9 librespot aplay' in m.systems[-1]; passed()
+m.alive=False; m.poll(10000); m.poll(30000); assert KILLALL in m.systems[-1]; passed()
 
 # Back reveals the saved More row, and paint keeps it selected.
 m=BrowseMachine(); m.open(); m.answer(*ME); m.row(0)
@@ -12405,7 +12406,7 @@ if 'usbmode_page_init' in HOOKS:
         m.advance(0,clear=False); m.page=m.top; assert m.nodes[m.page]['name']=='apps_page'
     def shelf_job(m,ms=500):
         worker,arg=m.threads[-1]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,count=50_000_000)==0; m.advance(ms,clear=False)
-    KILL='killall -9 librespot aplay'
+    KILL=KILLALL
     LIST='/mnt/mmc/.q2/sources.list'
     if is_m1plus:
         # M1 Plus: Spotify and the card apps. No Rockbox or Rockbox Themes row, even with a Rockbox on the
@@ -13977,7 +13978,7 @@ m.row(1); assert m.files[SCAP]==b'4096M' and m.labels()[2]=='Spotify Cache: 4 GB
 m.files[SCAP]=bytearray(b'9G'); assert endpoint(m,'stream_cache',1)==2  # not a choice: 2 GB
 m.word(O['MCL_TYPE'],5); m.play=2; m.waited=m.forked
 m.row(2); m.top=m.node('window','home_page')
-assert 'killall -9 librespot aplay' in m.systems[-1] and 'player_stop' in [c[0] for c in m.calls]
+assert KILLALL in m.systems[-1] and 'player_stop' in [c[0] for c in m.calls]
 assert [m.text(c[2]+8) for c in m.calls if c[0]=='navigator_to_with_context']==['Streaming stopped']
 assert endpoint(m,'radio_status')==0 and endpoint(m,'spot_status')==0 and m.key(O['KEY_PLAY'])!=11; m.close(); passed()
 # The wheel drives only allowlisted windows (patch/contexts.inc), so every runtime list page needs an
