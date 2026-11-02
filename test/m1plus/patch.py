@@ -5647,7 +5647,7 @@ class CoverflowMachine(QueueMachine):
                 self.plays.append((self.text(a),*[signed(self.get(b+4*i)) for i in range(4)]))
             elif self.text(a)=='dialog/msginfo_dialog': self.toasts.append((self.text(a),self.get(b),self.get(b+4),self.text(b+8)))
             else: self.opened.append((self.text(a),self.get(b),self.get(b+4))); self.top=self.node('window',self.text(a)); self.stack.append(self.top)
-        elif name=='access': path=self.text(a); ret=0 if (self.cached if '/mnt/mmc/.coverflow/' in path else not self.missing) else -1
+        elif name=='access': path=self.text(a); ret=0 if (self.cached if '/mnt/mmc/.coverflow/' in path else getattr(self,'soloify',0) if '/mnt/mmc/.soloify/' in path else not self.missing) else -1
         elif name=='fopen': ret=0  # no saved album: remember() keeps the first
         elif name=='toolsQueryDbTable':
             rows=self.albums if 'fileurl not like' in self.text(b) else []
@@ -11903,6 +11903,64 @@ m=BrowseMachine(); m.caps=(); m.open(); m.answer(*ME); m.row(1)
 m.answer(*OK,[('playlist','spotify:playlist:a','A','','','')]); m.row(0); m.answer(*OK,[])
 assert m.labels()==['Nothing here']; passed()
 
+
+# Soloify (patch/m1plus_spotify_backend.inc): the second backend of this page, the q2-soloify relay in
+# .soloify. Its Streaming row only while the relay is on the card; its own launcher, texts and rows (no
+# downloads, no sign-out); one backend at a time; its Delay and Quality saved where the relay reads them.
+if is_m1plus:
+    SBIN,SOLO_RUN='/mnt/mmc/.soloify/q2-soloify','/bin/sh /mnt/mmc/.soloify/run'
+    DELAY,QUALITY='/mnt/mmc/.soloify/.delay','/mnt/mmc/.soloify/.quality'
+    HUB=['download','collections','collection','playcollection','downloadliked','jobs','job','remove']  # every download op
+    def soloify_running(m): return m.call(address=payload_syms['spot_soloify_running'],args=(0,0,0,0),gap=0,clear=False)
+    class SoloifyMachine(BrowseMachine):
+        """BrowseMachine with the Soloify relay on the card, its Streaming row and its socket."""
+        bin=SBIN
+        def __init__(self,files=None): super().__init__(files); self.soloify=1
+        def add_on_row(self): return streaming(self)['Soloify']
+    m=BrowseMachine(); assert 'Soloify' not in streaming(m); passed()  # no relay on the card: no row
+    m=SoloifyMachine(); rows=streaming(m); names=list(rows)
+    assert names[names.index('Spotify'):][:3]==['Spotify','Soloify','Internet Radio'],names
+    icon,label=m.nodes[rows['Soloify']]['children'][:2]; assert m.nodes[icon]['image']=='row_spotify' and m.nodes[label]['text']=='Soloify'
+    # The first open starts its launcher; the menu has no Downloaded Tracks or Downloads even when the
+    # relay lists every download op (Spotify's shows them), and Account has no Sign Out.
+    m=SoloifyMachine(); m.caps=HUB; m.open()
+    assert m.labels()==['Loading…'] and len(m.systems)==2 and KILLALL in m.systems[0] and m.systems[1]==SOLO_RUN,(m.labels(),m.systems)  # the first open ends any Spotify first
+    m.answer(*ME); assert m.labels()==['Soloify','Liked Songs','Playlists','Albums','Artists','Search','Account'],m.labels()
+    n=BrowseMachine(); n.caps=HUB; n.open(); n.answer(*ME); assert n.labels()[-1]=='Downloads'
+    m.row(5); assert m.asked()==('account',); m.answer(*ME); assert m.labels()[:3]==['Account','Alice','Premium'] and 'Sign Out' not in m.labels(); m.back()
+    m.row(1); m.answer('ok','','',[('playlist','spotify:playlist:a','Mix A','alice','','')]); m.pick(0)
+    m.answer(*OK,[track('spotify:track:1','One','spotify:playlist:a','0')]); assert m.labels()==['Mix A','One','An Artist'],m.labels()  # no Download Playlist
+    m.back(); m.back()
+    m.row(4); edit=m.find('edit'); assert m.nodes[edit]['tips']=='Search Soloify'; passed()
+    # Its own words: the pairing prompt, and the relay not running.
+    m=SoloifyMachine(); m.open(); m.answer('login','','',[])
+    assert m.labels()==['Soloify','Pair Soloify on its server','Open Spotify near the server and choose Q2'],m.labels(); passed()
+    m=SoloifyMachine(); m.open(); m.advance(3000); m.worker(); assert m.labels()==["Soloify isn't running",'Retry']; passed()
+    # One backend at a time: the other is stopped first, whichever way round, and each starts its own launcher.
+    m=SoloifyMachine({BIN:bytearray()}); rows=streaming(m)
+    m.click(rows['Spotify']); m.page=m.top; assert m.systems==['/bin/sh /mnt/mmc/.spotify/run'],m.systems; m.close()
+    m.click(rows['Soloify']); m.page=m.top; assert len(m.systems)==3 and KILLALL in m.systems[1] and m.systems[2]==SOLO_RUN,m.systems; m.close()
+    m.click(rows['Spotify']); m.page=m.top; assert len(m.systems)==5 and KILLALL in m.systems[3] and m.systems[4]=='/bin/sh /mnt/mmc/.spotify/run',m.systems; m.close(); passed()
+    # Configuration: Delay and Quality after the cache rows while the relay is on the card, saved where the
+    # relay reads them (Auto: no file), and the Soloify switch with the others. A running Soloify is stopped
+    # to apply a change; Spotify's is not.
+    m=SoloifyMachine(); m.open(); assert soloify_running(m)==1
+    m.click(streaming(m)['Configuration']); m.page=m.top; assert m.nodes[m.page]['name']=='streamconf_page'
+    assert m.labels()==['Configuration','Tidal Cache: 2 GB','Spotify Cache: 2 GB','Soloify Delay: Auto','Soloify Quality: 160 kbit/s',
+                        'Stop Streaming Services','Spotify','Soloify','Internet Radio','AirPlay'],m.labels()
+    m.row(2); assert m.files[DELAY]==b'1000' and m.labels()[3]=='Soloify Delay: 1 s'
+    assert KILLALL in m.systems[-1] and m.toasts[-1][3]=='Soloify stopped to apply it' and soloify_running(m)==0
+    for ms in (2000,4000,8000): m.row(2); assert m.files[DELAY]==str(ms).encode() and m.labels()[3]==f'Soloify Delay: {ms//1000} s'
+    m.row(2); assert DELAY not in m.files and m.labels()[3]=='Soloify Delay: Auto'
+    for kbit in (96,128,160): m.row(3); assert m.files[QUALITY]==str(kbit).encode() and m.labels()[4]==f'Soloify Quality: {kbit} kbit/s'
+    m.row(3); assert m.files[QUALITY]==b'96'
+    m.files[DELAY]=bytearray(b'3000'); m.files[QUALITY]=bytearray(b'64')  # not choices: Auto, 160
+    m.close(); m.click(streaming(m)['Configuration']); m.page=m.top
+    assert m.labels()[3:5]==['Soloify Delay: Auto','Soloify Quality: 160 kbit/s']
+    m.row(7); assert m.config['STREAMHIDE']=='SOLOIFY' and switch(m,7)=='switch_off' and switch(m,6)=='switch_on'; m.row(7); assert m.config['STREAMHIDE']==''
+    m=SoloifyMachine({BIN:bytearray()}); streaming(m); m.click(streaming(m)['Spotify']); m.page=m.top; systems=len(m.systems)
+    m.click(streaming(m)['Configuration']); m.page=m.top; m.row(2); assert len(m.systems)==systems and m.files[DELAY]==b'1000'  # Spotify runs: left alone
+    passed()
 
 def run(m,name,*args): return m.call(address=payload_syms[name],args=(*args,0,0,0,0)[:4],gap=0,clear=False)
 

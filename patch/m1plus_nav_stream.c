@@ -1,5 +1,13 @@
 /* V2.1 Streaming Configuration, included by navigation.c. */
 static const char *const sc_dirs[] = { TIDAL_DIR, SPOT_DIR };
+extern int spot_soloify_running(void); /* spotify.c */
+/* Soloify's card settings, read by its relay when it connects (docs/wire.md): .delay (ms, none for
+ * Auto) and .quality (kbit/s, none for the bridge's 160). */
+#define SOLOIFY_DELAY SOLOIFY_DIR "/.delay"
+#define SOLOIFY_QUALITY SOLOIFY_DIR "/.quality"
+static int svc_soloify __attribute__((section(".scratch"))); /* its row is on Streaming, so on Configuration */
+static void *sc_soloify[2] __attribute__((section(".scratch"))); /* its Delay and Quality rows */
+static int soloify_installed(void) { return !access(SOLOIFY_DIR "/q2-soloify", 0); }
 
 /* The choice i, the cap being 512 << i MB: 2 (2 GB) when the file is missing or holds another. */
 int stream_cache(int spotify) {
@@ -19,14 +27,61 @@ static void sc_text(int i) {
     widget_set_text_utf8(widget_get_child(st.sc_row[i], 0), s);
 }
 
-/* M1's Q2 Pod services: Spotify, installed card apps, Internet Radio, AirPlay. Native
+static const unsigned sc_delays[] = { 0, 1000, 2000, 4000, 8000 }; /* ms; 0 is Auto: 1 s on the LAN, 4 s beyond */
+static const unsigned sc_rates[] = { 96, 128, 160 };
+
+/* The choice in a Soloify setting's file: its index in values, the file missing or holding another
+ * giving fallback. */
+static int sc_soloify_choice(const char *path, const unsigned *values, int n, int fallback) {
+    char s[12];
+    state_read(path, s, sizeof s);
+    unsigned v = (unsigned)atoi(s + 1);
+    for (int i = 0; i < n; ++i)
+        if (v == values[i]) return i;
+    return fallback;
+}
+
+static void sc_soloify_text(int i) {
+    char s[40];
+    if (i == 0) {
+        int d = sc_soloify_choice(SOLOIFY_DELAY, sc_delays, 5, 0);
+        if (d) tk_snprintf(s, sizeof s, "Soloify Delay: %u s", sc_delays[d] / 1000);
+        else tk_snprintf(s, sizeof s, "Soloify Delay: Auto");
+    } else
+        tk_snprintf(s, sizeof s, "Soloify Quality: %u kbit/s", sc_rates[sc_soloify_choice(SOLOIFY_QUALITY, sc_rates, 3, 2)]);
+    widget_set_text_utf8(widget_get_child(sc_soloify[i], 0), s);
+}
+
+/* Soloify's relay reads these when it connects, so a change stops a running Soloify: the next open
+ * starts it with the new value. */
+static void sc_soloify_click(int i) {
+    char s[12], tmp[40];
+    const char *path = i ? SOLOIFY_QUALITY : SOLOIFY_DELAY;
+    int n, next = i ? (sc_soloify_choice(path, sc_rates, 3, 2) + 1) % 3 : (sc_soloify_choice(path, sc_delays, 5, 0) + 1) % 5;
+    unsigned v = i ? sc_rates[next] : sc_delays[next];
+    if (!v) { /* Auto: no file */
+        unlink(path);
+    } else {
+        n = tk_snprintf(s, sizeof s, "%u", v);
+        tk_snprintf(tmp, sizeof tmp, "%s.tmp", path);
+        if (!blob_io(path, tmp, s, (unsigned)n, 1)) toast("Could not save setting");
+    }
+    sc_soloify_text(i);
+    if (spot_soloify_running()) {
+        spot_stop();
+        toast("Soloify stopped to apply it");
+    }
+}
+
+/* M1's Q2 Pod services: Spotify, Soloify if installed, installed card apps, Internet Radio, AirPlay. Native
  * Tidal stays on Home and has no switch; Tidal Downloads is unavailable. Keys and cache files
  * remain upstream's, so a card and its settings survive model changes. */
 static const char *const svc_fixed[][2] = { { "SPOTIFY", "Spotify" },
     { "RADIO", "Internet Radio" }, { "AIRPLAY", "AirPlay" } };
 /* Service i's key (label 0) or row label (1), as Streaming last listed them. */
 static const char *svc(int i, int label) {
-    if (i >= 1 && i < 1 + st.svc_n) return label ? addon_name(i - 1) : addon_id(i - 1);
+    if (i == 1 && svc_soloify) return label ? "Soloify" : "SOLOIFY";
+    if (i >= 1 && i < 1 + st.svc_n) return label ? addon_name(i - 1 - svc_soloify) : addon_id(i - 1 - svc_soloify);
     return svc_fixed[i < 1 ? i : i - st.svc_n][label];
 }
 static void svc_hidden(char *s) {
@@ -67,9 +122,10 @@ static int svc_toggle(int i) {
  * loop, a radio station, the card apps (addon.c) and a stock stream (Tidal's) queue, so the keys
  * and the output are local music's again; local music already stopped is left as it is. */
 static int sc_click(void *ctx, void *event) {
-    int i = (int)(long)ctx;
-    if (i > 3) return svc_toggle(i - 4);
-    if (i == 2) {
+    int i = (int)(long)ctx, x = svc_soloify ? 2 : 0; /* x: Soloify's two rows after the cache's */
+    if (i > 3 + x) return svc_toggle(i - 4 - x);
+    if (x && (i == 2 || i == 3)) return sc_soloify_click(i - 2), 0;
+    if (i == 2 + x) {
         unsigned type = (unsigned)MCL(MCL_TYPE);
         spot_stop();
         radio_stop();
@@ -91,18 +147,20 @@ static int sc_click(void *ctx, void *event) {
 static int stream_config(void *ctx, void *event) {
     if (st.sc_page || !(st.sc_page = page_open("streamconf_page", page_closed, page_keyup)))
         return 0;
-    int n = 3 + st.svc_n;
-    void *view = page_list(st.sc_page, st.sc_page, 0, "Configuration", 4 + n, PAGE_ROW_H);
+    int n = 3 + st.svc_n, x = svc_soloify ? 2 : 0;
+    void *view = page_list(st.sc_page, st.sc_page, 0, "Configuration", 4 + n + x, PAGE_ROW_H);
     for (int i = 0; i < 2; ++i)
         st.sc_row[i] = page_row_detail(view, i, "", 0, sc_click), sc_text(i);
-    page_row_detail(view, 2, "Stop Streaming Services", 0, sc_click);
-    void *gap = list_item_create(view, 0, 3 * PAGE_ROW_H, UI_W, PAGE_ROW_H); /* a gap before the toggles */
+    for (int i = 0; i < x; ++i) /* Soloify's Delay and Quality, while it is on the card */
+        sc_soloify[i] = page_row_detail(view, 2 + i, "", 0, sc_click), sc_soloify_text(i);
+    page_row_detail(view, 2 + x, "Stop Streaming Services", 0, sc_click);
+    void *gap = list_item_create(view, 0, (3 + x) * PAGE_ROW_H, UI_W, PAGE_ROW_H); /* a gap before the toggles */
     widget_use_style(gap, ROW_STYLE);
     widget_set_prop_int(gap, "style:normal:bg_color", (int)0xff000000u);
     char hide[SVC_HIDE];
     svc_hidden(hide);
     for (int i = 0; i < n; ++i) {
-        st.sc_check[i] = widget_get_child(page_row_detail(view, 4 + i, "", 0, sc_click), 0);
+        st.sc_check[i] = widget_get_child(page_row_detail(view, 4 + x + i, "", 0, sc_click), 0);
         list_toggle(st.sc_check[i], svc(i, 1), !svc_find(hide, i));
     }
     return 0;

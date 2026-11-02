@@ -25,8 +25,10 @@ int library_open(void *ctx, void *event) {
     static const char *const icons[] = { "local_podcasts", "local_audiobooks", "local_photos",
                                          "local_books", "local_videos" };
     char path[sizeof st.media_root];
-    int media[VIDEOS], scrobbles = scrobble_ready(), apps = addon_scan(), n = 10 + scrobbles + apps;
-    st.svc_n = apps;
+    int media[VIDEOS], scrobbles = scrobble_ready(), apps = addon_scan(), soloify = soloify_installed(),
+        n = 10 + scrobbles + apps + soloify;
+    st.svc_n = apps + soloify; /* Soloify's row is service 1, ahead of the card apps (m1plus_nav_stream.c) */
+    svc_soloify = soloify;
     char hide[SVC_HIDE];
     svc_hidden(hide);
     for (int k = 0; k < VIDEOS; k++) n += media[k] = media_find(k + 1, path);
@@ -43,10 +45,12 @@ int library_open(void *ctx, void *event) {
                          MEDIA[k]);
     library_row(view, "local_coverflow", coverflow_row, 0, "Coverflow");
     m1_svc_row(library_into(view, "row_spotify", spot_open, 0, "Spotify"), 0, hide); /* stream_*'s at 40 px (tools/m1plus.py) */
+    if (soloify) /* the second backend of the Spotify page, its icon Spotify's for now */
+        m1_svc_row(library_into(view, "row_spotify", spot_open, (void *)1, "Soloify"), 1, hide);
     for (int k = 0; k < apps; ++k) /* the card apps on the card (addon.c), as Streaming lists them */
-        m1_svc_row(library_into(view, "stream_app", addon_open, (void *)(long)k, addon_name(k)), k + 1, hide);
-    m1_svc_row(library_into(view, "row_radio", radio_open, 0, "Internet Radio"), apps + 1, hide);
-    m1_svc_row(library_into(view, "stream_airplay", airplay_open, 0, "AirPlay"), apps + 2, hide);
+        m1_svc_row(library_into(view, "stream_app", addon_open, (void *)(long)k, addon_name(k)), k + 1 + soloify, hide);
+    m1_svc_row(library_into(view, "row_radio", radio_open, 0, "Internet Radio"), st.svc_n + 1, hide);
+    m1_svc_row(library_into(view, "stream_airplay", airplay_open, 0, "AirPlay"), st.svc_n + 2, hide);
     library_into(view, "row_stream_config", stream_config, 0, "Configuration");
     if (scrobbles) library_row(view, "local_scrobble", upload_scrobbles, 0, "Upload Scrobbles");
     return 0;
