@@ -2927,6 +2927,28 @@ The changelog lists G1.
 
 **Next:** the next release is due about Nov 8 ([the cadence](m1plus-sync.md#cadence)).
 
+## 56. Soloify on the M1 (Nov 1)
+
+Soloify, a second Spotify backend (Spotify's own Soloist on a computer at home; the card's relay plays
+its audio), is an app of the M1 build only: [soloist.md](soloist.md#what-the-firmware-does) and
+[internals.md](internals.md#spotify) describe it, and `jtliang24/q2-soloify` holds the bridge, the relay
+and the card files. Branch `step5-soloify` off `staging`, three commits (`dbbba1e` the backend table, the
+hidden rows and `SPOT_KILL`; `6855871` the Streaming row and the Delay and Quality settings; `9788114`
+the Apps row), every change behind `M1PLUS`.
+
+| Gate | Result |
+|---|---|
+| `patch.py` | 1,381 MIPS scenarios passed (1,374 before), 0 known gaps, 35 not ported |
+| `build`, `boot` (three modes), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports` | pass |
+| `q2compare.py --suites` | 44 suite runs passed; Q2 Legacy and iPod `update.tar` byte-identical to 1.5.8's build |
+
+**Device pass on V02Ds (1.5.8 dev 14).** The user flashed it. The search fix (`2f8c003`, which step 4
+found missing on dev 13) works in all four categories, Back and More…; the Soloify row, page, hidden
+rows, backend switching, Stop Streaming Services, Delay and Quality (the relay's connect line and the
+bridge's encoder show them) and the Apps row passed. Open: scrub through Now Playing, which a double
+Centre press turns into a screen lock (Knob: Navigation on). The full table is in q2-soloify's
+`docs/step5.md`; the checks were driven through q2remote. No release was cut: the changelog entry waits for one.
+
 ## How to check a build now
 
 ```sh

@@ -1,6 +1,6 @@
-# Spotify through Soloist (plan)
+# Soloify: Spotify through Soloist
 
-Status: a plan, not implemented (2026-10-25). Spotify's own Soloist runs on an always-on computer at home. The device reaches it from any network, home Wi-Fi or a phone's hotspot away from home, over one outgoing TLS connection, plays its audio as Opus, and is controlled from Q2 Pod's own Spotify pages. Q2 Pod's firmware doesn't change: a relay on the card keeps librespot's contract ([librespot.md](librespot.md), [internals](internals.md#spotify)), so the Q2 and the M1 Plus both get it.
+Status: implemented in [jtliang24/q2-soloify](https://github.com/jtliang24/q2-soloify) (bridge, relay, card files), with the firmware side on the M1 Plus only: **Soloify**, an app beside Spotify on the same page ([What the firmware does](#what-the-firmware-does)). The rest of this document is the original plan and its tests (2026-10-25), kept as the design record; q2-soloify's PLAN.md has the decisions since (its own card folder `.soloify`, pinned TLS, Delay and Quality settings, immediate pause that rewinds Soloist). Spotify's own Soloist runs on an always-on computer at home. The device reaches it from any network, home Wi-Fi or a phone's hotspot away from home, over one outgoing TLS connection, plays its audio as Opus, and is controlled from Q2 Pod's own Spotify pages. Q2 Pod's firmware doesn't change: a relay on the card keeps librespot's contract ([librespot.md](librespot.md), [internals](internals.md#spotify)), so the Q2 and the M1 Plus both get it.
 
 ## Why
 
@@ -32,6 +32,16 @@ All on a Linux laptop (NixOS, PipeWire 1.6.6) running Soloist 1.3.9, and an M1 P
 | Battery | unmeasured: 100% throughout, just off the charger, too short a run |
 
 **Soloist on the device: ruled out.** It is closed source, so it could only run under QEMU's user-mode emulation, and only its ARMv7 build, since QEMU can't run 64-bit programs on the 32-bit X2000. Measured on x86_64 a minute into playback, the main process peaked at 65 MB (17 threads, 1.9% of one core) and its crash reporter at 21.7 MB, about 87 MB in all. The M1 has 115 MB of RAM, about 85 MB free with V2.1 running, and no swap, before QEMU's translation cache, the ARM libraries and a stand-in `libpulse.so.0` (Soloist links only glibc and loads `libpulse.so.0` at run time). Its CPU use, scaled to the X2000's 1.2 GHz cores and slowed further by emulation, comes to roughly a whole core or more.
+
+## What the firmware does
+
+M1 Plus only; every change is behind `M1PLUS`, so the Q2's `update.tar` is byte-identical to 1.5.8's build (`test/q2compare.py`). The upstream pull request, for the Q2, comes after the M1 device pass.
+
+- **A second backend on Spotify's page.** `patch/m1plus_spotify_backend.inc` is a two-entry table: Spotify (`.spotify`, `librespot`) and Soloify (`.soloify`, `q2-soloify`). It holds the launcher, binary and log paths and every text that names the service (Now Playing's notes, the pairing prompt, the "isn't running" and "didn't answer" messages, the search tip). Both use the same `/tmp/q2-librespot*` names, pid file and Q2SPOT/1, so the state and browser code is shared. `spot_open` takes the backend from its row (Spotify 0, Soloify 1) and stops the other first, so only one runs.
+- **Rows Soloify doesn't have.** Downloaded Tracks, the Downloads hub, Download Playlist and Sign Out are hidden by backend, whatever the relay's `caps` say.
+- **Streaming and Configuration.** A **Soloify** row follows Spotify's while `.soloify/q2-soloify` is on the card (Spotify's icon for now), with its own switch in Configuration; the hide list is keyed by name, so saved settings don't move. Two rows follow the cache rows: **Soloify Delay** (Auto, 1, 2, 4 or 8 s) and **Soloify Quality** (96, 128 or 160 kbit/s). They write `.soloify/.delay` (milliseconds; none for Auto, which is 1 s on the LAN and 4 s beyond) and `.soloify/.quality`. The relay reads them at each connection and sends the quality to the bridge in `A 1 MS KBPS` (q2-soloify's docs/wire.md); a change stops a running Soloify so the next open starts it with the new value.
+- **Stopping.** The M1's `SPOT_KILL` also kills `q2-soloify`, so Stop Streaming Services, the idle stop and Apps' jobs end either backend.
+- **Apps.** The upstream `sources.list` has no Soloify line, so the M1 adds `jtliang24/q2-soloify Soloify` after the fetched list (not saved with it): folder `.soloify`, binary `.soloify/q2-soloify`. Install, update and Remove stop a running backend first and leave `remote` and the settings files, which the ZIP doesn't hold.
 
 ## Design
 
@@ -153,6 +163,6 @@ Each step ends with its check passing; a device pass on both a Q2 and the M1 at 
 
 - **Where it lives.** A repo of its own beside q2-librespot (bridge, relay, card ZIP) is the likely fit, with only this doc and any firmware follow-ups here. Building the relay in this repo would reuse `tools/build.py`'s link recipe.
 - **Backend.** Spotify's desktop app could stand in for Soloist on an x86_64 server already running it: its MPRIS interface (checked on 1.2.95) has `PlayPause`, `Next`, `Previous`, `Seek`, `SetPosition`, `OpenUri`, a Spotify-only `LoadContextUri`, settable `Shuffle` and `LoopStatus`, and `Metadata` with `mpris:artUrl`, with change signals; no queue (`HasTrackList` false), which the Web API covers. It needs no API key and doesn't expire, but needs a graphical session, is far larger, and Spotify publishes it for x86_64 only, so not for a Pi. The relay and the wire don't change either way.
-- **Firmware follow-ups, later and upstream.** Hide Downloaded Tracks and Download Playlist when `caps` lacks their ops (today `patch/spotify.c` always shows them), and word "choose Q2" from the account's device name. Neither is needed for the first version.
+- **Firmware follow-ups, later and upstream.** The M1 build hides Soloify's download rows by backend; the upstream Q2 change would hide them when `caps` lacks their ops instead (today `patch/spotify.c` always shows them), and word "choose Q2" from the account's device name.
 - **Bridge language.** Python is assumed for its WebSocket, HTTP and OAuth libraries; Rust if it should share code with q2-librespot.
 - **Bitrate.** 160 kbit/s sounded good; 96 to 128 kbit/s would save mobile data at some quality, worth an A/B in step 1.
