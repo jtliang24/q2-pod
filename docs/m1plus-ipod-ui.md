@@ -50,18 +50,52 @@ Moving between them is clunky.
 
 ## Phase 1: The M1 compiles the iPod path
 
-- `tools/m1plus.py`:
-  - change the flags to `-DIPOD=1 -DM1PLUS=1`;
-  - drop `build()`'s `check(not ipod, 'M1 Plus has no iPod build yet')`;
-  - set `variant = 'ipod'` and give the M1 its own tag suffix;
-  - the M1 always builds the iPod variant.
-- `IPOD_HOOKS` and `IPOD_LEAF` (`tools/build.py`) are looked up in `M1PLUS_HOOKS` like any Q2 hook. Ones
-  the M1 doesn't take yet fall through to `compile_payload()`'s "return 0" trampolines, so the payload
-  links before each is ported.
-- Wherever `#if IPOD` code assumes a rewritten asset the M1 doesn't have yet, add an `#if M1PLUS` stub with
-  an `M1PLUS_PORTS` row marked `unported`, so `test/m1plus/ports.py` keeps the list honest.
-- **Gate:** the M1 builds, `test/m1plus/build.py --build` and `boot.py` pass, and the device boots to a
-  working (still stock-looking) UI. This is the branch's floor, and each later phase raises it.
+Phase 0 is done: the `sync/1.6.0` WIP is in `work/sync/1.6.0-wip/`, `feature/m1-ipod` is cut from
+`staging`, and the docs were updated in `6d93571`. Phase 1 is four commits, and each one passes the
+Verification steps below.
+
+1. **`build(m1plus): compile the shared C with IPOD=1`**
+   - `tools/m1plus.py` `compile_common()` and `compile_payload()`: change `-DIPOD=0` to `-DIPOD=1`.
+   - `compile_payload()` already gives each `HOOKS | IPOD_HOOKS` symbol that `M1PLUS_HOOKS` lacks a
+     `jr $ra; move $v0, $zero` trampoline, so the payload links without any new hook entry. There is no
+     `IPOD_LEAF` (`style_get_gradient`) jump, and no `--undefined` for it, until Phase 4.1.
+   - Fix the `#if IPOD` compile errors (about 80 sites, mostly in `navigation.c` and `coverflow.c`) one
+     at a time. Where the code names a Q2 iPod asset, name or offset that `patch/m1plus_offsets.inc` lacks,
+     add an `#if M1PLUS` stub. Never invent a V2.1 value.
+   - `M1PLUS_PORTS`: give each `IPOD_HOOKS` entry its own `unported` row naming its Phase 4 item, e.g.
+     `'style_get_color': ('unported', 'iPod UI paint backbone (m1plus-ipod-ui.md 4.1)')`. Rewrite the
+     comment that says "IPOD_HOOKS are Q2 only as a group".
+   - `test/m1plus/ports.py`: drop the blanket `q2only` rule for `IPOD_HOOKS`, so they get the same row
+     check as any Q2 hook. If a stub covers something other than a hook or call site, add a row kind for
+     it rather than leave it untracked.
+2. **`feat(m1plus): build the iPod variant only`**
+   - `tools/m1plus.py` `build()`:
+     - drop `check(not ipod, 'M1 Plus has no iPod build yet')`;
+     - set `variant = 'ipod'` with or without `--ipod`;
+     - add the M1's own tag, `TAG + 'M'`, so dev builds are `dev_tag(n, 'M')` (`V001m`);
+     - release tags are still `release_m1.m1_tag`'s (`V1581`).
+   - `test/m1plus/build.py`:
+     - `m1plus_checks()` asserts `variant == 'ipod'` in place of "Only the Stock UI exists";
+     - the "no iPod build" refusal test becomes a check that `ipod=True` and `ipod=False` produce the
+       same M1 build;
+     - the dev-tag checks cover `'m'` and keep the M1 tag apart from `VERSIONS`.
+   - `test/m1plus/patch.py`: when `is_m1plus`, the version check expects the M1 tag.
+3. **`test(m1plus): mark the iPod checks the M1 doesn't pass yet as known gaps`** (the user's choice,
+   Nov 2)
+   - Run `test/m1plus/patch.py` on the Phase 1 build and sort its failing `variant=='ipod'` branches (about
+     40):
+     - one that needs an unported asset or hook is wrapped in `known_gap('<feature> (4.N)', ...)`;
+     - one that tests only `IPOD=1` C behaviour (row fast-scroll counts, key handling) must pass as it
+       is. If it fails, that is a bug to fix, not a gap to mark.
+   - `known_gap` fails once its check passes, so each Phase 4 item removes its own markers.
+4. **`docs(m1plus): record Phase 1`**
+   - Add a progress section: what changed, the gap list and the device check.
+   - Roadmap section 5: drop "Until the plan's Phase 1 lands, `--ipod` is refused".
+   - The unported list's iPod UI row lists the hooks as unported, by phase.
+
+**Gate:** the M1 builds, the Verification steps pass (`patch.py` lists its known gaps and has no
+failures), and a `--dev` build flashed through the menu updater boots to a working, still stock-looking
+UI, checked over q2remote with screenshots. This is the branch's floor, and each later phase raises it.
 
 ## Phase 2: Device geometry as names
 
