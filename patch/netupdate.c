@@ -503,6 +503,21 @@ static struct {
 
 static int is(int i, const char *id) { return i >= 0 && i < shelf_n && !strcmp(apps[i].id, id); }
 
+#if M1PLUS
+/* The upstream list (SH_LIST_URL) doesn't carry Soloify, an M1 Plus app: it is added here, as a list
+ * line "jtliang24/q2-soloify Soloify" would make it (dir .soloify, binary .soloify/q2-soloify). It
+ * stops, as Spotify does, before a job touches its files. n entries of out, then the count. */
+static int soloify_listed(shelf_app *out, int n, int max) {
+    for (int k = 0; k < n; ++k)
+        if (!strcmp(out[k].id, "soloify")) return n;
+    if (n >= max) return n;
+    return n + shelf_sources("jtliang24/q2-soloify Soloify\n", out + n, 1);
+}
+#define IS_SPOT(i) (is(i, "spotify") || is(i, "soloify"))
+#else
+#define IS_SPOT(i) is(i, "spotify")
+#endif
+
 static int sh_find(const char *id) {
     for (int i = 0; i < shelf_n; ++i)
         if (is(i, id)) return i;
@@ -566,6 +581,9 @@ static int check(void) {
     for (int k = 0; fresh && k < n; ++k)
         m += snprintf(text + m, sizeof text - m, "%s %s\n", sh.next[k].repo, sh.next[k].name);
     if (fresh) mkdir(SH_DIR, 0755), blob_io(SH_LIST, SH_LIST ".tmp", text, m, 1);
+#if M1PLUS
+    if (fresh) n = soloify_listed(sh.next, n, SH_MAX); /* after the kept list: upstream's own stays as fetched */
+#endif
     sh.n = n;
     for (int k = 0; k < n && !sh.cancel; ++k)
         if (!M1PLUS || (strcmp(sh.next[k].id, "rockbox") && strcmp(sh.next[k].id, "themes")))
@@ -609,7 +627,7 @@ static int install(int i) {
     if (!r && sh.cancel) r = SH_CANCELLED;
     if (!r) {
         sh.stage = 3;
-        if (is(i, "spotify"))
+        if (IS_SPOT(i))
             system(SPOT_KILL);   /* librespot runs from .spotify, if started since */
         addon_quit(apps[i].dir); /* a card app, the same: its files closed first */
         app_file(path, sizeof path, i, ".tag");
@@ -705,7 +723,7 @@ static int sh_wait(const void *unused) {
     sh.job = 0;
     if (job == JOB_CHECK) /* the rows built again: the list may have changed */
         memcpy(apps, sh.next, sizeof apps), shelf_n = sh.n, sh.rows = -1;
-    if (job != JOB_CHECK && is(i, "spotify")) spot_stop(); /* spotify.c forgets the old one */
+    if (job != JOB_CHECK && IS_SPOT(i)) spot_stop(); /* spotify.c forgets the old one */
     sh_rows();
     if (job == JOB_INSTALL && r == SH_SPACE)
         snprintf(s, sizeof s, "Needs %u MB more space", sh.need), toast(s);
@@ -726,7 +744,7 @@ static int sh_wait(const void *unused) {
 }
 
 static void sh_start(int job, int i) {
-    if (is(i, "spotify") && job != JOB_CHECK)
+    if (IS_SPOT(i) && job != JOB_CHECK)
         spot_stop(); /* on this thread: spotify.c's state too */
     if (job != JOB_CHECK) addon_forget(apps[i].dir);
     sh.job = job, sh.app = i, sh.cancel = sh.percent = sh.result = 0, sh.running = 1;
@@ -816,6 +834,9 @@ int shelf_open(void *ctx, void *event) {
         unsigned n = 0;
         char *list = read_all(SH_LIST, 1u << 16, &n);
         shelf_n = shelf_sources(list, apps, SH_MAX);
+#if M1PLUS
+        if (shelf_n) shelf_n = soloify_listed(apps, shelf_n, SH_MAX);
+#endif
         free(list);
     }
     sh_rows();

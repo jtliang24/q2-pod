@@ -12478,12 +12478,12 @@ if 'usbmode_page_init' in HOOKS:
         m=M1ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                           '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
-        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install'] and not m.threads; passed()
+        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Soloify','Install'] and not m.threads; passed()  # Soloify: M1 Plus's own, after the list's
         m.close(); m.wifi=3; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
-        assert m.labels()==['App Store','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install']
+        assert m.labels()==['App Store','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install','Soloify','Install']
         m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
         assert m.urls==['https://raw.githubusercontent.com/DiamondBond/q2-pod/main/sources.list']+[f'https://api.github.com/repos/{r}/releases/latest' for r in
-                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser')],m.urls
+                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser','jtliang24/q2-soloify')],m.urls
         assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.labels()[2]=='Update'; passed()  # q2-v1.8 against the latest q2-v1.9
         m.row(0); assert m.labels()[2]=='Checking…' and KILL in m.systems[-1]; m.row(0); assert m.labels()[2]=='Cancelling…'
         shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[2]=='Update'; passed()
@@ -12492,6 +12492,18 @@ if 'usbmode_page_init' in HOOKS:
         assert m.toasts[-1][3]=='Spotify removed' and not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/librespot'}&set(m.files); passed()
         m.row(1); assert m.labels()[4]=='Press again to erase the login and cache'; m.row(1); shelf_job(m)
         assert m.toasts[-1][3]=="Spotify's login and cache erased"; m.close(); passed()
+        # Soloify: installed from its own repo (.soloify, its binary q2-soloify); an update or Remove ends a running
+        # backend first and leaves the files the ZIP doesn't hold: its remote file and its settings.
+        SOLO_TAG,SOLO_FILES='/mnt/mmc/.q2/apps/soloify.tag','/mnt/mmc/.q2/apps/soloify.files'
+        m=M1ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SOLO_TAG:bytearray(b'q2-v1.9'),SOLO_FILES:bytearray(b'.soloify/run\n.soloify/q2-soloify\n'),
+                          '/mnt/mmc/.soloify/run':bytearray(b'sh'),'/mnt/mmc/.soloify/q2-soloify':bytearray(b'ELF'),'/mnt/mmc/.soloify/remote':bytearray(b'host 7443 token\n'),
+                          '/mnt/mmc/.soloify/.delay':bytearray(b'4000'),'/mnt/mmc/.soloify/.quality':bytearray(b'96')})
+        m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
+        assert m.labels()[-2:]==['Soloify','Installed'],m.labels()
+        m.row(4); m.row(4); assert m.labels()[-1]=='Removing…'; shelf_job(m)
+        assert m.toasts[-1][3]=='Soloify removed' and KILL in m.systems[-3] and KILL in m.systems[-1],m.systems
+        assert not {SOLO_TAG,SOLO_FILES,'/mnt/mmc/.soloify/run','/mnt/mmc/.soloify/q2-soloify'}&set(m.files) and m.labels()[-1]=='Install'
+        assert {'/mnt/mmc/.soloify/remote','/mnt/mmc/.soloify/.delay','/mnt/mmc/.soloify/.quality'}<=set(m.files); m.close(); passed()
     if not is_m1plus:  # Rockbox's rows: Q2 only
         m=ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                         '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
@@ -12546,9 +12558,10 @@ if 'usbmode_page_init' in HOOKS:
     m.row(0); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and not m.threads; passed()
     m.wifi=3; m.row(0); assert m.labels()[2]=='Loading…' and len(m.threads)==1; m.row(0); assert len(m.threads)==1  # loading already
     m.reply=b'# apps\nme/q2-foo Foo\nme/q2-Bad\n'; shelf_job(m)
-    assert m.labels()==['App Store','Foo','Install'] and m.files[LIST]==b'me/q2-foo Foo\n'; passed()
+    FOO=['App Store','Foo','Install']+(['Soloify','Install'] if is_m1plus else [])  # M1 Plus's own Soloify follows the list, not kept in it
+    assert m.labels()==FOO and m.files[LIST]==b'me/q2-foo Foo\n'; passed()
     m.close(); m.now+=11*60*1000; m.reply=b'nothing'; apps_open(m); shelf_job(m)
-    assert m.labels()==['App Store','Foo','Install'] and m.files[LIST]==b'me/q2-foo Foo\n'; m.close(); passed()
+    assert m.labels()==FOO and m.files[LIST]==b'me/q2-foo Foo\n'; m.close(); passed()
 else:
     not_ported("Q2 Shelf, System settings' Apps (netupdate.c): no Apps row on M1 Plus, with the card app host")
 
