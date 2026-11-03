@@ -8,6 +8,7 @@
 #define CHOICE_CHECK "select" /* a CHOICE picker's checked option's image */
 #define UI_H 320
 #define BOTTOM 290
+#define STATUS_H 30 /* the status bar: BOTTOM is UI_H - STATUS_H */
 #define CORNER_R 80
 #define STATUS_MARGIN 52
 #define BAR_CORNER_R 76

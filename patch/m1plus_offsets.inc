@@ -14,6 +14,7 @@
 #define UI_W 320
 #define UI_H 480
 #define BOTTOM 450
+#define STATUS_H 30 /* the status bar: BOTTOM is UI_H - STATUS_H */
 #define CORNER_R 0
 #define STATUS_MARGIN 0
 #define BAR_CORNER_R 0

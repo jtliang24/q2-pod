@@ -3417,7 +3417,7 @@ static void bar_sync(void *bar) {
                           : (mode == 3 ? BATT_INSIDE_W : BATT_BODY_W) + BATT_NUB_W +
                                 (mode == 2 ? BATT_GAP + pct : 0);
     int resized = I(st.bar_slot, W_W) != width;
-    widget_resize(st.bar_slot, width, 30);
+    widget_resize(st.bar_slot, width, STATUS_H);
     /* Resize only relayouts the slot's own children; the right-aligned row must
      * position it again even when Icon + Percent -> Icon keeps it visible. */
     if (resized) widget_layout_children(P(st.bar_slot, W_PARENT));
@@ -4107,11 +4107,11 @@ static void bc_fit(void *win) {
     }
     st.bc_key = key, st.bc_box = box;
     unsigned w = st.bc_shape >> 16, h = st.bc_shape & 0xffff;
-    for (int s = 374; s > 2; s -= 2) {
+    for (int s = UI_W - 1; s > 2; s -= 2) {
         int bw = w >= h ? s : (int)(s * w / h), bh = w >= h ? (int)(s * h / w) : s;
-        int x = (375 - bw) / 2, y = (320 - bh) / 2, dx = GLASS_R + GLASS_SLACK - x,
+        int x = (UI_W - bw) / 2, y = (UI_H - bh) / 2, dx = GLASS_R + GLASS_SLACK - x,
             dy = GLASS_R - y;
-        if (bh > 320 || (dx > 0 && dy > 0 && dx * dx + dy * dy > GLASS_R * GLASS_R)) continue;
+        if (bh > UI_H || (dx > 0 && dy > 0 && dx * dx + dy * dy > GLASS_R * GLASS_R)) continue;
         if (I(img, W_X) == x && I(img, W_Y) == y && I(img, W_W) == bw && I(img, W_H) == bh) return;
         int sh = I(shade, W_H), foot = y + bh - sh;
         widget_move_resize(title, x + BC_TITLE_PAD, foot + I(title, W_Y) - I(shade, W_Y),
@@ -8311,15 +8311,15 @@ int ringnav_playlistsmore(void *win, void *ctx) {
          * s_btn_listitem, its 52px icon at x 10 and its 20px label at x 72. Edit Playlist follows
          * the Delete row at the same spacing. */
         int h = 72, inner = 68;
-        void *item = list_item_create(win, 0, 154, 375, h);
+        void *item = list_item_create(win, 0, 154, UI_W, h);
         widget_use_style(item, "s_listitem_black");
-        void *button = button_create(item, 20, 0, 335, inner);
+        void *button = button_create(item, 20, 0, UI_W - 40, inner);
         widget_use_style(button, "s_btn_listitem");
         widget_on(button, EVT_CLICK, ple_open, ctx);
         void *image = image_create(button, 10, 0, 52, inner);
         image_base_set_image(image, "rename");
         image_set_draw_type(image, IMAGE_DRAW_CENTER);
-        void *label = hscroll_label_create(button, 72, 0, 253, inner);
+        void *label = hscroll_label_create(button, 72, 0, UI_W - 122, inner);
         widget_use_style(label, "s_scrlabel_white20l");
         set_hscroll_label_attribute(label);
         widget_set_text_utf8(label, "Edit Playlist");

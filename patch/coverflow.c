@@ -2363,7 +2363,7 @@ const char *now_tag(void *r, int field) {
     return P(r, field);
 }
 
-#define HOME_PW (375 - HOME_SPLIT_W) /* Split's art panel, 290 high */
+#define HOME_PW (UI_W - HOME_SPLIT_W) /* Split's art panel, BOTTOM high */
 /* iPod Home (docs/ipod.md): the playing track's art beside the list. */
 static struct {
     void *win, *art, *list, *sets; /* sets: the Settings list, in the list's place while open */
@@ -2422,7 +2422,7 @@ static int pan_v(void) { return home.v0 * 256 + drift_at(home.ry, DRIFT_Y_MS); }
 /* A step repaints only the panel, once the pan has moved; coverflow_home_clip draws it. */
 static void drift_place(void) {
     if (pan_u() == home.du && pan_v() == home.dv) return;
-    static int pane[4] = { HOME_SPLIT_W, 0, HOME_PW, 290 }; /* rect_t, in the parent */
+    static int pane[4] = { HOME_SPLIT_W, 0, HOME_PW, BOTTOM }; /* rect_t, in the parent */
     widget_invalidate_force(P(home.art, W_PARENT), pane);
 }
 
@@ -2449,7 +2449,7 @@ static int home_drift(const void *unused) {
 
 /* A w x h image's size just covering the panel at its proportions; unknown sizes fill it. */
 static void home_fit(unsigned w, unsigned h, int *fw, int *fh) {
-    int pw = HOME_PW, ph = 290;
+    int pw = HOME_PW, ph = BOTTOM;
     *fw = pw, *fh = ph;
     if (w && h && w <= 8192 && h <= 8192) {
         if ((unsigned)pw * h > (unsigned)ph * w)
@@ -2499,7 +2499,7 @@ static int home_tex(const char *url) {
     home_fit(w, h, &fw, &fh);
     int tw = fw * DRIFT_ZOOM_PCT / 100, th = fh * DRIFT_ZOOM_PCT / 100;
     const unsigned char *data = 0;
-    if (!home.frame) home.frame = opaque_frame(HOME_PW, 290);
+    if (!home.frame) home.frame = opaque_frame(HOME_PW, BOTTOM);
     if (home.frame && format < 4 && w && h && w <= 8192 && h <= 8192 && tw <= DRIFT_TEXELS / th) {
         free(home.tex);
         home.tex = calloc((unsigned)(th + 3) * (unsigned)(tw + 3), 4);
@@ -2545,7 +2545,7 @@ static int home_tex(const char *url) {
         for (int y = th + 1; y < th + 3; ++y)
             memcpy(home.tex + y * ts, home.tex + th * ts, (unsigned)ts * 4);
         home.tw = tw, home.rx = tw - fw, home.ry = th - fh;
-        home.u0 = (fw - HOME_PW) / 2, home.v0 = (fh - 290) / 2, home.du = -1;
+        home.u0 = (fw - HOME_PW) / 2, home.v0 = (fh - BOTTOM) / 2, home.du = -1;
     }
     widget_unload_image(home.art, bitmap);
     return data != 0;
@@ -2579,7 +2579,7 @@ static void home_render(unsigned *d, int pitch, int u, int v) {
     bspline_w((unsigned)u & 255, wx), bspline_w((unsigned)v & 255, wy);
     int ts = home.tw + 3;
     const unsigned *s = home.tex + (v >> 8) * ts + (u >> 8); /* texel -1, -1 from u, v */
-    for (int y = -3; y < 290; ++y, s += ts) {
+    for (int y = -3; y < BOTTOM; ++y, s += ts) {
         unsigned *o = home.ring[(y + 3) & 3];
         for (int x = 0; x < HOME_PW; ++x) o[x] = tap4(s[x], s[x + 1], s[x + 2], s[x + 3], wx);
         if (y < 0) continue;
@@ -2592,7 +2592,7 @@ static void home_render(unsigned *d, int pitch, int u, int v) {
 
 /* The pan's frame over the art (its image is empty), rendered again only once the pan moved. */
 static void home_paint(void *canvas) {
-    int u = pan_u(), v = pan_v(), r[4] = { 0, 0, HOME_PW, 290 };
+    int u = pan_u(), v = pan_v(), r[4] = { 0, 0, HOME_PW, BOTTOM };
     if (u != home.du || v != home.dv) {
         unsigned *d = (unsigned *)bitmap_lock_buffer_for_write(home.frame);
         if (!d) return;
@@ -2628,7 +2628,7 @@ void coverflow_home_art(void *top) {
     char url[600] = "file://";
     if (r) art_path(url + 7, album, "");
     unsigned size[2] = { 0, 0 };
-    int fw = HOME_PW, fh = 290;
+    int fw = HOME_PW, fh = BOTTOM;
     home.tw = 0;
     const char *src = cover;
     /* the player writes every track's cover to the same file: drop AWTK's cached bitmap of the
@@ -2646,7 +2646,7 @@ void coverflow_home_art(void *top) {
             image_base_set_image(home.art, HOME_PLACEHOLDER);
         home_fit(size[0], size[1], &fw, &fh);
     }
-    widget_move_resize(home.art, HOME_SPLIT_W + (HOME_PW - fw) / 2, (290 - fh) / 2, fw, fh);
+    widget_move_resize(home.art, HOME_SPLIT_W + (HOME_PW - fw) / 2, (BOTTOM - fh) / 2, fw, fh);
     rearm(&home.repaint, home_repaint, 0);
 }
 

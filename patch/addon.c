@@ -1149,7 +1149,7 @@ static void qr_open(const char *state, const char *title) {
         return;
     }
     void *f = widget_factory(), *page = qp.page;
-    int h = widget_get_prop_int(page, "h", 290);
+    int h = widget_get_prop_int(page, "h", BOTTOM);
     qp.state = state;
 #if !M1PLUS
     widget_set_text_utf8(label(page, 16, 12, 240, 16, "s_scrlabel_white20l", 16, SPOT_GREY), title);
