@@ -14,9 +14,6 @@ static void home_paint(void *w, void *canvas);
  * tools/m1plus.py, listed by test/m1plus/ports.py); the Phase 4 item that ports each retires its stand-in. */
 int player_start(void *queue, int index, int class, int mode) { return 0; } /* ringnav_boot's: no hook calls it */
 int buzzeer_switch(int on) { return 0; } /* Key Tone: V2.1 has no buzzer command (progress 15) */
-/* Now Playing's position timer (4.6): the scrub has no timer to stop and restart */
-int playing_timer_start(void *win) { return 0; }
-int playing_timer_clear(void *win) { return 0; }
 /* AWTK's tk_str_end_with, which V2.1's AWTK lacks */
 int tk_str_end_with(const char *str, const char *part) {
     unsigned n = 0, m = 0;

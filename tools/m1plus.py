@@ -517,8 +517,6 @@ M1PLUS_UNRESOLVED = {
 M1PLUS_SHIMS = {
     'player_start': ('native', "ringnav_boot's boot resume (BOOT_MODE_CALL), which V2.1 does itself; no hook calls it"),
     'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
-    'playing_timer_start': ('unported', "Now Playing's position timer, for the scrub (ipod-ui 4.6)"),
-    'playing_timer_clear': ('unported', "Now Playing's position timer, for the scrub (ipod-ui 4.6)"),
     'tk_str_end_with': ('ported', "its own C: V2.1's AWTK lacks it"),
     'image_manager_unload_bitmap_by_name': ('unported', "unloading the big cover's and Home's art by name (ipod-ui 4.5, 4.6)"),
 }
@@ -535,6 +533,11 @@ M1PLUS_FUNCTION_ALIASES = {
     'player_seek_time': 'seek_time',
     'switch_charge_enable': 'toolsSetChargeSwitch',
     'taglib_file_open': 'taglib_file_new',
+    # Now Playing's position timer, which the scrub stops and restarts: V2.1's playing_page_init starts
+    # player_timer_start (0x53c210) and player_timer_clear (0x53c758) ends it. V1.32's shape; the
+    # interval is 500 ms where V1.32's is 250.
+    'playing_timer_start': 'player_timer_start',
+    'playing_timer_clear': 'player_timer_clear',
     # The batch record (pvec_selectrecord): n rows unselected, then one row's selection toggled
     'batch_init_selectrecord': 'select_recordinit',
     'batch_set_selectitem': 'set_selectindex',
