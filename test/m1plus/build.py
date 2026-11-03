@@ -2,7 +2,7 @@
 """JPEG and boot script checks; --build BUILD audits a build (Q2 or M1 Plus), and a stock firmware ZIP
 also tests packaging with a custom logo and quoted paths."""
 import io, sys; sys.path[1:1] = [sys.path[0] + '/..']; sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first: test/m1plus/build.py must import tools/build.py
-from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web, DEFAULT_CONFIG, COVERMODE
+from build import TAG, jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web, DEFAULT_CONFIG, COVERMODE
 
 logo = (ROOT/'assets/boot-logo.jpg').read_bytes()
 assert jpeg_size(logo) == (320, 375)
@@ -33,6 +33,7 @@ tags = [dev_tag(n, 'I') for n in range(1, 36**3)]
 assert tags[:2] == ['V001i', 'V002i'] and tags[35] == 'V010i' and tags[-1] == 'VZZZi'
 assert len(set(tags)) == len(tags) and all(len(t) == 5 for t in tags) and VERSIONS['ipod'] not in tags
 assert dev_tag(36**3, 'S') == 'V001s'
+assert dev_tag(1, 'M') == 'V001m' and TAG + 'M' not in [dev_tag(n, 'M') for n in range(1, 36**3)]
 print('Dev build tag checks passed.')
 
 def boot_check(s90play=None):
@@ -303,8 +304,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert not any(name in ps for name in M1PLUS_UNRESOLVED)
     payload = (directory/'patch.bin').read_bytes()
     assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
-    # Only the Stock UI exists for M1 Plus so far.
-    assert manifest['variant'] == 'stock' and manifest['compact_code'] == []
+    # The iPod UI is the only UI; its compact rows (4.4) are not ported yet.
+    assert manifest['variant'] == 'ipod' and manifest['compact_code'] == []
     assert set(manifest['changed_assets']) == {TAG_C}
     stock_syms = symbols(directory/'stock-demo')
     # Native evidence for this batch: options are asset rows, not V1.32's kind table;
@@ -1151,8 +1152,9 @@ if __name__ == '__main__':
               for rel,expected in [('release/assets/default/raw/images/xx/logo.jpg',card_logo),
                                    ('release/bin/demo',(a/'demo').read_bytes())]:
                   assert subprocess.check_output(['unsquashfs','-cat',str(a/'rootfs.squashfs'),rel])==expected
-              if m1plus:  # no iPod UI for M1 Plus yet, so no build may claim one
-                  try: build(args.zip, root/'ipod', custom, True)
-                  except ValueError as e: assert 'no iPod build' in str(e), e
-                  else: raise AssertionError('Built an M1 Plus iPod variant')
+              if m1plus:  # the iPod UI is its only UI: --ipod builds the same payload and tag
+                  assert manifest['version'] == TAG + 'M', manifest['version']
+                  build(args.zip, root/'ipod', custom, True)
+                  twin = json.loads((root/'ipod/manifest.json').read_text())
+                  assert (twin['version'], twin['variant'], twin['patch_sha256']) == (manifest['version'], 'ipod', manifest['patch_sha256'])
               print('Packaging, mutable logo and quoted paths checks passed.')

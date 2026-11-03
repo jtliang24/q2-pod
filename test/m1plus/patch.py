@@ -7,7 +7,7 @@ from functools import cmp_to_key
 from unicorn import Uc, UcError, UC_ARCH_MIPS, UC_MODE_MIPS32, UC_MODE_LITTLE_ENDIAN, UC_HOOK_CODE, UC_HOOK_BLOCK, UC_HOOK_INTR
 from unicorn.mips_const import *
 sys.path[1:1] = [sys.path[0] + '/..']; sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first
-from build import jal, j, segments, load_elf, symbols, BASE, SCRATCH, HOOKS, IPOD_HOOKS, WM_PAINT_LEAF, FUNCTIONS, GLOBALS, CONTEXT_DATA, ROOT, source_sha256, sha, PRIVATE_FUNCTIONS, VERSIONS, VERSION, dev_tag
+from build import TAG, jal, j, segments, load_elf, symbols, BASE, SCRATCH, HOOKS, IPOD_HOOKS, WM_PAINT_LEAF, FUNCTIONS, GLOBALS, CONTEXT_DATA, ROOT, source_sha256, sha, PRIVATE_FUNCTIONS, VERSIONS, VERSION, dev_tag
 B=pathlib.Path(sys.argv[1] if len(sys.argv)>1 else 'build')
 payload_syms=symbols(B/'patch.elf')
 manifest=json.loads((B/'manifest.json').read_text())
@@ -20,13 +20,13 @@ variant = manifest.get('variant')
 CF_PLACEHOLDER = 'default_album_flow' if variant=='ipod' else 'default_album_big'
 # iPod writes times as 0:02 and -1:02:05; Legacy keeps stock's 00:02 and -01:02:05.
 def mmss(t): return t if variant=='ipod' else re.sub(r'^(-?)(\d):',r'\g<1>0\2:',t)
-v = VERSIONS.get(variant, '')
+v = TAG + 'M' if manifest.get('model') == 'Shanling M1 Plus' else VERSIONS.get(variant, '')  # the M1's edition
 if manifest.get('release'):  # an M1 Plus release (tools/release_m1.py): its tag, from its name
     from release_m1 import m1_tag
     v = m1_tag(manifest['release']) if manifest.get('model') == 'Shanling M1 Plus' else ''
 assert v and manifest['version'] == (dev_tag(manifest['dev'], v[-1]) if manifest.get('dev') else v), 'Wrong variant/version'
-assert (manifest.get('compact_code') != []) == (variant == 'ipod')
 is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
+assert is_m1plus or (manifest.get('compact_code') != []) == (variant == 'ipod')
 KILLALL = 'killall -9 librespot q2-soloify aplay' if is_m1plus else 'killall -9 librespot aplay'  # SPOT_KILL's: the Soloify relay shares librespot's pid file
 from m1plus import call_sites, call_site_words, M1PLUS_FUNCTIONS
 SITES = call_sites(is_m1plus)  # this model's call-site patches (m1plus.py CALL_SITES); a missing one is NOT PORTED

@@ -5,7 +5,7 @@ build.py keeps upstream's Q2 code; its build() hands an M1 Plus input to build()
 (docs/m1plus-roadmap.md U1). The pipeline reuses build.py's helpers and tables where V2.1 matches V1.32,
 and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
-from build import (ROOT, TIMEZONES, TIMEZONE_ORDER, VERSION, VERSIONS, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
+from build import (ROOT, TIMEZONES, TIMEZONE_ORDER, VERSION, TAG, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
                    REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, WIFI_LPS, ICONS,
                    STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
@@ -948,10 +948,10 @@ def takes(path):
 
 def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     """m1_release: an M1 Plus release's (name, tag), from tools/release_m1.py: the tag instead of
-    VERSIONS', and the name in About and the manifest."""
-    check(not ipod, 'M1 Plus has no iPod build yet')
-    variant = 'stock'
-    version = VERSIONS[variant]
+    the build's own, and the name in About and the manifest."""
+    # The iPod UI is the only UI (docs/m1plus-ipod-ui.md), so --ipod changes nothing; M is the M1's edition
+    variant = 'ipod'
+    version = TAG + 'M'
     out.mkdir(parents=True, exist_ok=True)
     dev_count = 0
     if dev:  # the next number in the untracked .build-number
