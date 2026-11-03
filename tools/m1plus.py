@@ -344,7 +344,8 @@ def call_site_words(m1plus, ps):
 # The port report (test/m1plus/ports.py): each Q2 hook and call site the M1 doesn't have by the same
 # name, or for a hook the same payload symbol, as (status, why). ported: by another route; native: V2.1
 # does it itself; q2only: by design (docs/m1plus-roadmap.md, "Already Q2-only by design"); unported:
-# a roadmap U4 row. IPOD_HOOKS are Q2 only as a group (roadmap section 5). A sync adds a row for each
+# a roadmap U4 row. Each IPOD_HOOKS entry the M1 doesn't hook has its own unported row, naming the
+# docs/m1plus-ipod-ui.md item that ports it. A sync adds a row for each
 # new upstream hook or site it doesn't port, and the report fails until it has one.
 M1PLUS_PORTS = {
     # Hooks
@@ -377,6 +378,15 @@ M1PLUS_PORTS = {
                                            'its editor (m1plus_nav_playlist_hold.inc)'),
     'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
+    # The iPod UI's hooks (docs/m1plus-ipod-ui.md Phase 4): the shared C compiles with IPOD=1, but each of these is
+    # unhooked until its item ports it
+    'style_get_color': ('unported', 'the iPod accents and Light Mode recolour the styles (ipod-ui 4.1)'),
+    'image_manager_add': ('unported', "the iPod theme's images and Light Mode's flip (ipod-ui 4.1)"),
+    'ui_loader_load_widget_with_parent': ('unported', "Centred Now Playing's page, on every window's load (ipod-ui 4.1)"),
+    'systembar_showface': ('unported', "the status bar's play state, before any paint (ipod-ui 4.2)"),
+    'list_get_img_pic': ('unported', "song rows' format badge (ipod-ui 4.4)"),
+    'bigcover_page_init': ('unported', "the big cover's page (ipod-ui 4.6)"),
+    'playlist_rebuild': ('unported', "the playlist rebuild's iPod rows (ipod-ui 4.7)"),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -495,9 +505,21 @@ M1PLUS_PRIVATE_FUNCTIONS = {
 }
 # V1.32 routines V2.1 has no twin of yet, called only from a Q2 hook the M1 leaves unported: declared
 # with no address, so the page compiles and --gc-sections drops it. The link fails if live code
-# reaches one. Each goes with its hook's U4 row.
+# reaches one (not for navigation.c: M1PLUS_SHIMS). Each goes with its hook's U4 row.
 M1PLUS_UNRESOLVED = {
     'fwupdate_tf': 'Network Update (netupdate.c): stock\'s TF card update, systemset_fwupdate_page_init unported',
+}
+# V1.32 routines V2.1 has no twin of that navigation.c names, which is one section (the tests call its unhooked
+# routines, so --gc-sections cannot drop any): a stand-in in patch/m1plus_nav.h under the same name, as (status, why).
+# The shipped payload drops the ones nothing calls. native: V2.1 does it itself; q2only: by design; unported: the
+# docs/m1plus-ipod-ui.md item that ports it. test/m1plus/ports.py reports them.
+M1PLUS_SHIMS = {
+    'player_start': ('native', "ringnav_boot's boot resume (BOOT_MODE_CALL), which V2.1 does itself; no hook calls it"),
+    'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
+    'playing_timer_start': ('unported', "Now Playing's position timer, for the scrub (ipod-ui 4.6)"),
+    'playing_timer_clear': ('unported', "Now Playing's position timer, for the scrub (ipod-ui 4.6)"),
+    'tk_str_end_with': ('ported', "its own C: V2.1's AWTK lacks it"),
+    'image_manager_unload_bitmap_by_name': ('unported', "unloading the big cover's and Home's art by name (ipod-ui 4.5, 4.6)"),
 }
 M1PLUS_FUNCTION_ALIASES = {
     'device_set_volume': 'set_devicevolume',
@@ -784,7 +806,7 @@ def compile_common(out, binary, player=False):
                            f'#define {name} stock_{resumed[name]}_trampoline']
             elif name in syms and syms[name]:
                 header.append(f'#define {name} (({ret} (*)({args}))0x{syms[name]:x}u)')
-            elif name in M1PLUS_UNRESOLVED:
+            elif name in M1PLUS_UNRESOLVED or name in M1PLUS_SHIMS:
                 header.append(f'extern {ret} {name}({args});')
         # build.py has already checked each is a one-byte global (or, on V2.1, a byte or word).
         stubbed = dict(stubs)
@@ -795,7 +817,7 @@ def compile_common(out, binary, player=False):
                 header.append(f'#define {name} (*(volatile unsigned char *)0x{syms[name]:x}u)')
     (out/'peq_platform.h').write_text('\n'.join(header)+'\n')
     (out/'peq_imports.S').write_text('\n'.join(asm)+'\n')
-    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=0', '-DM1PLUS=1']
+    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=1', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
     for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
@@ -851,7 +873,8 @@ def patch_player(raw, out):
 def compile_payload(out):
     """Compile and link the payload."""
     extra = compile_common(out, out/'stock-demo')  # also writes the libc/libcstl imports navigation.c uses
-    flags = [*FLAGS, '-DIPOD=0', '-DM1PLUS=1']
+    # -Wno-unused-function: the Q2 pages M1 replaces (ringnav_display) are out, and their iPod helpers (setting_click) with no caller
+    flags = [*FLAGS, '-DIPOD=1', '-DM1PLUS=1', '-Wno-unused-function']
     run('clang',*flags,'-I',out,'-c',ROOT/'patch/navigation.c','-o',out/'navigation.o')
     asm = ['.set noreorder', '.text']
     active_hooks = M1PLUS_HOOKS
@@ -987,6 +1010,8 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
     symbol_table = run('readelf', '-Ws', demo)
     syms = symbols(demo, symbol_table)
     header = [f'#define RING_STEP {RING_STEP}']
+    # Classic's bold font (4.1) comes with the iPod assets: no range, so bold_label never picks it
+    header.append('#define BOLD_RANGES {0, 0}')
     # navigation.c's ringnav_timezone and ringnav_timezone_row name them; their hooks, select_timezone and
     # timezone_row, are unported (M1PLUS_PORTS)
     header.append('#define TIMEZONE_NAMES {' + ','.join(json.dumps(zone) for _, zone in TIMEZONES) + '}')

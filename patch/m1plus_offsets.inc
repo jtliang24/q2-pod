@@ -788,3 +788,36 @@ static inline int arc_out(int r, int y) {
 
 /* Folder videos stay off until folder_click is ported; no V2.1 return address matches zero. */
 #define LOAD_DIRECTORY_RET M1_UNPORTED
+
+/* iPod UI (docs/m1plus-ipod-ui.md, Phase 1): the shared C compiles with IPOD=1, so the iPod code inside
+ * routines the M1 already hooks (ringnav, ringnav_playing, the paint hooks, lyric_poll) is live. A name
+ * it reads gets a value that can't fault; the Phase 4 item that ports the feature replaces it. */
+/* Timing is behaviour, not device: Q2's values. */
+#define MARQUEE_HOLD_MS 1500
+#define LYRIC_PUSH_DETENTS 2
+#define LYRIC_PUSH_MS 1000
+#define DRIFT_ZOOM_PCT 110
+#define DRIFT_X_MS 20000
+#define DRIFT_Y_MS 26000
+#define DRIFT_TICK_MS 200
+#define DRIFT_MAX_STEP_MS 500
+/* No drift texture until the iPod Home art is ported (4.5): home_tex's tw <= DRIFT_TEXELS / th then
+ * fails, so it draws nothing. */
+#define DRIFT_TEXELS M1_UNPORTED
+/* The screen glass is square (CORNER_R 0), so nothing keeps clear of a rounded corner. */
+#define GLASS_R 0
+#define GLASS_SLACK 4
+#define BC_TITLE_PAD 12 /* the song name's inset from the art's sides */
+#define HOME_FULL_CHEVRON_SHIFT 10
+/* The confirm pop-up's prompt (4.7): 0 matches no child (y + h > 0), so confirm_prompt leaves it alone. */
+#define CONFIRM_TOP M1_UNPORTED
+#define CONFIRM_PROMPT_PX M1_UNPORTED
+/* Addresses read by routines the M1 doesn't hook (compact_*, ipod_list_layout, ringnav_style_gradient:
+ * 4.1, 4.3, 4.4). */
+#define DEFAULT_LAYOUT_VTABLE M1_UNPORTED_ADDR
+#define LIST_VIEW_LAYOUT M1_UNPORTED_ADDR
+#define STYLE_COLOR_GRADIENT_RET M1_UNPORTED_ADDR
+/* V2.1 has no long Return (HOLD_RETURN is Q2 only), so nothing arms the latch: a zero byte of the
+ * payload's own, which stays zero for good. */
+extern unsigned char m1_return_latch;
+#define RETURN_RELEASE_LATCH ((unsigned)&m1_return_latch)

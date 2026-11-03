@@ -292,8 +292,15 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     from build import (sha, run, fileoff, segments, symbols, BASE, RTC_WRITE, WIFI_LPS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ,
                        OBSOLETE, HELPER, BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO)
     from m1plus import (pic_gp, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS, PDR_M1PLUS, RTC_READ_M1PLUS,
-                        call_site_words, M1PLUS_PRIVATE_FUNCTIONS)
+                        call_site_words, M1PLUS_PRIVATE_FUNCTIONS, M1PLUS_SHIMS, M1PLUS_UNRESOLVED)
     ps = symbols(directory/'patch.elf')
+    # A shim is a stand-in some payload source calls (a row nothing uses is dropped), and the stand-in is defined once.
+    nav = (ROOT/'patch/m1plus_nav.h').read_text()
+    users = ''.join(f.read_text() for f in (ROOT/'patch').glob('*.[ch]') if f.name != 'm1plus_nav.h')
+    for name in M1PLUS_SHIMS:
+        assert len(re.findall(rf'^\w[\w *]* {name}\(', nav, re.M)) == 1, f'{name}: no stand-in in m1plus_nav.h'
+        assert re.search(rf'\b{name}\(', users), f'{name}: no payload source calls it; drop its M1PLUS_SHIMS row'
+    assert not any(name in ps for name in M1PLUS_UNRESOLVED)
     payload = (directory/'patch.bin').read_bytes()
     assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
     # Only the Stock UI exists for M1 Plus so far.

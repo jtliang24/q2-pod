@@ -6,7 +6,7 @@ the unported rows, for the roadmap's U4."""
 import argparse, collections, re, sys
 sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first
 from build import ROOT, HOOKS, IPOD_HOOKS
-from m1plus import CALL_SITES, M1PLUS_HOOKS, M1PLUS_PORTS
+from m1plus import CALL_SITES, M1PLUS_HOOKS, M1PLUS_PORTS, M1PLUS_SHIMS, M1PLUS_UNRESOLVED
 
 STATUSES = ('ported', 'native', 'q2only', 'unported')
 UNPORTED = ('M1_UNPORTED', 'M1_UNPORTED_ADDR')  # patch/m1plus_offsets.inc's values for an unported name
@@ -31,7 +31,6 @@ def report():
             if row: problems.append(f'hook {name}: M1PLUS_PORTS says {row[0]}, but the M1 hooks it ({same}); drop the row')
             rows.append(('hook', name, 'ported', '' if same == name else f'as {same}'))
         elif row: rows.append(('hook', name, *row))
-        elif name in IPOD_HOOKS: rows.append(('hook', name, 'q2only', 'the iPod UI (roadmap 5)'))
         else: problems.append(f'hook {name} ({symbol}): not on M1 and not in M1PLUS_PORTS')
     for name in CALL_SITES['q2']:
         row = ports.pop(name, None)
@@ -41,6 +40,11 @@ def report():
         elif row: rows.append(('site', name, *row))
         else: problems.append(f'site {name}: not on M1 and not in M1PLUS_PORTS')
     problems += [f'{name}: M1PLUS_PORTS has a row, but the Q2 has no such hook or call site' for name in ports]
+    # Functions V2.1 has no twin of: a shim is the payload's own stand-in, an unresolved one is never reached.
+    rows += [('function', name, *status_why) for name, status_why in M1PLUS_SHIMS.items()]
+    rows += [('function', name, 'unported', why) for name, why in M1PLUS_UNRESOLVED.items()]
+    problems += [f'function {name}: status {status!r} is not one of {STATUSES}'
+                 for name, (status, _) in M1PLUS_SHIMS.items() if status not in STATUSES]
     # Names: the M1 compile fails on any name shared code the M1 builds uses without a value, so a Q2
     # name with none is used only by Q2 code.
     inc = (ROOT/'patch/offsets.inc').read_text()
@@ -49,7 +53,7 @@ def report():
     m1 = defines((ROOT/'patch/m1plus_offsets.inc').read_text())
     for name in q2:
         if name not in m1: rows.append(('name', name, 'q2only', 'used only by Q2 code'))
-        elif m1[name] in UNPORTED: rows.append(('name', name, 'unported', 'its code is unreachable on M1'))
+        elif m1[name] in UNPORTED: rows.append(('name', name, 'unported', 'its code is unreachable or inert on M1'))
         else: rows.append(('name', name, 'ported', ''))
     problems += [f'name {name}: M1_UNPORTED, but the Q2 has no such name'
                  for name, value in m1.items() if value in UNPORTED and name not in q2]
@@ -82,7 +86,7 @@ def main():
     if problems: sys.exit('Port report:\n' + '\n'.join(f'  {p}' for p in problems))
     if not args.unported:
         counts = collections.Counter((kind, status) for kind, _, status, _ in rows)
-        for kind in ('hook', 'site', 'name'):
+        for kind in ('hook', 'site', 'function', 'name'):
             total = sum(n for (k, _), n in counts.items() if k == kind)
             print(f'{kind}s: {total} ({", ".join(f"{counts[kind, s]} {s}" for s in STATUSES if counts[kind, s])})')
         print()
