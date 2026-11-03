@@ -3116,8 +3116,32 @@ changed, 26 added, 5 removed of 1,270; `navigation.o` 145 (most the unifdef), `a
   rows after it; Stop Streaming Services.
 - App Store: no Erase row, Subsonic listed; Remove of Soloify keeps `.soloify/remote`, `.delay`, `.quality`.
 - A card app's page (Deezer or Soulseek): lists, a progress row's bar under its caption, playback.
-- Library: the Games row (on M1 since Phase 1); Long Songs, Era, Books, Photos, Coverflow, Shuffle Songs.
+- Library: Long Songs, Era, Books, Photos, Coverflow, Shuffle Songs.
 - Now Playing and lyrics: the cover, the knob scrub, a lyric page.
+
+**Device pass (Nov 3, over q2remote through `tools/wsl_relay.py`, the laptop's hotspot).** The user flashed
+V02Hm through the menu updater; About reads 1.5.9 dev 2 and the running `/release/bin/demo` matches the build's
+(`5474bd22…`). Before it, `config.ini`, the DB and the EQ files went to `.q2/backup-pre-V02Hm/` and the old image
+to `.q2/update-V02Gm.bin`. Screen Off was Off for the pass and is back to 1 minute (`LIGHTTIME=3`). demo kept one
+pid throughout, and kmsg had no fault (one `es9069q_hw_params` a track start). Passed:
+- The outline on the Q2 Pod page, System Setting and the native lists, following the knob (Knob Up is List Up:
+  the knob sits on the right side, so a clockwise turn goes up the list).
+- Long Songs, Era, Photos, Books, Coverflow (the cover, its reflection, a knob turn), Shuffle Songs.
+- Now Playing: the cover, the knob scrub (a press, six detents to 01:03, a press seeks); the lyric page of a
+  track with an `.lrc` follows the song.
+- Configuration: Erase Spotify Data's two presses ("Press again…", "Erasing…", back), `.spotify/cache` gone and
+  Spotify Cache at 2 GB, the cache put back from a copy after; Soloify's rows after it; Stop Streaming Services.
+- App Store: no Erase row, Subsonic listed. A card app (Podcasts): its page, a download, playback.
+
+Not checked on the device:
+- Soloify's Remove: Soloify has no release yet, so its row reads Update, never Installed, and Remove is offered
+  only on an installed row. The keep list is `special[]`'s row (`73ecc40`).
+- A progress row's bar: Podcasts sends none (its states are captions), and Deezer and Soulseek need accounts.
+  `patch.py`'s case (`3930462`) covers it.
+- Games: not reachable on the M1, the checklist's row was wrong (`m1plus-unported.md`'s Games note corrected).
+
+Seen, not the build's: the hotspot's DHCP gave the device no DNS server (`/tmp/resolv.conf` empty; the App
+Store said "Can't reach GitHub"); 1.1.1.1 was set for the pass and the file emptied after.
 
 ## How to check a build now
 

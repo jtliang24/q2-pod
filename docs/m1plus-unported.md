@@ -107,8 +107,9 @@ lists each iPod hook as `unported` with the Phase 4 item that ports it (`style_g
 
 ### Games
 
-Games are the iPod UI's. Their Library row (`ringnav_localmusic`) has been on the M1 since it compiled the
-iPod path, and 1.5.9 dropped its `#if IPOD`. They stay unplanned
+Games are the iPod UI's. `games.c` has compiled on the M1 since the iPod path did, but its Library row is
+`ringnav_localmusic`'s, which the M1 doesn't hook: its Library rows are the Q2 Pod page's
+(`m1plus_nav_library.c`), which has no Games row, so they can't be opened. They stay unplanned
 within the iPod UI port ([m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.8), and they changed again in
 1.4.2 and 1.4.5 (Snake). They use the Return key, which the M1 lacks, so they need a touch design first.
 
