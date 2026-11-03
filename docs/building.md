@@ -35,7 +35,7 @@ python3 tools/build.py 'Q2 Firmware V1.32.zip' --out /tmp/q2-dev --ipod --dev   
 python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out /tmp/m1plus-build   # or 'M1 Plus Firmware V2.1/update.bin'
 ```
 
-M1 Plus has only the Stock UI so far: `--ipod` is refused for it.
+M1 Plus builds the iPod variant only (`V158M`); `--ipod` changes nothing for it. The iPod assets are not patched yet ([m1plus-ipod-ui.md](m1plus-ipod-ui.md)), so it still looks like Stock.
 
 M1 Plus work must not break the Q2. Q2 builds stay byte-identical to the build of the upstream release the
 branch is level with, and every Q2 test keeps passing. The rule, its status and how to check

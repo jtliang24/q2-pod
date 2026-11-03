@@ -97,8 +97,10 @@ This replaces the Oct 26 decision to keep V2.1's own look. Upstream 1.5.9 delete
 M1 compiles, and the M1's mix of V2.1 pages and Q2 Pod pages is clunky (roadmap section 5). The iPod
 UI is built for the Q2's 375x320 landscape screen and touch wheel, and patches V1.32's UI assets,
 styles and code layout. The M1 version reflows it for the 320x480 portrait touchscreen and knob, and
-rewrites V2.1's assets the same way. Its iPod hooks stay `q2only` in the port report until each is
-ported.
+rewrites V2.1's assets the same way. Phase 1 is done: the M1 compiles the iPod path, and the port report
+lists each iPod hook as `unported` with the Phase 4 item that ports it (`style_get_color`,
+`image_manager_add`, `widget_on_paint_background` and `ui_loader_load_widget_with_parent` 4.1;
+`systembar_showface` 4.2; `list_get_img_pic` 4.4; `bigcover_page_init` 4.6; `playlist_rebuild` 4.7).
 
 ### Games
 

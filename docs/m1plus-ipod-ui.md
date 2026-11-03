@@ -59,39 +59,34 @@ Verification steps below.
    - `compile_payload()` already gives each `HOOKS | IPOD_HOOKS` symbol that `M1PLUS_HOOKS` lacks a
      `jr $ra; move $v0, $zero` trampoline, so the payload links without any new hook entry. There is no
      `IPOD_LEAF` (`style_get_gradient`) jump, and no `--undefined` for it, until Phase 4.1.
-   - Fix the `#if IPOD` compile errors (about 80 sites, mostly in `navigation.c` and `coverflow.c`) one
-     at a time. Where the code names a Q2 iPod asset, name or offset that `patch/m1plus_offsets.inc` lacks,
-     add an `#if M1PLUS` stub. Never invent a V2.1 value.
-   - `M1PLUS_PORTS`: give each `IPOD_HOOKS` entry its own `unported` row naming its Phase 4 item, e.g.
-     `'style_get_color': ('unported', 'iPod UI paint backbone (m1plus-ipod-ui.md 4.1)')`. Rewrite the
-     comment that says "IPOD_HOOKS are Q2 only as a group".
-   - `test/m1plus/ports.py`: drop the blanket `q2only` rule for `IPOD_HOOKS`, so they get the same row
-     check as any Q2 hook. If a stub covers something other than a hook or call site, add a row kind for
-     it rather than leave it untracked.
+   - The compile had 46 errors from 26 names, not about 80. Much of the `#if IPOD` code sits in routines
+     the M1 already hooks (`ringnav`, `ringnav_playing`, the paint hooks, `lyric_poll`), so it is live
+     at once. The policy (the user's choice, Nov 2) is the safe stand-in: every missing name gets a value
+     that cannot fault, what needs no iPod asset goes live now, and what is wrong becomes a gap. Names go in
+     `patch/m1plus_offsets.inc`; functions V2.1 lacks get a stand-in in `patch/m1plus_nav.h`
+     (`M1PLUS_SHIMS`). Never invent a V2.1 value.
+   - A one-off, uncommitted audit (`M1_UNPORTED_ADDR` as an undefined symbol, and the payload with
+     `-ffunction-sections` so `--gc-sections` drops what no hook reaches) shows which unported addresses
+     live code reads: none.
+   - `M1PLUS_PORTS`: each `IPOD_HOOKS` entry has its own `unported` row naming its Phase 4 item.
+     `test/m1plus/ports.py` has a `function` row kind for the stand-ins and unresolved routines.
+   - Found while testing: with `IPOD=1` the selection bar is drawn behind the rows by
+     `widget_on_paint_background`, which hides it behind V2.1's opaque rows. The M1 keeps Stock's outline
+     (`IPOD_BAR`) until 4.1's row styles.
 2. **`feat(m1plus): build the iPod variant only`**
-   - `tools/m1plus.py` `build()`:
-     - drop `check(not ipod, 'M1 Plus has no iPod build yet')`;
-     - set `variant = 'ipod'` with or without `--ipod`;
-     - add the M1's own tag, `TAG + 'M'`, so dev builds are `dev_tag(n, 'M')` (`V001m`);
-     - release tags are still `release_m1.m1_tag`'s (`V1581`).
-   - `test/m1plus/build.py`:
-     - `m1plus_checks()` asserts `variant == 'ipod'` in place of "Only the Stock UI exists";
-     - the "no iPod build" refusal test becomes a check that `ipod=True` and `ipod=False` produce the
-       same M1 build;
-     - the dev-tag checks cover `'m'` and keep the M1 tag apart from `VERSIONS`.
-   - `test/m1plus/patch.py`: when `is_m1plus`, the version check expects the M1 tag.
-3. **`test(m1plus): mark the iPod checks the M1 doesn't pass yet as known gaps`** (the user's choice,
-   Nov 2)
-   - Run `test/m1plus/patch.py` on the Phase 1 build and sort its failing `variant=='ipod'` branches (about
-     40):
-     - one that needs an unported asset or hook is wrapped in `known_gap('<feature> (4.N)', ...)`;
-     - one that tests only `IPOD=1` C behaviour (row fast-scroll counts, key handling) must pass as it
-       is. If it fails, that is a bug to fix, not a gap to mark.
-   - `known_gap` fails once its check passes, so each Phase 4 item removes its own markers.
-4. **`docs(m1plus): record Phase 1`**
-   - Add a progress section: what changed, the gap list and the device check.
-   - Roadmap section 5: drop "Until the plan's Phase 1 lands, `--ipod` is refused".
-   - The unported list's iPod UI row lists the hooks as unported, by phase.
+   - `tools/m1plus.py` `build()`: `variant = 'ipod'` with or without `--ipod`; the M1's tag is
+     `TAG + 'M'` (dev builds `V001m`); release tags are still `release_m1.m1_tag`'s (`V1581`).
+   - `test/m1plus/build.py` and `patch.py` expect the variant and tag; `--ipod` builds the same payload.
+   - Knob: Navigation is the default on the M1 (`pod_default`), since the iPod UI has no wheel.
+3. **`test(m1plus): list the patch.py checks the iPod UI gaps fail`** (the user's choice, Nov 2, in place
+   of hand-wrapping each in `known_gap`)
+   - `patch.py` fails 127 top-level checks on the M1, from about 25 causes. On the M1 it runs each one on its own
+     (`test/m1plus/gaprun.py`) against `test/m1plus/patch_gaps.py`, which lists each expected failure under the
+     Phase 4 item that ports it. A listed check that passes, or an unlisted failure, fails the run; each
+     Phase 4 item removes its own entries. A check of pure `IPOD=1` C behaviour must pass: if one fails, that
+     is a bug.
+   - The harness enters the unhooked `IPOD_HOOKS` routines directly.
+4. **`docs(m1plus): record Phase 1`** ([progress](m1plus-progress.md) section 57).
 
 **Gate:** the M1 builds, the Verification steps pass (`patch.py` lists its known gaps and has no
 failures), and a `--dev` build flashed through the menu updater boots to a working, still stock-looking

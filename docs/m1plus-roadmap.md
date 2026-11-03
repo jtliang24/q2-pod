@@ -363,10 +363,10 @@ look:
 - the M1's mix of V2.1 pages and Q2 Pod pages is clunky to move between.
 
 The iPod UI patches V1.32's UI assets, styles and code layout, and assumes the Q2's 375x320 landscape
-screen and touch wheel, so the M1 version reflows it for a 320x480 portrait touchscreen with a knob. Until
-the plan's Phase 1 lands, `--ipod` is refused for M1 Plus. Two `test/m1plus/patch.py` checks go with the
-port: the library rows' title bounds (`compact_row_layout`) and the info pages' unwind
-(`navigator_close`). In the Stock UI each runs V1.32's own code as a control.
+screen and touch wheel, so the M1 version reflows it for a 320x480 portrait touchscreen with a knob. Phase 1
+([progress](m1plus-progress.md) section 57) built the M1 as the iPod variant with no iPod assets. Two
+`test/m1plus/patch.py` checks go with the port: the library rows' title bounds (`compact_row_layout`) and the
+info pages' unwind (`navigator_close`). Both are in `test/m1plus/patch_gaps.py` until their Phase 4 items.
 
 ## 6. Tooling and release
 

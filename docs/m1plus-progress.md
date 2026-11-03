@@ -2949,6 +2949,64 @@ bridge's encoder show them) and the Apps row passed. Open: scrub through Now Pla
 Centre press turns into a screen lock (Knob: Navigation on). The full table is in q2-soloify's
 `docs/step5.md`; the checks were driven through q2remote. No release was cut: the changelog entry waits for one.
 
+## 57. The M1 compiles the iPod path (Nov 2)
+
+Phase 1 of [m1plus-ipod-ui.md](m1plus-ipod-ui.md). The M1's payload and shared C compile with `IPOD=1`,
+the build is the iPod variant (`V158M`, dev tags `V001m`), and no iPod asset is patched yet. Q2 Legacy and
+iPod `update.tar` stay byte-identical to 1.5.8's (`q2compare.py`).
+
+**What the compile needed.** 46 errors from 26 names (the plan guessed 80): `patch/m1plus_offsets.inc` has
+Q2's timing values, square glass corners (`GLASS_R 0`), `M1_UNPORTED` for the confirm and drift values
+(inert), `M1_UNPORTED_ADDR` for the three addresses only unhooked routines read, and a permanently zero
+Return latch (`m1_return_latch`). `BOLD_RANGES` is empty, so Classic's bold never applies.
+
+**Stand-ins (`M1PLUS_SHIMS`, `patch/m1plus_nav.h`).** `navigation.c` is one section (the tests call its
+unhooked routines), so every name it uses needs a definition: `buzzeer_switch` (q2only),
+`playing_timer_start`/`clear` (4.6), `image_manager_unload_bitmap_by_name` (4.5, 4.6), `player_start` (native)
+and `tk_str_end_with`, which is real code. The Q2 wheel's `wheel_raw`, `wheel_travel` and `wheel_held` stay
+zero. `test/m1plus/build.py` checks that each shim is still called. `ports.py` reports them and each
+unhooked `IPOD_HOOKS` entry as `unported`, with its Phase 4 item.
+
+**An audit, not committed.** Building once with `M1_UNPORTED_ADDR` as an undefined symbol and the payload
+compiled with `-ffunction-sections` (so `--gc-sections` drops what no hook reaches) linked cleanly: no
+routine a hook reaches reads an unported address.
+
+**Decisions on the way.**
+- *Selection.* With `IPOD=1` the selection bar is drawn behind the rows by `widget_on_paint_background`.
+  Hooking it showed nothing, because V2.1's rows paint an opaque background (the iPod row styles, 4.1,
+  make them transparent). The hook was reverted, and `IPOD_BAR` (`navigation.c`) keeps Stock's outline and
+  Home card on the M1 until 4.1. Q2's bytes are unchanged.
+- *Knob: Navigation is the default* (`pod_default`), since the iPod UI has no wheel. `boot.py` seeds
+  `KNOB=0` so its walk still starts on V2.1's volume knob.
+
+**Tests.** `patch.py` drives Q2's iPod build, so most of it fails on the M1 for lack of its assets and hooks:
+127 top-level checks, from about 25 causes. On the M1 `test/m1plus/gaprun.py` runs them one at a time and
+`test/m1plus/patch_gaps.py` lists the expected failures under the Phase 4 item that ports each (a listed
+check that passes, or a failure not listed, fails the run). The harness enters the unhooked
+`IPOD_HOOKS` routines directly. `playback.py` and `headset_io.py` are unchanged.
+
+| Gap | Checks |
+|---|---|
+| selection bar and paint backbone (4.1) | 27 |
+| style, image and loader hooks (4.1) | 2 |
+| iPod UI assets (3) | 3 |
+| Library rows (4.4) | 79 |
+| pull to search (4.4), hold Return (4.4) | 4 |
+| Home and the Q2 Pod page, boot resume, Coverflow insets (4.5) | 5 |
+| Now Playing, big cover (4.6) | 6 |
+| Lock screen battery (4.2) | 1 |
+
+Most of Library rows is two cascades (Photos, Books). Two entries hide possible real faults on the device:
+the Home card's click handler (`patch.py` line 9519) and Now Playing's open (`ringnav_playing`, line 6799),
+which crashes the emulator on a jump to 0 in the iPod path. The device pass checks both.
+
+**Gates.** `build.py`, `patch.py`, `boot.py` (plain, `--home-menu`, `--media`), `playback.py`, `m4b`, `id3`,
+`headset_io`, `ldac`, `bluealsa`, `ports.py` and `q2compare.py` pass.
+
+**Device check: not done.** Flash a `--dev` build and walk Home, Library, Settings, Now Playing, Quick
+Settings and lyrics over q2remote, with Screen Off set to Off first. Expect Stock's outline, the stock look,
+Previous as Back, and the knob moving the selection.
+
 ## How to check a build now
 
 ```sh
