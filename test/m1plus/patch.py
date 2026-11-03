@@ -12251,7 +12251,7 @@ if 'usbmode_page_init' in HOOKS:
     m.pick(2); m.answer('ok','refresh','',PROG); assert m.labels()[:3]==['Downloads','47%','112 of 240 songs'],m.labels()
     def prog_bar(i): return next(v for v in m.nodes if m.nodes[v]['type']=='view' and m.get(v+O['W_PARENT'])==m.rows()[i])
     def prog_paint(i): m.rounded.clear(); m.bands.clear(); m.call(address=HOOKS['widget_on_paint_border'][0],args=(prog_bar(i),m.canvas,0,0)); return [b[:4] for b in m.bands]
-    x,w=O['CF_EDGE'],375-2*O['CF_EDGE']
+    x,w=(O['PAGE_ROW_X'],O['PAGE_ROW_W']) if is_m1plus else (O['CF_EDGE'],375-2*O['CF_EDGE'])  # M1 Plus: V2.1's row caption's
     assert cf_geometry(m,prog_bar(0))==(x,44,w,8),cf_geometry(m,prog_bar(0))
     assert prog_paint(0)==[(0,0,w,8),(0,0,w*470//1000,8)] and not m.rounded and m.bands[0][4]==0xff3a3a3a!=m.bands[1][4],(m.bands,m.rounded)
     assert prog_paint(1)==[(0,0,w,8),(0,0,w,8)] and prog_paint(2)==prog_paint(3)==[(0,0,w,8)] and prog_paint(4)==prog_paint(1) and prog_paint(5)==prog_paint(2) and not m.rounded,(m.bands,m.rounded)
