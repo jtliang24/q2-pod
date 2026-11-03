@@ -26,7 +26,12 @@ if manifest.get('release'):  # an M1 Plus release (tools/release_m1.py): its tag
     v = m1_tag(manifest['release']) if manifest.get('model') == 'Shanling M1 Plus' else ''
 assert v and manifest['version'] == (dev_tag(manifest['dev'], v[-1]) if manifest.get('dev') else v), 'Wrong variant/version'
 is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
-assert is_m1plus or (manifest.get('compact_code') != []) == (variant == 'ipod')
+assert is_m1plus or (manifest.get('compact_code') != []) == (variant == 'ipod')  # M1's: known_gap below
+if is_m1plus and 'GAP_RUN' not in globals() and pathlib.Path(__file__).name == 'patch.py':  # not playback.py's and headset_io.py's copies of the head  # the checks below one at a time, the iPod UI's gaps expected to fail (gaprun.py)
+    GAP_RUN = True
+    import gaprun, patch_gaps
+    gaprun.run(__file__, globals(), sys._getframe().f_lineno, patch_gaps.GAPS)
+    sys.exit(0)
 KILLALL = 'killall -9 librespot q2-soloify aplay' if is_m1plus else 'killall -9 librespot aplay'  # SPOT_KILL's: the Soloify relay shares librespot's pid file
 from m1plus import call_sites, call_site_words, M1PLUS_FUNCTIONS
 SITES = call_sites(is_m1plus)  # this model's call-site patches (m1plus.py CALL_SITES); a missing one is NOT PORTED
@@ -57,6 +62,8 @@ if is_m1plus:
     # Every hook a test enters is one V2.1 really jumps from (the renames above are the same entries).
     assert set(HOOKS.values()) <= set(M1PLUS_HOOKS.values())
     WM_PAINT_LEAF = WM_PAINT_LEAF_M1PLUS
+    # The iPod hooks V2.1 doesn't jump from yet (M1PLUS_PORTS): a test enters each routine directly
+    IPOD_HOOKS = {name: (payload_syms[symbol], symbol, resume) for name, (_, symbol, resume) in IPOD_HOOKS.items()}
     FREE_GOT = 0xa032f4
     # The styles V2.1's theme has: one the payload uses that it lacks leaves the widget unstyled, as a
     # Q2 style named by a literal in shared C, not by its STYLE_* (patch/m1plus_q2.inc), would.
@@ -802,6 +809,9 @@ def known_gap(name, check):
     except AssertionError as e:  # the failing line is shown, so a harness assert can't pass for the gap
         GAPS.append(name); print(f'KNOWN GAP: {name}\n    {traceback.extract_tb(e.__traceback__)[-1].line} {e}'.rstrip()); return
     raise AssertionError(f'Gap fixed, remove its known_gap marker: {name}')
+if is_m1plus:
+    def compact_rows(): assert manifest.get('compact_code') != []
+    known_gap('compact rows (ipod-ui 4.4)', compact_rows)
 def row_button(m,row):
     """A list_row's tap target, which holds its icon and label: the list_item on V2.1, its button on V1.32."""
     return row if is_m1plus else m.nodes[row]['children'][0]
@@ -13181,6 +13191,7 @@ else:  # M1 Plus: Display gains Artist Albums, Coverflow Sort and Refresh Coverf
     assert texts()==['Artist Albums: Coverflow','Coverflow Sort: Album','Refresh Coverflow','Knob: Navigation','Knob Up: List Up'] and icons==[None]*5
     assert m.nodes[named(m,m.top,NAMES['VIEW_DISPLAY'])]['children'][-1]==rows[-1]
     assert click(3)==[(0,'Q2POD','KNOB')] and texts()[3]=='Knob: Volume'
+    assert click(3)==[(1,'Q2POD','KNOB')] and texts()[3]=='Knob: Navigation'
     assert click(4)==[(1,'Q2POD','KNOBDIR')] and texts()[4]=='Knob Up: List Down'
     assert click(4)==[(0,'Q2POD','KNOBDIR')] and texts()[4]=='Knob Up: List Up'
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1','KNOBDIR':'1'},stock_rows=3)
@@ -13193,7 +13204,6 @@ else:  # M1 Plus: Display gains Artist Albums, Coverflow Sort and Refresh Coverf
 if not is_m1plus:
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=3,sub=3)
     display_page=m.top; m.stack=[m.top]; m.nodes[m.wm]=dict(type='window_manager',name='',children=m.stack,visible=1)
-    assert click(3)==[(1,'Q2POD','KNOB')] and texts()[3]=='Knob: Navigation'
     assert click(-1)==[] and m.top!=display_page and m.nodes[m.top]['name']=='bootvol_page'
     assert m.nodes[m.title]['text']=='Wheel Sensitivity' and m.nodes[m.switch]['visible']==0 and m.nodes[m.vol]['text']=='50%'
     assert m.nodes[named(m,m.top,'view_bootvol')]['visible']==1 and m.nodes[named(m,m.top,'view_bootvol')]['enable']==1  # touch (#140)
