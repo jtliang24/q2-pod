@@ -3700,6 +3700,20 @@ static int scrub_expire(const void *info) {
     return 0;
 }
 
+/* Starts a scrub on the page's slider: the target is where the slider is, the page's timer stops so
+ * it cannot pull the fill back, and the fill goes to the scrub colour. */
+static void scrub_start(void) {
+    if (!st.np_slider) return;
+    st.scrub = 1;
+    st.scrub_moved = 0;
+    st.scrub_to = widget_get_prop_int(st.np_slider, "value", 0);
+    st.scrub_track = np_track();
+    stop_timer(&st.settle_timer);
+    playing_timer_clear(st.np_win);
+    np_fill(1);
+    rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
+}
+
 /* The lyrics: stock's 250 ms timer scrolls scroll_lrc to the current line whenever it is elsewhere.
  * Once the wheel or a finger moves them they stay (ringnav_lyric_follow), while the timer keeps the
  * bar and the highlight going, until the slide_view leaves the lyrics page or another song starts;
@@ -3931,16 +3945,8 @@ static int np_key(void *top, unsigned key) {
         if (press != 2) return press ? STOP : 0;
         if (st.scrub) /* one press ends a scrub, a double press starts one */
             scrub_end();
-        else if (st.np_slider) {
-            st.scrub = 1;
-            st.scrub_moved = 0;
-            st.scrub_to = widget_get_prop_int(st.np_slider, "value", 0);
-            st.scrub_track = np_track();
-            stop_timer(&st.settle_timer);
-            playing_timer_clear(st.np_win);
-            np_fill(1);
-            rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
-        }
+        else
+            scrub_start();
         return STOP;
     }
     if (np_track() != st.scrub_track) { /* a new track: scrub_end drops the last one's target */
