@@ -470,11 +470,7 @@ unsigned book_back(const unsigned char *t, unsigned n, unsigned pos, int rows, i
 #ifndef BOOK_ROWS
 #define BOOK_ROWS 10
 #endif
-#if IPOD
 #define BOOK_TONE accent_tone(2)
-#else
-#define BOOK_TONE 0xaaaaaa
-#endif
 #define BOOKS_MAX 500 /* ponytail: ringnav navigates at most MAX_ENTRIES (512) rows */
 #define MARKS_N 64    /* books whose page is kept, the most recently read first */
 

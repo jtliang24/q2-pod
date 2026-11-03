@@ -241,7 +241,7 @@ static inline int arc_out(int r, int y) {
     while ((s + 1) * (s + 1) <= v) ++s;
     return 16 * r - s;
 }
-#define PLACEHOLDER (IPOD ? "default_album_flow" : "default_album_big") /* Cover Flow's and Spotify's missing art */
+#define PLACEHOLDER "default_album_flow" /* Cover Flow's and Spotify's missing art */
 #define VOL_POLL_MS 50 /* how often the volume indicator checks for a change */
 /* The volume panel off Now Playing (vol_paint): exactly over Quick Settings' brightness row
  * (tools/ipod.py checks it), its rounded corners clear of the 80px glass corners. */
@@ -739,7 +739,7 @@ static inline int arc_out(int r, int y) {
 #define CF_BRIGHT1 192
 #define CF_BRIGHT2 128
 #define CF_REFLECT 24
-#define CF_REFLECT_TOP (IPOD ? 48 : 64)
+#define CF_REFLECT_TOP 48
 #define CF_STRIDE 100
 #define CF_TEXT_Y 268
 
@@ -789,7 +789,7 @@ static inline int arc_out(int r, int y) {
 /* Folder videos stay off until folder_click is ported; no V2.1 return address matches zero. */
 #define LOAD_DIRECTORY_RET M1_UNPORTED
 
-/* iPod UI (docs/m1plus-ipod-ui.md, Phase 1): the shared C compiles with IPOD=1, so the iPod code inside
+/* iPod UI (docs/m1plus-ipod-ui.md, Phase 1): the shared C is the iPod path alone, so the iPod code inside
  * routines the M1 already hooks (ringnav, ringnav_playing, the paint hooks, lyric_poll) is live. A name
  * it reads gets a value that can't fault; the Phase 4 item that ports the feature replaces it. */
 /* Timing is behaviour, not device: Q2's values. */
@@ -821,3 +821,8 @@ static inline int arc_out(int r, int y) {
  * payload's own, which stays zero for good. */
 extern unsigned char m1_return_latch;
 #define RETURN_RELEASE_LATCH ((unsigned)&m1_return_latch)
+/* Enlarged Album Art's countdown (4.6): V2.1's big cover is unported, so ringnav_sleep's reset goes to a
+ * byte of the payload's own that nothing reads. */
+extern signed char m1_bc_idle;
+#define BC_IDLE ((unsigned)&m1_bc_idle)
+#define BC_IDLE_FULL 40

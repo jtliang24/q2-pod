@@ -9,7 +9,7 @@ still calls it. Why the branch works this way, and what has to be in place first
 The M1 code sits in `tools/m1plus.py`, `patch/m1plus_*` and `test/m1plus/` (U1). These tools check a
 sync (U2):
 - `UPSTREAM_BASE`, at the repo's root, names the upstream tag or commit the branch is level with;
-- `test/q2compare.py` builds it and this tree, Legacy and iPod, and requires byte-identical `update.tar`;
+- `test/q2compare.py` builds it and this tree (the one iPod build since 1.5.9) and requires byte-identical `update.tar`;
 - `test/m1plus/ports.py`, the port report, classifies every Q2 hook, call site and `offsets.inc` name for
   M1. It fails on any it can't place;
 - `test/m1plus/q2only.py` lists the tag's changes inside Q2-only branches, whose M1 side the merge
@@ -177,9 +177,13 @@ release, or at once after a structural step.
       1.2.9's `test/peq.py` fails its Tidal check on `-Wformat-truncation`, upstream's own tree too.
       1.3.8's `test/chapters.py` runs `/usr/bin/ffmpeg`, which NixOS lacks; bind one in with
       bubblewrap: `F=$(nix build --inputs-from . nixpkgs#ffmpeg-headless --no-link --print-out-paths |
-      head -1)/bin/ffmpeg; bwrap --dev-bind / / --tmpfs /usr/bin --ro-bind $F /usr/bin/ffmpeg
-      --ro-bind /usr/bin/env /usr/bin/env sh -c 'TMPDIR=/tmp python3 test/q2compare.py <tag> --suites'`. Legacy and iPod `update.tar`
-      must be byte-identical to `<tag>`'s own build, and the tag's suites must pass on both
+      head -1)/bin/ffmpeg; bwrap --dev-bind / / --overlay-src /usr/bin --tmp-overlay /usr/bin --ro-bind $F
+      /usr/bin/ffmpeg sh -c 'TMPDIR=/tmp python3 test/q2compare.py <tag> --suites'`. An overlay, not a
+      tmpfs: on a merged-`/usr` host (Ubuntu) a tmpfs `/usr/bin` hides `/bin/sh`, so mksquashfs's `F`
+      entries (`cat` through a shell) write every swapped rootfs file empty, the base's build and this
+      tree's alike, and their `update.tar` still match (found Nov 3, at 1.5.9). In a fresh `work/gatetree`,
+      pass `--zip` (its `stock/` is the main tree's), not a `stock` link, which its snapshot would copy. The `update.tar` (Legacy and
+      iPod up to 1.5.8) must be byte-identical to `<tag>`'s own build, and the tag's suites must pass on it
       ([the checklist](m1plus-integration.md#checklist)). It fails on a suite the tag adds that it
       doesn't know how to run (`SUITES`), and names the suites whose text differs from the tag's.
    2. **Q2 scenario counts.** `test/patch.py`'s counts are at least the tag's own: no case dropped or
@@ -254,3 +258,4 @@ stay flat or fall.
 | Merge step: sync to 1.5.5 (Oct 30) | 1.5.5 (`4a23606`) | +1,533/−314 over 32 files: model-specific Folder video return address; existing navigation/seek include seams retained |
 | Merge step: sync to 1.5.8 (Oct 30) | 1.5.8 (`d7c8594`) | +1,554/−310 over 32 files: deferred Coverflow gestures, Simple EQ shortcut and wheel QS seams; native animator easing field |
 | 1.5.8 device-pass fixes (Nov 1) | 1.5.8 (`d7c8594`) | +1,573/−313 over 32 files: `FORCE_REFRESH` after a queue start, the subset resume's three `M1PLUS` lines, `TOO_LONG_PLAY` and `TOO_LONG_CHAPTERS`, and q2remote's Phys parsing |
+| Merge step: sync to 1.5.9 on `feature/m1-ipod` (Nov 3) | 1.5.9 (`43a611f`) | +1,712/−345 over 32 files: Stock's outline moved to `m1plus_nav_outline.c`, Soloify's `special[]` row, the card apps' caps and `library_poll` seams |

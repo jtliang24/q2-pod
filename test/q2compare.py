@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Q2 output against the upstream base: build UPSTREAM_BASE (from git archive) and this tree, Legacy and
-iPod, from the vendor ZIP, and require byte-identical update.tar. On a difference, print the manifest
+"""Q2 output against the upstream base: build UPSTREAM_BASE (from git archive) and this tree from the
+vendor ZIP, and require byte-identical update.tar. On a difference, print the manifest
 components that differ. --suites then runs the base's Q2 suites, as this tree has them, on its builds."""
 import argparse, concurrent.futures, io, json, os, pathlib, shutil, subprocess, sys, tarfile, tempfile
 sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first
 from build import ROOT, ZIP_SHA, sha
 
-VARIANTS = {'legacy': [], 'ipod': ['--ipod']}
+# 1.5.9 deleted Legacy (4fee7d5): the iPod build is the Q2's only one, with no flag.
+VARIANTS = {'ipod': []}
 # Every upstream tree's tools/build.py takes only the audited ZIP, so both sides build from it.
 ZIPS = [ROOT/'stock/Q2 Firmware V1.32.zip']
 CACHE = ROOT/'work/q2compare'  # the base's builds, by commit: a base never changes
@@ -219,7 +220,7 @@ def main():
             print(f'{v}: update.tar DIFFERS from {name}\'s', *differences(m, tree[v]), sep='\n')
     if differ: sys.exit(1)
     if args.suites: suites(commit, src, {v: out/v for v in VARIANTS}, out)
-    print(f'Q2 Legacy and iPod update.tar are byte-identical to {name}\'s build.')
+    print(f'Q2 update.tar is byte-identical to {name}\'s build.')
 
 
 if __name__ == '__main__':

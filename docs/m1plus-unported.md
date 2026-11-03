@@ -21,7 +21,7 @@ to its [progress](m1plus-progress.md) section.
 
 | Feature | Since | Q2 Pod's pieces | Status |
 |---|---|---|---|
-| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8) | In progress |
+| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8); Carousel, Click With Headphones, the art following the player's cover (1.5.9) | In progress |
 | [Games](#games) | 1.3.9 | `games.c`, the iPod UI's Games row | Unplanned |
 | [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone`; `timezone_row`, `TIMEZONES` (1.5.0) | Planned |
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
@@ -54,6 +54,9 @@ to its [progress](m1plus-progress.md) section.
 | [Tidal's cache and Tidal Downloads](#tidal) | 1.2.2 | `tidal_play`, `tidal_downloads`, `REC_TIDAL_ID` | Planned |
 | [Tidal's lists past 50](#tidal) | 1.5.0 | `tidalPlaylistDetailThd`, `tidalAlbumDetailThd`, `tidalColTracksThd`, `TIDAL_PAGE_DONE` | Planned |
 | [Knob: Navigation on the Tidal and HiFi store pages](#tidal) | the M1's own | `m1plus_contexts.inc` rows | Planned |
+| [Card apps' library update](#card-apps-library-update) | 1.5.9 | `addon_library.c` (`library_poll`), `M3U_DIR_CALL`, the caps' `library` | Planned |
+| [An .lrc's UTF-8 test](#an-lrcs-utf-8-test) | 1.5.9 | `mclIsUtf8WithoutBOM` (`ringnav_lrc_utf8`) | Planned |
+| [A playlist row's hold menu](#a-playlist-rows-hold-menu) | 1.5.9 | `qm_hold`'s `QM_PLAYLIST` | Planned |
 
 Era, Western tag/CUE text, hidden-folder exclusions, Streaming Configuration, user-space idle
 changes and lyrics passed the combined device checks in [progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28).
@@ -104,7 +107,9 @@ lists each iPod hook as `unported` with the Phase 4 item that ports it (`style_g
 
 ### Games
 
-Games are the iPod UI's: their Library row is `#if IPOD` (`patch/navigation.c`). They stay unplanned
+Games are the iPod UI's. `games.c` has compiled on the M1 since the iPod path did, but its Library row is
+`ringnav_localmusic`'s, which the M1 doesn't hook: its Library rows are the Q2 Pod page's
+(`m1plus_nav_library.c`), which has no Games row, so they can't be opened. They stay unplanned
 within the iPod UI port ([m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.8), and they changed again in
 1.4.2 and 1.4.5 (Snake). They use the Return key, which the M1 lacks, so they need a touch design first.
 
@@ -303,6 +308,26 @@ can be tested without enabling the feature.
 M1 keeps its two buttons (Enabled and Reset) and its existing wheel order in
 `m1plus_peq_simple.inc`. Presets remain available through Advanced. The new three-button shortcut
 needs a portrait layout and a device check; the other shared EQ state improvements are inherited.
+
+### Card apps' library update
+
+1.5.9's request file (`/tmp/q2-<id>.library`: Update Local Music and the app's own playlist import) is
+answered on the Q2 alone: `addon_poll` skips `library_poll` on M1, and the caps the apps read leave out
+`library`, so an app doesn't ask. The import reads V1.32's Playlists class (`0xf00b`) and patches
+`importPlayList`'s listing call (`M3U_DIR_CALL`); V2.1's `importPlayList` is `0x4ef394`, its listing
+call not yet found.
+
+### An .lrc's UTF-8 test
+
+1.5.9 replaces stock's `mclIsUtf8WithoutBOM`, which read 6 bytes and no 4-byte character (an emoji, or
+Korean's one-syllable words, failed it). V2.1's is `0x5d1824`; whether it has the same fault is not yet
+checked.
+
+### A playlist row's hold menu
+
+1.5.9's Play/Pause hold on a Playlists row opens the queue menu (Play Next, Add to Queue, Shuffle,
+More…). The M1's hold opens the playlist's editor (`m1plus_nav_playlist_hold.inc`), as V2.1 has no
+`playlistsmore_page`; the menu waits for the Library item (m1plus-ipod-ui.md 4.4).
 
 ### Enlarged art's reset default
 

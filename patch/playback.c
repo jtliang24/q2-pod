@@ -49,6 +49,7 @@ static int back_to __attribute__((section(".scratch"))), back_at __attribute__((
 /* Shuffle Songs is one-shot: the stock mode it replaced + 1, which the next other queue restores.
  * ponytail: RAM only, so a reboot mid-shuffle keeps Shuffle; a queue-file header field fixes it. */
 static int unshuffle __attribute__((section(".scratch")));
+unsigned playback_loads __attribute__((section(".scratch")));
 /* The wheel's ticks. Stock's encoder thread looks at the wheel once per 80 ms (200 ms after
  * touching) and ticks at most once a look, dropping any travel past its threshold: on the device
  * a tick took 27 units of travel against a threshold of 12, a fast half turn gave a single tick,
@@ -138,11 +139,9 @@ static void wheel_post(char *info, int key) {
     }
 }
 
-#if IPOD
 volatile int wheel_raw __attribute__((section(".scratch")));
 volatile int wheel_travel __attribute__((section(".scratch")));
 volatile int wheel_held __attribute__((section(".scratch"))); /* a finger on the wheel */
-#endif
 
 /* Quick Settings from the wheel: a swipe straight across it, as on a touchpad. The ring has no
  * middle, so the swipe is a touch at one edge and then, within QS_GAP_MS, one at the opposite edge
@@ -257,18 +256,14 @@ void wheel_sample(int *s, int ret, char *info) {
         if (wh_anchor) s[0] = wh_anchor;
         wh_anchor = 0;
         if (wh_guard != DARK_OPEN) wh_guard = 0;
-#if IPOD
         wheel_held = 0;
-#endif
         return;
     }
     if (!wh_anchor) {
         wh_anchor = wh_last = s[0];
         wh_acc = 0;
         qs_start(s[0]);
-#if IPOD
         wheel_held = 1;
-#endif
         return;
     }
     int d = s[0] - wh_last, units = wheel_units ? wheel_units : WHEEL_TICK_UNITS * WHEEL_FINE;
@@ -288,14 +283,12 @@ void wheel_sample(int *s, int ret, char *info) {
     }
     d *= WHEEL_FINE;
     wh_last = s[0];
-#if IPOD
     if (wheel_raw) { /* games.c's Vortex reads the travel itself; nothing is queued for a menu */
         __sync_fetch_and_add(&wheel_travel, d / WHEEL_FINE);
         wh_acc = 0;
         s[0] = wh_anchor;
         return;
     }
-#endif
     /* Sensitivity changed mid-turn (its own page takes the wheel): the carry keeps its share of a
      * tick, so it stays under the new travel and fires no burst. */
     if (units != wh_units) {
@@ -470,11 +463,11 @@ static void shuffle(entry *v, unsigned n) {
 }
 static void make_order(entry *v) {
     for (unsigned i = 0; i < s.n; ++i) v[i] = (entry){ i, s.groups[i], 0 };
-    qsort(v, s.n, sizeof *v, compare);
-    if (s.shuffle == 1) {
+    if (s.shuffle == 1) { /* no sort first: the shuffle undoes it, seconds on a big library */
         shuffle(v, s.n);
         return;
     }
+    qsort(v, s.n, sizeof *v, compare);
     if (s.shuffle == 2 || s.shuffle == 4)
         for (unsigned i = 0, j; i < s.n; i = j) {
             for (j = i + 1; j < s.n && v[j].group == v[i].group; ++j) {}
@@ -795,6 +788,7 @@ static void *no_videos(void *q, int *at) {
     return out;
 }
 int ringnav_load(void *q, int at, int type) {
+    ++playback_loads;
     if (s.restoring == 2) type = M(MCL_TYPE);
     close_preload();
     /* After Shuffle Songs, before stock loads; ringnav_mode's playback_clear ends its shuffle. */

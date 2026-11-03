@@ -3051,6 +3051,98 @@ modes), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` a
 - Unchanged: a list's turn and press, a list's double press (screen off), the volume bar, a press while it
   is open (stock's screen-off, no scrub), and Knob: Volume (the press turns the screen off, no scrub).
 
+## 59. Merge step: sync to 1.5.9 on `feature/m1-ipod` (Nov 3)
+
+1.5.9 is upstream's first iPod-only tag: `4fee7d5` deletes Legacy (`unifdef -DIPOD=1`), `d89415f` its
+leftovers, and `IPOD_HOOKS` folds into `HOOKS`. The port's base moved to it ([m1plus-ipod-ui.md](m1plus-ipod-ui.md),
+Phase 1.5): `sync/1.5.9` from `feature/m1-ipod` (backup `refs/backup/pre-sync-1.5.9`), not `staging`, which still
+compiles Legacy and stays on 1.5.8. 83 commits, 1,770 surface lines.
+
+**Conflicts** (`5e1536b`), 12 files: upstream's side, the seams put back, each M1 seam in an `#if IPOD` site on its
+iPod side.
+- `navigation.c`: upstream deletes Stock's outline from `paint_selection`, which the M1 still draws over V2.1's
+  opaque rows until 4.1; it moved to `m1plus_nav_outline.c` (`outline_selection`, from `ringnav_paint` beside
+  `home_paint`), and `IPOD_BAR` went. The state and keyup includes, the radio search, `LYRIC_ROW_BUILDER`.
+- `coverflow.c`: `CF_ROW_X/W` fold into `CF_X/W` on `UI_W`; Split Home's `UI_W`/`BOTTOM` beside Carousel.
+- `netupdate.c` (Erase's `JOB_ERASE` with `IS_SPOT`), `radio.c`, `spotify.c`, `peq_ui.c`, `books.c`,
+  `lockscreen.c`, `contexts.inc`, `tools/build.py` (the hand-off without `ipod`), `docs/internals.md`, `README.md`.
+
+**Follow-ups.**
+- `b9d30be`: `m1plus.py` reads `HOOKS` alone and drops `-DIPOD=1`; `TAG` now carries the Q2's edition
+  (`V159I`), so the M1's is `M1_TAG` (`V159M`) and `m1_dev_tag` (`V02Hm`). `addon_library.c` joins the payload.
+  `BC_IDLE` is a payload byte nothing reads (the big cover is unported, 4.6); `library_scope_scan` a no-op beside
+  the stubbed markers. New hook `mclIsUtf8WithoutBOM` and site `M3U_DIR_CALL`: unported rows.
+- `9ca378f`: Erase Spotify Data moves from the App Store to Streaming's Configuration (`da50aec`), on the M1's
+  page too (`m1plus_nav_stream.c`): after the cache rows, before Soloify's.
+- `1cb094e`, `addon.c`: the card apps' library update (#149) stays off on M1 (`addon_poll` skips `library_poll`:
+  its import reads V1.32's class `0xf00b`), and the caps the apps read leave out `library`.
+- `356ee01`: 1.5.9's progress row named `s_scrlabel_white20r`, which V2.1's theme lacks; it takes
+  `STYLE_SCRLABEL_WHITE20R`. The Q2-size review missed it; `test/m1plus/patch.py`'s theme check found it.
+- `73ecc40`: 1.5.9's Remove deletes a card app's whole folder unless it is a `special[]` app (`9a47c87`).
+  Soloify gets a `special[]` row on M1 that keeps its relay's `remote` file and its Delay and Quality.
+- `1915a33`: `q2compare.py` builds the one iPod variant.
+- Ruled out (`q2only.py`, 63 lines): Display's Click With Headphones (Key Tone is Q2 only), the playlist row's
+  hold menu (the M1's hold opens the editor: an unported row), `list_row_core`'s compact rows (4.4), the Q2's own
+  Configuration and Streaming. Carousel can't be chosen on M1 (Display is `m1plus_nav_display.c`): a 4.5 row.
+  `np_art_poll` looks up `img_cover`, which V2.1's Now Playing lacks (`img_playcover`), so it is inert.
+
+**Suites** (`99a5b4d` and after). Upstream's `test/patch.py` dedents every iPod block; `suitemerge.py` placed
+that badly (170 lines lost, 572 duplicated), so the copy was merged by line text, each side's indentation shift
+carried over, and its 43 conflicts by hand. The copy keeps the M1's own cases where it differs (the outline,
+V2.1's Coverflow rows and row caption, the playlist editor, no marker walk, its caps, Erase's rows a row on).
+`patch_gaps.py` is keyed again: the dedent splits each old iPod block into its statements, 127 entries to 887
+in 14 gaps, each under its old ipod-ui item; 1.5.9's iPod cases join theirs (4.2 status bar, 4.3 Display, 4.5
+Carousel, 4.6 the art follow, 3 the stream pages' times: V2.1's `toolsTimeItoa` writes 00:10 until it is
+patched, 4.8 Games). `2b51872`: `test/peq.py`'s firmware-folder check leaves out Soloify's (`peq.h`).
+
+**The gate's ffmpeg bind.** On this host (Ubuntu, merged `/usr`) the runbook's `--tmpfs /usr/bin` hid `/bin/sh`,
+so mksquashfs's `F` entries wrote every swapped rootfs file empty (`release/bin/demo`, `usr/bin/bluealsa`), the
+base's build and this tree's alike: `update.tar` matched, and `bluealsa`, `ldac`, `build` and `patch` failed on
+the empty files. The runbook now overlays `/usr/bin` instead. R1 results on this host before Nov 3 may not
+have compared real images.
+
+**Gates** (from `work/gatetree`, `--zip` given): q2compare against 1.5.9 with a fresh base: `update.tar`
+byte-identical (`1e9c789e9bc6`), all 33 suite runs pass (the base's own failures shown apart: the `*_build`
+suites' release guards, `mp3_gapless`'s pkg-config, `peq`'s App Store install). M1, `--dev` V02Hm in
+`work/sync/1.5.9/`: `build.py --build`, `patch.py` (887 expected failures in 14 gaps, 35 not ported), `boot.py`
+plain, `--home-menu` and `--media` (one run missed `books_back` and the rerun passed: timing), `playback.py`,
+`m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`. Footprint +1,712/−345 over 32 files.
+
+**Function diff** against V02Gm's code (section 58's build, rebuilt from `refs/backup/pre-sync-1.5.9`): 201
+changed, 26 added, 5 removed of 1,270; `navigation.o` 145 (most the unifdef), `addon.c` 33, `coverflow.c` 20,
+`netupdate.c` 14. The device checklist, Screen Off set to Off for it:
+- Lists: the selection outline on the Q2 Pod page, Settings and Library lists, and the knob moving it.
+- Streaming's Configuration: Erase Spotify Data (two presses, Erasing…, Spotify Cache back to 2 GB); Soloify's
+  rows after it; Stop Streaming Services.
+- App Store: no Erase row, Subsonic listed; Remove of Soloify keeps `.soloify/remote`, `.delay`, `.quality`.
+- A card app's page (Deezer or Soulseek): lists, a progress row's bar under its caption, playback.
+- Library: Long Songs, Era, Books, Photos, Coverflow, Shuffle Songs.
+- Now Playing and lyrics: the cover, the knob scrub, a lyric page.
+
+**Device pass (Nov 3, over q2remote through `tools/wsl_relay.py`, the laptop's hotspot).** The user flashed
+V02Hm through the menu updater; About reads 1.5.9 dev 2 and the running `/release/bin/demo` matches the build's
+(`5474bd22…`). Before it, `config.ini`, the DB and the EQ files went to `.q2/backup-pre-V02Hm/` and the old image
+to `.q2/update-V02Gm.bin`. Screen Off was Off for the pass and is back to 1 minute (`LIGHTTIME=3`). demo kept one
+pid throughout, and kmsg had no fault (one `es9069q_hw_params` a track start). Passed:
+- The outline on the Q2 Pod page, System Setting and the native lists, following the knob (Knob Up is List Up:
+  the knob sits on the right side, so a clockwise turn goes up the list).
+- Long Songs, Era, Photos, Books, Coverflow (the cover, its reflection, a knob turn), Shuffle Songs.
+- Now Playing: the cover, the knob scrub (a press, six detents to 01:03, a press seeks); the lyric page of a
+  track with an `.lrc` follows the song.
+- Configuration: Erase Spotify Data's two presses ("Press again…", "Erasing…", back), `.spotify/cache` gone and
+  Spotify Cache at 2 GB, the cache put back from a copy after; Soloify's rows after it; Stop Streaming Services.
+- App Store: no Erase row, Subsonic listed. A card app (Podcasts): its page, a download, playback.
+
+Not checked on the device:
+- Soloify's Remove: Soloify has no release yet, so its row reads Update, never Installed, and Remove is offered
+  only on an installed row. The keep list is `special[]`'s row (`73ecc40`).
+- A progress row's bar: Podcasts sends none (its states are captions), and Deezer and Soulseek need accounts.
+  `patch.py`'s case (`3930462`) covers it.
+- Games: not reachable on the M1, the checklist's row was wrong (`m1plus-unported.md`'s Games note corrected).
+
+Seen, not the build's: the hotspot's DHCP gave the device no DNS server (`/tmp/resolv.conf` empty; the App
+Store said "Can't reach GitHub"); 1.1.1.1 was set for the pass and the file emptied after.
+
 ## How to check a build now
 
 ```sh
