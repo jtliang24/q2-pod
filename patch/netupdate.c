@@ -46,6 +46,9 @@ static const struct {
     { "q2-rockbox-themes", "themes", ".rockbox", ".rockbox/config.cfg", "" },
     { "q2-librespot", "spotify", ".spotify", "'.spotify/cache/*' .spotify/.cache-size",
       ".spotify/librespot" },
+#if M1PLUS /* Soloify keeps its relay's remote file and its settings (m1plus_nav_stream.c), as Spotify its cache */
+    { "q2-soloify", "soloify", ".soloify", ".soloify/remote .soloify/.delay .soloify/.quality", ".soloify/q2-soloify" },
+#endif
 };
 /* The firmware's own card folders, never a card app's: a remove deletes .<id> whole. */
 static const char *const reserved[] = { "books", "coverflow", "downpic", "photos", "q2", "sldp",
