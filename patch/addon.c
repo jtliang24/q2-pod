@@ -691,7 +691,7 @@ static void progress_row(void *item, long permille) {
     void *t = widget_get_child(item, 0), *s = widget_get_child(item, 1);
     int x = I(t, W_X), w = I(t, W_W);
     widget_move_resize(t, x, 4, w * 3 / 5, 32);
-    widget_use_style(s, "s_scrlabel_white20r"); /* the style drops the detail's size and grey */
+    widget_use_style(s, STYLE_SCRLABEL_WHITE20R); /* the style drops the detail's size and grey */
     widget_set_prop_int(s, "style:normal:font_size", 16);
     widget_set_prop_int(s, "style:normal:text_color", (int)SPOT_GREY);
     widget_move_resize(s, x + w * 3 / 5, 4, w - w * 3 / 5, 32);
