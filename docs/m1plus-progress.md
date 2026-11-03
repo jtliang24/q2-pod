@@ -3007,6 +3007,45 @@ which crashes the emulator on a jump to 0 in the iPod path. The device pass chec
 Settings and lyrics over q2remote, with Screen Off set to Off first. Expect Stock's outline, the stock look,
 Previous as Back, and the knob moving the selection.
 
+## 58. Device pass: Phase 1 on the M1, and the knob scrub (Nov 3)
+
+**The pass** (`V02Em`, dev 15, over q2remote, Screen Off set to Off and restored to 1 minute after): the demo
+stayed up throughout (one pid), with no crash on Home, Library, Settings, Now Playing, Quick Settings or the
+lyrics. Five findings:
+1. A single knob press on Now Playing turned the screen off at once.
+2. A double press woke the device to the lock screen.
+3. and 4. Quick Settings drew Now Playing's controls. Intended: V2.1 shares them, and there is nothing to
+   scroll on that page. No change.
+5. One odd Home knob step. A Wi-Fi blip. No change.
+
+**Findings 1 and 2.** Now Playing keeps the knob's volume (`knob_nav_active`), so the press stayed
+`KEY_POWER`, which V2.1's `on_wm_keyup_fun` answers by turning the screen off; the Q2's rule in `np_key`
+(single press sleeps, double press scrubs) was never reached on the M1. The user's call: a single press
+scrubs and a double press locks, as a double Centre does on every list.
+- `playing_timer_start` and `playing_timer_clear` are now aliases of V2.1's `player_timer_start` (0x53c210) and
+  `player_timer_clear` (0x53c758), the same routines under new names (500 ms interval, V1.32's is 250). The
+  scrub needs them: stock's timer would pull the slider back. The stand-ins in section 57 are gone.
+- `scrub_start` is out of `np_key` (`patch/navigation.c`) so the M1 can call it; the Q2 build is
+  byte-identical.
+- `patch/m1plus_nav_np.c`, called from `m1plus_nav_keyup.inc` before V2.1's key-up: in Knob: Navigation a
+  single press on the top Now Playing page starts the scrub `DOUBLE_CLICK_MS` on (`center_press`), a double
+  press is left to V2.1 (screen off), and scrubbing a press seeks and ends it. The turns move the target:
+  clockwise (volume up) forward, whichever way Knob Up sorts a list. A key that isn't the knob's ends the
+  scrub. Knob: Volume, a dark screen and the boot guard keep V2.1's press.
+
+**Tests.** The Q2's scrub checks sit in `patch.py`'s big `if variant=='ipod':` block at line 6046, which fails
+early on the M1 (the "selection bar" gap), so they never run there. The M1's own checks are a top-level
+block before `MAINSCHEDULING_CALL`'s. Not mutation-tested: their first assertion (a press returns `STOP`)
+can only hold with the new code.
+
+**Gates** (`work/ipod-p1/c6`): `build.py`, `patch.py` (127 expected-failure checks, as before), `boot.py` (three
+modes), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and `q2compare.py --suites` pass.
+
+**Device check: not done.** Flash a `--dev` build and check on Now Playing: a single press recolours the
+slider and it stops following playback; the turns move the target, forward clockwise, with the volume
+unchanged; a press seeks; the scrub ends by itself after `SCRUB_MS`; a double press turns the screen off.
+Lists, Knob: Volume and the volume bar behave as before.
+
 ## How to check a build now
 
 ```sh

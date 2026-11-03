@@ -156,7 +156,8 @@ Each feature follows the same steps:
    - the Coverflow card;
    - retire `m1plus_coverflow_home.c` and `m1plus_nav_home.c`.
 6. **Now Playing:** the iPod layout, Centred Now Playing, `bigcover`, the volume dialog and the quiet
-   icons; scrub on the knob (`np_key`/`center_press`, with the knob press as Centre).
+   icons. The scrub on the knob landed early (progress 58): `patch/m1plus_nav_np.c`, with
+   `playing_timer_*` aliased to V2.1's.
 7. **Quick Settings and dialogs:** `statusbar_dialog.bin`, the confirm and add-to-playlist dialogs. The
    wheel QS swipe becomes a touch swipe down from the status bar; `qs_*`'s fake-finger path stays Q2-only.
 8. **Left Q2-only, as `NOT PORTED` rows:**
