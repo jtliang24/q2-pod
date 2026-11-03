@@ -12756,6 +12756,7 @@ if 'usbmode_page_init' in HOOKS:
     # Two apps running, each .play left in /tmp (q2-deezer's and q2-subsonic's, kept while each runs): only a change
     # to an app's own starts a session, so the newer one plays once and neither takes the queue back at each poll.
     card_app(m,'subsonic','name=Subsonic\n'); m.files['/tmp/q2-subsonic']=bytearray(b'4343'); n=len(m.plays)
+    if is_m1plus: m.destroy(m.lib_page); m.streams=None  # the Q2 Pod page opened again: its scan lists Subsonic
     for t in ('Deezer','Subsonic'): m.click((streaming(m) if is_m1plus else stream_rows(m))[t]); m.page=m.top; m.close()  # started again: polled
     STREAM='/mnt/mmc/.subsonic/stream/1'; m.files['/tmp/q2-subsonic.play']=bytearray(f'2600 {STREAM}'.encode())
     stream_songs('01 - Lunch.flac')
