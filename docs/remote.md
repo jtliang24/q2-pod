@@ -147,6 +147,13 @@ Plus (dev 11). The Q2's payload is built and linked the same way, but `peek` has
   export Q2_KEY="$(cat q2remote.key)"
   python3 tools/q2remote.py sh id
   ```
+  Through the relay, a command that runs for more than a few seconds can lose its reply (`the Q2 closed the
+  connection`, or `push failed:` with nothing after it) while the command itself finishes: check the result
+  with a second command (`md5sum` of a pushed file), or background a long job and read its output after.
+- **No internet on a Windows Mobile Hotspot:** the hotspot's DHCP can leave the player without a DNS server
+  (`/tmp/resolv.conf` empty, the App Store saying `Can't reach GitHub`), and the hotspot's own address may
+  not answer DNS. For a session, `q2remote.py sh 'echo nameserver 1.1.1.1 >/tmp/resolv.conf'`; the file is in
+  RAM and goes at a reboot.
 - **`no md-gpio-keys input device`:** run `devices`; the firmware may name its devices differently.
 - **`no Goodix-CTP input device` on the M1 Plus:** its `P: Phys=` line in `/proc/bus/input/devices` can hold junk, blank lines too; `parse_devices` drops a Phys value up to the next field, so check `devices` lists the touch panel.
 
