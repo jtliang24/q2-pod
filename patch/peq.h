@@ -156,9 +156,16 @@ long long now_ns(void);
  * stop and Home's Rockbox row, which lets ALSA go too. A q2video sink ends with librespot's pipe. */
 #define SPOT_OUT "/tmp/q2-librespot.out" /* the output for the card's aplay.sh, none on the DAC */
 #define SPOT_DOWNLOAD "/tmp/q2-librespot.download" /* backend download progress, independent of playback */
+#if M1PLUS
+/* The Soloify relay shares librespot's /tmp names and pid file, so it ends the same way. */
+#define SPOT_KILL                                                                                  \
+    "kill -9 $(cat /tmp/q2-librespot); killall -9 librespot q2-soloify aplay; "                    \
+    "rm -f /tmp/q2-librespot /tmp/q2-librespot.state " SPOT_OUT " " SPOT_DOWNLOAD
+#else
 #define SPOT_KILL                                                                                  \
     "kill -9 $(cat /tmp/q2-librespot); killall -9 librespot aplay; "                               \
     "rm -f /tmp/q2-librespot /tmp/q2-librespot.state " SPOT_OUT " " SPOT_DOWNLOAD
+#endif
 double decibels(double power); /* 10 log10 */
 
 /* Audited against hciplayer 9c3f8c6d… and MPlayer 1.3.0 libaf/af.h: the filter peq_player.c opens. */
@@ -228,6 +235,9 @@ int directory(void *path); /* playback.c: toolsLoadDirectory, for staged */
 #define TIDAL_DIR "/mnt/mmc/.tidal" /* tidal.c's cache, Tidal Downloads' list */
 void tidal_clear(void);
 #define SPOT_DIR "/mnt/mmc/.spotify" /* librespot and its launcher, spotify.c's */
+#if M1PLUS
+#define SOLOIFY_DIR "/mnt/mmc/.soloify" /* the Soloify relay and its launcher, the second backend of spotify.c's page */
+#endif
 /* addon.c: card apps, each a card folder .<id> holding its manifest q2app, its
  * launcher run, its binary q2-<id> and its icons. addon_scan finds them again (how many slots: a
  * slot's index stays its app's), addon_name, addon_id and addon_icon (an image name: file://… or the

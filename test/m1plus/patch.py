@@ -27,6 +27,7 @@ if manifest.get('release'):  # an M1 Plus release (tools/release_m1.py): its tag
 assert v and manifest['version'] == (dev_tag(manifest['dev'], v[-1]) if manifest.get('dev') else v), 'Wrong variant/version'
 assert (manifest.get('compact_code') != []) == (variant == 'ipod')
 is_m1plus = manifest.get('model') == 'Shanling M1 Plus'
+KILLALL = 'killall -9 librespot q2-soloify aplay' if is_m1plus else 'killall -9 librespot aplay'  # SPOT_KILL's: the Soloify relay shares librespot's pid file
 from m1plus import call_sites, call_site_words, M1PLUS_FUNCTIONS
 SITES = call_sites(is_m1plus)  # this model's call-site patches (m1plus.py CALL_SITES); a missing one is NOT PORTED
 def site_patched(name):
@@ -5646,7 +5647,7 @@ class CoverflowMachine(QueueMachine):
                 self.plays.append((self.text(a),*[signed(self.get(b+4*i)) for i in range(4)]))
             elif self.text(a)=='dialog/msginfo_dialog': self.toasts.append((self.text(a),self.get(b),self.get(b+4),self.text(b+8)))
             else: self.opened.append((self.text(a),self.get(b),self.get(b+4))); self.top=self.node('window',self.text(a)); self.stack.append(self.top)
-        elif name=='access': path=self.text(a); ret=0 if (self.cached if '/mnt/mmc/.coverflow/' in path else not self.missing) else -1
+        elif name=='access': path=self.text(a); ret=0 if (self.cached if '/mnt/mmc/.coverflow/' in path else getattr(self,'soloify',0) if '/mnt/mmc/.soloify/' in path else not self.missing) else -1
         elif name=='fopen': ret=0  # no saved album: remember() keeps the first
         elif name=='toolsQueryDbTable':
             rows=self.albums if 'fileurl not like' in self.text(b) else []
@@ -8854,7 +8855,7 @@ if variant=='ipod':
     texts={c[0]:m.text(c[1]) for c in m.calls if c[0] in ('fopen','system')}
     assert texts=={'fopen':'/tmp/q2pod-rockbox',
                    'system':'killall checkappprocess.sh; killall -9 hciplayer; kill -9 $(cat /tmp/q2-librespot); '
-                             'killall -9 librespot aplay; rm -f /tmp/q2-librespot /tmp/q2-librespot.state /tmp/q2-librespot.out /tmp/q2-librespot.download; sync; kill -9 $PPID'}
+                             +KILLALL+'; rm -f /tmp/q2-librespot /tmp/q2-librespot.state /tmp/q2-librespot.out /tmp/q2-librespot.download; sync; kill -9 $PPID'}
     assert [n for n in names if n in ('fclose','save_memoryplay_info','player_stop','system')]==['fclose','save_memoryplay_info','player_stop','system']; passed()
     m,names=rockbox(False)
     assert not {'fopen','player_stop','system'} & set(names)
@@ -11069,14 +11070,14 @@ m.state('playing'); m.poll(); m.state('paused'); m.poll(60000); assert len(m.sys
 m.close(); m.page=m.browser; m.close(); m.top=m.node('window','home_page')
 m.state('playing'); m.poll(); m.state('paused'); m.poll(20000); m.state('playing'); m.poll(); m.state('paused')
 m.poll(29000); assert len(m.systems)==1 and m.key(O['KEY_PLAY'])==11
-m.poll(1000); assert 'killall -9 librespot aplay' in m.systems[-1] and STATE in m.systems[-1]
+m.poll(1000); assert KILLALL in m.systems[-1] and STATE in m.systems[-1]
 assert m.key(O['KEY_PLAY'])!=11
 spot_open(m,button); assert m.systems[-1]=='/bin/sh /mnt/mmc/.spotify/run'; m.close(); passed()
 # Never played: the browser shut, SPOT_CAST_MS (150 s) leaves time to cast from the phone, then it stops.
 m=SpotMachine({BIN:bytearray()}); button=stream_page(m); page=spot_open(m,button); m.state('none'); m.poll()
 m.close(); m.page=m.browser; m.close(); m.top=m.node('window','home_page')
 m.poll(149000); assert len(m.systems)==1
-m.poll(1000); assert 'killall -9 librespot aplay' in m.systems[-1]; passed()
+m.poll(1000); assert KILLALL in m.systems[-1]; passed()
 
 # Internet Radio (patch/radio.c, docs/internals.md#internet-radio): favourites on the card and
 # radio-browser.info's directory, a station played by q2video -r, its tags from RADIO_STATE.
@@ -11671,13 +11672,13 @@ m.advance(2000); m.answer(*ME); m.row(1); m.answer('login','','',[]); assert m.l
 # Browsing keeps librespot: paused past SPOT_IDLE_MS with the browser open, it runs on; once the
 # browser is shut the wait starts, and the row starts it again, waiting for its socket.
 m.state('playing'); m.poll(); m.state('paused'); m.poll(60000); assert len(m.systems)==1
-m.destroy(m.page); m.poll(29500); assert len(m.systems)==1; m.poll(500); assert 'killall -9 librespot aplay' in m.systems[-1]
+m.destroy(m.page); m.poll(29500); assert len(m.systems)==1; m.poll(500); assert KILLALL in m.systems[-1]
 m.serve=None; m.open(); assert m.systems[-1]=='/bin/sh /mnt/mmc/.spotify/run'; m.worker(); assert m.labels()==['Loading…']
 m.advance(500); m.answer(*ME); assert m.labels()==MENU; passed()
 # Left open with the screen off, the browser holds nothing: SPOT_IDLE_MS on, it shuts and librespot stops.
 m.state('playing'); m.poll(); m.state('paused'); m.poll(); m.byte(syms['g_backlight_status'],0); kills=len(m.systems)
 m.poll(29500); assert len(m.systems)==kills
-names=m.poll(500); assert 'window_close' in names and 'killall -9 librespot aplay' in m.systems[-1]
+names=m.poll(500); assert 'window_close' in names and KILLALL in m.systems[-1]
 m.byte(syms['g_backlight_status'],1); m.destroy(m.page); passed()
 
 # Downloads outlive the browser without taking the audio output or stopping local playback.
@@ -11688,7 +11689,7 @@ m.play=2; names=m.poll(60000)
 assert len(m.systems)==1 and 'reset_poweroptions_timer' in names and 'player_stop' not in names
 assert not m.call(address=payload_syms['spot_status'],gap=0)
 m.files['/tmp/q2-librespot.download']=bytearray(b'downloading=0\n')
-m.poll(500); m.poll(30000); assert 'killall -9 librespot aplay' in m.systems[-1]; passed()
+m.poll(500); m.poll(30000); assert KILLALL in m.systems[-1]; passed()
 # A crashed librespot's files still say playing and downloading: once its socket refuses, no hold,
 # and it idles out; a new state (the restart) or a socket that answers again trusts them again.
 m=BrowseMachine(); m.open(); m.answer(*ME); m.state('playing'); m.poll(); m.destroy(m.page)
@@ -11698,7 +11699,7 @@ names=m.poll(); assert 'reset_poweroptions_timer' not in names
 m.state('playing',position=1); names=m.poll(); assert 'reset_poweroptions_timer' in names
 m.poll(10000); m.alive=True; names=m.poll(10000); assert 'reset_poweroptions_timer' in names
 m.alive=False
-m.alive=False; m.poll(10000); m.poll(30000); assert 'killall -9 librespot aplay' in m.systems[-1]; passed()
+m.alive=False; m.poll(10000); m.poll(30000); assert KILLALL in m.systems[-1]; passed()
 
 # Back reveals the saved More row, and paint keeps it selected.
 m=BrowseMachine(); m.open(); m.answer(*ME); m.row(0)
@@ -11902,6 +11903,64 @@ m=BrowseMachine(); m.caps=(); m.open(); m.answer(*ME); m.row(1)
 m.answer(*OK,[('playlist','spotify:playlist:a','A','','','')]); m.row(0); m.answer(*OK,[])
 assert m.labels()==['Nothing here']; passed()
 
+
+# Soloify (patch/m1plus_spotify_backend.inc): the second backend of this page, the q2-soloify relay in
+# .soloify. Its Streaming row only while the relay is on the card; its own launcher, texts and rows (no
+# downloads, no sign-out); one backend at a time; its Delay and Quality saved where the relay reads them.
+if is_m1plus:
+    SBIN,SOLO_RUN='/mnt/mmc/.soloify/q2-soloify','/bin/sh /mnt/mmc/.soloify/run'
+    DELAY,QUALITY='/mnt/mmc/.soloify/.delay','/mnt/mmc/.soloify/.quality'
+    HUB=['download','collections','collection','playcollection','downloadliked','jobs','job','remove']  # every download op
+    def soloify_running(m): return m.call(address=payload_syms['spot_soloify_running'],args=(0,0,0,0),gap=0,clear=False)
+    class SoloifyMachine(BrowseMachine):
+        """BrowseMachine with the Soloify relay on the card, its Streaming row and its socket."""
+        bin=SBIN
+        def __init__(self,files=None): super().__init__(files); self.soloify=1
+        def add_on_row(self): return streaming(self)['Soloify']
+    m=BrowseMachine(); assert 'Soloify' not in streaming(m); passed()  # no relay on the card: no row
+    m=SoloifyMachine(); rows=streaming(m); names=list(rows)
+    assert names[names.index('Spotify'):][:3]==['Spotify','Soloify','Internet Radio'],names
+    icon,label=m.nodes[rows['Soloify']]['children'][:2]; assert m.nodes[icon]['image']=='row_spotify' and m.nodes[label]['text']=='Soloify'
+    # The first open starts its launcher; the menu has no Downloaded Tracks or Downloads even when the
+    # relay lists every download op (Spotify's shows them), and Account has no Sign Out.
+    m=SoloifyMachine(); m.caps=HUB; m.open()
+    assert m.labels()==['Loading…'] and len(m.systems)==2 and KILLALL in m.systems[0] and m.systems[1]==SOLO_RUN,(m.labels(),m.systems)  # the first open ends any Spotify first
+    m.answer(*ME); assert m.labels()==['Soloify','Liked Songs','Playlists','Albums','Artists','Search','Account'],m.labels()
+    n=BrowseMachine(); n.caps=HUB; n.open(); n.answer(*ME); assert n.labels()[-1]=='Downloads'
+    m.row(5); assert m.asked()==('account',); m.answer(*ME); assert m.labels()[:3]==['Account','Alice','Premium'] and 'Sign Out' not in m.labels(); m.back()
+    m.row(1); m.answer('ok','','',[('playlist','spotify:playlist:a','Mix A','alice','','')]); m.pick(0)
+    m.answer(*OK,[track('spotify:track:1','One','spotify:playlist:a','0')]); assert m.labels()==['Mix A','One','An Artist'],m.labels()  # no Download Playlist
+    m.back(); m.back()
+    m.row(4); edit=m.find('edit'); assert m.nodes[edit]['tips']=='Search Soloify'; passed()
+    # Its own words: the pairing prompt, and the relay not running.
+    m=SoloifyMachine(); m.open(); m.answer('login','','',[])
+    assert m.labels()==['Soloify','Pair Soloify on its server','Open Spotify near the server and choose Q2'],m.labels(); passed()
+    m=SoloifyMachine(); m.open(); m.advance(3000); m.worker(); assert m.labels()==["Soloify isn't running",'Retry']; passed()
+    # One backend at a time: the other is stopped first, whichever way round, and each starts its own launcher.
+    m=SoloifyMachine({BIN:bytearray()}); rows=streaming(m)
+    m.click(rows['Spotify']); m.page=m.top; assert m.systems==['/bin/sh /mnt/mmc/.spotify/run'],m.systems; m.close()
+    m.click(rows['Soloify']); m.page=m.top; assert len(m.systems)==3 and KILLALL in m.systems[1] and m.systems[2]==SOLO_RUN,m.systems; m.close()
+    m.click(rows['Spotify']); m.page=m.top; assert len(m.systems)==5 and KILLALL in m.systems[3] and m.systems[4]=='/bin/sh /mnt/mmc/.spotify/run',m.systems; m.close(); passed()
+    # Configuration: Delay and Quality after the cache rows while the relay is on the card, saved where the
+    # relay reads them (Auto: no file), and the Soloify switch with the others. A running Soloify is stopped
+    # to apply a change; Spotify's is not.
+    m=SoloifyMachine(); m.open(); assert soloify_running(m)==1
+    m.click(streaming(m)['Configuration']); m.page=m.top; assert m.nodes[m.page]['name']=='streamconf_page'
+    assert m.labels()==['Configuration','Tidal Cache: 2 GB','Spotify Cache: 2 GB','Soloify Delay: Auto','Soloify Quality: 160 kbit/s',
+                        'Stop Streaming Services','Spotify','Soloify','Internet Radio','AirPlay'],m.labels()
+    m.row(2); assert m.files[DELAY]==b'1000' and m.labels()[3]=='Soloify Delay: 1 s'
+    assert KILLALL in m.systems[-1] and m.toasts[-1][3]=='Soloify stopped to apply it' and soloify_running(m)==0
+    for ms in (2000,4000,8000): m.row(2); assert m.files[DELAY]==str(ms).encode() and m.labels()[3]==f'Soloify Delay: {ms//1000} s'
+    m.row(2); assert DELAY not in m.files and m.labels()[3]=='Soloify Delay: Auto'
+    for kbit in (96,128,160): m.row(3); assert m.files[QUALITY]==str(kbit).encode() and m.labels()[4]==f'Soloify Quality: {kbit} kbit/s'
+    m.row(3); assert m.files[QUALITY]==b'96'
+    m.files[DELAY]=bytearray(b'3000'); m.files[QUALITY]=bytearray(b'64')  # not choices: Auto, 160
+    m.close(); m.click(streaming(m)['Configuration']); m.page=m.top
+    assert m.labels()[3:5]==['Soloify Delay: Auto','Soloify Quality: 160 kbit/s']
+    m.row(7); assert m.config['STREAMHIDE']=='SOLOIFY' and switch(m,7)=='switch_off' and switch(m,6)=='switch_on'; m.row(7); assert m.config['STREAMHIDE']==''
+    m=SoloifyMachine({BIN:bytearray()}); streaming(m); m.click(streaming(m)['Spotify']); m.page=m.top; systems=len(m.systems)
+    m.click(streaming(m)['Configuration']); m.page=m.top; m.row(2); assert len(m.systems)==systems and m.files[DELAY]==b'1000'  # Spotify runs: left alone
+    passed()
 
 def run(m,name,*args): return m.call(address=payload_syms[name],args=(*args,0,0,0,0)[:4],gap=0,clear=False)
 
@@ -12405,7 +12464,7 @@ if 'usbmode_page_init' in HOOKS:
         m.advance(0,clear=False); m.page=m.top; assert m.nodes[m.page]['name']=='apps_page'
     def shelf_job(m,ms=500):
         worker,arg=m.threads[-1]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,count=50_000_000)==0; m.advance(ms,clear=False)
-    KILL='killall -9 librespot aplay'
+    KILL=KILLALL
     LIST='/mnt/mmc/.q2/sources.list'
     if is_m1plus:
         # M1 Plus: Spotify and the card apps. No Rockbox or Rockbox Themes row, even with a Rockbox on the
@@ -12419,12 +12478,12 @@ if 'usbmode_page_init' in HOOKS:
         m=M1ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                           '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
-        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install'] and not m.threads; passed()
+        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Soloify','Install'] and not m.threads; passed()  # Soloify: M1 Plus's own, after the list's
         m.close(); m.wifi=3; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
-        assert m.labels()==['App Store','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install']
+        assert m.labels()==['App Store','Spotify','Installed','Erase Spotify Data','Login and cache','Deezer','Install','Soulseek','Install','File Browser','Install','Soloify','Install']
         m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
         assert m.urls==['https://raw.githubusercontent.com/DiamondBond/q2-pod/main/sources.list']+[f'https://api.github.com/repos/{r}/releases/latest' for r in
-                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser')],m.urls
+                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser','jtliang24/q2-soloify')],m.urls
         assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.labels()[2]=='Update'; passed()  # q2-v1.8 against the latest q2-v1.9
         m.row(0); assert m.labels()[2]=='Checking…' and KILL in m.systems[-1]; m.row(0); assert m.labels()[2]=='Cancelling…'
         shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[2]=='Update'; passed()
@@ -12433,6 +12492,18 @@ if 'usbmode_page_init' in HOOKS:
         assert m.toasts[-1][3]=='Spotify removed' and not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/librespot'}&set(m.files); passed()
         m.row(1); assert m.labels()[4]=='Press again to erase the login and cache'; m.row(1); shelf_job(m)
         assert m.toasts[-1][3]=="Spotify's login and cache erased"; m.close(); passed()
+        # Soloify: installed from its own repo (.soloify, its binary q2-soloify); an update or Remove ends a running
+        # backend first and leaves the files the ZIP doesn't hold: its remote file and its settings.
+        SOLO_TAG,SOLO_FILES='/mnt/mmc/.q2/apps/soloify.tag','/mnt/mmc/.q2/apps/soloify.files'
+        m=M1ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SOLO_TAG:bytearray(b'q2-v1.9'),SOLO_FILES:bytearray(b'.soloify/run\n.soloify/q2-soloify\n'),
+                          '/mnt/mmc/.soloify/run':bytearray(b'sh'),'/mnt/mmc/.soloify/q2-soloify':bytearray(b'ELF'),'/mnt/mmc/.soloify/remote':bytearray(b'host 7443 token\n'),
+                          '/mnt/mmc/.soloify/.delay':bytearray(b'4000'),'/mnt/mmc/.soloify/.quality':bytearray(b'96')})
+        m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
+        assert m.labels()[-2:]==['Soloify','Installed'],m.labels()
+        m.row(4); m.row(4); assert m.labels()[-1]=='Removing…'; shelf_job(m)
+        assert m.toasts[-1][3]=='Soloify removed' and KILL in m.systems[-3] and KILL in m.systems[-1],m.systems
+        assert not {SOLO_TAG,SOLO_FILES,'/mnt/mmc/.soloify/run','/mnt/mmc/.soloify/q2-soloify'}&set(m.files) and m.labels()[-1]=='Install'
+        assert {'/mnt/mmc/.soloify/remote','/mnt/mmc/.soloify/.delay','/mnt/mmc/.soloify/.quality'}<=set(m.files); m.close(); passed()
     if not is_m1plus:  # Rockbox's rows: Q2 only
         m=ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                         '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
@@ -12487,9 +12558,10 @@ if 'usbmode_page_init' in HOOKS:
     m.row(0); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and not m.threads; passed()
     m.wifi=3; m.row(0); assert m.labels()[2]=='Loading…' and len(m.threads)==1; m.row(0); assert len(m.threads)==1  # loading already
     m.reply=b'# apps\nme/q2-foo Foo\nme/q2-Bad\n'; shelf_job(m)
-    assert m.labels()==['App Store','Foo','Install'] and m.files[LIST]==b'me/q2-foo Foo\n'; passed()
+    FOO=['App Store','Foo','Install']+(['Soloify','Install'] if is_m1plus else [])  # M1 Plus's own Soloify follows the list, not kept in it
+    assert m.labels()==FOO and m.files[LIST]==b'me/q2-foo Foo\n'; passed()
     m.close(); m.now+=11*60*1000; m.reply=b'nothing'; apps_open(m); shelf_job(m)
-    assert m.labels()==['App Store','Foo','Install'] and m.files[LIST]==b'me/q2-foo Foo\n'; m.close(); passed()
+    assert m.labels()==FOO and m.files[LIST]==b'me/q2-foo Foo\n'; m.close(); passed()
 else:
     not_ported("Q2 Shelf, System settings' Apps (netupdate.c): no Apps row on M1 Plus, with the card app host")
 
@@ -13977,7 +14049,7 @@ m.row(1); assert m.files[SCAP]==b'4096M' and m.labels()[2]=='Spotify Cache: 4 GB
 m.files[SCAP]=bytearray(b'9G'); assert endpoint(m,'stream_cache',1)==2  # not a choice: 2 GB
 m.word(O['MCL_TYPE'],5); m.play=2; m.waited=m.forked
 m.row(2); m.top=m.node('window','home_page')
-assert 'killall -9 librespot aplay' in m.systems[-1] and 'player_stop' in [c[0] for c in m.calls]
+assert KILLALL in m.systems[-1] and 'player_stop' in [c[0] for c in m.calls]
 assert [m.text(c[2]+8) for c in m.calls if c[0]=='navigator_to_with_context']==['Streaming stopped']
 assert endpoint(m,'radio_status')==0 and endpoint(m,'spot_status')==0 and m.key(O['KEY_PLAY'])!=11; m.close(); passed()
 # The wheel drives only allowlisted windows (patch/contexts.inc), so every runtime list page needs an
