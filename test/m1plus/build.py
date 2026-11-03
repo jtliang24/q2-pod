@@ -37,6 +37,25 @@ from m1plus import M1_TAG, m1_dev_tag
 assert m1_dev_tag(1) == 'V001m' and M1_TAG not in [m1_dev_tag(n) for n in range(1, 36**3)]
 print('Dev build tag checks passed.')
 
+# tools/ipod.py's screen (docs/m1plus-ipod-ui.md Phase 2): the Q2's by default, as patch/m1plus_q2.inc gives
+# the payload, and tools/m1plus_ipod.py's second copy with the M1's, every other name still the Q2's.
+import re, ipod, m1plus_ipod
+def defines(name):
+    return {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b', (ROOT/'patch'/name).read_text(), re.M)}
+q2, m1 = defines('m1plus_q2.inc'), defines('m1plus_offsets.inc')
+SCREEN = ('UI_W', 'UI_H', 'STATUS_H', 'BOTTOM')
+assert [getattr(ipod, n) for n in SCREEN] == [q2[n] for n in SCREEN] == [375, 320, 30, 290]
+assert all(d['BOTTOM'] == d['UI_H'] - d['STATUS_H'] for d in (q2, m1))
+# The Q2 values the screen's names replaced literals in: its update.tar is byte-identical (test/q2compare.py).
+assert [ipod.CORNER_R, ipod.BC_ART, ipod.HOME_LIST_W, ipod.STATUS_MARGIN, ipod.NP_POS_X, ipod.NP_ICONS_END,
+        ipod.NP_ART, ipod.NP_BAR, ipod.NP_TIME_X] == [80, 292, 375, 54, 22, 353, 166, [21, 253, 333, 4], 46]
+m1ipod = m1plus_ipod.ipod
+assert [getattr(m1ipod, n) for n in SCREEN] == [m1[n] for n in SCREEN] == [320, 480, 30, 450]
+assert m1ipod.CORNER_R == m1['GLASS_R'] == 0 and m1ipod.HOME_LIST_W == 320
+assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O[k]} == {'UI_W', 'UI_H', 'GLASS_R'} == set(m1plus_ipod.PROFILE) - {'STATUS_H'}
+assert sys.modules['ipod'] is ipod and m1ipod is not ipod
+print('iPod screen profile checks passed.')
+
 def boot_check(s90play=None):
     """S90play's dual boot under the host sh, with stand-in programs: build.py's BOOT_HOOK, or a
     built rootfs's whole S90play (its dbus start stubbed), run as init runs it."""
