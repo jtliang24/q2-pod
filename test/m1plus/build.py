@@ -56,6 +56,21 @@ assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O[k]} == {'UI_W', 'UI_H', 'GL
 assert sys.modules['ipod'] is ipod and m1ipod is not ipod
 print('iPod screen profile checks passed.')
 
+# patch/m1plus_ipod.json (Phase 3): each of V1.32's 54 audited iPod pages is mapped onto V2.1's, or is a null row
+# that names the Phase 4 item deciding it. A sync that adds a page to patch/ipod.json fails here until it is mapped.
+import json
+AUDIT, M1_AUDIT = (json.loads((ROOT/'patch'/f).read_text()) for f in ('ipod.json', 'm1plus_ipod.json'))
+SECTIONS = ('assets', 'navbar_only', 'slide_only')
+assert set(M1_AUDIT['pages']) == {p for s in SECTIONS for p in AUDIT[s]} and len(M1_AUDIT['pages']) == 54
+MAPPED = {p: r for p, r in M1_AUDIT['pages'].items() if r['v21']}
+assert len({r['v21'] for r in MAPPED.values()}) == len(MAPPED), 'two V1.32 pages map to one V2.1 page'
+for section in SECTIONS:  # each V2.1 page sits in the section of the V1.32 page it replaces
+    assert set(M1_AUDIT[section]) == {r['v21'] for p, r in MAPPED.items() if p in AUDIT[section]}, section
+for p, r in M1_AUDIT['pages'].items():
+    assert bool(r['v21']) == bool(r['opener']) and r['why'], p
+    assert r['v21'] or re.search(r'Phase 4\.\d ', r['why']), f'{p}: a null row names its Phase 4 item'
+print('V2.1 iPod page inventory checks passed.')
+
 def boot_check(s90play=None):
     """S90play's dual boot under the host sh, with stand-in programs: build.py's BOOT_HOOK, or a
     built rootfs's whole S90play (its dbus start stubbed), run as init runs it."""
@@ -328,9 +343,17 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert 'variant' not in manifest and manifest['compact_code'] == []
     assert set(manifest['changed_assets']) == {TAG_C}
     stock_syms = symbols(directory/'stock-demo')
+    # Each V2.1 iPod page is the stock page the inventory hashed, decodes and re-encodes exactly, and its init
+    # function is in V2.1's demo.
+    from ipod import decode, encode, walk
+    for section in SECTIONS:
+        for page, digest in M1_AUDIT[section].items():
+            data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
+            assert sha(data) == digest and encode(decode(data)) == data, page
+    for page, row in MAPPED.items():
+        assert row['opener'] in stock_syms, f"{page}: no {row['opener']} in V2.1"
     # Native evidence for this batch: options are asset rows, not V1.32's kind table;
     # Tidal creates its URL worker on demand, and check_cpumem does only drop_caches work.
-    from ipod import decode, walk
     more = list(walk(decode(read('stock.squashfs', 'release/assets/default/raw/ui/dialog/playmore_dialog.bin'))))
     assert [n[2]['name'] for n in more if n[0] == 'list_item'] == [f'listitem{i}' for i in range(7)]
     assert next(n for n in more if n[2].get('name') == 'image3')[2]['image'] == 'p_onlinesearch'

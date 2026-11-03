@@ -1,0 +1,339 @@
+{
+  "pages": {
+    "audiosetting_page.bin": {
+      "v21": "audiosetting_page.bin",
+      "opener": "audiosetting_page_init",
+      "why": "same path and role"
+    },
+    "bigcover_page.bin": {
+      "v21": "bigcover_page.bin",
+      "opener": "bigcover_page_init",
+      "why": "same path and role"
+    },
+    "dialog/addplaylist_dialog.bin": {
+      "v21": "dialog/kbaddplaylist_dialog.bin",
+      "opener": "dialog_kbaddplaylist_dialog_init",
+      "why": "the add-to-playlist name entry, now a keyboard dialog (add_edit, return)"
+    },
+    "dialog/confirminfo_dialog.bin": {
+      "v21": "dialog/confirminfo_dialog.bin",
+      "opener": "dialog_confirminfo_dialog_init",
+      "why": "same path and role"
+    },
+    "dialog/statusbar_dialog.bin": {
+      "v21": "dialog/dropdown_dialog.bin",
+      "opener": "dialog_dropdown_dialog_init",
+      "why": "the pull-down status bar: V2.1 names it dropdown_dialog (sysbar views, volume, clock, battery)"
+    },
+    "dialog/volume_dialog.bin": {
+      "v21": "dialog/volume_dialog.bin",
+      "opener": "dialog_volume_dialog_init",
+      "why": "same path and role"
+    },
+    "folder_page.bin": {
+      "v21": "folder_page.bin",
+      "opener": "folder_page_init",
+      "why": "same path and role"
+    },
+    "home_page.bin": {
+      "v21": "home_page.bin",
+      "opener": "home_page_init",
+      "why": "same path and role"
+    },
+    "localmusic/album_page.bin": {
+      "v21": "album_page.bin",
+      "opener": "album_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/albuminfo_page.bin": {
+      "v21": "albuminfo_page.bin",
+      "opener": "albuminfo_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/allmusic_page.bin": {
+      "v21": "allmusic_page.bin",
+      "opener": "allmusic_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/artistinfo_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 has no artist page: an artist's albums load through loadLocalClassList(0xff01) (m1plus_nav_goto.c). Phase 4.4 (Library) decides how the iPod artist view is built."
+    },
+    "localmusic/localclass_page.bin": {
+      "v21": "localclass_page.bin",
+      "opener": "localclass_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/playlist_page.bin": {
+      "v21": "playlist_page.bin",
+      "opener": "playlist_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/playlistsmore_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 has no playlist menu page (progress 60). Phase 4.4 (Library) decides the M1 hold-menu."
+    },
+    "localmusic_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 has no localmusic_page and no localmusic_page_init: the Library root is not a page of its own. Phase 4.4 (Library) decides it."
+    },
+    "playing_page.bin": {
+      "v21": "playing_page.bin",
+      "opener": "playing_page_init",
+      "why": "same path and role"
+    },
+    "playset/balance_page.bin": {
+      "v21": "playset/balance_page.bin",
+      "opener": "playset_balance_page_init",
+      "why": "same path and role"
+    },
+    "playset/bootvol_page.bin": {
+      "v21": "playset/bootvol_page.bin",
+      "opener": "playset_bootvol_page_init",
+      "why": "same path and role"
+    },
+    "playset/dsdoutput_page.bin": {
+      "v21": "systemset/dsdmode_page.bin",
+      "opener": "systemset_dsdmode_page_init",
+      "why": "the DSD output mode list; V2.1 keeps it under systemset/"
+    },
+    "playset/equalizer_page.bin": {
+      "v21": "playset/equalizer_page.bin",
+      "opener": "playset_equalizer_page_init",
+      "why": "same path and role"
+    },
+    "playset/filter_page.bin": {
+      "v21": "playset/filter_page.bin",
+      "opener": "playset_filter_page_init",
+      "why": "same path and role"
+    },
+    "playset/maxvol_page.bin": {
+      "v21": "playset/maxvol_page.bin",
+      "opener": "playset_maxvol_page_init",
+      "why": "same path and role"
+    },
+    "playset/memplay_page.bin": {
+      "v21": "playset/memplay_page.bin",
+      "opener": "playset_memplay_page_init",
+      "why": "same path and role"
+    },
+    "playset/playmode_page.bin": {
+      "v21": "playset/playmode_page.bin",
+      "opener": "playset_playmode_page_init",
+      "why": "same path and role"
+    },
+    "playset/playset_page.bin": {
+      "v21": "playset/playset_page.bin",
+      "opener": "playset_playset_page_init",
+      "why": "same path and role"
+    },
+    "playset/replaygain_page.bin": {
+      "v21": "playset/replaygain_page.bin",
+      "opener": "playset_replaygain_page_init",
+      "why": "same path and role"
+    },
+    "playset/usbvol_page.bin": {
+      "v21": "systemset/usbvolmode_page.bin",
+      "opener": "systemset_usbvolmode_page_init",
+      "why": "the USB volume mode list; V2.1 keeps it under systemset/"
+    },
+    "stream_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 has no stream_page: its Home lists the streaming apps (airplay, hifi, tidal) as pages of their own. Phase 4.5 (Home) decides the Streams row."
+    },
+    "system_bar.bin": {
+      "v21": "system_bar.bin",
+      "opener": "system_bar_init",
+      "why": "same path and role"
+    },
+    "systemset/about_page.bin": {
+      "v21": "systemset/about_page.bin",
+      "opener": "systemset_about_page_init",
+      "why": "same path and role"
+    },
+    "systemset/autotime_page.bin": {
+      "v21": "systemset/autosynctime_page.bin",
+      "opener": "systemset_autosynctime_page_init",
+      "why": "the auto-sync time zone list"
+    },
+    "systemset/backlight_page.bin": {
+      "v21": "systemset/brightness_page.bin",
+      "opener": "systemset_brightness_page_init",
+      "why": "the brightness slider with - and + buttons"
+    },
+    "systemset/bluetooth_page.bin": {
+      "v21": "systemset/bluetooth_page.bin",
+      "opener": "systemset_bluetooth_page_init",
+      "why": "same path and role"
+    },
+    "systemset/btadjustvol_page.bin": {
+      "v21": "systemset/btvolume_page.bin",
+      "opener": "systemset_btvolume_page_init",
+      "why": "the Bluetooth volume - and + buttons"
+    },
+    "systemset/btquality_page.bin": {
+      "v21": "systemset/btquality_page.bin",
+      "opener": "systemset_btquality_page_init",
+      "why": "same path and role"
+    },
+    "systemset/datetime_page.bin": {
+      "v21": "systemset/typedatetime_page.bin",
+      "opener": "systemset_typedatetime_page_init",
+      "why": "the Date & Time list (auto, manual, 24-hour): opened beside powermanager_page by the Settings handler, as V1.32 does with its datetime_page; V2.1 reuses the name datetime_page for the manual selectors"
+    },
+    "systemset/display_page.bin": {
+      "v21": "systemset/display_page.bin",
+      "opener": "systemset_display_page_init",
+      "why": "same path and role"
+    },
+    "systemset/fwupdate_page.bin": {
+      "v21": "systemset/fwupdate_page.bin",
+      "opener": "systemset_fwupdate_page_init",
+      "why": "same path and role"
+    },
+    "systemset/keylock_page.bin": {
+      "v21": "systemset/keylock_page.bin",
+      "opener": "systemset_keylock_page_init",
+      "why": "same path and role"
+    },
+    "systemset/language_page.bin": {
+      "v21": "systemset/language_page.bin",
+      "opener": "systemset_language_page_init",
+      "why": "same path and role"
+    },
+    "systemset/lighttime_page.bin": {
+      "v21": "systemset/lighttime_page.bin",
+      "opener": "systemset_lighttime_page_init",
+      "why": "same path and role"
+    },
+    "systemset/manualtime_page.bin": {
+      "v21": "systemset/datetime_page.bin",
+      "opener": "systemset_datetime_page_init",
+      "why": "the manual date and time selectors (tselector_*), which V2.1 puts in datetime_page"
+    },
+    "systemset/netservice_page.bin": {
+      "v21": "systemset/netservice_page.bin",
+      "opener": "systemset_netservice_page_init",
+      "why": "same path and role"
+    },
+    "systemset/powermanager_page.bin": {
+      "v21": "systemset/powermanager_page.bin",
+      "opener": "systemset_powermanager_page_init",
+      "why": "same path and role"
+    },
+    "systemset/reset_page.bin": {
+      "v21": "systemset/reset_page.bin",
+      "opener": "systemset_reset_page_init",
+      "why": "same path and role"
+    },
+    "systemset/screensaver_about.bin": {
+      "v21": "systemset/screensaverabout_page.bin",
+      "opener": "systemset_screensaverabout_page_init",
+      "why": "the three-line screen saver note (label_tip1..3 are label_info1..3)"
+    },
+    "systemset/screensaver_page.bin": {
+      "v21": "systemset/screensaver_page.bin",
+      "opener": "systemset_screensaver_page_init",
+      "why": "same path and role"
+    },
+    "systemset/sleepshutdown_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 folds the sleep timer into powermanager_page (view_sleep: switch, tselector_hour, tselector_min). Phase 4.3 (Settings pages) decides it."
+    },
+    "systemset/standby_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 folds the standby list into powermanager_page (view_standby). Phase 4.3 (Settings pages) decides it."
+    },
+    "systemset/synclink_page.bin": {
+      "v21": "systemset/synclink_page.bin",
+      "opener": "systemset_synclink_page_init",
+      "why": "same path and role"
+    },
+    "systemset/sysset_page.bin": {
+      "v21": "systemset/sysset_page.bin",
+      "opener": "systemset_sysset_page_init",
+      "why": "same path and role"
+    },
+    "systemset/wifi_page.bin": {
+      "v21": "systemset/wifi_page.bin",
+      "opener": "systemset_wifi_page_init",
+      "why": "same path and role"
+    },
+    "systemset/wifiset_page.bin": {
+      "v21": "systemset/wifiset_page.bin",
+      "opener": "systemset_wifiset_page_init",
+      "why": "same path and role"
+    }
+  },
+  "assets": {
+    "album_page.bin": "a1587af1fb71b824f2da34fa703f7c513c5f0d671625518b535741d6edc02e3e",
+    "albuminfo_page.bin": "da7754483748440f0814260f0923fe9ab2cae1caecd7c8b39d62a3bf078f6669",
+    "allmusic_page.bin": "d57fc32e3f91bad57e4d32a9a75c8cd1364af78bd2c09506036fd88bfd29e49a",
+    "bigcover_page.bin": "7771cae49963ca5e0f07ca8fc079ed263601eedbbe63e2e1daadd3bba30dc0c5",
+    "dialog/confirminfo_dialog.bin": "f671867ef75a5a9fd2308d7565d152f7ffe609c2b23168340f206b5fc49a7676",
+    "dialog/dropdown_dialog.bin": "28690f07438fe6a39286f60e2059cd07d9457037c811412621f93392362398f1",
+    "dialog/kbaddplaylist_dialog.bin": "81f45ee1be55ff967ee032eaf60c6835fee898ecddc85eed53f9a9d38e6c999e",
+    "dialog/volume_dialog.bin": "76552f59c8137b7fb60ae454fb22edaa1c2b00ad9401d8b2323c8fc20629baba",
+    "folder_page.bin": "6441f44f3f6d9aeda375aad0f339956a384ebe1d0a666dfa3d78041cee7bc729",
+    "home_page.bin": "875a8080991c56d6b7950ec76a529136b4b5a580d3c9ae27c8b34cb7005558a5",
+    "localclass_page.bin": "bb61cad15595f75d0643cc721750a9064e0243e97800cfa01a2f93a4a4a2575b",
+    "playing_page.bin": "1d640decac5deb505d4031b967feb59ca0a67c0cfbb116ae5cf2267ade28d353",
+    "playlist_page.bin": "4c01af954a2f43bd90be84729bda244eb2567f608ae7a369c4f341121cd95466",
+    "system_bar.bin": "c05f9c3c928984edc81e4f02a0905ecf84ff71a80908a4520afca5fbf7545d18"
+  },
+  "navbar_only": {
+    "audiosetting_page.bin": "5ea8332e1a1514d1a5cf0df18229989c75c6899870ac870dd9bdf01252f31fc8",
+    "playset/balance_page.bin": "d2e59a8376b18b16055c199fc58030743a80cd9358b55e408fb0e52711c1f3a7",
+    "playset/bootvol_page.bin": "365141cb4dd5830d623ddb57bd422de5c25d380f0f874b8e65b73008033d56a4",
+    "playset/filter_page.bin": "8f9a56be17c83ca70726a173ce72e3bed7138cf602f305a6e01d675a26f4d285",
+    "playset/maxvol_page.bin": "7085dad723e737825d6dd274fd4f259286a1007e30b472cc5549f592e246798d",
+    "playset/memplay_page.bin": "b9cad3c8db582950852170400103cbd0b02fff00ae493ce2eaabfce3fb29b0eb",
+    "playset/playmode_page.bin": "5bd3b58becc64521d7727421f4b3a982efc07d555d98c6828fc8e88dbcf2a5f6",
+    "playset/playset_page.bin": "d2f00f98bb113c9420c38d9348eb96477545d51fd4ebbe5d2e57bd21524ec544",
+    "playset/replaygain_page.bin": "68e727bf834b12bd784264fa052cce76f1bb8a8293cfb449ef6156b7e2919683",
+    "systemset/about_page.bin": "7e2a0d3968e2ad10aa43f3c9aa549611b6c18fb929300a8280c89c7015940f03",
+    "systemset/autosynctime_page.bin": "6bae1b1e1e9d75538b0b56736b0f6a769d569d0d07db72e251d6e3bc3ba60ec8",
+    "systemset/bluetooth_page.bin": "80947223ac6191f1cac16e7d6f3540d0821f12fbb3cd78c8ad6e9c1d4a047e29",
+    "systemset/brightness_page.bin": "2bde5639a453db5a934307efc260400e47c3126804558d5115ae37d1bd14b609",
+    "systemset/btquality_page.bin": "380303370d1b3bfa218ede70e4de5ef33c50cf5258931810900fce3babbb6b64",
+    "systemset/btvolume_page.bin": "9c1c9a74473fb386a1e1e10b88d75b37676369e8113dd374fc20cb66233afaaa",
+    "systemset/datetime_page.bin": "f3a8b69aa1f16d6b15bf75dedf023da79d0405f28c87015377717c4591a25be6",
+    "systemset/display_page.bin": "e382af9b4d8419d7bcedde335285062f8f51d1c33711ad639b03b2c88f7282f3",
+    "systemset/dsdmode_page.bin": "8480b309b0652ea2d96a197ba55cd42ff7497555d6bc211a45e89deba5a7c73a",
+    "systemset/fwupdate_page.bin": "c9c7452f6e6294fac860485a645378006ced2d250dde506e185ed8f2dc155324",
+    "systemset/keylock_page.bin": "9f9af55a37e14485ff36a89d0a0a79589f3ec9a94dbe738dbbe7480985df0e35",
+    "systemset/language_page.bin": "dc538f2485a67a2e5706fcced50e8f0c303a72f2cf5fb8fa0e89098b81e5b1b9",
+    "systemset/lighttime_page.bin": "5a66ef0a95154b4c27616d257bd285c2c1d37935ff1879ef3695838c631c537f",
+    "systemset/netservice_page.bin": "8f0fe314f1b5c8d867561fcd4c9cb5891e7c9c92156703fbaabdb4dbbcbb9cb8",
+    "systemset/powermanager_page.bin": "65f8e24070d85af65c46fc329c738f63f288cd7bf54db975213b0b0bbe5a914a",
+    "systemset/reset_page.bin": "887ecb9bcf4bf3feeb75d60cb55dab26b026d9a8ca4c7c28081233ad03e6ad84",
+    "systemset/screensaver_page.bin": "e5dd65614219444ecc7a70ed97383ee62f97d4e61d9e8c9b9fd53e21eae6155e",
+    "systemset/screensaverabout_page.bin": "ba3f2d2990e33e1583bd1d2326011dc37234a8ee7a2e98ee303c1d2a8ae0365a",
+    "systemset/synclink_page.bin": "4898562f2b99526664dcfc3f6500a71f6cc6995a3d1cd2c57940110e3b05c0b4",
+    "systemset/sysset_page.bin": "26bdacc67fe5e1f4a61fbccd32cca4f0d7b1161b3f44e99f4d4dec07a494b4df",
+    "systemset/typedatetime_page.bin": "7cecc82a3848312da176dbeb6253ae9535eb10df78853fc48c7175b970853b9a",
+    "systemset/usbvolmode_page.bin": "8e44c30180259f50bec8830e1631899f4f5a768c205ff811c4f1347c9a0832e6",
+    "systemset/wifi_page.bin": "4aa68eef4c4ba6dcece6780d3785fda693d1c11c8e9dada1b7343a88033c61fa",
+    "systemset/wifiset_page.bin": "78c56276ed97434ff50d7a605d2689ccffc8d7417cca1def74247f8c1c046a8a"
+  },
+  "slide_only": {
+    "playset/equalizer_page.bin": "f69fb1129b81e2e4b402c0803a65891701d599127817afc2a7297b1b35016f8b"
+  },
+  "immediates": [],
+  "row_layout_calls": {
+    "purpose": "fit ordinary row titles and their containers on every native relayout",
+    "sites": []
+  },
+  "private_prologues": {},
+  "event_abi_words": {},
+  "settings_icons": {},
+  "quiet_icons": {},
+  "status_icons": {},
+  "styles": {}
+}
