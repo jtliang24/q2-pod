@@ -545,9 +545,6 @@ M1PLUS_FUNCTION_ALIASES = {
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
-    # iPod's paint backbone (4.1 of docs/m1plus-ipod-ui.md): with IPOD=1 the selection bar and the status bar's fill
-    # are drawn here, not by ringnav_paint's paint_selection. Hooked in Phase 1 so the lists keep a highlight.
-    'widget_on_paint_background': (0x66b778, 'ringnav_paint_bg', 'paint_bg'),
     'widget_dispatch': (0x66cec8, 'ringnav_dispatch', 'dispatch'),
     'on_wm_keylong_fun': (0x4cdd9c, 'ringnav_keylong', 'keylong'),
     'playset_equalizer_page_init': (0x49e358, 'peq_page_init', None),
