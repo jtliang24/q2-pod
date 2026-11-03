@@ -380,6 +380,7 @@ M1PLUS_PORTS = {
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
     # The iPod UI's hooks (docs/m1plus-ipod-ui.md Phase 4): the shared C compiles with IPOD=1, but each of these is
     # unhooked until its item ports it
+    'widget_on_paint_background': ('unported', "the iPod selection bar and status bar fill, which V2.1's opaque rows hide until their styles go (ipod-ui 4.1)"),
     'style_get_color': ('unported', 'the iPod accents and Light Mode recolour the styles (ipod-ui 4.1)'),
     'image_manager_add': ('unported', "the iPod theme's images and Light Mode's flip (ipod-ui 4.1)"),
     'ui_loader_load_widget_with_parent': ('unported', "Centred Now Playing's page, on every window's load (ipod-ui 4.1)"),

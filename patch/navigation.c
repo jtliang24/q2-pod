@@ -2120,6 +2120,14 @@ static void paint_caps(void *w, void *canvas) {
 }
 #endif
 
+/* The iPod's selection bar, drawn behind the rows by widget_on_paint_background. The M1 Plus keeps the
+ * outline Stock draws over them (ringnav_paint) until the iPod row styles make V2.1's rows transparent
+ * (docs/m1plus-ipod-ui.md 4.1). */
+#if IPOD && !M1PLUS
+#define IPOD_BAR 1
+#else
+#define IPOD_BAR 0
+#endif
 /* Load and settle the painted surface's selection, then draw it: a neutral outline over the rows
  * in Stock, an off-white bar behind them in iPod (a dot on Home), or Classic's full-width accent
  * bar. The outline is one neutral white line seated on a dark shade line: the shade is the stock
@@ -2128,13 +2136,13 @@ static void paint_caps(void *w, void *canvas) {
  * readable over artwork without borrowing the red "playing" language or the native focus flag.
  * Small rows and degenerate geometry keep the square fallback. */
 static void paint_selection(void *w, void *canvas) {
-#if IPOD
+#if IPOD_BAR
     if (kind(w)) st.sel_w = st.sel_widget = st.sel_accent = (void *)0;
 #endif
     if (!w || !canvas || !kind(w)) return;
     void *top = window_manager_get_top_window(window_manager());
     int i, shown = !st.touch_mode;
-#if IPOD
+#if IPOD_BAR
     void *own = window_of(w);
     if (own && own != top && slides(top)) {
         /* The page under a sliding one, painted into the animator's snapshot: draw the row it
@@ -2169,7 +2177,7 @@ static void paint_selection(void *w, void *canvas) {
     unsigned fill_color = (unsigned)I(lcd, LCD_FILL_COLOR);
     unsigned stroke_color = (unsigned)I(lcd, LCD_STROKE_COLOR);
     if (!clip_surface(canvas, &g_menu, &old)) return;
-#if IPOD
+#if IPOD_BAR
     /* A list row gets the full surface width; a grid tile keeps its own rect. */
     int tile = 2 * r.w < I(g_menu.w, W_W);
     if (!tile) {
@@ -2359,11 +2367,12 @@ int ringnav_paint(void *w, void *canvas) {
     paint_caps(w, canvas);
     coverflow_home_clip(w, canvas, 0);
     st.paint_w = w ? P(w, W_PARENT) : (void *)0;
-#else
+#endif
+#if !IPOD_BAR
     paint_selection(w, canvas);
+#endif
 #if M1PLUS
     home_paint(w, canvas); /* Knob: Navigation's card on V2.1's Home (m1plus_nav_home.c) */
-#endif
 #endif
     return result;
 }
