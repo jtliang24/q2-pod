@@ -3143,6 +3143,9 @@ Not checked on the device:
 Seen, not the build's: the hotspot's DHCP gave the device no DNS server (`/tmp/resolv.conf` empty; the App
 Store said "Can't reach GitHub"); 1.1.1.1 was set for the pass and the file emptied after.
 
+**Landed** in `feature/m1-ipod` (`fd53846`, `--no-ff`). `drift.py` from there: 1.5.9 → 1.6.3 due (78
+commits, 2,007 surface lines), left for the iPod port's Phase 6.
+
 ## How to check a build now
 
 ```sh

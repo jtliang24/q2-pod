@@ -107,8 +107,9 @@ into `feature/m1-ipod`. `work/sync/1.6.0-wip/` is reference for the overlapping 
   rows. Carousel is a Phase 4.5 row.
 - Gates, record (`UPSTREAM_BASE=1.5.9`) and a device pass. This is the floor for Phases 2 to 4.
 
-Gated on Nov 3 (progress 59): `sync/1.5.9`, its `--dev` build V02Hm in `work/sync/1.5.9/`. The device pass
-is next, then it lands in `feature/m1-ipod`.
+Done on Nov 3 (progress 59): gated, the device pass on its `--dev` build V02Hm (`work/sync/1.5.9/`), and
+landed in `feature/m1-ipod` (`fd53846`). `drift.py` then has 1.5.9 → 1.6.3 due (78 commits, 2,007 lines),
+which waits for Phase 6.
 
 ## Phase 2: Device geometry as names
 
