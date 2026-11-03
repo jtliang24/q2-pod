@@ -440,9 +440,9 @@ static void np_open(void) {
     np.station =
         label(page, SPOT_TEXT_X, SPOT_TITLE_Y, SPOT_TEXT_W, 28, STYLE_SCRLABEL_WHITE20L, NP_TITLE_PX, 0xffffffffu);
     np.artist = label(page, SPOT_TEXT_X, SPOT_ARTIST_Y, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
-                      IPOD ? (0xff000000u | NP_ARTIST_RGB) : SPOT_GREY);
+                      0xff000000u | NP_ARTIST_RGB);
     np.song = label(page, SPOT_TEXT_X, SPOT_ALBUM_Y, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
-              IPOD ? (0xff000000u | NP_ALBUM_RGB) : SPOT_GREY);
+              0xff000000u | NP_ALBUM_RGB);
     np.info = label(page, SPOT_TIME_X, SPOT_TIMES_Y, UI_W - 2 * SPOT_TIME_X - 80, 16, STYLE_SCRLABEL_WHITE20L, 14, SPOT_GREY);
     np.elapsed = label(page, UI_W - SPOT_TIME_X - 80, SPOT_TIMES_Y, 80, 16, STYLE_SCRLABEL_WHITE20R,
                        14, SPOT_GREY);

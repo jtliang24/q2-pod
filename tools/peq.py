@@ -55,6 +55,7 @@ LIBC = {
     'strlen': ('unsigned', 'const char *'),
     'fputs': ('int', 'const char *, void *'),
     'calloc': ('void *', 'unsigned, unsigned'),
+    'realloc': ('void *', 'void *, unsigned'),  # addon.c got: a kept reply to its size
     'free': ('void', 'void *'),
     'memmove': ('void *', 'void *, const void *, unsigned'),
     'pow': ('double', 'double, double'), 'cos': ('double', 'double'),
@@ -97,6 +98,7 @@ LIBC = {
     'localtime_r': ('const int *', 'const long *, int *'), 'tzset': ('void', 'void'),
     # Scrobble upload (scrobble.c): demo's libcurl and libcrypto
     'fseek': ('int', 'void *, long, int'), 'ftell': ('long', 'void *'), 'atoi': ('int', 'const char *'),
+    'strtol': ('long', 'const char *, char **, int'),  # addon.c progress_row
     'strstr': ('char *', 'const char *, const char *'),
     'curl_easy_init': ('void *', 'void'), 'curl_easy_setopt': ('int', 'void *, int, ...'),
     'curl_easy_perform': ('int', 'void *'), 'curl_easy_getinfo': ('int', 'void *, int, ...'),
@@ -127,7 +129,7 @@ LIBC = {
     'write': ('int', 'int, const void *, unsigned'),
 }
 
-def compile_common(out, binary, player=False, ipod=False, flac_experiments=()):
+def compile_common(out, binary, player=False, flac_experiments=()):
     got = {}
     for line in run('readelf', '-AW', binary).splitlines():
         words = line.split()
@@ -184,10 +186,10 @@ def compile_common(out, binary, player=False, ipod=False, flac_experiments=()):
                 'mp3_filter_entry:', 'move $a2, $fp', 'j mp3_filter', 'nop']
     (out/'peq_platform.h').write_text('\n'.join(header)+'\n')
     (out/'peq_imports.S').write_text('\n'.join(asm)+'\n')
-    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', f'-DIPOD={int(ipod)}']
+    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections']
     if player: flags += ['-mnan=2008']
     objects = []
-    for name in (['peq.c', 'peq_player.c', 'mp3_gapless.c'] + [f'flac_{n}.c' for n in flac_experiments]) if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
+    for name in (['peq.c', 'peq_player.c', 'mp3_gapless.c'] + [f'flac_{n}.c' for n in flac_experiments]) if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)

@@ -4,6 +4,7 @@ import cmath
 import ctypes as C
 import math
 import pathlib
+import re
 import subprocess
 import tempfile
 import sys; sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first
@@ -1055,7 +1056,7 @@ def eq3_captures(tmp, out, font):
     (tmp/'shim.h').write_text(SHIM_H)
     (tmp/'shim.c').write_text('#include "peq.h"\n' + SHIM)
     ui = compile_host(tmp, 'peq_ui_ipod.so', ROOT/'patch/peq_ui.c', ROOT/'patch/peq.c', tmp/'shim.c',
-                      '-I', ROOT/'patch', '-include', tmp/'shim.h', '-DIPOD=1')
+                      '-I', ROOT/'patch', '-include', tmp/'shim.h')
     ui.shim_e3_paint.restype = C.POINTER(C.c_uint32 * (290 * 375))
     ui.shim_text.restype = C.c_char_p
     (tmp/'root/mnt/data').mkdir(parents=True)
@@ -1773,7 +1774,7 @@ def player_check(tmp):
 
 def visualizer_check(tmp):
     """The visualizer's analysis (patch/visualizer.c vis_bands): a sine lands in its band at full scale."""
-    lib = compile_host(tmp, 'visualizer.so', ROOT/'patch/visualizer.c', ROOT/'patch/peq.c', '-DIPOD=1', '-I', ROOT/'patch')
+    lib = compile_host(tmp, 'visualizer.so', ROOT/'patch/visualizer.c', ROOT/'patch/peq.c', '-I', ROOT/'patch')
     rate, n, bands = 44100, 1024, 64
     def levels(pcm):
         out = (C.c_float * bands)()
@@ -1831,7 +1832,7 @@ void check_styles(void) {
     }
 }
 """)
-    checked = compile_host(tmp, 'visualizer_checks.so', harness, ROOT/'patch/peq.c', '-DIPOD=1', '-I', ROOT/'patch')
+    checked = compile_host(tmp, 'visualizer_checks.so', harness, ROOT/'patch/peq.c', '-I', ROOT/'patch')
     checked.check_styles()
     print('Visualizer: FFT bands, selected-style work, stereo scope/VU and pause decay passed.')
 
@@ -2807,6 +2808,10 @@ def shelf_check(tmp, lib):
         assert sources(bad, scratch) == [], bad
     assert [a[2] for a in sources('a/q2-x\nb/q2-x\nc/x\n', scratch)] == ['x']  # a repeated id: the first
     assert len(sources(''.join(f'me/q2-a{i}\n' for i in range(20)), scratch)) == 16
+    assert [a[2] for a in sources('a/q2\nb/q2-tidal\nc/downpic\nd/q2-tidal2\n', scratch)] == ['tidal2']  # never the firmware's folders
+    own = {m for f in (ROOT/'patch').glob('*.[ch]')
+           for m in re.findall(r'(?:mmc/|CARD "/)\.([a-z0-9-]+)["/]', f.read_text())} - {'rockbox', 'spotify'}
+    assert own and not [x for x in own if sources(f'a/q2-{x}\n', scratch)], own  # every card folder of the firmware's
     C.c_int.in_dll(lib, 'shelf_n').value = len(sources((ROOT/'sources.list').read_text()))
     ids = [a.id.decode() for a in apps[:6]]
     assert ids == ['rockbox', 'themes', 'spotify', 'deezer', 'soulseek', 'filebrowser'], ids
@@ -2851,13 +2856,13 @@ def shelf_check(tmp, lib):
 
     # The card apps (patch/addon.c), zipped as their releases are: the app, its launcher and manifest.
     # What each saved (Deezer's sign-in, settings and queue; Soulseek's settings, transfers and
-    # share index; File Browser's settings), never in a release, survives an install over it, an
-    # update and a remove.
+    # share index; File Browser's settings), never in a release, survives an install over it and an
+    # update; a remove takes the whole folder, and nothing outside it.
     saved = {3: ['.deezer/arl', '.deezer/quality', '.deezer/organize', '.deezer/mode', '.deezer/layout',
                  '.deezer/queue.json'],
              4: ['.soulseek/config.json', '.soulseek/downloads.json', '.soulseek/shares.cache'],
              5: ['.filebrowser/config.json']}
-    shutil.rmtree(card); card.mkdir(parents=True)
+    shutil.rmtree(card); (card/'Music').mkdir(parents=True); (card/'Music/a.flac').write_bytes(b'song')
     for i, kept in saved.items():
         d = '.' + ids[i]
         for f in kept: (card/f).parent.mkdir(exist_ok=True); (card/f).write_bytes(b'mine')
@@ -2866,8 +2871,11 @@ def shelf_check(tmp, lib):
         assert install(i, z) == 0 and install(i, z) == 0, i
         assert sorted(files(i)) == sorted(f'{d}/{n}' for n in (f'q2-{ids[i]}', 'run', 'q2app', 'README.txt'))
         assert all((card/f).read_bytes() == b'mine' for f in kept), i
+        (card/d/'stream').mkdir(); (card/d/'stream/01.flac').write_bytes(b'song')
+        (card/f'{d}2').mkdir(); (card/f'{d}2/x').write_bytes(b'other')
         lib.shelf_remove(i)
-        assert sorted(str(f.relative_to(card)) for f in (card/d).rglob('*')) == sorted(kept), i
+        assert not (card/d).exists() and not (card/f'.q2/apps/{ids[i]}.tag').exists(), i
+        assert (card/'Music/a.flac').exists() and (card/f'{d}2/x').exists(), i
     print("Q2 Shelf: release JSON, unzip listing checks, install, update, failed move, remove and card apps passed.")
 
 

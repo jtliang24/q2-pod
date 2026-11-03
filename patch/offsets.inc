@@ -75,18 +75,7 @@
 #define LCD_TEXT_COLOR 0xb8     /* lcd_set_text_color @0x6474c4 */
 #define CANVAS_ALIGN_V 0x30     /* canvas_set_text_align @0x63419c; middle = 1 */
 #define CANVAS_ALIGN_H 0x34     /* center = 1 */
-/* Selection outline tuning. RADIUS > 2 or the stock rounded path squares off; tests read these.
- * The shade uses the same stock dark surface as the fill at an alpha that keeps the outline
- * above 3:1 on pure white art (0x99 is the floor); on dark rows it matches the stock background
- * exactly and disappears. The line is translucent white at OUTLINE_ALPHA, so it reads as a soft
- * grey on the dark theme instead of a hard white edge; lower OUTLINE_ALPHA or SHADE_ALPHA
- * together and the contrast margin over bright art erodes. */
-#define RADIUS 9
-#define FILL_RGB 0x2b2b2b
-#define FILL_ALPHA 0x40
-#define SHADE_ALPHA 0xb3
-#define OUTLINE_RGB 0xffffff
-#define OUTLINE_ALPHA 0xb3
+#define FILL_RGB 0x2b2b2b /* the stock dark surface, under the letter and volume overlays */
 /* iPod accents, in the order of the Accent setting (IPOD/ACCENT in config.ini; 0 is the default):
  * { selection top, bottom, light tone, red tone, highlight }, 0xRRGGBB. Equal stops keep
  * selection flat on the Q2 panel; retain the fine top highlight. White text holds
@@ -147,7 +136,7 @@ static inline int arc_out(int r, int y) {
     while ((s + 1) * (s + 1) <= v) ++s;
     return 16 * r - s;
 }
-#define PLACEHOLDER (IPOD ? "default_album_flow" : "default_album_big") /* Cover Flow's and Spotify's missing art */
+#define PLACEHOLDER "default_album_flow" /* Cover Flow's and Spotify's missing art */
 #define VOL_POLL_MS 50 /* how often the volume indicator checks for a change */
 /* The volume panel off Now Playing (vol_paint): exactly over Quick Settings' brightness row
  * (tools/ipod.py checks it), its rounded corners clear of the 80px glass corners. */
@@ -193,6 +182,10 @@ static inline int arc_out(int r, int y) {
 /* iPod: the full-screen art (stock's bigcover_page) shows the song name BC_MS, then it and its shade
  * fade out in BC_STEPS steps, BC_STEP_MS apart. The art takes the cover's shape (bc_fit). */
 #define BC_MS 3000
+/* No symbol: Enlarged Album Art's countdown. Now Playing's timer (0x52bffc) counts it down while a
+ * song plays there and opens bigcover_page at 0, then sets it back to BC_IDLE_FULL (10 s). */
+#define BC_IDLE 0x99f660
+#define BC_IDLE_FULL 40
 #define BC_TITLE_PAD 12 /* the song name's inset from the art's sides */
 /* The screen glass's rounded corners and how far content keeps clear of them (tools/ipod.py). */
 #define GLASS_R 80
@@ -297,7 +290,7 @@ static inline int arc_out(int r, int y) {
 #define SPOT_ART_X 16
 /* iPod: Now Playing's art top, clear of the page dots (tools/ipod.py NP_ART_Y) */
 #define NP_ART_TOP 42
-#define SPOT_ART_Y (IPOD ? NP_ART_TOP : 50)
+#define SPOT_ART_Y NP_ART_TOP
 #define SPOT_ART_PX 166
 /* iPod: the 50px heart/play-mode frame sits this far below the art's bottom edge, so the centred
  * 28px glyph (4px clear at its foot) ends level with the art (tools/ipod.py NP_ICON_PAD) */
@@ -567,8 +560,8 @@ static inline int arc_out(int r, int y) {
 #define BOOTVOL_CHANGED 0x4b4300  /* slider_bootvol's EVT_VALUE_CHANGED */
 #define SCAN_THREAD 0xa271d8
 #define SCAN_DONE 0xa271d4
-/* Coverflow text: iPod keeps every label CF_EDGE from the sides, where the lowest track row's text
- * clears the bottom corners; both builds keep the captions there. Album names and artists scroll
+/* Coverflow text: every label, captions included, sits CF_EDGE from the sides, where the lowest
+ * track row's text clears the bottom corners. Album names and artists scroll
  * within that. Under the covers (CF_TEXT_Y), the album name is CF_NAME_PX white and the artist
  * CF_ARTIST_PX in CF_GREY (stock secondary text) right under it. */
 #define CF_EDGE 36
@@ -597,7 +590,7 @@ static inline int arc_out(int r, int y) {
 #define CF_BRIGHT1 192
 #define CF_BRIGHT2 128
 #define CF_REFLECT 24
-#define CF_REFLECT_TOP (IPOD ? 48 : 64)
+#define CF_REFLECT_TOP 48
 #define CF_STRIDE 110
 #define CF_TEXT_Y 212 /* the album caption's top, under the frame; the artist follows */
 /* Touch on the covers (coverflow.c, docs/internals.md#coverflow-touch) */

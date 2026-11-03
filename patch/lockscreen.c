@@ -234,10 +234,8 @@ static void big_clock(void *win) {
     widget_move_resize(pct, UI_W - 79, 3, 64, 24);
     widget_set_visible(batt, 0, 0);
 #endif
-#if IPOD /* Legacy has no Battery setting: stock's percent stays */
     extern int ipod_battery(void); /* navigation.c: IPOD BATTERY, 0 Icon, else a percentage */
     widget_set_visible(pct, ipod_battery() != 0, 0);
-#endif
     widget_set_prop_int(date, "style:normal:font_size", 22);
     widget_set_prop_int(time, "style:normal:font_size", 116);
     widget_set_prop_str(date, "style:normal:text_align_h", "center");

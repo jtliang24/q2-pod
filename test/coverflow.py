@@ -202,8 +202,8 @@ void *widget_lookup(void *x, const char *n, int r) {
     return !x ? 0 : !strcmp(n, "img_coverflow") ? x : !strcmp(n, "img_homeart") ? home_art :
            !strcmp(n, "list_view_home") ? home_list : 0;
 }
-static int home_full, classic, light;
-int ipod_home_full(void) { return home_full; }
+static int home_mode, classic, light; /* home_mode: HOME, 0 Split, 1 Full, 2 Carousel */
+int ipod_home(void) { return home_mode; }
 int ipod_classic(void) { return classic; }
 int bold_label(void *w, int was) { return was; } /* the font only: no geometry */
 int ipod_light(void) { return light; }
@@ -263,6 +263,7 @@ static int stock_write(void) { if (during_write) during_write(); return 0; }
 int stock_scan_all_trampoline(void *a, void *b) { return stock_write(); }
 int stock_scan_folder_trampoline(void *a, void *b) { return stock_write(); }
 int stock_delete_song_trampoline(void *a, void *b) { return stock_write(); }
+void library_scope_scan(void) {} /* the marker walk: test/library_scope.py */
 int coverflow_scan_all(void *, void *);
 static void rescan(void) { coverflow_scan_all(0, 0); } /* the library changed, as only a scan changes it */
 
@@ -568,7 +569,7 @@ static void renderer(void) {
     render(0, rest);
     for (int y = 0; y < 160; ++y)
         for (int x = 0; x < 160; ++x)
-            if (!IPOD || (x >= 12 && x < 148) || (y >= 12 && y < 148))
+            if ((x >= 12 && x < 148) || (y >= 12 && y < 148))
                 assert(px(CF_CX - 80 + x, CF_TOP + y) == art[y * 160 + x]);
     assert(px(CF_CX - 81, CF_TOP + 80) != art[80 * 160] && px(CF_CX, CF_TOP - 1) == 0xff000000u);
     /* Each neighbour's visible run on the horizon, sampled in its middle: its colour at its
@@ -590,14 +591,12 @@ static void renderer(void) {
     assert(!memcmp(without, frame, sizeof(frame))); /* the third out is not drawn at rest */
     /* Everything, reflections included, fits the frame with room to spare. */
     for (int x = 0; x < CF_VIEW_W; ++x) assert(!(px(x, 0) & 0xffffff) && !(px(x, CF_VIEW_H - 1) & 0xffffff));
-#if IPOD
     unsigned centre = px(CF_CX, CF_TOP + 80); /* Light Mode: the same covers over paper */
     light = 1;
     render(0, inner);
     assert(px(0, 0) == (0xff000000u | LIGHT_PAPER * 0x010101u) && px(CF_CX, CF_TOP + 80) == centre);
     light = 0;
     render(0, inner);
-#endif
     /* The reflection: CF_REFLECT rows under the cover, from CF_REFLECT_TOP of its brightness down
        to black, never brighter going down; nothing after it. */
     render(0, ring);
@@ -614,13 +613,13 @@ static void renderer(void) {
     const unsigned *alone[7] = { 0, 0, 0, flat[3], 0, 0, 0 };
     render(0, alone);
     assert(px(CF_CX, CF_TOP + 80) == colours[3]);
-    assert(px(CF_CX - 80, CF_TOP) == (IPOD ? 0xff000000u : colours[3]));
-    assert(px(CF_CX - 80, CF_TOP + 160) == (IPOD ? 0xff000000u : px(CF_CX, CF_TOP + 160)));
+    assert(px(CF_CX - 80, CF_TOP) == 0xff000000u);
+    assert(px(CF_CX - 80, CF_TOP + 160) == 0xff000000u);
     for (int frac = -ONE / 2; frac < ONE / 2; frac += ONE / 16 + 77) {
         render(frac, alone);
         for (int x = 0; x < CF_VIEW_W; ++x) {
             if (slot_of(px(x, CF_TOP + 80)) != 3) continue;
-            if (IPOD && x != CF_CX) continue; /* rounded edges leave a gap before their reflection */
+            if (x != CF_CX) continue; /* rounded edges leave a gap before their reflection */
             int body = 256, dipped = 0;
             for (int y = CF_TOP + 80; y < CF_VIEW_H; ++y) {
                 int v = ch(px(x, y), 0);
@@ -788,7 +787,7 @@ static void touches(widget *s, widget *covers_view) {
 static void depth(void) {
     renderer();
     /* On the page: the slide_menu spans the frame, one album per CF_STRIDE px, with empty children
-       under the drawn covers; the captions sit under the frame in both builds. */
+       under the drawn covers; the captions sit under the frame. */
     frame_fail = 0;
     open_page();
     widget *s = slide();
@@ -845,7 +844,6 @@ static void depth(void) {
     assert(covers_view->visible && !covers_view->numb && *(int *)(raw + SLIDE_INDEX) == 6);
     coverflow_paint(s, canvas);
     touches(s, covers_view);
-#if IPOD
     /* Auto Light Mode refreshes a stationary frame and its composited placeholder in RAM. */
     *(int *)(raw + SLIDE_INDEX) = 3;
     theme_placeholder = 1;
@@ -862,7 +860,6 @@ static void depth(void) {
         assert(locks == before && loads == decoded); /* no work on the next unchanged paint */
     }
     theme_placeholder = 0;
-#endif
     /* Refresh and close release the frame and every texture. */
     close_page();
     assert(frames == 0 && loads == unloads);
@@ -1442,20 +1439,21 @@ int main(void) {
     audiobooks();
     ffmpeg_art();
     player_cover();
-#if IPOD
-    /* iPod Home: the player's cover for its type, once the player has parsed the current track
+    /* Home: the player's cover for its type, once the player has parsed the current track
        (g_lastcover_url is its path), else the track album's Coverflow thumbnail, else the
        placeholder; reloaded only when the track or the usable cover changes, and only while Home
        is the painted top window. Both themes split the screen, the art itself in the right panel. */
     extern void coverflow_home_art(void *);
-    /* The pan's texture is softened once, [1,2,1]/4 a side (home_soften), so its sharpness no
-       longer pulses with the pan's sub-pixel phase: a lone texel spreads, flat colour stays. */
-    extern void home_soften(unsigned *, int, int);
-    unsigned line[4] = { 0xff000000u, 0xffffffffu, 0xff000000u, 0xff204080u };
-    home_soften(line, 4, 1);
-    assert(line[0] == 0xff3f3f3fu && line[1] == 0xff7f7f7fu && line[2] == 0xff474f5fu && line[3] == 0xff183060u);
+    /* The pan's texture is sharpened once, [-1,6,-1]/4 a side (home_sharpen), against its cubic
+       B-spline's softness: rounded and clamped a channel, the ends their own neighbours; flat
+       colour stays. */
+    extern void home_sharpen(unsigned *, int, int);
+    unsigned line[5] = { 0xff000000u, 0xffffffffu, 0xff000000u, 0xff515151u, 0xff204080u };
+    home_sharpen(line, 5, 1);
+    assert(line[0] == 0xff000000u && line[1] == 0xffffffffu && line[2] == 0xff000000u &&
+           line[3] == 0xff726a5au && line[4] == 0xff143c8cu);
     unsigned flat[3] = { 0xff123456u, 0xff123456u, 0xff123456u };
-    home_soften(flat, 3, 1); assert(flat[0] == 0xff123456u && flat[2] == 0xff123456u);
+    home_sharpen(flat, 3, 1); assert(flat[0] == 0xff123456u && flat[1] == 0xff123456u && flat[2] == 0xff123456u);
     assert(mmap((void *)(MCL_POS & ~4095), 4096, PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0) != MAP_FAILED);
     deque queue = {0};
@@ -1554,14 +1552,14 @@ int main(void) {
     for (int i = 0; i < 4; ++i) *(int *)(all[i]->raw + W_W) = 375;
     int dot_x = HOME_DOT_X + HOME_DOT + HOME_DOT_GAP;
     *(int *)(label->raw + W_X) = dot_x;
-    home_full = 1;
+    home_mode = 1;
     coverflow_home(win, 0);
     for (int i = 0; i < 4; ++i) assert(*(int *)(all[i]->raw + W_W) == (i < 2 ? 375 : HOME_FULL_ROW));
     assert(*(int *)(label->raw + W_W) == HOME_FULL_ROW - dot_x - HOME_LABEL_END && !W(home_art)->visible);
     before = loads;
     coverflow_home_art(win); /* hidden: nothing loads */
     assert(loads == before);
-    home_full = 0;
+    home_mode = 0;
     coverflow_home_layout();
     for (int i = 0; i < 4; ++i) assert(*(int *)(all[i]->raw + W_W) == HOME_SPLIT_W);
     assert(*(int *)(label->raw + W_W) == HOME_SPLIT_W - dot_x - HOME_SPLIT_LABEL_END && W(home_art)->visible);
@@ -1575,11 +1573,11 @@ int main(void) {
     coverflow_home_art(win);
     static const int classic_geo[4] = { 136, 0, 290, 290 };
     assert(loads == before + 4 && !strcmp(art, player) && !memcmp(geo, classic_geo, sizeof classic_geo));
-    home_full = 1;
+    home_mode = 1;
     coverflow_home_layout();
     for (int i = 0; i < 4; ++i) assert(*(int *)(all[i]->raw + W_W) == (i < 2 ? 375 : HOME_CLASSIC_ROW));
     assert(*(int *)(label->raw + W_W) == HOME_CLASSIC_ROW - HOME_CLASSIC_TEXT_X - HOME_CLASSIC_LABEL_END && !W(home_art)->visible);
-    classic = 0; home_full = 0;
+    classic = 0; home_mode = 0;
     coverflow_home_layout();
     assert(*(int *)(label->raw + W_X) == dot_x && !memcmp(geo, split, sizeof split) && loads == unloads);
     /* A cover that pans: the art's image is empty and fills the panel, the pan's frame drawn over it. */
@@ -1591,7 +1589,6 @@ int main(void) {
     coverflow_home_clip(home_art, canvas, 0);
     assert(draws == drew + 1);
 
-#endif
     embedded_first();
     return 0;
 }
@@ -1674,17 +1671,16 @@ def main():
         (tmp/'test.c').write_text(TEST)
         (tmp/'ffmpeg').write_text(FFMPEG_STUB)
         (tmp/'ffmpeg').chmod(0o755)
-        for ipod in (0, 1):  # a fresh card each run
-            binary = tmp/f'coverflow_test{ipod}'
-            subprocess.run(['cc', '-m32', '-pthread', '-DPEQ_HOST', f'-DPEQ_ROOT="{tmp}/root{ipod}"', f'-DIPOD={ipod}',
-                            f'-DART_FFMPEG="{tmp}/ffmpeg"', '-D_GNU_SOURCE', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-Wno-unused-function',
-                            '-I', str(ROOT/'patch'), '-include', str(tmp/'shim.h'), str(ROOT/'patch/coverflow.c'),
-                            str(tmp/'test.c'), '-o', str(binary)], check=True)
-            env = dict(os.environ)
-            if a.captures and ipod:  # capture the iPod reflection intensity
-                (tmp/'frames').mkdir()
-                env['CF_CAPTURES'] = str(tmp/'frames')
-            subprocess.run([str(binary)], check=True, env=env)
+        binary = tmp/'coverflow_test'
+        subprocess.run(['cc', '-m32', '-pthread', '-DPEQ_HOST', f'-DPEQ_ROOT="{tmp}/root"',
+                        f'-DART_FFMPEG="{tmp}/ffmpeg"', '-D_GNU_SOURCE', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-Wno-unused-function',
+                        '-I', str(ROOT/'patch'), '-include', str(tmp/'shim.h'), str(ROOT/'patch/coverflow.c'),
+                        str(tmp/'test.c'), '-o', str(binary)], check=True)
+        env = dict(os.environ)
+        if a.captures:  # capture the reflection intensity
+            (tmp/'frames').mkdir()
+            env['CF_CAPTURES'] = str(tmp/'frames')
+        subprocess.run([str(binary)], check=True, env=env)
         if a.captures:
             a.captures.mkdir(parents=True, exist_ok=True)
             from ipod import inc, imagemagick
@@ -1696,7 +1692,7 @@ def main():
           ' depth renderer (exact centre, clipping, symmetry, reflection, continuity),'
           ' its texture window, centre click, small libraries and flat fallback passed;'
           ' Sort by artist, year, recently added, most played and random, kept across opens, passed; an artist\'s albums alone passed;'
-          ' iPod Home art sources, fit, clip, cache and Split/Full layout in both themes passed.')
+          ' Home art sources, fit, clip, cache and Split/Full layout in both themes passed.')
 
 
 if __name__ == '__main__':

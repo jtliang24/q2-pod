@@ -227,6 +227,7 @@ int swap_on(void);
 int mono_on(void);      /* crossfade.c: Mono Audio's setting */
 int worker_stop(unsigned long thread, int *running, volatile int *cancel, unsigned *timer);
 void ringnav_select(void *w, int id, int rows);
+int library_scanning(void); /* coverflow.c: a library scan's thread runs */
 int blob_io(const char *path, const char *tmp, void *buf, unsigned size, int write);
 #define BLOB_IO(file, buf, write) blob_io(file, file ".tmp", &(buf), sizeof(buf), write)
 int clip_within(void *canvas, int *old, int *clip, int x, int y, int w, int h);
@@ -251,6 +252,7 @@ const char *addon_name(int a), *addon_id(int a), *addon_icon(int a);
 int addon_is_icon(const char *name); /* a card app's Streaming icon, by its file:// name */
 void addon_poll(void), addon_stop(void), addon_paint(void *w, void *canvas), addon_card_away(void);
 void addon_forget(const char *dir), addon_quit(const char *dir);
+void library_poll(void); /* addon_library.c: an app's library update request, once per addon_poll */
 /* spotify.c's Q2SPOT/1 framing (docs/librespot.md), which the card apps speak too */
 int spot_escape(const char *s, char *out, unsigned size);
 int spot_reply(char *buf, unsigned len, char **f, int max);
@@ -264,6 +266,7 @@ int stream_cache(int spotify); /* navigation.c: Streaming's Configuration, a cap
 void album_memory(void *r);
 void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, unsigned px, unsigned color);
 unsigned book_char(const unsigned char *t, unsigned n, unsigned *i); /* books.c: UTF-8, else Latin-1 */
+int utf8_text(const char *s); /* navigation.c: valid UTF-8, a 4-byte character too */
 /* Lyrics as lyrics.c's loader reads them: each line's start (ms, LRC_FAR unsynced), the order it
  * came in, its UTF-8 text and its word stamps (A2's <mm:ss.xx>), each the ms a word starts and its
  * byte offset in the text. */
@@ -279,12 +282,13 @@ typedef struct {
 } lrc_line;
 /* lyrics.c, iPod: Now Playing's lyrics page, three large lines lit word by word (docs/internals.md#
  * word-timed-lyrics). lyrics_publish takes each load's lines; lyrics_rows turns stock's rows of lrc
- * into the page's (whether it is on, as lyrics_on asks); lyrics_now is the playing position in ms,
+ * into the page's (whether it is on, as lyrics_on asks), and lyrics_fit lays them out again at
+ * lrc's new width; lyrics_now is the playing position in ms,
  * lyrics_sec its whole second (off the page), lyrics_line the playing line there (-1 before the
  * first), repainting it while page shows; lyrics_paint draws a row's line. */
 void lyrics_publish(const lrc_line *l, unsigned n, const lrc_mark *m);
-int lyrics_rows(void *lrc), lyrics_on(void *lrc), lyrics_now(void), lyrics_sec(void),
-    lyrics_line(void *lrc, int ms, int page);
+int lyrics_rows(void *lrc), lyrics_fit(void *lrc), lyrics_on(void *lrc), lyrics_now(void),
+    lyrics_sec(void), lyrics_line(void *lrc, int ms, int page);
 void lyrics_paint(void *row, void *canvas), lyrics_gone(void);
 unsigned accent_tone(int tone); /* iPod: the Accent's ACCENTS column (Minimal's own: MINIMAL_FILL) */
 unsigned rgba(unsigned rgb, unsigned alpha), mix(unsigned from, unsigned to, int j, int n);
@@ -320,14 +324,10 @@ int video_start(const char *file, int radio); /* books.c */
 void *edit_create(void *item, const char *input_type, int y, int h);
 const char *output_device(char *vol);         /* books.c */
 void dac_take(void);                          /* books.c */
-#if IPOD
 int ipod_classic(void); /* navigation.c: Theme: Classic */
 int bold_label(void *w, int was); /* navigation.c: Classic's bold font for w's text, or stock's */
 int ipod_light(void);   /* navigation.c: Light Mode */
 #define np_bar_h() (ipod_classic() ? NP_BAR_CLASSIC : NP_BAR_MINIMAL)
-#else
-#define np_bar_h() SPOT_BAR_H
-#endif
 #define SPOT_GREY 0xffaaaaaau
 void radio_search(void);       /* radio.c */
 void toast(const char *text); /* navigation.c */
@@ -335,8 +335,11 @@ const char *coverflow_sort_name(void); /* coverflow.c */
 void coverflow_sort_step(void), coverflow_refresh_art(void);
 int rockbox_available(void);  /* navigation.c: a regular Rockbox binary on the card */
 int page_keyup(void *ctx, void *event); /* navigation.c: Return leaves a payload page */
+int ringnav_localclass(int cls);        /* navigation.c: load_localclass_list's hook */
 int shelf_open(void *ctx, void *event); /* netupdate.c: System settings' Apps page */
 const char *shelf_busy(void);           /* netupdate.c: the app folder a job replaces */
+int shelf_erase(int start);             /* netupdate.c: Spotify's erase, started or running */
+void stream_erased(void);               /* navigation.c: Configuration follows a finished erase */
 void album_lyrics_stop(void);           /* onlinematch.c: Download Album Lyrics before USB storage */
 
 /* 2038 (docs/internals.md#2038). glibc 2.28's time() truncates the kernel's 64-bit seconds to 32
