@@ -107,6 +107,9 @@ into `feature/m1-ipod`. `work/sync/1.6.0-wip/` is reference for the overlapping 
   rows. Carousel is a Phase 4.5 row.
 - Gates, record (`UPSTREAM_BASE=1.5.9`) and a device pass. This is the floor for Phases 2 to 4.
 
+Gated on Nov 3 (progress 59): `sync/1.5.9`, its `--dev` build V02Hm in `work/sync/1.5.9/`. The device pass
+is next, then it lands in `feature/m1-ipod`.
+
 ## Phase 2: Device geometry as names
 
 - **Shared C.** Replace the iPod path's screen literals (375, 320, 290, 30 and the values derived from
