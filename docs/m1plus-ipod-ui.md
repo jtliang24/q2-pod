@@ -143,25 +143,39 @@ which waits for Phase 6.
 
 Done on Nov 3 (progress 60): `e8c1163`, `f946c64`, `7809395`.
 
-## Phase 3: The V2.1 audit
+## Phase 3: The V2.1 page inventory and the patch framework
 
-Create `patch/m1plus_ipod.json`, the M1's counterpart to `patch/ipod.json`, with the same keys:
-- **`assets`, `navbar_only`, `slide_only`:** V2.1's page names and SHA-256 hashes, mapped from V1.32's
-  17 + 36 + 1 pages using `m1plus_names()`'s decode/walk.
-- **Code edits:** `immediates`, `row_layout_calls`, `private_prologues`, `event_abi_words`. Find each
-  V2.1 site by hand under the ground rule (read the same-role V2.1 function, never reuse a V1.32 address),
-  and pin each one in `test/m1plus/build.py` `m1plus_checks()`.
-- **`settings_icons`, `quiet_icons`, `status_icons`, `styles`:** the V2.1 file names and hashes.
+An up-front audit of V2.1 for every key in `patch/ipod.json` turned out to be mostly Phase 4's design work:
+34 of V1.32's 54 audited pages sit at the same path in V2.1 and the rest are renamed, moved or gone; none
+of the 8 styles that `default.bin` edits exist in V2.1; 33 of 39 settings icons and all 8 quiet icons have
+other names (`pset_*`, `sset_*`); and V2.1's rows are their own structure, so the V1.32 row immediates have
+no direct counterparts. So Phase 3 is slim, and each Phase 4 item audits the sites, styles and icons it
+rewrites.
+
+Create `patch/m1plus_ipod.json`, the M1's counterpart to `patch/ipod.json`, with the same keys plus `pages`:
+- **`pages`:** one row per V1.32 page in `ipod.json`'s `assets | navbar_only | slide_only` (54 rows):
+  `{"v21": path | null, "opener": V2.1 function, "why": ...}`. The rows are decided by role, from the V2.1
+  function that opens the page name, not by path. A `null` row names the Phase 4 item that decides it.
+- **`assets`, `navbar_only`, `slide_only`:** the mapped V2.1 paths with their SHA-256, in the category of
+  the V1.32 page.
+- **Everything else** (`immediates`, `row_layout_calls`, `private_prologues`, `event_abi_words`,
+  `settings_icons`, `quiet_icons`, `status_icons`, `styles`): empty. Phase 4 fills each one.
 
 Then `tools/m1plus_ipod.py`: `patch_asset` and `patch_code` for V2.1.
-- Reuse `ipod.py`'s `decode`, `encode`, `walk`, `patch_word`, `sized_art`, `settings_icon` and its
-  `rows()` logic.
-- Only the stock-geometry `check()`s and the addresses change.
-- Wire it into `m1plus.build()`, which today validates V2.1's assets but patches none.
+- `patch_asset` checks the hash, the round trip and the root kind. It then applies the page's entry in
+  `REWRITES` (empty until Phase 4), or returns the page unchanged.
+- `patch_code` walks `immediates` and `row_layout_calls` with the copy's `patch_word`, and returns the
+  changes (none yet).
+- Wire both into `m1plus.build()`, which today validates V2.1's assets but patches none. `compact_code`
+  in the manifest comes from `patch_code`.
+- No M1 byte changes except the version string, so Phase 3 has no device pass: `fndiff.py` against the last
+  device build and the manifest prove it.
 
 ## Phase 4: Features, in dependency order
 
 Each feature follows the same steps:
+- audit the item's V2.1 code sites, styles and icons into `m1plus_ipod.json` (read V2.1's own code, never
+  reuse a V1.32 address), pin them in `m1plus_checks()`, and add its rewrite to `REWRITES`;
 - V2.1 hook addresses go in `M1PLUS_HOOKS`, and the `M1PLUS_PORTS` row changes to `ported`;
 - the asset rewrite;
 - M1 input mapping;
@@ -170,18 +184,20 @@ Each feature follows the same steps:
 - a device check on a `--dev` build.
 
 1. **Paint backbone and themes:** `style_get_color`, `image_manager_add`, `widget_on_paint_background`,
-   the `style_get_gradient` leaf, `ui_loader_load_widget_with_parent`, the `default.bin` style edits,
-   Light Mode, accents and Themes. Corners stay square.
+   the `style_get_gradient` leaf, `ui_loader_load_widget_with_parent`, the `default.bin` style edits
+   (the `styles` section), Light Mode, accents and Themes. Corners stay square.
 2. **Status bar:** `systembar_showface`, `system_bar.bin` with the iPod title and the back chevron (the
-   new M1 piece, beside the title), and the status icons.
+   new M1 piece, beside the title), and the status icons (the `status_icons` section).
 3. **Settings pages:**
-   - the `navbar_only` rewrite, `ipod_list_layout` through V2.1's `list_view` layout vtable slot, the
-     settings icons, and the Display/Appearance/Controls pages;
+   - the `navbar_only` rewrite, `ipod_list_layout` through V2.1's `list_view` layout vtable slot
+     (`LIST_VIEW_LAYOUT_SLOT`), the settings icons (the `settings_icons` section), and the
+     Display/Appearance/Controls pages;
    - retire `m1plus_nav_rows.c`, `m1plus_nav_display.c`, `m1plus_nav_sysset.c`,
      `m1plus_nav_audioset.c` and the M1 branches of `pod_rows`.
 4. **Library:**
    - compact rows: the local pages, `compact_set_row_layout` at V2.1's row-layout calls, and the
-     immediates;
+     immediates (the `immediates`, `row_layout_calls`, `private_prologues` and `event_abi_words` sections,
+     and the other library words in `patch_code`);
    - hold-return to Now Playing, mapped to the touch long-press (`m1plus_nav_touch.c`) and a knob hold;
    - retire `m1plus_coverflow_rows.c` and `page_list`'s V2.1-look overrides in `coverflow.c`.
 5. **Home:**
@@ -190,7 +206,8 @@ Each feature follows the same steps:
    - the Coverflow card;
    - retire `m1plus_coverflow_home.c` and `m1plus_nav_home.c`.
 6. **Now Playing:** the iPod layout, Centred Now Playing, `bigcover`, the volume dialog and the quiet
-   icons. The scrub on the knob landed early (progress 58): `patch/m1plus_nav_np.c`, with
+   icons (the `quiet_icons` section) and the NP bar. The scrub on the knob landed early (progress 58):
+   `patch/m1plus_nav_np.c`, with
    `playing_timer_*` aliased to V2.1's.
 7. **Quick Settings and dialogs:** `statusbar_dialog.bin`, the confirm and add-to-playlist dialogs. The
    wheel QS swipe becomes a touch swipe down from the status bar; `qs_*`'s fake-finger path stays Q2-only.
@@ -248,4 +265,4 @@ After every commit:
    build on the device.
 
 Rough sizes (as in the roadmap: **S** a day, **M** a few days, **L** a week or more): Phases 0 to 2 **M**,
-Phase 3 **L**, Phase 4 about **L** for every two items.
+Phase 3 **M**, Phase 4 about **L** for every two items, each absorbing its own share of the audit.
