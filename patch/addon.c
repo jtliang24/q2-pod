@@ -52,7 +52,11 @@
 #define CARD "/mnt/mmc"
 #define CAPS_FILE "/tmp/q2-addon.caps"
 /* This firmware's card-app features, space-separated; a feature adds its word. */
+#if M1PLUS
+#define ADDON_CAPS "playlist progress pages" /* no library: its update is unported (addon_poll) */
+#else
 #define ADDON_CAPS "playlist progress pages library"
+#endif
 
 /* An app found on the card, kept for the life of demo in its slot. present: on the card at the
  * last scan; relaunch: stopped for USB storage, to start again; restart: stopped by Retry (its
