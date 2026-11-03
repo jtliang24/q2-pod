@@ -125,12 +125,23 @@ which waits for Phase 6.
   - Only screen-derived values go in the M1 profile now. Layout values come with their Phase 4 item.
   - Each replacement is a seam that changes no Q2 bytes (`q2compare.py` checks this). Offer the set
     upstream with the other seams (roadmap section 6, "The seams") so these lines stop conflicting.
-- **`tools/ipod.py`.** Its constants come from a device profile: `BOTTOM`, `PITCH`, `BODY`, `ART`,
-  `CORNER_R`, the 320 in `corner_inset`, `STATUS_*`, `HOME_*`, `NP_*`, `QS_*`.
-  - `inc()` already reads `offsets.inc`. On the M1 it reads `m1plus_offsets.inc`.
-  - The Q2 profile must reproduce today's values exactly.
-  - Keep the change M1-side where possible: `tools/m1plus_ipod.py` wraps or overrides, so
-    `tools/ipod.py` stays upstream's text.
+- **`tools/ipod.py`.** Its constants come from a device profile: `BOTTOM`, `CORNER_R`, the 320 in
+  `corner_inset`, `BC_ART`, `STATUS_*`, `HOME_LIST_W`, `NP_*`, and the rewrites' screen-wide outputs.
+  - Everything is computed at import, and `inc()` reads only the text of `offsets.inc`, which holds
+    neither the Q2's `UI_W` (it is `m1plus_q2.inc`'s) nor the M1's layout names. So the seam is in
+    `tools/ipod.py`: `O` gets `UI_W`, `UI_H` and `STATUS_H` at the Q2's values, overlaid by a
+    `PROFILE` global when one is set, and `BOTTOM` is `UI_H - STATUS_H`. The Q2 import sets none and
+    reproduces today's values exactly. The checks of V1.32's stock geometry keep their literals, and
+    the Now Playing cross-checks against `SPOT_*`/`NP_ART_TOP` run only for the Q2 (4.3 lays out the
+    M1's).
+  - `tools/m1plus_ipod.py` loads a second copy with the M1's screen alone (`UI_W`, `UI_H`, `STATUS_H`,
+    `GLASS_R`, from `m1plus_offsets.inc`), leaving `sys.modules['ipod']` the Q2's. Every layout name
+    keeps the Q2's value until its Phase 4 item, and nothing builds with the copy until Phase 3.
+- **It changes the M1.** The named sites the M1 compiles now take its values (320, 480, 450):
+  `qr_open`, Split Home (`coverflow_home`, `_art`, `_clip`, `home_fit`, `home_tex`), `bc_fit` (in
+  `ringnav_paint_bg`) and `ringnav_playlistsmore`. `fndiff.py` lists them, and the device pass checks them.
+
+Done on Nov 3 (progress 60): `e8c1163`, `f946c64`, `7809395`.
 
 ## Phase 3: The V2.1 audit
 
@@ -212,10 +223,11 @@ Once the branch reaches parity (Phases 1 to 4.7 pass on the device):
 
 ## Files
 
-- **Edited:** `tools/m1plus.py`, `patch/m1plus_offsets.inc`, `patch/m1plus_q2.inc`, `patch/navigation.c`
-  and `patch/coverflow.c` (seams only), `test/m1plus/{build,patch,boot,ports}.py`, `docs/m1plus-*.md`.
+- **Edited:** `tools/m1plus.py`, `patch/m1plus_offsets.inc`, `patch/m1plus_q2.inc`, `patch/navigation.c`,
+  `patch/coverflow.c` and `patch/addon.c` (seams only), `tools/ipod.py` (the screen profile seam; its codec
+  and rewrites are reused), `test/m1plus/{build,patch,boot,ports}.py`, `docs/m1plus-*.md`.
 - **New:** `tools/m1plus_ipod.py`, `patch/m1plus_ipod.json`.
-- **Reused as is:** `tools/ipod.py` (codec and rewrites), `compile_payload()`'s trampoline fallback,
+- **Reused as is:** `compile_payload()`'s trampoline fallback,
   `m1plus_names()`, `test/m1plus/suitemerge.py`, and q2remote for device screenshots.
 - **Retired over Phase 4:** `m1plus_nav_rows.c`, `m1plus_coverflow_rows.c`, `m1plus_nav_display.c`,
   `m1plus_nav_sysset.c`, `m1plus_nav_audioset.c`, `m1plus_coverflow_home.c`, `m1plus_nav_home.c`,

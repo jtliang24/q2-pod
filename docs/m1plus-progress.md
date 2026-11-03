@@ -3146,6 +3146,69 @@ Store said "Can't reach GitHub"); 1.1.1.1 was set for the pass and the file empt
 **Landed** in `feature/m1-ipod` (`fd53846`, `--no-ff`). `drift.py` from there: 1.5.9 → 1.6.3 due (78
 commits, 2,007 surface lines), left for the iPod port's Phase 6.
 
+## 60. Phase 2: the screen's values as names (Nov 3)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 2, on `feature/m1-ipod` after 1.5.9.
+
+**The recount.** `navigation.c`, `coverflow.c` and `addon.c` (and what they include), preprocessed with each
+device's flags, keeping the lines that survive and hold 375, 320, 290 or 30 or a width derived from them.
+Compiled on the M1: `qr_open`'s default height (290), Split Home's `HOME_PW` and its eight 290s, `bc_fit`
+(374, 375, 320 twice), `ringnav_playlistsmore`'s Edit Playlist row (375, 335, 253) and `bar_sync`'s 30. The
+Q2-only sites (`#if !M1PLUS`: `logo_sync`, most of `qr_open`, `stream_config`, the Q2 `list_row_core`, the
+Shuffle note) keep their literals. The 30s of `1 << 30`, `SA_RETRY_MIN` and the time arithmetic aren't the
+status bar. A plain grep can't tell these apart: it reports the skipped `#if !M1PLUS` lines too.
+
+**Commits.**
+- `e8c1163` `refactor(seams)`: the sites above take `UI_W`, `UI_H`, `BOTTOM` and the new `STATUS_H` (30, in
+  both `.inc` files; `BOTTOM` stays a number there, since `test/m1plus/patch.py` reads only integer
+  `#define`s).
+- `f946c64` `refactor(ipod)`: the `PROFILE` seam in `tools/ipod.py` and the `tools/m1plus_ipod.py` stub.
+  The plan's "every layout name keeps the Q2's value, so the import can't fail" missed two import-time
+  checks: the derived Now Playing layout against `SPOT_*` and `NP_ART_TOP`. With the M1's screen they
+  can't agree until 4.3 lays out V2.1's stacked Now Playing (art 220 at x 50), so they run for the Q2 only.
+- `7809395` `test(m1plus)`: `test/m1plus/build.py` pins both screens (to `test/unit` at 1.6.2). It pins the
+  Q2 values the screen's names replaced literals in, not all 66 constants. A full snapshot before and
+  after `f946c64` matched (the three new names apart), and q2compare pins the Q2's output anyway.
+
+**Gates** (each commit): q2compare against 1.5.9, `update.tar` byte-identical, all 33 suite runs pass. M1
+(`work/phase2/c1`, V002m, and `c2`, V003m, which this checkout's `.build-number` numbers): `build.py --build`,
+`patch.py` (887 expected failures in 14 gaps, unchanged), `boot.py` plain, `--home-menu` and `--media`,
+`playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`. `--media` missed `books_back` once
+per build, both times while q2compare ran alongside it; each rerun passed (timing, as in section 59).
+Footprint +106/−56 over 8 files.
+
+**Function diff** against V02Hm (`work/sync/1.5.9`): after `e8c1163` it lists `qr_open`, `coverflow_home`,
+`coverflow_home_art`, `coverflow_home_clip`, `home_fit`, `home_tex`, `ringnav_paint_bg` (`bc_fit` is inlined)
+and `ringnav_playlistsmore`, plus `ringnav_about`'s version string. `bar_sync` isn't listed: its 30 stays 30.
+`f946c64` and `7809395` change only `ringnav_about` (the version again). The device checklist:
+- A playlist's More page: the Edit Playlist row (`ringnav_playlistsmore`), now 320 wide.
+- The QR page (Streaming's or an add-on's pairing page): its height.
+- Split Home and the full-screen art (`bc_fit`), where the M1 reaches them.
+
+**Device pass (Nov 3, over q2remote through `tools/wsl_relay.py`, the laptop's hotspot).** V003m
+(`update.bin` `b703f864…`) went to the card over q2remote and the user flashed it through the menu updater;
+the running `/release/bin/demo` is the build's (`2cadb324…`). Before it, `config.ini`, the DB and the EQ files
+went to `.q2/backup-pre-V003m/` and V02Hm's image to `.q2/update-V02Hm.bin`. Screen Off was Off for the pass and
+is back to 1 minute (`LIGHTTIME=3`). demo kept one pid (1099) throughout and kmsg had no fault. Screenshots are
+in `work/phase2/device/`. Checked:
+- **The QR page:** File Browser (Q2 Pod → File Browser) draws the title, the code, the address, the PIN and the
+  note inside 320x480, with nothing clipped; `qr_open` now takes its height from `BOTTOM` (450).
+- **Home, the Home editor and the library lists** paint as before (`ringnav_paint_bg`, with `bc_fit` inlined).
+
+Not reachable on the M1, so not checked:
+- **The Edit Playlist row (`ringnav_playlistsmore`):** V2.1 has no `playlistsmore_page`. A playlist row's hold
+  opens the editor itself (`m1plus_nav_playlist_hold.inc`), so the row is never built. The Playlist page
+  opens, with New, Import and Export rows and no playlists on this card.
+- **Split Home and the full-screen art:** the M1's Home is still V2.1's own grid; the iPod Home waits for
+  Phase 4.1.
+
+The Playlists card is hidden on this Home. The pass turned it on in the Home editor and then restored the
+layout: Reset gives V2.1's default cards, so Album, Artist and the rest were ticked back one by one until
+`HOMEMENU` read `1|2|5|6|10|11|16|17|12|` again, as in the backup.
+
+**For upstream** (roadmap section 6, "The seams"): `STATUS_H`, the named sites in `navigation.c`,
+`coverflow.c` and `addon.c`, and `tools/ipod.py`'s `PROFILE` overlay all leave the Q2's bytes unchanged.
+
 ## How to check a build now
 
 ```sh
