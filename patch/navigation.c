@@ -2629,11 +2629,18 @@ static const char *const pod_keys[] = {
 _Static_assert(sizeof pod_keys / sizeof *pod_keys == POD_COUNT, "a pod_keys entry per row");
 /* a row's choices: Artist albums three, Standby limit four, every other row off and on */
 static int pod_choices(unsigned i) { return i == POD_ARTIST_CF ? 3 : i == POD_STANDBY ? 4 : 2; }
+/* Artist albums defaults to Coverflow; on the M1 Plus, with no wheel, the knob to Navigation */
+static int pod_default(unsigned i) {
+#if M1PLUS
+    if (i == POD_KNOB) return 1;
+#endif
+    return i == POD_ARTIST_CF;
+}
 static void pod_settings(void) {
     if (st.pod_read) return;
     for (unsigned i = 0; i < sizeof pod_keys / sizeof *pod_keys; ++i)
-        if (pod_keys[i]) /* Artist albums defaults to Coverflow */
-            *pod_values[i] = config_value("Q2POD", pod_keys[i], pod_choices(i), i == POD_ARTIST_CF);
+        if (pod_keys[i])
+            *pod_values[i] = config_value("Q2POD", pod_keys[i], pod_choices(i), pod_default(i));
     st.pod_read = 1;
 }
 /* Wheel QS on (Q2POD WHEELQS, default off; playback.c's swipe). */

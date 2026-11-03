@@ -13177,20 +13177,23 @@ if not is_m1plus:  # Q2 only: the touch wheel's
 else:  # M1 Plus: Display gains Artist Albums, Coverflow Sort and Refresh Coverflow (1.4.5), Knob and its
     # direction, icon-less as V2.1's display rows, in one list (m1plus_nav_display.c): no sub-pages (1.5.0)
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=3)
-    assert texts()==['Artist Albums: Coverflow','Coverflow Sort: Album','Refresh Coverflow','Knob: Volume','Knob Up: List Up'] and icons==[None]*5
+    # Knob: Navigation is the default (the iPod UI has no wheel)
+    assert texts()==['Artist Albums: Coverflow','Coverflow Sort: Album','Refresh Coverflow','Knob: Navigation','Knob Up: List Up'] and icons==[None]*5
     assert m.nodes[named(m,m.top,NAMES['VIEW_DISPLAY'])]['children'][-1]==rows[-1]
-    assert click(3)==[(1,'Q2POD','KNOB')] and texts()[3]=='Knob: Navigation'
     assert click(3)==[(0,'Q2POD','KNOB')] and texts()[3]=='Knob: Volume'
     assert click(4)==[(1,'Q2POD','KNOBDIR')] and texts()[4]=='Knob Up: List Down'
     assert click(4)==[(0,'Q2POD','KNOBDIR')] and texts()[4]=='Knob Up: List Up'
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1','KNOBDIR':'1'},stock_rows=3)
-    assert texts()[3:]==['Knob: Navigation','Knob Up: List Down']; passed()
+    assert texts()[3:]==['Knob: Navigation','Knob Up: List Down']
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'0'},stock_rows=3)
+    assert texts()[3:]==['Knob: Volume','Knob Up: List Up']; passed()
 # Its row opens stock's Boot volume page re-dressed (crossfade.c): titled, no switch, the percent
 # beside the slider, which runs 50-200 in tens. The wheel and +/- step 10%, live and saved, the
 # slider snaps to a ten, a drag is live but saved once at its release, and Centre goes back (edit_key, as on Brightness).
 if not is_m1plus:
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=3,sub=3)
     display_page=m.top; m.stack=[m.top]; m.nodes[m.wm]=dict(type='window_manager',name='',children=m.stack,visible=1)
+    assert click(3)==[(1,'Q2POD','KNOB')] and texts()[3]=='Knob: Navigation'
     assert click(-1)==[] and m.top!=display_page and m.nodes[m.top]['name']=='bootvol_page'
     assert m.nodes[m.title]['text']=='Wheel Sensitivity' and m.nodes[m.switch]['visible']==0 and m.nodes[m.vol]['text']=='50%'
     assert m.nodes[named(m,m.top,'view_bootvol')]['visible']==1 and m.nodes[named(m,m.top,'view_bootvol')]['enable']==1  # touch (#140)

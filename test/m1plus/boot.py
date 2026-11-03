@@ -169,7 +169,8 @@ def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None):
     if card: media_db(root/'mnt/data/database.db')
     # Past the first-boot language choice; with home_menu, V2.1's Home cards ([MAIN] HOMEMENU, ids each
     # followed by |, as saveHomemenu 0x4d7940 writes them).
-    (root/'mnt/data/config.ini').write_text('[SYSSET]\nLANGUAGE=2\n' + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
+    # Knob: Volume, so the walk starts on V2.1's own knob; it turns Knob: Navigation on itself (patch.py has the default)
+    (root/'mnt/data/config.ini').write_text('[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB=0\n' + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
     conf = (root/'etc/dbus-1/system.conf').read_text()
     # No other users exist in the sandbox: the bus runs as its caller.
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))
