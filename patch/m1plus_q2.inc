@@ -56,8 +56,8 @@
 #define SPOT_ARTIST_Y (SPOT_ART_Y + 75)
 #define SPOT_ALBUM_Y (SPOT_ART_Y + 103)
 #define SPOT_TAG_X 16
-#define SPOT_HEART_X (UI_W - (IPOD ? 72 : 55)) /* local Now Playing's heart (tools/ipod.py img_fav) */
-#define SPOT_HEART_Y (IPOD ? SPOT_ART_Y + SPOT_ART_PX - 50 + NP_ICON_PAD : 176)
+#define SPOT_HEART_X (UI_W - 72) /* local Now Playing's heart (tools/ipod.py img_fav) */
+#define SPOT_HEART_Y (SPOT_ART_Y + SPOT_ART_PX - 50 + NP_ICON_PAD)
 /* Now Playing's heart and its stock click, which toggles My Fav for the playing track (manage_myfav)
  * and the heart with it; playing_page_init binds it with the window. */
 #define VIEW_FAV "img_fav"

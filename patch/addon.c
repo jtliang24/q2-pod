@@ -442,7 +442,7 @@ static void poll_one(app_t *a) {
 
 void addon_poll(void) {
     for (int i = 0; i < ap.n; ++i) poll_one(&ap.a[i]);
-    library_poll();
+    if (!M1PLUS) library_poll(); /* M1 Plus: the card apps' library update is unported (1.5.9) */
 }
 
 /* An app asked to end through its loop, not its socket, so a frozen one stops too; restart: started

@@ -16,6 +16,13 @@ M1PLUS_BIN_SHA = '1ccb4667e3e9bdf9a35be4dc58d09b898ca53c5fd58396b7667fb91fe895f9
 M1PLUS_ZIP_SHA = 'db7bdbc42ffe6d5c1e3fdca9363edb78a01898b9a725c34793394cf6abfa33c0'
 M1PLUS_DEMO_SHA = '29e23119bc2a0f153f3ea0ba942a39754d1aab0879c1040fae2269df8bd9b3f1'
 M1PLUS_GP = 0xa03ed0
+# The M1's edition letter in the tag where the Q2's is I (build.py TAG, V159I): V159M, and dev builds
+# end in m (V02Gm), so no M1 tag equals a Q2 one.
+M1_TAG = TAG[:-1] + 'M'
+
+def m1_dev_tag(number):
+    return dev_tag(number)[:-1] + 'm'
+
 INPUTS = {M1PLUS_ZIP_SHA: ('M1 Plus Firmware V2.1/update.bin', M1PLUS_BIN_SHA), M1PLUS_BIN_SHA: (None, M1PLUS_BIN_SHA)}
 # Stock routines only the M1 Plus payload calls, beside build.py's FUNCTIONS (compile_common merges them).
 M1PLUS_FUNCTIONS = {
@@ -184,6 +191,8 @@ CALL_SITES = {
         'LYRIC_SAVE': ((0x525484, 0x0320f809, 'ringnav_lyric_save'), (0x525480, 0x24c62630, None)),
         # Tidal's playlist, album and favourite-tracks threads' done store: sb $3,0($2) -> nop.
         'TIDAL_PAGE_DONE': ((0x48b57c, 0xa0430000, 0), (0x48b70c, 0xa0430000, 0), (0x488434, 0xa0430000, 0)),
+        # importPlayList's jalr toolsGetDirectoryM3u8, its lw $t9 pinned: a card app's own playlists only.
+        'M3U_DIR_CALL': ((0x50dab8, 0x0320f809, 'addon_m3u_dir'), (0x50dab4, 0x8f99bad4, None)),
     },
     # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
     'm1plus': {
@@ -334,6 +343,7 @@ CALL_SITE_PURPOSES = {
     'LYRIC_SAVE': 'lyrics saved beside the song',
     'COVER_SAVE': 'covers saved beside the song',
     'TIDAL_PAGE_DONE': 'Tidal lists load every page',
+    'M3U_DIR_CALL': 'card apps import only their own playlists',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
@@ -388,6 +398,8 @@ M1PLUS_PORTS = {
     'list_get_img_pic': ('unported', "song rows' format badge (ipod-ui 4.4)"),
     'bigcover_page_init': ('unported', "the big cover's page (ipod-ui 4.6)"),
     'playlist_rebuild': ('unported', "the playlist rebuild's iPod rows (ipod-ui 4.7)"),
+    'mclIsUtf8WithoutBOM': ('unported', "an .lrc's UTF-8 test that reads 4-byte characters (1.5.9); V2.1's "
+                            'mclIsUtf8WithoutBOM is 0x5d1824, not yet checked'),
     # Call sites
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -403,6 +415,8 @@ M1PLUS_PORTS = {
     'STREAM_POLL_CALLS': ('native', "V2.1 creates a Tidal URL worker per request (get_tidal_trackurl, 0x512ed0); "
                           "no boot worker or idle start-flag poll, and no Baidu Pan"),
     'TIDAL_PAGE_DONE': ('unported', 'Tidal lists past 50 (1.5.0): goes with the Tidal list threads'),
+    'M3U_DIR_CALL': ('unported', "a card app's library update imports only its own playlists (1.5.9); V2.1's "
+                     'importPlayList is 0x4ef394, its listing call not yet found'),
     'timezone_row': ('unported', "the time zone rows' offsets in effect now (1.5.0): goes with select_timezone"),
     'folder_click': ('unported', "videos played from Folder view (1.5.0), where the Q2's Videos row now opens; "
                      "V2.1's folder row click is not yet found. The M1's Videos row keeps 1.4.5's list "
@@ -802,8 +816,8 @@ def compile_common(out, binary, player=False):
         syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
         # A routine V2.1 hooks where V1.32 does not (on_wm_keyup_fun, ringnav's): the payload's own
         # replays reach stock through its trampoline, not back into the hook.
-        from build import HOOKS, IPOD_HOOKS
-        resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS | IPOD_HOOKS}
+        from build import HOOKS
+        resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS}
         for name, (ret, args) in (FUNCTIONS | M1PLUS_FUNCTIONS).items():
             if name in resumed:
                 header += [f'extern {ret} stock_{resumed[name]}_trampoline({args});',
@@ -821,10 +835,10 @@ def compile_common(out, binary, player=False):
                 header.append(f'#define {name} (*(volatile unsigned char *)0x{syms[name]:x}u)')
     (out/'peq_platform.h').write_text('\n'.join(header)+'\n')
     (out/'peq_imports.S').write_text('\n'.join(asm)+'\n')
-    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DIPOD=1', '-DM1PLUS=1']
+    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -878,7 +892,7 @@ def compile_payload(out):
     """Compile and link the payload."""
     extra = compile_common(out, out/'stock-demo')  # also writes the libc/libcstl imports navigation.c uses
     # -Wno-unused-function: the Q2 pages M1 replaces (ringnav_display) are out, and their iPod helpers (setting_click) with no caller
-    flags = [*FLAGS, '-DIPOD=1', '-DM1PLUS=1', '-Wno-unused-function']
+    flags = [*FLAGS, '-DM1PLUS=1', '-Wno-unused-function']
     run('clang',*flags,'-I',out,'-c',ROOT/'patch/navigation.c','-o',out/'navigation.o')
     asm = ['.set noreorder', '.text']
     active_hooks = M1PLUS_HOOKS
@@ -889,8 +903,8 @@ def compile_payload(out):
                 f'ori $gp, $gp, {gp & 65535}', f'j 0x{address + 12:x}', 'nop']
     # A Q2 hook V2.1 lacks has no stock code to resume, so its trampoline returns 0. Every Q2 hook's
     # gets one, so a new upstream hook's payload links on M1 before it is ported (M1PLUS_PORTS).
-    from build import HOOKS, IPOD_HOOKS
-    for x in dict.fromkeys(x for _, _, x in (HOOKS | IPOD_HOOKS).values() if x):
+    from build import HOOKS
+    for x in dict.fromkeys(x for _, _, x in HOOKS.values() if x):
         if x not in resume:
             asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', 'jr $ra', 'move $v0, $zero']
     (out/'trampoline.S').write_text('\n'.join(asm)+'\n')
@@ -949,19 +963,17 @@ def takes(path):
     missing file too, goes on to build.py's own checks, as upstream's tests expect."""
     return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() in INPUTS
 
-def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
+def build(target_path, out, logo, dev=False, m1_release=None):
     """m1_release: an M1 Plus release's (name, tag), from tools/release_m1.py: the tag instead of
     the build's own, and the name in About and the manifest."""
-    # The iPod UI is the only UI (docs/m1plus-ipod-ui.md), so --ipod changes nothing; M is the M1's edition
-    variant = 'ipod'
-    version = TAG + 'M'
+    version = M1_TAG
     out.mkdir(parents=True, exist_ok=True)
     dev_count = 0
     if dev:  # the next number in the untracked .build-number
         counter = ROOT/'.build-number'
         dev = int(counter.read_text()) + 1 if counter.exists() else 1
         counter.write_text(f'{dev}\n')
-        version = dev_tag(dev, version[-1])
+        version = m1_dev_tag(dev)
         # About's "dev N" counts from 1 for each upstream VERSION; the tag keeps the global number, so
         # the updater, which refuses the installed tag, still takes each dev build over any other.
         per = ROOT/'work/dev-count'
@@ -1236,7 +1248,7 @@ def build(target_path, out, logo, ipod=False, dev=False, m1_release=None):
         update_sha256=sha(out_archive.read_bytes()), rootfs_sha256=sha(newsq.read_bytes()),
         kernel_sha256=sha(blobs['recovery-update/xImage']), patch_bytes=len(payload), ring_step_pixels=RING_STEP,
         audio_extension_calls=[dict(address=hex(a), original=f'{o:#010x}', replacement=hex(n)) for name, a, o, n in call_site_words(True, ps) if name == 'AUDIO_EXTENSION_CALLS' and n != o],
-        version=version, **({'release': m1_release[0]} if m1_release else {}), variant=variant, dev=dev, **({'dev_count': dev_count} if dev else {}), peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=[], changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
+        version=version, **({'release': m1_release[0]} if m1_release else {}), dev=dev, **({'dev_count': dev_count} if dev else {}), peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=[], changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
         patch_symbols={n:hex(v) for n,v in ps.items() if n.startswith('stock_')},
         tools={t:run(t,'--version').splitlines()[0] for t in ['clang','ld.lld','llvm-objcopy']} |
               {'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]})

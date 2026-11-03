@@ -5,7 +5,7 @@ fail this until each is classified; a row the M1 no longer needs fails it too. -
 the unported rows, for the roadmap's U4."""
 import argparse, collections, re, sys
 sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first
-from build import ROOT, HOOKS, IPOD_HOOKS
+from build import ROOT, HOOKS
 from m1plus import CALL_SITES, M1PLUS_HOOKS, M1PLUS_PORTS, M1PLUS_SHIMS, M1PLUS_UNRESOLVED
 
 STATUSES = ('ported', 'native', 'q2only', 'unported')
@@ -24,7 +24,7 @@ def report():
     for name, status_why in ports.items():
         if status_why[0] not in STATUSES: problems.append(f'{name}: status {status_why[0]!r} is not one of {STATUSES}')
     m1_symbols = {symbol: m1 for m1, (_, symbol, _) in M1PLUS_HOOKS.items()}
-    for name, (_, symbol, _) in (HOOKS | IPOD_HOOKS).items():
+    for name, (_, symbol, _) in HOOKS.items():
         same = name if name in M1PLUS_HOOKS else m1_symbols.get(symbol)
         row = ports.pop(name, None)
         if same:
@@ -95,7 +95,7 @@ def main():
                 if s == status and why and why != 'used only by Q2 code':
                     print(f'{status:8} {kind} {name}: {why}')
         print()
-        m1_only = sorted(set(M1PLUS_HOOKS) - set(HOOKS | IPOD_HOOKS) -
+        m1_only = sorted(set(M1PLUS_HOOKS) - set(HOOKS) -
                          {why[3:] for _, _, s, why in rows if why.startswith('as ')})
         print(f'M1-only hooks: {", ".join(m1_only)}')
         print(f'Names used only by Q2 code: {", ".join(n for k, n, s, _ in rows if k == "name" and s == "q2only")}')

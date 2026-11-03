@@ -83,7 +83,7 @@ def validate(directory, name):
     m = json.loads((directory/'manifest.json').read_text())
     tag = m1_tag(name)
     check(m.get('model') == MODEL and m.get('release') == name and m.get('version') == tag and
-          m.get('variant') == 'stock' and not m.get('dev'), 'Wrong release identity')
+          not m.get('dev'), 'Wrong release identity')
     check(m.get('input_sha256') in (M1PLUS_ZIP_SHA, M1PLUS_BIN_SHA) and m.get('stock_demo_sha256') == M1PLUS_DEMO_SHA,
           'Wrong stock identity')
     check(m.get('logo_source') == 'stock', 'A release keeps V2.1\'s own splash')
