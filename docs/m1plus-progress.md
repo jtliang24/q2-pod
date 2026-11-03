@@ -3003,9 +3003,7 @@ which crashes the emulator on a jump to 0 in the iPod path. The device pass chec
 **Gates.** `build.py`, `patch.py`, `boot.py` (plain, `--home-menu`, `--media`), `playback.py`, `m4b`, `id3`,
 `headset_io`, `ldac`, `bluealsa`, `ports.py` and `q2compare.py` pass.
 
-**Device check: not done.** Flash a `--dev` build and walk Home, Library, Settings, Now Playing, Quick
-Settings and lyrics over q2remote, with Screen Off set to Off first. Expect Stock's outline, the stock look,
-Previous as Back, and the knob moving the selection.
+**Device check:** passed; see [section 58](#58-device-pass-phase-1-on-the-m1-and-the-knob-scrub-nov-3).
 
 ## 58. Device pass: Phase 1 on the M1, and the knob scrub (Nov 3)
 

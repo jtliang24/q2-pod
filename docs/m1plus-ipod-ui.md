@@ -21,7 +21,10 @@ Moving between them is clunky.
 
 - **Port the iPod UI to the M1 and make it the M1's only UI**, as on the Q2. Stock pages appear only where
   the iPod UI itself opens them.
-- **Port first, on the 1.5.8 base** (`staging`, `UPSTREAM_BASE=1.5.8`), then resume syncing.
+- **Port first, on the 1.5.9 base**, then resume syncing. 1.5.9 is the first iPod-only tag. Phase 1 started
+  on 1.5.8 (`staging`); `feature/m1-ipod` then takes 1.5.9 through one sync step (Phase 1.5), since the
+  M1 compiles `IPOD=1` and `4fee7d5` deletes only code it no longer compiles. `staging` stays on 1.5.8,
+  because it still compiles the Legacy path. (Revised Nov 3.)
 - **Look:** upstream's iPod structure reflowed for the 320x480 portrait screen, with square corners
   (`GLASS_R` 0). The knob takes the wheel's turns, and touch takes the wheel's gestures.
 - **Method:** upstream's own. Audit V2.1's UI `.bin` pages, styles and row-layout code, and rewrite them
@@ -92,15 +95,30 @@ Verification steps below.
 failures), and a `--dev` build flashed through the menu updater boots to a working, still stock-looking
 UI, checked over q2remote with screenshots. This is the branch's floor, and each later phase raises it.
 
+## Phase 1.5: Sync to 1.5.9
+
+Merge upstream 1.5.9 into `feature/m1-ipod` through the runbook ([m1plus-sync.md](m1plus-sync.md),
+steps 1 to 5), with `sync/1.5.9` cut from `feature/m1-ipod` instead of `staging`, landed `--no-ff` back
+into `feature/m1-ipod`. `work/sync/1.6.0-wip/` is reference for the overlapping conflicts.
+- M1 seams in `#if !IPOD` or `IPOD ? a : b` sites go with upstream's unifdef: keep the iPod side.
+- `test/q2compare.py` builds one (iPod) variant where the base's `build.py` has no `--ipod`.
+- `tools/m1plus.py` follows the `IPOD_HOOKS` fold into `HOOKS`, and drops the dead `-DIPOD=1`.
+- New names and hooks (Carousel, Click With Headphones) get V2.1 values or `M1_UNPORTED`/`unported`
+  rows. Carousel is a Phase 4.5 row.
+- Gates, record (`UPSTREAM_BASE=1.5.9`) and a device pass. This is the floor for Phases 2 to 4.
+
 ## Phase 2: Device geometry as names
 
 - **Shared C.** Replace the iPod path's screen literals (375, 320, 290, 30 and the values derived from
   them) with names.
-  - Counts at 1.6.3: `coverflow.c` (15 each of 375 and 290), `peq_ui.c` 12, `navigation.c` 8, then
-    `addon.c`, `games.c`, `photos.c`, `spotify.c`, `books.c`, `video.c` and `visualizer.c`.
+  - Recount on the 1.5.9 tree. (The earlier counts were upstream 1.6.3's, and M1 seams already name most
+    of `coverflow.c`, `peq_ui.c` and `photos.c`.) The sites left are mostly `navigation.c`, Split Home in
+    `coverflow.c`, and the parts of `addon.c`'s QR page that the M1 compiles. `games.c` (Q2-only, 4.8)
+    and `video.c` (already split) stay as they are.
   - Use the names that already exist where they fit: `UI_W` (375 in `m1plus_q2.inc`, 320 in
-    `m1plus_offsets.inc`), `BOTTOM`, `HOME_*`, `NP_*`, `SET_*`, `CF_*`, `GLASS_R`. Add `UI_H` and
-    `BAR_H`.
+    `m1plus_offsets.inc`), `UI_H`, `BOTTOM`, `HOME_*`, `NP_*`, `SET_*`, `CF_*`, `GLASS_R`. Add
+    `STATUS_H` (30) for the status bar; `BAR_H` is taken by `video.c`'s progress bar.
+  - Only screen-derived values go in the M1 profile now. Layout values come with their Phase 4 item.
   - Each replacement is a seam that changes no Q2 bytes (`q2compare.py` checks this). Offer the set
     upstream with the other seams (roadmap section 6, "The seams") so these lines stop conflicting.
 - **`tools/ipod.py`.** Its constants come from a device profile: `BOTTOM`, `PITCH`, `BODY`, `ART`,
@@ -152,7 +170,8 @@ Each feature follows the same steps:
    - hold-return to Now Playing, mapped to the touch long-press (`m1plus_nav_touch.c`) and a knob hold;
    - retire `m1plus_coverflow_rows.c` and `page_list`'s V2.1-look overrides in `coverflow.c`.
 5. **Home:**
-   - the `home_page.bin` rewrite with Split (art on top, menu below) and Classic; Carousel comes with 1.5.9;
+   - the `home_page.bin` rewrite with Split (art on top, menu below), Classic and Carousel (an `unported`
+     row since the 1.5.9 sync);
    - the Coverflow card;
    - retire `m1plus_coverflow_home.c` and `m1plus_nav_home.c`.
 6. **Now Playing:** the iPod layout, Centred Now Playing, `bigcover`, the volume dialog and the quiet
@@ -182,11 +201,10 @@ Each feature follows the same steps:
 ## Phase 6: Back to syncing
 
 Once the branch reaches parity (Phases 1 to 4.7 pass on the device):
-- land it on `staging` and release `1.5.8-m1.N`;
-- restart the sync through the upstream-sync runbook ([m1plus-sync.md](m1plus-sync.md)). `4fee7d5` now
-  only removes code the M1 no longer compiles, and the saved `work/sync/1.6.0-wip/` resolutions are
-  reference only.
-- Carousel and the other 1.5.9/1.6.x iPod features then arrive as ordinary port rows.
+- land it on `staging` and release `1.5.9-m1.N`;
+- restart the sync from 1.5.9 through the upstream-sync runbook ([m1plus-sync.md](m1plus-sync.md));
+  `drift.py` then plans 1.6.0 and 1.6.3. The saved `work/sync/1.6.0-wip/` resolutions are reference only.
+- The 1.6.x iPod features then arrive as ordinary port rows.
 
 ## Files
 
@@ -202,13 +220,13 @@ Once the branch reaches parity (Phases 1 to 4.7 pass on the device):
 ## Verification
 
 After every commit:
-1. **Q2 unchanged:** `TMPDIR=/tmp python3 test/q2compare.py 1.5.8 --suites`. Legacy and iPod
-   `update.tar` must be byte-identical.
+1. **Q2 unchanged:** `TMPDIR=/tmp python3 test/q2compare.py 1.5.9 --suites` (1.5.8 before Phase 1.5). The
+   iPod `update.tar` must be byte-identical.
 2. **M1 gates:** a fresh `--dev` build, then `test/m1plus/build.py --build`, `patch.py`, `boot.py` (plain,
    `--home-menu` and `--media`), `playback.py`, `m4b`, `id3`, `headset_io`, `test/ldac.py`,
    `test/bluealsa.py`, then `ports.py`. Each ported row moves from `unported` to `ported`, and a
    `known_gap` that now passes is removed.
-3. **CI suite:** `pytest test/unit`.
+3. **CI suite:** `pytest test/unit`, from the 1.6.2 sync on (upstream adds `test/unit` in 1.6.2).
 4. **Device:** at the end of each Phase 4 item, flash through the menu updater, then walk the feature over
    q2remote with screenshots. Record it as a progress section, with `test/m1plus/fndiff.py` against the
    build on the device.
