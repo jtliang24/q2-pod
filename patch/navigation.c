@@ -2361,9 +2361,9 @@ int ringnav_paint(void *w, void *canvas) {
     st.paint_w = w ? P(w, W_PARENT) : (void *)0;
 #else
     paint_selection(w, canvas);
+#endif
 #if M1PLUS
     home_paint(w, canvas); /* Knob: Navigation's card on V2.1's Home (m1plus_nav_home.c) */
-#endif
 #endif
     return result;
 }
