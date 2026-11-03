@@ -3041,10 +3041,17 @@ can only hold with the new code.
 **Gates** (`work/ipod-p1/c6`): `build.py`, `patch.py` (127 expected-failure checks, as before), `boot.py` (three
 modes), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and `q2compare.py --suites` pass.
 
-**Device check: not done.** Flash a `--dev` build and check on Now Playing: a single press recolours the
-slider and it stops following playback; the turns move the target, forward clockwise, with the volume
-unchanged; a press seeks; the scrub ends by itself after `SCRUB_MS`; a double press turns the screen off.
-Lists, Knob: Volume and the volume bar behave as before.
+**Device check (V02Gm, 1.5.8 dev 15, Nov 3): passed.** On Now Playing in Knob: Navigation:
+
+- A single press sets `st.scrub` and the slider stops following playback.
+- The turns move `scrub_to` by 5 s a detent, forward clockwise, and the volume stays put.
+- A press during the scrub seeks to the target (02:43 after `knob 6`) and clears `st.scrub`.
+- With no input the scrub ends `SCRUB_MS` on and commits its target (92 s, 01:34 on screen after).
+- A double press turns the screen off. It did so every time at 20 and 50 ms between events, one time
+  in three at 80, and never at 110 ms. At 110 ms the press-to-press time, with `q2remote`'s own overhead,
+  is over `DOUBLE_CLICK_MS`, so a real double press has to land inside 250 ms, as on the lists.
+- Unchanged: a list's turn and press, a list's double press (screen off), the volume bar, a press while it
+  is open (stock's screen-off, no scrub), and Knob: Volume (the press turns the screen off, no scrub).
 
 ## How to check a build now
 
