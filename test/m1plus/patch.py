@@ -14271,6 +14271,72 @@ if is_m1plus:
     assert knob('KEY_POWER',setup=lambda m:m.byte(syms['g_power_longkey'],1))==O['KEY_POWER']
     assert knob('KEY_POWER',setup=lambda m:m.byte(O['BOOT_KEY_GUARD'],1))==O['KEY_POWER']; passed()
 
+if is_m1plus:
+    # Knob: Navigation (KNOB=1) on Now Playing, where the knob keeps the volume and its press is V2.1's
+    # power key, which turns the screen off: a single press starts the scrub DOUBLE_CLICK_MS on and a
+    # double press leaves the key to V2.1 (the screen off), as a double Centre does on a list. Scrubbing,
+    # volume up is forward, volume down back, and a press seeks and ends it; none reaches the volume.
+    # (The Q2's scrub, a double Centre, is the checks of the iPod block above.)
+    NP_FG='style:normal:fg_color'; NP_FILL=signed(color_t(O['MINIMAL_FILL']))
+    def np_page(mode='1',reverse=None):  # Now Playing on a queue of three, Knob: Navigation as mode
+        CONFIG.clear(); CONFIG.update(KNOB=mode)
+        if reverse is not None: CONFIG.update(KNOBDIR=reverse)
+        m=QueueMachine(queue=3,pos=1); CONFIG.clear(); playing=HOOKS['playing_page_init'][0]; m.handlers[playing+12]='stock_playing'
+        m.slider=m.node('slider','slider_play',max=225,value=100)
+        m.elapsed,m.remain=m.node('label','label_playtime'),m.node('label','label_ipod_remain')
+        m.win=m.top=m.node('window','playing_page',[m.slider,m.elapsed,m.remain])
+        m.word(m.win+O['W_PARENT'],m.wm)
+        assert m.call(address=playing,args=(m.win,7,0,0),gap=0)==0
+        m.mock('on_wm_keyup_fun'); m.seeks=[]; m.starts=[]
+        return m
+    def np_did(m,name): return [c[1] for c in m.calls if c[0]==name]
+    def np_keep(m):  # every seek and timer restart so far
+        m.seeks+=np_did(m,'player_seek_time'); m.starts+=np_did(m,'playing_timer_start')
+    def np_step(m,*a,**k):
+        r=(m.advance if k.pop('wait',False) else m.call)(*a,**k); np_keep(m); return r
+    def np_stock(m): return 'on_wm_keyup_fun' in [c[0] for c in m.calls]
+    def np_scrub(m):  # a single press, and the scrub it starts DOUBLE_CLICK_MS on
+        assert m.call(O['KEY_POWER'])==11 and not np_stock(m) and not np_did(m,'playing_timer_clear')
+        m.advance(DC-1,clear=False); assert not np_did(m,'playing_timer_clear')
+        m.advance(1,clear=False); np_keep(m)
+        assert np_did(m,'playing_timer_clear')==[m.win] and m.nodes[m.slider][NP_FG]==-1 and not np_stock(m) and not m.screens
+    def np_ended(m,seeks,label=''):  # the scrub is over: fill and stock's timer are back, and the knob is the volume's
+        assert m.seeks==seeks and m.starts==[m.win] and m.nodes[m.slider][NP_FG]==NP_FILL and not m.timers,(label,m.seeks,m.starts)
+        assert m.call(O['KEY_VOLUMEUP'])==0 and np_stock(m) and not np_did(m,'player_seek_time'),label
+    m=np_page(); np_scrub(m); passed()
+    # Clockwise (volume up) moves the target forward, whichever way Knob Up sorts a list, and counter-clockwise back.
+    for reverse in ('0','1'):
+        m=np_page(reverse=reverse); np_scrub(m)
+        assert np_step(m,O['KEY_VOLUMEUP'])==11 and m.nodes[m.slider]['value']==105 and m.nodes[m.elapsed]['text']=='01:45'
+        assert m.nodes[m.remain]['text']=='-02:00' and not np_stock(m)
+        assert np_step(m,O['KEY_VOLUMEDOWN'],gap=1500)==11 and m.nodes[m.slider]['value']==100 and not np_stock(m)
+        assert np_step(m,O['KEY_VOLUMEUP'],gap=1500)==11 and m.nodes[m.slider]['value']==105 and not np_stock(m); passed()
+    # A press seeks there and ends it, a second as quick (a double press) swallowed.
+    for presses in (1,2):
+        m=np_page(); np_scrub(m); np_step(m,O['KEY_VOLUMEUP'])
+        assert np_step(m,O['KEY_POWER'])==11 and m.seeks==[105] and not m.starts and not np_stock(m)  # settle_poll restarts it
+        if presses==2: assert np_step(m,O['KEY_POWER'],gap=100)==11 and not np_stock(m)
+        np_step(m,DC+O['SCRUB_MS'],wait=True); assert not m.screens and m.u.mem_read(syms['g_backlight_status'],1)[0]
+        np_ended(m,[105],presses); passed()
+    # With no turn the scrub times out without a seek.
+    m=np_page(); np_scrub(m); np_step(m,O['SCRUB_MS'],wait=True); np_ended(m,[],'timeout'); passed()
+    # A double press never starts one: its second release reaches V2.1 as the power key.
+    m=np_page(); assert m.call(O['KEY_POWER'])==11 and not np_stock(m)
+    assert m.call(O['KEY_POWER'],gap=100,clear=False)==0 and np_stock(m) and m.get(m.event+O['EVENT_KEY'])==O['KEY_POWER']
+    m.advance(DC+O['SCRUB_MS'],clear=False); assert not np_did(m,'playing_timer_clear') and not m.timers and m.nodes[m.slider][NP_FG]==NP_FILL; passed()
+    # Not scrubbing, the turns are the volume's (V2.1's); a key that is not the knob's ends a scrub.
+    m=np_page(); assert m.call(O['KEY_VOLUMEDOWN'])==0 and np_stock(m) and m.get(m.event+O['EVENT_KEY'])==O['KEY_VOLUMEDOWN']; passed()
+    m=np_page(); np_scrub(m); np_step(m,O['KEY_VOLUMEUP']); np_step(m,O['KEY_FWD_BTN'],gap=50)
+    assert m.seeks==[105] and m.nodes[m.slider][NP_FG]==NP_FILL; passed()
+    # Volume mode, a dark screen and the boot guard keep V2.1's press at once, with no timer behind.
+    for kw in (dict(mode='0'),dict(dark=1),dict(guard=1),dict(longkey=1)):
+        m=np_page(kw.get('mode','1'))
+        if 'dark' in kw: m.byte(syms['g_backlight_status'],0)
+        if 'guard' in kw: m.byte(O['BOOT_KEY_GUARD'],1)
+        if 'longkey' in kw: m.byte(syms['g_power_longkey'],1)
+        assert m.call(O['KEY_POWER'])==0 and np_stock(m) and not m.timers,kw
+        m.advance(DC+O['SCRUB_MS'],clear=False); assert not np_did(m,'playing_timer_clear'),kw; passed()
+
 if 'MAINSCHEDULING_CALL' in SITES:
     # on_wm_idle_status's player_mainscheduling (its status round trip) runs every MAINSCHEDULING_MS, a second
     # while dark with nothing playing.

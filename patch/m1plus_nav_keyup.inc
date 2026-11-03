@@ -15,5 +15,7 @@
     (void)search_key;
     /* Knob: Navigation's turns and press on V2.1's Home grid (m1plus_nav_home.c) */
     if (home_key(window_manager_get_top_window(window_manager()), key)) return STOP;
+    /* Knob: Navigation's press and turns on Now Playing, which scrub (m1plus_nav_np.c) */
+    if (np_knob_key(window_manager_get_top_window(window_manager()), key, boot_guard)) return STOP;
     int result = stock_keyup_trampoline(ctx, event);
 #endif

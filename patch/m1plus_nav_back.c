@@ -40,7 +40,8 @@ static int previous_back(const void *info) {
  * changes the volume (on_wm_keyup_fun opens the volume dialog for 220/221); V2.1 binds no key-down
  * handler. Only where ringnav navigates: elsewhere the turn would do nothing, so Now Playing, the
  * volume dialog, Bluetooth receiver and USB DAC modes (their pages are no context, and usable()
- * leaves both modes to stock) and a dark screen keep the volume. */
+ * leaves both modes to stock) and a dark screen keep the volume. Now Playing's press is the scrub's
+ * (m1plus_nav_np.c), taken before V2.1's key-up. */
 static int knob_nav_active(void) {
     pod_settings();
     /* Bluetooth receiver mode keeps the knob's volume: usable() no longer refuses it (1.3.8, the
@@ -50,3 +51,4 @@ static int knob_nav_active(void) {
 }
 #endif
 #include "m1plus_nav_home.c"
+#include "m1plus_nav_np.c"
