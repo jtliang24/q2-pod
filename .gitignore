@@ -24,3 +24,4 @@ graphify-out/
 /database.db
 /.direnv
 /.envrc
+.plan/
