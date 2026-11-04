@@ -460,13 +460,19 @@ if __name__ == '__main__':
         # Stock reached Home (not a blank page, "SN Error" or the language guide): its pages' dots.
         assert len(set(stock[i:i+4] for i in range(0, len(stock), 4))) > 50, 'stock demo drew no Home'
         bar = 30 * W * 4  # the status bar, whose clock and battery change from run to run
-        def differing(a, b, y0=30, y1=H):
-            return [i // 4 for i in range(y0 * W * 4, y1 * W * 4, 4) if a[i:i+4] != b[i:i+4]]
+        # The style audit's colours (patch/m1plus_ipod.json): V2.1's list rows are 0x131313 in stock and transparent
+        # (black) patched, and their press 0x362221 is 0x333333. A screen is stock's but for those (edits=True): a pixel
+        # of one colour is the other, and an icon's soft edge, blended over the row, is darker by at most the row's 0x13.
+        edited = {bytes((0x13, 0x13, 0x13)): bytes((0, 0, 0)), bytes((0x36, 0x22, 0x21)): bytes((0x33, 0x33, 0x33))}
+        def edit(x, y): return edited.get(x) == y or all(0 <= p - q <= 0x13 for p, q in zip(x, y))
+        def differing(a, b, y0=30, y1=H, edits=False):
+            return [i // 4 for i in range(y0 * W * 4, y1 * W * 4, 4) if a[i:i+4] != b[i:i+4]
+                    and not (edits and edit(a[i:i+3], b[i:i+3]))]
         if args.home_menu:
-            differ = differing(stock, patched, 30, HOME_DOTS[0]) + differing(stock, patched, HOME_DOTS[1])
+            differ = differing(stock, patched, 30, HOME_DOTS[0], True) + differing(stock, patched, HOME_DOTS[1], H, True)
             assert differing(stock, patched, *HOME_DOTS), 'six cards: the dots show no page for the Q2 Pod card'
         else:
-            differ = differing(stock, patched)
+            differ = differing(stock, patched, edits=True)
         assert not differ, f'patched Home differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
         # The walk: the same touches to both, a screen each step.
         seen, seen_all = {'home': patched}, {}
@@ -484,20 +490,20 @@ if __name__ == '__main__':
             if args.captures:
                 for t, px in shots.items(): png(px, args.captures/f'{name}-{t}.png')
             if isinstance(want, tuple) and want[:2] == ('same', 'moved'):
-                differ = differing(shots['stock'], shots['patched'])
+                differ = differing(shots['stock'], shots['patched'], edits=True)
                 assert not differ, f'{name}: patched differs from stock at {len(differ)} pixels'
                 x0, y0, x1, y1 = want[3]
                 box = lambda px: [px[(y * W + x0) * 4:(y * W + x1) * 4] for y in range(y0, y1)]
                 for t in ('stock', 'patched'):
                     assert box(shots[t]) != box(seen_all[t][want[2]]), f'{name}: {t} showed no change in {want[3]}'
             elif want == 'same':
-                differ = differing(shots['stock'], shots['patched'])
+                differ = differing(shots['stock'], shots['patched'], edits=True)
                 assert not differ, f'{name}: patched differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
             elif want == 'differs':
-                assert differing(shots['stock'], shots['patched']), f'{name}: the payload left stock\'s page as it was'
+                assert differing(shots['stock'], shots['patched'], edits=True), f'{name}: the payload left stock\'s page as it was'
             elif want[0] == 'rows':
-                assert not differing(shots['stock'], shots['patched'], *want[1]), f'{name}: rows {want[1]} differ from stock'
-                assert differing(shots['stock'], shots['patched'], *want[2]), f'{name}: rows {want[2]} are stock\'s'
+                assert not differing(shots['stock'], shots['patched'], *want[1], edits=True), f'{name}: rows {want[1]} differ from stock'
+                assert differing(shots['stock'], shots['patched'], *want[2], edits=True), f'{name}: rows {want[2]} are stock\'s'
             elif want[0] == 'kept':
                 x0, y0, x1, y1 = want[2]
                 box = lambda px: [px[(y * W + x0) * 4:(y * W + x1) * 4] for y in range(y0, y1)]

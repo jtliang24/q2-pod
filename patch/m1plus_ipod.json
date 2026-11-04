@@ -335,5 +335,68 @@
   "settings_icons": {},
   "quiet_icons": {},
   "status_icons": {},
-  "styles": {}
+  "styles": {
+    "default.bin": {
+      "sha256": "24a8f765f315d836afa85731ca923512a506138930398683242ffaaa831b00c9",
+      "why": "V2.1's list rows are opaque dark greys (131313, black) that hide the selection bar paint_bg draws behind them, and its pressed rows are a brown tint (362221); iPod rows are transparent with a grey press (333333). V2.1's accent text on rows (the gold of the playing item) turns white as the Q2's red does. Dialogs' notpress rows, the hold menu's list_itemsort_style and Tidal's btn_tidal_more stay (4.7, 4.5).",
+      "edits": [
+        [
+          "list_item",
+          "list_item_style",
+          "bg_color",
+          "131313ff",
+          "00000000",
+          4
+        ],
+        [
+          "list_item",
+          "list_item_style",
+          "bg_color",
+          "362221ff",
+          "333333ff",
+          1
+        ],
+        [
+          "list_item",
+          "list_item_black_style",
+          "bg_color",
+          "000000ff",
+          "00000000",
+          5
+        ],
+        [
+          "button",
+          "btn_tablerow_style",
+          "bg_color",
+          "131313ff",
+          "00000000",
+          4
+        ],
+        [
+          "button",
+          "btn_tablerow_style",
+          "bg_color",
+          "362221ff",
+          "333333ff",
+          1
+        ],
+        [
+          "hscroll_label",
+          "srlabel_item_gold18_style",
+          "text_color",
+          "fe7e40ff",
+          "ffffffff",
+          3
+        ],
+        [
+          "hscroll_label",
+          "srlabel_item_gold20_style",
+          "text_color",
+          "fe7e40ff",
+          "ffffffff",
+          3
+        ]
+      ]
+    }
+  }
 }

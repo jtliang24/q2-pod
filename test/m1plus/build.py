@@ -340,10 +340,12 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     payload = (directory/'patch.bin').read_bytes()
     assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
     # The iPod UI is the only UI. Its code edits and page rewrites (tools/m1plus_ipod.py) are what each Phase 4
-    # item has audited so far: none yet, so the build changes only the TagLib cover library.
+    # item has audited so far: the TagLib cover library, the style files (4.1) and the pages in REWRITES.
     import m1plus_ipod
     assert 'variant' not in manifest and manifest['compact_code'] == [] and not M1_AUDIT['immediates'] and not M1_AUDIT['row_layout_calls']['sites']
-    assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES}
+    raw_styles = 'release/assets/default/raw/styles/'
+    assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
+        raw_styles + p for p in M1_AUDIT['styles']}
     stock_syms = symbols(directory/'stock-demo')
     # Each V2.1 iPod page is the stock page the inventory hashed, decodes and re-encodes exactly, and its init
     # function is in V2.1's demo.
@@ -359,6 +361,34 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     for page in m1plus_ipod.UI_ASSETS:
         data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
         assert page in m1plus_ipod.REWRITES or m1plus_ipod.patch_asset(page, data) == data, page
+    # ipod-ui 4.1, the styles: V2.1's default.bin is the file the audit hashed, each edit's old value is in exactly its
+    # audited number of states, and the build's file differs from it in those states and nowhere else. Each edited style
+    # is one a V2.1 page or its code names (a style nothing uses would edit nothing that paints).
+    from ipod import style_props
+    with tempfile.TemporaryDirectory(prefix='m1-ui-') as tmp:
+        run('unsquashfs', '-q', '-no-xattrs', '-d', f'{tmp}/ui', directory/'stock.squashfs', 'release/assets/default/raw/ui')
+        used = {n[2].get('style') for q in pathlib.Path(tmp, 'ui').rglob('*.bin') for n in walk(decode(q.read_bytes()))}
+    for rel, audit in M1_AUDIT['styles'].items():
+        raw = read('stock.squashfs', raw_styles + rel)
+        done = m1plus_ipod.patch_style(rel, raw)
+        assert sha(raw) == audit['sha256'] and len(done) == len(raw) and done != raw
+        assert sha(done) == manifest['changed_assets'][raw_styles + rel]['sha256'] == sha(read('rootfs.squashfs', raw_styles + rel))
+        sites, props = set(), list(style_props(raw))
+        for widget, style, prop, old, new, n in audit['edits']:
+            at = [a for w, st, _, p, a, v in props if (w, st, p, v) == (widget, style, prop, bytes.fromhex(old))]
+            assert len(at) == n and all(done[a:a + 4] == bytes.fromhex(new) for a in at), (style, prop)
+            assert style in used or b'\0' + style.encode() + b'\0' in stock, f'{style}: no page or code of V2.1 names it'
+            sites.update(i for a in at for i in range(a, a + 4))
+        assert {i for i in range(len(raw)) if raw[i] != done[i]} <= sites
+        # a wrong state count and an unaudited file are refused (patch_style's own checks)
+        for bad, why in (({**audit, 'edits': [[*audit['edits'][0][:5], audit['edits'][0][5] + 1], *audit['edits'][1:]]}, 'expected'),
+                         ({**audit, 'sha256': '0' * 64}, 'Unaudited')):
+            try:
+                m1plus_ipod.ipod.patch_style(raw, bad)
+            except ValueError as e:
+                assert why in str(e), e
+            else:
+                raise AssertionError(f'{rel}: patch_style took {why!r}')
     page = next(iter(M1_AUDIT['assets']))
     data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
     def refuses(path, bad, message):
@@ -447,36 +477,6 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # 220/221 (key - 220 < 2). V2.1 has no Key Tone (no buzzer command) to port.
     def got(lw): return struct.unpack_from('<I', stock, fileoff(stock, M1PLUS_GP + struct.unpack_from('<h', stock, fileoff(stock, lw))[0]))[0]
     def words(address, n): return struct.unpack_from(f'<{n}I', stock, fileoff(stock, address))
-    assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
-    bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
-    assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'
-    assert words(0x4cdbf4, 2) == (0x2443ff24, 0x2c630002) and compared(0x4cdc34, 0x4cdc44)[1] == b'dialog/volume_dialog'
-    assert b'buzzer' not in stock and b'cmd_mcu' not in stock
-    # Coverflow's worker (coverflow.c build_art) holds parse_cover_mutex alone on M1: V2.1 has no
-    # player cover lock. Its toolsGetAlbumCover calls (lw $t9 from its GOT slot) are the three in
-    # parse_albumcovertask_thd and the one in parseplaycover_thd, which locks parse_cover_mutex first.
-    text = next(p for _, p in segments(stock) if p[0] == 1 and p[6] & 1)  # the executable LOAD segment
-    calls = [text[2] + i for i in range(0, text[4], 4) if struct.unpack_from('<I', stock, text[1] + i)[0] == 0x8f99b87c]
-    assert got(0x4df1e8) == stock_syms['toolsGetAlbumCover'] and calls == [0x4dd6a4, 0x4de894, 0x4de95c, 0x4df1e8]
-    assert all(stock_syms['parse_albumcovertask_thd'] <= c < stock_syms['parseplaycover_thd'] for c in calls[:3])
-    assert words(0x4df1c4, 3) == (0x8f99f8b4, 0x8f84b878, 0x0320f809) and got(0x4df1c8) == stock_syms['parse_cover_mutex']
-    assert got(0x4df1c4) == stock_syms['pthread_mutex_lock@GLIBC_2.0'] and stock_syms['parseplaycover_thd'] < 0x4df1c4 < 0x4df1e8
-    # now_tag's ID3_ALBUM_ARTIST (coverflow.c): toolsGetMusicInfo fixes id3 field 6 (li $v1, 6) and
-    # copies it to info+0x580 (addiu $a0, $s2, 0x580), MUSIC_INFO_ALBUM_ARTIST, as V1.32 does.
-    assert stock_syms['toolsGetMusicInfo'] < 0x5ecba0 and words(0x5ecba0, 1) == (0x24030006,) and words(0x5ecbc4, 1) == (0x26440580,)
-    # The online searches (onlinematch.c) read stock's keyinfo as online_setkeyword_info fills it: the
-    # title at +0x200, the album at +0x400 and the artist at +0x500 (addiu $a0, $s0, ...; $s0 keyinfo).
-    assert got(0x50b49c) == stock_syms['keyinfo'] and words(0x50b4d4, 1) == (0x26040200,)
-    assert words(0x50b4f0, 1) == (0x26040400,) and words(0x50b50c, 1) == (0x26040500,)
-    # radio.c's and spotify.c's Search take the keyboard's OK as EVT_IM_ACTION: V2.1's
-    # input_method_dispatch_action dispatches 0x13c (li $a1), V1.32's 0x13a.
-    assert words(stock_syms['input_method_dispatch_action'] + 0x14, 1) == (0x2405013c,)
-    # V2.1's names for two V1.32 routines (M1PLUS_FUNCTION_ALIASES), each called where V1.32 calls its
-    # twin: folder_back's bal clear_foldervariate (folder_reset_variable) and delete_playqueue_file's
-    # bal start_playqueue (player_start_queue).
-    def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
-    assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
-    assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
     # ipod-ui 4.1, the paint backbone: V2.1's own code for what the four hooks and the gradient leaf read.
     # style_get_gradient is a leaf: a null style, vtable or slot returns 0, else it tail-calls the style
     # vtable's get_gradient (+0x18), as the Q2's does. style_get_color asks it first (a bal, which returns to
@@ -514,6 +514,36 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # ui_loader_load_widget_with_parent(name, parent): both kept in registers for the load
     load = stock_syms['ui_loader_load_widget_with_parent']
     assert words(load + 0x24, 1) == (0x00808825,) and words(load + 0x30, 1) == (0x00a0a025,)
+    assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
+    bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
+    assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'
+    assert words(0x4cdbf4, 2) == (0x2443ff24, 0x2c630002) and compared(0x4cdc34, 0x4cdc44)[1] == b'dialog/volume_dialog'
+    assert b'buzzer' not in stock and b'cmd_mcu' not in stock
+    # Coverflow's worker (coverflow.c build_art) holds parse_cover_mutex alone on M1: V2.1 has no
+    # player cover lock. Its toolsGetAlbumCover calls (lw $t9 from its GOT slot) are the three in
+    # parse_albumcovertask_thd and the one in parseplaycover_thd, which locks parse_cover_mutex first.
+    text = next(p for _, p in segments(stock) if p[0] == 1 and p[6] & 1)  # the executable LOAD segment
+    calls = [text[2] + i for i in range(0, text[4], 4) if struct.unpack_from('<I', stock, text[1] + i)[0] == 0x8f99b87c]
+    assert got(0x4df1e8) == stock_syms['toolsGetAlbumCover'] and calls == [0x4dd6a4, 0x4de894, 0x4de95c, 0x4df1e8]
+    assert all(stock_syms['parse_albumcovertask_thd'] <= c < stock_syms['parseplaycover_thd'] for c in calls[:3])
+    assert words(0x4df1c4, 3) == (0x8f99f8b4, 0x8f84b878, 0x0320f809) and got(0x4df1c8) == stock_syms['parse_cover_mutex']
+    assert got(0x4df1c4) == stock_syms['pthread_mutex_lock@GLIBC_2.0'] and stock_syms['parseplaycover_thd'] < 0x4df1c4 < 0x4df1e8
+    # now_tag's ID3_ALBUM_ARTIST (coverflow.c): toolsGetMusicInfo fixes id3 field 6 (li $v1, 6) and
+    # copies it to info+0x580 (addiu $a0, $s2, 0x580), MUSIC_INFO_ALBUM_ARTIST, as V1.32 does.
+    assert stock_syms['toolsGetMusicInfo'] < 0x5ecba0 and words(0x5ecba0, 1) == (0x24030006,) and words(0x5ecbc4, 1) == (0x26440580,)
+    # The online searches (onlinematch.c) read stock's keyinfo as online_setkeyword_info fills it: the
+    # title at +0x200, the album at +0x400 and the artist at +0x500 (addiu $a0, $s0, ...; $s0 keyinfo).
+    assert got(0x50b49c) == stock_syms['keyinfo'] and words(0x50b4d4, 1) == (0x26040200,)
+    assert words(0x50b4f0, 1) == (0x26040400,) and words(0x50b50c, 1) == (0x26040500,)
+    # radio.c's and spotify.c's Search take the keyboard's OK as EVT_IM_ACTION: V2.1's
+    # input_method_dispatch_action dispatches 0x13c (li $a1), V1.32's 0x13a.
+    assert words(stock_syms['input_method_dispatch_action'] + 0x14, 1) == (0x2405013c,)
+    # V2.1's names for two V1.32 routines (M1PLUS_FUNCTION_ALIASES), each called where V1.32 calls its
+    # twin: folder_back's bal clear_foldervariate (folder_reset_variable) and delete_playqueue_file's
+    # bal start_playqueue (player_start_queue).
+    def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
+    assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
+    assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
     # online_lyricthd: the hooked search (kugou_obtainlyric), NetEase's com163_obtainlyric on a miss and
     # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
     assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')
@@ -679,7 +709,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added |= {xx+'stream_app.png'}  # its card apps' rows (addon.c), at 40 px too
     # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
     added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
-    replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C}
+    replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C} | {
+        'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles'])]}
     logo = xx+'logo.jpg'
     with tempfile.TemporaryDirectory(prefix='m1-rootfs-') as tmp:
         trees = {}

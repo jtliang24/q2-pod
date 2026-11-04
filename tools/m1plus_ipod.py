@@ -5,8 +5,8 @@ The profile is the screen alone, from patch/m1plus_offsets.inc: UI_W, UI_H, STAT
 square corners). Every layout name keeps the Q2's value until its Phase 4 item gives it V2.1's.
 
 Phase 3 adds the V2.1 patch around that copy: patch/m1plus_ipod.json (V1.32's pages mapped onto V2.1's, every
-other section empty), and patch_asset and patch_code, which m1plus.build() runs on every build. Nothing is
-rewritten yet: a Phase 4 item adds its page to REWRITES and its sites to the JSON."""
+other section empty), and patch_asset and patch_code, which m1plus.build() runs on every build. A Phase 4 item adds
+its page to REWRITES and its sites to the JSON; 4.1 adds the `styles` section, through patch_style."""
 import functools
 import importlib.util
 import json
@@ -47,6 +47,12 @@ def patch_asset(path, data):
         return data
     REWRITES[path](root)
     return ipod.encode(root)
+
+
+def patch_style(rel, data):
+    """The style file rel (styles/<rel>) with the audited edits (the iPod rows' transparent backgrounds, press greys and
+    white accent text), through the copy's patch_style: it checks the file's hash and every edit's state count."""
+    return ipod.patch_style(data, AUDIT['styles'][rel])
 
 
 def patch_code(data, symbols):
