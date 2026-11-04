@@ -97,7 +97,7 @@ WM_VT_SLOT, WM_VTABLE = (0x88, 0x97d6a0) if is_m1plus else (0x94, 0x9a0490)
 # The payload's styles (offsets.inc STYLE_*) as this model compiles them: S('s_listitem_black') is that
 # V1.32 name, or V2.1's nearest on M1 Plus.
 from build import run as _run
-NAMES = dict(re.findall(r'^#define ((?:STYLE|VIEW|ICON|ROW|ABOUT)_\w+) "([^"]+)"', _run('clang', '-E', '-dM', f'-DM1PLUS={int(is_m1plus)}', '-x', 'c', str(ROOT/'patch/offsets.inc')), re.M))
+NAMES = dict(re.findall(r'^#define ((?:STYLE|VIEW|ICON|ROW|ABOUT|STATUSW)_\w+|STATUS_LOWCHARGE) "([^"]+)"', _run('clang', '-E', '-dM', f'-DM1PLUS={int(is_m1plus)}', '-x', 'c', str(ROOT/'patch/offsets.inc')), re.M))
 def S(name): return NAMES['STYLE_' + name[2:].upper()]
 DC=O['DOUBLE_CLICK_MS']  # centre double-press window
 # iPod accent presets: {gradient top, bottom, light tone, red tone, highlight} per Accent setting value.
@@ -1101,12 +1101,14 @@ s.clock=(19,31); s.top=pages[-1]; minute(); assert clock()=='7:31 PM' and len(wr
 # each second; a new badge shows CODEC_MS, fades out and BT_GLYPH fades in over CODEC_STEPS steps
 # each way, and BT_GLYPH then replaces the badge stock sets again. The battery shows the icon, the
 # percentage or both in view_battery, and the icon while the group's ink would reach past BATT_ROOM.
-# The percentage is sized to its digits once the first paint measured them (10 px each here).
+# The percentage is sized to its digits once the first paint measured them (10 px each here). The widgets are named
+# as this model's bar names them (offsets.inc STATUSW_*: V2.1's img_btclass and pgbar_battery on M1 Plus).
 def battery_checks():
+    named_as={'img_bt':'BT','img_wifi':'WIFI','label_battery':'PCT','view_battery':'SLOT','img_battery':'ICON'}
     def battery_bar(mode):
         b=Machine(); b.config={'BATTERY':str(mode)}
         level=b.node('progress_bar','progress_battery',value=50)
-        w={n:b.node(t,n,list(c),visible=v,**kw) for n,t,c,v,kw in (
+        w={n:b.node(t,NAMES['STATUSW_'+named_as[n]],list(c),visible=v,**kw) for n,t,c,v,kw in (
             ('img_bt','image',(),1,dict(image='bar_ldac')),('img_wifi','image',(),1,{}),
             ('label_battery','label',(),0,{}),('view_battery','view',(),0,{}),
             ('img_battery','image',(level,),1,dict(image='bar_battery')))}
@@ -1115,6 +1117,10 @@ def battery_checks():
         w['progress_battery']=level
         b.word(bar+O['W_PARENT'],b.wm); b.word(syms['system_bar'],bar)
         return b,bar,w,lambda x=bar: b.call(address=HOOKS['widget_on_paint_background'][0],args=(x,b.canvas,0,0),gap=0)
+    def level(b,w,value,image=None):  # as this model's stock shows it: label_battery's "88%", or V2.1's power_capacity
+        b.nodes[w['label_battery']]['text']=f'{value}%'
+        if is_m1plus: b.word(syms['power_capacity'],value)
+        if image: b.nodes[w['img_battery']]['image']=NAMES['STATUS_LOWCHARGE'] if image=='bar_lowcharge' else image
     def shown(b,w): return [n for n in ('img_battery','label_battery','view_battery') if b.nodes[w[n]]['visible']]
     def alpha(b,w): return b.get(w['img_bt']+0x34)&255
     b,bar,w,paint=battery_bar(1); paint()
@@ -1141,15 +1147,15 @@ def battery_checks():
     # of them changes.
     b,bar,w,paint=battery_bar(2); b.nodes[w['img_bt']]['visible']=0
     lcd=lambda: (b.lcd_colors(),b.get(b.lcd+O['LCD_TEXT_COLOR']),b.get(b.canvas+O['CANVAS_ALIGN_V']),b.get(b.canvas+O['CANVAS_ALIGN_H']))
-    b.nodes[w['label_battery']]['text']='50%'
+    level(b,w,50)
     paint(); assert shown(b,w)==['view_battery']; before=lcd()
     def slot(): b.bands=[]; b.letters=[]; paint(w['view_battery']); assert lcd()==before; return b.bands,b.letters
     bw,bh,y=O['BATT_BODY_W'],O['BATT_BODY_H'],(30+1-O['BATT_BODY_H'])//2-O['BATT_PCT_DY']
     measured=False
     for image,value,rgb,text in (('bar_battery',0,0xffffff,'0'),('bar_battery',1,0xffffff,'1'),('bar_battery',50,0xffffff,'50'),('bar_battery',100,0xffffff,'100'),('bar_battery',88,0xffffff,'88'),('bar_charge',63,O['BATT_CHARGE_RGB'],'63'),('bar_charge',100,O['BATT_CHARGE_RGB'],'100'),
                                  ('bar_lowcharge',5,O['BATT_LOW_RGB'],'5')):
-        # the level is label_battery's text: stock zeroes progress_battery while charging
-        b.nodes[w['img_battery']]['image']=image; b.nodes[w['label_battery']]['text']=f'{value}%'
+        # the level is label_battery's text (M1 Plus: power_capacity): stock zeroes progress_battery while charging
+        level(b,w,value,image)
         b.nodes[w['progress_battery']]['value']=0 if image=='bar_charge' else value
         b.calls=[]; paint(); assert ('widget_invalidate_force',w['view_battery']) in [c[:2] for c in b.calls]
         b.calls=[]; paint(); assert ('widget_invalidate_force',w['view_battery']) not in [c[:2] for c in b.calls]
@@ -1165,7 +1171,7 @@ def battery_checks():
     # Percent: the digits alone, in a slot their width, the charge colour, after the first paint.
     b,bar,w,paint=battery_bar(1); b.nodes[w['img_bt']]['visible']=0
     for image,value,rgb in (('bar_battery',100,0xffffff),('bar_battery',88,0xffffff),('bar_charge',7,O['BATT_CHARGE_RGB'])):
-        b.nodes[w['img_battery']]['image']=image; b.nodes[w['label_battery']]['text']=f'{value}%'
+        level(b,w,value,image)
         paint(); paint(w['view_battery']); paint(); before=lcd(); bands,letters=slot()
         pct=10*len(str(value))+10
         assert b.get(w['view_battery']+O['W_W'])==pct and not bands
@@ -1177,8 +1183,7 @@ def battery_checks():
         b.nodes[w['img_bt']]['visible']=0
         for image,rgb in (('bar_battery',0xffffff),('bar_charge',O['BATT_CHARGE_RGB']),('bar_lowcharge',O['BATT_LOW_RGB'])):
             for value in (0,1,9,10,99,100):
-                b.nodes[w['img_battery']]['image']=image
-                b.nodes[w['label_battery']]['text']=f'{value}%'
+                level(b,w,value,image)
                 paint(); before=lcd(); bands,letters=slot()
                 bw,bh,nh=O['BATT_INSIDE_W'],O['BATT_INSIDE_H'],O['BATT_NUB_H']; y=(30+1-bh)//2
                 assert b.get(w['view_battery']+O['W_W'])==bw+O['BATT_NUB_W']
@@ -1186,11 +1191,11 @@ def battery_checks():
                 assert [(r['kind'],r['rect'],r['color'],r['radius']) for r in b.rounded]==[('fill',(0,y,bw,bh),color_t(rgb),3)]
                 assert [(l['text'],l['rect'],l['color'],l['font'],l['align']) for l in letters]==[(str(value),(2,y+O['BATT_INSIDE_TEXT_DY'],bw-4,bh),color_t(0),('default',O['BATT_INSIDE_PX']),(1,1))]
     # Percent Inside fits beside the widest codec and Wi-Fi.
-    b,bar,w,paint=battery_bar(3); b.nodes[w['label_battery']]['text']='100%'
+    b,bar,w,paint=battery_bar(3); level(b,w,100)
     b.nodes[w['img_bt']]['image']='bar_aptxhd'
     paint(); assert b.get(w['view_battery']+O['W_W'])==O['BATT_INSIDE_W']+O['BATT_NUB_W']
     # A crowded codec temporarily uses the small icon and recovers without a level change.
-    b,bar,w,paint=battery_bar(2); b.nodes[w['label_battery']]['text']='100%'
+    b,bar,w,paint=battery_bar(2); level(b,w,100)
     b.nodes[w['img_bt']]['image']='bar_aptxhd'
     paint(); assert b.get(w['view_battery']+O['W_W'])==O['BATT_BODY_W']+O['BATT_NUB_W']
     b.advance(O['CODEC_MS'])
@@ -1208,7 +1213,7 @@ def battery_checks():
                 b,bar,w,paint=battery_bar(mode)
                 b.nodes[w['img_bt']].update(visible=bt,image=O_GLYPH)
                 b.nodes[w['img_wifi']]['visible']=wifi
-                b.nodes[w['label_battery']]['text']='100%'
+                level(b,w,100)
                 paint()
                 assert shown(b,w)==['view_battery']
                 assert b.get(w['view_battery']+O['W_W'])==(O['BATT_PCT_W'] if mode==1 else (O['BATT_INSIDE_W'] if mode==3 else O['BATT_BODY_W'])+O['BATT_NUB_W']+(O['BATT_GAP']+O['BATT_PCT_W'] if mode==2 else 0))
@@ -7259,9 +7264,9 @@ assert len(m.plays)==1 and m.plays[0][0]=='playing_page' and m.plays[0][2:]==(1,
 assert m.text(syms['g_memory_info']+0x611)=='Album 1' and m.u.mem_read(syms['g_memory_info']+0x60d,1)==b'\0'
 dq=m.plays[-1][1]&0xffffffff; assert m.names(dq)==['T1','T2']; passed()
 m.missing=True; m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert len(m.plays)==1 and 'Storage unavailable' in m.texts(); passed()
-# M1 Plus: the covers' back button, over the carousel.
+# No back button over the carousel: on M1 Plus the status bar's chevron is the covers' back (ipod-ui 4.2).
 backs=[x for x in m.nodes[m.get(m.slide+O['W_PARENT'])]['children'] if m.nodes[x].get('style')=='navbar_btnreturn_style']
-assert len(backs)==int(is_m1plus)
+assert not backs
 # Return: tracks -> covers on the same album, covers -> Home (M1 Plus: back to the Q2 Pod page, which
 # opened it).
 assert m.key()==11 and m.nodes[m.get(m.slide+O['W_PARENT'])]['visible'] and m.get(m.slide+O['SLIDE_INDEX'])==1 and not m.homes
@@ -11074,9 +11079,8 @@ def spot_open(m,button):
     m.page=m.top; assert m.nodes[m.page]['name']=='spotify_page'; return m.page
 def texts(w): return [t for t in labels(w) if t is not None]
 def np_views(m,page):
-    """Spotify's Now Playing page's two views; on M1 Plus the back button over them, its last child."""
-    info,msg,*rest=m.nodes[page]['children']
-    assert [m.nodes[b].get('style') for b in rest]==(['navbar_btnreturn_style'] if is_m1plus else [])
+    """Spotify's Now Playing page's two views, its only children (M1 Plus: the status bar's chevron is its back)."""
+    info,msg=m.nodes[page]['children']
     return info,msg
 BIN='/mnt/mmc/.spotify/librespot'
 # The row follows stock's, with its icon. Without librespot on the card the page says so and
@@ -11148,7 +11152,7 @@ assert len(m.thumbs)==3
 for w in [x for x in m.nodes if m.nodes[x]['type'] in ('hscroll_label','image','view') and under(x,info) and x!=info]:
     x,y,bw,bh=cf_geometry(m,w); inset=0 if is_m1plus else max(corner_inset(30+y),corner_inset(30+y+bh))  # the window starts at y 30
     assert inset<=x and x+bw<=O['UI_W']-inset,(m.nodes[w].get('text'),x,y,bw,bh)
-if is_m1plus:  # portrait: the text under the art, none of it under the back button
+if is_m1plus:  # portrait: the text under the art, none of it in the top left the back button had (BACK_W, kept clear until 4.4)
     art=(O['SPOT_ART_X'],O['SPOT_ART_Y'],O['SPOT_ART_PX'],O['SPOT_ART_PX'])
     meet=lambda a,b: a[0]<b[0]+b[2] and b[0]<a[0]+a[2] and a[1]<b[1]+b[3] and b[1]<a[1]+a[3]
     boxes=[cf_geometry(m,w) for w in m.nodes if m.nodes[w]['type'] in ('hscroll_label','view') and under(w,info) and w!=info]
@@ -11333,10 +11337,10 @@ m.forked=4343; m.row(2); np=m.top; assert m.nodes[np]['name']=='radionp_page' an
 m.advance(500); assert m.labels(np)==['Internet Radio','Three','','','Connecting…','']
 # The heart, at local Now Playing's place: Three is no favourite.
 heart=next(w for w in m.nodes[np]['children'] if m.nodes[w].get('image') in ('play_fav','play_unfav'))
-# M1 Plus: at the top right, the art filling the width under it, and the back button at the top left.
+# M1 Plus: at the top right, the art filling the width under it; the status bar's chevron is its back.
 heart_x,heart_y = (O['UI_W']-54,0) if is_m1plus else (O['UI_W']-72,O['NP_ART_TOP']+O['SPOT_ART_PX']-50+O['NP_ICON_PAD'])
 assert m.nodes[heart]['image']=='play_unfav' and [m.get(heart+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[heart_x,heart_y,50,50]
-assert [m.nodes[b].get('style') for b in m.nodes[np]['children'] if m.nodes[b]['type']=='button']==(['navbar_btnreturn_style'] if is_m1plus else []); passed()
+assert not [b for b in m.nodes[np]['children'] if m.nodes[b]['type']=='button']; passed()
 # Playing: its tags (the StreamTitle as artist - title), the stream and the time since the sound
 # started; standby and auto power-off held (not the screen's timer) and the DAC kept on.
 m.word(syms['g_dacoff_time'],5)
@@ -14802,7 +14806,7 @@ else:
     not_ported("Now Playing's info lines (NP_INFO_CALL not patched in V2.1)")
 
 if is_m1plus:
-    # M1 Plus has no Return key, so the back button on every payload page (back_button) hands the window
+    # M1 Plus has no Return key, so the status bar's back chevron (ipod-ui 4.2) hands a payload page the window
     # manager a Return press and release, as the input thread queues a key's (dispatch_key_return).
     # Every event stock's dispatch receives is recorded as (type, key) when it arrives; a pointer
     # event's x sits where a key's code does (EVENT_X == EVENT_KEY). Touches arrive as the input thread queues them (tslib_run, V2.1 0x637634):
@@ -14820,8 +14824,8 @@ if is_m1plus:
         m.top=m.node('window',page,[m.node()]); return m
     def dispatched(m):
         out=m.seen; m.seen=[]; return out
-    def touch(*points):
-        m=input_machine()
+    def touch(*points,m=None):
+        m=m or input_machine()
         for kind,x,y in points:
             m.word(m.event+O['EVENT_Y'],y)
             assert m.call(x,address=INPUT,args=(m.wm,m.event,0,0),event_type=kind,gap=20,clear=False)==0
@@ -14829,29 +14833,36 @@ if is_m1plus:
     # Touches reach stock as they arrive: there is no edge gesture, so a swipe in from the left edge is the page's.
     assert touch((PRESS,10,200),(MOVE,30,202),(MOVE,90,205),(LIFT,90,205))==[(PRESS,10),(MOVE,30),(MOVE,90),(LIFT,90)]
     assert touch((PRESS,10,200),(LIFT,10,200))==[(PRESS,10),(LIFT,10)]; passed()
-    # The back button, V2.1's btn_return at the top left: its click takes nothing else, and the Return
-    # follows on a timer, outside the button's own dispatch (it closes the page).
-    m=input_machine(); button=m.call(address=payload_syms['back_button'],args=(m.node('view'),0,0,0),gap=0)
-    b=m.nodes[button]
-    assert b['type']=='button' and b['style']=='navbar_btnreturn_style'
-    assert (b['style:normal:icon'],b['style:over:icon'],b['style:pressed:icon'])==('return','return','return_down')
-    assert [m.get(button+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[0,0,O['BACK_W'],48]
-    (f,ctx),=[(f,ctx) for t,f,ctx in b['handlers'] if t==O['EVT_CLICK']]
-    m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),event_type=O['EVT_CLICK'],gap=0)==11 and dispatched(m)==[]
+    # The status bar's chevron (img_back), the payload pages' only back: shown while Home isn't on top (chevron_sync,
+    # at the bar's paint). Its press and release are its own, and its tap, lifted inside it, is previous_back on a
+    # timer, outside the dispatch that closes the page: a payload page takes a Return.
+    def chevron(page='shuffle_page'):
+        m=input_machine(page); back=m.node('image','img_back',visible=0)
+        bar=m.node('system_bar','system_bar',[back]); m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar)
+        m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0); dispatched(m)
+        return m,back
+    m,back=chevron(); edge=(O['BAR_BACK_W']-1,O['STATUS_H']-1)
+    assert m.nodes[back]['visible'] and touch((PRESS,*edge),(MOVE,*edge),(LIFT,*edge),m=m)==[] and dispatched(m)==[]
     m.advance(0); assert dispatched(m)==RETURN
     m.advance(1000); assert dispatched(m)==[]; passed()
-    # page_title puts the back button beside a plain title, centred on the screen.
+    # Lifted outside it, the press is still the chevron's: nothing goes back, and nothing under it sees either event.
+    m,_=chevron(); assert touch((PRESS,10,10),(MOVE,10,90),(LIFT,10,90),m=m)==[]; m.advance(0); assert dispatched(m)==[]
+    # A press beside it is the page's, and so is one on Home, where it hides.
+    m,_=chevron(); x=O['BAR_BACK_W']; assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[(PRESS,x),(LIFT,x)]
+    m,back=chevron('home_page'); assert not m.nodes[back]['visible']
+    assert touch((PRESS,10,10),(LIFT,10,10),m=m)==[(PRESS,10),(LIFT,10)]; m.advance(0); assert dispatched(m)==[]; passed()
+    # page_title centres a plain title on the screen, clear of the top left the back button had (4.4 and 4.5 relay it).
     m=input_machine(); body=m.node('view'); title=m.call(address=payload_syms['page_title'],args=(body,m.string('Photos'),0,0),gap=0)
-    buttons=[c for c in m.nodes[body]['children'] if m.nodes[c]['type']=='button']
-    assert len(buttons)==1 and m.nodes[buttons[0]]['style']=='navbar_btnreturn_style'
+    assert not [c for c in m.nodes[body]['children'] if m.nodes[c]['type']=='button']
     assert not m.nodes[title].get('handlers') and 'clickable' not in m.nodes[title]
     assert m.get(title+O['W_X'])==O['BACK_W'] and m.get(title+O['W_W'])==O['UI_W']-2*O['BACK_W']; passed()
-    # Previous is a media key, as on stock, never Return: the back button is the way back. Idle, on
-    # Now Playing, and with the screen off and the keys locked (stock's key lock, not a hidden page's Back).
-    m=input_machine(); m.calls=[]
+    # Previous is a media key, as on stock, never Return: the chevron is the way back. Idle, on
+    # Now Playing, and with the screen off and the keys locked (stock's key lock, not a hidden page's Back). Knob:
+    # Volume here; the M1's default, Navigation, is the previous() checks below.
+    m=input_machine(); m.config['KNOB']='0'; m.calls=[]
     m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[] and 'on_wm_keyup_fun' in [c[0] for c in m.calls]
     m=input_machine('playing_page'); m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[]
-    m=input_machine(); m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
+    m=input_machine(); m.config['KNOB']='0'; m.byte(syms['g_backlight_status'],0); m.byte(syms['g_keylock_flag'],1); m.byte(syms['g_keylock_mode'],0)
     m.calls=[]; m.call(O['KEY_BACK_BTN'],gap=1000); assert dispatched(m)==[] and 'on_wm_keyup_fun' in [c[0] for c in m.calls]; passed()
     # With Knob: Navigation, Previous is Back as well: after the key's own dispatch, a click on the
     # page's title-bar back button, the first one showing in navbar_btnreturn_style (V2.1's pages
@@ -14884,19 +14895,17 @@ if is_m1plus:
     for page,want in (('spotify_page',True),('radionp_page',True),('tidal_page',True),('sysset_page',False)):
         assert previous('KEY_PLAY',mode='0',page=page)==(False,not want,want),page
     passed()
-    # A payload page's back button (back_button) is found the same way; its click is the Return the
-    # back button test above follows.
-    m=input_machine('shuffle_page'); m.config['KNOB']='1'; page=m.top
-    button=m.call(address=payload_syms['back_button'],args=(page,0,0,0),gap=0)
-    m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0); assert m.clicks==[button]; passed()
+    # A payload page has no back button: Previous gives it the Return the chevron's tap does (previous_back).
+    m=input_machine('shuffle_page'); m.config['KNOB']='1'
+    m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0); assert not m.clicks and dispatched(m)==RETURN; passed()
     # A V2.1 dialog without a back button (Now Playing's ⋯ menu, playmore_dialog) closes by navigator_back.
     m=input_machine('playmore_dialog'); m.config['KNOB']='1'; m.top=m.node('dialog','playmore_dialog',[m.node()])
     m.mock('navigator_back'); m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0)
     assert [c[0] for c in m.calls].count('navigator_back')==1 and not m.clicks; passed()
     # Display's Knob: Navigation (Q2POD KNOB=1). The knob's turns are Previous and Next, volume up
     # Previous (up the list) unless Knob Up: List Down (KNOBDIR=1), and its press Centre, on the release, before stock's key-up, which is where V2.1 opens the volume dialog
-    # (on_wm_keyup_fun's 220/221 test, pinned in test/m1plus/build.py). Volume (the default), a dark screen,
-    # Now Playing and a press the boot guard holds keep the knob's own keys.
+    # (on_wm_keyup_fun's 220/221 test, pinned in test/m1plus/build.py); with no KNOB key it is Navigation, the M1's
+    # default (pod_default). Volume, a dark screen, Now Playing and a press the boot guard holds keep the knob's own keys.
     def knob(key,mode='1',page='sysset_page',setup=lambda m:None,reverse=None):
         m=input_machine(page)
         if mode is not None: m.config['KNOB']=mode
@@ -14906,12 +14915,13 @@ if is_m1plus:
     assert [knob(k,reverse='0') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_PREV'],O['KEY_NEXT']]
     assert [knob(k,reverse='1') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN','KEY_POWER')]==[O['KEY_NEXT'],O['KEY_PREV'],O['KEY_CENTER']]
     assert [knob(k,mode='0',reverse='1') for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']]
+    assert [knob(k,mode=None) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_PREV'],O['KEY_NEXT']]
     # V2.1's own settings pages (m1plus_contexts.inc): Date and time's menu turned the volume on dev 4.
     for page in re.findall(r'"(\w+)"',(ROOT/'patch/m1plus_contexts.inc').read_text()):
         assert [knob(k,page=page) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_PREV'],O['KEY_NEXT']],page
     # Only where the payload navigates: Now Playing's enlarged art, Bluetooth receiver and USB DAC
     # modes, by page or flag, and the volume dialog keep the volume too.
-    for kw in (dict(mode=None),dict(mode='0'),dict(page='playing_page'),dict(page='bigcover_page'),
+    for kw in (dict(mode='0'),dict(page='playing_page'),dict(page='bigcover_page'),
                dict(setup=lambda m:m.byte(syms['g_backlight_status'],0)),
                dict(page='bluetoothrecv_page'),dict(page='usbmode_page'),dict(page='volume_dialog'),
                dict(setup=lambda m:m.byte(syms['bt__recv_pageflag'],2)),

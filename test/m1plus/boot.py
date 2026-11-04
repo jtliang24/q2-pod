@@ -19,6 +19,8 @@ import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, sub
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]/'tools'))
 from build import BASE, SCRATCH, source_sha256, symbols, run
 from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
+from m1plus_ipod import M1
+BAR_BACK_W, STATUS_H = M1['BAR_BACK_W'], M1['STATUS_H']
 
 W, H = 320, 480
 # The hooks V2.1's startup reaches with no input: Home, the paint and dispatch paths, the UI loop and
@@ -212,7 +214,9 @@ def swipe(x0, y0, x1, y1, steps=10):
 NEXT_PAGE = swipe(280, 250, 40, 250)  # Home's carousel, a page right
 DOWN_LIST = swipe(160, 420, 160, 60)  # a list scrolled towards its end
 UP_LIST = swipe(160, 100, 160, 460)    # and back towards its start
-BACK = tap(18, 53)                    # V2.1's title-bar back button, and the payload's (back_button)
+BACK = tap(18, 53)                    # V2.1's title-bar back button, on its own pages (stock has it too)
+CHEVRON = tap(BAR_BACK_W // 2, STATUS_H // 2)  # the status bar's back chevron: the payload's pages' only back (ipod-ui 4.2),
+                                               # and V2.1's pages' too, which previous_back clicks the button of
 # Keys, as Linux reports them (keyboard_gpio_add.sh, keyboard_encoder): "keys CODE" on the buttons'
 # device, "knob CODE" on the knob's; each a press and a release.
 PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
@@ -240,19 +244,19 @@ WALK = [
     ('knob', [KNOB_UP, KNOB_UP], 3, ('same', 'moved', 'playset', (0, 0, 60, 30))),  # the volume, as stock's, and its figure up
     ('eq', tap(160, 238), 5, 'differs'),  # the PEQ editor in stock's EQ page
 ]
-PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back button; stock's EQ page has its own
+PATCHED_ONLY = [('eq_closed', CHEVRON, 4, ('as', 'playset')),  # the PEQ's back: the chevron; stock's EQ page has its own button
                 ('eq_again', tap(160, 238), 5, ('as', 'eq')),
                 ('eq_previous', [PREVIOUS], 4, ('as', 'eq')),  # Previous is a media key, not Back: the PEQ stays
                 # Back steps back one screen: Advanced's Preamp row, then Back to Advanced, then out.
                 ('advanced', tap(250, 53), 4, ('not', 'eq')),           # the tab bar's right half
                 ('preamp', tap(160, 414), 4, ('not', 'advanced')),      # the fifth row, after 1.3.8's Reset to defaults
-                ('preamp_back', BACK, 4, ('not', 'preamp', 'playset')),
-                ('advanced_back', BACK, 4, ('as', 'playset')),
+                ('preamp_back', CHEVRON, 4, ('not', 'preamp', 'playset')),
+                ('advanced_back', CHEVRON, 4, ('as', 'playset')),
                 ('playset_end', (DOWN_LIST + ['wait 800']) * 3 + DOWN_LIST, 4, ('not', 'playset')),
                 ('crossfade', tap(160, 318), 4, ('not', 'playset_end')),  # a row up for 1.3.8's Swap L/R, the last row
                 ('crossfade_slid', tap(230, 247), 4, ('not', 'crossfade')),
                 # Back: the list as before (the rows V2.1 rebuilds, then ours again), Crossfade's row now 8 s.
-                ('crossfade_back', BACK, 4, ('as', 'playset_end', (30, 286), (286, 350))),
+                ('crossfade_back', CHEVRON, 4, ('as', 'playset_end', (30, 286), (286, 350))),
                 # Display's Knob: Navigation. The knob's turns then move System Setting's selection
                 # (its outline drawn), and the volume, in the status bar, stays as it was.
                 ('knob_home', BACK, 5, ('not', 'crossfade_back')),
@@ -260,12 +264,13 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 ('display', tap(160, 302), 4, ('not', 'knob_sysset')),
                 # Lock screen: switched on, V2.1's grid shows its pictures, the built-ins drawn, in
                 # the payload's scroll view; scrolled to its end, Time show, Clock and About. Switched
-                # off again, then the back button returns to Display.
+                # off again, then the chevron returns to Display: on V2.1's pages it clicks their own back
+                # button (previous_back), which knob_home and display_back tap.
                 ('lockscreen', tap(160, 238), 4, ('not', 'display')),
                 ('lockscreen_on', tap(221, 53), 4, ('not', 'lockscreen')),
                 ('lockscreen_end', DOWN_LIST, 4, ('not', 'lockscreen_on')),
                 ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
-                ('lockscreen_back', BACK, 4, ('as', 'display')),
+                ('lockscreen_back', CHEVRON, 4, ('as', 'display')),
                 # Display's end: 1.4.5's Coverflow Sort and Refresh Coverflow push the knob's two rows below the screen.
                 ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
                 ('knob_row', tap(160, 384), 3, ('as', 'display_end', (30, 352), (352, 416))),  # Knob: Navigation
@@ -280,10 +285,10 @@ PATCHED_ONLY = [('eq_closed', BACK, 4, ('as', 'playset')),  # the PEQ's back but
                 # Navigation) closes the page, and so does the back button.
                 ('q2pod', tap(*Q2POD_CARD), 4, ('not', 'previous_home')),
                 ('q2pod_shuffle', tap(160, 110), 4, ('not', 'q2pod')),
-                ('q2pod_shuffle_back', BACK, 4, ('as', 'q2pod')),
+                ('q2pod_shuffle_back', CHEVRON, 4, ('as', 'q2pod')),
                 ('q2pod_previous', [PREVIOUS], 4, ('as', 'previous_home')),
                 ('q2pod_again', tap(*Q2POD_CARD), 4, ('as', 'q2pod')),
-                ('q2pod_back', BACK, 4, ('as', 'previous_home')),
+                ('q2pod_back', CHEVRON, 4, ('as', 'previous_home')),
                 # Knob: Navigation on Home (m1plus_nav_home.c): the first turn frames the first card
                 # of the page in view, five more the Q2 Pod card in its sixth slot, and the press opens
                 # its page. Previous closes it, the frame kept; six turns back cross to the second page.
@@ -301,7 +306,7 @@ MENU_WALK = [('menu_page2', NEXT_PAGE, 4, ('not', 'home')),
              ('menu_q2pod', tap(83, 83), 4, ('not', 'menu_page2')),
              # Back on Home, V2.1's refresh retitles the bottom bar (y 414 on) without the asset's full
              # stop ("Life is short,Play more", 0x53438c): the rest is as before.
-             ('menu_back', BACK, 4, ('as', 'menu_page2', (30, 414), (414, 480)))]
+             ('menu_back', CHEVRON, 4, ('as', 'menu_page2', (30, 414), (414, 480)))]
 
 # --media: a card with two 11-minute songs, a book and two photos, and V2.1's songtable listing the
 # songs as its scan writes them (time and time_end 0: not CUE tracks). The card is on a tmpfs: on
@@ -354,37 +359,37 @@ def q2pod_end_row(i): return tap(160, 110 + 64 * (i - 6))
 MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
               ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
               ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
-              ('long_songs_back', BACK, 4, ('as', 'media_q2pod')),
+              ('long_songs_back', CHEVRON, 4, ('as', 'media_q2pod')),
               ('era', q2pod_row(4), 4, ('not', 'media_q2pod')),
               ('era_decade', tap(160, 110), 4, ('not', 'era')),
-              ('era_decade_back', BACK, 4, ('as', 'era')),
-              ('era_back', BACK, 4, ('as', 'media_q2pod')),
+              ('era_decade_back', CHEVRON, 4, ('as', 'era')),
+              ('era_back', CHEVRON, 4, ('as', 'media_q2pod')),
               ('books', DOWN_LIST + ['wait 800'] + q2pod_end_row(6), 4, ('not', 'media_q2pod')),
               ('book', tap(160, 110), 5, ('not', 'books')),          # the first book's row
-              ('book_back', BACK, 4, ('not', 'book')),
-              ('books_back', BACK + UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
+              ('book_back', CHEVRON, 4, ('not', 'book')),
+              ('books_back', CHEVRON + UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
               ('photos', q2pod_row(5), 6, ('not', 'media_q2pod')),
               ('photo', tap(56, 126), 5, ('not', 'photos')),         # the first tile
               # qemu's demo decodes neither photo ("Can't open this photo"), so the move to the
               # second and back shows only in the trace (photos.c moved); the viewer stays open.
               ('photo_swipes', swipe(240, 250, 60, 250) + ['wait 1500'] + swipe(60, 250, 240, 250), 4, ('as', 'photo')),
-              ('photo_back', BACK, 4, ('not', 'photo')),
-              ('photos_back', BACK, 4, ('as', 'media_q2pod')),
+              ('photo_back', CHEVRON, 4, ('not', 'photo')),
+              ('photos_back', CHEVRON, 4, ('as', 'media_q2pod')),
               ('q2pod_end', DOWN_LIST, 4, ('not', 'media_q2pod')),
               ('coverflow', q2pod_end_row(7), 10, ('not', 'q2pod_end')),
               ('cover_next', swipe(220, 150, 120, 150), 4, ('not', 'coverflow')),  # one cover: the second album
               ('cover_prev', swipe(120, 150, 220, 150), 4, ('as', 'coverflow')),
               ('cover_open', tap(160, 120), 5, ('not', 'coverflow')),               # the centre cover's tracks
-              ('cover_back', BACK, 4, ('as', 'coverflow')),
-              ('coverflow_back', BACK, 4, ('as', 'q2pod_end')),
+              ('cover_back', CHEVRON, 4, ('as', 'coverflow')),
+              ('coverflow_back', CHEVRON, 4, ('as', 'q2pod_end')),
               # Streaming's rows (V2.1 has no Streaming page): Spotify, not on the card, says so on its
               # Now Playing page; Internet Radio opens its menu. Each closes with its back button.
               ('spotify', q2pod_end_row(8), 4, ('not', 'q2pod_end')),
-              ('spotify_back', BACK, 4, ('as', 'q2pod_end')),
+              ('spotify_back', CHEVRON, 4, ('as', 'q2pod_end')),
               ('radio', q2pod_end_row(9), 5, ('not', 'q2pod_end')),
-              ('radio_back', BACK, 4, ('as', 'q2pod_end')),
+              ('radio_back', CHEVRON, 4, ('as', 'q2pod_end')),
               ('configuration', q2pod_end_row(11), 4, ('not', 'q2pod_end')),
-              ('configuration_back', BACK, 4, ('as', 'q2pod_end')),
+              ('configuration_back', CHEVRON, 4, ('as', 'q2pod_end')),
               ('q2pod_top', UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
               ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
               ('shuffle_songs', tap(160, 110), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
@@ -494,8 +499,10 @@ if __name__ == '__main__':
                 assert not differ, f'{name}: patched differs from stock at {len(differ)} pixels'
                 x0, y0, x1, y1 = want[3]
                 box = lambda px: [px[(y * W + x0) * 4:(y * W + x1) * 4] for y in range(y0, y1)]
-                for t in ('stock', 'patched'):
-                    assert box(shots[t]) != box(seen_all[t][want[2]]), f'{name}: {t} showed no change in {want[3]}'
+                assert box(shots['stock']) != box(seen_all['stock'][want[2]]), f'{name}: stock showed no change in {want[3]}'
+                # The iPod bar draws no volume figure (V2.1's img_volume and label_volume stay off-screen, as the Q2's): the
+                # box is as it was, the chevron and the play state, and the volume shows in V2.1's own dialog below.
+                assert box(shots['patched']) == box(seen_all['patched'][want[2]]), f'{name}: patched drew a volume figure in {want[3]}'
             elif want == 'same':
                 differ = differing(shots['stock'], shots['patched'], edits=True)
                 assert not differ, f'{name}: patched differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
