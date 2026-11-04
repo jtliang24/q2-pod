@@ -3539,6 +3539,10 @@ lock window shows no clock at all.
      Light's ink bar). Cosmetic, for the visual pass.
   7. **The PEQ's tabs:** after a tab tap, the other tab shows a grey box; after the chevron back from Preamp, neither
      does. Not yet compared with qemu or the Q2.
+  8. **Previous as back is inconsistent** (the user, after the pass): with Knob: Navigation, Previous goes back on
+     some screens and not on others, and not every time: the user found it on Playback Setting's Channel Balance and
+     Crossfade pages. In the pass it went back from Display setting and the Q2 Pod app. With Knob: Volume, Previous
+     is a media key by design (the PEQ stays, `boot.py`'s `eq_previous`), so the Knob setting is checked first.
 - Wi-Fi dropped once ("No route to host"); the tap had landed, and a shot before the next tap confirmed the page.
 
 ## How to check a build now
