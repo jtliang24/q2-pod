@@ -16,7 +16,8 @@
 #define BOTTOM 450
 #define STATUS_H 30 /* the status bar: BOTTOM is UI_H - STATUS_H */
 #define CORNER_R 0
-#define STATUS_MARGIN 0
+#define STATUS_MARGIN 6 /* corner_x(7, 16) + STATUS_PAD of tools/ipod.py: the glass is square, the slack stays */
+#define BAR_BACK_W 32 /* the status bar's back chevron: its image's width and its tap, STATUS_H tall (ipod-ui 4.2) */
 #define BAR_CORNER_R 0
 #define I(p, o) (*(int *)((char *)(p) + (o)))
 #define P(p, o) (*(void **)((char *)(p) + (o)))
@@ -274,7 +275,7 @@ static inline int arc_out(int r, int y) {
 #define BATT_PCT_DY 1
 #define BATT_CHARGE_RGB 0x34c759
 #define BATT_LOW_RGB 0xff1448
-#define BATT_ROOM 94
+#define BATT_ROOM 115 /* 320 - STATUS_MARGIN - (160 + CLOCK_TEXT / 2 + CLOCK_GAP): the right group clears the clock (ipod-ui 4.2) */
 /* Plain Bluetooth ink and codec reaches from the right edge of their stock canvases. */
 #define BT_REACH 10
 #define BT_CODECS { "bar_sbc", "bar_aac", "bar_aptx", "bar_aptxhd", "bar_ldac" }

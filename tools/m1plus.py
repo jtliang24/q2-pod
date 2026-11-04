@@ -394,7 +394,6 @@ M1PLUS_PORTS = {
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
     # The iPod UI's hooks (docs/m1plus-ipod-ui.md Phase 4): the shared C compiles with IPOD=1, but each of these is
     # unhooked until its item ports it
-    'systembar_showface': ('unported', "the status bar's play state, before any paint (ipod-ui 4.2)"),
     'list_get_img_pic': ('unported', "song rows' format badge (ipod-ui 4.4)"),
     'bigcover_page_init': ('unported', "the big cover's page (ipod-ui 4.6)"),
     'playlist_rebuild': ('unported', "the playlist rebuild's iPod rows (ipod-ui 4.7)"),
@@ -503,6 +502,10 @@ M1PLUS_STUB = 'm1stub_'
 M1PLUS_RAW_GLOBALS = {'g_power_longkey': 0xa041b8}
 # Local V2.1 routines, each checked to be a PIC entry with V2.1's GOT base.
 M1PLUS_PRIVATE_FUNCTIONS = {
+    # The status bar's 1 s tick (docs/m1plus-ipod-ui.md 4.2): systembar_timer_start (0x5453c8) arms a 1000 ms timer on
+    # 0x545394, which calls this with 0. It finds the bar's widgets by name from the system_bar global, as the Q2's
+    # systembar_showface finds them from its argument, and sets their images and text but not their geometry.
+    'systembar_showface': 0x544b48,
     'slide_menu_on_scroll_done': 0x6123f4,  # what slide_menu's scroll_to binds to its animator's end (0x612320)
     'folder_refresh': 0x5318ac,  # folder_page_init's (0x53354c): navbar and table from pdeq_showlist
     'album_row': 0x4e93c8,  # getAllAlbum's toolsQueryDbTable callback (0x4ea458): a record to tools_pdeq_directory
@@ -563,6 +566,7 @@ M1PLUS_FUNCTION_ALIASES = {
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
+    'systembar_showface': (0x544b48, 'ringnav_showface', 'showface'),  # V2.1's show_sysbar_face (ipod-ui 4.2)
     # The iPod UI's paint backbone (ipod-ui 4.1): the selection bar behind the rows, the accents and Light Mode on every
     # style colour and cached image, and each window's asset
     'widget_on_paint_background': (0x66b778, 'ringnav_paint_bg', 'paint_bg'),
@@ -1195,6 +1199,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     for n in ('home_q2pod', 'home_q2pod_down'):
         icons[f'{n}.png'] = ('mymusic.png', (ROOT/'assets/icons'/f'{n}.png').read_bytes())
     icons['row_stream_config.png'] = ('pset_playmode.png', sized_art(cat(xx+'sset_netservice.png'), 40))
+    icons['bar_back.png'] = ('bar_play.png', m1plus_ipod.back_chevron())  # the status bar's back chevron (ipod-ui 4.2)
     icons['stream_airplay.png'] = ('airplay.png', cat(xx+'airplay.png'))
     # the card apps' rows on the Q2 Pod page (addon.c), at V2.1's 40 px as row_spotify
     icons['stream_app.png'] = ('tidal.png', sized_art((ROOT/'assets/icons/stream_app.png').read_bytes(), 40))
@@ -1249,6 +1254,14 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         data = m1plus_ipod.patch_style(rel, original)
         check(data != original, f'{path}: the audited edits changed nothing')
         target = out/'styles'/rel; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+        p = swap_inode(p, path.encode(), target)
+        changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
+    # ... and its status bar's images (4.2): V2.1's play state, Bluetooth and Wi-Fi glyphs as the iPod's slim ones.
+    for n in m1plus_ipod.AUDIT['status_icons']:
+        path = 'release/assets/default/raw/images/xx/' + n
+        original = cat(path)
+        data = m1plus_ipod.status_icon(n, original)
+        target = out/'status'/n; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
         p = swap_inode(p, path.encode(), target)
         changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
     pseudo.write_bytes(p)

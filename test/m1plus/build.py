@@ -52,7 +52,9 @@ assert [ipod.CORNER_R, ipod.BC_ART, ipod.HOME_LIST_W, ipod.STATUS_MARGIN, ipod.N
 m1ipod = m1plus_ipod.ipod
 assert [getattr(m1ipod, n) for n in SCREEN] == [m1[n] for n in SCREEN] == [320, 480, 30, 450]
 assert m1ipod.CORNER_R == m1['GLASS_R'] == 0 and m1ipod.HOME_LIST_W == 320
-assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O[k]} == {'UI_W', 'UI_H', 'GLASS_R'} == set(m1plus_ipod.PROFILE) - {'STATUS_H'}
+# ... and the layout names a Phase 4 item has given V2.1's (4.2: the bar's battery room, which the 320 px bar fits).
+assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O[k]} == {'UI_W', 'UI_H', 'GLASS_R', 'BATT_ROOM'} == set(m1plus_ipod.PROFILE) - {'STATUS_H'}
+assert m1ipod.BATT_ROOM == m1['BATT_ROOM'] == 115 and m1['STATUS_MARGIN'] == m1ipod.STATUS_MARGIN == 6 and m1['BAR_BACK_W'] == m1plus_ipod.BACK_W
 assert sys.modules['ipod'] is ipod and m1ipod is not ipod
 print('iPod screen profile checks passed.')
 
@@ -345,7 +347,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert 'variant' not in manifest and manifest['compact_code'] == [] and not M1_AUDIT['immediates'] and not M1_AUDIT['row_layout_calls']['sites']
     raw_styles = 'release/assets/default/raw/styles/'
     assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
-        raw_styles + p for p in M1_AUDIT['styles']}
+        raw_styles + p for p in M1_AUDIT['styles']} | {
+        'release/assets/default/raw/images/xx/' + p for p in M1_AUDIT['status_icons']}
     stock_syms = symbols(directory/'stock-demo')
     # Each V2.1 iPod page is the stock page the inventory hashed, decodes and re-encodes exactly, and its init
     # function is in V2.1's demo.
@@ -514,6 +517,53 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # ui_loader_load_widget_with_parent(name, parent): both kept in registers for the load
     load = stock_syms['ui_loader_load_widget_with_parent']
     assert words(load + 0x24, 1) == (0x00808825,) and words(load + 0x30, 1) == (0x00a0a025,)
+    # ipod-ui 4.2, the status bar. systembar_timer_start (0x5453c8) arms a 1000 ms timer (addiu a2, zero, 0x3e8) on the
+    # callback at 0x545394: `bal show_sysbar_face; move a0, zero`. The face (systembar_showface, the payload's hook)
+    # reads the system_bar global, not its argument, and finds each widget by name; the battery's level is power_capacity
+    # and its icon names are bar_charge and bar_lowpower.
+    face = stock_syms['show_sysbar_face']
+    assert M1PLUS_PRIVATE_FUNCTIONS['systembar_showface'] == face == M1PLUS_HOOKS['systembar_showface'][0]
+    assert words(0x545414, 1) == (0x240603e8,) and words(0x5453b0, 2) == (branch(0x04110000, 0x5453b0, face), 0x00002025)
+    assert got(0x544b98) == stock_syms['system_bar'] and got(0x545120) == stock_syms['power_capacity']
+    for addiu, name in ((0x544bd8, b'img_playstate'), (0x544c98, b'img_btclass'), (0x544cb8, b'img_wifi'), (0x544cd8, b'img_battery'),
+                        (0x544cf8, b'pgbar_battery')):
+        assert compared(addiu - 0xc, addiu)[1] == name, name
+    assert compared(0x54535c, 0x545360)[1] == b'bar_charge' and compared(0x545160, 0x545168)[1] == b'bar_lowpower'
+    # V2.1's system_bar.bin as the rewrite takes it (its names are the audit's) and as the build ships it: the payload's
+    # names are in it (label_eq and label_idle are not: V2.1 has neither, and a null lookup is tolerated), the chevron is
+    # a hidden BAR_BACK_W x STATUS_H image at the far left, the clock stays centred, the groups clear it, and what the
+    # iPod doesn't draw is off-screen. A bar whose widgets differ is refused.
+    bar_path = 'release/assets/default/raw/ui/system_bar.bin'
+    bar_raw = read('stock.squashfs', bar_path)
+    bar_new = m1plus_ipod.patch_asset('system_bar.bin', bar_raw)
+    assert bar_new == read('rootfs.squashfs', bar_path) != bar_raw
+    named = {n[2].get('name'): n for n in walk(decode(bar_new))}
+    want = dict(re.findall(r'^#define STATUSW_(\w+) "([^"]+)"', (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M))
+    assert {n for k, n in want.items() if k not in ('IDLE', 'EQ')} <= set(named) and not {want['IDLE'], want['EQ']} & set(named)
+    assert named['img_back'][1] == [0, 0, 32, 30] and named['img_back'][2]['visible'] == 'false' and named['img_back'][2]['image'] == 'bar_back'
+    clock = named['bar_dclock'][1]
+    assert clock[0] + clock[2] // 2 == 160
+    # The widgets the iPod doesn't draw stay inside the bar, transparent: on V2.1 an invalidate off the screen's left
+    # loses the frame's flush (boot.py's walk saw the page stay as it was after a tap, about 9 runs in 10).
+    assert all(named[n][1][0] >= 0 and named[n][1][0] + named[n][1][2] <= 320 and named[n][2].get('opacity') == '0'
+               for n in m1plus_ipod.STATUS_HIDDEN)
+    left, right = named['view_bar_left'][1], named['view_bar_right'][1]
+    assert left[0] == 0 and left[0] + left[2] <= clock[0] and clock[0] + clock[2] <= right[0] and right[0] + right[2] == 320
+    broken = decode(bar_raw); broken[3][0][2]['name'] = 'view_left'
+    try:
+        m1plus_ipod.status_bar(broken)
+    except ValueError as e:
+        assert 'Unexpected status bar' in str(e)
+    else:
+        raise AssertionError('status_bar took a bar with other names')
+    # The status images: V2.1's own (hashed), as the iPod's slim glyphs, at the Q2's sizes (Wi-Fi 14, Bluetooth 42, 12).
+    from ipod import png_header
+    for icon, digest in M1_AUDIT['status_icons'].items():
+        path = 'release/assets/default/raw/images/xx/' + icon
+        shipped = read('rootfs.squashfs', path)
+        assert sha(read('stock.squashfs', path)) == digest and sha(shipped) == manifest['changed_assets'][path]['sha256']
+        assert png_header(shipped) == (14 if icon.startswith('bar_wifi') else 42 if icon.startswith('bar_bt') else 12, 16, 8, 6), icon
+    assert png_header(read('rootfs.squashfs', 'release/assets/default/raw/images/xx/bar_back.png')) == (32, 30, 8, 6)
     assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
     bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
     assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'
@@ -705,12 +755,14 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added = {xx+n for n in ICONS} | {xx+f'local_{n}.png' for n in ('shuffle', 'scrobble', 'podcasts', 'audiobooks', 'photos',
                                                                     'books', 'videos', 'longsongs', 'era')} | {
              xx+f'stream_{n}.png' for n in ('spotify', 'radio', 'airplay')} | {HELPER, SCROBBLE_CA, BOOT} | ({REMOTE} if manifest['dev'] else set())
+    added |= {xx+'bar_back.png'}  # the status bar's back chevron (ipod-ui 4.2)
     added |= {xx+f'row_{n}.png' for n in ('spotify', 'radio', 'stream_config')}  # the Q2 Pod page's Streaming rows, at 40 px
     added |= {xx+'stream_app.png'}  # its card apps' rows (addon.c), at 40 px too
     # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
     added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C} | {
-        'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles'])]}
+        'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles']),
+                                                                      *('images/xx/' + q for q in M1_AUDIT['status_icons'])]}
     logo = xx+'logo.jpg'
     with tempfile.TemporaryDirectory(prefix='m1-rootfs-') as tmp:
         trees = {}

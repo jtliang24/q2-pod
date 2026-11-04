@@ -3435,7 +3435,8 @@ static void bar_sync(void *bar) {
  * dark or not, so a wake never shows stock's hidden icon; the badge and battery wait for paint. */
 int ringnav_showface(void *bar) {
     int result = stock_showface_trampoline(bar);
-    bar_state_sync(bar); /* no I/O, and a relayout waits for a paint */
+    /* M1 Plus: V2.1's tick passes 0 and reads the system_bar global itself */
+    bar_state_sync(M1PLUS ? *(void *const *)system_bar : bar); /* no I/O, and a relayout waits for a paint */
     return result;
 }
 

@@ -1,8 +1,9 @@
 """tools/ipod.py with the M1 Plus's screen (docs/m1plus-ipod-ui.md Phase 2): a second copy of the module,
 loaded with the M1's PROFILE, so sys.modules['ipod'] stays the Q2's that tools/m1plus.py imports from.
 
-The profile is the screen alone, from patch/m1plus_offsets.inc: UI_W, UI_H, STATUS_H, and GLASS_R (0, the
-square corners). Every layout name keeps the Q2's value until its Phase 4 item gives it V2.1's.
+The profile is the screen from patch/m1plus_offsets.inc: UI_W, UI_H, STATUS_H, and GLASS_R (0, the square corners),
+and the layout names a Phase 4 item has given V2.1's values (4.2: BATT_ROOM, as the 320 px bar fits it). Every other
+layout name keeps the Q2's value until its item.
 
 Phase 3 adds the V2.1 patch around that copy: patch/m1plus_ipod.json (V1.32's pages mapped onto V2.1's, every
 other section empty), and patch_asset and patch_code, which m1plus.build() runs on every build. A Phase 4 item adds
@@ -15,7 +16,7 @@ from build import ROOT, check, sha
 
 M1 = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b',
                                                (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M)}
-PROFILE = {name: M1[name] for name in ('UI_W', 'UI_H', 'STATUS_H', 'GLASS_R')}
+PROFILE = {name: M1[name] for name in ('UI_W', 'UI_H', 'STATUS_H', 'GLASS_R', 'BATT_ROOM')}
 
 
 def load(profile=PROFILE):
@@ -32,8 +33,81 @@ ipod = load()
 AUDIT = json.loads((ROOT/'patch/m1plus_ipod.json').read_text())
 UI_ASSETS = AUDIT['assets'] | AUDIT['navbar_only'] | AUDIT['slide_only']
 
+# 4.2: V2.1's system_bar.bin is a system_bar of view_bar_left (img_playstate, img_volume, label_volume, img_digital), a
+# digit_clock (bar_dclock), view_bar_right (img_btclass, img_synclink, img_wifi), and the battery as a progress bar
+# (pgbar_battery) over its icon (img_battery). show_sysbar_face (0x544b48, each second) finds them by name and sets
+# their images and text, never their geometry.
+STATUS_BAR = 'system_bar.bin'
+STATUS_NAMES = ['view_bar_left', 'bar_dclock', 'view_bar_right', 'pgbar_battery', 'img_battery']
+STATUS_LEFT = ['img_playstate', 'img_volume', 'label_volume', 'img_digital']
+STATUS_RIGHT = ['img_btclass', 'img_synclink', 'img_wifi']
+# Shown on the iPod bar: the back chevron and the play state on the left; Bluetooth, Wi-Fi and the payload's battery
+# (view_battery) on the right. The volume, the digital badge, the link badge and V2.1's own battery stay in the bar,
+# still updated by V2.1, but never drawn.
+STATUS_SHOWN = ['img_back', 'img_playstate', 'img_btclass', 'img_wifi', 'view_battery']
+STATUS_HIDDEN = ['img_volume', 'label_volume', 'img_digital', 'img_synclink', 'pgbar_battery', 'img_battery']
+BACK_W = M1['BAR_BACK_W']  # the chevron's image and tap width, the bar's height tall
+CLOCK_W = 90  # V2.1's digit_clock width; "12:59 PM" is CLOCK_TEXT px at the bar's font
+
+
+def status_bar(root):
+    """V2.1's status bar as the iPod's: square-cornered margins, the play state, Bluetooth, Wi-Fi and the payload's
+    battery slot, the clock centred, and a back chevron at the far left (shown by the payload when a page is open)."""
+    check(root[0] == 'system_bar' and [n[2].get('name') for n in root[3]] == STATUS_NAMES, 'Unexpected status bar')
+    left, clock, right, pgbar, battery = root[3]
+    check([n[2].get('name') for n in left[3]] == STATUS_LEFT and [n[2].get('name') for n in right[3]] == STATUS_RIGHT,
+          'Unexpected status bar widgets')
+    gap, margin, height = ipod.inc('STATUS_GAP'), ipod.STATUS_MARGIN, ipod.STATUS_H
+    root[2]['style:normal:bg_color'] = '#000000'
+    # Clear, not black: AWTK draws the border over the bar's fill, and Light Mode flips black to paper.
+    root[2].update({f'style:{s}:border_color': '#00000000' for s in ('normal', 'disable', 'focused')})
+    named = {n[2]['name']: n for n in left[3] + right[3]}
+    named['img_playstate'][1][2], named['img_wifi'][1][2], named['img_btclass'][1][2] = 12, 14, 42
+    back = ['image', [0, 0, BACK_W, height], {'name': 'img_back', 'image': 'bar_back', 'draw_type': 'center',
+                                              'visible': 'false'}, []]
+    # The payload's battery (view_battery) is sized and painted at run time; it hides until the first sync.
+    slot = ['view', [0, 0, ipod.BATT_H_W, 0], {'name': 'view_battery', 'visible': 'false'}, []]
+    left[3] = [back, named['img_playstate']]
+    right[3] = [named['img_btclass'], named['img_wifi'], slot]
+    shown = [left, right]
+    left[1], right[1] = [0, 0, ipod.UI_W // 2 - CLOCK_W // 2, height], [ipod.UI_W // 2 + CLOCK_W // 2, 0, ipod.UI_W // 2 - CLOCK_W // 2, height]
+    left[2]['children_layout'] = f'default(r=1,c=0,x=0,s={gap})'
+    right[2]['children_layout'] = f'default(r=1,c=0,a=right,xm={margin},s={gap})'
+    # The clock: V2.1's own digit_clock, centred.
+    clock[1] = [(ipod.UI_W - CLOCK_W) // 2, 0, CLOCK_W, 100]
+    clock[2]['self_layout'] = f'default(x={(ipod.UI_W - CLOCK_W) // 2},y=0,w={CLOCK_W},h=100%)'
+    # Room: the right group's ink, with every glyph, stays clear of the widest clock text; the left's play state too.
+    room = int(ipod.UI_W - margin - (ipod.UI_W / 2 + ipod.CLOCK_TEXT / 2 + ipod.CLOCK_GAP))
+    reach = ipod.BT_REACH + 2 * gap + 14 + max(ipod.BATT_PCT_W, ipod.BATT_H_W, ipod.inc('BATT_INSIDE_W') + ipod.inc('BATT_NUB_W'))
+    check(ipod.BATT_ROOM == room and reach <= room, f'Status bar battery needs {reach}px of {room}px')
+    check(BACK_W + gap + 12 <= ipod.UI_W // 2 - ipod.CLOCK_TEXT // 2 - ipod.CLOCK_GAP, 'Status bar left group meets the clock')
+    # Widgets V2.1 shows each second but the iPod doesn't draw: at the bar's left, transparent (opacity 0, which AWTK
+    # doesn't paint), not off-screen as the Q2's are. V2.1's face resizes and sets them each second, and on V2.1 an
+    # invalidate left of the screen loses that frame's flush to the panel: the page painted with it stays in the back
+    # buffer until something repaints it (docs/m1plus-progress.md section 63).
+    moved = [named[k] for k in ('img_volume', 'label_volume', 'img_digital', 'img_synclink')]
+    root[3] += moved
+    for n in moved + [pgbar, battery]:
+        n[1], n[2]['opacity'] = [0, 0, n[1][2], height], '0'
+    return root
+
+
+def back_chevron():
+    """The chevron the bar's img_back draws: a slim white `<` in a BACK_W x STATUS_H canvas, rendered at 4x."""
+    draw = ("scale 4,4 fill none stroke-width 2.2 stroke white stroke-linecap round stroke-linejoin round "
+            "path 'M17,7 L9,15 L17,23'")
+    return ipod.imagemagick('-size', f'{BACK_W * 4}x{ipod.STATUS_H * 4}', 'xc:none', '-draw', draw, '-filter', 'Lanczos',
+                            '-resize', f'{BACK_W}x{ipod.STATUS_H}!', *ipod.PNG_OUT, data=b'')
+
+
+def status_icon(name, data):
+    """The audited V2.1 status image (hashed in `status_icons`) as the iPod's slim glyph of the same name."""
+    ipod.STATUS_ICONS = AUDIT['status_icons']  # the copy checks V2.1's hashes, not the Q2's
+    return ipod.status_icon(name, data)
+
+
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
-REWRITES = {}
+REWRITES = {STATUS_BAR: status_bar}
 
 
 def patch_asset(path, data):

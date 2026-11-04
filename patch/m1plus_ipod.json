@@ -334,7 +334,17 @@
   "event_abi_words": {},
   "settings_icons": {},
   "quiet_icons": {},
-  "status_icons": {},
+  "status_icons": {
+    "bar_bt.png": "c14288c2d869c6f4d92e3a662b5a8ac3eed835c0c9a2f331c5c4da6aeb51fd9d",
+    "bar_btcon.png": "a00eb3eab090ba96c3ccff5f60a1d0db422dd74bf90c9b164886772b8eeea7de",
+    "bar_play.png": "9b65bea60768a6433eb5ebec7b2285290bd323ca826462126fce27ab73a9db65",
+    "bar_pause.png": "c88c59b79a6a1971883ad5aceb04c889891c74d4bf4b5ddc5bbd24ca636edfc7",
+    "bar_wifi0.png": "aefe45a64936dcc7ecd00349afd8ab9eb89d234c89573354cfdba77459bde123",
+    "bar_wifi1.png": "5db1e3c746b5a350b1b1721cdd8663beaa79452fbc94afb8412b3b02a6e5988f",
+    "bar_wifi2.png": "5faaaa65204ed5995acbb5b8afffa05a9f31c1b3450ed1954b48b56b6597451c",
+    "bar_wifi3.png": "e4b52af512a0d9a93d7773dbb91a74793c24dfce7e2b9d309765bf61072d193e",
+    "bar_wifi4.png": "4197d12d8f0972b4df801044ff03491b227243a82947f41f5e350b4fbd5073d8"
+  },
   "styles": {
     "default.bin": {
       "sha256": "24a8f765f315d836afa85731ca923512a506138930398683242ffaaa831b00c9",
