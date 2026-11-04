@@ -3209,6 +3209,60 @@ layout: Reset gives V2.1's default cards, so Album, Artist and the rest were tic
 **For upstream** (roadmap section 6, "The seams"): `STATUS_H`, the named sites in `navigation.c`,
 `coverflow.c` and `addon.c`, and `tools/ipod.py`'s `PROFILE` overlay all leave the Q2's bytes unchanged.
 
+## 61. Phase 3: the V2.1 page inventory and the patch framework (Nov 3)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 3, on `feature/m1-ipod`. The plan's up-front audit of every key
+in `patch/ipod.json` moved into the Phase 4 items (decided Nov 3): 33 of the 39 settings icons and all 8
+quiet icons have other names in V2.1 (`pset_*`, `sset_*`), none of the 8 styles `default.bin` edits exist
+there, and V2.1's rows are their own structure, so the V1.32 row immediates have no counterparts to find
+before an item designs them. Phase 3 delivers the page inventory and the framework, and changes no M1 byte
+but the version string, so it has no device pass.
+
+**The inventory.** `patch/m1plus_ipod.json` maps each of the 54 pages of `ipod.json`'s `assets`,
+`navbar_only` and `slide_only` onto V2.1's. The rows are decided by role, not path: every V2.1 page has an
+exported `<dir>_<page>_init` in `.dynsym` (212 in V1.32, 222 in V2.1), and the `opener` field names the
+V2.1 one. Where the init could not decide, the widgets and the Settings list handler did (V1.32's
+`0x4cc134` opens `datetime_page` and `powermanager_page`; V2.1's `0x4ad7b0` opens `typedatetime_page` and
+`powermanager_page`).
+- 33 keep their path and role.
+- 5 `localmusic/X` become the top-level `X` (V2.1 has no `localmusic/` directory): `album`, `albuminfo`,
+  `allmusic`, `localclass`, `playlist`.
+- 10 are renamed or moved: `statusbar_dialog` to `dropdown_dialog`, `addplaylist_dialog` to
+  `kbaddplaylist_dialog`, `backlight` to `brightness`, `btadjustvol` to `btvolume`, `autotime` to
+  `autosynctime`, `screensaver_about` to `screensaverabout_page`, `playset/usbvol` and `playset/dsdoutput`
+  to `systemset/usbvolmode` and `systemset/dsdmode`, and two role swaps: V1.32's `datetime_page` (the
+  Date & Time list) is V2.1's `typedatetime_page`, and V1.32's `manualtime_page` (the selectors) is V2.1's
+  `datetime_page`.
+- 6 are null rows that name their Phase 4 item: `artistinfo_page`, `playlistsmore_page` and
+  `localmusic_page` (4.4; V2.1 has no init for any of them), `stream_page` (4.5), and `sleepshutdown_page`
+  and `standby_page` (4.3; V2.1 folds both into `powermanager_page`).
+Same-path pages are not always the same role (`datetime_page`, `powermanager_page`), which a path match alone
+would have missed. The code, icon and style sections are empty.
+
+**The framework.** `tools/m1plus_ipod.py` gains `patch_asset` (hash, round trip and root kind, then its
+`REWRITES` entry, else the stock bytes) and `patch_code` (the audit's `immediates` and `row_layout_calls`
+with the M1 copy of `ipod.py`'s values). `m1plus.build()` runs both: it swaps in only a page a rewrite
+changed, and the manifest's `compact_code` is `patch_code`'s list. `REWRITES` and the code sections are empty,
+so the output is unchanged. Each Phase 4 item adds its own audit, pins and rewrite.
+
+**Commits.**
+- `7e1ffbb` `docs(m1plus)`: Phase 3 slimmed; every Phase 4 item gains the audit step, Phase 3 is **M**.
+- `36e1df6` `feat(m1plus)`: the inventory, pinned in `test/m1plus/build.py` (module level: the 54 pages,
+  unique V2.1 paths, matching categories, a Phase 4 item in every null row; in `m1plus_checks`: each page's
+  stock hash, round trip and init symbol).
+- `9f2676d` `feat(m1plus)`: the framework, wired into `build()`; `m1plus_checks` pins that every page
+  no rewrite touches comes back as the stock bytes, `compact_code` and `changed_assets` hold only what the
+  audit holds, and that a changed page, trailing bytes and a wrong root kind each raise.
+
+**Gates** (commits 2 and 3, builds in `work/phase3/c2`, V02Hm, and `c3`, V02Im): `build.py --build`,
+and for `c3` `patch.py` (887 expected failures in 14 gaps, unchanged), `boot.py` plain, `--home-menu` and
+`--media`, `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`; q2compare 1.5.9 with
+`--suites`, `update.tar` byte-identical and all 33 suite runs passing. `fndiff.py c2 c3` lists only
+`ringnav_about` (the version string), and `c3`'s manifest has `compact_code == []` and only the TagLib
+library in `changed_assets`. Checks proved to fail: a wrong opener name and a wrong page hash each stop
+`--build`, and the framework's three refusals are asserted. No device pass: the demo changes only by that
+version string, and the rootfs by none of the pages.
+
 ## How to check a build now
 
 ```sh

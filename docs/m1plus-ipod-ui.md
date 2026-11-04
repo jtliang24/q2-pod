@@ -171,6 +171,8 @@ Then `tools/m1plus_ipod.py`: `patch_asset` and `patch_code` for V2.1.
 - No M1 byte changes except the version string, so Phase 3 has no device pass: `fndiff.py` against the last
   device build and the manifest prove it.
 
+Done on Nov 3 (progress 61): `36e1df6`, `9f2676d`.
+
 ## Phase 4: Features, in dependency order
 
 Each feature follows the same steps:
