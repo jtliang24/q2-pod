@@ -8,6 +8,11 @@
  * Q2 Pod card's. The lists' frame shows the focus; a touch hides it, and the next turn shows it on
  * the first card of the page in view. Previous stays Previous track on Home (m1plus_nav_knob.inc). */
 #define HOME_MAX 24 /* V2.1's 18 cards and the Q2 Pod card, with room */
+/* The card's frame colors, packed from offsets.inc's tuning (little-endian r,g,b,a): a translucent fill, and a
+ * neutral white line seated on a dark shade of the stock surface so bright art cannot wash it out. */
+#define FILL_COLOR ((FILL_ALPHA << 24) | FILL_RGB)
+#define SHADE_COLOR ((SHADE_ALPHA << 24) | FILL_RGB)
+#define OUTLINE_COLOR ((OUTLINE_ALPHA << 24) | OUTLINE_RGB)
 
 /* Home's cards in reading order, each with its page's index; their count. */
 static unsigned home_cards(void *slides, void **cards, unsigned char *pages) {

@@ -1674,7 +1674,8 @@ static int accent(void) {
         st.rounded = config_value("IPOD", "ROUNDED", 2, 0); /* Square unless chosen */
         st.light = config_value("IPOD", "LIGHT", 3, 0);     /* dark unless chosen; 2 Auto */
         st.keep_lit = config_value("IPOD", "KEEPLIT", 2, 0);
-        st.np_centred = config_value("IPOD", "NPCENTRED", 2, 0);
+        /* M1 Plus: the stock page Centred Now Playing opens (playing_page_stock) is built in 4.6 */
+        st.np_centred = M1PLUS ? 0 : config_value("IPOD", "NPCENTRED", 2, 0);
         st.keytone_hp = config_value("IPOD", "KEYTONEHP", 2, 0);
         int buf[11];
         st.light_day = light_day(clock_now(buf));
@@ -2106,8 +2107,7 @@ static void paint_caps(void *w, void *canvas) {
 }
 
 /* Load and settle the painted surface's selection, then draw it behind the rows: Minimal's card
- * (a dot on Home) or Classic's full-width accent bar. The M1 Plus draws its outline over the rows
- * instead (m1plus_nav_outline.c). */
+ * (a dot on Home) or Classic's full-width accent bar. */
 static void paint_selection(void *w, void *canvas) {
     if (kind(w)) st.sel_w = st.sel_widget = st.sel_accent = (void *)0;
     if (!w || !canvas || !kind(w)) return;
@@ -2195,7 +2195,6 @@ static void paint_selection(void *w, void *canvas) {
     stock_canvas_set_stroke_color(canvas, stroke_color);
     canvas_set_clip_rect(canvas, &old);
 }
-#include "m1plus_nav_outline.c"
 
 static void edit_paint(void *w, void *canvas);
 
@@ -2305,7 +2304,6 @@ int ringnav_paint(void *w, void *canvas) {
     coverflow_home_clip(w, canvas, 0);
     st.paint_w = w ? P(w, W_PARENT) : (void *)0;
 #if M1PLUS
-    outline_selection(w, canvas);
     home_paint(w, canvas); /* Knob: Navigation's card on V2.1's Home (m1plus_nav_home.c) */
 #endif
     return result;

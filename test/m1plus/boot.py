@@ -160,6 +160,10 @@ def shim(out, root, sn_addr):
     run('ld.lld', '-m', 'elf32ltsmip', '-shared', '--hash-style=sysv', '-soname', 'shim.so', out/'shim.o',
         root/'lib/libc-2.28.so', root/'lib/libdl-2.28.so', '-o', out/'shim.so')
 
+# The iPod theme's default is Minimal, whose greys recolour the icons' edges: both runs use Classic with Crimson (the
+# stock red), which leaves a stock colour as it was, so a page that differs from stock differs by a change of layout.
+IPOD_CLASSIC = '[IPOD]\nTHEME=1\nACCENT=1\n'
+
 def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None):
     """Unpack image as a sandbox root and start dbus-daemon, then demo for seconds; returns the bwrap.
     With card, a directory mounted as the card, and V2.1's library database listing its songs."""
@@ -170,7 +174,7 @@ def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None):
     # Past the first-boot language choice; with home_menu, V2.1's Home cards ([MAIN] HOMEMENU, ids each
     # followed by |, as saveHomemenu 0x4d7940 writes them).
     # Knob: Volume, so the walk starts on V2.1's own knob; it turns Knob: Navigation on itself (patch.py has the default)
-    (root/'mnt/data/config.ini').write_text('[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB=0\n' + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
+    (root/'mnt/data/config.ini').write_text('[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB=0\n' + IPOD_CLASSIC + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
     conf = (root/'etc/dbus-1/system.conf').read_text()
     # No other users exist in the sandbox: the bus runs as its caller.
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))

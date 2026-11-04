@@ -813,11 +813,11 @@ static inline int arc_out(int r, int y) {
 /* The confirm pop-up's prompt (4.7): 0 matches no child (y + h > 0), so confirm_prompt leaves it alone. */
 #define CONFIRM_TOP M1_UNPORTED
 #define CONFIRM_PROMPT_PX M1_UNPORTED
-/* Addresses read by routines the M1 doesn't hook (compact_*, ipod_list_layout, ringnav_style_gradient:
- * 4.1, 4.3, 4.4). */
+/* Addresses read by routines the M1 doesn't hook (compact_*, ipod_list_layout: 4.3, 4.4). */
 #define DEFAULT_LAYOUT_VTABLE M1_UNPORTED_ADDR
 #define LIST_VIEW_LAYOUT M1_UNPORTED_ADDR
-#define STYLE_COLOR_GRADIENT_RET M1_UNPORTED_ADDR
+/* style_get_color's bal style_get_gradient (0x65a048, V2.1's) returns here (4.1). */
+#define STYLE_COLOR_GRADIENT_RET 0x65a050
 /* V2.1 has no long Return (HOLD_RETURN is Q2 only), so nothing arms the latch: a zero byte of the
  * payload's own, which stays zero for good. */
 extern unsigned char m1_return_latch;

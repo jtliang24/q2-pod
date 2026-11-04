@@ -49,6 +49,10 @@ M1PLUS_FUNCTIONS = {
  'text_edit_set_select': ('int', 'void *, unsigned, unsigned'),  # the M1 Plus's edit_set_select (patch/m1plus_peq.h)
 }
 WM_PAINT_LEAF_M1PLUS = ('window_manager_paint', 0x677b44, 'ringnav_wm_paint', (0x10800009, 0, 0x8c820088))
+# style_get_gradient (docs/m1plus-ipod-ui.md 4.1) is the Q2's leaf again: beqz a0; nop; lw v0, 0(a0), then the
+# style vtable's get_gradient (+0x18) tail-called. style_get_color's own bal to it returns to
+# STYLE_COLOR_GRADIENT_RET (offsets.inc), which the payload's leaf tells apart.
+GRADIENT_LEAF_M1PLUS = ('style_get_gradient', 0x659f9c, 'ringnav_style_gradient', (0x10800009, 0, 0x8c820000))
 BLUEALSA_SHA = '0a4ffb7cc8207a46a3568440c5f31022b7125befd164e2f1af52537340a9892a'  # the same binary in Q2 V1.32 and M1 Plus V2.1
 # V2.1 also reads the RTC back each time demo starts (platform_init's toolsGetRtcTime), local time
 # too: it reads UTC as well, or every start would shift the clock by the zone's offset.
@@ -390,10 +394,6 @@ M1PLUS_PORTS = {
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
     # The iPod UI's hooks (docs/m1plus-ipod-ui.md Phase 4): the shared C compiles with IPOD=1, but each of these is
     # unhooked until its item ports it
-    'widget_on_paint_background': ('unported', "the iPod selection bar and status bar fill, which V2.1's opaque rows hide until their styles go (ipod-ui 4.1)"),
-    'style_get_color': ('unported', 'the iPod accents and Light Mode recolour the styles (ipod-ui 4.1)'),
-    'image_manager_add': ('unported', "the iPod theme's images and Light Mode's flip (ipod-ui 4.1)"),
-    'ui_loader_load_widget_with_parent': ('unported', "Centred Now Playing's page, on every window's load (ipod-ui 4.1)"),
     'systembar_showface': ('unported', "the status bar's play state, before any paint (ipod-ui 4.2)"),
     'list_get_img_pic': ('unported', "song rows' format badge (ipod-ui 4.4)"),
     'bigcover_page_init': ('unported', "the big cover's page (ipod-ui 4.6)"),
@@ -563,6 +563,12 @@ M1PLUS_FUNCTION_ALIASES = {
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
+    # The iPod UI's paint backbone (ipod-ui 4.1): the selection bar behind the rows, the accents and Light Mode on every
+    # style colour and cached image, and each window's asset
+    'widget_on_paint_background': (0x66b778, 'ringnav_paint_bg', 'paint_bg'),
+    'style_get_color': (0x659fcc, 'ringnav_style_color', 'color'),
+    'image_manager_add': (0x655638, 'ringnav_image_add', 'image'),
+    'ui_loader_load_widget_with_parent': (0x663a74, 'ringnav_ui_load', 'ui_load'),
     'widget_dispatch': (0x66cec8, 'ringnav_dispatch', 'dispatch'),
     'on_wm_keylong_fun': (0x4cdd9c, 'ringnav_keylong', 'keylong'),
     'playset_equalizer_page_init': (0x49e358, 'peq_page_init', None),
@@ -911,7 +917,7 @@ def compile_payload(out):
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     leaf_paint = WM_PAINT_LEAF_M1PLUS
     undefined = [f'--undefined={name}' for _, name, _ in active_hooks.values()]
-    undefined += [f'--undefined={leaf_paint[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
+    undefined += [f'--undefined={leaf_paint[2]}', f'--undefined={GRADIENT_LEAF_M1PLUS[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
     # every call site's payload routine: a jal from stock code is no reference the linker sees
     undefined += [f'--undefined={new}' for words in CALL_SITES['m1plus'].values() for _, _, new in words if isinstance(new, str)]
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
@@ -1069,10 +1075,15 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         check(syms[name] == address, f'{name}: callback address mismatch')
         check(pic_gp(patched, address) == M1PLUS_GP, f'{name}: unexpected PIC prologue or GOT base')
         jump(fileoff(patched, address), replacement)
-    for name, address, replacement, words in [WM_PAINT_LEAF_M1PLUS]:
+    for name, address, replacement, words in [WM_PAINT_LEAF_M1PLUS, GRADIENT_LEAF_M1PLUS]:
         off = fileoff(patched, address)
         check(syms[name] == address and struct.unpack_from('<III', patched, off) == words, f'{name}: unexpected code')
         jump(off, replacement)
+    # style_get_color's own bal style_get_gradient, returning to STYLE_COLOR_GRADIENT_RET, stays unmapped.
+    from ipod import branch
+    ret = m1plus_inc('STYLE_COLOR_GRADIENT_RET')
+    check(struct.unpack_from('<I', patched, fileoff(patched, ret - 8))[0] ==
+          branch(0x04110000, ret - 8, GRADIENT_LEAF_M1PLUS[1]), 'style_get_color: unexpected gradient call')
     for name, address in M1PLUS_PRIVATE_FUNCTIONS.items():
         check(pic_gp(raw_demo, address) == M1PLUS_GP, f'{name}: not a V2.1 PIC entry')
     # ringnav_speed and ringnav_mode tell config_mplayer's re-applying calls, and config_init's

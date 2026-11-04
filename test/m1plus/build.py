@@ -327,8 +327,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     import filecmp, os, pathlib, re, struct, subprocess, tarfile, tempfile
     from build import (sha, run, fileoff, segments, symbols, BASE, RTC_WRITE, WIFI_LPS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ,
                        OBSOLETE, HELPER, BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO)
-    from m1plus import (pic_gp, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS, PDR_M1PLUS, RTC_READ_M1PLUS,
-                        call_site_words, M1PLUS_PRIVATE_FUNCTIONS, M1PLUS_SHIMS, M1PLUS_UNRESOLVED)
+    from m1plus import (pic_gp, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS, GRADIENT_LEAF_M1PLUS, PDR_M1PLUS, RTC_READ_M1PLUS,
+                        call_site_words, M1PLUS_PRIVATE_FUNCTIONS, M1PLUS_SHIMS, M1PLUS_UNRESOLVED, m1plus_inc)
     ps = symbols(directory/'patch.elf')
     # A shim is a stand-in some payload source calls (a row nothing uses is dropped), and the stand-in is defined once.
     nav = (ROOT/'patch/m1plus_nav.h').read_text()
@@ -418,9 +418,9 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     for _, address, _, _ in call_site_words(True, ps):
         off = fileoff(stock, address)
         allowed.update(range(off, off+4))
-    name, address, replacement, words = WM_PAINT_LEAF_M1PLUS
-    assert stock_syms[name] == address and struct.unpack_from('<III', stock, fileoff(stock, address)) == words
-    jumped(address, replacement)
+    for name, address, replacement, words in (WM_PAINT_LEAF_M1PLUS, GRADIENT_LEAF_M1PLUS):
+        assert stock_syms[name] == address and struct.unpack_from('<III', stock, fileoff(stock, address)) == words
+        jumped(address, replacement)
     # The one version literal takes the 5-character tag; the byte past V2.1's NUL is padding.
     at, n = stock.index(b'V2.1\0'), len(manifest['version']) + 1
     assert stock.count(b'V2.1\0') == 1 and stock[at+5:at+n] == bytes(n-5) and demo[at:at+n] == manifest['version'].encode()+b'\0'
@@ -477,6 +477,43 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
     assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
     assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
+    # ipod-ui 4.1, the paint backbone: V2.1's own code for what the four hooks and the gradient leaf read.
+    # style_get_gradient is a leaf: a null style, vtable or slot returns 0, else it tail-calls the style
+    # vtable's get_gradient (+0x18), as the Q2's does. style_get_color asks it first (a bal, which returns to
+    # STYLE_COLOR_GRADIENT_RET) and takes a gradient's first stop; with none it calls the vtable's get_color (+0x14).
+    from ipod import branch
+    gradient, color = stock_syms['style_get_gradient'], stock_syms['style_get_color']
+    assert words(gradient, 11) == (0x10800009, 0, 0x8c820000, 0x10400006, 0, 0x8c590018, 0x13200003, 0, 0x03200008, 0,
+                                   0x03e00008), 'style_get_gradient: not the audited leaf'  # ... lw t9, 0x18(v0); jr t9
+    assert words(gradient + 0x2c, 1) == (0x00001025,)  # the null paths return 0
+    assert words(color + 0x34, 2) == (0x8ca20000, 0x10400004) and words(color + 0x40, 1) == (0x8c420014,)  # the slot @0x14
+    assert words(color + 0xb4, 2) == (0x8c590014, 0x0320f809), 'style_get_color: get_color slot'
+    ret = m1plus_inc('STYLE_COLOR_GRADIENT_RET')
+    assert ret == color + 0x84 and words(ret - 8, 1) == (branch(0x04110000, ret - 8, gradient),), 'style_get_color: gradient call'
+    # gradient_t: the stop count at +8, then 8-byte {color, offset} stops from +0xc (the first stop's color is +0xc,
+    # the last's is 8 * nr + 4)
+    first, last = stock_syms['gradient_get_first_color'], stock_syms['gradient_get_last_color']
+    assert words(first + 0x14, 2) == (0x8ca30008, 0x14600011) and words(first + 0x60, 1) == (0x8ca3000c,)
+    assert words(last + 0x14, 2) == (0x8ca30008, 0x14600011) and words(last + 0x60, 2) == (0x00a32821, 0x8ca30004)
+    # bitmap_t: w @0, h @4, line length @8, flags u16 @0xc, format u16 @0xe (bitmap_init); formats 1 to 4 are the
+    # 4-byte ones (bitmap_get_bpp_of_format's table, whose address is a GOT page plus an addiu).
+    init = stock_syms['bitmap_init']
+    assert (words(init + 0x7c, 1), words(init + 0x84, 1), words(init + 0x90, 1), words(init + 0xa0, 1)) == (
+        (0xae130000,), (0xae140004,), (0xa611000e,), (0xa602000c,)), 'bitmap_init: bitmap_t layout'
+    assert words(stock_syms['bitmap_get_line_length'] + 0x18, 1) == (0x8c820008,)
+    table = got(0x63fefc) + struct.unpack_from('<h', stock, fileoff(stock, 0x63ff00))[0]
+    assert words(0x63fefc, 1) == (0x8f828054,) and stock[fileoff(stock, table):][:9] == bytes((4, 4, 4, 4, 2, 2, 3, 3, 1)), 'bpp table'
+    # image_manager_add(manager, name, bitmap_t *): the name in a1, copied by the cache, and the bitmap in a2, whose
+    # first 0x48 bytes it copies
+    add = stock_syms['image_manager_add']
+    assert words(add + 0x20, 1) == (0x00a09825,) and words(add + 0x40, 1) == (0x00c09025,)  # move s3, a1; move s2, a2
+    assert words(add + 0x74, 2) == (0x24060048, 0x02402825) and words(add + 0x98, 1) == (0x02602025,)
+    # widget_on_paint_background(widget, canvas): the widget's vtable @0x70, whose on_paint_background (+0x58) it tail-calls
+    paint_bg = stock_syms['widget_on_paint_background']
+    assert words(paint_bg + 0x30, 1) == (0x8c820070,) and words(paint_bg + 0x3c, 1) == (0x8c590058,)
+    # ui_loader_load_widget_with_parent(name, parent): both kept in registers for the load
+    load = stock_syms['ui_loader_load_widget_with_parent']
+    assert words(load + 0x24, 1) == (0x00808825,) and words(load + 0x30, 1) == (0x00a0a025,)
     # online_lyricthd: the hooked search (kugou_obtainlyric), NetEase's com163_obtainlyric on a miss and
     # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
     assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')
