@@ -3543,6 +3543,10 @@ lock window shows no clock at all.
      some screens and not on others, and not every time: the user found it on Playback Setting's Channel Balance and
      Crossfade pages. In the pass it went back from Display setting and the Q2 Pod app. With Knob: Volume, Previous
      is a media key by design (the PEQ stays, `boot.py`'s `eq_previous`), so the Knob setting is checked first.
+  9. **Two back buttons, and a small one** (the user, for the visual pass): some pages show both the bar's chevron
+     and V2.1's bigger navbar back (Now Playing's `<` below the bar). The chevron is hard to hit, more so with a
+     case on. That is acceptable where Previous goes back (finding 8). Pages where the knob doesn't navigate, such
+     as Now Playing, need a prominent back button.
 - Wi-Fi dropped once ("No route to host"); the tap had landed, and a shot before the next tap confirmed the page.
 
 ## How to check a build now

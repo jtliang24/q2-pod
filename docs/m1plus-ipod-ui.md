@@ -196,7 +196,10 @@ Each feature follows the same steps:
    Code and gates done on Nov 4 (progress 63): the clock centred, the chevron at the far left, `back_button`
    retired. V2.1's widgets the iPod doesn't draw stay inside the bar, transparent: an invalidate off the screen
    loses a frame's flush there. The lock screen's battery is ported (progress 64); the Q2-shaped bar scenarios
-   stay a listed gap. Its device pass is still to do.
+   stay a listed gap. The device pass (Nov 4, progress 64) passed. For the visual pass: the chevron is small and
+   hard to hit with a case on, so it can stay small only where Previous goes back; pages where the knob doesn't
+   navigate (Now Playing) need a prominent back button, and pages showing both the chevron and V2.1's navbar back
+   settle on one.
 3. **Settings pages:**
    - the `navbar_only` rewrite, `ipod_list_layout` through V2.1's `list_view` layout vtable slot
      (`LIST_VIEW_LAYOUT_SLOT`), the settings icons (the `settings_icons` section), and the
