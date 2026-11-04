@@ -944,9 +944,6 @@ void books_open(const char *root) {
     bk.reader = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     bk.sheet = widget_factory_create_widget(f, "view", bk.reader, 0, 0, UI_W, h);
     bk.info = bottom_caption(bk.reader, h);
-#if M1PLUS
-    back_button(bk.reader); /* over the page; Return goes back to the books */
-#endif
     view_show(bk.reader, 0);
     bk.buf = calloc(BOOK_WIN, 1);
     bk.path = calloc(BOOKS_MAX, sizeof *bk.path);

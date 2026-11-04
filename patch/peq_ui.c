@@ -830,15 +830,28 @@ void peq_paint(void *w, void *canvas) {
 static void e3_done(void);
 /* Replaces the stock page's on_common_keyup: Return steps back one screen; on Simple it ends an
  * adjustment, else leaves. */
-static int keyup(void *ctx, void *event) {
-    if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
+static inline __attribute__((always_inline)) void back(void *ctx) { /* inlined: the Q2 keeps its bytes */
     if (ui.tab == ADVANCED) action((void *)(long)BACK, ctx);
     else if (e3.adjusting) {
         e3_done();
         e3_show();
     } else navigator_back();
+}
+
+static int keyup(void *ctx, void *event) {
+    if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
+    back(ctx);
     return 11; /* RET_STOP */
 }
+
+#if M1PLUS
+/* The status bar's back chevron on the PEQ page (m1plus_nav_back.c previous_back): what Return does there. */
+int peq_back(void *top) {
+    if (!ui.page || top != ui.page) return 0;
+    back(0);
+    return 1;
+}
+#endif
 
 static int e3_flush(void);
 /* Leaving saves what Simple has unsaved and lets go of its Off comparison's held preamp. */
@@ -908,9 +921,6 @@ static void *bar(void *page, int x, int w) {
     widget_use_style(title, STYLE_LABEL_WHITE20C);
     widget_set_prop_int(title, "line_wrap", 1);
     if (w == UI_W) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
-#if M1PLUS
-    back_button(page);
-#endif
     return title;
 }
 

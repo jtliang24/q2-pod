@@ -116,11 +116,12 @@
 #define STYLE_SCRLABEL_WHITE20L "srlabel_leftwhite20_style"
 #define STYLE_SCRLABEL_WHITE20R "srlabel_item_right_gray16_styl"
 #define STYLE_SCRLABEL_WHITE24L "srlabel_leftwhite22_style"
-/* V2.1's title-bar back button (btn_return in its pages' navigationbar_view), which back_button copies. */
+/* V2.1's title-bar back button (btn_return in its pages' navigationbar_view). The payload's pages no longer copy it: the
+ * status bar's chevron closes them (4.2). */
 #define STYLE_NAVBAR_RETURN "navbar_btnreturn_style"
 #define ICON_RETURN "return"
 #define ICON_RETURN_DOWN "return_down"
-#define BACK_W 48 /* back_button's width, the payload's title-bar height: titles start after it */
+#define BACK_W 48 /* the width titles keep clear at a payload page's top left, where the button was: 4.4 and 4.5 relay them */
 /* V2.1's Home: home_page_init's grid builder (0x534064) fills home_sview, a slide_view, with one
  * 320x364 page view per HOME_CARDS ids of pdeq_choicemenu and sets home_sindicator's max to the pages.
  * Each card (0x533d8c) is a HOME_CARD_W x HOME_CARD_H view, two columns from HOME_CARD_X, rows from 0:

@@ -450,9 +450,6 @@ static void np_open(void) {
     image_set_draw_type(np.heart, IMAGE_DRAW_CENTER);
     widget_set_prop_str(np.heart, "clickable", "true");
     widget_on(np.heart, EVT_CLICK, np_heart, 0);
-#if M1PLUS
-    back_button(page); /* Return closes the page */
-#endif
     np.seen = ~rd.serial;
     np.timer = timer_add(np_tick, 0, 500);
     np_refresh();

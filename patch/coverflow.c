@@ -1086,13 +1086,11 @@ void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(vo
     return page;
 }
 
-#include "m1plus_coverflow_back.c"
-
-/* A page's 48px title bar, on M1 Plus after a back button; shared with photos.c. */
+/* A page's 48px title bar, on M1 Plus clear of the top left the back button had (BACK_W: the status bar's chevron is
+ * the back now, and 4.4 and 4.5 relay the pages); shared with photos.c. */
 void *page_title(void *body, const char *caption) {
 #if M1PLUS
     void *title = text(body, BACK_W, 0, UI_W - 2 * BACK_W, 48); /* still centred on the screen */
-    back_button(body);
 #else
     void *title = text(body, CF_X, 0, CF_W, 48);
 #endif
@@ -1863,7 +1861,6 @@ static void covers(void) {
         widget_set_prop_int(cf.artist, "style:normal:font_size", CF_ARTIST_PX);
         widget_set_prop_int(cf.artist, "style:normal:text_color", (int)CF_GREY);
 #if M1PLUS
-        back_button(cf.covers);
         static const unsigned touch[] = { EVT_INPUT_POINTER_DOWN, EVT_INPUT_POINTER_MOVE,
                                           EVT_POINTER_UP, EVT_POINTER_ABORT };
         for (unsigned i = 0; i < sizeof touch / sizeof *touch; ++i)

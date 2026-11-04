@@ -1,8 +1,8 @@
 /* M1 Plus: the shared helpers only the M1 Plus payload has, and view_show for both models. patch/peq.h
  * includes this beside its own helpers (docs/m1plus-roadmap.md U1c). */
 #if M1PLUS
-void *back_button(void *parent);
-void dispatch_key_return(void); /* navigation.c: back_button's Return */
+int peq_back(void *top); /* peq_ui.c: the chevron's back on the PEQ page, 1 if top is it */
+void dispatch_key_return(void); /* navigation.c: previous_back's Return, for a payload page */
 #endif
 #if M1PLUS
 int slide_swipe(void *s, void *e, int px, int bounded); /* navigation.c: a finger on a carousel */

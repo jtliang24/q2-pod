@@ -607,9 +607,6 @@ static void spot_np(void) {
         label(ui.msg, CF_EDGE, 100, UI_W - 2 * CF_EDGE, 30, STYLE_SCRLABEL_WHITE20C, 20, 0xffffffffu);
     ui.sub =
         label(ui.msg, CF_EDGE, 134, UI_W - 2 * CF_EDGE, 24, STYLE_SCRLABEL_WHITE20C, 16, SPOT_GREY);
-#if M1PLUS
-    back_button(page); /* over both views; Return closes the page */
-#endif
     ui.timer = timer_add(tick, 0, 250);
     spot_refresh();
 }

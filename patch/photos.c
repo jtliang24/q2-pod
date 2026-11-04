@@ -322,7 +322,6 @@ static int to_viewer(const void *unused) {
         }
         ph.info = bottom_caption(ph.viewer, h);
 #if M1PLUS
-        back_button(ph.viewer); /* over the photo; Return goes back to the grid */
         widget_set_sensitive(ph.slide, 0);
         static const unsigned touch[] = { EVT_INPUT_POINTER_DOWN, EVT_INPUT_POINTER_MOVE,
                                           EVT_POINTER_UP, EVT_POINTER_ABORT };

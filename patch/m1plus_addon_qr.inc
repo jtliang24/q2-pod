@@ -3,7 +3,6 @@
 #if M1PLUS
     /* V2.1's back button and the title in the title bar; the code centred under it, the text below
      * the code; the messages centred on the page. V2.1's theme's label styles. */
-    back_button(page);
     widget_set_text_utf8(label(page, BACK_W, 14, UI_W - 2 * BACK_W, 20, STYLE_SCRLABEL_WHITE20C, 16, SPOT_GREY), title);
     qp.qr = widget_factory_create_widget(f, "view", page, (UI_W - QR_PX) / 2, 56, QR_PX, QR_PX);
     qp.col = widget_factory_create_widget(f, "view", page, 16, 56 + QR_PX + 12, UI_W - 32, h - 68 - QR_PX);

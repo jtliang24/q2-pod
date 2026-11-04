@@ -380,6 +380,8 @@ typedef struct {
 #if M1PLUS
     int knob_mode;    /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
     int knob_reverse; /* Display's Knob Up: 0 List Up (Previous), 1 List Down (Next) */
+    void *bar_back;   /* the status bar's back chevron (img_back), whose tap is previous_back (ipod-ui 4.2) */
+    int chev_down;    /* its press is held by the chevron until its release */
 #endif
     void *art_cf_win, *art_cf_list; /* the artist page given its Coverflow, the albums pending */
     void *art_cf_veil;              /* the artist page unseen until they show, and its anim_hint */
@@ -3330,6 +3332,9 @@ static int bar_state_sync(void *bar) {
         st.bar_idle = widget_lookup(bar, STATUSW_IDLE, 1);
         st.bar_state = widget_lookup(bar, STATUSW_STATE, 1);
         st.bar_eq = widget_lookup(bar, STATUSW_EQ, 1);
+#if M1PLUS
+        st.bar_back = widget_lookup(bar, "img_back", 1);
+#endif
     }
     if (st.bar_state) {
         int status = media_owner() == 1 ? mclGetPlayStatus() :
@@ -3367,8 +3372,24 @@ static int bar_repaint(const void *info) {
  * to its ink so every gap is STATUS_GAP, and the icon wherever the group's ink would reach more
  * than BATT_ROOM (a wide badge while it shows). widget_set_visible does nothing for an unchanged
  * state and relayouts the view for a new one. */
+#if M1PLUS
+/* The back chevron shows whenever the top window is not Home (ipod-ui 4.2). Only a paint changes it: the top window's
+ * (or the bar's) background reaches bar_sync, which then repaints the bar after the frame; the 1 s tick leaves it, as
+ * nothing paints after a change made there. Returns whether it changed. */
+static int chevron_sync(void) {
+    if (!st.bar_back) return 0;
+    int show = !home_menu(window_manager_get_top_window(window_manager())),
+        changed = show != !!widget_get_visible(st.bar_back);
+    widget_set_visible(st.bar_back, show, 0);
+    return changed;
+}
+#endif
 static void bar_sync(void *bar) {
-    if (bar_state_sync(bar) && !st.bar_timer) st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
+    int changed = bar_state_sync(bar);
+#if M1PLUS
+    changed |= chevron_sync();
+#endif
+    if (changed && !st.bar_timer) st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
     if (!st.bar_bt || !st.bar_wifi || !st.bar_pct || !st.bar_slot || !st.bar_icon) return;
     int shown = widget_get_visible(st.bar_bt), c = 0;
     const char *image = shown ? widget_get_prop_str(st.bar_bt, "image", "") : "";
