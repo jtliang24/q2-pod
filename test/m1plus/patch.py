@@ -14137,9 +14137,24 @@ if is_m1plus:  # the icon and its bar at the top line's right end, as V2.1 place
 else: assert box(LEVEL)[2]>=60 and box(LEVEL)[0]+box(LEVEL)[2]<=O['UI_W'] and not m.nodes[w['img_battery']]['visible']
 passed()
 # Battery: Icon keeps the percentage off the Large clock; every percentage mode shows it (iPod only).
+# M1 Plus: Icon keeps V2.1's icon and its level bar. A percentage hides the icon; the bar, its fill clear and as
+# wide as the status bar's Percent, ends where the icon did and paints the percentage as Percent does, in the
+# colours of the icon V2.1 sets (screens_charge, screens_lowbattery), until the window goes.
 for mode in range(4):
-    CONFIG.update(BATTERY=str(mode)); m,w,_,_=lock_window('q2pod:aurora',{'LOCKCLOCK':'1'}); CONFIG.clear()
-    assert m.nodes[w[LEVEL]]['visible']==(mode!=0) and not m.nodes[w['img_battery']]['visible']
+    CONFIG.update(BATTERY=str(mode)); m,w,_,box=lock_window('q2pod:aurora',{'LOCKCLOCK':'1'}); CONFIG.clear()
+    if not is_m1plus:
+        assert m.nodes[w[LEVEL]]['visible']==(mode!=0) and not m.nodes[w['img_battery']]['visible']; continue
+    assert m.nodes[w[LEVEL]]['visible'] and m.nodes[w['img_battery']]['visible']==(mode==0)
+    paint=lambda: (m.letters.clear(),m.call(address=HOOKS['widget_on_paint_background'][0],args=(w[LEVEL],m.canvas,0,0),gap=0))[1]
+    if not mode:
+        assert box(LEVEL)==(268,5,33,20) and 'style:normal:fg_color' not in m.nodes[w[LEVEL]]
+        assert paint()==0 and not m.letters; continue
+    assert box(LEVEL)==(306-O['BATT_PCT_W'],4,O['BATT_PCT_W'],23) and m.nodes[w[LEVEL]]['style:normal:fg_color']==0
+    for image,value,rgb in (('screens_battery',88,0xffffff),('screens_charge',7,O['BATT_CHARGE_RGB']),('screens_lowbattery',5,O['BATT_LOW_RGB'])):
+        m.nodes[w['img_battery']]['image']=image; m.word(syms['power_capacity'],value)
+        assert paint()==0 and [(l['text'],l['color']) for l in m.letters]==[(f'{value}%',color_t(rgb))]
+    f,ctx=m.handler(w[LEVEL],O['EVT_DESTROY']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+    assert paint()==0 and not m.letters
 passed()
 m,w,info,box=lock_window(cards[0])
 assert m.nodes[w['img_screensaver']]['image']==cards[0] and 'style:normal:font_size' not in m.nodes[w[TIME]]; passed()

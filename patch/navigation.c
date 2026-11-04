@@ -382,6 +382,7 @@ typedef struct {
     int knob_reverse; /* Display's Knob Up: 0 List Up (Previous), 1 List Down (Next) */
     void *bar_back;   /* the status bar's back chevron (img_back), whose tap is previous_back (ipod-ui 4.2) */
     int chev_down;    /* its press is held by the chevron until its release */
+    void *lock_icon, *lock_level; /* the Large lock clock's battery icon and level bar, when it shows a percentage */
 #endif
     void *art_cf_win, *art_cf_list; /* the artist page given its Coverflow, the albums pending */
     void *art_cf_veil;              /* the artist page unseen until they show, and its anim_hint */
@@ -3511,6 +3512,39 @@ static void paint_battery(void *w, void *canvas) {
     stock_canvas_set_fill_color(canvas, fill);
 }
 
+#if M1PLUS
+/* The Large lock clock's percentage (lockscreen.c, ipod-ui 4.2), for a Battery setting that shows one: V2.1's lock
+ * window has no "88%" label, only its icon (screens_battery, _charge or _lowbattery) with the level bar inside, both
+ * set again as the level changes. The icon hides; the bar, its fill clear and as wide as the status bar's Percent,
+ * ends where the icon did and carries the percentage as Percent paints it, green while charging, red when low. */
+static int lock_level_gone(void *ctx, void *event) {
+    (void)ctx;
+    (void)event;
+    st.lock_icon = st.lock_level = (void *)0;
+    return 0;
+}
+void ipod_lock_level(void *icon, void *level) {
+    st.lock_icon = icon;
+    st.lock_level = level;
+    widget_on(level, EVT_DESTROY, lock_level_gone, (void *)0);
+    widget_set_visible(icon, 0, 0);
+    widget_set_prop_int(level, "style:normal:fg_color", 0);
+    widget_move_resize(level, I(icon, W_X) + I(icon, W_W) - BATT_PCT_W, I(icon, W_Y), BATT_PCT_W, I(icon, W_H));
+}
+static void paint_lock_level(void *w, void *canvas) {
+    const char *icon = widget_get_prop_str(st.lock_icon, "image", "");
+    int level = I(g_power_capacity, 0), mode = st.batt_mode;
+    unsigned key = st.batt_key;
+    st.batt_mode = 1; /* paint_battery reads the bar's; the lock's for this paint */
+    st.batt_key = (unsigned)(level > 100 ? 100 : level) << 2 |
+                  (unsigned)(icon && !tk_strcmp(icon, "screens_charge")) << 1 |
+                  (unsigned)(icon && !tk_strcmp(icon, "screens_lowbattery"));
+    paint_battery(w, canvas);
+    st.batt_mode = mode;
+    st.batt_key = key;
+}
+#endif
+
 /* Seconds as stock writes label_playtime, after a minus when negative is 1. */
 static void clock_text(void *label, int negative, int t) {
     char s[16] = "-";
@@ -4375,6 +4409,9 @@ int ringnav_paint_bg(void *w, void *canvas) {
     paint_selection(w, canvas);
     coverflow_home_clip(w, canvas, 1);
     if (w && w == st.bar_slot) paint_battery(w, canvas);
+#if M1PLUS
+    if (w && w == st.lock_level) paint_lock_level(w, canvas);
+#endif
     if (!w || P(w, W_PARENT) != wm) return result;
     if (w == bar && P(canvas, CANVAS_LCD)) {
         unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);

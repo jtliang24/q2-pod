@@ -14,8 +14,6 @@ GAPS = {
     '35b96a16c8': 'iPod UI assets (ipod-ui 3)',  # patch.py:11145 m.advance(2500); assert texts(info)[4:]==[0:12,-3:08] and len(m.thumbs)==1
     '338b3ce9bb': 'iPod UI assets (ipod-ui 3)',  # patch.py:11194 m.advance(250); assert texts(info)[4]==1:05 and on_wm_keyup_fun not in [c[0] for
     '30331ad68c': 'iPod UI assets (ipod-ui 3)',  # patch.py:11349 m.advance(3000); assert m.labels(np)==[Internet Radio,Three,Some Artist,A Song,M
-    # Lock screen battery (ipod-ui 4.2)
-    'a30d14f512': 'Lock screen battery (ipod-ui 4.2)',  # patch.py:14140 for mode in range(4):
     # status bar scenarios on the V2.1 bar (Phase 5)
     '78b0d2089b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5441 for v in views:
     '8217be2fad': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5450 cells=laid_out()
