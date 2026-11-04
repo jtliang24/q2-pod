@@ -3516,7 +3516,30 @@ lock window shows no clock at all.
 - `q2compare.py 1.5.9 --suites` on the lock screen code (`update.tar` byte-identical, 33 suite runs). The style edit
   and its pin are M1-only files.
 
-**Device pass:** still to do, for 4.2 and these fixes together.
+**Device pass** (Nov 4, build `g2` flashed as `V039m`; `peek` accepted the payload hash; config backed up to
+`/mnt/mmc/.q2/config-pass64.ini`; Screen Off was Off for the pass; the Battery, Large clock and Light keys were set in
+`config.ini` with a reboot each, and the backup is back, byte-identical, so Screen Off is 1min again; screenshots in
+`work/phase4/4.2/dev/`):
+- **The bar (4.2):** Home has the clock and no chevron. System Setting, Display setting, Album, Now Playing, the
+  Q2 Pod app and File Browser each show the chevron. The chevron went back one page from each; Previous (Knob:
+  Navigation) went back from Display setting and the Q2 Pod app; V2.1's own navbar back still left System Setting.
+- **The PEQ:** 20 taps (Preamp, chevron, Simple, Advanced, five times), a shot 1.5 s after each. Every tap changed the
+  screen, with no stale frame, and each step's screen was identical in all five cycles.
+- **Battery modes:** Percent ("100%"), Icon + Percent and Percent Inside in the bar. With the Large clock, Percent
+  and Icon + Percent show the percentage at the top right with the icon hidden; Icon keeps V2.1's icon. The battery
+  read Full on USB power, so the text was white; the charging and low colours are only covered by `patch.py`.
+- **Light Mode:** the bar's glyphs, chevron and Percent Inside turn to ink; Library's knob bar is ink with paper text.
+  - Finding 1 is fixed: the hold menu's selected row ("Play Next") has the ink bar with white text.
+  - Finding 2 is closed: a held touch, shot at 0.2 s, is grey (`c8c8c8`) over the whole row (y 260 to 314); the menu
+    is open by 0.6 s.
+- Found, not fixed (planned after the pass):
+  5. **Light Mode, the lock screen:** the Large clock, the date, the percentage and the `>>>` turn to ink on the
+     dark Graphite wallpaper, so they can hardly be read. The mini player flips to paper.
+  6. **The row arrow on the selection bar:** the `>` keeps its rest colour (white on dark Minimal's light bar, ink on
+     Light's ink bar). Cosmetic, for the visual pass.
+  7. **The PEQ's tabs:** after a tab tap, the other tab shows a grey box; after the chevron back from Preamp, neither
+     does. Not yet compared with qemu or the Q2.
+- Wi-Fi dropped once ("No route to host"); the tap had landed, and a shot before the next tap confirmed the page.
 
 ## How to check a build now
 
