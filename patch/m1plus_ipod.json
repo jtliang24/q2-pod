@@ -348,7 +348,7 @@
   "styles": {
     "default.bin": {
       "sha256": "24a8f765f315d836afa85731ca923512a506138930398683242ffaaa831b00c9",
-      "why": "V2.1's list rows are opaque dark greys (131313, black) that hide the selection bar paint_bg draws behind them, and its pressed rows are a brown tint (362221); iPod rows are transparent with a grey press (333333). V2.1's accent text on rows (the gold of the playing item) turns white as the Q2's red does. Dialogs' notpress rows, the hold menu's list_itemsort_style and Tidal's btn_tidal_more stay (4.7, 4.5).",
+      "why": "V2.1's list rows are opaque dark greys (131313, black) that hide the selection bar paint_bg draws behind them, and its pressed rows are a brown tint (362221); iPod rows are transparent with a grey press (333333). V2.1's accent text on rows (the gold of the playing item) turns white as the Q2's red does. The hold menu's list_itemsort_style rows (black, 362221 pressed) are clear too: opaque, they hid the bar, and Light Mode turned them to paper under the selected row's white text. Dialogs' notpress rows and Tidal's btn_tidal_more stay (4.7, 4.5).",
       "edits": [
         [
           "list_item",
@@ -373,6 +373,22 @@
           "000000ff",
           "00000000",
           5
+        ],
+        [
+          "list_item",
+          "list_itemsort_style",
+          "bg_color",
+          "000000ff",
+          "00000000",
+          4
+        ],
+        [
+          "list_item",
+          "list_itemsort_style",
+          "bg_color",
+          "362221ff",
+          "333333ff",
+          1
         ],
         [
           "button",

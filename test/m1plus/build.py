@@ -383,6 +383,12 @@ def m1plus_checks(directory, manifest, stock, demo, read):
             assert style in used or b'\0' + style.encode() + b'\0' in stock, f'{style}: no page or code of V2.1 names it'
             sites.update(i for a in at for i in range(a, a + 4))
         assert {i for i in range(len(raw)) if raw[i] != done[i]} <= sites
+        # Every row style of V2.1's lists, settings pages, tables and the hold menu is clear at rest, its press 333333
+        # or clear: an opaque row hides the selection bar behind it, and Light Mode turns it to paper (the hold menu's,
+        # 4.1's device pass).
+        rows = [(st, state, v.hex()) for _, st, state, p, _, v in style_props(done) if p == 'bg_color' and st in (
+            'list_item_style', 'list_item_black_style', 'list_itemsort_style', 'btn_tablerow_style')]
+        assert len(rows) == 20 and all(v == '00000000' or state == 'pressed' and v == '333333ff' for _, state, v in rows), rows
         # a wrong state count and an unaudited file are refused (patch_style's own checks)
         for bad, why in (({**audit, 'edits': [[*audit['edits'][0][:5], audit['edits'][0][5] + 1], *audit['edits'][1:]]}, 'expected'),
                          ({**audit, 'sha256': '0' * 64}, 'Unaudited')):
