@@ -3444,8 +3444,8 @@ screen switch.
   - The Q2-shaped status bar scenarios (375 px, `view_left`, `label_clock`, `label_idle`; 20 checks) are now
     `status bar scenarios on the V2.1 bar (Phase 5)`.
   - 29 more fail inside the big cover's set-up (4.6): `b` is now the battery loop's last value.
-  - `Lock screen battery (ipod-ui 4.2)` still fails: the lock screen keeps V2.1's icon and bar, and the Battery
-    setting doesn't reach it.
+  - `Lock screen battery (ipod-ui 4.2)` still failed here: the lock screen kept V2.1's icon and bar, and the Battery
+    setting didn't reach it. Ported in section 64.
 
 **Gates** (build `work/phase4/4.2/f3`, `V037m`):
 - `build.py --build` and `patch.py`;
@@ -3458,6 +3458,65 @@ screen switch.
 fields.
 
 **Device pass:** not done yet. It follows the commits, with the 4.1 Light Mode fixes.
+
+## 64. The lock screen's battery and 4.1's device findings (Nov 4)
+
+On `feature/m1-ipod`, after section 63's commits.
+
+**Lock screen battery (ipod-ui 4.2).** The Q2's Large clock shows `label_battery`'s "88%" at the top line's right end
+when the Battery setting shows a percentage, and nothing in Icon. V2.1's lock window has no such label:
+- It has only `img_battery` (`screens_battery`, `screens_charge` or `screens_lowbattery`) with `pgbar_battery`
+  inside it.
+- Its refresh (`0x53f520`, from the lock window) sets both again as the level changes: the icon's image and the bar's
+  value, never their visibility.
+
+The port, on the M1's Large clock only (Standard stays V2.1's):
+- **Icon:** V2.1's icon and its level bar, as before.
+- **A percentage mode:** `lockscreen.c` hands the two widgets to `navigation.c`'s `ipod_lock_level`. That hides the
+  icon and clears the bar's fill. The bar, as wide as the status bar's Percent (`BATT_PCT_W`), ends where the icon did.
+- **The paint:** `ringnav_paint_bg` paints the percentage in the bar through `paint_battery`, as Percent paints it.
+  The level is `power_capacity`, green while the icon is `screens_charge`, red while it is `screens_lowbattery`.
+- **Repaints:** V2.1's own value changes repaint it. The widget is forgotten on its `EVT_DESTROY`.
+- **The Q2:** its branch is unchanged, and `update.tar` stays byte-identical.
+
+`patch.py`'s Battery loop now has an M1 branch, so the gap is gone (894 in 13 gaps):
+- Icon keeps both widgets and draws no text.
+- Each percentage mode hides the icon, places the bar, and paints "88%" white, charging "7%" green and low "5%" red.
+- After the window's destroy, the bar paints nothing.
+
+In qemu (`[SYSSET] SSAVERTIMESHOW=1` and `SCREENSAVERPATH=q2pod:aurora`, `[Q2POD] LOCKCLOCK=1`), Percent showed "70%" at
+the right end and Icon showed V2.1's icon. V2.1's key is `SSAVERTIMESHOW`, with the double S; with any other key, the
+lock window shows no clock at all.
+
+**4.1's device findings** (section 62, each reproduced in qemu first):
+1. **Light Mode, the hold menu's selected row** (fixed).
+   - **The cause:** the menu's rows are `list_itemsort_style`, which is opaque: black at rest, `362221` pressed. It
+     covered the selection bar painted behind it. Dark Classic showed no bar in qemu either, only white text on every
+     row. Light Mode turned the black to paper under the selected row's white text.
+   - **The fix:** two more same-size edits in `m1plus_ipod.json` `styles` (now nine): rest states clear, press
+     `333333`, as `list_item_style`'s.
+   - **The pin:** `build.py` now asserts that all four row styles (`list_item`, `list_item_black`, `list_itemsort`,
+     `btn_tablerow`) are clear at rest, with a `333333` or clear press. It fails on section 63's build, on exactly the
+     hold menu's five states.
+   - **In qemu:** in Light Mode the selected row now has the Crimson bar with white text.
+2. **Light Mode, the press band** (not reproduced; closed with a note). In qemu, a held touch on a Library row is grey
+   over the whole row at 0.2 and 0.35 s and gone by 0.6 s, as the menu opens. The device shot (0.35 s) probably read
+   the panel while a frame was being copied to it. The device pass looks again.
+3. **The orange accent:** stays on the final visual pass (the accent mapping gap).
+4. **Clipped labels:** none is a payload clip that needs a fix now.
+   - V2.1's own: "Atmosphere Lamp Settings" and Playback Setting's "Changed album art(10s wait)" show left-clipped
+     identically in stock qemu. "Multiple Speed" is a 60 px `hscroll_label` in V2.1's `playmore_dialog`.
+   - Configuration's "Press again to erase the login and cache" is the payload's own. It is longer than the M1 row's
+     240 px scrolling label, and the device shot caught it mid-scroll. It is left for the visual pass.
+
+**Gates** (build `work/phase4/4.2/g2`, `V039m`), run serially:
+- `build.py --build`; `patch.py` (894 in 13 gaps, none unlisted);
+- `boot.py` plain 3 of 3, `--home-menu` and `--media`;
+- `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports.py` (unchanged from section 63);
+- `q2compare.py 1.5.9 --suites` on the lock screen code (`update.tar` byte-identical, 33 suite runs). The style edit
+  and its pin are M1-only files.
+
+**Device pass:** still to do, for 4.2 and these fixes together.
 
 ## How to check a build now
 

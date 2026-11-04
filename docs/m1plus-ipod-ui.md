@@ -189,13 +189,14 @@ Each feature follows the same steps:
    the `style_get_gradient` leaf, `ui_loader_load_widget_with_parent`, the `default.bin` style edits
    (the `styles` section), Light Mode, accents and Themes. Corners stay square.
    Code and gates done on Nov 3 (progress 62): the hooks, the leaf, seven style edits and the retired outline. The
-   device pass (Nov 4) found two Light Mode faults, the hold menu's row and the press band.
+   device pass (Nov 4) found two Light Mode faults. The hold menu's row is fixed by two more style edits (progress
+   64); the press band didn't reproduce in qemu.
 2. **Status bar:** `systembar_showface`, `system_bar.bin` with the iPod title and the back chevron (the
    new M1 piece, beside the title), and the status icons (the `status_icons` section).
    Code and gates done on Nov 4 (progress 63): the clock centred, the chevron at the far left, `back_button`
    retired. V2.1's widgets the iPod doesn't draw stay inside the bar, transparent: an invalidate off the screen
-   loses a frame's flush there. The lock screen's battery and the Q2-shaped bar scenarios stay listed gaps. Its
-   device pass is still to do.
+   loses a frame's flush there. The lock screen's battery is ported (progress 64); the Q2-shaped bar scenarios
+   stay a listed gap. Its device pass is still to do.
 3. **Settings pages:**
    - the `navbar_only` rewrite, `ipod_list_layout` through V2.1's `list_view` layout vtable slot
      (`LIST_VIEW_LAYOUT_SLOT`), the settings icons (the `settings_icons` section), and the
