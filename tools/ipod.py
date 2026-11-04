@@ -359,7 +359,7 @@ def status_bar(root):
     shown = [[n for n in v[3] if n[2]['name'] not in BATT_MODES] for v in (left, right)]
     extent = max(STATUS_MARGIN + sum(n[1][2] for n in v) + inc('STATUS_GAP') * (len(v) - 1) for v in shown)
     width = UI_W - 2 * extent
-    check(width >= CLOCK_MIN and right[1][0] + right[1][2] == 375, f'Status bar clock {width}px, too narrow')
+    check(width >= CLOCK_MIN and right[1][0] + right[1][2] == UI_W, f'Status bar clock {width}px, too narrow')
     room = int(UI_W - STATUS_MARGIN - (UI_W / 2 + CLOCK_TEXT / 2 + CLOCK_GAP))
     reach = BT_REACH + 2 * inc('STATUS_GAP') + widgets['img_wifi'][1][2] + max(BATT_PCT_W, BATT_H_W, inc('BATT_INSIDE_W') + inc('BATT_NUB_W'))
     check(BATT_ROOM == room and reach <= room, f'Status bar battery needs {reach}px of {room}px')

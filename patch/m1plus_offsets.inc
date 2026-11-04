@@ -498,6 +498,18 @@ static inline int arc_out(int r, int y) {
 #define SAVER_ROW 143
 #define SAVER_ITEM 58 /* Time show to About */
 #define VIEW_LOCK_BATTERY "img_battery"
+/* The status bar's widgets by name (ipod-ui 4.2): V2.1's system_bar.bin has img_playstate, img_btclass and the battery as
+ * a progress bar over its icon, and no label_eq, label_idle or label_battery; the rewrite adds view_battery. A name
+ * absent from the bar is a null lookup, which bar_state_sync tolerates. */
+#define STATUSW_BT "img_btclass"
+#define STATUSW_WIFI "img_wifi"
+#define STATUSW_PCT "pgbar_battery"
+#define STATUSW_SLOT "view_battery"
+#define STATUSW_ICON "img_battery"
+#define STATUSW_IDLE "label_idle"
+#define STATUSW_STATE "img_playstate"
+#define STATUSW_EQ "label_eq"
+#define STATUS_LOWCHARGE "bar_lowpower"
 /* M1 Plus: a press held still this long on a library row opens its hold menu (ringnav_input). */
 #define LONG_PRESS_MS 500
 /* Long Songs (docs/internals.md#long-songs): songs longer than this. */

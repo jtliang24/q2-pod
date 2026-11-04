@@ -74,6 +74,17 @@
 #define VIEW_LOCK_LEVEL "label_battery"
 #define LOCK_CLOCK_Y 14
 #define VIEW_LOCK_BATTERY "img_battery"
+/* The status bar's widgets by name, which navigation.c finds in system_bar (bar_state_sync) and whose layout tools/ipod.py
+ * status_bar sets. No VIEW_ prefix: the M1's label_idle, label_eq and view_battery are added by its rewrite. */
+#define STATUSW_BT "img_bt"
+#define STATUSW_WIFI "img_wifi"
+#define STATUSW_PCT "label_battery"
+#define STATUSW_SLOT "view_battery"
+#define STATUSW_ICON "img_battery"
+#define STATUSW_IDLE "label_idle"
+#define STATUSW_STATE "img_state"
+#define STATUSW_EQ "label_eq"
+#define STATUS_LOWCHARGE "bar_lowcharge" /* the battery icon's low image */
 /* M1 Plus: a press held still this long on a library row opens its hold menu (ringnav_input). */
 #define LONG_PRESS_MS 500
 #define KEY_VOLUMEDOWN 221

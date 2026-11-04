@@ -3322,14 +3322,14 @@ static int pct_width(unsigned level) {
 static int bar_state_sync(void *bar) {
     int changed = 0;
     if (!st.bar_bt) {
-        st.bar_bt = widget_lookup(bar, "img_bt", 1);
-        st.bar_wifi = widget_lookup(bar, "img_wifi", 1);
-        st.bar_pct = widget_lookup(bar, "label_battery", 1);
-        st.bar_slot = widget_lookup(bar, "view_battery", 1);
-        st.bar_icon = widget_lookup(bar, "img_battery", 1);
-        st.bar_idle = widget_lookup(bar, "label_idle", 1);
-        st.bar_state = widget_lookup(bar, "img_state", 1);
-        st.bar_eq = widget_lookup(bar, "label_eq", 1);
+        st.bar_bt = widget_lookup(bar, STATUSW_BT, 1);
+        st.bar_wifi = widget_lookup(bar, STATUSW_WIFI, 1);
+        st.bar_pct = widget_lookup(bar, STATUSW_PCT, 1);
+        st.bar_slot = widget_lookup(bar, STATUSW_SLOT, 1);
+        st.bar_icon = widget_lookup(bar, STATUSW_ICON, 1);
+        st.bar_idle = widget_lookup(bar, STATUSW_IDLE, 1);
+        st.bar_state = widget_lookup(bar, STATUSW_STATE, 1);
+        st.bar_eq = widget_lookup(bar, STATUSW_EQ, 1);
     }
     if (st.bar_state) {
         int status = media_owner() == 1 ? mclGetPlayStatus() :
@@ -3404,12 +3404,16 @@ static void bar_sync(void *bar) {
     /* the level from label_battery's "88%" (stock zeroes progress_battery while charging), then
      * charging (bar_charge) and low (bar_lowcharge), as stock picks the icon */
     const char *icon = widget_get_prop_str(st.bar_icon, "image", "");
-    const unsigned *t = widget_get_text(st.bar_pct);
     int level = 0;
+#if M1PLUS /* V2.1's bar has a progress bar, not a "88%" label: the level it shows is power_capacity's */
+    level = I(g_power_capacity, 0);
+#else
+    const unsigned *t = widget_get_text(st.bar_pct);
     while (t && *t >= '0' && *t <= '9') level = level * 10 + (int)(*t++ - '0');
+#endif
     unsigned key = (unsigned)(level > 100 ? 100 : level) << 2 |
                    (unsigned)(icon && !tk_strcmp(icon, "bar_charge")) << 1 |
-                   (unsigned)(icon && !tk_strcmp(icon, "bar_lowcharge"));
+                   (unsigned)(icon && !tk_strcmp(icon, STATUS_LOWCHARGE));
     int pct = pct_width(key >> 2);
     int width = mode == 1 ? pct
                           : (mode == 3 ? BATT_INSIDE_W : BATT_BODY_W) + BATT_NUB_W +
