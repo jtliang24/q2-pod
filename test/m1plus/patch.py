@@ -977,67 +977,47 @@ assert m.get(w+O['SCROLL_Y'])==148 and m.get(w+O['VIEW_ANIMATOR'])==0; passed()
 # Painting establishes selection without a sacrificial button press or native focus.
 m=Machine(); w,entries=m.page_list(5,extent=1000)
 assert m.paint(w)==0 and m.selected(w)==0
-if is_m1plus:  # Stock's outline over V2.1's opaque rows until 4.1 (m1plus_nav_outline.c)
-    # Default outline: translucent fill, one dark shade stroke, one white stroke, all clipped.
-    assert [r['kind'] for r in m.rounded]==['fill','stroke','stroke']
-    fill,shade,white=m.rounded
-    assert fill['rect']==(1,1,238,46) and fill['bg']==0 and fill['clip']==(0,0,240,96)
-    assert fill['color']==FILL and fill['radius']==O['RADIUS'] and fill['width'] is None
-    assert shade['rect']==(1,1,238,46) and shade['bg']==0
-    assert shade['color']==SHADE
-    assert shade['radius']==O['RADIUS'] and shade['width']==1 and shade['clip']==(0,0,240,96)
-    assert white['rect']==(2,2,236,44) and white['bg']==0 and white['color']==OUTLINE
-    assert white['radius']==O['RADIUS']-1 and white['width']==1
-    assert not m.strokes and m.global_alpha==0
-    assert m.clip==(0,0,240,240)
-    assert m.lcd_colors()==LCD_COLORS
-    assert not any(m.get(e+O['W_FOCUS'])&0x80 for e in entries)
-    stroke_name = 'canvas_stroke_rounded_rect_ex'  # V2.1's, with its four radii (m1plus.py)
-    assert [c[0] for c in m.calls if c[0].startswith('canvas_')][-6:]==[
-        'canvas_fill_rounded_rect',stroke_name,stroke_name,
-        'canvas_set_fill_color','canvas_set_stroke_color','canvas_set_clip_rect']; passed()
-else:
-    # The bar is painted behind the rows: every band precedes the border hook, which draws nothing.
-    names=[c[0] for c in m.calls]
-    bg,border=names.index('stock_paint_bg'),names.index('stock_paint')
-    assert all(bg<i<border for i,n in enumerate(names) if n=='canvas_fill_rounded_rect')
-    assert not m.bands and not m.strokes and m.global_alpha==0
-    # Minimal: one off-white card over the full surface width, square (Corners: Square, no key).
-    [card]=m.rounded; inset=O['SEL_INSET']
-    assert card['kind']=='fill' and card['rect']==(0,0,240,48) and card['radius']==0
-    assert card['color']==color_t(0xeeeeec) and card['clip']==(0,0,240,96)
-    assert m.clip==(0,0,240,240) and m.lcd_colors()==LCD_COLORS
-    assert not any(m.get(e+O['W_FOCUS'])&0x80 for e in entries); passed()
-    # Corners: Rounded insets it SEL_INSET from each side, a pill.
-    k=Machine(); k.config['ROUNDED']='1'; kw,_=k.page_list(5,extent=1000); k.paint(kw)
-    assert [(c['rect'],c['radius']) for c in k.rounded]==[((inset,0,240-2*inset,48),24)]
-    # A left image the round end would cut shrinks it; hidden (Folder's multi-select check) it doesn't.
-    for visible,radius in ((1,2),(0,24)):
-        k=Machine(); k.config['ROUNDED']='1'; kw,es=k.page_list(5,extent=1000)
-        check=k.node('image','img_choice',visible=visible); k.nodes[es[0]]['children']=[check]
-        for o,v in zip(('W_X','W_Y','W_W','W_H'),(8,0,50,48)): k.word(check+O[o],v)
-        k.paint(kw); assert [c['radius'] for c in k.rounded]==[radius],(visible,k.rounded)
-    # Theme: Classic draws the accent's bar (its highlight, then Graphite's flat fill) instead, full
-    # width; under Corners: Rounded the same inset pill, each band a chord of a 48px circle at either end.
-    k=Machine(); k.config['THEME']='1'; kw,_=k.page_list(5,extent=1000); k.paint(kw)
-    assert [b[:3] for b in k.bands]==[(0,j,240) for j in range(48)]
-    k=Machine(); k.config.update(THEME='1',ROUNDED='1'); kw,_=k.page_list(5,extent=1000); k.paint(kw)
-    def chord(j,h):
-        out=8*h-math.isqrt((h*h-(2*j+1-h)**2)*64)
-        return (out+15)//16, out&15
-    want=[]
-    for band_y in range(48):
-        n,frac=chord(band_y,48)
-        color=color_t(ACCENTS[0][4 if band_y==0 else 0])
-        want.append((inset+n,band_y,240-2*inset-2*n,1,color))
-        if frac:
-            edge=(color&0xffffff)|((16-frac)*17<<24)
-            want.extend([(inset+n-1,band_y,1,1,edge),(240-inset-n,band_y,1,1,edge)])
-    assert [b[:5] for b in k.bands]==want
-    # Coverage and geometry mirror at both ends and across the horizontal centre.
-    assert any(0<b[4]>>24<255 for b in k.bands)
-    assert [b[:4] for b in k.bands if b[1]==0]==[(inset+20,0,240-2*inset-40,1),(inset+19,0,1,1),(240-inset-20,0,1,1)]
-    passed()
+# The bar is painted behind the rows: every band precedes the border hook, which draws nothing.
+names=[c[0] for c in m.calls]
+bg,border=names.index('stock_paint_bg'),names.index('stock_paint')
+assert all(bg<i<border for i,n in enumerate(names) if n=='canvas_fill_rounded_rect')
+assert not m.bands and not m.strokes and m.global_alpha==0
+# Minimal: one off-white card over the full surface width, square (Corners: Square, no key).
+[card]=m.rounded; inset=O['SEL_INSET']
+assert card['kind']=='fill' and card['rect']==(0,0,240,48) and card['radius']==0
+assert card['color']==color_t(0xeeeeec) and card['clip']==(0,0,240,96)
+assert m.clip==(0,0,240,240) and m.lcd_colors()==LCD_COLORS
+assert not any(m.get(e+O['W_FOCUS'])&0x80 for e in entries); passed()
+# Corners: Rounded insets it SEL_INSET from each side, a pill.
+k=Machine(); k.config['ROUNDED']='1'; kw,_=k.page_list(5,extent=1000); k.paint(kw)
+assert [(c['rect'],c['radius']) for c in k.rounded]==[((inset,0,240-2*inset,48),24)]
+# A left image the round end would cut shrinks it; hidden (Folder's multi-select check) it doesn't.
+for visible,radius in ((1,2),(0,24)):
+    k=Machine(); k.config['ROUNDED']='1'; kw,es=k.page_list(5,extent=1000)
+    check=k.node('image','img_choice',visible=visible); k.nodes[es[0]]['children']=[check]
+    for o,v in zip(('W_X','W_Y','W_W','W_H'),(8,0,50,48)): k.word(check+O[o],v)
+    k.paint(kw); assert [c['radius'] for c in k.rounded]==[radius],(visible,k.rounded)
+# Theme: Classic draws the accent's bar (its highlight, then Graphite's flat fill) instead, full
+# width; under Corners: Rounded the same inset pill, each band a chord of a 48px circle at either end.
+k=Machine(); k.config['THEME']='1'; kw,_=k.page_list(5,extent=1000); k.paint(kw)
+assert [b[:3] for b in k.bands]==[(0,j,240) for j in range(48)]
+k=Machine(); k.config.update(THEME='1',ROUNDED='1'); kw,_=k.page_list(5,extent=1000); k.paint(kw)
+def chord(j,h):
+    out=8*h-math.isqrt((h*h-(2*j+1-h)**2)*64)
+    return (out+15)//16, out&15
+want=[]
+for band_y in range(48):
+    n,frac=chord(band_y,48)
+    color=color_t(ACCENTS[0][4 if band_y==0 else 0])
+    want.append((inset+n,band_y,240-2*inset-2*n,1,color))
+    if frac:
+        edge=(color&0xffffff)|((16-frac)*17<<24)
+        want.extend([(inset+n-1,band_y,1,1,edge),(240-inset-n,band_y,1,1,edge)])
+assert [b[:5] for b in k.bands]==want
+# Coverage and geometry mirror at both ends and across the horizontal centre.
+assert any(0<b[4]>>24<255 for b in k.bands)
+assert [b[:4] for b in k.bands if b[1]==0]==[(inset+20,0,240-2*inset-40,1),(inset+19,0,1,1),(240-inset-20,0,1,1)]
+passed()
 # Cards stay two pixels inside all three columns, including scrolled first/last rows.
 for classic in (0,1):
     for offset in (0, 24):
