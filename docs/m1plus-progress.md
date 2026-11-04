@@ -3263,6 +3263,84 @@ library in `changed_assets`. Checks proved to fail: a wrong opener name and a wr
 `--build`, and the framework's three refusals are asserted. No device pass: the demo changes only by that
 version string, and the rootfs by none of the pages.
 
+## 62. Phase 4.1: the paint backbone and themes (Nov 3)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4 item 1, on `feature/m1-ipod`. The M1 now paints through the iPod
+hooks: the selection bar behind the rows, the accents and Light Mode on every style colour and cached image, and
+each window's asset through the loader.
+
+**The audit** (V2.1's own code, pinned in `test/m1plus/build.py` `m1plus_checks`):
+- The four PIC routines resolve `M1PLUS_GP`: `widget_on_paint_background` `0x66b778`, `style_get_color` `0x659fcc`,
+  `image_manager_add` `0x655638`, `ui_loader_load_widget_with_parent` `0x663a74`. Their arguments are the Q2's:
+  the widget and canvas; the name and bitmap in `a1` and `a2`, the cache copying `bitmap_t`'s first `0x48` bytes;
+  the name and parent.
+- `style_get_gradient` `0x659f9c` is the Q2's leaf again: the same first three words (`beqz a0; nop; lw v0, 0(a0)`),
+  then the style vtable's `get_gradient` at `+0x18` tail-called. `style_get_color` calls it with a `bal` at `0x65a048`,
+  returning to `STYLE_COLOR_GRADIENT_RET` (`0x65a050`), and calls `get_color` at vtable `+0x14` when there is no
+  gradient. `gradient_t` is the Q2's: the stop count at `+8`, 8-byte `{color, offset}` stops from `+0xc`
+  (`gradient_get_first_color` and `_last_color`).
+- `bitmap_t` is the Q2's: w `@0`, h `@4`, line length `@8`, flags `u16 @0xc`, format `u16 @0xe`; formats 1 to 4 are the
+  4-byte ones (`bitmap_get_bpp_of_format`'s table reads `4 4 4 4 2 2 3 3 1`).
+- No new M1 offset names are needed except `STYLE_COLOR_GRADIENT_RET`, which was `M1_UNPORTED_ADDR`.
+
+**Styles** (`m1plus_ipod.json` `styles`, 7 same-size edits in `default.bin`). None of V1.32's eight styles exist in
+V2.1; its rows use these:
+- `list_item_style` (86 pages and dialogs; `131313` rows, a `362221` press) and `btn_tablerow_style` (the table rows
+  of All Music, the queue and Jump to): the four rest states turn transparent, the press turns `333333`.
+- `list_item_black_style` (the settings pages that Knob: Navigation walks): five states transparent.
+- `srlabel_item_gold18_style` and `_gold20_style` (the playing item's gold title, set from about 30 sites): `fe7e40` to
+  white, as the Q2's red titles.
+- Left alone, with the reason in the JSON: `list_item_notpress_style` (dialogs' input rows), `list_itemsort_style` (the
+  hold menu, 4.7), `list_item_cover_style` (its rest state is transparent already), `btn_tidal_more`.
+- A style edit replaces every state holding the old value, so a pressed state can be told apart only by its value.
+
+**Images.** The name rules in `ringnav_image_add` match almost nothing in V2.1: it has no `list_into`, `local_*`,
+`small_*`, `navbar_*` or `img_*`, and the prefixes it has (`drop_`, `tidal_`, `bt_`, `search*`, `playlist_`) are
+unrelated art. Light Mode's flip takes any plain-named image without colour that is mostly glyph, so it needs no
+name. No M1 image names were added; each item that rewrites a page gives its icons names (4.3's `pset_*`/`sset_*`,
+4.4's `icon_*`, 4.5's `home_*`).
+
+**Found, not fixed.** V2.1's own accent is orange (`fe7e40`, with a brown `362221` press), not the Q2's `ff1448`
+(`STOCK_RED`). `red_map` recolours only blends of `STOCK_RED`, so under a non-Crimson accent V2.1's orange text and
+icons keep their colour. That is a visual matter for the final pass.
+
+**Code.**
+- `M1PLUS_HOOKS` gains the four routines, `GRADIENT_LEAF_M1PLUS` the leaf; their `M1PLUS_PORTS` rows are gone, so
+  `ports.py` reports them ported.
+- `tools/m1plus_ipod.py` `patch_style`; `m1plus.build()` swaps the patched `default.bin` in and records it in
+  `changed_assets`.
+- Centred Now Playing stays off on the M1 (`st.np_centred = M1PLUS ? 0 : ...`): its `playing_page_stock` is 4.6's.
+  The settings read now makes ten config reads on the M1, not eleven.
+- Retired: `m1plus_nav_outline.c` (Stock's outline over the rows). The Home card's frame colours moved into
+  `m1plus_nav_home.c`.
+
+**Tests.**
+- The bar checks in `patch.py` that ran only as the M1's outline now run as the iPod's bar. Eight listed gaps pass
+  and left the list: the bar behind the rows, Minimal's card geometry, the bands, and the row clip.
+- The 529 others failed in set-ups of later items (V1.32's Home, Now Playing and scrub pages, the Display pages, the
+  wheel's Key Tone checks that exist only for the Q2), so they were re-keyed to their items with `GAPS_DUMP`:
+  Library rows 4.4 (259 with the Most Played and playlist-more ones), Now Playing 4.6 (202), Display settings 4.3
+  (149), Home 4.5 (100), the wheel and Key Tone 4.8 (74), the big cover 4.6 (37), dialogs 4.7 (3). None is a check of
+  pure `IPOD=1` behaviour that fails.
+- `boot.py` compared Home with stock's below the status bar. With the iPod hooks on, the M1's default theme is
+  Minimal, whose greys recolour the antialiased edges of Home's orange icons (140 pixels), so both runs now start
+  with `[IPOD] THEME=1 ACCENT=1` (Classic, Crimson: a stock colour is left as it was; Crimson is accent 1, not 0). The
+  walk's stock comparisons allow the style audit's own colours: a `131313` row pixel is black patched, `362221` is
+  `333333`, and an icon's soft edge over a row may be darker by at most `0x13`.
+- Proved to fail: a wrong `STYLE_COLOR_GRADIENT_RET` stops the build (`style_get_color: unexpected gradient call`);
+  a style edit with a wrong state count, and an unhashed style file, are refused in `m1plus_checks`.
+
+**Gates** (build `work/phase4/4.1/c3`, V02Mm): `build.py --build`; `patch.py` (879 expected failures in 14 gaps, none
+unlisted); `boot.py` plain, `--home-menu` and `--media`; `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`,
+`bluealsa`; `ports.py`; `q2compare.py 1.5.9 --suites` (update.tar byte-identical, 33 suite runs).
+
+**Commits.**
+- `39e90da` `feat(m1plus)`: the four hooks, the leaf and the audit pins; the outline retired.
+- `a33650c` `feat(m1plus)`: the style rewrite and its tests.
+- `0ad3cbe` `test(m1plus)`: the gaps re-keyed.
+
+**Device pass:** not done yet; it follows the commits.
+
 ## How to check a build now
 
 ```sh

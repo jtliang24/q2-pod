@@ -188,6 +188,8 @@ Each feature follows the same steps:
 1. **Paint backbone and themes:** `style_get_color`, `image_manager_add`, `widget_on_paint_background`,
    the `style_get_gradient` leaf, `ui_loader_load_widget_with_parent`, the `default.bin` style edits
    (the `styles` section), Light Mode, accents and Themes. Corners stay square.
+   Code and gates done on Nov 3 (progress 62): the hooks, the leaf, seven style edits and the retired outline. Its
+   device pass is still to do.
 2. **Status bar:** `systembar_showface`, `system_bar.bin` with the iPod title and the back chevron (the
    new M1 piece, beside the title), and the status icons (the `status_icons` section).
 3. **Settings pages:**
