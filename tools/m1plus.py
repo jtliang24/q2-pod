@@ -1021,6 +1021,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         address = symbols(out/lib)[fn+'@@OPENSSL_1_1_0']
         check(struct.unpack_from('<I', data, address + at)[0] == word, f'{lib}: {fn} layout changed')
     from ipod import SETTINGS_ICONS, imagemagick, patch_word, sized_art
+    import m1plus_ipod
     m1plus_names(sq, out)  # every V2.1 name the payload uses is in V2.1's rootfs
     demo = out/'stock-demo'; demo.write_bytes(raw_demo)
     symbol_table = run('readelf', '-Ws', demo)
@@ -1098,6 +1099,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     (out/'watchdog').write_bytes(cat(WATCHDOG).replace(*WATCHDOG_SLEEP))
     for name, address, old, new in call_site_words(True, ps):
         patch_word(patched, address, old, new, CALL_SITE_PURPOSES[name])
+    compact_code = m1plus_ipod.patch_code(patched, ps)  # the iPod UI's audited code edits (Phase 3: none yet)
     # Single shared version literal: V2.1's updater refuses an equal firmware_v20.info version (update_firmware,
     # 0x4e0e34; docs/m1plus.md), so it carries the build tag and stock V2.1 can be flashed back. About's FW.
     # Version row reads it too; ringnav_about shows STOCK_VERSION there instead.
@@ -1219,6 +1221,16 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         (out/name).write_bytes(data)
         p = swap_inode(p, path.encode(), out/name)
         changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
+    # The iPod UI's pages (docs/m1plus-ipod-ui.md Phase 3): only a page a rewrite changed is swapped in.
+    for rel in m1plus_ipod.UI_ASSETS:
+        path = 'release/assets/default/raw/ui/' + rel
+        original = cat(path)
+        data = m1plus_ipod.patch_asset(rel, original)
+        if data == original:
+            continue
+        target = out/'ui'/rel; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+        p = swap_inode(p, path.encode(), target)
+        changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
     pseudo.write_bytes(p)
     (out/'empty').mkdir(exist_ok=True)
     newsq = out/'rootfs.squashfs'
@@ -1248,7 +1260,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         update_sha256=sha(out_archive.read_bytes()), rootfs_sha256=sha(newsq.read_bytes()),
         kernel_sha256=sha(blobs['recovery-update/xImage']), patch_bytes=len(payload), ring_step_pixels=RING_STEP,
         audio_extension_calls=[dict(address=hex(a), original=f'{o:#010x}', replacement=hex(n)) for name, a, o, n in call_site_words(True, ps) if name == 'AUDIO_EXTENSION_CALLS' and n != o],
-        version=version, **({'release': m1_release[0]} if m1_release else {}), dev=dev, **({'dev_count': dev_count} if dev else {}), peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=[], changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
+        version=version, **({'release': m1_release[0]} if m1_release else {}), dev=dev, **({'dev_count': dev_count} if dev else {}), peq=audio, bluealsa_sha256=sha(bluealsa), q2video_sha256=sha((out/'q2video').read_bytes()), q2boot_sha256=sha((out/'q2boot').read_bytes()), **({'q2remote_sha256': sha((out/'q2remote').read_bytes())} if dev else {}), compact_code=compact_code, changed_assets=changed_assets, logo_sha256=sha(logo_data), logo_source=logo_source,
         patch_symbols={n:hex(v) for n,v in ps.items() if n.startswith('stock_')},
         tools={t:run(t,'--version').splitlines()[0] for t in ['clang','ld.lld','llvm-objcopy']} |
               {'imagemagick': imagemagick('-version', data=b'').decode().splitlines()[0]})

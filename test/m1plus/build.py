@@ -339,9 +339,11 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert not any(name in ps for name in M1PLUS_UNRESOLVED)
     payload = (directory/'patch.bin').read_bytes()
     assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
-    # The iPod UI is the only UI; its compact rows (4.4) are not ported yet.
-    assert 'variant' not in manifest and manifest['compact_code'] == []
-    assert set(manifest['changed_assets']) == {TAG_C}
+    # The iPod UI is the only UI. Its code edits and page rewrites (tools/m1plus_ipod.py) are what each Phase 4
+    # item has audited so far: none yet, so the build changes only the TagLib cover library.
+    import m1plus_ipod
+    assert 'variant' not in manifest and manifest['compact_code'] == [] and not M1_AUDIT['immediates'] and not M1_AUDIT['row_layout_calls']['sites']
+    assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES}
     stock_syms = symbols(directory/'stock-demo')
     # Each V2.1 iPod page is the stock page the inventory hashed, decodes and re-encodes exactly, and its init
     # function is in V2.1's demo.
@@ -352,6 +354,31 @@ def m1plus_checks(directory, manifest, stock, demo, read):
             assert sha(data) == digest and encode(decode(data)) == data, page
     for page, row in MAPPED.items():
         assert row['opener'] in stock_syms, f"{page}: no {row['opener']} in V2.1"
+    # patch_asset returns every page no rewrite touches as the stock bytes, and refuses what the audit didn't hash,
+    # bytes the codec rejects, and a page of the wrong kind (every page's round trip is checked above).
+    for page in m1plus_ipod.UI_ASSETS:
+        data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
+        assert page in m1plus_ipod.REWRITES or m1plus_ipod.patch_asset(page, data) == data, page
+    page = next(iter(M1_AUDIT['assets']))
+    data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
+    def refuses(path, bad, message):
+        try:
+            m1plus_ipod.patch_asset(path, bad)
+        except ValueError as e:
+            assert message in str(e), e
+        else:
+            raise AssertionError(f'{path}: patch_asset took {message!r}')
+    refuses(page, bytes([data[0] ^ 1]) + data[1:], 'unaudited')
+    hashed = dict(m1plus_ipod.UI_ASSETS)
+    try:  # audited, but not a UI page the codec takes (trailing bytes), or not the kind the path names
+        m1plus_ipod.UI_ASSETS[page] = sha(data + bytes(4))
+        refuses(page, data + bytes(4), 'Trailing UI data')
+        dialog = read('stock.squashfs', 'release/assets/default/raw/ui/dialog/confirminfo_dialog.bin')
+        m1plus_ipod.UI_ASSETS[page] = sha(dialog)
+        refuses(page, dialog, 'expected a window')
+    finally:
+        m1plus_ipod.UI_ASSETS.clear(); m1plus_ipod.UI_ASSETS.update(hashed)
+    assert m1plus_ipod.patch_code(bytearray(0), ps) == []
     # Native evidence for this batch: options are asset rows, not V1.32's kind table;
     # Tidal creates its URL worker on demand, and check_cpumem does only drop_caches work.
     more = list(walk(decode(read('stock.squashfs', 'release/assets/default/raw/ui/dialog/playmore_dialog.bin'))))
