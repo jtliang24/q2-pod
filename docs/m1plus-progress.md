@@ -3339,7 +3339,125 @@ unlisted); `boot.py` plain, `--home-menu` and `--media`; `playback.py`, `m4b`, `
 - `a33650c` `feat(m1plus)`: the style rewrite and its tests.
 - `0ad3cbe` `test(m1plus)`: the gaps re-keyed.
 
-**Device pass:** not done yet; it follows the commits.
+**Device pass** (Nov 4, build `c3` flashed as V02Mm; `peek` accepted the payload hash; Screen Off was Off for the pass
+and is back at 1min, `LIGHTTIME=3`; the `[IPOD]` theme keys added for the Classic and Light runs are removed again;
+screenshots in `work/phase4/4.1/dev/`; demo never restarted outside the config reboots):
+- Minimal (the default), dark: Library lists (My Fav) take the light selection bar with dark text from the knob; a
+  held touch paints the `333333` press grey; the hold menu is a dialog with the same bar; System Setting, Display
+  setting, Screen Off, the Q2 Pod app and Configuration rows are black with white text; Now Playing's slider is as V2.1.
+- Classic with Crimson: the bar is crimson with white text (Library, and System Setting in Light Mode); Now Playing's
+  slider fill is crimson.
+- Light Mode: V2.1's pages flip to paper, with ink text.
+- Found, not fixed (planned after the pass):
+  1. Light Mode, hold menu: the selected row ("Play Next") is white on the paper dialog with no bar, so it can't be read.
+  2. Light Mode, held touch on a Library row: the grey press shows as a band over the lower part of the row only
+     (a screenshot taken 0.35 s into a 0.7 s hold).
+  3. Crimson leaves V2.1's orange (`fe7e40`) alone: format badges, Now Playing's transport buttons, the Screen Off
+     radio (already listed as the accent mapping gap).
+  4. Left-clipped long labels ("nosphere Lamp Settings", "ultiple Speed", Configuration's confirm text). The
+     Display setting page is walked against stock in `boot.py` and matches, so the clip is probably V2.1's own.
+- Wi-Fi dropped twice ("No route to host"); a shot before the next tap kept the walk on the right page.
+
+## 63. Phase 4.2: the status bar and the back chevron (Nov 4)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4 item 2, on `feature/m1-ipod`. V2.1's status bar is now the iPod's: the
+clock centred, the play state, Bluetooth, Wi-Fi and the payload's battery slot, and a back chevron at the far left. The
+chevron is the only back on the payload's own pages, and their title-bar buttons are gone.
+
+**The audit** (V2.1's own code, pinned in `test/m1plus/build.py` `m1plus_checks`):
+- **The 1 s tick.** V2.1 has no `systembar_showface`.
+  - `systembar_timer_start` (`0x5453c8`) arms a 1000 ms timer on `0x545394`, which calls `show_sysbar_face`
+    (`0x544b48`) with 0. The face reads the `system_bar` global, not its argument.
+  - It finds `img_playstate`, `img_volume`, `label_volume`, `img_digital`, `img_synclink`, `img_btclass`, `img_wifi`,
+    `img_battery` and `pgbar_battery` by name. Each second it sets their images, text, visibility and the volume's
+    size, but no position.
+  - The battery's level is `power_capacity`, and its icons are `bar_charge` and `bar_lowpower`.
+- **The bar** (`system_bar.bin`) holds `view_bar_left`, a `digit_clock` (`bar_dclock`), `view_bar_right`, and the
+  battery as a progress bar over its icon. A bar with other names is refused.
+- **Status icons:** the nine `bar_*` images the iPod redraws, hashed in `m1plus_ipod.json` `status_icons`.
+- **New names:**
+  - `STATUSW_*` (the bar's widgets by name, Q2 and M1);
+  - `STATUS_LOWCHARGE`;
+  - `BAR_BACK_W` (32);
+  - `STATUS_MARGIN` 6 and `BATT_ROOM` 115, as the 320 px bar fits.
+
+**Lost taps were a dropped flush.** `boot.py` plain failed about 9 runs in 10 on the first 4.2 builds, where 4.1
+passed 4 of 4. A tap seemed to do nothing: the shot still showed the step before, from the PEQ's tabs to the Lock
+screen switch.
+- **The taps weren't lost.** An instrumented copy of the walk (soft failures, both framebuffer pages, the pan
+  ioctls, late shots and each step's slice of the exec trace) showed what happened:
+  - the handler ran;
+  - the new page was drawn in page 1 (V2.1's offline buffer);
+  - page 0, the panel, kept the old one, and was still unchanged 8 s later;
+  - the next step's chevron went back from the screen the tap had opened.
+  - V2.1 pans once, at start: page 0 is always the screen.
+- **The cause.** The rewrite first moved the widgets the iPod doesn't draw to x −200, as the Q2's are. V2.1's face
+  resizes and sets them every second. On V2.1, an invalidate left of the screen loses the flush of the frame it joins
+  (the exact routine is not read; `soft_copy_image` has no bounds check, so the drop is earlier).
+- **What it wasn't:**
+  - not the tick hook: a build without it failed;
+  - not `bar_sync`'s paint-time relayouts: a build with them inert failed.
+  - The same widgets inside the bar at x 0 with `opacity 0` passed 3 of 3.
+- **The fix.** The six widgets stay at the bar's left, transparent (AWTK paints nothing at opacity 0). They are
+  pinned to stay inside the bar, with opacity 0, and the pin was proved to fail at x −200 and without the opacity.
+- **On the device** this would have been the same: a tap whose page never appears until something else repaints.
+
+**Code.**
+- `REWRITES['system_bar.bin']` (`tools/m1plus_ipod.py` `status_bar`):
+  - the bar black with a clear border;
+  - `img_back` (`bar_back`, a slim white chevron, `BAR_BACK_W` x `STATUS_H`, hidden at boot) ahead of the play state;
+  - Bluetooth, Wi-Fi and `view_battery` on the right;
+  - V2.1's `digit_clock` centred;
+  - the groups checked clear of the widest clock.
+- The tick: `M1PLUS_HOOKS` `systembar_showface` → `ringnav_showface`, which runs `bar_state_sync` on the
+  `system_bar` global.
+- `tools/ipod.py`: `status_bar`'s right edge is `UI_W`, not 375. The Q2's bytes are unchanged.
+- `bar_state_sync` finds the widgets through `STATUSW_*`. On the M1, `bar_sync` reads the level from
+  `power_capacity`.
+- The chevron (`m1plus_nav_back.c`):
+  - `chevron_input`, ahead of the long press in `ringnav_input`, owns a press that starts inside it until the
+    release, and runs `previous_back` on a timer when the finger lifts inside it;
+  - `chevron_sync` (in `bar_sync`) shows it unless Home is on top;
+  - `previous_back`, shared with Previous in Knob: Navigation, now gives a payload page a Return after V2.1's
+    button and the dialog cases;
+  - `peq_back` steps the PEQ back as its Return does.
+- Retired: `m1plus_coverflow_back.c` (`back_button`) and its calls in Coverflow, Photos, Books, the video player,
+  Radio, Spotify, the QR page and the PEQ. `BACK_W` stays the room at a payload page's top left until 4.4 and 4.5 lay
+  the pages out again.
+
+**Tests.**
+- `boot.py`:
+  - `CHEVRON` closes the payload's pages and the PEQ;
+  - Lock screen closes by the chevron (V2.1's own button, through `previous_back`);
+  - `knob_home` and `display_back` keep V2.1's button;
+  - `knob` checks that the patched bar draws no volume figure;
+  - `eq_previous`, dropped while the taps were lost, is back.
+- `patch.py`:
+  - **The M1 input block** (Previous, the knob, Return) was one 4.4 gap and hid three stale checks (Knob: Volume
+    as the default, and two that wanted a payload back button). It passes now, and it holds the chevron's case: the
+    tap's Return, a press that slides out (nothing), a press beside it (the page's), and Home (hidden).
+  - The codec and battery case names the bar's widgets through `STATUSW_*` and sets the level where each model's
+    stock does.
+  - Coverflow's, Spotify's and Radio's pages have no back button.
+- **Gaps** (`patch_gaps.py`, 895 in 14 gaps):
+  - 15 pass and are dropped, the `status bar (ipod-ui 4.2)` entry among them.
+  - The Q2-shaped status bar scenarios (375 px, `view_left`, `label_clock`, `label_idle`; 20 checks) are now
+    `status bar scenarios on the V2.1 bar (Phase 5)`.
+  - 29 more fail inside the big cover's set-up (4.6): `b` is now the battery loop's last value.
+  - `Lock screen battery (ipod-ui 4.2)` still fails: the lock screen keeps V2.1's icon and bar, and the Battery
+    setting doesn't reach it.
+
+**Gates** (build `work/phase4/4.2/f3`, `V037m`):
+- `build.py --build` and `patch.py`;
+- `boot.py` plain 8 of 8 and `--home-menu` 3 of 3 on `f1` (the fix), then each once more on `f3`;
+- `--media` 3 of 3 on `f1`, then once more on `f3`;
+- `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports.py`;
+- `q2compare.py 1.5.9 --suites` (`update.tar` byte-identical, 33 suite runs).
+
+`fndiff.py` from 4.1's `c3`: 123 changed, 1 added (`peq_back`) and 3 removed, most of them from `st`'s two new
+fields.
+
+**Device pass:** not done yet. It follows the commits, with the 4.1 Light Mode fixes.
 
 ## How to check a build now
 
