@@ -570,6 +570,39 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         assert sha(read('stock.squashfs', path)) == digest and sha(shipped) == manifest['changed_assets'][path]['sha256']
         assert png_header(shipped) == (14 if icon.startswith('bar_wifi') else 42 if icon.startswith('bar_bt') else 12, 16, 8, 6), icon
     assert png_header(read('rootfs.squashfs', 'release/assets/default/raw/images/xx/bar_back.png')) == (32, 30, 8, 6)
+    # ipod-ui 4.3, the settings pages. V2.1's list_view layouter (children_layouter_list_view_create) uses the vtable at
+    # 0x9047a0: its type name, then the layout slot ipod_list_layout takes (LIST_VIEW_LAYOUT_SLOT) holding
+    # LIST_VIEW_LAYOUT.
+    assert stock_syms['children_layouter_list_view_create'] == 0x60b79c and words(0x9047a8, 1) == (0x60abb0,)
+    vtable_name = words(0x9047a0, 1)[0]
+    assert stock[fileoff(stock, vtable_name):fileoff(stock, vtable_name) + 10] == b'list_view\0'
+    # V2.1's settings rows have no inner button: a list_item_style list_item holds its children directly, centred on a
+    # 60 px body in a 64 px row: a 40 px icon at 12,10, the label at 60,20 (at 12 without an icon), and trailing
+    # images that end at x 308 (a 57x28 switch at 251,16, right_arrow 13 px at 295, a 26 px tick at 282,17). Each
+    # pinned word is an `li` of one argument (a1 x, a2 y, a3 w) at System Setting's, Playback Setting's, Display's,
+    # Bluetooth's, Time zone's and Language's builders.
+    def li(reg, value): return 0x24000000 | reg << 16 | value
+    shape = {0x4adbcc: li(5, 12), 0x4adbc4: li(6, 10), 0x4adbc0: li(7, 40),  # sysset icon
+             0x4adc10: li(5, 60), 0x4adc00: li(6, 20),  # sysset label
+             0x4adcdc: li(5, 251), 0x4adcd4: li(6, 16), 0x4adcd0: li(7, 57),  # sysset switch
+             0x4a0680: li(5, 12), 0x4a0678: li(6, 10), 0x4a0674: li(7, 40),  # playset icon
+             0x4a0778: li(5, 251), 0x4a0770: li(6, 16), 0x4a076c: li(7, 57),  # playset switch
+             0x4a5d88: li(5, 12), 0x4a5d80: li(6, 20),  # display's label, no icon
+             0x4a30e4: li(5, 295), 0x4a30d8: li(7, 13),  # bluetooth quality's right_arrow
+             0x4a2310: li(5, 282), 0x4a2308: li(6, 17), 0x4a2304: li(7, 26),  # time zone's tick
+             0x4a7fa0: li(5, 282), 0x4a7f98: li(6, 17), 0x4a7f94: li(7, 26)}  # language's tick
+    assert all(words(a, 1) == (w,) for a, w in shape.items()), [hex(a) for a, w in shape.items() if words(a, 1) != (w,)]
+    # Its row icons (settings_icons): every 40 px pset_, sset_, system_ and playset_ image, hashed; already SET_ICON
+    # square RGBA, so the build ships them as they are, and the image hook leaves their category colours alone.
+    import fnmatch
+    images = [p for p in re.findall(r'squashfs-root/release/assets/default/raw/images/xx/(\S+\.png)',
+                                    subprocess.run(['unsquashfs', '-l', str(directory/'stock.squashfs')], capture_output=True, text=True).stdout)
+              if any(fnmatch.fnmatch(p, f'{k}_*') for k in ('pset', 'sset', 'system', 'playset'))]
+    square = {p for p in images if png_header(read('stock.squashfs', 'release/assets/default/raw/images/xx/' + p))[:2] == (40, 40)}
+    assert set(M1_AUDIT['settings_icons']) == square and len(square) == 43
+    for icon, digest in M1_AUDIT['settings_icons'].items():
+        path = 'release/assets/default/raw/images/xx/' + icon
+        assert sha(read('stock.squashfs', path)) == digest and png_header(read('stock.squashfs', path)) == (40, 40, 8, 6), icon
     assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
     bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
     assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'
