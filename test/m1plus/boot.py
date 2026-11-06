@@ -534,6 +534,11 @@ if __name__ == '__main__':
             else:
                 differ = differing(seen[want[1]], shots['patched'])
                 assert not differ, f'{name}: not back at {want[1]} ({len(differ)} pixels differ)'
+        if 'advanced' in seen:
+            # The PEQ's tab tap with Knob: Volume: no focus card over Simple, which nothing could move (peq_focus_shown;
+            # V039m's grey box). The card would be 0x333333 at (56, 40).
+            px = seen['advanced'][(40 * W + 56) * 4:(40 * W + 56) * 4 + 3]
+            assert px == b'\0\0\0', f'advanced: the focus card shows over Simple ({px.hex()}) with Knob: Volume'
         for p in runs.values(): p.wait(timeout=args.seconds + WALK_SECONDS + 120)
         for name in runs:
             out = tmp/name

@@ -1179,7 +1179,7 @@ static void tabs_paint(void *canvas) {
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
     for (int i = 0; i < 2; ++i) {
         int x = i ? TAB_RIGHT : TAB_LEFT, shown = i == !simple;
-        if (focus && !shown) e3_box(canvas, x, 4, TAB_W, 40, 0x333333);
+        if (focus && !shown && peq_focus_shown()) e3_box(canvas, x, 4, TAB_W, 40, 0x333333);
         caption(canvas, i ? "Advanced" : "Simple", x, 4, TAB_W, 40, 20, shown ? 0xffffffffu : CF_GREY);
         if (shown) e3_box(canvas, x + (TAB_W - 96) / 2, 42, 96, 3, TONE);
     }

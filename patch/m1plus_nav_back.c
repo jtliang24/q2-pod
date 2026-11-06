@@ -72,6 +72,7 @@ static int knob_gate(void) {
 static int knob_nav_active(void) {
     return knob_gate() && allowed_top(window_manager_get_top_window(window_manager()));
 }
+int ringnav_knob_nav(void) { return knob_nav_active(); }
 /* Previous is Back wherever ringnav navigates, and on V2.1's pages that keep the knob's volume but have a back
  * button: its sliders (Channel Balance, Startup and Max Volume, Brightness, Bluetooth volume, and the payload's
  * Crossfade, on Startup Volume's page) and the lock screen's About. On V039m Previous stayed a media key there.

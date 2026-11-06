@@ -3,6 +3,14 @@
 #if M1PLUS
 int peq_back(void *top); /* peq_ui.c: the chevron's back on the PEQ page, 1 if top is it */
 void dispatch_key_return(void); /* navigation.c: previous_back's Return, for a payload page */
+int ringnav_knob_nav(void); /* navigation.c: the knob navigates here (Knob: Navigation) */
+#endif
+/* The PEQ tab bar's focus card (tabs_paint): where the wheel or knob is. The M1's knob moves it only in Knob:
+ * Navigation; with Knob: Volume a tap's card marked a focus nothing could move (V039m). */
+#if M1PLUS
+#define peq_focus_shown() ringnav_knob_nav()
+#else
+#define peq_focus_shown() 1
 #endif
 #if M1PLUS
 int slide_swipe(void *s, void *e, int px, int bounded); /* navigation.c: a finger on a carousel */
