@@ -14893,6 +14893,7 @@ if is_m1plus:
         assert dispatched(m)==[]  # no Return
         return m.clicks==[back],'on_wm_keyup_fun' in ran,'media_key' in ran
     rotated=lambda m:m.byte(syms['g_rotate_mode'],1)
+    SLIDER_PAGES=('balance_page','bootvol_page','maxvol_page','brightness_page','btvolume_page','screensaverabout_page')
     assert previous()==(True,False,False)
     assert previous(setup=lambda m:m.mock('media_owner'))==(True,False,False)  # the mock's 0: not local
     assert previous('KEY_FWD_BTN',setup=rotated)==(True,False,False)
@@ -14905,6 +14906,13 @@ if is_m1plus:
                dict(setup=lambda m:(m.byte(syms['g_backlight_status'],0),m.byte(syms['g_keylock_flag'],1),m.byte(syms['g_keylock_mode'],0)))):
         assert previous(**kw)==(False,True,False),kw
     assert previous(page='home_page',setup=lambda m:m.mock('media_owner'))==(False,False,True); passed()
+    # V2.1's slider pages keep the knob's volume (they are no context: knob() below) and have a back button, which
+    # Previous presses too. On V039m it stayed a media key on Channel Balance and Crossfade (Startup Volume's page).
+    for page in SLIDER_PAGES: assert previous(page=page)==(True,False,False),page
+    # A page that is no context and has no back button keeps it a media key: the volume dialog.
+    m=input_machine('volume_dialog'); m.config['KNOB']='1'; m.calls=[]
+    m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0,clear=False)
+    assert dispatched(m)==[] and not m.clicks and 'on_wm_keyup_fun' in [c[0] for c in m.calls]; passed()
     # A focused Spotify or radio page takes the playback keys while local music owns them, as the
     # Q2's key-up does (headset.c media_focused): elsewhere they stay stock's.
     for page,want in (('spotify_page',True),('radionp_page',True),('tidal_page',True),('sysset_page',False)):
@@ -14939,6 +14947,7 @@ if is_m1plus:
     for kw in (dict(mode='0'),dict(page='playing_page'),dict(page='bigcover_page'),
                dict(setup=lambda m:m.byte(syms['g_backlight_status'],0)),
                dict(page='bluetoothrecv_page'),dict(page='usbmode_page'),dict(page='volume_dialog'),
+               *(dict(page=page) for page in SLIDER_PAGES),
                dict(setup=lambda m:m.byte(syms['bt__recv_pageflag'],2)),
                dict(setup=lambda m:m.byte(syms['g_usblink_status'],2))):
         assert [knob(k,**kw) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']],kw

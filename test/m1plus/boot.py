@@ -206,7 +206,7 @@ def executed(log, elf):
         if i >= 0: hits[funcs[i][1]] += 1
     return hits
 
-WALK_SECONDS = 210  # the walk's budget after startup, inside the same run
+WALK_SECONDS = 260  # the walk's budget after startup, inside the same run
 
 def tap(x, y): return [f'{x} {y} 200', 'wait 80', f'{x} {y} 0']
 def swipe(x0, y0, x1, y1, steps=10):
@@ -280,6 +280,15 @@ PATCHED_ONLY = [('eq_closed', CHEVRON, 4, ('as', 'playset')),  # the PEQ's back:
                 # stays Previous track (nothing plays) and Home stays.
                 ('previous_back', [PREVIOUS], 4, ('as', 'knob_home')),
                 ('previous_home', [PREVIOUS], 4, ('as', 'previous_back')),
+                # V2.1's slider pages keep the knob's volume (no context) but Previous goes back there too: Max
+                # Volume and Default Vol (bootvol_page, Crossfade's page too). On V039m it stayed a media key there.
+                # Playback Setting reopens where its list was: scrolled back to its start, Max Volume is the fifth row.
+                ('slider_playset', tap(237, 230) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('not', 'previous_home')),
+                ('maxvol', tap(160, 366), 4, ('not', 'slider_playset')),
+                ('maxvol_previous', [PREVIOUS], 4, ('as', 'slider_playset')),
+                ('bootvol', tap(160, 430), 4, ('not', 'slider_playset', 'maxvol')),
+                ('bootvol_previous', [PREVIOUS], 4, ('as', 'slider_playset')),
+                ('slider_home', [PREVIOUS], 4, ('as', 'previous_home')),
                 # The Q2 Pod card opens its page (rows of 64 px under the 48 px title bar); its
                 # Shuffle row opens Shuffle, which the back button closes. Previous (Knob:
                 # Navigation) closes the page, and so does the back button.

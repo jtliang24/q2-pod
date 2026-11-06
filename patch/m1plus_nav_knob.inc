@@ -7,14 +7,15 @@
         if (key == KEY_VOLUMEUP) key = up, I(event, EVENT_KEY) = up;
         else if (key == KEY_VOLUMEDOWN) key = down, I(event, EVENT_KEY) = down;
         else if (key == KEY_POWER && !boot_guard) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
-        /* Previous is Back: the page's back button, pressed (Home has nothing to go back to: there
-         * it stays Previous track). It is the button stock takes as Previous: V2.1 swaps the two
-         * on a rotated screen (on_wm_keyup_fun, rotate_mode 1). knob_nav_active() already leaves a
-         * dark screen and the key lock to stock. */
-        else if (key == (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) &&
-                 !home_menu(window_manager_get_top_window(window_manager()))) {
-            timer_add(previous_back, 0, 0);
-            return STOP;
-        }
+    }
+    /* Previous is Back: the page's back button, pressed (Home has nothing to go back to: there
+     * it stays Previous track), also on a slider page, where the knob keeps the volume
+     * (knob_back_active). It is the button stock takes as Previous: V2.1 swaps the two on a
+     * rotated screen (on_wm_keyup_fun, rotate_mode 1). knob_gate() already leaves a dark screen
+     * and the key lock to stock. */
+    if (key == (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) && knob_back_active() &&
+        !home_menu(window_manager_get_top_window(window_manager()))) {
+        timer_add(previous_back, 0, 0);
+        return STOP;
     }
 #endif

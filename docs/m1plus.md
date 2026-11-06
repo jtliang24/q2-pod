@@ -196,8 +196,12 @@ When switched to **Navigation**:
   the two on a rotated screen): on its release, a timer clicks the top page's first showing button
   in `navbar_btnreturn_style`. That is V2.1's own back button, whose click is `on_back_onclick` (its
   pages take no `KEY_RETURN`), or the payload's `back_button`, whose click is a Return. On Home,
-  Previous stays Previous track: there is nothing to go back to. Where the knob keeps the volume
-  (below), Previous stays a media key too.
+  Previous stays Previous track: there is nothing to go back to. Previous goes back wherever the
+  knob navigates, and also on a page that keeps the knob's volume but has a back button
+  (`knob_back_active`): V2.1's sliders (Channel Balance, Startup and Max Volume, Brightness,
+  Bluetooth volume, and the payload's Crossfade, on Startup Volume's page) and the lock screen's
+  About. Elsewhere the knob keeps the volume (below), and Previous stays a media key: Now Playing,
+  its enlarged art, and a page with no back button, such as the volume dialog.
 - **Knob Push (`KEY_POWER` $\to$ `KEY_CENTER`)**:
   - In Navigation mode: Single press activates the selected row (`confirm_center`), while double press toggles the screen off (`DOUBLE_CLICK_MS`).
   - In Volume mode: Single press wakes or sleeps the display immediately (stock behavior).

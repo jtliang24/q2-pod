@@ -63,12 +63,24 @@ static int chevron_input(void *e) {
  * volume dialog, Bluetooth receiver and USB DAC modes (their pages are no context, and usable()
  * leaves both modes to stock) and a dark screen keep the volume. Now Playing's press is the scrub's
  * (m1plus_nav_np.c), taken before V2.1's key-up. */
-static int knob_nav_active(void) {
+static int knob_gate(void) {
     pod_settings();
     /* Bluetooth receiver mode keeps the knob's volume: usable() no longer refuses it (1.3.8, the
      * Q2's wheel navigates the gear's Audio settings there). */
-    if (!st.knob_mode || !usable() || now_playing() || bt__recv_pageflag) return 0;
-    return allowed_top(window_manager_get_top_window(window_manager()));
+    return st.knob_mode && usable() && !now_playing() && !bt__recv_pageflag;
+}
+static int knob_nav_active(void) {
+    return knob_gate() && allowed_top(window_manager_get_top_window(window_manager()));
+}
+/* Previous is Back wherever ringnav navigates, and on V2.1's pages that keep the knob's volume but have a back
+ * button: its sliders (Channel Balance, Startup and Max Volume, Brightness, Bluetooth volume, and the payload's
+ * Crossfade, on Startup Volume's page) and the lock screen's About. On V039m Previous stayed a media key there.
+ * Now Playing's enlarged art keeps it a media key, as Now Playing does. */
+static int knob_back_active(void) {
+    if (!knob_gate()) return 0;
+    void *top = window_manager_get_top_window(window_manager());
+    return allowed_top(top) ||
+           (back_of(top, 0) && tk_strcmp(widget_get_prop_str(top, "name", ""), "bigcover_page"));
 }
 #endif
 #include "m1plus_nav_home.c"
