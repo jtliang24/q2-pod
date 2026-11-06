@@ -508,6 +508,9 @@ typedef struct {
                         (ringnav_artist_list) */
     unsigned *art_ids; /* and its rows' album_id, 0 for an album not found */
     unsigned art_n;
+#if M1PLUS
+    void *lock_win; /* the lock window while it is open: Light Mode leaves it dark (ipod_lock_dark) */
+#endif
 } scratch_t;
 static scratch_t st __attribute__((section(".scratch")));
 static void rate_bind(void *win); /* ratings: Now Playing's heart */
@@ -1704,6 +1707,9 @@ int ipod_home(void) {
 }
 int ipod_light(void) {
     accent();
+#if M1PLUS
+    if (st.lock_win) return 0; /* ipod_lock_dark */
+#endif
     return st.light == 2 ? st.light_day : st.light;
 }
 int ipod_battery(void) {
@@ -3542,6 +3548,32 @@ static void paint_lock_level(void *w, void *canvas) {
     paint_battery(w, canvas);
     st.batt_mode = mode;
     st.batt_key = key;
+}
+/* Light Mode leaves the lock window dark: its clock, date, percentage, >>> and mini player are white over a
+ * wallpaper (on V039m Light turned them to ink on Graphite). ipod_light() reads 0 while it is open. The images cached
+ * in the other mode go as it opens and, after its destroy, as it closes, as at Light Mode's Auto switch (light_apply). */
+static int lock_images(const void *info) {
+    (void)info;
+    accent();
+    if (st.light == 2 ? st.light_day : st.light) {
+        image_manager_unload_all(image_manager());
+        widget_invalidate_force(window_manager(), (void *)0);
+    }
+    return 0; /* one shot */
+}
+static int lock_gone(void *ctx, void *event) {
+    (void)event;
+    if (st.lock_win == ctx) {
+        st.lock_win = (void *)0;
+        timer_add(lock_images, (void *)0, 0); /* not inside the window's destroy */
+    }
+    return 0;
+}
+void ipod_lock_dark(void *win) {
+    if (!win || st.lock_win == win) return;
+    lock_images((void *)0);
+    st.lock_win = win;
+    widget_on(win, EVT_DESTROY, lock_gone, win);
 }
 #endif
 

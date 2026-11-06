@@ -14156,6 +14156,21 @@ for mode in range(4):
     f,ctx=m.handler(w[LEVEL],O['EVT_DESTROY']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
     assert paint()==0 and not m.letters
 passed()
+if is_m1plus:
+    # Light Mode leaves the lock window dark (on V039m its clock, date, percentage and >>> turned to ink on Graphite):
+    # ipod_light() reads 0 while it is open, so the percentage paints white, and the images cached in the other mode
+    # go as it opens and, on a timer after its destroy, as it closes. With Light off nothing is unloaded.
+    unloads=lambda m:[c[0] for c in m.calls].count('image_manager_unload_all')
+    light=lambda m:m.call(address=payload_syms['ipod_light'],args=(0,0,0,0),gap=0)
+    CONFIG.update(BATTERY='1',LIGHT='1'); m,w,_,_=lock_window('q2pod:graphite',{'LOCKCLOCK':'1'}); CONFIG.clear()
+    assert unloads(m)==1 and light(m)==0
+    m.nodes[w['img_battery']]['image']='screens_battery'; m.word(syms['power_capacity'],88); m.letters.clear()
+    m.call(address=HOOKS['widget_on_paint_background'][0],args=(w[LEVEL],m.canvas,0,0),gap=0)
+    assert [(l['text'],l['color']) for l in m.letters]==[('88%',color_t(0xffffff))]
+    f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and unloads(m)==0
+    m.advance(0,clear=False); assert unloads(m)==1 and light(m)==1
+    m,_,_,_=lock_window('q2pod:graphite',{'LOCKCLOCK':'1'}); assert unloads(m)==0 and light(m)==0; passed()
 m,w,info,box=lock_window(cards[0])
 assert m.nodes[w['img_screensaver']]['image']==cards[0] and 'style:normal:font_size' not in m.nodes[w[TIME]]; passed()
 if not is_m1plus:

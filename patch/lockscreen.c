@@ -248,6 +248,10 @@ static void big_clock(void *win) {
 /* saverscreen_page_init: stock builds the lock window; a built-in picture then paints in place of
  * stock's (lockscreen_paint), and Large lays the clock out again. */
 int lockscreen_init(void *win, void *ctx) {
+#if M1PLUS
+    extern void ipod_lock_dark(void *win); /* navigation.c: Light Mode leaves the lock window dark */
+    ipod_lock_dark(win);
+#endif
     int result = stock_saver_trampoline(win, ctx);
     void *img = widget_lookup(win, "img_screensaver", 1);
     int id = wall_id(PICTURE);
