@@ -190,7 +190,7 @@ Each feature follows the same steps:
    (the `styles` section), Light Mode, accents and Themes. Corners stay square.
    Code and gates done on Nov 3 (progress 62): the hooks, the leaf, seven style edits and the retired outline. The
    device pass (Nov 4) found two Light Mode faults. The hold menu's row is fixed by two more style edits (progress
-   64); the press band didn't reproduce in qemu.
+   64); the press band didn't reproduce in qemu. Light Mode now leaves the lock window dark (progress 65).
 2. **Status bar:** `systembar_showface`, `system_bar.bin` with the iPod title and the back chevron (the
    new M1 piece, beside the title), and the status icons (the `status_icons` section).
    Code and gates done on Nov 4 (progress 63): the clock centred, the chevron at the far left, `back_button`
@@ -199,7 +199,8 @@ Each feature follows the same steps:
    stay a listed gap. The device pass (Nov 4, progress 64) passed. For the visual pass: the chevron is small and
    hard to hit with a case on, so it can stay small only where Previous goes back; pages where the knob doesn't
    navigate (Now Playing) need a prominent back button, and pages showing both the chevron and V2.1's navbar back
-   settle on one.
+   settle on one. Previous now goes back on V2.1's slider pages too, and the PEQ's tab focus card shows only in
+   Knob: Navigation (progress 65).
 3. **Settings pages:**
    - the `navbar_only` rewrite, `ipod_list_layout` through V2.1's `list_view` layout vtable slot
      (`LIST_VIEW_LAYOUT_SLOT`), the settings icons (the `settings_icons` section), and the

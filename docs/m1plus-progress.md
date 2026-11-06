@@ -3549,6 +3549,64 @@ lock window shows no clock at all.
      as Now Playing, need a prominent back button.
 - Wi-Fi dropped once ("No route to host"); the tap had landed, and a shot before the next tap confirmed the page.
 
+## 65. The V039m findings: Previous on slider pages, the lock screen in Light Mode, the PEQ's tab card (Nov 6)
+
+On `feature/m1-ipod`, before Phase 4.3. Section 64's device pass left findings 5, 7 and 8 unplanned; the user chose
+to clear all three first. Each was reproduced in qemu on `g2` (`V039m`) first.
+
+**8. Previous as back** (fixed).
+- **The cause:** Previous's Back sat inside `knob_nav_active`, which passes only on a context page (`contexts.inc`,
+  `m1plus_contexts.inc`). V2.1's slider pages are none: `balance_page`, `bootvol_page` (Startup Volume, and the
+  payload's Crossfade, built on it), `maxvol_page`, `brightness_page`, `btvolume_page` and
+  `screensaverabout_page`. There the knob keeps the volume by design, and Previous stayed Previous track. Display
+  setting and the Q2 Pod app are contexts, so the pass's checks there went back.
+- **In qemu:** with Knob: Navigation, Previous on Max Volume left the page as it was.
+- **The fix:** `knob_gate` holds the shared tests (Navigation, `usable()`, not Now Playing, not Bluetooth receiver
+  mode). `knob_nav_active` adds the context test, for the knob's turns and press. Previous's Back now asks
+  `knob_back_active`: a context, or a page with a back button (`back_of`), except Now Playing's enlarged art
+  (`bigcover_page`), which keeps Previous a media key, as Now Playing does. The knob's turns are unchanged: the
+  slider pages keep the volume.
+- **Tests:** `patch.py`: Previous clicks the back button on all six slider pages, where the knob still turns the
+  volume, and the volume dialog (no context, no back button) keeps it a media key. `boot.py`: with Knob:
+  Navigation, Previous leaves Max Volume and Default Vol (`maxvol_previous`, `bootvol_previous`); on `g2` the first
+  fails, "not back at slider_playset". Playback Setting reopens where its list was scrolled, so the step scrolls it
+  back to its start first. The walk's budget is 260 s, from 210.
+
+**5. The lock screen in Light Mode** (fixed).
+- **The cause:** Light Mode flips every neutral colour, the style hooks' and the payload's own (`ui_ink`), and the
+  image hook flips white glyphs. Nothing exempted the lock window, so its white clock, date and `>>>` turned to ink
+  over the wallpaper. The percentage is green or red only while charging or low.
+- **In qemu** (`[IPOD] LIGHT=1`, the Large clock, `q2pod:graphite`): the clock, the date and the `>>>` were ink.
+- **The fix (M1 only):** `lockscreen_init` hands the window to `ipod_lock_dark`, and `ipod_light()` reads 0 until
+  its `EVT_DESTROY`. The images cached in the other mode are dropped as it opens and, on a timer after the destroy,
+  as it closes, as Light Mode's Auto switch does (`light_apply`). `st.lock_win` is the last field of `scratch_t`,
+  so no other field moves. The Q2's code is shared and probably has the same fault; the Q2 build is unchanged.
+- **In qemu:** the lock screen is white on Graphite in Light Mode, and Home after the unlock is light again with its
+  icons flipped.
+- **Tests:** `patch.py`: in Light Mode the lock window reads dark, its percentage paints white, the image cache is
+  dropped once at the open and once after the destroy, and `ipod_light()` is 1 again; with Light off nothing is
+  dropped.
+
+**7. The PEQ's tab card** (fixed; the user's choice).
+- **The cause:** it is the Q2's focus card. `tab_to` puts the wheel on the tab bar after a tap as after Centre, and
+  `tabs_paint` marks the other tab, which Centre would open. On the M1 with Knob: Volume nothing can move that
+  focus.
+- **In qemu:** after the walk's `advanced` tap, Simple's card was `333333`.
+- **The fix:** `tabs_paint` draws it only where `peq_focus_shown()`: always on the Q2, and on the M1 while the knob
+  navigates (`ringnav_knob_nav`, Knob: Navigation). The tap's behaviour is unchanged.
+- **Tests:** `boot.py`: after `advanced` (Knob: Volume), Simple's card area is black.
+
+**Gates** (build `work/phase4/4.3/a2`, `V03Bm`), run serially:
+- `build.py --build`; `patch.py` (894 in 13 gaps, none unlisted);
+- `boot.py` plain 3 of 3, `--home-menu` and `--media`;
+- `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports.py`;
+- `q2compare.py 1.5.9 --suites`: `update.tar` byte-identical, 33 suite runs passed.
+
+`fndiff.py` against `g2`: 8 changed and 5 added, of 1276. The added are `knob_gate`, `ringnav_knob_nav`,
+`ipod_lock_dark`, `lock_images` and `lock_gone`. The changed are the intended `knob_nav_active`, `ringnav`,
+`ipod_light`, `lockscreen_init` and `peq_paint`. `draw_spaced`, `paint_battery` and `ringnav_about` keep their
+instruction bytes: only a constant-pool label's number (`$CPI305_0` to `$CPI309_0`) or a relocation record differs.
+
 ## How to check a build now
 
 ```sh
