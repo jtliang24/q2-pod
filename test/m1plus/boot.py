@@ -280,9 +280,12 @@ PATCHED_ONLY = [# Its end: Apps (netupdate.c) before System Update, Formatting C
                 ('lockscreen_end', DOWN_LIST, 4, ('not', 'lockscreen_on')),
                 ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
                 ('lockscreen_back', CHEVRON, 4, ('as', 'display')),
-                # Display's end: 1.4.5's Coverflow Sort and Refresh Coverflow push the knob's two rows below the screen.
+                # Display's end: V2.1's rows, then Appearance, Coverflow and Controls (ipod-ui 4.3), the last row. Controls
+                # holds Smart Awake, then the knob's two rows; the first is Knob: Navigation once tapped.
                 ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
-                ('knob_row', set_row(4), 3, ('as', 'display_end', (30, set_band(4)[0]), set_band(4))),  # Knob: Navigation
+                ('controls', set_row(5), 4, ('not', 'display_end')),
+                ('knob_row', set_row(1), 3, ('as', 'controls', (30, set_band(1)[0]), set_band(1))),
+                ('controls_back', CHEVRON, 4, ('as', 'display_end')),
                 ('display_back', CHEVRON_EDGE, 4, ('as', 'knob_sysset')),
                 ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
                 # With Knob: Navigation, Previous is Back: System Setting closes to Home, where it

@@ -4863,8 +4863,10 @@ static void theme_preset(void) {
         setting_put(&st.accent, 4, "ACCENT"); /* Cobalt */
     else
         setting_put(&st.minimal_accent, 0, "MINIMAL_ACCENT"); /* Graphite */
+#if !M1PLUS /* M1 Plus: square glass, no Corners row; Home's layouts wait for ipod-ui 4.5 */
     setting_put(&st.rounded, !classic, "ROUNDED");
     setting_put(&st.home, 0, "HOME");
+#endif
 }
 
 static int setting_click(void *ctx, void *event) {
@@ -4899,10 +4901,16 @@ static int setting_click(void *ctx, void *event) {
             theme_preset();
             coverflow_home_layout();
             settings_layout(window_manager());
+#if M1PLUS /* Now Playing is V2.1's until ipod-ui 4.6; Appearance has no Home or Corners row */
+            keep_selected(st.setting_label[3]);
+            for (int k = 0; k < 7; ++k)
+                if (k != 3 && k != 4 && k != 1 && k != 5) setting_text(k); /* the preset's rows */
+#else
             np_theme();
             keep_selected(st.setting_label[3]);
             for (int k = 0; k < 7; ++k)
                 if (k != 3 && k != 4) setting_text(k); /* the preset's rows */
+#endif
         }
         np_fill(0);
         image_manager_unload_all(image_manager());
@@ -4954,8 +4962,6 @@ int ringnav_np_info(void *win) {
     return result;
 }
 
-#include "m1plus_nav_display.c"
-#if !M1PLUS /* M1 Plus: m1plus_nav_display.c's ringnav_display, one list */
 /* The Display sub-page the next display_page is to be (DISPLAY_*), 0 for Display itself. */
 enum { DISPLAY_APPEARANCE = 1, DISPLAY_COVERFLOW, DISPLAY_CONTROLS };
 static int display_sub __attribute__((section(".scratch")));
@@ -4973,17 +4979,21 @@ static int display_open(void *ctx, void *event) {
  * Accent, Corners, Home and Battery; Artist Albums, Coverflow Sort and Refresh Coverflow; Shortcut
  * (iPod), Hold Return and Wheel Sensitivity, the last opening its slider page (crossfade.c). The
  * value rows show it in the label and have no chevron, since they change in place.
+ * M1 Plus (ipod-ui 4.3): V2.1's four rows (Brightness, Screen Off, Lock screen, Atmosphere Lamp), then the
+ * same three, with V2.1's icons. Appearance holds Theme, Light Mode, Accent and Battery; Controls Smart Awake
+ * and the volume knob's two rows. The rest wait for their item or stay Q2 only (docs/m1plus-unported.md).
  * ponytail: stock's page opened over itself; its own rows' state is never touched on a sub-page. */
 int ringnav_display(void *win, void *ctx) {
     static const char *const titles[] = { 0, "Appearance", "Coverflow", "Controls" },
-                             *const sub_icons[] = { 0, "system_display", "playset_covermode",
-                                                    "playset_folderjump" };
-    static const char *const cf_icons[] = { "playset_covermode", "playset_covermode",
-                                            "system_update" };
-    static const char *const hold_icon[] = { "playset_folderjump" };
-    static const char *const wheel_icon[] = { "system_display" };
+                             *const sub_icons[] = { 0, ICON_DISPLAY, ICON_COVERMODE,
+                                                    ICON_FOLDERJUMP };
+    static const char *const cf_icons[] = { ICON_COVERMODE, ICON_COVERMODE, "system_update" };
+#if !M1PLUS
+    static const char *const hold_icon[] = { ICON_FOLDERJUMP };
+    static const char *const wheel_icon[] = { ICON_DISPLAY };
+#endif
     int sub = display_sub, result = stock_display_trampoline(win, ctx);
-    void *view = win ? widget_lookup(win, "scroll_view_display", 1) : (void *)0;
+    void *view = win ? widget_lookup(win, VIEW_DISPLAY, 1) : (void *)0;
     if (!view) return result;
     if (!sub) {
         for (int i = DISPLAY_APPEARANCE; i <= DISPLAY_CONTROLS; ++i)
@@ -4995,18 +5005,22 @@ int ringnav_display(void *win, void *ctx) {
     void *nav = widget_lookup(win, "view_navbar", 1), *title = nav ? widget_get_child(nav, 0) : 0;
     if (title) widget_set_text_utf8(title, titles[sub]);
     if (sub == DISPLAY_COVERFLOW) {
-        pod_rows(win, "scroll_view_display", POD_ARTIST_CF, 1, cf_icons);
-        pod_rows(win, "scroll_view_display", POD_CF_SORT, 2, cf_icons + 1);
+        pod_rows(win, VIEW_DISPLAY, POD_ARTIST_CF, 1, cf_icons);
+        pod_rows(win, VIEW_DISPLAY, POD_CF_SORT, 2, cf_icons + 1);
         return result;
     }
+#if M1PLUS /* Corners: the glass is square; Home and Shortcut: Home's layouts (ipod-ui 4.5); Centred Now
+            * Playing (4.6); Click With Headphones: Key Tone, no buzzer */
+    static const unsigned char appearance[] = { 3, 6, 0, 2 }, controls[] = { 7 };
+#else
     /* Theme, Light Mode, Accent, Corners, Home, Battery, Centred Now Playing; Shortcut, Smart
      * Awake, Click With Headphones. */
     static const unsigned char appearance[] = { 3, 6, 0, 5, 1, 2, 8 }, controls[] = { 4, 7, 9 };
-    static const char *const icons[] = { "system_display",      "playset_covermode",
-                                         "system_powermanager", "system_display",
-                                         "playset_covermode",   "system_display",
-                                         "system_display",      "system_display",
-                                         "playset_covermode",   "system_display" };
+#endif
+    static const char *const icons[] = { ICON_DISPLAY,     ICON_COVERMODE, ICON_POWER,
+                                         ICON_DISPLAY,     ICON_COVERMODE, ICON_DISPLAY,
+                                         ICON_DISPLAY,     ICON_DISPLAY,   ICON_COVERMODE,
+                                         ICON_DISPLAY };
     const unsigned char *rows = sub == DISPLAY_APPEARANCE ? appearance : controls;
     for (int k = 0, n = sub == DISPLAY_APPEARANCE ? sizeof appearance : sizeof controls; k < n;
          ++k) {
@@ -5015,12 +5029,17 @@ int ringnav_display(void *win, void *ctx) {
         setting_text(i);
     }
     if (sub != DISPLAY_CONTROLS) return result;
-    pod_rows(win, "scroll_view_display", POD_HOLD_HOME, 1, hold_icon);
-    pod_rows(win, "scroll_view_display", POD_WHEEL_QS, 1, wheel_icon);
-    wheel_row(list_row_into(view, "system_display", xfade_open, (void *)1));
+#if M1PLUS /* the volume knob's role (read by knob_nav_active) and Navigation's direction; no Return key for
+            * Hold Return (ipod-ui 4.4), no wheel for Wheel QS or Wheel Sensitivity */
+    static const char *const knob_icons[] = { ICON_FOLDERJUMP, ICON_FOLDERJUMP };
+    pod_rows(win, VIEW_DISPLAY, POD_KNOB, 2, knob_icons);
+#else
+    pod_rows(win, VIEW_DISPLAY, POD_HOLD_HOME, 1, hold_icon);
+    pod_rows(win, VIEW_DISPLAY, POD_WHEEL_QS, 1, wheel_icon);
+    wheel_row(list_row_into(view, ICON_DISPLAY, xfade_open, (void *)1));
+#endif
     return result;
 }
-#endif
 
 #define BOOT_TARGET "/mnt/data/boot-target"
 static int boot_rockbox __attribute__((section(".scratch")));

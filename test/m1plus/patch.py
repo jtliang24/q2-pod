@@ -13822,20 +13822,38 @@ if not is_m1plus:  # Q2 only: the touch wheel's
         assert m.nodes[named(m,m.top,'scroll_view_display')]['children'][-2]==rows[-2],config
         assert click(-2)==[(1-on,'Q2POD','WHEELQS')], config
     passed()
-else:  # M1 Plus: Display gains Artist Albums, Coverflow Sort and Refresh Coverflow (1.4.5), Knob and its
-    # direction, icon-less as V2.1's display rows, in one list (m1plus_nav_display.c): no sub-pages (1.5.0)
-    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=3)
+else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow and Controls, with V2.1's icons and chevron,
+    # each opening the page again (display_sub) with V2.1's rows dropped. Coverflow: Artist Albums, Coverflow Sort and
+    # Refresh Coverflow (1.4.5); Controls: Smart Awake, then the knob and its direction; Appearance: Theme, Light Mode,
+    # Accent and Battery, Theme's preset leaving the square corners and Home alone. Not there: Corners (the glass is
+    # square), Hold Return, Wheel QS and Wheel Sensitivity (no Return key, no wheel), Click With Headphones (no buzzer),
+    # Home and Shortcut (4.5) and Centred Now Playing (4.6).
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4)
+    assert texts()==['Appearance','Coverflow','Controls'] and icons==['sset_display','pset_covermode','pset_jumpfolder']
+    assert all(m.nodes[m.nodes[r]['children'][-1]].get('image')=='right_arrow' for r in rows)
+    assert click(1)==[] and m.opened[-1]==('systemset/display_page',None) and m.get(payload_syms['display_sub'])==0
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=2)
+    assert texts()==['Artist Albums: Coverflow','Coverflow Sort: Album','Refresh Coverflow']
+    assert icons==['pset_covermode','pset_covermode','system_update'] and m.nodes[m.settings_view]['children']==rows
     # Knob: Navigation is the default (the iPod UI has no wheel)
-    assert texts()==['Artist Albums: Coverflow','Coverflow Sort: Album','Refresh Coverflow','Knob: Navigation','Knob Up: List Up'] and icons==[None]*5
-    assert m.nodes[named(m,m.top,NAMES['VIEW_DISPLAY'])]['children'][-1]==rows[-1]
-    assert click(3)==[(0,'Q2POD','KNOB')] and texts()[3]=='Knob: Volume'
-    assert click(3)==[(1,'Q2POD','KNOB')] and texts()[3]=='Knob: Navigation'
-    assert click(4)==[(1,'Q2POD','KNOBDIR')] and texts()[4]=='Knob Up: List Down'
-    assert click(4)==[(0,'Q2POD','KNOBDIR')] and texts()[4]=='Knob Up: List Up'
-    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1','KNOBDIR':'1'},stock_rows=3)
-    assert texts()[3:]==['Knob: Navigation','Knob Up: List Down']
-    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'0'},stock_rows=3)
-    assert texts()[3:]==['Knob: Volume','Knob Up: List Up']; passed()
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=3)
+    assert texts()==['Smart Awake','Knob: Navigation','Knob Up: List Up'] and icons==['sset_display','pset_jumpfolder','pset_jumpfolder']
+    assert click(0)==[(1,'IPOD','KEEPLIT')]
+    assert click(1)==[(0,'Q2POD','KNOB')] and texts()[1]=='Knob: Volume'
+    assert click(1)==[(1,'Q2POD','KNOB')] and texts()[1]=='Knob: Navigation'
+    assert click(2)==[(1,'Q2POD','KNOBDIR')] and texts()[2]=='Knob Up: List Down'
+    assert click(2)==[(0,'Q2POD','KNOBDIR')] and texts()[2]=='Knob Up: List Up'
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1','KNOBDIR':'1'},stock_rows=4,sub=3)
+    assert texts()[1:]==['Knob: Navigation','Knob Up: List Down']
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'0'},stock_rows=4,sub=3)
+    assert texts()[1:]==['Knob: Volume','Knob Up: List Up']
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=1)
+    assert [t.split(':')[0] for t in texts()]==['Theme','Light Mode','Accent','Battery'] and texts()[0]=='Theme: Minimal'
+    assert icons==['sset_display']*3+['sset_powermanager']
+    m.nodes[m.wm]={'type':'window_manager','children':[m.top]}  # Theme lays every settings list out again
+    keys={w[2] for w in click(0)}
+    assert texts()[:2]==['Theme: Classic','Light Mode: On'] and {'THEME','LIGHT'}<=keys and not keys&{'ROUNDED','HOME'}, keys
+    passed()
 # Its row opens stock's Boot volume page re-dressed (crossfade.c): titled, no switch, the percent
 # beside the slider, which runs 50-200 in tens. The wheel and +/- step 10%, live and saved, the
 # slider snaps to a ten, a drag is live but saved once at its release, and Centre goes back (edit_key, as on Brightness).
