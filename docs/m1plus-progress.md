@@ -3738,6 +3738,78 @@ The M1 has no Key tone row.
 - `draws_image` is unchanged in source but inlined differently.
 - `draw_spaced` and `ringnav_about` differ only in a constant-pool label, as in section 65.
 
+## 68. Phase 4.4: compact Library, holds and search (Nov 7)
+
+The V2.1 library audit and 64 px stock lists landed in `27de9cd`, `0ea2b69` and `73fc9f3`.
+The remaining implementation extends that layout to the payload's pages:
+
+- **Rows:** shared page-row helpers replace `m1plus_coverflow_rows.c`; payload lists use 64 px pitch,
+  the shared white caption and grey metadata styles, and V2.1's small trailing chevron. The old
+  `PAGE_ROW_*` geometry is retired. `ROW_*` remains for settings rows and the Q2 Pod menu (Home, 4.5).
+- **Hold Return:** V2.1's AWTK key-long at 1000 ms opens Now Playing (or Home with Hold Return: Home).
+  Previous is Back only in Knob: Navigation; Home's grid and Now Playing keep stock's hold.
+  A latch consumes the hold's release. The status-bar chevron also supports a hold, in either knob mode;
+  moving beyond the pull threshold cancels its timer. Controls exposes Hold Return before Knob.
+- **Playlist hold:** numeric playlist rows open `QM_PLAYLIST`; More… opens the editor. New, Import and
+  the Add to Playlist picker are excluded.
+- **Search:** a pull on the payload Library or a V2.1 library list opens V2.1's `search_page` through
+  `stock_search` at `0x523304`. Internet Radio keeps its own search.
+- **Media:** tests enter Photos, Books, Videos, Podcasts and Audiobooks through `library_open`.
+  Photos and Books use the status-bar chevron rather than an overlay back button.
+
+**Remaining M1 branches in coverflow.c:** the one stock cover mutex, native touch path, Q2 Pod entry and
+back destination, and Home card binding preserve M1 features or ABI differences. The title's back-button
+clearance is retained until Home/title layout (4.5). The alternate row styles and album-caption exception
+are removed. Continuous carousel physics remains a separate unported feature.
+
+**Verification:** the Q2 comparison passes all 33 suites with a byte-identical `update.tar`. Playback, M4B,
+ID3, headset I/O, LDAC and Bluetooth silence/DROP checks pass. Moving the new chevron timer state to the end
+of navigation state keeps the function diff against `b8` to 18 changed, 4 added and 2 removed; these include
+System Setting's order, compact rows, holds and search. The port report classifies all 662 entries.
+
+The playlist-picker regression now checks that Add to Playlist returns before generic song hold handling.
+A stale boot-walk coordinate now taps Knob below the new Hold Return row. The expanded media walk adds the
+Library steps' settling time to its observation budget and explicitly exercises pull to search and Back.
+
+Two real input defects found in the emulator are fixed and covered by focused MIPS regressions:
+- The chevron consumes its press before stock dispatch, so AWTK never sets its pointer-pressed flag. Its
+  timer uses its own press state; moving or aborting cancels the timer.
+- A window switch can filter Previous's held release before the navigation hook. The low-level input hook
+  keeps the latch armed through stock dispatch, then clears it even if stock skipped the navigation hook.
+  The next short Previous still goes Back. Both orientations are covered.
+
+The final build, `work/phase4/4.4/final4` (`V041m`), passes the build audit and full MIPS run: 1,820 scenarios,
+with 783 expected failures in 12 later-phase groups and no unlisted failures, stale entries or passing gaps.
+Playback, M4B, ID3, headset I/O, LDAC, Bluetooth and the port report were rerun on this exact image and pass.
+All three emulator walks (plain, Home-menu and media) pass on this exact image. The media
+walk verifies both holds followed by normal Back, Playlists, Long Songs, Books, Photos, Coverflow, Streaming,
+pull to V2.1 search and Back, and Shuffle. QEMU validates Photos navigation but cannot decode the fixture
+images; actual PNG rendering was verified in the hardware pass below.
+
+Four fixtures using Q2 Return/window-manager or pointer dispatch ABI move to Phase 5, with 181 Games checks
+in 4.8. No 4.4 gap groups remain.
+
+`graphify update .` refreshed the AST graph.
+
+**Device pass (Nov 7, 1.5.9 dev 57 / V041m): passed, no defects observed.** The installed demo SHA-256
+matches `final4` exactly; the pre-update demo matched `b8`, the function-comparison baseline. The 17 System
+Setting roles are in order with About last; each moved row opens its own page or toggles its switch, and
+Boot to and App Store work. Reset/format were checked only up to their page or confirmation.
+
+All Songs, Albums, Artists and Folder show seven compact rows in Minimal and Classic. Previous release,
+Previous hold in Navigation, the following short Back, chevron tap/hold in both knob modes, and Hold Return:
+Home all work. Pull-to-search works on Artists and the payload Library and returns correctly. A temporary
+playlist's hold opens the queue menu; More opens its editor. The temporary playlist was removed afterward.
+Podcasts/Audiobooks open their folders; Photos decodes the existing PNGs and swipes correctly; the existing
+EPUB renders within the screen margins. Captures and the detailed checklist are in
+`work/phase4/4.4/device-pass/`.
+
+The temporary Home cards were removed, Controls and Minimal restored, and Screen Off returned to 1 minute.
+The original config and Rockbox boot-target files were restored byte-for-byte and synced; their hashes still
+matched after an idle cycle. Backups remain in `work/phase4/4.4/device-before/` and on the card as
+`.q2/config-pass-V041m.ini` and `.q2/boot-target-pass-V041m`. The previous card-root image is preserved as
+`.q2/update-pre-V041m.bin`.
+
 ## How to check a build now
 
 ```sh

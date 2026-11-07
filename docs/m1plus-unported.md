@@ -56,7 +56,7 @@ to its [progress](m1plus-progress.md) section.
 | [Knob: Navigation on the Tidal and HiFi store pages](#tidal) | the M1's own | `m1plus_contexts.inc` rows | Planned |
 | [Card apps' library update](#card-apps-library-update) | 1.5.9 | `addon_library.c` (`library_poll`), `M3U_DIR_CALL`, the caps' `library` | Planned |
 | [An .lrc's UTF-8 test](#an-lrcs-utf-8-test) | 1.5.9 | `mclIsUtf8WithoutBOM` (`ringnav_lrc_utf8`) | Planned |
-| [A playlist row's hold menu](#a-playlist-rows-hold-menu) | 1.5.9 | `qm_hold`'s `QM_PLAYLIST` | Planned |
+| [A playlist row's hold menu](#a-playlist-rows-hold-menu) | 1.5.9 | `qm_hold`'s `QM_PLAYLIST` | Ported; dev 57 device pass |
 
 Era, Western tag/CUE text, hidden-folder exclusions, Streaming Configuration, user-space idle
 changes and lyrics passed the combined device checks in [progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28).
@@ -168,13 +168,14 @@ decoder's routines are to be found by the same callers.
 ### Display's sub-pages
 
 1.5.0 splits Display into Appearance (iPod), Coverflow and Controls, each reopening stock's page with its
-own rows. Ported with the iPod settings pages (ipod-ui 4.3, progress 66), awaiting its device pass:
+own rows. Ported with the iPod settings pages (ipod-ui 4.3, progress 66), device-checked through progress 66 and 68:
 - **Appearance:** Theme, Light Mode, Accent and Battery.
 - **Coverflow:** Artist Albums, Coverflow Sort and Refresh Coverflow.
-- **Controls:** Smart Awake, then the knob and its direction.
+- **Controls:** Smart Awake, Hold Return (Recent or Home), then the knob and its direction.
 
-Home and Shortcut come with Home (4.5), Hold Return with the Library (4.4), and Centred Now Playing with Now
-Playing (4.6). Corners (square glass), Wheel QS, Wheel Sensitivity and Click With Headphones (no wheel, no
+Home and Shortcut come with Home (4.5), and Centred Now Playing with Now Playing (4.6). Hold Return is
+ported with the Library (4.4): hold Previous in Knob: Navigation wherever it is Back, or hold the status bar
+chevron in either Knob mode. Corners (square glass), Wheel QS, Wheel Sensitivity and Click With Headphones (no wheel, no
 buzzer) stay Q2-only. V2.1's page reopens over itself as the Q2's does.
 
 ### Videos in Folder view
@@ -205,8 +206,8 @@ page draws V2.1's 40 px `stream_app` for every app; `addon_icon` would need the 
 ### Play/Pause's hold
 
 1.4.5 moves the long press of a spare key code (232, 500 ms) to Play/Pause at 700 ms, in V1.32's
-unnamed `input_device_status`. On the M1 the hold menu also opens with a touch long-press. V2.1's
-routine and its key code are to be found.
+unnamed `input_device_status`. On the M1 the hold menu also opens with a touch long-press. V2.1 uses AWTK's
+key-long event after 1000 ms for Play/Pause and Previous; the Q2's 700 ms `HOLD_KEYS` rewrite remains unported.
 
 ### Stock's Chinese UI text
 
@@ -331,8 +332,10 @@ checked.
 ### A playlist row's hold menu
 
 1.5.9's Play/Pause hold on a Playlists row opens the queue menu (Play Next, Add to Queue, Shuffle,
-More…). The M1's hold opens the playlist's editor (`m1plus_nav_playlist_hold.inc`), as V2.1 has no
-`playlistsmore_page`; the menu waits for the Library item (m1plus-ipod-ui.md 4.4).
+More…). Ported in the Library item (m1plus-ipod-ui.md 4.4): Play/Pause hold and touch long-press open
+`QM_PLAYLIST` on V2.1's numeric playlist rows. More… opens the payload's playlist editor
+(`m1plus_nav_playlist_hold.inc`), since V2.1 has no `playlistsmore_page`. New, Import and the Add to Playlist
+picker keep their own actions. The dev 57 device pass confirmed the menu and editor.
 
 ### Enlarged art's reset default
 

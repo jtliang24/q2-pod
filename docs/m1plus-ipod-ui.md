@@ -224,14 +224,20 @@ Each feature follows the same steps:
      extras, then maintenance, About last. The shared `reorder` takes the Q2's row ids, so the M1 keeps its seam.
 
    The M1 branches of `pod_rows`' callers are features, not V2.1's look (no Wake row, no volume guard, the knob
-   rows), so they stay. Rows waiting for later items: Home and Shortcut (4.5), Hold Return (4.4), Centred Now
-   Playing (4.6). The device pass is next.
-4. **Library:**
+   rows), so they stay. Rows waiting for later items: Home and Shortcut (4.5), Centred Now
+   Playing (4.6). The reordered settings passed on dev 57 (progress §68).
+4. **Library (implemented and device-checked on dev 57, progress §68):**
    - compact rows: the local pages, `compact_set_row_layout` at V2.1's row-layout calls, and the
      immediates (the `immediates`, `row_layout_calls`, `private_prologues` and `event_abi_words` sections,
      and the other library words in `patch_code`);
-   - hold-return to Now Playing, mapped to the touch long-press (`m1plus_nav_touch.c`) and a knob hold;
-   - retire `m1plus_coverflow_rows.c` and `page_list`'s V2.1-look overrides in `coverflow.c`.
+   - Hold Return to Now Playing or Home: Previous held in Knob: Navigation wherever it is Back, and the
+     status bar chevron held in either Knob mode (`m1plus_nav_back.c`);
+   - retire `m1plus_coverflow_rows.c` and use the shared payload page rows in `coverflow.c`.
+
+   Implementation: the V2.1 lists use 64 px pitch and 60 px bodies, with 40 px stock art. Payload lists use
+   the shared page-row helpers at 64 px. Pull to search opens V2.1's `search_page`; playlist holds open
+   the queue menu with More… opening the editor. Photos, Books and media folders enter through
+   `library_open`. Verification and device-pass status are recorded in progress §68.
 5. **Home:**
    - the `home_page.bin` rewrite with Split (art on top, menu below), Classic and Carousel (an `unported`
      row since the 1.5.9 sync);
@@ -244,7 +250,8 @@ Each feature follows the same steps:
 7. **Quick Settings and dialogs:** `statusbar_dialog.bin`, the confirm and add-to-playlist dialogs. The
    wheel QS swipe becomes a touch swipe down from the status bar; `qs_*`'s fake-finger path stays Q2-only.
 8. **Left Q2-only, as `NOT PORTED` rows:**
-   - Games (they need a design without the Return key and the wheel);
+   - Games (they need a design without the Return key and the wheel); the 181 execution checks are
+     grouped as `Games (ipod-ui 4.8, Q2 only)` in `patch_gaps.py`;
    - the click sound (`buzzeer_switch`), unless the M1 has a buzzer;
    - `chord_gate`'s rim presses;
    - `WHEEL_TS_READ`;
