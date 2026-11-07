@@ -13,6 +13,11 @@
      * (knob_back_active). It is the button stock takes as Previous: V2.1 swaps the two on a
      * rotated screen (on_wm_keyup_fun, rotate_mode 1). knob_gate() already leaves a dark screen
      * and the key lock to stock. */
+    /* Its hold opened Now Playing (hold_previous): the release is spent, wherever it lands. */
+    if (key == (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) && m1_return_latch) {
+        m1_return_latch = 0;
+        return STOP;
+    }
     if (key == (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) && knob_back_active() &&
         !home_menu(window_manager_get_top_window(window_manager()))) {
         timer_add(previous_back, 0, 0);

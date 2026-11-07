@@ -511,6 +511,10 @@ typedef struct {
 #if M1PLUS
     void *lock_win; /* the lock window while it is open: Light Mode leaves it dark (ipod_lock_dark) */
 #endif
+#if M1PLUS
+    unsigned chev_timer; /* its long-press, Hold Return's (chevron_hold), armed at the press */
+    int chev_x, chev_y, chev_held; /* the press's point; the hold fired, so the release is spent */
+#endif
 } scratch_t;
 static scratch_t st __attribute__((section(".scratch")));
 static void rate_bind(void *win); /* ratings: Now Playing's heart */
@@ -4988,8 +4992,8 @@ int ringnav_display(void *win, void *ctx) {
                              *const sub_icons[] = { 0, ICON_DISPLAY, ICON_COVERMODE,
                                                     ICON_FOLDERJUMP };
     static const char *const cf_icons[] = { ICON_COVERMODE, ICON_COVERMODE, "system_update" };
-#if !M1PLUS
     static const char *const hold_icon[] = { ICON_FOLDERJUMP };
+#if !M1PLUS
     static const char *const wheel_icon[] = { ICON_DISPLAY };
 #endif
     int sub = display_sub, result = stock_display_trampoline(win, ctx);
@@ -5029,9 +5033,10 @@ int ringnav_display(void *win, void *ctx) {
         setting_text(i);
     }
     if (sub != DISPLAY_CONTROLS) return result;
-#if M1PLUS /* the volume knob's role (read by knob_nav_active) and Navigation's direction; no Return key for
-            * Hold Return (ipod-ui 4.4), no wheel for Wheel QS or Wheel Sensitivity */
+#if M1PLUS /* Hold Return (Previous's hold and the chevron's, ipod-ui 4.4), then the volume knob's role (read by
+            * knob_nav_active) and Navigation's direction; no wheel for Wheel QS or Wheel Sensitivity */
     static const char *const knob_icons[] = { ICON_FOLDERJUMP, ICON_FOLDERJUMP };
+    pod_rows(win, VIEW_DISPLAY, POD_HOLD_HOME, 1, hold_icon);
     pod_rows(win, VIEW_DISPLAY, POD_KNOB, 2, knob_icons);
 #else
     pod_rows(win, VIEW_DISPLAY, POD_HOLD_HOME, 1, hold_icon);
@@ -5475,7 +5480,7 @@ int compact_now_playing(void) {
             /* The window switch stops the hold's key-up from reaching the stock release
              * filter, so the latch it armed would otherwise swallow the next Return. Drop it
              * once the switch really landed, so the first short Return goes back. */
-#if !M1PLUS /* V2.1 has no Return key, so no latch */
+#if !M1PLUS /* the M1 latch is Previous's, which its release spends in ringnav (m1plus_nav_knob.inc) */
             void *now = window_manager_get_top_window(wm);
             if (now && !tk_strcmp(widget_get_prop_str(now, "name", ""), "playing_page"))
                 *(volatile unsigned char *)RETURN_RELEASE_LATCH = 0;
@@ -8998,7 +9003,13 @@ static int quick_stuck(void *top) {
  * toasts), on a card app's row its hold op (addon_hold: a Deezer list downloaded whole), in Quick
  * Settings the wheel's brightness/volume switch, on View Queue's shuffle list
  * Play Next (un_hold), the release latched as the queue menu's. */
+#if M1PLUS
+static int hold_previous(unsigned key); /* m1plus_nav_back.c */
+#endif
 int ringnav_keylong(void *ctx, void *event) {
+#if M1PLUS /* Previous held: Hold Return (ipod-ui 4.4) */
+    if (event && hold_previous((unsigned)I(event, EVENT_KEY))) return STOP;
+#endif
     if (event && ple_key((unsigned)I(event, EVENT_KEY), 3)) return STOP;
     if (!event || I(event, EVENT_KEY) != KEY_PLAY) return stock_keylong_trampoline(ctx, event);
     void *top = window_manager_get_top_window(window_manager());

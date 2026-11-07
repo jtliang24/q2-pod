@@ -294,9 +294,9 @@ GAPS = {
     '7e86233542.19': 'Library rows (ipod-ui 4.4)',  # patch.py:10809 m.close(); assert m.get(payload_syms[g])==0 and not frames() and m.get(payload_s
     'e087294d76': 'Library rows (ipod-ui 4.4)',  # patch.py:10820 assert m.nodes[icon][image]==local_videos and m.nodes[label][text]==Videos and l
     'e426449b2e.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10822 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and [m.text(c[1]) for c
-    # hold Return to Now Playing (ipod-ui 4.4)
-    'dfe4cdaacb': 'hold Return to Now Playing (ipod-ui 4.4)',  # patch.py:3181 for existing in (False,True):
-    '06388513e1': 'hold Return to Now Playing (ipod-ui 4.4)',  # patch.py:3204 assert m.call(170,gap=0)==11
+    # Q2 Return key and window-manager ABI (Phase 5)
+    'dfe4cdaacb': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3181 for existing in (False,True):
+    '06388513e1': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3204 assert m.call(170,gap=0)==11
     # pull to search on iPod lists (ipod-ui 4.4)
     'b8767f31f8': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3273 for page_name in (folder_page,localmusic_page,allmusic_page,radio_page):
     '22ec0013d1': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3315 assert len(m.searches())==1 and m.get(w+O[TABLE_ROWS])==count and m.get(w+O[TABL

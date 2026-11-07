@@ -13880,18 +13880,22 @@ else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow an
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=2)
     assert texts()==['Artist Albums: Coverflow','Coverflow Sort: Album','Refresh Coverflow']
     assert icons==['pset_covermode','pset_covermode','system_update'] and m.nodes[m.settings_view]['children']==rows
-    # Knob: Navigation is the default (the iPod UI has no wheel)
+    # Hold Return (4.4: Previous's hold and the chevron's), then the knob's rows; Knob: Navigation is the default (the
+    # iPod UI has no wheel)
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=3)
-    assert texts()==['Smart Awake','Knob: Navigation','Knob Up: List Up'] and icons==['sset_display','pset_jumpfolder','pset_jumpfolder']
+    assert texts()==['Smart Awake','Hold Return: Recent','Knob: Navigation','Knob Up: List Up']
+    assert icons==['sset_display','pset_jumpfolder','pset_jumpfolder','pset_jumpfolder']
     assert click(0)==[(1,'IPOD','KEEPLIT')]
-    assert click(1)==[(0,'Q2POD','KNOB')] and texts()[1]=='Knob: Volume'
-    assert click(1)==[(1,'Q2POD','KNOB')] and texts()[1]=='Knob: Navigation'
-    assert click(2)==[(1,'Q2POD','KNOBDIR')] and texts()[2]=='Knob Up: List Down'
-    assert click(2)==[(0,'Q2POD','KNOBDIR')] and texts()[2]=='Knob Up: List Up'
+    assert click(1)==[(1,'Q2POD','HOLDRETURN')] and texts()[1]=='Hold Return: Home'
+    assert click(1)==[(0,'Q2POD','HOLDRETURN')] and texts()[1]=='Hold Return: Recent'
+    assert click(2)==[(0,'Q2POD','KNOB')] and texts()[2]=='Knob: Volume'
+    assert click(2)==[(1,'Q2POD','KNOB')] and texts()[2]=='Knob: Navigation'
+    assert click(3)==[(1,'Q2POD','KNOBDIR')] and texts()[3]=='Knob Up: List Down'
+    assert click(3)==[(0,'Q2POD','KNOBDIR')] and texts()[3]=='Knob Up: List Up'
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1','KNOBDIR':'1'},stock_rows=4,sub=3)
-    assert texts()[1:]==['Knob: Navigation','Knob Up: List Down']
+    assert texts()[2:]==['Knob: Navigation','Knob Up: List Down']
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'0'},stock_rows=4,sub=3)
-    assert texts()[1:]==['Knob: Volume','Knob Up: List Up']
+    assert texts()[2:]==['Knob: Volume','Knob Up: List Up']
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=1)
     assert [t.split(':')[0] for t in texts()]==['Theme','Light Mode','Accent','Battery'] and texts()[0]=='Theme: Minimal'
     assert icons==['sset_display']*3+['sset_powermanager']
@@ -15019,6 +15023,49 @@ if is_m1plus:
     # Q2's key-up does (headset.c media_focused): elsewhere they stay stock's.
     for page,want in (('spotify_page',True),('radionp_page',True),('tidal_page',True),('sysset_page',False)):
         assert previous('KEY_PLAY',mode='0',page=page)==(False,not want,want),page
+    passed()
+    # Hold Return (ipod-ui 4.4): Previous held where it is Back, V2.1's key-long for it (AWTK's, after 1000 ms: pinned in
+    # test/m1plus/build.py), opens Now Playing (compact_now_playing) and spends its release, so the page doesn't go
+    # back and stock's key-up doesn't skip. Knob: Volume, Home's grid and Now Playing (V2.1's own hold) leave it to
+    # stock; rotated, the button stock takes as Previous is the other one.
+    def hold(key='KEY_BACK_BTN',mode='1',page='sysset_page',setup=lambda m:None):
+        m=input_machine(page); m.config['KNOB']=mode; m.handlers[payload_syms['compact_now_playing']]='np_hold'
+        back=m.node('button',style='navbar_btnreturn_style')
+        m.top=m.node('window',page,[m.node('view','navigationbar_view',[back]),m.node()]); setup(m)
+        m.calls=[]; ret=m.call(O[key],address=HOOKS['on_wm_keylong_fun'][0],event_type=O['EVT_KEY_LONG'],gap=0)
+        held='np_hold' in [c[0] for c in m.calls]
+        assert (ret==11)==held and m.u.mem_read(payload_syms['m1_return_latch'],1)[0]==held
+        m.calls=[]; m.call(O[key],gap=1000); ran=[c[0] for c in m.calls]; m.advance(0)
+        assert dispatched(m)==[] and not m.u.mem_read(payload_syms['m1_return_latch'],1)[0]
+        return held,m.clicks==[back],'on_wm_keyup_fun' in ran
+    assert hold()==(True,False,False)
+    assert hold('KEY_FWD_BTN',setup=rotated)==(True,False,False) and hold('KEY_FWD_BTN')==(False,False,True)
+    for kw in (dict(mode='0'),dict(page='home_page'),dict(page='playing_page')):
+        assert hold(**kw)==(False,False,True),kw
+    for page in SLIDER_PAGES: assert hold(page=page)==(True,False,False),page
+    passed()
+    # Stock may filter the hold's release after a window switch without calling ringnav's key-up hook.
+    # Its low-level input dispatch must still spend the latch, so the next Previous is a short Back.
+    for rotate,key in ((0,'KEY_BACK_BTN'),(1,'KEY_FWD_BTN')):
+        m=input_machine('playing_page'); m.byte(syms['g_rotate_mode'],rotate)
+        m.byte(payload_syms['m1_return_latch'],1)
+        m.call(O[key],address=INPUT,args=(m.wm,m.event,0,0),event_type=O['EVT_KEY_UP'],gap=0)
+        assert dispatched(m)==[(O['EVT_KEY_UP'],O[key])] and not m.u.mem_read(payload_syms['m1_return_latch'],1)[0]
+    passed()
+    # The chevron's long-press, by touch in either Knob mode: held LONG_PRESS_MS it opens Now Playing, and its release
+    # goes nowhere; a drag of PULL_CLAIM_PX first is no hold, and its lift inside is still the chevron's tap.
+    for mode in ('0','1'):
+        m,back=chevron(); m.config['KNOB']=mode; m.handlers[payload_syms['compact_now_playing']]='np_hold'; m.calls=[]
+        assert touch((PRESS,10,10),m=m)==[]; assert not m.pressed  # the chevron owns the press before stock can set its flag
+        m.advance(O['LONG_PRESS_MS']-50); assert 'np_hold' not in [c[0] for c in m.calls]
+        m.advance(100); assert [c[0] for c in m.calls].count('np_hold')==1
+        m.pressed=0; assert touch((LIFT,10,10),m=m)==[]; m.advance(0); assert dispatched(m)==[]
+        m.calls=[]; assert touch((PRESS,10,10),(MOVE,10+O['PULL_CLAIM_PX'],10),m=m)==[]; m.advance(O['LONG_PRESS_MS']+100)
+        assert 'np_hold' not in [c[0] for c in m.calls]
+        m.pressed=0; assert touch((LIFT,10,10),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN
+        m.calls=[]; assert touch((PRESS,10,10),(O['EVT_POINTER_ABORT'],10,10),m=m)==[]
+        m.advance(O['LONG_PRESS_MS']+100); assert 'np_hold' not in [c[0] for c in m.calls]
+        m.calls=[]; touch((LIFT,10,10),m=m); m.advance(0); assert dispatched(m)!=RETURN
     passed()
     # A payload page has no back button: Previous gives it the Return the chevron's tap does (previous_back).
     m=input_machine('shuffle_page'); m.config['KNOB']='1'

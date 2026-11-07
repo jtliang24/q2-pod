@@ -176,8 +176,9 @@ def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None):
     if card: media_db(root/'mnt/data/database.db')
     # Past the first-boot language choice; with home_menu, V2.1's Home cards ([MAIN] HOMEMENU, ids each
     # followed by |, as saveHomemenu 0x4d7940 writes them).
-    # Knob: Volume, so the walk starts on V2.1's own knob; it turns Knob: Navigation on itself (patch.py has the default)
-    (root/'mnt/data/config.ini').write_text('[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB=0\n' + IPOD_CLASSIC + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
+    # Knob: Volume, so the walk starts on V2.1's own knob; it turns Knob: Navigation on itself (patch.py has the default).
+    # The media walk's Library steps go back and hold with Previous, so it starts in Navigation (the M1's default).
+    (root/'mnt/data/config.ini').write_text(f'[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB={1 if card else 0}\n' + IPOD_CLASSIC + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
     conf = (root/'etc/dbus-1/system.conf').read_text()
     # No other users exist in the sandbox: the bus runs as its caller.
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))
@@ -282,10 +283,10 @@ PATCHED_ONLY = [# System Setting in the iPod order (m1plus_nav_sysset.c): its en
                 ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
                 ('lockscreen_back', CHEVRON, 4, ('as', 'display')),
                 # Display's end: V2.1's rows, then Appearance, Coverflow and Controls (ipod-ui 4.3), the last row. Controls
-                # holds Smart Awake, then the knob's two rows; the first is Knob: Navigation once tapped.
+                # holds Smart Awake, Hold Return, then the knob's two rows; Knob becomes Navigation once tapped.
                 ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
                 ('controls', set_row(5), 4, ('not', 'display_end')),
-                ('knob_row', set_row(1), 3, ('as', 'controls', (30, set_band(1)[0]), set_band(1))),
+                ('knob_row', set_row(2), 3, ('as', 'controls', (30, set_band(2)[0]), set_band(2))),
                 ('controls_back', CHEVRON, 4, ('as', 'display_end')),
                 ('display_back', CHEVRON_EDGE, 4, ('as', 'knob_sysset')),
                 ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
@@ -378,7 +379,33 @@ def media_db(path):
 # Tap row centres, 30 px below the old edge coordinates: a settling scroll must not pick the row above.
 def q2pod_row(i): return tap(160, 110 + 64 * i)
 def q2pod_end_row(i): return tap(160, 110 + 64 * (i - 6))
-MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
+# The Library (ipod-ui 4.4), from Home's first page (All Songs, Folder, Album and Artist cards): V2.1's library lists
+# without their title bar, in LIB_PITCH rows from the top; each closes by the chevron or Previous (Knob: Navigation, the
+# M1's default). On an album's tracks, Previous held (V2.1's key-long, after 1000 ms) opens Now Playing, and so does
+# the chevron held (LONG_PRESS_MS); Now Playing's chevron goes back to the list.
+LIB_PITCH = M1['LIB_PITCH']
+HOME_AGAIN = ('as', 'home', (30, 414), (414, 480))  # back on Home, retitled as home3_again is
+def lib_row(i): return tap(160, STATUS_H + LIB_PITCH * i + LIB_PITCH // 2)
+CHEVRON_HOLD = [f'{BAR_BACK_W // 2} {STATUS_H // 2} 200', f'wait {M1["LONG_PRESS_MS"] + 400}', f'{BAR_BACK_W // 2} {STATUS_H // 2} 0']
+LIBRARY_WALK = [('lib_songs', tap(82, 200), 5, ('not', 'home')),
+                ('lib_songs_back', CHEVRON, 4, HOME_AGAIN),
+                ('lib_folder', tap(237, 200), 5, ('not', 'home')),
+                ('lib_folder_back', [PREVIOUS], 4, HOME_AGAIN),
+                ('lib_artists', tap(237, 318), 5, ('not', 'home')),
+                ('lib_artists_back', CHEVRON, 4, HOME_AGAIN),
+                ('lib_albums', tap(82, 318), 5, ('not', 'home')),
+                ('lib_album', lib_row(0), 5, ('not', 'lib_albums')),  # the first album's tracks
+                ('lib_hold', [f'hold {PREVIOUS} 1400'], 5, ('not', 'lib_album')),
+                ('lib_hold_back', CHEVRON, 5, ('as', 'lib_album')),
+                ('lib_chevron_hold', CHEVRON_HOLD, 5, ('not', 'lib_album')),
+                ('lib_chevron_back', CHEVRON, 5, ('as', 'lib_album')),
+                ('lib_album_back', [PREVIOUS], 4, ('as', 'lib_albums')),
+                ('lib_albums_back', CHEVRON, 4, HOME_AGAIN),
+                ('lib_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
+                ('lib_playlists', tap(237, 82), 5, ('not', 'lib_home3')),  # Home id 14: playlist_page
+                ('lib_playlists_back', [PREVIOUS], 4, ('as', 'lib_home3')),
+                ('lib_home1', swipe(40, 250, 280, 250) + ['wait 1500'] + swipe(40, 250, 280, 250), 4, HOME_AGAIN)]
+MEDIA_WALK = LIBRARY_WALK + [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
               ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
               ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
               ('long_songs_back', CHEVRON, 4, ('as', 'media_q2pod')),
@@ -418,20 +445,21 @@ MEDIA_WALK = [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
-    EV_SYN; the rest to the touch file."""
-    touch = [l for l in lines if not l.startswith(('keys ', 'knob '))]
+    EV_SYN (a "hold" line holds the key MS before its release); the rest to the touch file."""
+    touch = [l for l in lines if not l.startswith(('keys ', 'knob ', 'hold '))]
     if touch:
         with open(out/'touch', 'a') as f: f.write(''.join(l + '\n' for l in touch))
     for line in lines:
-        if not line.startswith(('keys ', 'knob ')): continue
-        device, code = line.split()
+        if not line.startswith(('keys ', 'knob ', 'hold ')): continue
+        held = line.startswith('hold ')
+        device, code, *ms = line.split()[1:] if held else line.split()
         fd = os.open(out/device, os.O_RDWR)  # never waits, as the reader's own open
         try:
             for value in (1, 0):
                 now = time.time()
                 event = lambda kind, code, value: struct.pack('<IIHHi', int(now), int(now % 1 * 1e6), kind, code, value)
                 os.write(fd, event(1, int(code), value) + event(0, 0, 0))  # EV_KEY, then EV_SYN
-                time.sleep(0.12)
+                time.sleep(int(ms[0]) / 1000 if held and value else 0.12)
         finally:
             os.close(fd)
         time.sleep(0.4)
@@ -451,6 +479,8 @@ if __name__ == '__main__':
                     help='a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Shuffle Songs')
     args = ap.parse_args()
     if args.home_menu and args.media: raise SystemExit('--home-menu and --media are separate runs')
+    # The Library walk precedes the original media walk; give its new steps their settling budget too.
+    walk_seconds = WALK_SECONDS + (sum(step[2] for step in LIBRARY_WALK) if args.media else 0)
     manifest = json.loads((args.build/'manifest.json').read_text())
     if manifest.get('source_sha256') != source_sha256():
         raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
@@ -469,7 +499,7 @@ if __name__ == '__main__':
                 card = pathlib.Path(cards)/name
                 card.mkdir()
                 media_card(card)
-            runs[name] = start(args.build/image, tmp/name, args.seconds + WALK_SECONDS, sn_addr, trace,
+            runs[name] = start(args.build/image, tmp/name, args.seconds + walk_seconds, sn_addr, trace,
                                HOME_MENU if args.home_menu else '', card)
         deadline = time.monotonic() + args.seconds
         while time.monotonic() < deadline:  # startup: either demo dying early fails below
@@ -542,7 +572,7 @@ if __name__ == '__main__':
             # V039m's grey box). The card would be 0x333333 at (56, 40).
             px = seen['advanced'][(40 * W + 56) * 4:(40 * W + 56) * 4 + 3]
             assert px == b'\0\0\0', f'advanced: the focus card shows over Simple ({px.hex()}) with Knob: Volume'
-        for p in runs.values(): p.wait(timeout=args.seconds + WALK_SECONDS + 120)
+        for p in runs.values(): p.wait(timeout=args.seconds + walk_seconds + 120)
         for name in runs:
             out = tmp/name
             status = int((out/'exit').read_text())

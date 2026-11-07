@@ -857,8 +857,8 @@ static inline int arc_out(int r, int y) {
 #define LIST_VIEW_LAYOUT_SLOT 0x9047a8
 /* style_get_color's bal style_get_gradient (0x65a048, V2.1's) returns here (4.1). */
 #define STYLE_COLOR_GRADIENT_RET 0x65a050
-/* V2.1 has no long Return (HOLD_RETURN is Q2 only), so nothing arms the latch: a zero byte of the
- * payload's own, which stays zero for good. */
+/* V2.1 has no long Return (HOLD_RETURN is Q2 only): the latch is a byte of the payload's own, which Previous's hold
+ * (hold_previous, ipod-ui 4.4) arms and its release clears (m1plus_nav_knob.inc). */
 extern unsigned char m1_return_latch;
 #define RETURN_RELEASE_LATCH ((unsigned)&m1_return_latch)
 /* Enlarged Album Art's countdown (4.6): V2.1's big cover is unported, so ringnav_sleep's reset goes to a

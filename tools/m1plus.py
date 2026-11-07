@@ -406,7 +406,9 @@ M1PLUS_PORTS = {
     'CLASS_ICON': ('native', 'V2.1 draws its own artist icon (roadmap 4)'),
     'ARTIST_COVER_ROW': ('native', "V2.1 has no artist page of 160 px rows: an artist's albums are an album list, "
                          'whose covers COVER_PAUSE and ALBUM_ART cover (progress 12, 30)'),
-    'HOLD_RETURN': ('q2only', 'long Return; the M1 has no Return key'),
+    'HOLD_RETURN': ('ported', "long Return's Now Playing (compact_now_playing): on the M1, Previous's hold where it "
+                    "is Back (ringnav_keylong's hold_previous, AWTK's 1000 ms key-long) and the chevron's (chevron_hold) "
+                    '(ipod-ui 4.4)'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
     'MAINSCHEDULING_CALL': ('unported', 'paced player scheduling (1.5.5); V2.1 call site not yet pinned'),
