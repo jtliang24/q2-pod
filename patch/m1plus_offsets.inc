@@ -17,7 +17,11 @@
 #define STATUS_H 30 /* the status bar: BOTTOM is UI_H - STATUS_H */
 #define CORNER_R 0
 #define STATUS_MARGIN 6 /* corner_x(7, 16) + STATUS_PAD of tools/ipod.py: the glass is square, the slack stays */
-#define BAR_BACK_W 32 /* the status bar's back chevron: its image's width and its tap, STATUS_H tall (ipod-ui 4.2) */
+#define BAR_BACK_W 32 /* the status bar's back chevron: its image's width, STATUS_H tall (ipod-ui 4.2) */
+/* Its tap (ipod-ui 4.3): twice the image's width, so a finger (or a case's lip) finds it, and in Minimal SET_TOP into
+ * the page too, above a settings list's first row (Classic's sits flush under the bar); the image keeps its slim
+ * look. */
+#define BAR_BACK_HIT_W 64
 #define BAR_CORNER_R 0
 #define I(p, o) (*(int *)((char *)(p) + (o)))
 #define P(p, o) (*(void **)((char *)(p) + (o)))

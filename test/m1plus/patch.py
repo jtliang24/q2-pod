@@ -14867,19 +14867,27 @@ if is_m1plus:
     # The status bar's chevron (img_back), the payload pages' only back: shown while Home isn't on top (chevron_sync,
     # at the bar's paint). Its press and release are its own, and its tap, lifted inside it, is previous_back on a
     # timer, outside the dispatch that closes the page: a payload page takes a Return.
-    def chevron(page='shuffle_page'):
-        m=input_machine(page); back=m.node('image','img_back',visible=0)
+    def chevron(page='shuffle_page',theme='0'):
+        m=input_machine(page); m.config['THEME']=theme; back=m.node('image','img_back',visible=0)
         bar=m.node('system_bar','system_bar',[back]); m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar)
         m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0); dispatched(m)
         return m,back
-    m,back=chevron(); edge=(O['BAR_BACK_W']-1,O['STATUS_H']-1)
+    # Its tap area (4.3): BAR_BACK_HIT_W wide, twice the image, and in Minimal SET_TOP into the page, above a settings
+    # list's first row.
+    assert (O['BAR_BACK_HIT_W'],O['BAR_BACK_W'])==(64,32) and O['STATUS_H']+O['SET_TOP']==38
+    m,back=chevron(); edge=(O['BAR_BACK_HIT_W']-1,O['STATUS_H']+O['SET_TOP']-1)
     assert m.nodes[back]['visible'] and touch((PRESS,*edge),(MOVE,*edge),(LIFT,*edge),m=m)==[] and dispatched(m)==[]
     m.advance(0); assert dispatched(m)==RETURN
     m.advance(1000); assert dispatched(m)==[]; passed()
     # Lifted outside it, the press is still the chevron's: nothing goes back, and nothing under it sees either event.
     m,_=chevron(); assert touch((PRESS,10,10),(MOVE,10,90),(LIFT,10,90),m=m)==[]; m.advance(0); assert dispatched(m)==[]
-    # A press beside it is the page's, and so is one on Home, where it hides.
-    m,_=chevron(); x=O['BAR_BACK_W']; assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[(PRESS,x),(LIFT,x)]
+    # A press beside it, or below it (a settings list's first row: in Classic, flush under the bar), is the page's, and
+    # so is one on Home, where it hides.
+    m,_=chevron(); x=O['BAR_BACK_HIT_W']; assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[(PRESS,x),(LIFT,x)]
+    y=O['STATUS_H']+O['SET_TOP']; m,_=chevron(); assert touch((PRESS,10,y),(LIFT,10,y),m=m)==[(PRESS,10),(LIFT,10)]
+    y=O['STATUS_H']; m,back=chevron(theme='1')
+    assert m.nodes[back]['visible'] and touch((PRESS,10,y),(LIFT,10,y),m=m)==[(PRESS,10),(LIFT,10)]
+    assert touch((PRESS,10,y-1),(LIFT,10,y-1),m=m)==[]
     m,back=chevron('home_page'); assert not m.nodes[back]['visible']
     assert touch((PRESS,10,10),(LIFT,10,10),m=m)==[(PRESS,10),(LIFT,10)]; m.advance(0); assert dispatched(m)==[]; passed()
     # page_title centres a plain title on the screen, clear of the top left the back button had (4.4 and 4.5 relay it).

@@ -45,13 +45,15 @@ static int previous_back(const void *info) {
 }
 
 /* The status bar's back chevron (img_back, the left BAR_BACK_W of the bar): shown while the top window is not Home
- * (chevron_sync). Its press and release belong to it: the window manager gives no other window the pointer, and the
- * tap, made when the finger lifts inside the chevron, is previous_back. Nothing else sees either event. */
+ * (chevron_sync). Its tap area is BAR_BACK_HIT_W wide, the bar's height, and in Minimal SET_TOP into the page, the gap
+ * above a settings list's first row (Classic's lists sit flush under the bar). A press there belongs to it, release
+ * included: the window manager gives no other window the pointer, and the tap, made when the finger lifts inside that
+ * area, is previous_back. Nothing else sees either event. */
 static int chevron_input(void *e) {
     if (!e || !st.bar_back) return 0;
     unsigned type = (unsigned)I(e, EVENT_TYPE);
     if (type != EVT_INPUT_POINTER_DOWN && type != EVT_INPUT_POINTER_MOVE && type != EVT_POINTER_UP) return 0;
-    int in = I(e, EVENT_X) < BAR_BACK_W && I(e, EVENT_Y) < STATUS_H;
+    int in = I(e, EVENT_X) < BAR_BACK_HIT_W && I(e, EVENT_Y) < STATUS_H + (ipod_classic() ? 0 : SET_TOP);
     if (type == EVT_INPUT_POINTER_DOWN) st.chev_down = in && widget_get_visible(st.bar_back);
     if (!st.chev_down) return 0;
     if (type == EVT_POINTER_UP) {

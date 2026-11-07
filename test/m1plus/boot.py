@@ -21,7 +21,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]/'tools'))
 from build import BASE, SCRATCH, source_sha256, symbols, run
 from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
 from m1plus_ipod import M1
-BAR_BACK_W, STATUS_H = M1['BAR_BACK_W'], M1['STATUS_H']
+BAR_BACK_W, BAR_BACK_HIT_W, STATUS_H = M1['BAR_BACK_W'], M1['BAR_BACK_HIT_W'], M1['STATUS_H']
 
 W, H = 320, 480
 # The hooks V2.1's startup reaches with no input: Home, the paint and dispatch paths, the UI loop and
@@ -215,10 +215,12 @@ def swipe(x0, y0, x1, y1, steps=10):
 NEXT_PAGE = swipe(280, 250, 40, 250)  # Home's carousel, a page right
 DOWN_LIST = swipe(160, 420, 160, 60)  # a list scrolled towards its end
 UP_LIST = swipe(160, 100, 160, 460)    # and back towards its start
-# The iPod settings rows (ipod-ui 4.3): SET_ROWS rows of SET_ROW from SET_TOP under the bar, the same whether the list is
-# at its start or scrolled to its end. V2.1's title bar is hidden there: the chevron and Previous are the backs.
-def set_row(i): return tap(160, STATUS_H + 8 + 72 * i + 36)
-def set_band(i): return (STATUS_H + 8 + 72 * i, STATUS_H + 8 + 72 * (i + 1))
+# The iPod settings rows (ipod-ui 4.3): SET_ROWS rows of SET_ROW, in Classic (the walk's theme) flush under the bar, the
+# same whether the list is at its start or scrolled to its end. V2.1's title bar is hidden there: the chevron and
+# Previous are the backs.
+def set_row(i): return tap(160, STATUS_H + M1['SET_ROW'] * i + M1['SET_ROW'] // 2)
+def set_band(i): return (STATUS_H + M1['SET_ROW'] * i, STATUS_H + M1['SET_ROW'] * (i + 1))
+CHEVRON_EDGE = tap(BAR_BACK_HIT_W - 4, STATUS_H // 2)  # its tap's far edge, past the image (BAR_BACK_W)
 CHEVRON = tap(BAR_BACK_W // 2, STATUS_H // 2)  # the status bar's back chevron: the payload's pages' only back (ipod-ui 4.2),
                                                # and V2.1's pages' too, which previous_back clicks the button of
 # Keys, as Linux reports them (keyboard_gpio_add.sh, keyboard_encoder): "keys CODE" on the buttons'
@@ -281,7 +283,7 @@ PATCHED_ONLY = [# Its end: Apps (netupdate.c) before System Update, Formatting C
                 # Display's end: 1.4.5's Coverflow Sort and Refresh Coverflow push the knob's two rows below the screen.
                 ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
                 ('knob_row', set_row(4), 3, ('as', 'display_end', (30, set_band(4)[0]), set_band(4))),  # Knob: Navigation
-                ('display_back', CHEVRON, 4, ('as', 'knob_sysset')),
+                ('display_back', CHEVRON_EDGE, 4, ('as', 'knob_sysset')),
                 ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
                 # With Knob: Navigation, Previous is Back: System Setting closes to Home, where it
                 # stays Previous track (nothing plays) and Home stays.
