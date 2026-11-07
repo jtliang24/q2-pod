@@ -220,8 +220,8 @@ Each feature follows the same steps:
    `m1plus_nav_display.c` is retired. Three M1 files stay:
    - `m1plus_nav_rows.c`: V2.1's row shape for `list_row`. V2.1 lacks the Q2's row styles.
    - `m1plus_nav_audioset.c`: V2.1 rebuilds Playback's list on each return, so the payload's rows are added again.
-   - `m1plus_nav_sysset.c`: V2.1's own System Setting order, Apps before Update. The Q2's order by role waits for
-     the user's choice of where V2.1's extra rows go.
+   - `m1plus_nav_sysset.c`: System Setting in the iPod order by role (progress 67): the Q2's rows, then V2.1's
+     extras, then maintenance, About last. The shared `reorder` takes the Q2's row ids, so the M1 keeps its seam.
 
    The M1 branches of `pod_rows`' callers are features, not V2.1's look (no Wake row, no volume guard, the knob
    rows), so they stay. Rows waiting for later items: Home and Shortcut (4.5), Hold Return (4.4), Centred Now

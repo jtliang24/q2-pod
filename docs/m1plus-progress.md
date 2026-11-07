@@ -3692,6 +3692,52 @@ walks share the CPU badly, so they run one at a time.
 - **Added:** `setting_click`, `setting_text`, `display_open` and `keep_selected`, reachable on the M1 now.
 - **Unchanged in code:** `draw_spaced` and `ringnav_about` differ only in a constant-pool label, as in section 65.
 
+## 67. System Setting in the iPod order (Nov 7)
+
+On `feature/m1-ipod`, Part C of `.plan/phase4-3.md`, after the 4.3 device pass on dev 39 (`b8`, `V03Jm`) found no
+defects. The user's order (Nov 6): the Q2's rows by role, then V2.1's extras, then maintenance, with About last:
+
+1. Wireless Setting, Network Service, Display setting, Idle, Buttons lock, Date and time, Language, In-Vehicle mode;
+2. Boot to (only with Rockbox on the card), App Store;
+3. Double Tap to Turn On, Screen Rotation, Theme;
+4. System Update, Reset settings, Formatting Card, About.
+
+The M1 has no Key tone row.
+
+**The audit** (pinned in `test/m1plus/build.py`):
+- **The rows:** V2.1's builder (`systemset_sysset_page_init`) makes a row per `syssetMenu` entry, 0 to 14 (15 with
+  `sset_prove` when the language is 3). Each row draws the icon `get_systemset_showinfo` copies. That comes from one
+  of two tables, picked by a GPIO, which differ only in Double Tap's icon (`sset_tswake` or `sset_doublewake`).
+- **The names:** Buttons lock is `sset_keylock`, not `sset_screenlock`.
+- **The click:** each row is named by its menu index, and its click (`0x4ad7b0`) reads the name back with `atoi` and
+  indexes `syssetMenu`. A restacked row keeps its click, so no click depends on a row's place.
+
+**The code** (`patch/m1plus_nav_sysset.c`):
+- `sysset_ipod_order` replaces `apps_before_update`. It takes a role table of V2.1's icon names in the order above,
+  and restacks the list once, after the payload's rows are added.
+- **The payload's rows** are matched by pointer, not by icon: App Store draws `system_update` as Update does, and
+  Boot to draws `sset_powermanager` as Idle does. `ringnav_systemset` takes each as the list's last row right after
+  adding it, and hands both to the seam.
+- **Unknown rows:** a row matching no role (`sset_prove`, or a later firmware's) goes after Theme, so it is never
+  lost.
+- **The Q2:** the shared `reorder` still takes the Q2's row ids and returns at once on the M1. The Q2 build is
+  unchanged.
+
+**Tests:**
+- **`build.py`:** the two icon tables, `syssetMenu`, the click's `atoi`, and the role table's names against the
+  tables.
+- **`patch.py`:** `boot_row` builds V2.1's rows with their icons, `sset_prove` among them, and checks the order with
+  and without Rockbox. App Store's and Boot to's clicks still reach their handlers.
+- **`boot.py`:** Display is now the third row (`display` taps row 2), and the list's end is System Update, Reset,
+  Formatting Card and About.
+
+**Gates** (`c1`): `build.py --build`; `patch.py` (870 in 13 gaps, none unlisted); `boot.py` plain.
+
+`fndiff.py` against `b8`: 4 changed, 2 added and 1 removed, of 1281.
+- `ringnav_systemset` changed, `sysset_ipod_order` and `last_row` were added, and `apps_before_update` was removed.
+- `draws_image` is unchanged in source but inlined differently.
+- `draw_spaced` and `ringnav_about` differ only in a constant-pool label, as in section 65.
+
 ## How to check a build now
 
 ```sh
