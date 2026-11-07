@@ -14,6 +14,7 @@ GAPS = {
     '35b96a16c8': 'iPod UI assets (ipod-ui 3)',  # patch.py:11145 m.advance(2500); assert texts(info)[4:]==[0:12,-3:08] and len(m.thumbs)==1
     '338b3ce9bb': 'iPod UI assets (ipod-ui 3)',  # patch.py:11194 m.advance(250); assert texts(info)[4]==1:05 and on_wm_keyup_fun not in [c[0] for
     '30331ad68c': 'iPod UI assets (ipod-ui 3)',  # patch.py:11349 m.advance(3000); assert m.labels(np)==[Internet Radio,Three,Some Artist,A Song,M
+    '9e5dd4854f': 'iPod UI assets (ipod-ui 3)',  # patch.py:8720 for name in (local_album,local_photos,list_folder,list_tidal,player_playlist,
     # status bar scenarios on the V2.1 bar (Phase 5)
     '78b0d2089b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5441 for v in views:
     '8217be2fad': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5450 cells=laid_out()
@@ -35,156 +36,6 @@ GAPS = {
     'c0c216337f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5504 m.word(0xa3beac,2); m.nodes[eq][visible]=1; m.nodes[state][visible]=0
     '4cb62ca34f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5506 assert (stock_showface,bar) in [c[:2] for c in m.calls] and m.nodes[state][visib
     '0a9fe5785b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5508 for mode in (1,2,3,0,1,2,3,0):
-    # Display settings pages (ipod-ui 4.3)
-    'a85f9167be': 'Display settings pages (ipod-ui 4.3)',  # patch.py:2165 for row,image,fills in ((2,select,3),(0,unselect,0),(2,more,4),(0,more,0)):
-    '9e5dd4854f': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8720 for name in (local_album,local_photos,list_folder,list_tidal,player_playlist,
-    '1068b5c50c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8757 m,main,_=display({},sub=0)
-    'c6052dee0d': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8758 kids=m.nodes[main][children]
-    '487c8eb5c1': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8759 assert len(kids)==6 and [row_text(r) for r in kids[3:]]==[Appearance,Coverflow,C
-    '2dff49cb69': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8760 assert m.icons_set==[system_display,list_into,playset_covermode,list_into,playse
-    'c99a4ebc97': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8761 f,ctx=m.handler(m.nodes[kids[4]][children][0],O[EVT_CLICK]); m.calls=[]
-    'e8cb08926c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8762 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.opened[-1]==(syst
-    '36b49d8f56': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8765 cfv=display_page(m,2); cf,cf_sort,cf_refresh=m.nodes[cfv][children]
-    '5db2661012': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8765 cfv=display_page(m,2); cf,cf_sort,cf_refresh=m.nodes[cfv][children]
-    'f6375d0298': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8766 assert m.icons_set==[playset_covermode,playset_covermode,system_update]
-    '66249771a8': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8767 ctl=display_page(m,3); shortcut,keep_lit,click_hp,hold,qs,wheel=m.nodes[ctl][chi
-    'b6f44251eb': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8767 ctl=display_page(m,3); shortcut,keep_lit,click_hp,hold,qs,wheel=m.nodes[ctl][chi
-    'ccb736163c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8768 assert m.icons_set==[playset_covermode,system_display,switch_off,system_display,
-    '15567d5dec': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8769 assert [row_text(r) for r in (shortcut,hold,qs)]==[Shortcut: Rockbox,Hold Return
-    'dcddcb57a6': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8770 view=display_page(m,1); rows=setting_rows(m,view)
-    'f92a41034a': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8770 view=display_page(m,1); rows=setting_rows(m,view)
-    '85172db86c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8771 kids=m.nodes[view][children]; light,corners,centred=kids[1],kids[3],kids[6]
-    '944032aee2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8772 assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and m.nodes
-    'c9c6fdc8c1': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8773 assert m.icons_set==[system_display,system_display,system_display,system_display
-    '0ac48111d4': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8774 buttons=[m.nodes[r][children][0] for r in rows]; labels=[m.nodes[b][children][1]
-    '0e824e3e4f': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8774 buttons=[m.nodes[r][children][0] for r in rows]; labels=[m.nodes[b][children][1]
-    '549cb92260': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8775 for b,l in zip(buttons,labels):
-    '2ab19091a5': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8782 keep_label=m.nodes[m.nodes[keep_lit][children][0]][children][1]; assert m.nodes[
-    '70bf24c794': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8782 keep_label=m.nodes[m.nodes[keep_lit][children][0]][children][1]; assert m.nodes[
-    '4d56f7c40c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8783 f,ctx=m.handler(m.nodes[keep_lit][children][0],O[EVT_CLICK]); m.calls=[]
-    '86b4e73d17': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8784 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
-    '1bbb79bed9': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8785 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
-    '8271bfe8ff.10': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8786 m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    '0f4a736089': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8788 hp_label=m.nodes[m.nodes[click_hp][children][0]][children][1]; assert m.nodes[hp
-    'cda4c9d091': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8788 hp_label=m.nodes[m.nodes[click_hp][children][0]][children][1]; assert m.nodes[hp
-    '4de8cb5d25': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8789 f,ctx=m.handler(m.nodes[click_hp][children][0],O[EVT_CLICK]); m.calls=[]
-    '86b4e73d17.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8790 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
-    '49995443e1': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8791 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
-    '8271bfe8ff.11': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8792 m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    '341ae680b0': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8795 centred_label=m.nodes[m.nodes[centred][children][0]][children][1]; assert m.node
-    'cb11270062': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8795 centred_label=m.nodes[m.nodes[centred][children][0]][children][1]; assert m.node
-    '41b6025c64': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8796 f,ctx=m.handler(m.nodes[centred][children][0],O[EVT_CLICK]); m.calls=[]
-    '86b4e73d17.3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8797 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
-    '36ad551169': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8798 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
-    '3a615939a6': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8803 assert loaded(playing_page)==[playing_page_stock] and loaded(home_page)==[home_p
-    '8271bfe8ff.12': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8804 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert loaded(playing_page)==[pl
-    '6ab6271070': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8806 cf_label=m.nodes[m.nodes[cf][children][0]][children][1]; assert m.nodes[cf_label
-    'a153bcc628': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8806 cf_label=m.nodes[m.nodes[cf][children][0]][children][1]; assert m.nodes[cf_label
-    'd3ef113228': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8807 f,ctx=m.handler(m.nodes[cf][children][0],O[EVT_CLICK]); m.calls=[]
-    'cd883ae115': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8808 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[cf_label][t
-    '2a4b480d6f': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8809 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
-    '115a769ae0': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8810 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
-    '8271bfe8ff.13': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8810 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
-    '6ab6271070.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8811 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
-    '8271bfe8ff.14': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8811 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
-    '5350877c9a': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8814 sort_label,refresh_label=(m.nodes[m.nodes[r][children][0]][children][1] for r in
-    '1f952a4891': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8815 assert m.nodes[sort_label][text]==Coverflow Sort: Album and m.nodes[refresh_labe
-    'acc55bb4b8': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8816 f,ctx=m.handler(m.nodes[cf_refresh][children][0],O[EVT_CLICK]); m.mock(opendir@G
-    'd9ba565d32': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8817 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]==Co
-    '26bda3c14e': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8818 assert [m.text(c[1]) for c in m.calls if c[0]==opendir@GLIBC_2.0]==[/mnt/mmc/.co
-    '1cdc7d997d': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8827 assert texts()==[Accent: Ivory,Home: Split,Battery: Icon,Theme: Minimal]; passed
-    'a7f54dea42': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8835 m.call(address=HOOKS[home_page_init][0],args=(home,0,0,0),gap=0)
-    'd3cec3151b': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8836 art=named(m,home,img_homeart)
-    '84fb5c2e21': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8861 shortcut_button=m.nodes[shortcut][children][0]
-    '5622a7e908': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8862 sf,sc=m.handler(shortcut_button,O[EVT_CLICK])
-    'e5e97b6d36': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8863 for label in (Favorites,Shuffle,Rated Albums,Artists,Albums,Games,Rockbox):
-    '927dc434cc': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8867 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(1,HOME)] and te
-    'a0f267beae': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8867 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(1,HOME)] and te
-    '0c075ea462': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8876 corners_label=m.nodes[m.nodes[corners][children][0]][children][1]; assert m.node
-    '3fd3d27d9c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8876 corners_label=m.nodes[m.nodes[corners][children][0]][children][1]; assert m.node
-    '88774fb87c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8878 assert corners_switch()==[switch_off]
-    '66dc56914a': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8879 f,ctx=m.handler(m.nodes[corners][children][0],O[EVT_CLICK]); m.calls=[]
-    '191084d657': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8880 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and corners_switch()==[
-    '445cf125f8': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8881 assert [(c[1],m.text(c[3])) for c in m.calls if c[0]==write_int_config]==[(1,ROU
-    '8329427fda': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8883 light_label=m.nodes[m.nodes[light][children][0]][children][1]; assert m.nodes[li
-    'a206a7a356': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8883 light_label=m.nodes[m.nodes[light][children][0]][children][1]; assert m.nodes[li
-    '7553168288': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8884 f,ctx=f_light,ctx_light=m.handler(m.nodes[light][children][0],O[EVT_CLICK])
-    '91dc641367': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8885 for value,text in ((1,On),(2,Auto),(0,Off)):
-    'f1eae9f6ce': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8900 writes=click(3); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]==[(1,
-    'fd2f07fc93': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8900 writes=click(3); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]==[(1,
-    'd54d44a9a7': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8901 assert corners_switch()==[switch_off] and m.nodes[light_label][text]==Light Mode
-    'c181110dc5': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8902 assert (image_manager_unload_all,0x1000500) in [c[:2] for c in m.calls] and (wid
-    '85172db86c.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8903 kids=m.nodes[view][children]
-    '944032aee2.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8904 assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and m.nodes
-    '044cdebfbf': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8905 assert texts()==[Accent: Cobalt,Home: Split,Battery: Icon,Theme: Classic]; home_
-    'baa6580069': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8905 assert texts()==[Accent: Cobalt,Home: Split,Battery: Icon,Theme: Classic]; home_
-    'd652ea7b25.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8907 m.paint(view); assert m.selected(view)==0; passed()
-    'bb0f2639c0': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8911 for _ in range(2): m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0)
-    'a206a7a356.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8912 assert m.nodes[light_label][text]==Light Mode: Off
-    '231e4ded71': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8913 for value,name in ((5,Tangerine),(6,Plum),(8,Green),(0,Graphite),(1,Crimson),(2,
-    '304a770053': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8921 writes=click(3); assert [(w[0],m.text(w[2])) for w in writes]==[(0,THEME),(0,MIN
-    'f1eae9f6ce.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8921 writes=click(3); assert [(w[0],m.text(w[2])) for w in writes]==[(0,THEME),(0,MIN
-    '26a9fde919': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8922 assert texts()[3]==Theme: Minimal and corners_switch()==[switch_on] and m.nodes[
-    'd652ea7b25.3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8923 m.paint(view); assert m.selected(view)==0
-    '85172db86c.3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8924 kids=m.nodes[view][children]
-    '78b2a6d980': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8925 assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and texts()
-    '466012b4b4.3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8926 home_bounds(False)
-    '6c1776f92b': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8927 m.paint(view); assert not m.bands and m.rounded[0][color]==color_t(ACCENTS[0][0]
-    'a573372f36': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8929 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); m.call(address=f_lig
-    'a573372f36.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8929 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); m.call(address=f_lig
-    '9406000021': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8930 assert m.nodes[light_label][text]==Light Mode: Auto
-    'f49ec85af4': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8931 for theme in (Classic,Minimal):
-    'a206a7a356.3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8933 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); assert m.nodes[light
-    'a573372f36.3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8933 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); assert m.nodes[light
-    '472cbcd7f9': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8935 for value,name in ((1,Crimson),(2,Tidal),(3,Champagne),(4,Cobalt),(5,Tangerine),
-    '3264b12e96': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8939 click(3); home_bounds(False,True); click(3); home_bounds(False); passed()
-    '3264b12e96.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8939 click(3); home_bounds(False,True); click(3); home_bounds(False); passed()
-    '466012b4b4.4': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8939 click(3); home_bounds(False,True); click(3); home_bounds(False); passed()
-    'baa6580069.3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8939 click(3); home_bounds(False,True); click(3); home_bounds(False); passed()
-    '63150259f5': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8941 for value,name in ((1,Percent),(2,Icon + Percent),(3,Percent Inside),(0,Icon)):
-    '47417148e4': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
-    'e44a70fe75': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
-    'f529705857': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
-    'b43f0ec9d3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8946 m,view,rows=display({BATTERY:3}); assert m.nodes[m.nodes[m.nodes[rows[2]][childr
-    'e8b43de32c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8946 m,view,rows=display({BATTERY:3}); assert m.nodes[m.nodes[m.nodes[rows[2]][childr
-    '47417148e4.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8947 m,view,rows=display({ACCENT:2,HOME:1,THEME:1}); got=[m.nodes[m.nodes[m.nodes[r
-    'e684a09ad2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8947 m,view,rows=display({ACCENT:2,HOME:1,THEME:1}); got=[m.nodes[m.nodes[m.nodes[r
-    '49c403d473': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8948 assert got==[Accent: Tidal,Home: Full,Battery: Icon,Theme: Classic] and m.nodes[
-    'b5c738c80f': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8978 m,view,_=display({},sub=0)
-    '3d40ff6b9b': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8981 assert m.selected(view)==3 and m.confirm()==11 and m.dispatched()[0][1]==m.nodes
-    'b32ce1e463': 'Display settings pages (ipod-ui 4.3)',  # patch.py:8985 assert at(0x613ee8,4)==bytes.fromhex(1cc7a524) and at(0x77c71c,5)==bdone\0; pass
-    'dca5c4a74d': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9068 for classic in (0,1):
-    '01f9e7d40a': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9083 CONFIG.clear(); m,view=settings(display,sub=1); items=m.nodes[view][children]; t
-    '4a05eb9365': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9083 CONFIG.clear(); m,view=settings(display,sub=1); items=m.nodes[view][children]; t
-    'a993d66116': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9083 CONFIG.clear(); m,view=settings(display,sub=1); items=m.nodes[view][children]; t
-    'e0a4fa8337': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9088 previous=m.node(window,sysset_page,[cached,library]); m.nodes[m.wm][children].in
-    'e1e8ddc1d0': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9089 for classic in (1,0,1,0,1):  # each a click on Theme, from Minimal
-    '075f869521': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9107 m,view=settings(0x4cbcc4,default=72); before=tree(m,view); lay(m,view); after=tr
-    '9aec68f85c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9107 m,view=settings(0x4cbcc4,default=72); before=tree(m,view); lay(m,view); after=tr
-    'd83a7b5843': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9107 m,view=settings(0x4cbcc4,default=72); before=tree(m,view); lay(m,view); after=tr
-    'db4762b8ba': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9107 m,view=settings(0x4cbcc4,default=72); before=tree(m,view); lay(m,view); after=tr
-    'ba217aad41': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9108 assert [r[1] for r in after]==[r[1] for r in before] and all(r[0][3]==72 for r i
-    '6f053ba547': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9110 m,view=settings(0x4cbcc4); odd=m.node(list_item); other=m.node(button)
-    '075f869521.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9113 m.nodes[view][children].append(odd); lay(m,view)
-    'f8aa851a1b': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9113 m.nodes[view][children].append(odd); lay(m,view)
-    '075f869521.3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9117 m,view=settings(0x4cbcc4); lay(m,view); items=m.nodes[view][children]
-    '6f053ba547.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9117 m,view=settings(0x4cbcc4); lay(m,view); items=m.nodes[view][children]
-    'a993d66116.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9117 m,view=settings(0x4cbcc4); lay(m,view); items=m.nodes[view][children]
-    '375301fb60': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9118 buttons=[m.nodes[i][children][0] for i in items]
-    'd652ea7b25.4': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9119 m.paint(view); assert m.selected(view)==0
-    '588932ae9b': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9120 for k in range(1,len(items)):
-    '330e6086e6.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9125 assert m.confirm()==11 and m.dispatched()[0][1]==buttons[-1]; passed()
-    '638c1bd20c': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9126 m.click(buttons[2]); assert m.selected(view)==2; passed()
-    'ecbccc89c2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9126 m.click(buttons[2]); assert m.selected(view)==2; passed()
-    'f9bab94df3': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9130 m,view,rows=display({ACCENT:2}); m.paint(view)
-    '8fe2090d8d': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9131 assert not m.bands and m.rounded[-1][color]==color_t(0xeeeeec); passed()
-    '5ffc96853b': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9132 m,view,rows=display({ACCENT:2,THEME:1}); m.paint(view)
-    'fe173a1c41': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9133 assert [m.bands[i][4] for i in (0,1,47)]==[color_t(ACCENTS[2][i]) for i in (4,0,
-    '8271bfe8ff.15': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9134 f,ctx=m.handler(m.nodes[rows[0]][children][0],O[EVT_CLICK]); m.call(address=f,ar
-    '91e3bc677a': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9134 f,ctx=m.handler(m.nodes[rows[0]][children][0],O[EVT_CLICK]); m.call(address=f,ar
-    'b42e571763': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9135 m.paint(view); assert [m.bands[i][4] for i in (0,1,47)]==[color_t(ACCENTS[3][i])
-    'c547892cd4.2': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9143 assert m.nodes[m.slider][FG]==-1; centre(m,50); assert m.nodes[m.slider][FG]==si
-    'f1671ac043': 'Display settings pages (ipod-ui 4.3)',  # patch.py:9148 for config,listw,roww,shown in (({HOME:1},375,O[HOME_FULL_ROW],0),({},O[HOME_SPL
     # Library rows (ipod-ui 4.4)
     'a44d2b3708': 'Library rows (ipod-ui 4.4)',  # patch.py:5703 if localmusic_playlistsmore_page_init in HOOKS or is_m1plus:  # M1 Plus: no play
     '068a8e2bb8': 'Library rows (ipod-ui 4.4)',  # patch.py:9844 assert m.nodes[title][style]==m.nodes[detail][style] and m.nodes[title][style]==
@@ -912,4 +763,129 @@ GAPS = {
     # Games (ipod-ui 4.8, Q2 only)
     '59bdeea4c9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10743 assert word(G_SCREEN)==0 and not frames() and m.get(payload_syms[wheel_raw])==0
     '7b597aa195.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10744 assert m.key()==11; passed()  # Return in the chooser after Vortex goes back to 
+    # Display and settings scenarios on V2.1's rows (Phase 5)
+    'a85f9167be': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:2165 for row,image,fills in ((2,select,3),(0,unselect,0),(2,more,4),(0,more,0)):
+    '487c8eb5c1': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8759 assert len(kids)==6 and [row_text(r) for r in kids[3:]]==[Appearance,Coverflow,C
+    '2dff49cb69': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8760 assert m.icons_set==[system_display,list_into,playset_covermode,list_into,playse
+    'c99a4ebc97': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8761 f,ctx=m.handler(m.nodes[kids[4]][children][0],O[EVT_CLICK]); m.calls=[]
+    'e8cb08926c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8762 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.opened[-1]==(syst
+    'f6375d0298': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8766 assert m.icons_set==[playset_covermode,playset_covermode,system_update]
+    'b6f44251eb': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8767 ctl=display_page(m,3); shortcut,keep_lit,click_hp,hold,qs,wheel=m.nodes[ctl][chi
+    'ccb736163c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8768 assert m.icons_set==[playset_covermode,system_display,switch_off,system_display,
+    '15567d5dec': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8769 assert [row_text(r) for r in (shortcut,hold,qs)]==[Shortcut: Rockbox,Hold Return
+    'dcddcb57a6': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8770 view=display_page(m,1); rows=setting_rows(m,view)
+    '944032aee2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8772 assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and m.nodes
+    '10c62dfae3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8772 kids=m.nodes[view]['children']; light,corners,centred=kids[1],kids[3],kids[6]
+    'c9c6fdc8c1': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8773 assert m.icons_set==[system_display,system_display,system_display,system_display
+    '0ac48111d4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8774 buttons=[m.nodes[r][children][0] for r in rows]; labels=[m.nodes[b][children][1]
+    '0e824e3e4f': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8774 buttons=[m.nodes[r][children][0] for r in rows]; labels=[m.nodes[b][children][1]
+    '549cb92260': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8775 for b,l in zip(buttons,labels):
+    '2ab19091a5': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8782 keep_label=m.nodes[m.nodes[keep_lit][children][0]][children][1]; assert m.nodes[
+    '70bf24c794': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8782 keep_label=m.nodes[m.nodes[keep_lit][children][0]][children][1]; assert m.nodes[
+    '4d56f7c40c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8783 f,ctx=m.handler(m.nodes[keep_lit][children][0],O[EVT_CLICK]); m.calls=[]
+    '86b4e73d17': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8784 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
+    '1bbb79bed9': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8785 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
+    '8271bfe8ff.10': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8786 m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    '0f4a736089': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8788 hp_label=m.nodes[m.nodes[click_hp][children][0]][children][1]; assert m.nodes[hp
+    'cda4c9d091': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8788 hp_label=m.nodes[m.nodes[click_hp][children][0]][children][1]; assert m.nodes[hp
+    '4de8cb5d25': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8789 f,ctx=m.handler(m.nodes[click_hp][children][0],O[EVT_CLICK]); m.calls=[]
+    '86b4e73d17.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8790 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
+    '49995443e1': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8791 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
+    '8271bfe8ff.11': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8792 m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    '341ae680b0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8795 centred_label=m.nodes[m.nodes[centred][children][0]][children][1]; assert m.node
+    'cb11270062': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8795 centred_label=m.nodes[m.nodes[centred][children][0]][children][1]; assert m.node
+    '41b6025c64': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8796 f,ctx=m.handler(m.nodes[centred][children][0],O[EVT_CLICK]); m.calls=[]
+    '86b4e73d17.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8797 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
+    '36ad551169': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8798 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
+    '3a615939a6': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8803 assert loaded(playing_page)==[playing_page_stock] and loaded(home_page)==[home_p
+    '8271bfe8ff.12': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8804 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert loaded(playing_page)==[pl
+    '6ab6271070': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8806 cf_label=m.nodes[m.nodes[cf][children][0]][children][1]; assert m.nodes[cf_label
+    'a153bcc628': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8806 cf_label=m.nodes[m.nodes[cf][children][0]][children][1]; assert m.nodes[cf_label
+    'd3ef113228': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8807 f,ctx=m.handler(m.nodes[cf][children][0],O[EVT_CLICK]); m.calls=[]
+    'cd883ae115': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8808 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[cf_label][t
+    '2a4b480d6f': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8809 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
+    '115a769ae0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8810 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
+    '8271bfe8ff.13': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8810 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
+    '6ab6271070.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8811 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
+    '8271bfe8ff.14': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8811 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
+    '5350877c9a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8814 sort_label,refresh_label=(m.nodes[m.nodes[r][children][0]][children][1] for r in
+    '1f952a4891': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8815 assert m.nodes[sort_label][text]==Coverflow Sort: Album and m.nodes[refresh_labe
+    'acc55bb4b8': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8816 f,ctx=m.handler(m.nodes[cf_refresh][children][0],O[EVT_CLICK]); m.mock(opendir@G
+    'd9ba565d32': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8817 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]==Co
+    '26bda3c14e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8818 assert [m.text(c[1]) for c in m.calls if c[0]==opendir@GLIBC_2.0]==[/mnt/mmc/.co
+    '1cdc7d997d': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8827 assert texts()==[Accent: Ivory,Home: Split,Battery: Icon,Theme: Minimal]; passed
+    'a7f54dea42': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8835 m.call(address=HOOKS[home_page_init][0],args=(home,0,0,0),gap=0)
+    'd3cec3151b': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8836 art=named(m,home,img_homeart)
+    '84fb5c2e21': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8861 shortcut_button=m.nodes[shortcut][children][0]
+    '5622a7e908': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8862 sf,sc=m.handler(shortcut_button,O[EVT_CLICK])
+    'e5e97b6d36': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8863 for label in (Favorites,Shuffle,Rated Albums,Artists,Albums,Games,Rockbox):
+    '927dc434cc': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8867 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(1,HOME)] and te
+    'a0f267beae': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8867 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(1,HOME)] and te
+    '0c075ea462': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8876 corners_label=m.nodes[m.nodes[corners][children][0]][children][1]; assert m.node
+    '3fd3d27d9c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8876 corners_label=m.nodes[m.nodes[corners][children][0]][children][1]; assert m.node
+    '88774fb87c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8878 assert corners_switch()==[switch_off]
+    '66dc56914a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8879 f,ctx=m.handler(m.nodes[corners][children][0],O[EVT_CLICK]); m.calls=[]
+    '191084d657': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8880 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and corners_switch()==[
+    '445cf125f8': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8881 assert [(c[1],m.text(c[3])) for c in m.calls if c[0]==write_int_config]==[(1,ROU
+    '8329427fda': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8883 light_label=m.nodes[m.nodes[light][children][0]][children][1]; assert m.nodes[li
+    'a206a7a356': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8883 light_label=m.nodes[m.nodes[light][children][0]][children][1]; assert m.nodes[li
+    '7553168288': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8884 f,ctx=f_light,ctx_light=m.handler(m.nodes[light][children][0],O[EVT_CLICK])
+    '91dc641367': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8885 for value,text in ((1,On),(2,Auto),(0,Off)):
+    'f1eae9f6ce': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8900 writes=click(3); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]==[(1,
+    'fd2f07fc93': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8900 writes=click(3); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]==[(1,
+    'd54d44a9a7': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8901 assert corners_switch()==[switch_off] and m.nodes[light_label][text]==Light Mode
+    'c181110dc5': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8902 assert (image_manager_unload_all,0x1000500) in [c[:2] for c in m.calls] and (wid
+    '944032aee2.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8904 assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and m.nodes
+    '044cdebfbf': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8905 assert texts()==[Accent: Cobalt,Home: Split,Battery: Icon,Theme: Classic]; home_
+    'baa6580069': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8905 assert texts()==[Accent: Cobalt,Home: Split,Battery: Icon,Theme: Classic]; home_
+    'bb0f2639c0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8911 for _ in range(2): m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0)
+    'a206a7a356.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8912 assert m.nodes[light_label][text]==Light Mode: Off
+    '231e4ded71': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8913 for value,name in ((5,Tangerine),(6,Plum),(8,Green),(0,Graphite),(1,Crimson),(2,
+    '304a770053': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8921 writes=click(3); assert [(w[0],m.text(w[2])) for w in writes]==[(0,THEME),(0,MIN
+    'f1eae9f6ce.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8921 writes=click(3); assert [(w[0],m.text(w[2])) for w in writes]==[(0,THEME),(0,MIN
+    '26a9fde919': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8922 assert texts()[3]==Theme: Minimal and corners_switch()==[switch_on] and m.nodes[
+    '78b2a6d980': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8925 assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and texts()
+    '466012b4b4.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8926 home_bounds(False)
+    '6c1776f92b': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8927 m.paint(view); assert not m.bands and m.rounded[0][color]==color_t(ACCENTS[0][0]
+    'a573372f36': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8929 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); m.call(address=f_lig
+    'a573372f36.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8929 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); m.call(address=f_lig
+    '9406000021': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8930 assert m.nodes[light_label][text]==Light Mode: Auto
+    'f49ec85af4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8931 for theme in (Classic,Minimal):
+    'a206a7a356.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8933 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); assert m.nodes[light
+    'a573372f36.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8933 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); assert m.nodes[light
+    '472cbcd7f9': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8935 for value,name in ((1,Crimson),(2,Tidal),(3,Champagne),(4,Cobalt),(5,Tangerine),
+    '3264b12e96': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8939 click(3); home_bounds(False,True); click(3); home_bounds(False); passed()
+    '3264b12e96.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8939 click(3); home_bounds(False,True); click(3); home_bounds(False); passed()
+    '466012b4b4.4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8939 click(3); home_bounds(False,True); click(3); home_bounds(False); passed()
+    'baa6580069.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8939 click(3); home_bounds(False,True); click(3); home_bounds(False); passed()
+    '63150259f5': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8941 for value,name in ((1,Percent),(2,Icon + Percent),(3,Percent Inside),(0,Icon)):
+    '47417148e4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
+    'e44a70fe75': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
+    'f529705857': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
+    'b43f0ec9d3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8946 m,view,rows=display({BATTERY:3}); assert m.nodes[m.nodes[m.nodes[rows[2]][childr
+    'e8b43de32c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8946 m,view,rows=display({BATTERY:3}); assert m.nodes[m.nodes[m.nodes[rows[2]][childr
+    '47417148e4.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8947 m,view,rows=display({ACCENT:2,HOME:1,THEME:1}); got=[m.nodes[m.nodes[m.nodes[r
+    'e684a09ad2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8947 m,view,rows=display({ACCENT:2,HOME:1,THEME:1}); got=[m.nodes[m.nodes[m.nodes[r
+    '49c403d473': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8948 assert got==[Accent: Tidal,Home: Full,Battery: Icon,Theme: Classic] and m.nodes[
+    '3d40ff6b9b': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8981 assert m.selected(view)==3 and m.confirm()==11 and m.dispatched()[0][1]==m.nodes
+    'b32ce1e463': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8985 assert at(0x613ee8,4)==bytes.fromhex(1cc7a524) and at(0x77c71c,5)==bdone\0; pass
+    'dca5c4a74d': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9068 for classic in (0,1):
+    '01f9e7d40a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9083 CONFIG.clear(); m,view=settings(display,sub=1); items=m.nodes[view][children]; t
+    'e1e8ddc1d0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9089 for classic in (1,0,1,0,1):  # each a click on Theme, from Minimal
+    'd83a7b5843': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9107 m,view=settings(0x4cbcc4,default=72); before=tree(m,view); lay(m,view); after=tr
+    '6f053ba547': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9110 m,view=settings(0x4cbcc4); odd=m.node(list_item); other=m.node(button)
+    '6f053ba547.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9117 m,view=settings(0x4cbcc4); lay(m,view); items=m.nodes[view][children]
+    'd652ea7b25.4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9119 m.paint(view); assert m.selected(view)==0
+    '330e6086e6.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9125 assert m.confirm()==11 and m.dispatched()[0][1]==buttons[-1]; passed()
+    '638c1bd20c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9126 m.click(buttons[2]); assert m.selected(view)==2; passed()
+    'ecbccc89c2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9126 m.click(buttons[2]); assert m.selected(view)==2; passed()
+    'f9bab94df3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9130 m,view,rows=display({ACCENT:2}); m.paint(view)
+    '8fe2090d8d': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9131 assert not m.bands and m.rounded[-1][color]==color_t(0xeeeeec); passed()
+    '5ffc96853b': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9132 m,view,rows=display({ACCENT:2,THEME:1}); m.paint(view)
+    'fe173a1c41': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9133 assert [m.bands[i][4] for i in (0,1,47)]==[color_t(ACCENTS[2][i]) for i in (4,0,
+    '8271bfe8ff.15': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9134 f,ctx=m.handler(m.nodes[rows[0]][children][0],O[EVT_CLICK]); m.call(address=f,ar
+    '91e3bc677a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9134 f,ctx=m.handler(m.nodes[rows[0]][children][0],O[EVT_CLICK]); m.call(address=f,ar
+    'b42e571763': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9135 m.paint(view); assert [m.bands[i][4] for i in (0,1,47)]==[color_t(ACCENTS[3][i])
+    'c547892cd4.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9143 assert m.nodes[m.slider][FG]==-1; centre(m,50); assert m.nodes[m.slider][FG]==si
+    'f1671ac043': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9148 for config,listw,roww,shown in (({HOME:1},375,O[HOME_FULL_ROW],0),({},O[HOME_SPL
 }
