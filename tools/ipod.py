@@ -821,6 +821,33 @@ def patch_word(data, address, old, new, purpose, changes=None):
         changes.append(dict(address=hex(address), original=hex(old), patched=hex(new), purpose=purpose))
 
 
+def settings_page(path, root, nav, stock_rows=(SET_STOCK_ROW,), bottom=None):
+    """A NAVBAR_ONLY page without its toolbar nav, a child of root: the toolbar stays, hidden and disabled, so
+    stock's widget and callback lookups still find it. The settings list holds SET_ROWS complete SET_ROW rows from
+    SET_TOP (ipod_list_layout lays the rows out); panels and notes move up the toolbar's height, keeping their size,
+    and text ends clear of a top corner. stock_rows are the list's audited default_item_heights. bottom: root's
+    height when the list must stop above BOTTOM (an M1 slide), holding as many complete rows as fit."""
+    nav[2]['visible'] = 'false'
+    nav[2]['enable'] = 'false'
+    bar = nav[1][3]
+    for n in root[3]:
+        if n is nav:
+            continue
+        kind, g, props, _ = n
+        if kind == 'list_view':  # settings rows: see ipod_list_layout
+            check(g[1] == bar and props.get('default_item_height') in map(str, stock_rows) and
+                  'item_height' not in props, f'{path}: unexpected settings list')
+            props['default_item_height'] = str(SET_ROW)
+            rows = SET_ROWS if bottom is None else min(SET_ROWS, (bottom - SET_TOP) // SET_ROW)
+            g[1], g[3] = SET_TOP, rows * SET_ROW
+        else:
+            check(g[1] >= bar, f'{path}: unexpected content under the toolbar')
+            g[1] -= bar
+            if kind in ('label', 'hscroll_label') and corner_inset(STATUS_H + g[1]):
+                g[2] = min(g[2], UI_W - g[0] - corner_x(STATUS_H + g[1], 0))
+    return root
+
+
 def patch_asset(path, data):
     check(sha(data) == UI_ASSETS[path], f'{path}: unaudited UI asset')
     root = decode(data)
@@ -850,6 +877,10 @@ def patch_asset(path, data):
     if path in TOOLBAR_SWITCHES:
         slider_plain(path, root)
         return encode(root)
+    if path in NAVBAR_ONLY:
+        settings_page(path, root, nav[0])
+        slider_plain(path, root)
+        return encode(root)
     if not playlist:
         nav[0][2]['visible'] = 'false'
         nav[0][2]['enable'] = 'false'
@@ -861,12 +892,7 @@ def patch_asset(path, data):
         if n is nav[0]:
             continue
         kind, g, props, _ = n
-        if kind == 'list_view' and path in NAVBAR_ONLY:  # settings rows: see ipod_list_layout
-            check(g[1] == 50 and props.get('default_item_height') == str(SET_STOCK_ROW) and
-                    'item_height' not in props, f'{path}: unexpected settings list')
-            props['default_item_height'] = str(SET_ROW)
-            g[1], g[3] = SET_TOP, SET_ROWS * SET_ROW
-        elif kind in ('list_view', 'table_view', 'tab_control'):
+        if kind in ('list_view', 'table_view', 'tab_control'):
             check(g[1] in (50, 100), f'{path}: unexpected list position')
             if not playlist:
                 g[1] -= 50
@@ -878,14 +904,6 @@ def patch_asset(path, data):
             g[1] = 10 + ((g[1] - 60) // 78) * PITCH
         elif props.get('name') == 'view':  # allmusic's stock empty-state panel
             g[1] -= 50
-        elif path in NAVBAR_ONLY:  # settings panels and notes keep their size; text ends clear of a top corner
-            check(g[1] >= 50, f'{path}: unexpected content under the toolbar')
-            g[1] -= 50
-            if kind in ('label', 'hscroll_label') and corner_inset(STATUS_H + g[1]):
-                g[2] = min(g[2], UI_W - g[0] - corner_x(STATUS_H + g[1], 0))
-    if path in NAVBAR_ONLY:
-        slider_plain(path, root)
-        return encode(root)
 
     def rows(n, in_row=False):
         kind, g, props, children = n
