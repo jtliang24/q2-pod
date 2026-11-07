@@ -873,7 +873,6 @@ def patch_asset(path, data):
     nav = [n for n in root[3] if n[2].get('name') == 'view_navbar']
     check(len(nav) == 1 and nav[0][1] in ([0, 0, 375, 50], [0, 0, 370, 50]), f'{path}: unexpected toolbar')  # 370: stream_page
     # Keep the widget (and callback lookups) alive. Children may be recreated by stock.
-    playlist = path == 'localmusic/playlist_page.bin'
     if path in TOOLBAR_SWITCHES:
         slider_plain(path, root)
         return encode(root)
@@ -881,29 +880,44 @@ def patch_asset(path, data):
         settings_page(path, root, nav[0])
         slider_plain(path, root)
         return encode(root)
+    library_page(path, root, nav[0])
+    return encode(root)
+
+
+# The stock row sizes the library rewrite takes: the Q2's (V1.32's 78 px rows on a 70 px body, its 365 px table_client,
+# the 50 px toolbar), or another model's (tools/m1plus_ipod.py).
+LIBRARY_STOCK = {'playlist': 'localmusic/playlist_page.bin', 'toolbar': 50, 'list_y': (50, 100), 'pitch': 78, 'body': 70,
+                 'client': 365, 'titles': (11, 14, 21, 40, 41), 'art': (9, 10)}
+
+
+def library_page(path, root, nav, stock=LIBRARY_STOCK):
+    """A library page (every asset page but the settings pages, Home and the whole-page rewrites) with the iPod rows:
+    its toolbar nav hidden and disabled (the Playlists page keeps its own), its lists from the top to BOTTOM, and its
+    rows PITCH high on a BODY high body, their text and art re-centred. stock: the model's row sizes."""
+    playlist = path == stock['playlist']
     if not playlist:
-        nav[0][2]['visible'] = 'false'
-        nav[0][2]['enable'] = 'false'
+        nav[2]['visible'] = 'false'
+        nav[2]['enable'] = 'false'
     else:  # the toolbar's right button keeps the iPod glyphs' corner clearance
-        for n in nav[0][3]:
+        for n in nav[3]:
             if n[2].get('name') == 'gif_returnplay':
                 n[1][0] = UI_W - corner_x(STATUS_H, n[1][3]) - n[1][2]
     for n in root[3]:
-        if n is nav[0]:
+        if n is nav:
             continue
         kind, g, props, _ = n
         if kind in ('list_view', 'table_view', 'tab_control'):
-            check(g[1] in (50, 100), f'{path}: unexpected list position')
+            check(g[1] in stock['list_y'], f'{path}: unexpected list position')
             if not playlist:
-                g[1] -= 50
+                g[1] -= stock['toolbar']
             g[3] = BOTTOM - g[1]
         elif props.get('name') == 'view_navbar_allplay':
             check(g == [0, 50, 375, 50], f'{path}: unexpected action bar')
             g[1] = 0
         elif kind == 'list_item':  # playlist editing actions
-            g[1] = 10 + ((g[1] - 60) // 78) * PITCH
+            g[1] = 10 + ((g[1] - 60) // stock['pitch']) * PITCH
         elif props.get('name') == 'view':  # allmusic's stock empty-state panel
-            g[1] -= 50
+            g[1] -= stock['toolbar']
 
     def rows(n, in_row=False):
         kind, g, props, children = n
@@ -911,24 +925,24 @@ def patch_asset(path, data):
             for key, value in props.items():
                 if key.endswith(':bg_color') and value == '#000000':
                     props[key] = '#00000000'
-        if kind == 'table_client' and props.get('self_layout', '').startswith('default(x=0,y=0,w=365,'):
+        if kind == 'table_client' and props.get('self_layout', '').startswith(f"default(x=0,y=0,w={stock['client']},"):
             # the full width, as the Library's scroll_view: the scroll bar overlays the row's right
             # edge, and the selection card and chevrons line up with every other list
-            props['self_layout'] = props['self_layout'].replace('w=365', f'w={UI_W}')
+            props['self_layout'] = props['self_layout'].replace(f"w={stock['client']}", f'w={UI_W}')
             g[2] = UI_W
-        in_row = in_row or kind in ('list_item', 'table_row') and g[3] in (0, 78)
+        in_row = in_row or kind in ('list_item', 'table_row') and g[3] in (0, stock['pitch'])
         for prop in ('row_height', 'default_item_height'):
-            if props.get(prop) == '78':
+            if props.get(prop) == str(stock['pitch']):
                 props[prop] = str(PITCH)
         if in_row:
-            if kind in ('list_item', 'table_row') and g[3] == 78:
+            if kind in ('list_item', 'table_row') and g[3] == stock['pitch']:
                 g[3] = PITCH
-            elif g[3] == 70:
+            elif g[3] == stock['body']:
                 g[3] = BODY
-            if g[1] in (11, 14, 21, 40, 41):
+            if g[1] in stock['titles']:
                 # titles and metadata keep their stock centring: the body shrank by two pixels
                 g[1] -= 1
-            elif g[1] in (9, 10) and kind == 'image':
+            elif g[1] in stock['art'] and kind == 'image':
                 g[1] = ART_INSET
         if path == ARTIST_PAGE:
             if kind == 'pages':
@@ -940,7 +954,7 @@ def patch_asset(path, data):
         for child in children:
             rows(child, in_row)
     rows(root)
-    return encode(root)
+    return root
 
 
 def patch_code(data, symbols):
