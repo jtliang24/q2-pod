@@ -10150,18 +10150,41 @@ worker,arg=m.threads[0]; m.call(address=worker,args=(arg,0,0,0),gap=0); m.advanc
 assert m.files['/mnt/data/ringnav-lengths']==struct.pack('<2I',fnv('/p/A'),1300)
 assert m.texts()==['Long Songs','A','Artist · 21:40','A','Artist · 11:40']; passed()
 
+def library_entry(m,image,caption,geometry=False):
+    """The Library's row that opens a medium's page, its tap target. The Q2's is Local Music's last (LIBRARY_INIT, 17
+    rows with the medium's); the M1 Plus's is the Q2 Pod page's (library_open, ipod-ui 4.4): V2.1 has no localmusic_page."""
+    if is_m1plus:
+        assert m.call(address=payload_syms['library_open'],args=(0,0,0,0),gap=0,count=5_000_000)==0
+        m.page=m.top; assert m.nodes[m.top]['name']=='library_page'
+        rows=m.nodes[m.find('scroll_view')]['children']
+        row,=[r for r in rows if m.nodes[m.nodes[r]['children'][0]].get('image')==image]
+        assert m.nodes[m.nodes[row]['children'][1]]['text']==caption
+        return row
+    view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
+    assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0,count=5_000_000)==0
+    button=row_button(m,m.nodes[view]['children'][-1]); icon,label,into=m.nodes[button]['children']
+    assert m.nodes[icon]['image']==image and m.nodes[label]['text']==caption and len(m.nodes[view]['children'])==17
+    if geometry: library_geometry(m,m.nodes[view]['children'][-1])
+    return button
+
 # Upload Scrobbles: the second-last row, above Update Local Music, only with an account in the card's .scrobble.ini (a
 # ListenBrainz token or all four Last.fm keys). Without Wi-Fi it only says so; otherwise scrobble.c's thread
 # starts, a second press finds it running, and a timer reports the result once the thread ends.
 m=ShuffleMachine(); m.config.update(USER='u',PASSWORD='p',API_KEY='k')  # no API_SECRET: no row
-view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==16
-assert ('/mnt/mmc/.scrobble.ini','LASTFM','API_SECRET','') in m.config_reads
-m.config['TOKEN']='tok'; m.nodes[view]['children']=[m.node('list_item') for _ in range(11)]
-assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==17
-button=row_button(m,m.nodes[view]['children'][-2]); icon,label=m.nodes[button]['children']
-assert m.nodes[icon]['image']=='local_scrobble' and m.nodes[label]['text']=='Upload Scrobbles' and not m.nodes[button].get('name')
-library_geometry(m,m.nodes[view]['children'][-2])
+if is_m1plus:
+    m.call(address=payload_syms['library_open'],args=(0,0,0,0),gap=0); m.page=m.top
+    assert 'Upload Scrobbles' not in m.texts()
+    m=ShuffleMachine(); m.config['TOKEN']='tok'
+    button=library_entry(m,'local_scrobble','Upload Scrobbles')
+else:
+    view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
+    assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==16
+    assert ('/mnt/mmc/.scrobble.ini','LASTFM','API_SECRET','') in m.config_reads
+    m.config['TOKEN']='tok'; m.nodes[view]['children']=[m.node('list_item') for _ in range(11)]
+    assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==17
+    button=row_button(m,m.nodes[view]['children'][-2]); icon,label=m.nodes[button]['children']
+    assert m.nodes[icon]['image']=='local_scrobble' and m.nodes[label]['text']=='Upload Scrobbles' and not m.nodes[button].get('name')
+    library_geometry(m,m.nodes[view]['children'][-2])
 f,ctx=m.handler(button,O['EVT_CLICK'])
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]=='Connect to Wi-Fi first' and not m.threads
 m.wifi=3; assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]=='Uploading scrobbles' and len(m.threads)==1
@@ -10180,10 +10203,7 @@ assert [auto(n)//60000 for n in (0,1,10,30,31,1000)]==[180,176,140,60,60,60]; pa
 m=ShuffleMachine(); m.card=[('Music',4),('PODCASTS',4),('Audiobooks',8)]
 m.handlers[int(manifest['patch_symbols']['stock_folder_trampoline'],16)]='stock_folder'
 m.handlers[int(manifest['patch_symbols']['stock_folder_back_trampoline'],16)]='stock_folder_back'
-view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[view]['children'])==17
-button=row_button(m,m.nodes[view]['children'][-2]); icon,label,into=m.nodes[button]['children']
-assert m.nodes[icon]['image']=='local_podcasts' and m.nodes[label]['text']=='Podcasts' and not m.nodes[button].get('name')
+button=library_entry(m,'local_podcasts','Podcasts')
 f,ctx=m.handler(button,O['EVT_CLICK']); m.calls=[]
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and [m.text(c[1]) for c in m.calls if c[0]=='navigator_to']==['folder_page']
 win=m.node('window','folder_page'); m.calls=[]
@@ -10201,10 +10221,7 @@ assert m.u.mem_read(syms['g_folder_layer'],1)[0]==3; passed()
 m=ShuffleMachine(); m.card=[('Audiobooks',4)]; m.byte(syms['g_otg_status'],1)
 m.handlers[int(manifest['patch_symbols']['stock_folder_trampoline'],16)]='stock_folder'
 m.handlers[int(manifest['patch_symbols']['stock_folder_back_trampoline'],16)]='stock_folder_back'
-view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)])
-m.top=m.node('window','localmusic_page',[view])
-m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)
-button=row_button(m,m.nodes[view]['children'][-2])
+button=library_entry(m,'local_audiobooks','Audiobooks')
 f,ctx=m.handler(button,O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
 win=m.node('window','folder_page'); m.call(address=HOOKS['folder_page_init'][0],args=(win,0,0,0),gap=0)
 assert m.text(syms['g_folder_path'])=='/mnt/mmc/Audiobooks' and m.u.mem_read(syms['g_folder_layer'],1)[0]==3
@@ -10466,11 +10483,7 @@ R='/mnt/mmc/photos'
 tree={'/mnt/mmc':[('Music',4),('photos',4)],R:[('b.jpg',8),('A.png',8),('._b.jpg',8),('notes.txt',8),('Trip',4),('Empty',4),('.hidden',4)],
       R+'/Trip':[('2.JPG',8),('1.jpg',0)],R+'/Empty':[('x.txt',8)],R+'/.hidden':[('h.jpg',8)]}
 data={R+'/b.jpg':exif(6),R+'/A.png':b'\x89PNG',R+'/Trip/1.jpg':b'corrupt',R+'/Trip/2.JPG':exif(1)}
-m=PhotosMachine(tree,data)
-view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0,count=5_000_000)==0
-button=row_button(m,m.nodes[view]['children'][-1]); icon,label,into=m.nodes[button]['children']
-assert m.nodes[icon]['image']=='local_photos' and m.nodes[label]['text']=='Photos' and len(m.nodes[view]['children'])==17
+m=PhotosMachine(tree,data); button=library_entry(m,'local_photos','Photos')
 f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
 page=m.top; assert m.nodes[page]['name']=='photos_page' and m.nodes[page]['style:normal:bg_color']==-0x1000000
 albums,grid,viewer=m.nodes[page]['children']; assert not m.nodes[grid]['visible'] and not m.nodes[viewer]['visible']
@@ -10544,8 +10557,8 @@ if is_m1plus:
     assert shown()==before and m.get(s+O['SLIDE_INDEX'])==1; passed()
 # Centre shows "2 of 4" and the name; a bad photo says so whatever.
 info=[x for x in m.nodes[viewer]['children'] if m.nodes[x]['type']=='hscroll_label'][0]
-# M1 Plus: the viewer's back button, over the photo (Return goes back to the grid).
-assert len([x for x in m.nodes[viewer]['children'] if m.nodes[x].get('style')=='navbar_btnreturn_style'])==int(is_m1plus)
+# The status-bar chevron closes the viewer; there is no overlay back button.
+assert len([x for x in m.nodes[viewer]['children'] if m.nodes[x].get('style')=='navbar_btnreturn_style'])==0
 x,y,bw,bh=cf_geometry(m,info); inset=0 if is_m1plus else max(corner_inset(30+y),corner_inset(30+y+bh))
 assert not m.nodes[info]['visible'] and inset<=x and x+bw<=O['UI_W']-inset  # the whole rounded band clears the glass
 f,ctx=m.handler(m.nodes[s]['children'][1],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
@@ -10676,17 +10689,12 @@ with zipfile.ZipFile(buf,'w',zipfile.ZIP_DEFLATED) as z:
     z.writestr('b.xhtml','<html><body><p>Chapter 2</p></body></html>')
 tree={'/mnt/mmc':[('Music',4),('books',4)],R:[('Zed.txt',8),('notes.md',8),('._Zed.txt',8),('Series',4)],R+'/Series':[('A Tale.EPUB',8)]}
 files={R+'/Zed.txt':bytearray(txt.encode()),R+'/Series/A Tale.EPUB':bytearray(buf.getvalue())}
-m=BooksMachine(tree,files)
-view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0,count=5_000_000)==0
-button=row_button(m,m.nodes[view]['children'][-1]); icon,label,into=m.nodes[button]['children']
-assert m.nodes[icon]['image']=='local_books' and m.nodes[label]['text']=='Books' and len(m.nodes[view]['children'])==17
-library_geometry(m,m.nodes[view]['children'][-1])
+m=BooksMachine(tree,files); button=library_entry(m,'local_books','Books',geometry=True)
 f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
 page=m.page=m.top; assert m.nodes[page]['name']=='books_page' and m.nodes[page]['style:normal:bg_color']==-0x1000000
 books,reader=m.nodes[page]['children']; sheet,info,*back=m.nodes[reader]['children']
-# M1 Plus: the reader's back button, over the page (Return goes back to the books).
-assert [m.nodes[b]['style'] for b in back]==(['navbar_btnreturn_style'] if is_m1plus else [])
+# The status-bar chevron closes the reader; there is no overlay back button.
+assert [m.nodes[b]['style'] for b in back]==[]
 assert not m.nodes[reader]['visible'] and labels(books)==['Books','A Tale','Zed']; passed()
 # A .txt opens on its first page: up to ten white lines of the default font, the BOM dropped,
 # wrapped at spaces within the margins, every line clear of the glass's rounded corners.
@@ -10868,12 +10876,16 @@ m.close(); assert m.get(payload_syms['g'])==0 and not frames() and m.get(payload
 R='/mnt/mmc/VIDEOS'
 tree={'/mnt/mmc':[('Music',4),('VIDEOS',4)],R:[('b.MKV',8),('a.mp4',8),('notes.txt',8),('._a.mp4',8),('Trip',4)],R+'/Trip':[('c.avi',8)]}
 m=BooksMachine(tree,{})
-view=m.node('scroll_view','scroll_view_localmusic',[m.node('list_item') for _ in range(11)]); m.top=m.node('window','localmusic_page',[view])
-assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0,count=5_000_000)==0
-button=row_button(m,m.nodes[view]['children'][-1]); icon,label,into=m.nodes[button]['children']
-assert m.nodes[icon]['image']=='local_videos' and m.nodes[label]['text']=='Videos' and len(m.nodes[view]['children'])==17
+button=library_entry(m,'local_videos','Videos')
 f,ctx=m.handler(button,O['EVT_CLICK']); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and [m.text(c[1]) for c in m.calls if c[0]=='navigator_to']==['folder_page']; m.page=m.node('window','folder_page'); passed()
+assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
+if is_m1plus:
+    m.page=m.top
+    assert m.nodes[m.page]['name']=='books_page' and labels(m.nodes[m.page]['children'][0])==['Videos','c','a','b']
+else:
+    assert [m.text(c[1]) for c in m.calls if c[0]=='navigator_to']==['folder_page']
+    m.page=m.node('window','folder_page')
+passed()
 # Folder view's video (books_video) starts the same q2video, with no Videos page open; anything else is left to stock.
 for path,ok in ((R+'/b.MKV',1),(R+'/notes.txt',0),(R+'/._a.mp4',0)):
     v=BooksMachine(tree,{}); assert v.call(address=payload_syms['books_video'],args=(v.string(path),0,0,0),gap=0)==ok,path

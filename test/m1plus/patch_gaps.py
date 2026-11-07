@@ -21,7 +21,7 @@ GAPS = {
     '6faac8d410': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5452 assert all(h==30 and inset<=x and x+w<=375-inset for x,w,h in cells), (inset,cel
     '4a0bdf3e2a': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5453 title=named(m,bar,label_clock); x,w=m.get(title+O[W_X]),m.get(title+O[W_W])
     '83f4a0efd5': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5454 left,right=(cells[len(m.nodes[views[0]][children])-1],cells[len(m.nodes[views[0]
-    '953d4e8e49': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5455 assert left[0]+left[1]<=x and x+w<=right[0] and x+w/2==375/2, (left,right,x,w); 
+    '953d4e8e49': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5455 assert left[0]+left[1]<=x and x+w<=right[0] and x+w/2==375/2, (left,right,x,w);
     '4f4969742f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5461 for mode,want in enumerate((10,O[BATT_PCT_W],O[BATT_BODY_W]+O[BATT_NUB_W]+O[BATT
     'b51c376171': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5474 m.nodes[named(m,bar,img_bt)][visible]=0
     '019eb47519': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5477 m.nodes[named(m,bar,label_battery)][text]=50%
@@ -36,265 +36,6 @@ GAPS = {
     'c0c216337f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5504 m.word(0xa3beac,2); m.nodes[eq][visible]=1; m.nodes[state][visible]=0
     '4cb62ca34f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5506 assert (stock_showface,bar) in [c[:2] for c in m.calls] and m.nodes[state][visib
     '0a9fe5785b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5508 for mode in (1,2,3,0,1,2,3,0):
-    # Library rows (ipod-ui 4.4)
-    '90bd3c3315': 'Library rows (ipod-ui 4.4)',  # patch.py:10104 assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[
-    '1735956559': 'Library rows (ipod-ui 4.4)',  # patch.py:10107 assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[
-    '1735956559.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10130 assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[
-    'c9436c1725': 'Library rows (ipod-ui 4.4)',  # patch.py:10132 assert m.nodes[icon][image]==local_podcasts and m.nodes[label][text]==Podcasts a
-    'e426449b2e': 'Library rows (ipod-ui 4.4)',  # patch.py:10134 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and [m.text(c[1]) for c
-    'aff13a2aa5': 'Library rows (ipod-ui 4.4)',  # patch.py:10137 assert m.text(syms[g_folder_path])==/mnt/mmc/PODCASTS and m.u.mem_read(syms[g_fo
-    '6904e6d290': 'Library rows (ipod-ui 4.4)',  # patch.py:10138 assert [c[0] for c in m.calls]==([stock_folder,folder_reset_variable,strlen@GLIB
-    'e2bf44dcdb': 'Library rows (ipod-ui 4.4)',  # patch.py:10156 assert m.text(syms[g_folder_path])==/mnt/mmc/Audiobooks and m.u.mem_read(syms[g_
-    '4cf040f0ac.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10162 assert m.u.mem_read(syms[g_folder_layer],1)[0]==1; passed()
-    'e1488a9b2c': 'Library rows (ipod-ui 4.4)',  # patch.py:10419 assert m.nodes[icon][image]==local_photos and m.nodes[label][text]==Photos and l
-    'f70dc558f2': 'Library rows (ipod-ui 4.4)',  # patch.py:10421 page=m.top; assert m.nodes[page][name]==photos_page and m.nodes[page][style:norm
-    '0bbb08dfbf': 'Library rows (ipod-ui 4.4)',  # patch.py:10422 albums,grid,viewer=m.nodes[page][children]; assert not m.nodes[grid][visible] an
-    'f137392a59': 'Library rows (ipod-ui 4.4)',  # patch.py:10422 albums,grid,viewer=m.nodes[page][children]; assert not m.nodes[grid][visible] an
-    '98bd21d7ec': 'Library rows (ipod-ui 4.4)',  # patch.py:10427 assert labels(albums)==[Photos,All Photos,Trip]; passed()
-    'e684ea0e3b': 'Library rows (ipod-ui 4.4)',  # patch.py:10430 rows=m.find(scroll_view,albums); first=m.nodes[rows][children][0]
-    'ef0fa3e1ea': 'Library rows (ipod-ui 4.4)',  # patch.py:10430 rows=m.find(scroll_view,albums); first=m.nodes[rows][children][0]
-    '7a16728ff5': 'Library rows (ipod-ui 4.4)',  # patch.py:10431 f,ctx=m.handler(first,O[EVT_CLICK]); m.call(address=f,args=(ctx,m.event,0,0),gap
-    '1fd75a2d47': 'Library rows (ipod-ui 4.4)',  # patch.py:10432 assert not m.nodes[albums][visible] and m.nodes[grid][visible] and labels(grid)=
-    'f35ed69ec8': 'Library rows (ipod-ui 4.4)',  # patch.py:10433 tiles_view=m.find(scroll_view,grid); tiles=m.nodes[tiles_view][children]
-    'f527a66865': 'Library rows (ipod-ui 4.4)',  # patch.py:10433 tiles_view=m.find(scroll_view,grid); tiles=m.nodes[tiles_view][children]
-    'f2dcd8f006': 'Library rows (ipod-ui 4.4)',  # patch.py:10434 assert m.nodes[tiles_view].get(yslidable)==1 and m.nodes[tiles_view].get(virtual
-    'ca5bcbf4b7': 'Library rows (ipod-ui 4.4)',  # patch.py:10435 assert [cf_geometry(m,t) for t in tiles]==[(O[PH_GRID_X]+(i%O[PH_COLS])*O[PH_TIL
-    '014c02e5ef': 'Library rows (ipod-ui 4.4)',  # patch.py:10436 assert all(m.nodes[t][style]==S(s_listitem_black) for t in tiles) and len(m.thre
-    '5e9c3519c5.5': 'Library rows (ipod-ui 4.4)',  # patch.py:10443 worker,arg=m.threads[0]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,cou
-    '05e51b9735': 'Library rows (ipod-ui 4.4)',  # patch.py:10445 assert m.thumbs==[(paths[0],cache(0,.tmp),SW,SH),(cache(0,.jpg),cache(0,.tmp),TW
-    'c8bc727799': 'Library rows (ipod-ui 4.4)',  # patch.py:10449 assert m.forks==1 and m.bad=={cache(2,.bad)} and cache(2,.jpg) not in m.cache
-    '35102b9315': 'Library rows (ipod-ui 4.4)',  # patch.py:10450 m.advance(250); assert m.joins==[77]; passed()
-    '9798366090': 'Library rows (ipod-ui 4.4)',  # patch.py:10452 border(tiles[1]); assert m.draws[-1]==((0,0,54,72),((O[PH_TILE_W]-54)//2,(O[PH_T
-    '3f8d3b67be': 'Library rows (ipod-ui 4.4)',  # patch.py:10456 f,ctx=m.handler(tiles[1],O[EVT_CLICK]); m.call(address=f,args=(ctx,m.event,0,0),
-    '689b5f7f65': 'Library rows (ipod-ui 4.4)',  # patch.py:10457 s=m.find(slide_menu,viewer); m.slide=s
-    '803c670638': 'Library rows (ipod-ui 4.4)',  # patch.py:10458 assert m.nodes[viewer][visible] and not m.nodes[grid][visible] and len(m.nodes[s
-    '445325f05f': 'Library rows (ipod-ui 4.4)',  # patch.py:10461 assert stride==(O[PH_SHOT_H] if is_m1plus else O[UI_W]), stride
-    'd3dd7d93fb': 'Library rows (ipod-ui 4.4)',  # patch.py:10462 assert m.get(s+O[SLIDE_INDEX])==1
-    'f14b2a65e7': 'Library rows (ipod-ui 4.4)',  # patch.py:10465 assert m.draws==want_draws and m.loads==[file://+cache(1,.jpg),file://+cache(0,.
-    '9a0ce9d7d0': 'Library rows (ipod-ui 4.4)',  # patch.py:10469 (_,a),(_,b)=m.draws
-    '9c02c75b54': 'Library rows (ipod-ui 4.4)',  # patch.py:10472 assert len(m.draws)==2 and a[0]-rest_x==b[0]+O[UI_W] and a[0]-rest_x==O[UI_W]//4
-    'd869882dfa': 'Library rows (ipod-ui 4.4)',  # patch.py:10474 if is_m1plus:
-    'eb14fc1851': 'Library rows (ipod-ui 4.4)',  # patch.py:10492 info=[x for x in m.nodes[viewer][children] if m.nodes[x][type]==hscroll_label][0
-    '375ba953ac': 'Library rows (ipod-ui 4.4)',  # patch.py:10494 assert len([x for x in m.nodes[viewer][children] if m.nodes[x].get(style)==navba
-    'b1e491e365': 'Library rows (ipod-ui 4.4)',  # patch.py:10496 assert not m.nodes[info][visible] and inset<=x and x+bw<=O[UI_W]-inset  # the wh
-    '04d4486489': 'Library rows (ipod-ui 4.4)',  # patch.py:10497 f,ctx=m.handler(m.nodes[s][children][1],O[EVT_CLICK]); m.call(address=f,args=(ct
-    'd3326d5c6b': 'Library rows (ipod-ui 4.4)',  # patch.py:10498 assert m.nodes[info][visible] and m.nodes[info][text]==2 of 4  b.jpg and m.nodes
-    '77da0b2628': 'Library rows (ipod-ui 4.4)',  # patch.py:10499 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert not m.nodes[info][visible
-    '2e373d3697': 'Library rows (ipod-ui 4.4)',  # patch.py:10500 m.word(s+O[SLIDE_INDEX],2); f,ctx=m.handler(s,O[EVT_VALUE_CHANGED]); m.call(addr
-    'c7fddc062c': 'Library rows (ipod-ui 4.4)',  # patch.py:10501 assert m.nodes[info][visible] and m.nodes[info][text]=="Cant open this photo"; p
-    '807736ab70': 'Library rows (ipod-ui 4.4)',  # patch.py:10503 m.top=page; assert m.call()==11 and signed(m.get(m.get(s+O[SLIDE_ANIMATOR])+O[AN
-    '756d505e56': 'Library rows (ipod-ui 4.4)',  # patch.py:10505 m.page=page; assert m.key()==11 and m.nodes[grid][visible] and not m.nodes[viewe
-    '45e71bc88a': 'Library rows (ipod-ui 4.4)',  # patch.py:10506 assert m.nodes[tiles_view][_ringnav_index]==2 and m.nodes[tiles_view][_ringnav_c
-    '3e0937e7bd': 'Library rows (ipod-ui 4.4)',  # patch.py:10507 assert m.key()==11 and m.nodes[albums][visible] and not m.nodes[grid][visible]
-    'c41f2aab67': 'Library rows (ipod-ui 4.4)',  # patch.py:10509 m.close(); assert sorted(m.destroyed)==sorted(m.frames) and m.frames; passed()
-    'cbacef2660': 'Library rows (ipod-ui 4.4)',  # patch.py:10629 assert m.nodes[icon][image]==local_books and m.nodes[label][text]==Books and len
-    'b358ca1c9e': 'Library rows (ipod-ui 4.4)',  # patch.py:10632 page=m.page=m.top; assert m.nodes[page][name]==books_page and m.nodes[page][styl
-    '733a834669': 'Library rows (ipod-ui 4.4)',  # patch.py:10635 assert [m.nodes[b][style] for b in back]==([navbar_btnreturn_style] if is_m1plus
-    'c46dab838d': 'Library rows (ipod-ui 4.4)',  # patch.py:10636 assert not m.nodes[reader][visible] and labels(books)==[Books,A Tale,Zed]; passe
-    '9f67208a44': 'Library rows (ipod-ui 4.4)',  # patch.py:10639 rows=m.nodes[m.find(scroll_view,books)][children]
-    '3cc8ca65d6': 'Library rows (ipod-ui 4.4)',  # patch.py:10645 open_book(1); assert m.nodes[reader][visible] and not m.nodes[books][visible] an
-    '4da64fc55e': 'Library rows (ipod-ui 4.4)',  # patch.py:10645 open_book(1); assert m.nodes[reader][visible] and not m.nodes[books][visible] an
-    'b1fcbcb769': 'Library rows (ipod-ui 4.4)',  # patch.py:10647 assert len(first)==O[BOOK_ROWS] and all(c==0xffffffff and font==(default,20) for
-    '498022484e': 'Library rows (ipod-ui 4.4)',  # patch.py:10648 assert  .join(t for t,*_ in first if t).split()==words[:len( .join(t for t,*_ in
-    '4d543f31ef': 'Library rows (ipod-ui 4.4)',  # patch.py:10652 assert [y for _,_,y,*_ in first]==[6+26*i for i in range(O[BOOK_ROWS])] and len(
-    '50336d44f7': 'Library rows (ipod-ui 4.4)',  # patch.py:10655 seen= .join(t for t,*_ in first+second).split(); assert seen==words[:len(seen)] 
-    '6f3fb08151': 'Library rows (ipod-ui 4.4)',  # patch.py:10659 assert m.call(O[KEY_CENTER])==11 and m.nodes[info][visible] and re.fullmatch(r\d
-    '9ed8cbf09a': 'Library rows (ipod-ui 4.4)',  # patch.py:10661 assert m.key()==11 and m.nodes[books][visible] and /mnt/data/ringnav-books in m.
-    '1122a9c94c': 'Library rows (ipod-ui 4.4)',  # patch.py:10662 assert m.nodes[m.find(scroll_view,books)][_ringnav_index]==1
-    '3cc8ca65d6.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10663 open_book(1); assert page_lines()==third; passed()
-    '7a7393e41f': 'Library rows (ipod-ui 4.4)',  # patch.py:10666 m.key(); open_book(0); assert m.nodes[info][visible] and m.nodes[info][text]==Pr
-    '89ccc96807': 'Library rows (ipod-ui 4.4)',  # patch.py:10666 m.key(); open_book(0); assert m.nodes[info][visible] and m.nodes[info][text]==Pr
-    '5e9c3519c5.6': 'Library rows (ipod-ui 4.4)',  # patch.py:10667 worker,arg=m.threads[0]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,cou
-    'ff8f3c9395': 'Library rows (ipod-ui 4.4)',  # patch.py:10669 assert bytes(m.files[cache])==Chapter 1\n\nCafé & tea.\f\nChapter 2.encode() and
-    'a02c341028': 'Library rows (ipod-ui 4.4)',  # patch.py:10670 assert [t for t,*_ in page_lines()]==[Chapter 1,,Café & tea.] and m.call()==11 a
-    '89ccc96807.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10673 m.key(); m.files[R+/Series/A Tale.EPUB]=bytearray(bPK junk); m.files.pop(cache);
-    '9f1e9af975': 'Library rows (ipod-ui 4.4)',  # patch.py:10673 m.key(); m.files[R+/Series/A Tale.EPUB]=bytearray(bPK junk); m.files.pop(cache);
-    '66ca87bd79': 'Library rows (ipod-ui 4.4)',  # patch.py:10674 worker,arg=m.threads[-1]; m.call(address=worker,args=(arg,0,0,0),gap=0,count=50_
-    'e0231eb762': 'Library rows (ipod-ui 4.4)',  # patch.py:10675 assert m.nodes[info][visible] and m.nodes[info][text]=="Cant open this book" and
-    'e39fa9664a': 'Library rows (ipod-ui 4.4)',  # patch.py:10697 sheet,chooser=games_open(); G=m.get(payload_syms[g])
-    '213d438955': 'Library rows (ipod-ui 4.4)',  # patch.py:10698 assert labels(chooser)==[Games,Sudoku,Vortex,Solitaire,Snake] and not m.nodes[sh
-    '7fe72d327e': 'Library rows (ipod-ui 4.4)',  # patch.py:10699 rows=m.nodes[m.find(scroll_view,chooser)][children]
-    '1a3e33b7bc': 'Library rows (ipod-ui 4.4)',  # patch.py:10708 pick(0); assert m.nodes[sheet][visible] and not m.nodes[chooser][visible] and wo
-    '55475613b4': 'Library rows (ipod-ui 4.4)',  # patch.py:10708 pick(0); assert m.nodes[sheet][visible] and not m.nodes[chooser][visible] and wo
-    'b20a386471': 'Library rows (ipod-ui 4.4)',  # patch.py:10709 key(O[KEY_NEXT]); assert byte(G_CUR)==1
-    'f0312e5d82': 'Library rows (ipod-ui 4.4)',  # patch.py:10709 key(O[KEY_NEXT]); assert byte(G_CUR)==1
-    'b5cb0ea5ea': 'Library rows (ipod-ui 4.4)',  # patch.py:10710 key(O[KEY_PREV]); key(O[KEY_PREV]); assert byte(G_CUR)==80
-    'b5cb0ea5ea.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10710 key(O[KEY_PREV]); key(O[KEY_PREV]); assert byte(G_CUR)==80
-    'f954819afe': 'Library rows (ipod-ui 4.4)',  # patch.py:10710 key(O[KEY_PREV]); key(O[KEY_PREV]); assert byte(G_CUR)==80
-    '8ab44fbf2b': 'Library rows (ipod-ui 4.4)',  # patch.py:10711 key(O[KEY_FWD_BTN]); assert byte(G_CUR)==8
-    'd32ce63cd7': 'Library rows (ipod-ui 4.4)',  # patch.py:10711 key(O[KEY_FWD_BTN]); assert byte(G_CUR)==8
-    '27066724e2': 'Library rows (ipod-ui 4.4)',  # patch.py:10712 key(O[KEY_BACK_BTN]); assert byte(G_CUR)==80; passed()
-    'f954819afe.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10712 key(O[KEY_BACK_BTN]); assert byte(G_CUR)==80; passed()
-    '6097ea4c6d': 'Library rows (ipod-ui 4.4)',  # patch.py:10716 blank=cells().index(0); clue=next(i for i,c in enumerate(cells()) if c&16)
-    '762bfec88c': 'Library rows (ipod-ui 4.4)',  # patch.py:10716 blank=cells().index(0); clue=next(i for i,c in enumerate(cells()) if c&16)
-    '66068ea3ba': 'Library rows (ipod-ui 4.4)',  # patch.py:10717 m.byte(G+G_CUR,clue); key(O[KEY_CENTER]); assert not word(G_PICKING)
-    '89af2aa3aa': 'Library rows (ipod-ui 4.4)',  # patch.py:10717 m.byte(G+G_CUR,clue); key(O[KEY_CENTER]); assert not word(G_PICKING)
-    'de88260b50': 'Library rows (ipod-ui 4.4)',  # patch.py:10717 m.byte(G+G_CUR,clue); key(O[KEY_CENTER]); assert not word(G_PICKING)
-    '04c950dde2': 'Library rows (ipod-ui 4.4)',  # patch.py:10718 m.byte(G+G_CUR,blank); key(O[KEY_CENTER]); assert word(G_PICKING)
-    '89af2aa3aa.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10718 m.byte(G+G_CUR,blank); key(O[KEY_CENTER]); assert word(G_PICKING)
-    'dce369e8ed': 'Library rows (ipod-ui 4.4)',  # patch.py:10718 m.byte(G+G_CUR,blank); key(O[KEY_CENTER]); assert word(G_PICKING)
-    'f31d93643d': 'Library rows (ipod-ui 4.4)',  # patch.py:10719 for _ in range(3): key(O[KEY_NEXT])
-    '610b9df287': 'Library rows (ipod-ui 4.4)',  # patch.py:10720 paint(); key(O[KEY_CENTER]); assert cells()[blank]==3 and not word(G_PICKING)
-    '89af2aa3aa.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10720 paint(); key(O[KEY_CENTER]); assert cells()[blank]==3 and not word(G_PICKING)
-    '0c96352e42': 'Library rows (ipod-ui 4.4)',  # patch.py:10721 m.advance(2000); saved=bytes(m.files[/mnt/data/ringnav-sudoku]); assert len(save
-    '623961eddf': 'Library rows (ipod-ui 4.4)',  # patch.py:10721 m.advance(2000); saved=bytes(m.files[/mnt/data/ringnav-sudoku]); assert len(save
-    '076a4e0505': 'Library rows (ipod-ui 4.4)',  # patch.py:10722 key(O[KEY_CENTER]); key(O[KEY_NEXT]); key(O[KEY_RETURN]); assert cells()[blank]=
-    '4df64b387d': 'Library rows (ipod-ui 4.4)',  # patch.py:10722 key(O[KEY_CENTER]); key(O[KEY_NEXT]); key(O[KEY_RETURN]); assert cells()[blank]=
-    '89af2aa3aa.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10722 key(O[KEY_CENTER]); key(O[KEY_NEXT]); key(O[KEY_RETURN]); assert cells()[blank]=
-    'f0312e5d82.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10722 key(O[KEY_CENTER]); key(O[KEY_NEXT]); key(O[KEY_RETURN]); assert cells()[blank]=
-    '17b18e8bc2': 'Library rows (ipod-ui 4.4)',  # patch.py:10723 before=cells(); key(O[KEY_PLAY]); assert cells()==before and word(52); paint()
-    '585fa21b17': 'Library rows (ipod-ui 4.4)',  # patch.py:10723 before=cells(); key(O[KEY_PLAY]); assert cells()==before and word(52); paint()
-    'a63f5492f4': 'Library rows (ipod-ui 4.4)',  # patch.py:10723 before=cells(); key(O[KEY_PLAY]); assert cells()==before and word(52); paint()
-    '2682c91d39': 'Library rows (ipod-ui 4.4)',  # patch.py:10724 key(O[KEY_RETURN]); assert cells()==before and not word(52)
-    '4df64b387d.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10724 key(O[KEY_RETURN]); assert cells()==before and not word(52)
-    '4df64b387d.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10725 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
-    '66735bf663': 'Library rows (ipod-ui 4.4)',  # patch.py:10725 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
-    '7b597aa195.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10726 assert m.key()==11; passed()
-    'c54ae6e308': 'Library rows (ipod-ui 4.4)',  # patch.py:10728 m.page=m.top; pick(1); assert word(G_SCREEN)==2 and len(frames())==1 and m.get(p
-    'fd81feb488': 'Library rows (ipod-ui 4.4)',  # patch.py:10728 m.page=m.top; pick(1); assert word(G_SCREEN)==2 and len(frames())==1 and m.get(p
-    '39b8a3eb58': 'Library rows (ipod-ui 4.4)',  # patch.py:10729 m.word(payload_syms[wheel_travel],-50&0xffffffff); m.advance(34); assert word(G_
-    'b65e55e61d': 'Library rows (ipod-ui 4.4)',  # patch.py:10731 assert made(reset_poweroptions_timer) and made(widget_invalidate_force)
-    '89af2aa3aa.5': 'Library rows (ipod-ui 4.4)',  # patch.py:10735 key(O[KEY_CENTER]); m.advance(500); assert word(G_VX)==1 and made(widget_invalid
-    '909fcc2b6a': 'Library rows (ipod-ui 4.4)',  # patch.py:10735 key(O[KEY_CENTER]); m.advance(500); assert word(G_VX)==1 and made(widget_invalid
-    '8ab44fbf2b.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10736 key(O[KEY_FWD_BTN]); assert not made(widget_invalidate_force)
-    'a63f5492f4.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10737 key(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames() and m.get(payload_sy
-    'ab6bd7a3ab': 'Library rows (ipod-ui 4.4)',  # patch.py:10737 key(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames() and m.get(payload_sy
-    '0dfa876a9e': 'Library rows (ipod-ui 4.4)',  # patch.py:10738 x=word(G_VX+20),word(G_VX+24); m.advance(500); assert (word(G_VX+20),word(G_VX+2
-    '4cf142ac31': 'Library rows (ipod-ui 4.4)',  # patch.py:10738 x=word(G_VX+20),word(G_VX+24); m.advance(500); assert (word(G_VX+20),word(G_VX+2
-    'a63f5492f4.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10739 key(O[KEY_PLAY]); assert word(G_PAUSED)==0 and len(frames())==1 and m.get(payloa
-    'e8f2d84a5f': 'Library rows (ipod-ui 4.4)',  # patch.py:10739 key(O[KEY_PLAY]); assert word(G_PAUSED)==0 and len(frames())==1 and m.get(payloa
-    'ab6bd7a3ab.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10741 assert word(G_PAUSED)==1 and not frames() and m.get(payload_syms[wheel_raw])==0
-    '4df64b387d.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10742 key(O[KEY_RETURN]); assert word(G_PAUSED)==2; key(O[KEY_NEXT]); paint(); key(O[K
-    '89af2aa3aa.6': 'Library rows (ipod-ui 4.4)',  # patch.py:10742 key(O[KEY_RETURN]); assert word(G_PAUSED)==2; key(O[KEY_NEXT]); paint(); key(O[K
-    'f0312e5d82.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10742 key(O[KEY_RETURN]); assert word(G_PAUSED)==2; key(O[KEY_NEXT]); paint(); key(O[K
-    'ff742ca8d6': 'Library rows (ipod-ui 4.4)',  # patch.py:10742 key(O[KEY_RETURN]); assert word(G_PAUSED)==2; key(O[KEY_NEXT]); paint(); key(O[K
-    '6e49df19e4': 'Library rows (ipod-ui 4.4)',  # patch.py:10751 m.page=m.top; pick(2); assert word(G_SCREEN)==3 and cur()==0 and [n(p) for p in 
-    'fe2edce464': 'Library rows (ipod-ui 4.4)',  # patch.py:10751 m.page=m.top; pick(2); assert word(G_SCREEN)==3 and cur()==0 and [n(p) for p in 
-    '09e347b645': 'Library rows (ipod-ui 4.4)',  # patch.py:10752 key(O[KEY_CENTER]); m.advance(2000); assert (n(0),n(1))==(23,1) and bytes(m.file
-    '89af2aa3aa.7': 'Library rows (ipod-ui 4.4)',  # patch.py:10752 key(O[KEY_CENTER]); m.advance(2000); assert (n(0),n(1))==(23,1) and bytes(m.file
-    '27066724e2.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
-    '5393abcfc6': 'Library rows (ipod-ui 4.4)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
-    '5a8ea34ce4': 'Library rows (ipod-ui 4.4)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
-    '5a8ea34ce4.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
-    '8ab44fbf2b.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
-    'f0312e5d82.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
-    '27066724e2.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
-    'b5cb0ea5ea.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
-    'b5cb0ea5ea.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
-    'b77931b1d9': 'Library rows (ipod-ui 4.4)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
-    'faca4081c1': 'Library rows (ipod-ui 4.4)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
-    '2fba74c885': 'Library rows (ipod-ui 4.4)',  # patch.py:10755 put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a fac
-    '8829606b74': 'Library rows (ipod-ui 4.4)',  # patch.py:10755 put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a fac
-    'b06052aade': 'Library rows (ipod-ui 4.4)',  # patch.py:10755 put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a fac
-    '3adb6b93ae': 'Library rows (ipod-ui 4.4)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
-    '60d2c2805f.8': 'Library rows (ipod-ui 4.4)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
-    '89af2aa3aa.8': 'Library rows (ipod-ui 4.4)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
-    '04c950dde2.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10757 key(O[KEY_FWD_BTN]); key(O[KEY_CENTER]); assert word(G_PICKING)  # not onto the 
-    '89af2aa3aa.9': 'Library rows (ipod-ui 4.4)',  # patch.py:10757 key(O[KEY_FWD_BTN]); key(O[KEY_CENTER]); assert word(G_PICKING)  # not onto the 
-    '8ab44fbf2b.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10757 key(O[KEY_FWD_BTN]); key(O[KEY_CENTER]); assert word(G_PICKING)  # not onto the 
-    '89af2aa3aa.10': 'Library rows (ipod-ui 4.4)',  # patch.py:10758 key(O[KEY_FWD_BTN]); key(O[KEY_PREV]); key(O[KEY_CENTER]); assert not word(G_PIC
-    '8ab44fbf2b.5': 'Library rows (ipod-ui 4.4)',  # patch.py:10758 key(O[KEY_FWD_BTN]); key(O[KEY_PREV]); key(O[KEY_CENTER]); assert not word(G_PIC
-    'b5cb0ea5ea.5': 'Library rows (ipod-ui 4.4)',  # patch.py:10758 key(O[KEY_FWD_BTN]); key(O[KEY_PREV]); key(O[KEY_CENTER]); assert not word(G_PIC
-    'de88260b50.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10758 key(O[KEY_FWD_BTN]); key(O[KEY_PREV]); key(O[KEY_CENTER]); assert not word(G_PIC
-    'e122849745': 'Library rows (ipod-ui 4.4)',  # patch.py:10759 assert (n(6),n(7),byte(G_SOL+4+24*6+1),byte(G_SOL+4+24*7))==(2,1,64|10,64|3) and
-    '2d1aafdcf1': 'Library rows (ipod-ui 4.4)',  # patch.py:10760 put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O[KEY_CENTER]); key(O[KEY_CENTER])  #
-    '89af2aa3aa.11': 'Library rows (ipod-ui 4.4)',  # patch.py:10760 put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O[KEY_CENTER]); key(O[KEY_CENTER])  #
-    '89af2aa3aa.12': 'Library rows (ipod-ui 4.4)',  # patch.py:10760 put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O[KEY_CENTER]); key(O[KEY_CENTER])  #
-    'bb7cea08b8': 'Library rows (ipod-ui 4.4)',  # patch.py:10760 put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O[KEY_CENTER]); key(O[KEY_CENTER])  #
-    '66fc1b822e': 'Library rows (ipod-ui 4.4)',  # patch.py:10761 assert not word(G_PICKING) and n(1)==0 and n(2)==1 and byte(G_SOL+4+48)==64|26
-    '6f97b4218f': 'Library rows (ipod-ui 4.4)',  # patch.py:10762 m.byte(G+G_SOL+329,6); key(O[KEY_CENTER]); key(O[KEY_CENTER]); assert not word(G
-    '89af2aa3aa.13': 'Library rows (ipod-ui 4.4)',  # patch.py:10762 m.byte(G+G_SOL+329,6); key(O[KEY_CENTER]); key(O[KEY_CENTER]); assert not word(G
-    '89af2aa3aa.14': 'Library rows (ipod-ui 4.4)',  # patch.py:10762 m.byte(G+G_SOL+329,6); key(O[KEY_CENTER]); key(O[KEY_CENTER]); assert not word(G
-    'f24d40e6a6': 'Library rows (ipod-ui 4.4)',  # patch.py:10762 m.byte(G+G_SOL+329,6); key(O[KEY_CENTER]); key(O[KEY_CENTER]); assert not word(G
-    '4df64b387d.5': 'Library rows (ipod-ui 4.4)',  # patch.py:10763 key(O[KEY_CENTER]); key(O[KEY_RETURN]); assert not word(G_PICKING) and word(G_SC
-    '89af2aa3aa.15': 'Library rows (ipod-ui 4.4)',  # patch.py:10763 key(O[KEY_CENTER]); key(O[KEY_RETURN]); assert not word(G_PICKING) and word(G_SC
-    'fc8f50ca54': 'Library rows (ipod-ui 4.4)',  # patch.py:10763 key(O[KEY_CENTER]); key(O[KEY_RETURN]); assert not word(G_PICKING) and word(G_SC
-    '2074d0cbd8': 'Library rows (ipod-ui 4.4)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
-    '3b5bfd9a87': 'Library rows (ipod-ui 4.4)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
-    '48117aadd2': 'Library rows (ipod-ui 4.4)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
-    '4df64b387d.6': 'Library rows (ipod-ui 4.4)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
-    '60d2c2805f.9': 'Library rows (ipod-ui 4.4)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
-    'a63f5492f4.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
-    '0265a33ba6': 'Library rows (ipod-ui 4.4)',  # patch.py:10765 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
-    '4df64b387d.7': 'Library rows (ipod-ui 4.4)',  # patch.py:10765 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
-    'a8b1b2cfa3': 'Library rows (ipod-ui 4.4)',  # patch.py:10772 m.page=m.top; pick(3); assert word(G_SCREEN)==4 and len(frames())==1 and m.get(p
-    'eff446ceed': 'Library rows (ipod-ui 4.4)',  # patch.py:10772 m.page=m.top; pick(3); assert word(G_SCREEN)==4 and len(frames())==1 and m.get(p
-    '60d2c2805f.10': 'Library rows (ipod-ui 4.4)',  # patch.py:10773 assert body()==[207,208,209] and sdir()==1 and sstate()==1; paint()
-    '78000abffe': 'Library rows (ipod-ui 4.4)',  # patch.py:10773 assert body()==[207,208,209] and sdir()==1 and sstate()==1; paint()
-    'f8114faee2': 'Library rows (ipod-ui 4.4)',  # patch.py:10774 snake_before=bytes(m.u.mem_read(G+G_SN,820))
-    '144777dfab': 'Library rows (ipod-ui 4.4)',  # patch.py:10775 skey(O[KEY_NEXT]); skey(O[KEY_PREV]); assert bytes(m.u.mem_read(G+G_SN,820))==sn
-    '4d62a8962b': 'Library rows (ipod-ui 4.4)',  # patch.py:10775 skey(O[KEY_NEXT]); skey(O[KEY_PREV]); assert bytes(m.u.mem_read(G+G_SN,820))==sn
-    '8287c7e95e': 'Library rows (ipod-ui 4.4)',  # patch.py:10775 skey(O[KEY_NEXT]); skey(O[KEY_PREV]); assert bytes(m.u.mem_read(G+G_SN,820))==sn
-    '2fa25e9f4c': 'Library rows (ipod-ui 4.4)',  # patch.py:10776 skey(O[KEY_FWD_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==2
-    '2fa25e9f4c.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10776 skey(O[KEY_FWD_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==2
-    '96332b49eb': 'Library rows (ipod-ui 4.4)',  # patch.py:10776 skey(O[KEY_FWD_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==2
-    '0a7bec6f95': 'Library rows (ipod-ui 4.4)',  # patch.py:10777 m.advance(170); assert body()[-1]==229 and sdir()==3 and made(widget_invalidate_
-    '00dddc04a1': 'Library rows (ipod-ui 4.4)',  # patch.py:10778 skey(O[KEY_BACK_BTN]); assert sdir()==3  # waits for the next step
-    '96b5b20b52': 'Library rows (ipod-ui 4.4)',  # patch.py:10778 skey(O[KEY_BACK_BTN]); assert sdir()==3  # waits for the next step
-    '60d2c2805f.11': 'Library rows (ipod-ui 4.4)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
-    '8e41ef36eb': 'Library rows (ipod-ui 4.4)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
-    'af9a1fb5b9': 'Library rows (ipod-ui 4.4)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
-    'c37b29e226': 'Library rows (ipod-ui 4.4)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
-    'e18733dc4c': 'Library rows (ipod-ui 4.4)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
-    '144777dfab.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10780 skey(O[KEY_NEXT]); assert sdir()==3  # no turning while paused
-    '96b5b20b52.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10780 skey(O[KEY_NEXT]); assert sdir()==3  # no turning while paused
-    '8aa1970242': 'Library rows (ipod-ui 4.4)',  # patch.py:10781 skey(O[KEY_PLAY]); assert word(G_PAUSED)==0 and len(frames())==1
-    'c37b29e226.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10781 skey(O[KEY_PLAY]); assert word(G_PAUSED)==0 and len(frames())==1
-    'e3f0e327aa': 'Library rows (ipod-ui 4.4)',  # patch.py:10782 m.word(G+G_SN+812,5); m.advance(170*12); assert sstate()==2 and not frames() and
-    'eeb61f1ab8': 'Library rows (ipod-ui 4.4)',  # patch.py:10782 m.word(G+G_SN+812,5); m.advance(170*12); assert sstate()==2 and not frames() and
-    '25f19f306a': 'Library rows (ipod-ui 4.4)',  # patch.py:10783 best=bytes(m.files[/mnt/data/ringnav-snake]); assert len(best)==12 and best[:8]=
-    '33e712f7ef': 'Library rows (ipod-ui 4.4)',  # patch.py:10783 best=bytes(m.files[/mnt/data/ringnav-snake]); assert len(best)==12 and best[:8]=
-    '60d2c2805f.12': 'Library rows (ipod-ui 4.4)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
-    '7e0adf5d24': 'Library rows (ipod-ui 4.4)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
-    'e040fa48bd': 'Library rows (ipod-ui 4.4)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
-    '00827aff47': 'Library rows (ipod-ui 4.4)',  # patch.py:10785 skey(O[KEY_BACK_BTN]); assert sdir()==0  # side Previous turns left, without the
-    '00dddc04a1.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10785 skey(O[KEY_BACK_BTN]); assert sdir()==0  # side Previous turns left, without the
-    '60e611da01': 'Library rows (ipod-ui 4.4)',  # patch.py:10786 m.advance(170); assert body()[-1]==189
-    '2fa25e9f4c.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10787 skey(O[KEY_FWD_BTN]); assert sdir()==1  # side Next turns right
-    'b274b92071': 'Library rows (ipod-ui 4.4)',  # patch.py:10787 skey(O[KEY_FWD_BTN]); assert sdir()==1  # side Next turns right
-    '00dddc04a1.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10788 skey(O[KEY_PLAY]); skey(O[KEY_BACK_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==1
-    '2fa25e9f4c.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10788 skey(O[KEY_PLAY]); skey(O[KEY_BACK_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==1
-    'b274b92071.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10788 skey(O[KEY_PLAY]); skey(O[KEY_BACK_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==1
-    'c37b29e226.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10788 skey(O[KEY_PLAY]); skey(O[KEY_BACK_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==1
-    'c37b29e226.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10789 skey(O[KEY_PLAY])
-    'd303e06d4c': 'Library rows (ipod-ui 4.4)',  # patch.py:10790 skey(O[KEY_RETURN]); assert word(G_PAUSED)==2 and word(60)==0
-    'faf9c369f1': 'Library rows (ipod-ui 4.4)',  # patch.py:10790 skey(O[KEY_RETURN]); assert word(G_PAUSED)==2 and word(60)==0
-    '144777dfab.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10791 skey(O[KEY_NEXT]); assert word(60)==1  # the wheel picks in the menu
-    'ace70b2003': 'Library rows (ipod-ui 4.4)',  # patch.py:10791 skey(O[KEY_NEXT]); assert word(60)==1  # the wheel picks in the menu
-    '2dc4376a5f': 'Library rows (ipod-ui 4.4)',  # patch.py:10792 skey(O[KEY_PREV]); assert word(60)==0
-    '8287c7e95e.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10792 skey(O[KEY_PREV]); assert word(60)==0
-    '00dddc04a1.4': 'Library rows (ipod-ui 4.4)',  # patch.py:10793 skey(O[KEY_BACK_BTN]); assert word(60)==1
-    'ace70b2003.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10793 skey(O[KEY_BACK_BTN]); assert word(60)==1
-    '2dc4376a5f.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10794 skey(O[KEY_FWD_BTN]); assert word(60)==0
-    '2fa25e9f4c.5': 'Library rows (ipod-ui 4.4)',  # patch.py:10794 skey(O[KEY_FWD_BTN]); assert word(60)==0
-    '2fa25e9f4c.6': 'Library rows (ipod-ui 4.4)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
-    '60d2c2805f.13': 'Library rows (ipod-ui 4.4)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
-    '7e0adf5d24.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
-    '6c7b308867': 'Library rows (ipod-ui 4.4)',  # patch.py:10796 assert word(G_SCREEN)==0 and not frames(); passed()
-    '7e86233542.18': 'Library rows (ipod-ui 4.4)',  # patch.py:10798 m.close(); assert m.get(payload_syms[g])==0 and not frames()
-    '7fe72d327e.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10799 sheet,chooser=games_open(); G=m.get(payload_syms[g]); rows=m.nodes[m.find(scroll
-    'e39fa9664a.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10799 sheet,chooser=games_open(); G=m.get(payload_syms[g]); rows=m.nodes[m.find(scroll
-    '1a3e33b7bc.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10800 pick(0); assert cells()==before
-    '98152372b9': 'Library rows (ipod-ui 4.4)',  # patch.py:10800 pick(0); assert cells()==before
-    '4df64b387d.8': 'Library rows (ipod-ui 4.4)',  # patch.py:10801 key(O[KEY_RETURN]); m.advance(0); pick(2); assert sol()[:-4]==before_sol[:-4]  #
-    '6e49df19e4.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10801 key(O[KEY_RETURN]); m.advance(0); pick(2); assert sol()[:-4]==before_sol[:-4]  #
-    '74841e0c17': 'Library rows (ipod-ui 4.4)',  # patch.py:10801 key(O[KEY_RETURN]); m.advance(0); pick(2); assert sol()[:-4]==before_sol[:-4]  #
-    'd1de3ca1f1': 'Library rows (ipod-ui 4.4)',  # patch.py:10804 m.byte(G+G_SOL+329,0)
-    '9332ab3ede': 'Library rows (ipod-ui 4.4)',  # patch.py:10806 assert not saves; m.advance(2000); assert len(saves)==1 and bytes(m.files[/mnt/d
-    '1a3e33b7bc.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
-    '4df64b387d.10': 'Library rows (ipod-ui 4.4)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
-    '4df64b387d.9': 'Library rows (ipod-ui 4.4)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
-    '6e49df19e4.3': 'Library rows (ipod-ui 4.4)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
-    '71bc7633bd': 'Library rows (ipod-ui 4.4)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
-    '012e45a329': 'Library rows (ipod-ui 4.4)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
-    '4df64b387d.11': 'Library rows (ipod-ui 4.4)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
-    'c54ae6e308.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
-    '7e86233542.19': 'Library rows (ipod-ui 4.4)',  # patch.py:10809 m.close(); assert m.get(payload_syms[g])==0 and not frames() and m.get(payload_s
-    'e087294d76': 'Library rows (ipod-ui 4.4)',  # patch.py:10820 assert m.nodes[icon][image]==local_videos and m.nodes[label][text]==Videos and l
-    'e426449b2e.2': 'Library rows (ipod-ui 4.4)',  # patch.py:10822 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and [m.text(c[1]) for c
-    # Q2 Return key and window-manager ABI (Phase 5)
-    'dfe4cdaacb': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3181 for existing in (False,True):
-    '06388513e1': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3204 assert m.call(170,gap=0)==11
     # Home and the Q2 Pod page (ipod-ui 4.5)
     '4f7dbcae47': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5371 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
     'f43abcdfc1': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5371 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
@@ -323,8 +64,8 @@ GAPS = {
     'f43abcdfc1.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5403 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2]); m.clip=(0,0,375,32
     '3eaa96bb9c.5': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5404 m.paint(view)
     '1a714b6666': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5407 assert m.rounded[0][rect]==(25,HOME_ROW//2-3,6,6) and m.icons==bar()
-    '06323174d4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5409 m.call(); m.paint(view); assert m.selected(view)==1 and m.rounded[0][rect][1]>0 
-    '3eaa96bb9c.6': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5409 m.call(); m.paint(view); assert m.selected(view)==1 and m.rounded[0][rect][1]>0 
+    '06323174d4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5409 m.call(); m.paint(view); assert m.selected(view)==1 and m.rounded[0][rect][1]>0
+    '3eaa96bb9c.6': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5409 m.call(); m.paint(view); assert m.selected(view)==1 and m.rounded[0][rect][1]>0
     '2f7883a1cf': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5412 m.touch(); m.paint(view); assert m.icons==bar() and m.selected(view)==1; passed(
     '3eaa96bb9c.7': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5412 m.touch(); m.paint(view); assert m.icons==bar() and m.selected(view)==1; passed(
     '3eaa96bb9c.8': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5413 m.byte(syms[g_navbar_status],1); m.paint(view); assert not m.icons and not loade
@@ -336,21 +77,21 @@ GAPS = {
     '3eaa96bb9c.10': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5420 m.call(); m.paint(view); assert m.selected(view)==1 and m.sel()[1]>0 and m.icons
     '9089197301': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5420 m.call(); m.paint(view); assert m.selected(view)==1 and m.sel()[1]>0 and m.icons
     'f519682145': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:6030 for theme in (0,1):
-    '1903a0a4b3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:6083 assert not [t for t in m.timers.values() if t[1]==payload_syms[home_drift]] and 
+    '1903a0a4b3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:6083 assert not [t for t in m.timers.values() if t[1]==payload_syms[home_drift]] and
     'd30af9692f': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:6084 assert [signed(m.get(m.art+O[k])) for k in (W_X,W_Y,W_W,W_H)]==[SPLIT,0,PW,290];
     '4bf024fbb1': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8315 m.art_size=(319,319); m.pixels.clear(); paint_home(); c=tex_of(319,319)
     '9dbe947d5c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8316 assert m.nodes[m.art][image]== and [signed(m.get(m.art+O[k])) for k in (W_X,W_Y,
     'f55ac103ea': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8317 assert (c[u0],c[v0],c[rx],c[ry])==((290-PW)//2,0,29,29) and not drifts()
-    '8cef526eea': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8318 assert drawn()==framed(c,0) and (bitmap_lock_buffer_for_write,) in [x[:1] for x 
+    '8cef526eea': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8318 assert drawn()==framed(c,0) and (bitmap_lock_buffer_for_write,) in [x[:1] for x
     '214b860d29': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8319 assert drawn()==framed(c,0) and (bitmap_lock_buffer_for_write,) not in [x[:1] fo
     'd78c984174': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8320 paint_home(); m.advance(0); assert len(drifts())==1  # it arms on the next paint
     '4bf4c098d9': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8321 m.calls.clear(); m.advance(TICK); assert set(invalidated())=={(m.home,(SPLIT,0,P
-    'fb9e654bc7': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8322 assert drawn()==framed(c,TICK)!=framed(c,0)  # a tick moves it by a fraction of 
+    'fb9e654bc7': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8322 assert drawn()==framed(c,TICK)!=framed(c,0)  # a tick moves it by a fraction of
     '1b40e39f5c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8323 m.advance(1000-TICK); assert drawn()==framed(c,1000) and len(drifts())==1; passe
     '7684b0f340': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8324 m.advance(TICK); instructions[0]=0; assert drawn()==framed(c,1000+TICK); frame_c
     '41e7830027': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8326 tid=next(t for t,v in m.timers.items() if v[1]==payload_syms[home_drift]); m.tim
     '8fc3352f1c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8326 tid=next(t for t,v in m.timers.items() if v[1]==payload_syms[home_drift]); m.tim
-    '20aa5be228': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8327 m.advance(5000); t=1000+TICK+O[DRIFT_MAX_STEP_MS]; assert drawn()==framed(c,t); 
+    '20aa5be228': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8327 m.advance(5000); t=1000+TICK+O[DRIFT_MAX_STEP_MS]; assert drawn()==framed(c,t);
     '8856eca524': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8330 for cover_up in (lambda: setattr(m,top,np),lambda: m.byte(syms[g_backlight_statu
     '20aa5be228.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8343 paint_home(); assert drawn()==framed(c,t); paint_home(); assert len(drifts())==1
     'd78c984174.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8343 paint_home(); assert drawn()==framed(c,t); paint_home(); assert len(drifts())==1
@@ -394,8 +135,6 @@ GAPS = {
     '0f3397c13c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9716 if is_m1plus: q2pod_real_grid()
     'ff99c8ed8a': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9819 home_carousel()
     '6557576207': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9820 for full in (0,1):
-    '9bacd6a492': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:10442 border(tiles[0]); assert m.bands[-1][:5]==((O[PH_TILE_W]-O[PH_THUMB_W])//2,(O[PH
-    'edbce3467b': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:10453 border(tiles[2]); assert m.bands[-1][4]==O[PH_GREY]
     # boot resume to Home (ipod-ui 4.5)
     '6bd274c37f': 'boot resume to Home (ipod-ui 4.5)',  # patch.py:4657 assert struct.unpack_from(<I,demo,fileoff(demo,0x523de0))[0]==jal(boot)
     'ca3db14059': 'boot resume to Home (ipod-ui 4.5)',  # patch.py:4658 for car,cls,want in ((0,1,[(0x5550,4,1,3)]),(0,0xff,[]),(1,0xf003,[])):
@@ -507,11 +246,11 @@ GAPS = {
     '20a2be18af': 'Now Playing (ipod-ui 4.6)',  # patch.py:6575 m.word(O[MCL_POS],2); m.word(m.lrc+O[SCROLL_Y],60); assert rows(m)==0 and loop(m
     '5810214f81.2': 'Now Playing (ipod-ui 4.6)',  # patch.py:6576 follow(m,20); assert settle(m)[-1]==20; passed()  # the follow is back
     'b5e3f6b84f.3': 'Now Playing (ipod-ui 4.6)',  # patch.py:6576 follow(m,20); assert settle(m)[-1]==20; passed()  # the follow is back
-    '39fd93c268': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1; 
-    'b1c92aab98.10': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1; 
-    'b1c92aab98.8': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1; 
-    'b1c92aab98.9': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1; 
-    'f19fc2ec4d.2': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1; 
+    '39fd93c268': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1;
+    'b1c92aab98.10': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1;
+    'b1c92aab98.8': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1;
+    'b1c92aab98.9': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1;
+    'f19fc2ec4d.2': 'Now Playing (ipod-ui 4.6)',  # patch.py:6579 m=lyric_page(page=0); loop(m); m.pressed=1; loop(m); m.nodes[m.slide][value]=1;
     '20a2be18af.2': 'Now Playing (ipod-ui 4.6)',  # patch.py:6580 m.word(m.lrc+O[SCROLL_Y],60); loop(m); m.pressed=0; loop(m); follow(m,0); assert
     'a8da2bfe8f': 'Now Playing (ipod-ui 4.6)',  # patch.py:6580 m.word(m.lrc+O[SCROLL_Y],60); loop(m); m.pressed=0; loop(m); follow(m,0); assert
     'b1c92aab98.11': 'Now Playing (ipod-ui 4.6)',  # patch.py:6580 m.word(m.lrc+O[SCROLL_Y],60); loop(m); m.pressed=0; loop(m); follow(m,0); assert
@@ -531,8 +270,8 @@ GAPS = {
     'b1c92aab98.16': 'Now Playing (ipod-ui 4.6)',  # patch.py:6585 m.nodes[m.slide][value]=0; loop(m); assert follow(m,20)==20  # off the page: sto
     '504ef5d85c': 'Now Playing (ipod-ui 4.6)',  # patch.py:6586 m.byte(syms[g_backlight_status],0); loop(m); m.word(O[MCL_POS],2); assert loop(m
     'b1c92aab98.17': 'Now Playing (ipod-ui 4.6)',  # patch.py:6586 m.byte(syms[g_backlight_status],0); loop(m); m.word(O[MCL_POS],2); assert loop(m
-    '20a2be18af.3': 'Now Playing (ipod-ui 4.6)',  # patch.py:6587 m.word(m.lrc+O[SCROLL_Y],60); assert rows(m)==0  # a stale follow, then the new 
-    'b750c0fe2e': 'Now Playing (ipod-ui 4.6)',  # patch.py:6587 m.word(m.lrc+O[SCROLL_Y],60); assert rows(m)==0  # a stale follow, then the new 
+    '20a2be18af.3': 'Now Playing (ipod-ui 4.6)',  # patch.py:6587 m.word(m.lrc+O[SCROLL_Y],60); assert rows(m)==0  # a stale follow, then the new
+    'b750c0fe2e': 'Now Playing (ipod-ui 4.6)',  # patch.py:6587 m.word(m.lrc+O[SCROLL_Y],60); assert rows(m)==0  # a stale follow, then the new
     'b1c92aab98.18': 'Now Playing (ipod-ui 4.6)',  # patch.py:6588 m.byte(syms[g_backlight_status],1); loop(m); m.pressed=1; loop(m); m.nodes[m.sli
     'b1c92aab98.19': 'Now Playing (ipod-ui 4.6)',  # patch.py:6588 m.byte(syms[g_backlight_status],1); loop(m); m.pressed=1; loop(m); m.nodes[m.sli
     'b1c92aab98.20': 'Now Playing (ipod-ui 4.6)',  # patch.py:6588 m.byte(syms[g_backlight_status],1); loop(m); m.pressed=1; loop(m); m.nodes[m.sli
@@ -647,8 +386,8 @@ GAPS = {
     '57475acdcd': 'big cover page (ipod-ui 4.6)',  # patch.py:6258 assert fit()==[]
     '04ca846cfd': 'big cover page (ipod-ui 4.6)',  # patch.py:6259 put(img,*sq); assert fit()==bc_mv and geo(img)==[x,y,w,h]
     'bf7c4f0afa.2': 'big cover page (ipod-ui 4.6)',  # patch.py:6259 put(img,*sq); assert fit()==bc_mv and geo(img)==[x,y,w,h]
-    '14633f4497': 'big cover page (ipod-ui 4.6)',  # patch.py:6260 b.word(O[MCL_POS],2); assert fit()==[] and geo(img)==[x,y,w,h]  # a skip: still 
-    '5347fbe965.2': 'big cover page (ipod-ui 4.6)',  # patch.py:6260 b.word(O[MCL_POS],2); assert fit()==[] and geo(img)==[x,y,w,h]  # a skip: still 
+    '14633f4497': 'big cover page (ipod-ui 4.6)',  # patch.py:6260 b.word(O[MCL_POS],2); assert fit()==[] and geo(img)==[x,y,w,h]  # a skip: still
+    '5347fbe965.2': 'big cover page (ipod-ui 4.6)',  # patch.py:6260 b.word(O[MCL_POS],2); assert fit()==[] and geo(img)==[x,y,w,h]  # a skip: still
     '3568f7fe3d': 'big cover page (ipod-ui 4.6)',  # patch.py:6261 b.byte(syms[g_playcover_type],1); b.nodes[img][image]=file:///tmp/externpic.jpg
     '7022507e88.2': 'big cover page (ipod-ui 4.6)',  # patch.py:6261 b.byte(syms[g_playcover_type],1); b.nodes[img][image]=file:///tmp/externpic.jpg
     '74fa668bc8': 'big cover page (ipod-ui 4.6)',  # patch.py:6262 b.u.mem_write(syms[g_lastcover_url],bc_track(2)); assert fit()==bc_mv and geo(im
@@ -696,7 +435,7 @@ GAPS = {
     'b76d3b1aa8': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9303 assert tick(m)==1 and seen==[0,1] and tick(m,gap=100)==1 and seen==[0,1,0,1]; pa
     '7548179734': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9307 assert [tick(m,gap=100) for _ in range(16)]==[1]*16 and m.selected(w)==65; passe
     'c2b318887d': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9310 assert sum(tick(m) for _ in range(5))==5 and m.selected(w)==5
-    'd7e731a709': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9311 assert [tick(m,gap=gap) for gap in (100,200,200,O[EDGE_PAUSE_MS]-1)]==[0,0,0,0] 
+    'd7e731a709': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9311 assert [tick(m,gap=gap) for gap in (100,200,200,O[EDGE_PAUSE_MS]-1)]==[0,0,0,0]
     '73a22f538a': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9312 assert tick(m,gap=O[EDGE_PAUSE_MS])==1 and m.selected(w)==0
     'e6289a625f': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9313 assert tick(m,gap=100)==1 and m.selected(w)==1; passed()
     '4b6b6e58a9': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9318 for field in (pressed,animating):
@@ -710,10 +449,10 @@ GAPS = {
     '4e6d8c3707': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9331 assert press(m,CENTER)==1 and lift(m,CENTER)==0 and m.ret==11
     '9b7bc98d6f': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9332 m.advance(O[DOUBLE_CLICK_MS]); assert m.clicks==[es[0]] and not buzzes(m); passe
     '843be0645f': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9338 assert [tick(m) for _ in range(4)]==[0,0,0,0] and m.selected(view)==4 and m.u.me
-    'd728f0276e': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9340 assert press(m)==0; m.byte(TONE,0); assert lift(m)==0 and m.selected(view)==1   
-    'e7acacb513': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9340 assert press(m)==0; m.byte(TONE,0); assert lift(m)==0 and m.selected(view)==1   
-    '68d8609819': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9341 assert press(m)==0; m.byte(TONE,1); assert lift(m)==1 and m.selected(view)==2   
-    'd728f0276e.2': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9341 assert press(m)==0; m.byte(TONE,1); assert lift(m)==1 and m.selected(view)==2   
+    'd728f0276e': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9340 assert press(m)==0; m.byte(TONE,0); assert lift(m)==0 and m.selected(view)==1
+    'e7acacb513': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9340 assert press(m)==0; m.byte(TONE,0); assert lift(m)==0 and m.selected(view)==1
+    '68d8609819': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9341 assert press(m)==0; m.byte(TONE,1); assert lift(m)==1 and m.selected(view)==2
+    'd728f0276e.2': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9341 assert press(m)==0; m.byte(TONE,1); assert lift(m)==1 and m.selected(view)==2
     '4cc7114bfc': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9342 m.byte(TONE,0x5a); assert tick(m)==1 and m.u.mem_read(TONE,1)==b\x5a; passed()
     '0edabec405': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9354 assert [tick(m,key) for key in (NEXT,PREV,NEXT)]==stock((NEXT,PREV,NEXT))==[1,1,
     '02b19578f8.2': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9355 m=audible(scrub_page()); centre(m); debounced(m)  # the double presss stock whee
@@ -726,8 +465,8 @@ GAPS = {
     '1259956533': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9367 for kw in ({po:1},{bal:1},{way:1}):
     '1b3c3df4b3': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9373 m,w,es=long_list(8,routed(audible(Machine()),status=2))
     'e975a93454': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9374 assert tick(m)==1 and m.selected(w)==1 and [tick(m,key) for key in keys]==[1]*5;
-    '8545dac447': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9377 assert [press(m,RETURN),press(m,RETURN,gap=500)]==[1,0]; long_return(m); assert 
-    'da312d9a7f': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9377 assert [press(m,RETURN),press(m,RETURN,gap=500)]==[1,0]; long_return(m); assert 
+    '8545dac447': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9377 assert [press(m,RETURN),press(m,RETURN,gap=500)]==[1,0]; long_return(m); assert
+    'da312d9a7f': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9377 assert [press(m,RETURN),press(m,RETURN,gap=500)]==[1,0]; long_return(m); assert
     '25abf919f0': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9378 assert len(destinations(m))==0 and press(m,RETURN)==1; passed()
     'f34bc407f0': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9380 assert press(m,CENTER)==1 and m.release()==11 and press(m,CENTER,gap=100)==1 and
     '0c1461d0f7': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9381 for flags in (dict(g_backlight_status=0),dict(g_backlight_status=0,g_keylock_fla
@@ -749,8 +488,187 @@ GAPS = {
     '02b19578f8.3': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9413 debounced(m); assert tick(m)==1 and m.selected(w)==3
     'fd4b0317ce': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9413 debounced(m); assert tick(m)==1 and m.selected(w)==3
     # Games (ipod-ui 4.8, Q2 only)
+    'e39fa9664a': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10697 sheet,chooser=games_open(); G=m.get(payload_syms[g])
+    '213d438955': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10698 assert labels(chooser)==[Games,Sudoku,Vortex,Solitaire,Snake] and not m.nodes[sh
+    '7fe72d327e': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10699 rows=m.nodes[m.find(scroll_view,chooser)][children]
+    '1a3e33b7bc': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10708 pick(0); assert m.nodes[sheet][visible] and not m.nodes[chooser][visible] and wo
+    '55475613b4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10708 pick(0); assert m.nodes[sheet][visible] and not m.nodes[chooser][visible] and wo
+    'b20a386471': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10709 key(O[KEY_NEXT]); assert byte(G_CUR)==1
+    'f0312e5d82': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10709 key(O[KEY_NEXT]); assert byte(G_CUR)==1
+    'b5cb0ea5ea': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10710 key(O[KEY_PREV]); key(O[KEY_PREV]); assert byte(G_CUR)==80
+    'b5cb0ea5ea.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10710 key(O[KEY_PREV]); key(O[KEY_PREV]); assert byte(G_CUR)==80
+    'f954819afe': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10710 key(O[KEY_PREV]); key(O[KEY_PREV]); assert byte(G_CUR)==80
+    '8ab44fbf2b': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10711 key(O[KEY_FWD_BTN]); assert byte(G_CUR)==8
+    'd32ce63cd7': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10711 key(O[KEY_FWD_BTN]); assert byte(G_CUR)==8
+    '27066724e2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10712 key(O[KEY_BACK_BTN]); assert byte(G_CUR)==80; passed()
+    'f954819afe.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10712 key(O[KEY_BACK_BTN]); assert byte(G_CUR)==80; passed()
+    '6097ea4c6d': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10716 blank=cells().index(0); clue=next(i for i,c in enumerate(cells()) if c&16)
+    '762bfec88c': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10716 blank=cells().index(0); clue=next(i for i,c in enumerate(cells()) if c&16)
+    '66068ea3ba': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10717 m.byte(G+G_CUR,clue); key(O[KEY_CENTER]); assert not word(G_PICKING)
+    '89af2aa3aa': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10717 m.byte(G+G_CUR,clue); key(O[KEY_CENTER]); assert not word(G_PICKING)
+    'de88260b50': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10717 m.byte(G+G_CUR,clue); key(O[KEY_CENTER]); assert not word(G_PICKING)
+    '04c950dde2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10718 m.byte(G+G_CUR,blank); key(O[KEY_CENTER]); assert word(G_PICKING)
+    '89af2aa3aa.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10718 m.byte(G+G_CUR,blank); key(O[KEY_CENTER]); assert word(G_PICKING)
+    'dce369e8ed': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10718 m.byte(G+G_CUR,blank); key(O[KEY_CENTER]); assert word(G_PICKING)
+    'f31d93643d': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10719 for _ in range(3): key(O[KEY_NEXT])
+    '610b9df287': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10720 paint(); key(O[KEY_CENTER]); assert cells()[blank]==3 and not word(G_PICKING)
+    '89af2aa3aa.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10720 paint(); key(O[KEY_CENTER]); assert cells()[blank]==3 and not word(G_PICKING)
+    '0c96352e42': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10721 m.advance(2000); saved=bytes(m.files[/mnt/data/ringnav-sudoku]); assert len(save
+    '623961eddf': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10721 m.advance(2000); saved=bytes(m.files[/mnt/data/ringnav-sudoku]); assert len(save
+    '076a4e0505': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10722 key(O[KEY_CENTER]); key(O[KEY_NEXT]); key(O[KEY_RETURN]); assert cells()[blank]=
+    '4df64b387d': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10722 key(O[KEY_CENTER]); key(O[KEY_NEXT]); key(O[KEY_RETURN]); assert cells()[blank]=
+    '89af2aa3aa.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10722 key(O[KEY_CENTER]); key(O[KEY_NEXT]); key(O[KEY_RETURN]); assert cells()[blank]=
+    'f0312e5d82.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10722 key(O[KEY_CENTER]); key(O[KEY_NEXT]); key(O[KEY_RETURN]); assert cells()[blank]=
+    '17b18e8bc2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10723 before=cells(); key(O[KEY_PLAY]); assert cells()==before and word(52); paint()
+    '585fa21b17': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10723 before=cells(); key(O[KEY_PLAY]); assert cells()==before and word(52); paint()
+    'a63f5492f4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10723 before=cells(); key(O[KEY_PLAY]); assert cells()==before and word(52); paint()
+    '2682c91d39': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10724 key(O[KEY_RETURN]); assert cells()==before and not word(52)
+    '4df64b387d.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10724 key(O[KEY_RETURN]); assert cells()==before and not word(52)
+    '4df64b387d.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10725 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
+    '66735bf663': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10725 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
+    '7b597aa195.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10726 assert m.key()==11; passed()
+    'c54ae6e308': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10728 m.page=m.top; pick(1); assert word(G_SCREEN)==2 and len(frames())==1 and m.get(p
+    'fd81feb488': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10728 m.page=m.top; pick(1); assert word(G_SCREEN)==2 and len(frames())==1 and m.get(p
+    '39b8a3eb58': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10729 m.word(payload_syms[wheel_travel],-50&0xffffffff); m.advance(34); assert word(G_
+    'b65e55e61d': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10731 assert made(reset_poweroptions_timer) and made(widget_invalidate_force)
+    '89af2aa3aa.5': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10735 key(O[KEY_CENTER]); m.advance(500); assert word(G_VX)==1 and made(widget_invalid
+    '909fcc2b6a': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10735 key(O[KEY_CENTER]); m.advance(500); assert word(G_VX)==1 and made(widget_invalid
+    '8ab44fbf2b.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10736 key(O[KEY_FWD_BTN]); assert not made(widget_invalidate_force)
+    'a63f5492f4.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10737 key(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames() and m.get(payload_sy
+    'ab6bd7a3ab': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10737 key(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames() and m.get(payload_sy
+    '0dfa876a9e': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10738 x=word(G_VX+20),word(G_VX+24); m.advance(500); assert (word(G_VX+20),word(G_VX+2
+    '4cf142ac31': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10738 x=word(G_VX+20),word(G_VX+24); m.advance(500); assert (word(G_VX+20),word(G_VX+2
+    'a63f5492f4.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10739 key(O[KEY_PLAY]); assert word(G_PAUSED)==0 and len(frames())==1 and m.get(payloa
+    'e8f2d84a5f': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10739 key(O[KEY_PLAY]); assert word(G_PAUSED)==0 and len(frames())==1 and m.get(payloa
+    'ab6bd7a3ab.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10741 assert word(G_PAUSED)==1 and not frames() and m.get(payload_syms[wheel_raw])==0
+    '4df64b387d.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10742 key(O[KEY_RETURN]); assert word(G_PAUSED)==2; key(O[KEY_NEXT]); paint(); key(O[K
+    '89af2aa3aa.6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10742 key(O[KEY_RETURN]); assert word(G_PAUSED)==2; key(O[KEY_NEXT]); paint(); key(O[K
+    'f0312e5d82.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10742 key(O[KEY_RETURN]); assert word(G_PAUSED)==2; key(O[KEY_NEXT]); paint(); key(O[K
+    'ff742ca8d6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10742 key(O[KEY_RETURN]); assert word(G_PAUSED)==2; key(O[KEY_NEXT]); paint(); key(O[K
+    '6e49df19e4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10751 m.page=m.top; pick(2); assert word(G_SCREEN)==3 and cur()==0 and [n(p) for p in
+    'fe2edce464': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10751 m.page=m.top; pick(2); assert word(G_SCREEN)==3 and cur()==0 and [n(p) for p in
+    '09e347b645': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10752 key(O[KEY_CENTER]); m.advance(2000); assert (n(0),n(1))==(23,1) and bytes(m.file
+    '89af2aa3aa.7': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10752 key(O[KEY_CENTER]); m.advance(2000); assert (n(0),n(1))==(23,1) and bytes(m.file
+    '27066724e2.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
+    '5393abcfc6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
+    '5a8ea34ce4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
+    '5a8ea34ce4.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
+    '8ab44fbf2b.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
+    'f0312e5d82.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10753 key(O[KEY_NEXT]); assert cur()==1; key(O[KEY_FWD_BTN]); assert cur()==7; key(O[K
+    '27066724e2.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
+    'b5cb0ea5ea.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
+    'b5cb0ea5ea.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
+    'b77931b1d9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
+    'faca4081c1': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10754 key(O[KEY_PREV]); key(O[KEY_PREV]); assert cur()==12; key(O[KEY_BACK_BTN]); asse
+    '2fba74c885': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10755 put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a fac
+    '8829606b74': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10755 put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a fac
+    'b06052aade': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10755 put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a fac
+    '3adb6b93ae': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
+    '60d2c2805f.8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
+    '89af2aa3aa.8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
+    '04c950dde2.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10757 key(O[KEY_FWD_BTN]); key(O[KEY_CENTER]); assert word(G_PICKING)  # not onto the
+    '89af2aa3aa.9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10757 key(O[KEY_FWD_BTN]); key(O[KEY_CENTER]); assert word(G_PICKING)  # not onto the
+    '8ab44fbf2b.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10757 key(O[KEY_FWD_BTN]); key(O[KEY_CENTER]); assert word(G_PICKING)  # not onto the
+    '89af2aa3aa.10': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10758 key(O[KEY_FWD_BTN]); key(O[KEY_PREV]); key(O[KEY_CENTER]); assert not word(G_PIC
+    '8ab44fbf2b.5': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10758 key(O[KEY_FWD_BTN]); key(O[KEY_PREV]); key(O[KEY_CENTER]); assert not word(G_PIC
+    'b5cb0ea5ea.5': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10758 key(O[KEY_FWD_BTN]); key(O[KEY_PREV]); key(O[KEY_CENTER]); assert not word(G_PIC
+    'de88260b50.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10758 key(O[KEY_FWD_BTN]); key(O[KEY_PREV]); key(O[KEY_CENTER]); assert not word(G_PIC
+    'e122849745': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10759 assert (n(6),n(7),byte(G_SOL+4+24*6+1),byte(G_SOL+4+24*7))==(2,1,64|10,64|3) and
+    '2d1aafdcf1': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10760 put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O[KEY_CENTER]); key(O[KEY_CENTER])  #
+    '89af2aa3aa.11': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10760 put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O[KEY_CENTER]); key(O[KEY_CENTER])  #
+    '89af2aa3aa.12': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10760 put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O[KEY_CENTER]); key(O[KEY_CENTER])  #
+    'bb7cea08b8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10760 put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O[KEY_CENTER]); key(O[KEY_CENTER])  #
+    '66fc1b822e': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10761 assert not word(G_PICKING) and n(1)==0 and n(2)==1 and byte(G_SOL+4+48)==64|26
+    '6f97b4218f': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10762 m.byte(G+G_SOL+329,6); key(O[KEY_CENTER]); key(O[KEY_CENTER]); assert not word(G
+    '89af2aa3aa.13': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10762 m.byte(G+G_SOL+329,6); key(O[KEY_CENTER]); key(O[KEY_CENTER]); assert not word(G
+    '89af2aa3aa.14': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10762 m.byte(G+G_SOL+329,6); key(O[KEY_CENTER]); key(O[KEY_CENTER]); assert not word(G
+    'f24d40e6a6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10762 m.byte(G+G_SOL+329,6); key(O[KEY_CENTER]); key(O[KEY_CENTER]); assert not word(G
+    '4df64b387d.5': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10763 key(O[KEY_CENTER]); key(O[KEY_RETURN]); assert not word(G_PICKING) and word(G_SC
+    '89af2aa3aa.15': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10763 key(O[KEY_CENTER]); key(O[KEY_RETURN]); assert not word(G_PICKING) and word(G_SC
+    'fc8f50ca54': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10763 key(O[KEY_CENTER]); key(O[KEY_RETURN]); assert not word(G_PICKING) and word(G_SC
+    '2074d0cbd8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
+    '3b5bfd9a87': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
+    '48117aadd2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
+    '4df64b387d.6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
+    '60d2c2805f.9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
+    'a63f5492f4.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
+    '0265a33ba6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10765 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
+    '4df64b387d.7': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10765 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
+    'a8b1b2cfa3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10772 m.page=m.top; pick(3); assert word(G_SCREEN)==4 and len(frames())==1 and m.get(p
+    'eff446ceed': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10772 m.page=m.top; pick(3); assert word(G_SCREEN)==4 and len(frames())==1 and m.get(p
+    '60d2c2805f.10': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10773 assert body()==[207,208,209] and sdir()==1 and sstate()==1; paint()
+    '78000abffe': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10773 assert body()==[207,208,209] and sdir()==1 and sstate()==1; paint()
+    'f8114faee2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10774 snake_before=bytes(m.u.mem_read(G+G_SN,820))
+    '144777dfab': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10775 skey(O[KEY_NEXT]); skey(O[KEY_PREV]); assert bytes(m.u.mem_read(G+G_SN,820))==sn
+    '4d62a8962b': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10775 skey(O[KEY_NEXT]); skey(O[KEY_PREV]); assert bytes(m.u.mem_read(G+G_SN,820))==sn
+    '8287c7e95e': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10775 skey(O[KEY_NEXT]); skey(O[KEY_PREV]); assert bytes(m.u.mem_read(G+G_SN,820))==sn
+    '2fa25e9f4c': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10776 skey(O[KEY_FWD_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==2
+    '2fa25e9f4c.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10776 skey(O[KEY_FWD_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==2
+    '96332b49eb': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10776 skey(O[KEY_FWD_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==2
+    '0a7bec6f95': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10777 m.advance(170); assert body()[-1]==229 and sdir()==3 and made(widget_invalidate_
+    '00dddc04a1': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10778 skey(O[KEY_BACK_BTN]); assert sdir()==3  # waits for the next step
+    '96b5b20b52': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10778 skey(O[KEY_BACK_BTN]); assert sdir()==3  # waits for the next step
+    '60d2c2805f.11': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
+    '8e41ef36eb': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
+    'af9a1fb5b9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
+    'c37b29e226': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
+    'e18733dc4c': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
+    '144777dfab.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10780 skey(O[KEY_NEXT]); assert sdir()==3  # no turning while paused
+    '96b5b20b52.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10780 skey(O[KEY_NEXT]); assert sdir()==3  # no turning while paused
+    '8aa1970242': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10781 skey(O[KEY_PLAY]); assert word(G_PAUSED)==0 and len(frames())==1
+    'c37b29e226.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10781 skey(O[KEY_PLAY]); assert word(G_PAUSED)==0 and len(frames())==1
+    'e3f0e327aa': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10782 m.word(G+G_SN+812,5); m.advance(170*12); assert sstate()==2 and not frames() and
+    'eeb61f1ab8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10782 m.word(G+G_SN+812,5); m.advance(170*12); assert sstate()==2 and not frames() and
+    '25f19f306a': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10783 best=bytes(m.files[/mnt/data/ringnav-snake]); assert len(best)==12 and best[:8]=
+    '33e712f7ef': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10783 best=bytes(m.files[/mnt/data/ringnav-snake]); assert len(best)==12 and best[:8]=
+    '60d2c2805f.12': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
+    '7e0adf5d24': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
+    'e040fa48bd': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
+    '00827aff47': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10785 skey(O[KEY_BACK_BTN]); assert sdir()==0  # side Previous turns left, without the
+    '00dddc04a1.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10785 skey(O[KEY_BACK_BTN]); assert sdir()==0  # side Previous turns left, without the
+    '60e611da01': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10786 m.advance(170); assert body()[-1]==189
+    '2fa25e9f4c.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10787 skey(O[KEY_FWD_BTN]); assert sdir()==1  # side Next turns right
+    'b274b92071': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10787 skey(O[KEY_FWD_BTN]); assert sdir()==1  # side Next turns right
+    '00dddc04a1.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10788 skey(O[KEY_PLAY]); skey(O[KEY_BACK_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==1
+    '2fa25e9f4c.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10788 skey(O[KEY_PLAY]); skey(O[KEY_BACK_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==1
+    'b274b92071.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10788 skey(O[KEY_PLAY]); skey(O[KEY_BACK_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==1
+    'c37b29e226.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10788 skey(O[KEY_PLAY]); skey(O[KEY_BACK_BTN]); skey(O[KEY_FWD_BTN]); assert sdir()==1
+    'c37b29e226.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10789 skey(O[KEY_PLAY])
+    'd303e06d4c': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10790 skey(O[KEY_RETURN]); assert word(G_PAUSED)==2 and word(60)==0
+    'faf9c369f1': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10790 skey(O[KEY_RETURN]); assert word(G_PAUSED)==2 and word(60)==0
+    '144777dfab.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10791 skey(O[KEY_NEXT]); assert word(60)==1  # the wheel picks in the menu
+    'ace70b2003': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10791 skey(O[KEY_NEXT]); assert word(60)==1  # the wheel picks in the menu
+    '2dc4376a5f': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10792 skey(O[KEY_PREV]); assert word(60)==0
+    '8287c7e95e.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10792 skey(O[KEY_PREV]); assert word(60)==0
+    '00dddc04a1.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10793 skey(O[KEY_BACK_BTN]); assert word(60)==1
+    'ace70b2003.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10793 skey(O[KEY_BACK_BTN]); assert word(60)==1
+    '2dc4376a5f.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10794 skey(O[KEY_FWD_BTN]); assert word(60)==0
+    '2fa25e9f4c.5': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10794 skey(O[KEY_FWD_BTN]); assert word(60)==0
+    '2fa25e9f4c.6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
+    '60d2c2805f.13': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
+    '7e0adf5d24.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
+    '6c7b308867': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10796 assert word(G_SCREEN)==0 and not frames(); passed()
+    '7e86233542.18': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10798 m.close(); assert m.get(payload_syms[g])==0 and not frames()
+    '7fe72d327e.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10799 sheet,chooser=games_open(); G=m.get(payload_syms[g]); rows=m.nodes[m.find(scroll
+    'e39fa9664a.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10799 sheet,chooser=games_open(); G=m.get(payload_syms[g]); rows=m.nodes[m.find(scroll
+    '1a3e33b7bc.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10800 pick(0); assert cells()==before
+    '98152372b9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10800 pick(0); assert cells()==before
+    '4df64b387d.8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10801 key(O[KEY_RETURN]); m.advance(0); pick(2); assert sol()[:-4]==before_sol[:-4]  #
+    '6e49df19e4.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10801 key(O[KEY_RETURN]); m.advance(0); pick(2); assert sol()[:-4]==before_sol[:-4]  #
+    '74841e0c17': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10801 key(O[KEY_RETURN]); m.advance(0); pick(2); assert sol()[:-4]==before_sol[:-4]  #
+    'd1de3ca1f1': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10804 m.byte(G+G_SOL+329,0)
+    '9332ab3ede': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10806 assert not saves; m.advance(2000); assert len(saves)==1 and bytes(m.files[/mnt/d
+    '1a3e33b7bc.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
+    '4df64b387d.10': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
+    '4df64b387d.9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
+    '6e49df19e4.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
+    '71bc7633bd': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10807 key(O[KEY_RETURN]); m.advance(0); pick(0); key(O[KEY_RETURN]); m.advance(0); ass
+    '012e45a329': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
+    '4df64b387d.11': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
+    'c54ae6e308.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
+    '7e86233542.19': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10809 m.close(); assert m.get(payload_syms[g])==0 and not frames() and m.get(payload_s
     '59bdeea4c9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10743 assert word(G_SCREEN)==0 and not frames() and m.get(payload_syms[wheel_raw])==0
-    '7b597aa195.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10744 assert m.key()==11; passed()  # Return in the chooser after Vortex goes back to 
+    '7b597aa195.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10744 assert m.key()==11; passed()  # Return in the chooser after Vortex goes back to
     # Display and settings scenarios on V2.1's rows (Phase 5)
     'a85f9167be': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:2165 for row,image,fills in ((2,select,3),(0,unselect,0),(2,more,4),(0,more,0)):
     '487c8eb5c1': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8759 assert len(kids)==6 and [row_text(r) for r in kids[3:]]==[Appearance,Coverflow,C
@@ -876,6 +794,9 @@ GAPS = {
     'b42e571763': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9135 m.paint(view); assert [m.bands[i][4] for i in (0,1,47)]==[color_t(ACCENTS[3][i])
     'c547892cd4.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9143 assert m.nodes[m.slider][FG]==-1; centre(m,50); assert m.nodes[m.slider][FG]==si
     'f1671ac043': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9148 for config,listw,roww,shown in (({HOME:1},375,O[HOME_FULL_ROW],0),({},O[HOME_SPL
+    # Q2 Return key and window-manager ABI (Phase 5)
+    'dfe4cdaacb': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3181 for existing in (False,True):
+    '06388513e1': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3204 assert m.call(170,gap=0)==11
     # Q2 pointer dispatch ABI (Phase 5)
     'c2221ae651': 'Q2 pointer dispatch ABI (Phase 5)',  # patch.py:3383 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
     '4fbeccd763': 'Q2 pointer dispatch ABI (Phase 5)',  # PullDispatchMachine uses Q2 vtable and emitter fixtures; V2.1 needs its own fixture
