@@ -28,9 +28,9 @@ UI_W, UI_H, STATUS_H = inc('UI_W'), inc('UI_H'), inc('STATUS_H')
 # 72px rows. The stock 52px artwork is drawn 1:1 (no rescaling) with an 8px inset inside the
 # 68px row body. Rows keep the row layout's eight-pixel left margin for the artwork.
 BOTTOM = UI_H - STATUS_H
-PITCH = 72
-BODY = PITCH - 4
-ART = 52
+PITCH = O.get('LIB_PITCH', 72)  # a PROFILE's own library rows (tools/m1plus_ipod.py), else the Q2's
+BODY = O.get('LIB_BODY', PITCH - 4)
+ART = O.get('LIB_ART', 52)
 ART_INSET = (BODY - ART) // 2
 MARGIN = 8
 # The 375x320 panel's glass has rounded corners that hide whatever is drawn in them. CORNER_R is

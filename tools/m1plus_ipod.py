@@ -3,8 +3,8 @@ loaded with the M1's PROFILE, so sys.modules['ipod'] stays the Q2's that tools/m
 
 The profile is the screen from patch/m1plus_offsets.inc: UI_W, UI_H, STATUS_H, and GLASS_R (0, the square corners),
 and the layout names a Phase 4 item has given V2.1's values (4.2: BATT_ROOM, as the 320 px bar fits it; 4.3: the
-settings rows' SET_ROW, SET_TOP, SET_ROWS and V2.1's SET_STOCK_ROW). Every other layout name keeps the Q2's value
-until its item.
+settings rows' SET_ROW, SET_TOP, SET_ROWS and V2.1's SET_STOCK_ROW; 4.4: the library rows' LIB_PITCH, LIB_BODY and
+LIB_ART, which ipod.py's PITCH, BODY and ART take). Every other layout name keeps the Q2's value until its item.
 
 Phase 3 adds the V2.1 patch around that copy: patch/m1plus_ipod.json (V1.32's pages mapped onto V2.1's, every
 other section empty), and patch_asset and patch_code, which m1plus.build() runs on every build. A Phase 4 item adds
@@ -18,7 +18,7 @@ from build import ROOT, check, sha
 M1 = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b',
                                                (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M)}
 PROFILE = {name: M1[name] for name in ('UI_W', 'UI_H', 'STATUS_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_TOP', 'SET_ROWS',
-                                       'SET_STOCK_ROW')}
+                                       'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART')}
 
 
 def load(profile=PROFILE):
@@ -147,8 +147,49 @@ def settings_page(path):
     return rewrite
 
 
+# 4.4: V2.1's library pages, through ipod.library_page with V2.1's row sizes. Their rows are built in code (the
+# constructors patch_code edits); the pages hold the lists, an empty navigationbar_view (V2.1 fills it at run time:
+# Return, the title, Search, Multi-select, Back to player) and the rows' 60 px template. The title bar is hidden and
+# disabled, as the Q2's view_navbar is, its run-time return button still Previous's and the chevron's (back_of); the
+# Playlists page keeps its own, as the Q2's does. Each list then reaches BOTTOM from the top, LIB_ROWS LIB_PITCH rows,
+# and its scroll view, table client and scroll bar, which have fixed heights on V2.1, take its height; the table
+# clients span the screen, as the Q2's do, the scroll bar over the rows' right edge.
+LIBRARY_PAGES = ('allmusic_page.bin', 'album_page.bin', 'albuminfo_page.bin', 'localclass_page.bin', 'playlist_page.bin',
+                 'folder_page.bin')
+LIBRARY_STOCK = ipod.LIBRARY_STOCK | {'playlist': 'playlist_page.bin', 'list_y': (50,), 'pitch': M1['LIB_STOCK_PITCH'],
+                                      'body': M1['LIB_STOCK_BODY'], 'client': 310, 'titles': (), 'art': ()}
+
+
+def library_page(path):
+    """The rewrite of V2.1's library page path."""
+    def rewrite(root):
+        nav = [n for n in root[3] if n[2].get('name') == NAVBAR]
+        check(len(nav) == 1 and nav[0][1] == [0, 0, ipod.UI_W, 50] and not nav[0][3], f'{path}: unexpected toolbar')
+        lists = [n for n in root[3] if n[0] in ('list_view', 'table_view')]
+        check(len(lists) == 1 and lists[0][1][3] == ipod.BOTTOM - 50, f'{path}: unexpected list')
+        ipod.library_page(path, root, nav[0], LIBRARY_STOCK)
+        lst = lists[0]
+        layout = lst[2].get('self_layout')
+        if layout:  # Folders' table places itself (y=50, h=400), over its geometry
+            check(layout == f'default(x=0,y=50,w=100%,h={ipod.BOTTOM - 50})', f'{path}: unexpected list layout')
+            lst[2]['self_layout'] = f'default(x=0,y={lst[1][1]},w=100%,h={lst[1][3]})'
+        for c in lst[3]:
+            check(c[0] in ('scroll_view', 'table_client', 'scroll_bar_m'), f'{path}: unexpected list child')
+            if c[1][3] == ipod.BOTTOM - 50:
+                c[1][3] = lst[1][3]
+            if c[0] == 'table_client' and c[1][2] == LIBRARY_STOCK['client'] and 'self_layout' not in c[2]:
+                c[1][2] = ipod.UI_W
+        for n in ipod.walk(root):
+            layout = n[2].get('self_layout', '')
+            if n[0] == 'table_row' and layout == f"default(w=100%,h={LIBRARY_STOCK['pitch']})":
+                n[2]['self_layout'] = f'default(w=100%,h={ipod.PITCH})'
+        return root
+    return rewrite
+
+
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
-REWRITES = {STATUS_BAR: status_bar} | {p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES}
+REWRITES = {STATUS_BAR: status_bar} | {p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
+    p: library_page(p) for p in LIBRARY_PAGES}
 
 
 def patch_asset(path, data):
@@ -185,6 +226,10 @@ def patch_code(data, symbols):
     group = AUDIT['row_layout_calls']
     for address, instruction in group['sites']:
         word(int(address, 16), int(instruction, 16), ipod.jal(symbols['compact_set_row_layout']), group['purpose'])
+    # 4.4: Folders' and an album's tracks' rebinds resize the row's label (by multi-select), as the Q2's folder rebind
+    # does (0x522410): the width is the row layouter's (compact_row_layout).
+    for address in (0x532f6c, 0x527918):
+        word(address, 0x0320f809, 0, 'library rebind retains the width owned by its row layouter')
     # 4.3: the settings rows, through V2.1's list_view layouter's layout slot (data, vtable 0x9047a0 + 8).
     word(M1['LIST_VIEW_LAYOUT_SLOT'], M1['LIST_VIEW_LAYOUT'], symbols['ipod_list_layout'],
          'settings lists stack SET_ROW rows and map their children')

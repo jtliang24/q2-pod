@@ -394,7 +394,8 @@ M1PLUS_PORTS = {
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
     # The iPod UI's hooks (docs/m1plus-ipod-ui.md Phase 4): the shared C compiles with IPOD=1, but each of these is
     # unhooked until its item ports it
-    'list_get_img_pic': ('unported', "song rows' format badge (ipod-ui 4.4)"),
+    'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
+                         "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
     'bigcover_page_init': ('unported', "the big cover's page (ipod-ui 4.6)"),
     'playlist_rebuild': ('unported', "the playlist rebuild's iPod rows (ipod-ui 4.7)"),
     'mclIsUtf8WithoutBOM': ('unported', "an .lrc's UTF-8 test that reads 4-byte characters (1.5.9); V2.1's "

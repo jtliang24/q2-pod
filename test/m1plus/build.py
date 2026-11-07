@@ -53,8 +53,13 @@ m1ipod = m1plus_ipod.ipod
 assert [getattr(m1ipod, n) for n in SCREEN] == [m1[n] for n in SCREEN] == [320, 480, 30, 450]
 assert m1ipod.CORNER_R == m1['GLASS_R'] == 0 and m1ipod.HOME_LIST_W == 320
 # ... and the layout names a Phase 4 item has given V2.1's (4.2: the bar's battery room, which the 320 px bar fits).
-assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O[k]} == {'UI_W', 'UI_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_ROWS',
-                                                            'SET_STOCK_ROW'} == set(m1plus_ipod.PROFILE) - {'STATUS_H', 'SET_TOP'}
+assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O.get(k)} == {'UI_W', 'UI_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_ROWS',
+                                                                'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART'} == set(m1plus_ipod.PROFILE) - {'STATUS_H', 'SET_TOP'}
+# 4.4: LIB_ROWS complete library rows from the top of the screen under the bar, on a body inside each row, the art inside
+# the body; ipod.py's names take the M1's (the Q2's stay 72, 68 and 52).
+assert (m1ipod.PITCH, m1ipod.BODY, m1ipod.ART, m1ipod.ART_INSET) == (m1['LIB_PITCH'], m1['LIB_BODY'], m1['LIB_ART'], m1['LIB_ART_INSET']) == (64, 60, 40, 10)
+assert m1['LIB_ROWS'] * m1ipod.PITCH <= m1ipod.BOTTOM < (m1['LIB_ROWS'] + 1) * m1ipod.PITCH and m1ipod.ART + 2 * m1ipod.ART_INSET == m1ipod.BODY < m1ipod.PITCH
+assert (ipod.PITCH, ipod.BODY, ipod.ART) == (72, 68, 52) and 'LIB_PITCH' not in ipod.O
 # 4.3: six complete settings rows fit under the bar, each row's 60 px body inside it.
 assert m1ipod.SET_TOP + m1ipod.SET_ROWS * m1ipod.SET_ROW <= m1ipod.BOTTOM and m1['SET_STOCK_BODY'] <= m1ipod.SET_ROW
 assert (m1ipod.SET_ROW, m1ipod.SET_ROWS, m1ipod.SET_TOP, m1ipod.SET_STOCK_ROW) == (72, 6, 8, 64)
@@ -351,7 +356,17 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # 4.3's one code edit: V2.1's list_view layout slot is ipod_list_layout.
     slot = dict(address=hex(0x9047a8), original=hex(0x60abb0), patched=hex(ps['ipod_list_layout']),
                 purpose='settings lists stack SET_ROW rows and map their children')
-    assert 'variant' not in manifest and manifest['compact_code'] == [slot] and not M1_AUDIT['immediates'] and not M1_AUDIT['row_layout_calls']['sites']
+    # 4.4's: the library rows' immediates (pitch and body, the text re-centred by half the body's growth), each row
+    # constructor's layout call made compact_set_row_layout, and the two rebinds' resizes gone (pinned below).
+    edits = [dict(address=a, original=hex(int(w, 16)), patched=hex(int(w, 16) & 0xffff0000 | {'pitch': m1ipod.PITCH, 'body': m1ipod.BODY}.get(g['value'], g['value'])),
+                  purpose=g['purpose']) for g in M1_AUDIT['immediates'] for a, w in g['sites']]
+    grown = (m1ipod.BODY - m1plus_ipod.M1['LIB_STOCK_BODY']) // 2
+    assert [g['value'] for g in M1_AUDIT['immediates']] == ['pitch', 'body', 10 + grown, 30 + grown, 32 + grown]
+    edits += [dict(address=a, original='0x320f809', patched=hex(m1ipod.jal(ps['compact_set_row_layout'])), purpose=M1_AUDIT['row_layout_calls']['purpose'])
+              for a, _ in M1_AUDIT['row_layout_calls']['sites']]
+    edits += [dict(address=hex(a), original='0x320f809', patched='0x0', purpose='library rebind retains the width owned by its row layouter')
+              for a in (0x532f6c, 0x527918)]
+    assert 'variant' not in manifest and manifest['compact_code'] == edits + [slot], manifest['compact_code']
     raw_styles = 'release/assets/default/raw/styles/'
     assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
         raw_styles + p for p in M1_AUDIT['styles']} | {
@@ -424,7 +439,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         refuses(page, dialog, 'expected a window')
     finally:
         m1plus_ipod.UI_ASSETS.clear(); m1plus_ipod.UI_ASSETS.update(hashed)
-    assert m1plus_ipod.patch_code(bytearray(stock), ps) == [slot]
+    assert m1plus_ipod.patch_code(bytearray(stock), ps) == edits + [slot]
     try:  # the slot as audited, or nothing
         damaged = bytearray(stock); damaged[fileoff(stock, 0x9047a8)] ^= 1
         m1plus_ipod.patch_code(damaged, ps)
@@ -636,6 +651,22 @@ def m1plus_checks(directory, manifest, stock, demo, read):
             assert n[1][1] == m1['SET_TOP'] and n[1][3] == rows * m1['SET_ROW'] and n[2]['default_item_height'] == str(m1['SET_ROW']), page
             assert [c[1][3] for c in n[3]] == [n[1][3]] * 2, page  # its scroll view and bar, as tall
     assert sum(1 for p in M1_AUDIT['navbar_only'] if p in m1plus_ipod.REWRITES) == 32
+    # 4.4: the library pages as built: the title bar hidden and disabled (Playlists keeps its own, as the Q2's does), the
+    # list from the top to BOTTOM (Playlists' under its bar), its children as tall (or following it, h=100%), rows
+    # LIB_PITCH (an album's 154 px header default aside) and the table clients the screen's width.
+    for page in m1plus_ipod.LIBRARY_PAGES:
+        built = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + page))
+        nav, = [n for n in built[3] if n[2].get('name') == 'navigationbar_view']
+        lst, = [n for n in built[3] if n[0] in ('list_view', 'table_view')]
+        top = 50 if page == 'playlist_page.bin' else 0
+        assert (nav[2].get('visible') == nav[2].get('enable') == 'false') == (page != 'playlist_page.bin'), page
+        assert lst[1][1] == top and lst[1][3] == m1ipod.BOTTOM - top, page
+        assert lst[2].get('self_layout') in (None, f'default(x=0,y={top},w=100%,h={m1ipod.BOTTOM - top})'), page  # Folders' places itself
+        assert all(c[1][3] == lst[1][3] or 'h=100%' in c[2].get('self_layout', '') for c in lst[3]), page
+        assert {n[2][k] for n in walk(built) for k in ('row_height', 'default_item_height') if k in n[2]} <= {str(m1ipod.PITCH), '154'}, page
+        assert all(n[1][2] == m1ipod.UI_W for n in walk(built) if n[0] == 'table_client'), page
+        assert all(n[1][3] == m1ipod.PITCH and n[2].get('self_layout') == f'default(w=100%,h={m1ipod.PITCH})'
+                   for n in walk(built) if n[0] == 'table_row'), page
     # System Setting in the iPod order (m1plus_nav_sysset.c sysset_ipod_order). V2.1's builder makes a row per
     # syssetMenu entry (0..14, or 15 with sset_prove), names it by its index and draws get_systemset_showinfo's icon:
     # one of two tables, memcpy'd by a GPIO, which differ only in Double Tap's. The rows' click
@@ -873,6 +904,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     off = fileoff(stock, 0x9047a8)  # the list_view layout slot (patch_code)
     assert demo[off:off+4] == struct.pack('<I', ps['ipod_list_layout'])
     allowed.update(range(off, off+4))
+    for edit in manifest['compact_code']:  # 4.4's library words (patch_code), each as the manifest lists it
+        off = fileoff(stock, int(edit['address'], 16))
+        assert struct.unpack_from('<I', stock, off)[0] == int(edit['original'], 16) and struct.unpack_from('<I', demo, off)[0] == int(edit['patched'], 16)
+        allowed.update(range(off, off+4))
     # The payload: stock's final PT_NULL header becomes its LOAD segment, R/W/X at BASE, after stock's bytes.
     old_segs, new_segs = segments(stock), segments(demo)
     assert [h for h, _ in old_segs] == [h for h, _ in new_segs] and [p for _, p in old_segs[:-1]] == [p for _, p in new_segs[:-1]]

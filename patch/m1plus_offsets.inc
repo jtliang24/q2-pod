@@ -413,6 +413,18 @@ static inline int arc_out(int r, int y) {
 #define SET_STOCK_TRAIL 258   /* a 50 px trailing image ending where V2.1's end, at x 308 */
 #define SET_RIGHT_SIDE 150    /* stock children starting here keep to the right edge */
 #define SET_MAPPED "_set_row" /* a V2.1 row's custom prop once ipod_list_layout has mapped it */
+/* iPod library rows (ipod-ui 4.4): LIB_ROWS complete LIB_PITCH rows from the top of the 450 px under the bar (the
+ * title bar hidden), each a LIB_BODY body, as V2.1's Folders rows already are. V2.1's other library rows are 60 on a
+ * 56 body (LIB_STOCK_PITCH, LIB_STOCK_BODY); their text views re-centre by half the difference. Their art keeps V2.1's
+ * size, LIB_ART: 40 px icons drawn 1:1 (centred) and 60 px album covers the layouter scales, so ART_INSET is
+ * LIB_ART_INSET. */
+#define LIB_PITCH 64
+#define LIB_BODY 60
+#define LIB_ROWS 7
+#define LIB_ART 40
+#define LIB_ART_INSET 10
+#define LIB_STOCK_PITCH 60
+#define LIB_STOCK_BODY 56
 #define LIST_DEFAULT_ITEM_HEIGHT 0x7c  /* list_view default_item_height */
 #define IMAGE_DRAW_SCALE_DOWN 5        /* "scale_down" in the stock draw type table @0x9272c0 */
 #define IMAGE_DRAW_CENTER 1            /* "center", the same table */

@@ -325,10 +325,106 @@
   "slide_only": {
     "playset/equalizer_page.bin": "f69fb1129b81e2e4b402c0803a65891701d599127817afc2a7297b1b35016f8b"
   },
-  "immediates": [],
+  "immediates": [
+    {
+      "value": "pitch",
+      "purpose": "library row height: V2.1's 60 px rows (All Songs, the class lists, Albums, an album's tracks)",
+      "sites": [
+        [
+          "0x528570",
+          "0x2402003c"
+        ],
+        [
+          "0x5368bc",
+          "0x2402003c"
+        ],
+        [
+          "0x5245f0",
+          "0x2402003c"
+        ],
+        [
+          "0x52667c",
+          "0x2402003c"
+        ]
+      ]
+    },
+    {
+      "value": "body",
+      "purpose": "library row body: the inner button and its children, V2.1's 56 px (All Songs, the class lists)",
+      "sites": [
+        [
+          "0x5285a0",
+          "0x24110038"
+        ],
+        [
+          "0x5368e8",
+          "0x24110038"
+        ]
+      ]
+    },
+    {
+      "value": 12,
+      "purpose": "title re-centred in the 60 px body (All Songs, Albums), font unchanged",
+      "sites": [
+        [
+          "0x528734",
+          "0x2406000a"
+        ],
+        [
+          "0x522918",
+          "0x2406000a"
+        ]
+      ]
+    },
+    {
+      "value": 32,
+      "purpose": "All Songs' artist line re-centred in the 60 px body",
+      "sites": [
+        [
+          "0x5287b8",
+          "0x2406001e"
+        ]
+      ]
+    },
+    {
+      "value": 34,
+      "purpose": "Albums' artist line re-centred in the 60 px body",
+      "sites": [
+        [
+          "0x5229c0",
+          "0x24060020"
+        ]
+      ]
+    }
+  ],
   "row_layout_calls": {
     "purpose": "fit ordinary row titles and their containers on every native relayout",
-    "sites": []
+    "sites": [
+      [
+        "0x528624",
+        "0x0320f809"
+      ],
+      [
+        "0x53696c",
+        "0x0320f809"
+      ],
+      [
+        "0x5332bc",
+        "0x0320f809"
+      ],
+      [
+        "0x524494",
+        "0x0320f809"
+      ],
+      [
+        "0x52651c",
+        "0x0320f809"
+      ],
+      [
+        "0x53e6ec",
+        "0x0320f809"
+      ]
+    ]
   },
   "private_prologues": {
     "stock_search": "4e001c3ccc0b9c2721e09903"

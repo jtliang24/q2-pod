@@ -451,8 +451,8 @@ class Machine:
             n['children_layout']=self.text(b)
             layout=self.alloc(32)
             self.word(layout+O['CHILDREN_LAYOUT_VTABLE'],O['DEFAULT_LAYOUT_VTABLE'])
-            self.u.mem_write(layout+0x14,struct.pack('<HH',1,0))
-            for param,off in (('xm','DEFAULT_LAYOUT_X_MARGIN'),('s','DEFAULT_LAYOUT_SPACING')):
+            self.u.mem_write(layout+O['DEFAULT_LAYOUT_X_MARGIN']-4,struct.pack('<HH',1,0))  # rows and cols, before the margins
+            for param,off in (('x' if is_m1plus else 'xm','DEFAULT_LAYOUT_X_MARGIN'),('s','DEFAULT_LAYOUT_SPACING')):  # V2.1's key for x is x
                 match=re.search(r'\b'+param+r'=(\d+)',self.text(b))
                 self.byte(layout+O[off],int(match[1]) if match else 0)
             self.word(a+O['W_CHILDREN_LAYOUT'],layout); ret=0
@@ -833,9 +833,9 @@ def known_gap(name, check):
         GAPS.append(name); print(f'KNOWN GAP: {name}\n    {traceback.extract_tb(e.__traceback__)[-1].line} {e}'.rstrip()); return
     raise AssertionError(f'Gap fixed, remove its known_gap marker: {name}')
 if is_m1plus:
-    # 4.4's code edits; 4.3's one, the list_view layout slot (ipod_list_layout), is not one of them
-    def compact_rows(): assert [c for c in manifest.get('compact_code', []) if c['address'] != hex(O['LIST_VIEW_LAYOUT_SLOT'])]
-    known_gap('compact rows (ipod-ui 4.4)', compact_rows)
+    # 4.4's code edits (the library rows: tools/m1plus_ipod.py patch_code), beside 4.3's one, the list_view layout slot
+    # (ipod_list_layout)
+    assert [c for c in manifest.get('compact_code', []) if c['address'] != hex(O['LIST_VIEW_LAYOUT_SLOT'])]
 def row_button(m,row):
     """A list_row's tap target, which holds its icon and label: the list_item on V2.1, its button on V1.32."""
     return row if is_m1plus else m.nodes[row]['children'][0]
@@ -1489,6 +1489,46 @@ if not is_m1plus:
     passed()
 # (Not on M1 Plus: the payload's part here is the iPod UI's, compact_row_layout and the ARTWORK
 # insets; in the Stock UI it runs V1.32's builders untouched, as a control. M1 Plus has no iPod UI.)
+if is_m1plus:
+    # ipod-ui 4.4: V2.1's library rows at the iPod's pitch. Each constructor runs as V2.1 has it (patched), its widgets
+    # the harness's: All Songs' (music_create_tablerow) and the class lists' (localclass_create_tablerow) rows are
+    # LIB_PITCH high on a LIB_BODY button, All Songs' title and artist line re-centred in it; Folders' already were. Each
+    # row's layout call is compact_set_row_layout (patch_code): V2.1's params kept, its layouter the payload's copy of
+    # V2.1's default vtable (DEFAULT_LAYOUT_VTABLE), whose layout slot is compact_row_layout and every other slot V2.1's.
+    # compact_row_layout gives the title (or its text view) the row's width less the margins and the visible siblings,
+    # keeps its ellipsis (focus-only scrolling) and hands the row to V2.1's layout.
+    def descendants(m,w): return [d for c in m.nodes[w]['children'] for d in [c,*descendants(m,c)]]
+    for address,page in ((0x528560,'allmusic_page'),(0x5368ac,'localclass_page'),(0x5331fc,'folder_page')):
+        m=Machine(); w=m.page(page,'table_client'); m.word(w+O['W_PARENT'],m.top); m.word(m.top+O['W_PARENT'],m.wm)
+        m.mock('table_row_create','button_create','image_create','view_create','hscroll_label_create','widget_use_style',
+               'widget_set_name','widget_set_children_layout','image_set_draw_type','image_base_set_image',
+               'hscroll_label_set_ellipses','hscroll_label_set_speed','hscroll_label_set_only_focus','widget_resize')
+        m.call(address=address,args=(w,0,0,0),gap=0)
+        row,=m.nodes[w]['children']; button,=m.nodes[row]['children']
+        assert (m.get(row+O['W_H']),m.get(button+O['W_H']))==(O['LIB_PITCH'],O['LIB_BODY']),page
+        labels=[d for d in descendants(m,button) if m.nodes[d]['type']=='hscroll_label']
+        called=lambda n: next(d for d in descendants(m,button) if m.nodes[d]['name']==n)
+        if page=='allmusic_page':  # the title in view_info, the artist line in its own view under it
+            assert m.get(called('scrlabel_name')+O['W_Y'])==12 and m.get(m.get(called('scrlabel_artist')+O['W_PARENT'])+O['W_Y'])==32
+        else: assert m.get(called('scrlabel_name')+O['W_Y'])==0  # the row's full height
+        layout=m.get(button+O['W_CHILDREN_LAYOUT']); vt=m.get(layout+O['CHILDREN_LAYOUT_VTABLE'])
+        assert m.nodes[button]['children_layout']=='default(r=1,c=0,x=12,s=8)' and vt!=O['DEFAULT_LAYOUT_VTABLE']
+        assert m.get(vt+8)==payload_syms['compact_row_layout'] and all(m.get(vt+4*i)==m.get(O['DEFAULT_LAYOUT_VTABLE']+4*i) for i in (0,1,3,4,5,6,7))
+        m.handlers[m.get(O['DEFAULT_LAYOUT_VTABLE']+8)]='v21_layout'
+        kids=m.nodes[button]['children']; text=next(c for c in kids if c in labels or any(d in labels for d in descendants(m,c)))
+        title=text if text in labels else next(d for d in m.nodes[text]['children'] if d in labels)
+        for choice in (1,0):
+            m.nodes[kids[0]]['visible']=choice  # img_choice, shown in multi-select
+            m.calls=[]; assert m.call(address=payload_syms['compact_row_layout'],args=(layout,button,0,0),gap=0)==0
+            assert [c[0] for c in m.calls].count('v21_layout')==1
+            want=m.get(button+O['W_W'])-2*12-sum(m.get(c+O['W_W'])+8 for c in kids if c!=text and m.nodes[c]['visible'])
+            assert m.get(text+O['W_W'])==want and m.nodes[title].get('hscroll_label_set_only_focus')==1,(page,choice)
+            if title!=text: assert m.get(title+O['W_X'])+m.get(title+O['W_W'])==want
+        passed()
+    # The rebinds that reset a row's label width (Folders' 0x532f6c, an album's tracks' 0x527918) are gone, so the
+    # layouter's width stays; the class lists' never had one.
+    for address in (0x532f6c,0x527918): assert struct.unpack('<I',bytes(Machine().u.mem_read(address,4)))[0]==0
+    passed()
 
 # Long Return executes the stock gates and release filter.
 def long_machine():
