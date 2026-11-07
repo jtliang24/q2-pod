@@ -25,7 +25,7 @@ void list_toggle(void *label, const char *title, int on) {
     void *item = P(label, W_PARENT);
     void *image = widget_lookup(item, "_setting_switch", 0);
     if (!image) {
-        int h = I(item, W_H) ? I(item, W_H) : PAGE_ROW_H;
+        int h = I(item, W_H) ? I(item, W_H) : LIB_PITCH;
         image = image_create(item, 251, (h - 28) / 2, 57, 28);
         widget_set_name(image, "_setting_switch");
         widget_move_resize(label, I(label, W_X), I(label, W_Y), 251 - 8 - I(label, W_X), I(label, W_H));

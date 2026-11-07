@@ -166,13 +166,13 @@ static int stream_config(void *ctx, void *event) {
     if (st.sc_page || !(st.sc_page = page_open("streamconf_page", page_closed, page_keyup)))
         return 0;
     int n = 3 + st.svc_n, x = svc_soloify ? 2 : 0;
-    void *view = page_list(st.sc_page, st.sc_page, 0, "Configuration", 5 + n + x, PAGE_ROW_H);
+    void *view = page_list(st.sc_page, st.sc_page, 0, "Configuration", 5 + n + x, LIB_PITCH);
     for (int i = 0; i < 3; ++i)
         st.sc_row[i] = page_row_detail(view, i, "", 0, sc_click), sc_text(i);
     for (int i = 0; i < x; ++i) /* Soloify's Delay and Quality, while it is on the card */
         sc_soloify[i] = page_row_detail(view, 3 + i, "", 0, sc_click), sc_soloify_text(i);
     page_row_detail(view, 3 + x, "Stop Streaming Services", 0, sc_click);
-    void *gap = list_item_create(view, 0, (4 + x) * PAGE_ROW_H, UI_W, PAGE_ROW_H); /* a gap before the toggles */
+    void *gap = list_item_create(view, 0, (4 + x) * LIB_PITCH, UI_W, LIB_PITCH); /* a gap before the toggles */
     widget_use_style(gap, ROW_STYLE);
     widget_set_prop_int(gap, "style:normal:bg_color", (int)0xff000000u);
     char hide[SVC_HIDE];

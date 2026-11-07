@@ -91,10 +91,6 @@
 #define ROW_STYLE "list_item_style"            /* V2.1's settings row (list_row_core) */
 #define ROW_LABEL_STYLE "srlabel_leftwhite21_style"
 #define ROW_CHEVRON "right_arrow"
-/* page_list's rows on M1 (m1plus_coverflow_rows.c): list_row_core's height, the caption at its x */
-#define PAGE_ROW_H 64
-#define PAGE_ROW_X 12
-#define PAGE_ROW_W 270
 #define VIEW_SYSSET "sysset_scrollview"
 #define VIEW_POWER "standby_scrollview" /* Idle (powermanager_page) */
 #define VIEW_DISPLAY "display_scrollview"
@@ -328,7 +324,7 @@ static inline int arc_out(int r, int y) {
  * colour flips too when it is mostly glyph: under LIGHT_SURFACE (1/n of its area) opaque and darker
  * than LIGHT_GLYPH, so a grey or dark disc keeps its white glyph. The M1 has no iPod build, so the
  * Q2's white chevron is never loaded. */
-#define LIST_INTO_WHITE M1_UNPORTED
+#define LIST_INTO_WHITE "right_arrow" /* V2.1's payload row chevron */
 #define LIGHT_PAPER 0xf4
 #define LIGHT_INK 0x16
 #define LIGHT_SPREAD 16
@@ -665,9 +661,9 @@ static inline int arc_out(int r, int y) {
 /* playlist_page_init's context >> 16 (0x53eb9c): Add to Playlist's mode, 0 when browsing; its row
  * click adds in a mode > 0 (0x53d470), as V1.32's 0xa27894 */
 #define PLAYLIST_ADD_MODE 0xa06f50
-/* The playlist editor's tick (ple_tick) at the end of V2.1's PAGE_ROW_H row, before the scroll bar */
+/* The playlist editor's tick (ple_tick) at the end of a compact row, before the scroll bar */
 #define PLE_TICK_X 284
-#define PLE_ROW_H PAGE_ROW_H
+#define PLE_ROW_H LIB_PITCH
 /* ple_mutate's temporary id. V2.1's libsqlite3 is 3.19.3, which refuses HAVING without GROUP BY ("a
  * GROUP BY clause is required before HAVING"), so Move Up/Down said "Could not save playlist": a CASE
  * gives NULL at the top id instead, which ple_number refuses as the Q2's empty result is */

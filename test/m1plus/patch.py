@@ -7341,8 +7341,8 @@ for found,want in (((('b.mp3','/p/b.mp3',2,1),('a.mp3','/p/a.mp3',1,2),('c.mp3',
                    ((('Mr. Blue','/p/img.flac',0,0,300),('Intro','/p/img.flac'),('01 x.flac','/p/01 x.flac')),['01 x','Intro','Mr. Blue'])):
     m=CoverflowMachine(); m.found=[track(m,*t) for t in found]; m.open(); view=m.tracks()
     assert [m.nodes[m.nodes[i]['children'][0]].get('text') for i in m.nodes[view]['children']]==want
-    # M1 Plus: the titles keep V2.1's row label, left at PAGE_ROW_X, where the Q2 centres them
-    assert all(m.nodes[m.nodes[i]['children'][0]]['style']==(NAMES['ROW_LABEL_STYLE'] if is_m1plus else S('s_scrlabel_white20c')) for i in m.nodes[view]['children'])
+    # Both models use the shared album track caption style.
+    assert all(m.nodes[m.nodes[i]['children'][0]]['style']==S('s_scrlabel_white20c') for i in m.nodes[view]['children'])
     body=next(n for n in m.nodes.values() if m.find('list_view') in n.get('children',())); assert m.nodes[body['children'][0]]['style:normal:font_size']==O['CF_NAME_PX']
     f,ctx=m.handler(m.nodes[view]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     assert [n.rsplit('.',1)[0] if n.endswith(('.mp3','.flac')) else n for n in m.names(m.plays[-1][1]&0xffffffff)]==want; passed()
@@ -7873,9 +7873,9 @@ if not is_m1plus:
         label=m.nodes[item]['children'][0]; assert cf_geometry(m,label)[::2]==(E,O['UI_W']-2*E)
     assert clear(E,48+(rows-1)*48+14,O['UI_W']-2*E,20)  # the lowest visible row
 else:
-    # M1 Plus: page_list's rows are V2.1's (m1plus_coverflow_rows.c): the caption left at PAGE_ROW_X, clear of a chevron
-    view=m.tracks(); assert {cf_geometry(m,m.nodes[i]['children'][0])[::2] for i in m.nodes[view]['children']}=={(O['PAGE_ROW_X'],O['PAGE_ROW_W'])}
-    assert {m.nodes[i]['style'] for i in m.nodes[view]['children']}=={'list_item_style'} and m.get(m.nodes[view]['children'][1]+O['W_Y'])==O['PAGE_ROW_H']
+    # M1 Plus uses the shared page rows at its compact pitch.
+    view=m.tracks(); assert {cf_geometry(m,m.nodes[i]['children'][0])[::2] for i in m.nodes[view]['children']}=={(O['CF_EDGE'],O['UI_W']-2*O['CF_EDGE'])}
+    assert {m.nodes[i]['style'] for i in m.nodes[view]['children']}=={NAMES['STYLE_LISTITEM_BLACK']} and m.get(m.nodes[view]['children'][1]+O['W_Y'])==O['LIB_PITCH']
 passed()
 
 # Execute stock sibling selection and playback scheduling; mock filesystem enumeration,
@@ -9566,7 +9566,7 @@ page=m.top; assert m.nodes[page]['name']=='shuffle_page' and m.nodes[page]['styl
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.top==page
 m.page=page; menu=m.find('scroll_view'); rows=m.nodes[menu]['children']
 def caption(r): return m.nodes[m.nodes[r]['children'][0]]['text']
-assert [m.get(r+O['W_H']) for r in rows]==[O['PAGE_ROW_H'] if is_m1plus else 48]*3 and [caption(r) for r in rows]==['Shuffle Songs','Shuffle Albums','Shuffle Folders']
+assert [m.get(r+O['W_H']) for r in rows]==[O['LIB_PITCH'] if is_m1plus else 48]*3 and [caption(r) for r in rows]==['Shuffle Songs','Shuffle Albums','Shuffle Folders']
 note=m.nodes[page]['children'][-1]
 assert m.texts()==['Shuffle']+[caption(r) for r in rows]+([] if is_m1plus else [m.nodes[note]['text']])
 assert m.nodes[note]['text']=='Albums and folders take a moment to shuffle' and m.nodes[note]['style:normal:text_color']==-0x555556 and m.nodes[note]['style:normal:font_size']==16 and not m.nodes[note].get('handlers')
@@ -9575,7 +9575,7 @@ if is_m1plus:
     # it is a centred label the screen's width less 20 px each side, wrapped onto two lines.
     assert m.nodes[note]['type']=='label' and m.nodes[note]['style']==NAMES['STYLE_LABEL_WHITE18C']
     assert (m.get(note+O['W_X']),m.get(note+O['W_W']))==(20,O['UI_W']-40) and ('label_set_line_wrap',note,1) in opened
-    assert m.get(note+O['W_Y'])==48+3*O['PAGE_ROW_H']+10  # under V2.1's 64 px rows (m1plus_coverflow_rows.c)
+    assert m.get(note+O['W_Y'])==48+3*O['LIB_PITCH']+10  # under the compact 64 px rows
     assert m.nodes[note].get('word_wrap')==1  # between words: line_wrap alone split "shu/ffle" on dev 13
 else:
     assert m.nodes[note]['type']=='hscroll_label' and m.get(note+O['W_W'])==335
@@ -11675,7 +11675,7 @@ def chevron(m,i):
     """Row i ends in stock's list_into (page_row_detail_into), its labels ending before the glyph (x 322);
     M1 Plus: V2.1's right_arrow, the labels ending where page rows' do."""
     *labels,last=m.nodes[m.rows()[i]]['children']
-    end=O['PAGE_ROW_X']+O['PAGE_ROW_W'] if is_m1plus else 316
+    end=O['UI_W']-38 if is_m1plus else 316
     return m.nodes[last].get('image')==('right_arrow' if is_m1plus else 'list_into') and all(m.get(l+O['W_X'])+m.get(l+O['W_W'])<=end for l in labels)
 def switch(m,i):  # by upstream's names (M1 Plus: V2.1's sset_on and sset_off)
     image=m.nodes[m.nodes[m.rows()[i]]['children'][-1]].get('image')
@@ -12018,7 +12018,7 @@ m.answer(*OK,[]); m.destroy(m.top); m.top=m.page
 m.row(1); assert m.toasts[-1][3]=='Unavailable'
 m.row(3); assert m.asked()==('collection','liked','next'); m.answer(*OK,[])
 m.back(); m.row(4); assert m.labels()==['Download Controls','Pause','Resume','Cancel Download','Retry Failed','Update Download']
-RH=O['PAGE_ROW_H'] if is_m1plus else 48  # M1 Plus: V2.1's page rows
+RH=O['LIB_PITCH'] if is_m1plus else 48  # M1 Plus: V2.1's page rows
 assert [(m.get(r+O['W_Y']),m.get(r+O['W_H'])) for r in m.rows()]==[(RH*i,RH) for i in range(5)]
 m.row(3); assert m.asked()==('job','liked','retry'); m.answer('ok','Retry queued','',[])
 m.back(); m.back(); m.back()
@@ -12289,7 +12289,7 @@ if 'usbmode_page_init' in HOOKS:
     m.pick(2); m.answer('ok','refresh','',PROG); assert m.labels()[:3]==['Downloads','47%','112 of 240 songs'],m.labels()
     def prog_bar(i): return next(v for v in m.nodes if m.nodes[v]['type']=='view' and m.get(v+O['W_PARENT'])==m.rows()[i])
     def prog_paint(i): m.rounded.clear(); m.bands.clear(); m.call(address=HOOKS['widget_on_paint_border'][0],args=(prog_bar(i),m.canvas,0,0)); return [b[:4] for b in m.bands]
-    x,w=(O['PAGE_ROW_X'],O['PAGE_ROW_W']) if is_m1plus else (O['CF_EDGE'],375-2*O['CF_EDGE'])  # M1 Plus: V2.1's row caption's
+    x,w=(O['CF_EDGE'],O['UI_W']-2*O['CF_EDGE']) if is_m1plus else (O['CF_EDGE'],375-2*O['CF_EDGE'])  # M1 Plus: V2.1's row caption's
     assert cf_geometry(m,prog_bar(0))==(x,44,w,8),cf_geometry(m,prog_bar(0))
     assert prog_paint(0)==[(0,0,w,8),(0,0,w*470//1000,8)] and not m.rounded and m.bands[0][4]==0xff3a3a3a!=m.bands[1][4],(m.bands,m.rounded)
     assert prog_paint(1)==[(0,0,w,8),(0,0,w,8)] and prog_paint(2)==prog_paint(3)==[(0,0,w,8)] and prog_paint(4)==prog_paint(1) and prog_paint(5)==prog_paint(2) and not m.rounded,(m.bands,m.rounded)

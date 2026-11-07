@@ -1103,7 +1103,7 @@ void *page_title(void *body, const char *caption) {
  * the list's white background never shows below a short list. Shared with photos.c. */
 void *page_list(void *page, void *body, void **title, const char *caption, int n, int item_h) {
 #if M1PLUS
-    item_h = PAGE_ROW_H; /* V2.1's rows (m1plus_coverflow_rows.c) */
+    item_h = LIB_PITCH; /* seven compact rows on a full library list */
 #endif
     int h = widget_get_prop_int(page, "h", BOTTOM), rows = h - 48;
     if (n * item_h < rows) rows = n * item_h;
@@ -1128,16 +1128,19 @@ static void *list(const char *title, int n) {
     return page_list(cf.page, cf.body, &cf.title, title, n, 48);
 }
 
-#if !M1PLUS
 /* One 48px row of a page_list or, with a detail (navigation.c's Most Played), a 64px one: the caption
  * over the detail in 16px #AAAAAA, stock's s_scrlabel_gray24l grey. iPod left-aligns them, as every
  * stock list. Returns the row. Shared with photos.c. */
 void *page_row_detail(void *view, int index, const char *caption, const char *detail,
                       int (*click)(void *, void *)) {
+#if M1PLUS
+    int h = LIB_PITCH;
+#else
     int h = detail ? 64 : 48;
+#endif
     void *item = list_item_create(view, 0, index * h, UI_W, h);
     widget_use_style(item, STYLE_LISTITEM_BLACK);
-    void *label = text(item, CF_X, detail ? 4 : 0, CF_W, detail ? 32 : 48);
+    void *label = text(item, CF_X, detail ? 4 : 0, CF_W, detail ? 32 : h);
     widget_use_style(label, STYLE_SCRLABEL_WHITE20L);
     widget_set_text_utf8(label, caption);
     if (detail) {
@@ -1156,9 +1159,13 @@ void *page_row_detail(void *view, int index, const char *caption, const char *de
 void row_into(void *item, int h) {
     for (unsigned i = 0, n = widget_count_children(item); i < n; ++i) {
         void *label = widget_get_child(item, i);
-        widget_move_resize(label, I(label, W_X), I(label, W_Y), 316 - I(label, W_X), I(label, W_H));
+        widget_move_resize(label, I(label, W_X), I(label, W_Y), (M1PLUS ? UI_W - 38 : 316) - I(label, W_X), I(label, W_H));
     }
+#if M1PLUS /* V2.1's small chevron, centred in the compact row */
+    image_base_set_image(image_create(item, UI_W - 25, (h - 22) / 2, 13, 22), ROW_CHEVRON);
+#else
     image_base_set_image(image_create(item, 302, 0, 50, h), "list_into");
+#endif
 }
 
 /* A page_row_detail row that opens another page, with row_into's chevron. An empty detail centres
@@ -1166,7 +1173,11 @@ void row_into(void *item, int h) {
 void *page_row_detail_into(void *view, int index, const char *caption, const char *detail,
                            int (*click)(void *, void *)) {
     void *item = page_row_detail(view, index, caption, detail, click);
+#if M1PLUS
+    int h = LIB_PITCH;
+#else
     int h = detail ? 64 : 48;
+#endif
     if (detail && !*detail) widget_move_resize(widget_get_child(item, 0), CF_X, 0, CF_W, h);
     row_into(item, h);
     return item;
@@ -1175,8 +1186,7 @@ void *page_row_detail_into(void *view, int index, const char *caption, const cha
 void page_row_into(void *view, int index, const char *caption, int (*click)(void *, void *)) {
     page_row_detail_into(view, index, caption, 0, click);
 }
-#endif
-#include "m1plus_coverflow_rows.c"
+
 
 /* clip: the canvas clip, read into old, narrowed to x, y, w, h; false when nothing shows. Shared
  * with navigation.c. */
@@ -2089,8 +2099,8 @@ static int to_tracks(const void *unused) {
     for (int i = 0; i < n; ++i) {
         void *row = page_row_detail(
             view, i, track_name(name, sizeof name, deque_at(cf.tracks, (unsigned)i)), 0, play);
-        if (!M1PLUS) /* M1 Plus: V2.1's rows keep their caption left (m1plus_coverflow_rows.c) */
-            widget_use_style(widget_get_child(row, 0), STYLE_SCRLABEL_WHITE20C);
+        /* Album track captions use the shared page-row style. */
+        widget_use_style(widget_get_child(row, 0), STYLE_SCRLABEL_WHITE20C);
     }
     return 0;
 }
