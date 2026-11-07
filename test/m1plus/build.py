@@ -53,7 +53,11 @@ m1ipod = m1plus_ipod.ipod
 assert [getattr(m1ipod, n) for n in SCREEN] == [m1[n] for n in SCREEN] == [320, 480, 30, 450]
 assert m1ipod.CORNER_R == m1['GLASS_R'] == 0 and m1ipod.HOME_LIST_W == 320
 # ... and the layout names a Phase 4 item has given V2.1's (4.2: the bar's battery room, which the 320 px bar fits).
-assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O[k]} == {'UI_W', 'UI_H', 'GLASS_R', 'BATT_ROOM'} == set(m1plus_ipod.PROFILE) - {'STATUS_H'}
+assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O[k]} == {'UI_W', 'UI_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_ROWS',
+                                                            'SET_STOCK_ROW'} == set(m1plus_ipod.PROFILE) - {'STATUS_H', 'SET_TOP'}
+# 4.3: six complete settings rows fit under the bar, each row's 60 px body inside it.
+assert m1ipod.SET_TOP + m1ipod.SET_ROWS * m1ipod.SET_ROW <= m1ipod.BOTTOM and m1['SET_STOCK_BODY'] <= m1ipod.SET_ROW
+assert (m1ipod.SET_ROW, m1ipod.SET_ROWS, m1ipod.SET_TOP, m1ipod.SET_STOCK_ROW) == (72, 6, 8, 64)
 assert m1ipod.BATT_ROOM == m1['BATT_ROOM'] == 115 and m1['STATUS_MARGIN'] == m1ipod.STATUS_MARGIN == 6 and m1['BAR_BACK_W'] == m1plus_ipod.BACK_W
 assert sys.modules['ipod'] is ipod and m1ipod is not ipod
 print('iPod screen profile checks passed.')
@@ -344,7 +348,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # The iPod UI is the only UI. Its code edits and page rewrites (tools/m1plus_ipod.py) are what each Phase 4
     # item has audited so far: the TagLib cover library, the style files (4.1) and the pages in REWRITES.
     import m1plus_ipod
-    assert 'variant' not in manifest and manifest['compact_code'] == [] and not M1_AUDIT['immediates'] and not M1_AUDIT['row_layout_calls']['sites']
+    # 4.3's one code edit: V2.1's list_view layout slot is ipod_list_layout.
+    slot = dict(address=hex(0x9047a8), original=hex(0x60abb0), patched=hex(ps['ipod_list_layout']),
+                purpose='settings lists stack SET_ROW rows and map their children')
+    assert 'variant' not in manifest and manifest['compact_code'] == [slot] and not M1_AUDIT['immediates'] and not M1_AUDIT['row_layout_calls']['sites']
     raw_styles = 'release/assets/default/raw/styles/'
     assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
         raw_styles + p for p in M1_AUDIT['styles']} | {
@@ -417,7 +424,14 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         refuses(page, dialog, 'expected a window')
     finally:
         m1plus_ipod.UI_ASSETS.clear(); m1plus_ipod.UI_ASSETS.update(hashed)
-    assert m1plus_ipod.patch_code(bytearray(0), ps) == []
+    assert m1plus_ipod.patch_code(bytearray(stock), ps) == [slot]
+    try:  # the slot as audited, or nothing
+        damaged = bytearray(stock); damaged[fileoff(stock, 0x9047a8)] ^= 1
+        m1plus_ipod.patch_code(damaged, ps)
+    except ValueError as e:
+        assert 'unexpected instruction' in str(e), e
+    else:
+        raise AssertionError('patch_code took a changed layout slot')
     # Native evidence for this batch: options are asset rows, not V1.32's kind table;
     # Tidal creates its URL worker on demand, and check_cpumem does only drop_caches work.
     more = list(walk(decode(read('stock.squashfs', 'release/assets/default/raw/ui/dialog/playmore_dialog.bin'))))
@@ -603,6 +617,25 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     for icon, digest in M1_AUDIT['settings_icons'].items():
         path = 'release/assets/default/raw/images/xx/' + icon
         assert sha(read('stock.squashfs', path)) == digest and png_header(read('stock.squashfs', path)) == (40, 40, 8, 6), icon
+    # The settings pages as built: each navigationbar_view hidden and disabled, its return button still enabled (back_of
+    # and previous_back click it); each list SET_TOP from the bar, its rows SET_ROW, as many complete ones as fit (the
+    # Power page's standby slide stops at 434, over its slide indicator). The Lock Screen page keeps its toolbar.
+    m1 = m1plus_ipod.M1
+    for page in M1_AUDIT['navbar_only']:
+        built = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + page))
+        navs = [n for n in walk(built) if n[2].get('name', '').startswith('navigationbar_view')]
+        lists = [n for n in walk(built) if n[0] == 'list_view']
+        if page in m1plus_ipod.SETTINGS_TOOLBAR_SWITCHES:
+            assert page not in m1plus_ipod.REWRITES and all(n[2].get('visible') != 'false' for n in navs), page
+            continue
+        assert navs and all(n[2]['visible'] == n[2]['enable'] == 'false' for n in navs), page
+        backs = [b for n in navs for b in n[3] if b[2].get('style') == 'navbar_btnreturn_style']
+        assert len(backs) == len(navs) and all(b[2].get('enable') == 'true' for b in backs), page
+        for n in lists:
+            rows = 5 if n[2]['name'] == 'standby_listview' else m1['SET_ROWS']
+            assert n[1][1] == m1['SET_TOP'] and n[1][3] == rows * m1['SET_ROW'] and n[2]['default_item_height'] == str(m1['SET_ROW']), page
+            assert [c[1][3] for c in n[3]] == [n[1][3]] * 2, page  # its scroll view and bar, as tall
+    assert sum(1 for p in M1_AUDIT['navbar_only'] if p in m1plus_ipod.REWRITES) == 32
     assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
     bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
     assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'
@@ -768,6 +801,9 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert demo[off:off+size] == bytes(size) and any(stock[off:off+size])
     assert all(p[1]+p[4] <= off for _, p in segments(stock) if p[0] == 1)
     allowed.update(range(off, off+size))
+    off = fileoff(stock, 0x9047a8)  # the list_view layout slot (patch_code)
+    assert demo[off:off+4] == struct.pack('<I', ps['ipod_list_layout'])
+    allowed.update(range(off, off+4))
     # The payload: stock's final PT_NULL header becomes its LOAD segment, R/W/X at BASE, after stock's bytes.
     old_segs, new_segs = segments(stock), segments(demo)
     assert [h for h, _ in old_segs] == [h for h, _ in new_segs] and [p for _, p in old_segs[:-1]] == [p for _, p in new_segs[:-1]]

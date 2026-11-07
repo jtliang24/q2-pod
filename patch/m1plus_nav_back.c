@@ -3,9 +3,14 @@
 /* A page's title-bar back button: V2.1's, which each page's init makes in navbar_btnreturn_style
  * with on_back_onclick as its click (its pages take no Return). The first one showing, depth first.
  * A widget with no style reads NULL, not the default (value_str of a NULL string). The payload's own
- * pages have none: the status bar's chevron (previous_back) closes them with a Return. */
+ * pages have none: the status bar's chevron (previous_back) closes them with a Return. A settings page's
+ * navigationbar_view (each slide's, numbered, on a slide page) is hidden and disabled by the iPod rewrite
+ * (ipod-ui 4.3, ipod.settings_page), its button still enabled: it is searched, as the page's one back. */
 static void *back_of(void *w, int depth) {
-    if (!w || depth > 8 || !widget_get_visible(w)) return (void *)0;
+    if (!w || depth > 8 ||
+        (!widget_get_visible(w) &&
+         !tk_str_start_with(widget_get_prop_str(w, "name", ""), "navigationbar_view")))
+        return (void *)0;
     const char *style =
         !tk_strcmp(widget_get_type(w), "button") ? widget_get_prop_str(w, "style", "") : 0;
     if (style && !tk_strcmp(style, STYLE_NAVBAR_RETURN)) return w;

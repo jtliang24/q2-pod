@@ -833,7 +833,8 @@ def known_gap(name, check):
         GAPS.append(name); print(f'KNOWN GAP: {name}\n    {traceback.extract_tb(e.__traceback__)[-1].line} {e}'.rstrip()); return
     raise AssertionError(f'Gap fixed, remove its known_gap marker: {name}')
 if is_m1plus:
-    def compact_rows(): assert manifest.get('compact_code') != []
+    # 4.4's code edits; 4.3's one, the list_view layout slot (ipod_list_layout), is not one of them
+    def compact_rows(): assert [c for c in manifest.get('compact_code', []) if c['address'] != hex(O['LIST_VIEW_LAYOUT_SLOT'])]
     known_gap('compact rows (ipod-ui 4.4)', compact_rows)
 def row_button(m,row):
     """A list_row's tap target, which holds its icon and label: the list_item on V2.1, its button on V1.32."""

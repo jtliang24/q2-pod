@@ -383,27 +383,29 @@ static inline int arc_out(int r, int y) {
 #define SPOT_HEART_X (UI_W - 54)
 #define SPOT_HEART_Y 0
 /* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic flush, and
- * holds SET_ROWS complete SET_ROW rows. Stock builds each row as a list_item holding a
- * SET_STOCK_W x SET_STOCK_BODY button at x SET_STOCK_X with a SET_STOCK_ICON icon, a label and a
- * 50px trailing image (chevron, tick or switch); items made SET_STOCK_ROW high are normalised to
- * SET_ROW. The icon shrinks to SET_ICON at SET_ICON_X, the text starts SET_GAP after it (or at
- * SET_TEXT_X without one) and trailing images end SET_EDGE from the right edge; test/build.py
- * and test/patch.py check them against the rounded glass in the first and last visible rows. */
-#define SET_ROW 68
+ * holds SET_ROWS complete SET_ROW rows (ipod-ui 4.3: six 72 px rows in the 450 px under the bar). V2.1 builds
+ * each row as a list_item_style list_item holding its children itself, no inner button (m1plus_nav_rows.c):
+ * a SET_STOCK_ICON icon at 12,10, a label at 60,20 (12,20 without an icon) and trailing images ending at x
+ * 308 (a 57x28 switch, right_arrow, a tick), all centred on a SET_STOCK_BODY body; items made SET_STOCK_ROW
+ * high, or left 0 for the list's default height, become SET_ROW. The icon stays SET_ICON at SET_ICON_X, the
+ * text starts SET_GAP after it (or at SET_TEXT_X without one) and trailing images end SET_EDGE from the right
+ * edge. SET_STOCK_X and SET_STOCK_W are the row itself; SET_STOCK_TRAIL is a 50 px image ending at 308. */
+#define SET_ROW 72
 #define SET_TOP 8
-#define SET_ROWS 4
+#define SET_ROWS 6
 #define SET_ICON 40
 #define SET_ICON_X 28
 #define SET_GAP 12
 #define SET_TEXT_X 20
 #define SET_EDGE 24
-#define SET_STOCK_ROW 78
-#define SET_STOCK_BODY 70
-#define SET_STOCK_X 20
-#define SET_STOCK_W 335
-#define SET_STOCK_ICON 52
-#define SET_STOCK_TRAIL 276   /* the usual trailing image x in the stock button */
+#define SET_STOCK_ROW 64
+#define SET_STOCK_BODY 60
+#define SET_STOCK_X 0
+#define SET_STOCK_W UI_W
+#define SET_STOCK_ICON 40
+#define SET_STOCK_TRAIL 258   /* a 50 px trailing image ending where V2.1's end, at x 308 */
 #define SET_RIGHT_SIDE 150    /* stock children starting here keep to the right edge */
+#define SET_MAPPED "_set_row" /* a V2.1 row's custom prop once ipod_list_layout has mapped it */
 #define LIST_DEFAULT_ITEM_HEIGHT 0x7c  /* list_view default_item_height */
 #define IMAGE_DRAW_SCALE_DOWN 5        /* "scale_down" in the stock draw type table @0x9272c0 */
 #define IMAGE_DRAW_CENTER 1            /* "center", the same table */
@@ -827,9 +829,12 @@ static inline int arc_out(int r, int y) {
 /* The confirm pop-up's prompt (4.7): 0 matches no child (y + h > 0), so confirm_prompt leaves it alone. */
 #define CONFIRM_TOP M1_UNPORTED
 #define CONFIRM_PROMPT_PX M1_UNPORTED
-/* Addresses read by routines the M1 doesn't hook (compact_*, ipod_list_layout: 4.3, 4.4). */
+/* Addresses read by routines the M1 doesn't hook (compact_*: 4.4). */
 #define DEFAULT_LAYOUT_VTABLE M1_UNPORTED_ADDR
-#define LIST_VIEW_LAYOUT M1_UNPORTED_ADDR
+/* V2.1's list_view layouter (children_layouter_list_view_create, 0x60b79c): its vtable 0x9047a0's layout slot,
+ * which patch_code points at ipod_list_layout, and the layout it held (ipod-ui 4.3). */
+#define LIST_VIEW_LAYOUT 0x60abb0
+#define LIST_VIEW_LAYOUT_SLOT 0x9047a8
 /* style_get_color's bal style_get_gradient (0x65a048, V2.1's) returns here (4.1). */
 #define STYLE_COLOR_GRADIENT_RET 0x65a050
 /* V2.1 has no long Return (HOLD_RETURN is Q2 only), so nothing arms the latch: a zero byte of the

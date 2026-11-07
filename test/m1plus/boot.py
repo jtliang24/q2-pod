@@ -10,9 +10,10 @@ status bar's clock and battery), and enter the payload through the hooks startup
 
 Then both take the same input through WALK: touches (the shim stands in for tslib, as the
 touchscreen's samples) and keys (the buttons' and knob's devices, /dev/input/event1 and event2, are
-FIFOs the harness writes Linux key events to). Home's pages, System Setting, About, Playback Setting
-and its EQ: each screen must match stock's, or differ where the payload changes it, and the payload's
-back button must close its EQ and Previous must not.
+FIFOs the harness writes Linux key events to). Home's pages must match stock's, and System Setting differ
+(the iPod settings rows, ipod-ui 4.3); from there the walk is the patched demo's alone: About, Playback
+Setting and its EQ, Display and the slider pages, where the chevron (and Previous, in Knob: Navigation)
+goes back, and the payload's back button must close its EQ and Previous must not.
 Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
 import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
@@ -214,7 +215,10 @@ def swipe(x0, y0, x1, y1, steps=10):
 NEXT_PAGE = swipe(280, 250, 40, 250)  # Home's carousel, a page right
 DOWN_LIST = swipe(160, 420, 160, 60)  # a list scrolled towards its end
 UP_LIST = swipe(160, 100, 160, 460)    # and back towards its start
-BACK = tap(18, 53)                    # V2.1's title-bar back button, on its own pages (stock has it too)
+# The iPod settings rows (ipod-ui 4.3): SET_ROWS rows of SET_ROW from SET_TOP under the bar, the same whether the list is
+# at its start or scrolled to its end. V2.1's title bar is hidden there: the chevron and Previous are the backs.
+def set_row(i): return tap(160, STATUS_H + 8 + 72 * i + 36)
+def set_band(i): return (STATUS_H + 8 + 72 * i, STATUS_H + 8 + 72 * (i + 1))
 CHEVRON = tap(BAR_BACK_W // 2, STATUS_H // 2)  # the status bar's back chevron: the payload's pages' only back (ipod-ui 4.2),
                                                # and V2.1's pages' too, which previous_back clicks the button of
 # Keys, as Linux reports them (keyboard_gpio_add.sh, keyboard_encoder): "keys CODE" on the buttons'
@@ -223,29 +227,31 @@ PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
 KNOB_DOWN, PRESS = 'knob 114', 'keys 116'   # KEY_VOLUMEDOWN, and the knob's press, KEY_POWER
 # (name, touches for both, seconds to settle, expectation): 'same', stock's below the status bar;
 # ('rows', same, differ), the y bands that match stock's and that must not; 'differs'; ('as', step),
-# the patched screen as it was at that step; ('not', step, ...), unlike it at each of those steps; or
-# ('same', 'moved', step, box): same, and the box (x0, y0, x1, y1, the status bar's included) changed
-# on both since that step; ('as', step, same, differ), as at that step in the y band same and unlike
-# it in differ; ('kept', step, box): unlike that step, but the box as it was then. Positions are
-# V2.1's 320x480 layout.
+# the patched screen as it was at that step; ('not', step, ...), unlike it at each of those steps;
+# ('as', step, same, differ), as at that step in the y band same and unlike it in differ; or ('kept',
+# step, box): unlike that step, but the box (x0, y0, x1, y1, the status bar's included) as it was then;
+# ('still', step, box): as at that step, the box too.
+# Positions are V2.1's 320x480 layout, the settings pages' the iPod rows' (set_row).
 # Home's last page: V2.1's five cards (seventeen in all), then, patched, the Q2 Pod card in the
 # sixth slot (its row's right half, y 266 to 394 with its label); stock's slot is empty.
 Q2POD_CARD = (237, 318)
 HOME3_ROWS = ('rows', (30, 266), (266, 394))
 WALK = [
     ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, HOME3_ROWS),
-    ('sysset', tap(82, 318), 4, 'same'),
-    # Its end: System Update, Formatting Card, Reset and About as stock's, Apps (netupdate.c) before them.
-    ('sysset_end', DOWN_LIST + ['wait 800'] + DOWN_LIST, 4, ('rows', (224, 480), (84, 220))),
-    # About: Model and FW. Version (the stock firmware's, ringnav_about) as stock's, then CFW. Version.
-    ('about', tap(160, 446), 4, ('rows', (30, 208), (208, 272))),
-    ('home3_again', BACK + ['wait 2500'] + BACK, 5, HOME3_ROWS),
-    ('playset', tap(237, 230), 4, 'same'),
-    ('knob', [KNOB_UP, KNOB_UP], 3, ('same', 'moved', 'playset', (0, 0, 60, 30))),  # the volume, as stock's, and its figure up
-    ('eq', tap(160, 238), 5, 'differs'),  # the PEQ editor in stock's EQ page
+    ('sysset', tap(82, 318), 4, 'differs'),  # the iPod settings rows
 ]
-PATCHED_ONLY = [('eq_closed', CHEVRON, 4, ('as', 'playset')),  # the PEQ's back: the chevron; stock's EQ page has its own button
-                ('eq_again', tap(160, 238), 5, ('as', 'eq')),
+PATCHED_ONLY = [# Its end: Apps (netupdate.c) before System Update, Formatting Card, Reset and About, the last row.
+                ('sysset_end', DOWN_LIST + ['wait 800'] + DOWN_LIST, 4, ('not', 'sysset')),
+                ('about', set_row(5), 4, ('not', 'sysset_end')),
+                # Back on Home, V2.1's refresh retitles the bottom bar (y 414 on) without the asset's full stop.
+                ('home3_again', CHEVRON + ['wait 2500'] + CHEVRON, 5, ('as', 'home3', (30, 414), (414, 480))),
+                ('playset', tap(237, 230), 4, ('not', 'home3_again')),
+                # The knob turns the volume (Knob: Volume): the iPod bar draws no figure (V2.1's img_volume and label_volume
+                # stay transparent), the chevron and the play state as they were.
+                ('knob', [KNOB_UP, KNOB_UP], 3, ('still', 'playset', (0, 0, 60, 30))),
+                ('eq', set_row(2), 5, ('not', 'playset')),  # the PEQ editor in stock's EQ page
+                ('eq_closed', CHEVRON, 4, ('as', 'playset')),  # the PEQ's back: the chevron; stock's EQ page has its own button
+                ('eq_again', set_row(2), 5, ('as', 'eq')),
                 ('eq_previous', [PREVIOUS], 4, ('as', 'eq')),  # Previous is a media key, not Back: the PEQ stays
                 # Back steps back one screen: Advanced's Preamp row, then Back to Advanced, then out.
                 ('advanced', tap(250, 53), 4, ('not', 'eq')),           # the tab bar's right half
@@ -253,28 +259,29 @@ PATCHED_ONLY = [('eq_closed', CHEVRON, 4, ('as', 'playset')),  # the PEQ's back:
                 ('preamp_back', CHEVRON, 4, ('not', 'preamp', 'playset')),
                 ('advanced_back', CHEVRON, 4, ('as', 'playset')),
                 ('playset_end', (DOWN_LIST + ['wait 800']) * 3 + DOWN_LIST, 4, ('not', 'playset')),
-                ('crossfade', tap(160, 318), 4, ('not', 'playset_end')),  # a row up for 1.3.8's Swap L/R, the last row
-                ('crossfade_slid', tap(230, 247), 4, ('not', 'crossfade')),
-                # Back: the list as before (the rows V2.1 rebuilds, then ours again), Crossfade's row now 8 s.
-                ('crossfade_back', CHEVRON, 4, ('as', 'playset_end', (30, 286), (286, 350))),
+                ('crossfade', set_row(0), 4, ('not', 'playset_end')),  # the first row at the end, MQA the last
+                ('crossfade_slid', tap(230, 197), 4, ('not', 'crossfade')),  # its slider, up the hidden title bar's 50 px
+                # Back: the list as before (the rows V2.1 rebuilds, then ours again), Crossfade's row now 11 s. Resume Songs'
+                # label (row 2) is wider than its row and scrolls, so the rows compared are the last three.
+                ('crossfade_back', CHEVRON, 4, ('as', 'playset_end', (set_band(3)[0], 480), set_band(0))),
                 # Display's Knob: Navigation. The knob's turns then move System Setting's selection
                 # (its outline drawn), and the volume, in the status bar, stays as it was.
-                ('knob_home', BACK, 5, ('not', 'crossfade_back')),
+                ('knob_home', CHEVRON, 5, ('not', 'crossfade_back')),
                 ('knob_sysset', tap(82, 318) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('as', 'sysset')),
-                ('display', tap(160, 302), 4, ('not', 'knob_sysset')),
+                ('display', set_row(3), 4, ('not', 'knob_sysset')),
                 # Lock screen: switched on, V2.1's grid shows its pictures, the built-ins drawn, in
                 # the payload's scroll view; scrolled to its end, Time show, Clock and About. Switched
                 # off again, then the chevron returns to Display: on V2.1's pages it clicks their own back
                 # button (previous_back), which knob_home and display_back tap.
-                ('lockscreen', tap(160, 238), 4, ('not', 'display')),
+                ('lockscreen', set_row(2), 4, ('not', 'display')),  # it keeps its title bar, which holds its switch
                 ('lockscreen_on', tap(221, 53), 4, ('not', 'lockscreen')),
                 ('lockscreen_end', DOWN_LIST, 4, ('not', 'lockscreen_on')),
                 ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
                 ('lockscreen_back', CHEVRON, 4, ('as', 'display')),
                 # Display's end: 1.4.5's Coverflow Sort and Refresh Coverflow push the knob's two rows below the screen.
                 ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
-                ('knob_row', tap(160, 384), 3, ('as', 'display_end', (30, 352), (352, 416))),  # Knob: Navigation
-                ('display_back', BACK, 4, ('as', 'knob_sysset')),
+                ('knob_row', set_row(4), 3, ('as', 'display_end', (30, set_band(4)[0]), set_band(4))),  # Knob: Navigation
+                ('display_back', CHEVRON, 4, ('as', 'knob_sysset')),
                 ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
                 # With Knob: Navigation, Previous is Back: System Setting closes to Home, where it
                 # stays Previous track (nothing plays) and Home stays.
@@ -284,9 +291,9 @@ PATCHED_ONLY = [('eq_closed', CHEVRON, 4, ('as', 'playset')),  # the PEQ's back:
                 # Volume and Default Vol (bootvol_page, Crossfade's page too). On V039m it stayed a media key there.
                 # Playback Setting reopens where its list was: scrolled back to its start, Max Volume is the fifth row.
                 ('slider_playset', tap(237, 230) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('not', 'previous_home')),
-                ('maxvol', tap(160, 366), 4, ('not', 'slider_playset')),
+                ('maxvol', set_row(4), 4, ('not', 'slider_playset')),
                 ('maxvol_previous', [PREVIOUS], 4, ('as', 'slider_playset')),
-                ('bootvol', tap(160, 430), 4, ('not', 'slider_playset', 'maxvol')),
+                ('bootvol', set_row(5), 4, ('not', 'slider_playset', 'maxvol')),
                 ('bootvol_previous', [PREVIOUS], 4, ('as', 'slider_playset')),
                 ('slider_home', [PREVIOUS], 4, ('as', 'previous_home')),
                 # The Q2 Pod card opens its page (rows of 64 px under the 48 px title bar); its
@@ -489,7 +496,7 @@ if __name__ == '__main__':
             differ = differing(stock, patched, edits=True)
         assert not differ, f'patched Home differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
         # The walk: the same touches to both, a screen each step.
-        seen, seen_all = {'home': patched}, {}
+        seen = {'home': patched}
         walk, patched_only = ((MENU_WALK, MENU_WALK) if args.home_menu else (MEDIA_WALK, MEDIA_WALK) if args.media
                               else (WALK + PATCHED_ONLY, PATCHED_ONLY))
         for name, touches, settle, want in walk:
@@ -500,19 +507,9 @@ if __name__ == '__main__':
             for t in runs: alive(t)
             shots = {t: screen(tmp/t) for t in targets}
             seen[name] = shots['patched']
-            for t, px in shots.items(): seen_all.setdefault(t, {})[name] = px
             if args.captures:
                 for t, px in shots.items(): png(px, args.captures/f'{name}-{t}.png')
-            if isinstance(want, tuple) and want[:2] == ('same', 'moved'):
-                differ = differing(shots['stock'], shots['patched'], edits=True)
-                assert not differ, f'{name}: patched differs from stock at {len(differ)} pixels'
-                x0, y0, x1, y1 = want[3]
-                box = lambda px: [px[(y * W + x0) * 4:(y * W + x1) * 4] for y in range(y0, y1)]
-                assert box(shots['stock']) != box(seen_all['stock'][want[2]]), f'{name}: stock showed no change in {want[3]}'
-                # The iPod bar draws no volume figure (V2.1's img_volume and label_volume stay off-screen, as the Q2's): the
-                # box is as it was, the chevron and the play state, and the volume shows in V2.1's own dialog below.
-                assert box(shots['patched']) == box(seen_all['patched'][want[2]]), f'{name}: patched drew a volume figure in {want[3]}'
-            elif want == 'same':
+            if want == 'same':
                 differ = differing(shots['stock'], shots['patched'], edits=True)
                 assert not differ, f'{name}: patched differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
             elif want == 'differs':
@@ -520,10 +517,10 @@ if __name__ == '__main__':
             elif want[0] == 'rows':
                 assert not differing(shots['stock'], shots['patched'], *want[1], edits=True), f'{name}: rows {want[1]} differ from stock'
                 assert differing(shots['stock'], shots['patched'], *want[2], edits=True), f'{name}: rows {want[2]} are stock\'s'
-            elif want[0] == 'kept':
+            elif want[0] in ('kept', 'still'):
                 x0, y0, x1, y1 = want[2]
                 box = lambda px: [px[(y * W + x0) * 4:(y * W + x1) * 4] for y in range(y0, y1)]
-                assert differing(seen[want[1]], shots['patched']), f'{name}: still as at {want[1]}'
+                assert bool(differing(seen[want[1]], shots['patched'])) == (want[0] == 'kept'), f'{name}: {want[0]} at {want[1]}?'
                 assert box(shots['patched']) == box(seen[want[1]]), f'{name}: {want[2]} changed since {want[1]}'
             elif want[0] == 'not':
                 for step in want[1:]:

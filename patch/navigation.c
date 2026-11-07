@@ -5334,6 +5334,9 @@ static void set_child(void *c, int row_w, int row_h, int shift) {
  * another builder made, which keeps its own height and geometry. */
 static void *set_button(void *item) {
     if (tk_strcmp(widget_get_type(item), "list_item")) return (void *)0;
+#if M1PLUS /* V2.1's rows hold their children (m1plus_nav_rows.c): the row is its own, until mapped */
+    return widget_get_prop_int(item, SET_MAPPED, 0) ? (void *)0 : item;
+#endif
     for (unsigned i = 0; i < widget_count_children(item); ++i) {
         void *b = widget_get_child(item, i);
         if (I(b, W_X) == SET_STOCK_X && I(b, W_W) == SET_STOCK_W &&
@@ -5354,11 +5357,21 @@ static void set_row(void *item) {
         unsigned n = widget_count_children(b);
         for (unsigned j = 0; j < n; ++j) {
             void *c = widget_get_child(b, j);
+#if M1PLUS /* V2.1's trailing images differ in width; their right edges line up */
+            if (I(c, W_X) >= SET_RIGHT_SIDE && I(c, W_X) + I(c, W_W) - 50 > trail &&
+                !tk_strcmp(widget_get_type(c), "image"))
+                trail = I(c, W_X) + I(c, W_W) - 50;
+#else
             if (I(c, W_W) == 50 && I(c, W_X) >= SET_RIGHT_SIDE && I(c, W_X) > trail &&
                 !tk_strcmp(widget_get_type(c), "image"))
                 trail = I(c, W_X);
+#endif
         }
+#if M1PLUS
+        widget_set_prop_int(b, SET_MAPPED, 1);
+#else
         widget_move_resize(b, 0, 0, row_w, row_h);
+#endif
         for (unsigned j = 0; j < n; ++j)
             set_child(widget_get_child(b, j), row_w, row_h,
                       row_w - SET_EDGE - 50 - SET_STOCK_X - trail);

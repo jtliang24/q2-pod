@@ -2,8 +2,9 @@
 loaded with the M1's PROFILE, so sys.modules['ipod'] stays the Q2's that tools/m1plus.py imports from.
 
 The profile is the screen from patch/m1plus_offsets.inc: UI_W, UI_H, STATUS_H, and GLASS_R (0, the square corners),
-and the layout names a Phase 4 item has given V2.1's values (4.2: BATT_ROOM, as the 320 px bar fits it). Every other
-layout name keeps the Q2's value until its item.
+and the layout names a Phase 4 item has given V2.1's values (4.2: BATT_ROOM, as the 320 px bar fits it; 4.3: the
+settings rows' SET_ROW, SET_TOP, SET_ROWS and V2.1's SET_STOCK_ROW). Every other layout name keeps the Q2's value
+until its item.
 
 Phase 3 adds the V2.1 patch around that copy: patch/m1plus_ipod.json (V1.32's pages mapped onto V2.1's, every
 other section empty), and patch_asset and patch_code, which m1plus.build() runs on every build. A Phase 4 item adds
@@ -16,7 +17,8 @@ from build import ROOT, check, sha
 
 M1 = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b',
                                                (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M)}
-PROFILE = {name: M1[name] for name in ('UI_W', 'UI_H', 'STATUS_H', 'GLASS_R', 'BATT_ROOM')}
+PROFILE = {name: M1[name] for name in ('UI_W', 'UI_H', 'STATUS_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_TOP', 'SET_ROWS',
+                                       'SET_STOCK_ROW')}
 
 
 def load(profile=PROFILE):
@@ -106,8 +108,47 @@ def status_icon(name, data):
     return ipod.status_icon(name, data)
 
 
+# 4.3: V2.1's settings pages (navbar_only) lose their navigationbar_view as the Q2's lose view_navbar
+# (ipod.settings_page): hidden and disabled, its return button left for back_of (patch/m1plus_nav_back.c), their
+# lists holding SET_ROWS SET_ROW rows that ipod_list_layout maps (V2.1's are 64 high, memplay's 60). The Lock Screen
+# page keeps its toolbar, which holds its on/off switch (image_switch), as the Q2's TOOLBAR_SWITCHES do. Date & Time
+# and Power have no page toolbar: each slide of their slide_view has its own (navigationbar_view, numbered), and a
+# slide's list stops at the slide's foot (the slide indicator under it). V2.1's scroll view and scroll bar have fixed
+# heights (the Q2's scroll view follows its list, h=100%): they take the list's.
+NAVBAR = 'navigationbar_view'
+SETTINGS_TOOLBAR_SWITCHES = ('systemset/screensaver_page.bin',)
+SETTINGS_SLIDES = ('systemset/datetime_page.bin', 'systemset/powermanager_page.bin')
+SETTINGS_STOCK_ROWS = (ipod.SET_STOCK_ROW, 60)
+
+
+def settings_page(path):
+    """The rewrite of V2.1's settings page path: ipod.settings_page on the page, or on each of its slides."""
+    def toolbar(node):
+        nav = [n for n in node[3] if n[2].get('name', '').startswith(NAVBAR)]
+        check(len(nav) == 1 and nav[0][0] == 'view' and nav[0][1] == [0, 0, ipod.UI_W, 50], f'{path}: unexpected toolbar')
+        return nav[0]
+
+    def rewrite(root):
+        if path not in SETTINGS_SLIDES:
+            nav = toolbar(root)
+            check(nav[2]['name'] == NAVBAR, f'{path}: unexpected toolbar')
+            ipod.settings_page(path, root, nav, SETTINGS_STOCK_ROWS)
+        else:
+            holder, = [n for n in root[3] if n[2].get('name') == 'slide_view_view']
+            slides, = [n for n in holder[3] if n[0] == 'slide_view']
+            for slide in slides[3]:
+                ipod.settings_page(path, slide, toolbar(slide), SETTINGS_STOCK_ROWS, bottom=slide[1][3])
+        for n in ipod.walk(root):
+            if n[0] == 'list_view':
+                check([c[0] for c in n[3]] == ['scroll_view', 'scroll_bar_m'], f'{path}: unexpected settings list')
+                for c in n[3]:
+                    c[1][3] = n[1][3]
+        return root
+    return rewrite
+
+
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
-REWRITES = {STATUS_BAR: status_bar}
+REWRITES = {STATUS_BAR: status_bar} | {p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES}
 
 
 def patch_asset(path, data):
@@ -130,7 +171,8 @@ def patch_style(rel, data):
 
 
 def patch_code(data, symbols):
-    """The audited code edits (immediates, then row layout calls) on data, V2.1's demo; returns the manifest's changes."""
+    """The audited code edits (immediates, row layout calls, then the list_view layout slot) on data, V2.1's demo;
+    returns the manifest's changes."""
     changes = []
     word = functools.partial(ipod.patch_word, data, changes=changes)
     for group in AUDIT['immediates']:
@@ -143,4 +185,7 @@ def patch_code(data, symbols):
     group = AUDIT['row_layout_calls']
     for address, instruction in group['sites']:
         word(int(address, 16), int(instruction, 16), ipod.jal(symbols['compact_set_row_layout']), group['purpose'])
+    # 4.3: the settings rows, through V2.1's list_view layouter's layout slot (data, vtable 0x9047a0 + 8).
+    word(M1['LIST_VIEW_LAYOUT_SLOT'], M1['LIST_VIEW_LAYOUT'], symbols['ipod_list_layout'],
+         'settings lists stack SET_ROW rows and map their children')
     return changes
