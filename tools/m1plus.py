@@ -520,6 +520,9 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     # Now Playing's info page: its labels from the playing track, "Label:value" (show_player_face's bal, NP_INFO_CALL)
     'np_info': 0x539c40,
     'volume_refresh': 0x47d664,  # the volume dialog's label, bar and slider from the output's level (on_volume_tsup_fun)
+    # The library title bar's Search button (0x5230a8 binds it, in search_style): navigator_to("search_page"), V2.1's
+    # library search, which pull to search opens (ipod-ui 4.4; m1plus_ipod.json private_prologues).
+    'stock_search': 0x523304,
 }
 # V1.32 routines V2.1 has no twin of yet, called only from a Q2 hook the M1 leaves unported: declared
 # with no address, so the page compiles and --gc-sections drops it. The link fails if live code
@@ -1115,7 +1118,13 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     (out/'watchdog').write_bytes(cat(WATCHDOG).replace(*WATCHDOG_SLEEP))
     for name, address, old, new in call_site_words(True, ps):
         patch_word(patched, address, old, new, CALL_SITE_PURPOSES[name])
-    compact_code = m1plus_ipod.patch_code(patched, ps)  # the iPod UI's audited code edits (Phase 3: none yet)
+    # The iPod UI's private entries and the event ids its code reads (m1plus_ipod.json), as V2.1 has them.
+    for name, original in m1plus_ipod.AUDIT['private_prologues'].items():
+        check(M1PLUS_PRIVATE_FUNCTIONS[name] == syms[name] and
+              raw_demo[fileoff(raw_demo, syms[name]):][:12].hex() == original, f'{name}: unexpected stock entry')
+    for address, original in m1plus_ipod.AUDIT['event_abi_words'].items():
+        check(raw_demo[fileoff(raw_demo, int(address, 16)):][:4].hex() == original, f'{address}: unexpected event ABI instruction')
+    compact_code = m1plus_ipod.patch_code(patched, ps)  # the iPod UI's audited code edits
     # Single shared version literal: V2.1's updater refuses an equal firmware_v20.info version (update_firmware,
     # 0x4e0e34; docs/m1plus.md), so it carries the build tag and stock V2.1 can be flashed back. About's FW.
     # Version row reads it too; ringnav_about shows STOCK_VERSION there instead.

@@ -58,7 +58,7 @@
     "localmusic/artistinfo_page.bin": {
       "v21": null,
       "opener": null,
-      "why": "V2.1 has no artist page: an artist's albums load through loadLocalClassList(0xff01) (m1plus_nav_goto.c). Phase 4.4 (Library) decides how the iPod artist view is built."
+      "why": "V2.1 has no artist page: an artist's albums load through loadLocalClassList(0xff01) (m1plus_nav_goto.c). Phase 4.4 (Library) decided it: they show on V2.1's localclass_page, laid out as the other library lists."
     },
     "localmusic/localclass_page.bin": {
       "v21": "localclass_page.bin",
@@ -73,12 +73,12 @@
     "localmusic/playlistsmore_page.bin": {
       "v21": null,
       "opener": null,
-      "why": "V2.1 has no playlist menu page (progress 60). Phase 4.4 (Library) decides the M1 hold-menu."
+      "why": "V2.1 has no playlist menu page (progress 60). Phase 4.4 (Library) decided it: a Playlists row's hold opens the hold menu's playlist rows (QM_PLAYLIST), whose More... is the playlist editor."
     },
     "localmusic_page.bin": {
       "v21": null,
       "opener": null,
-      "why": "V2.1 has no localmusic_page and no localmusic_page_init: the Library root is not a page of its own. Phase 4.4 (Library) decides it."
+      "why": "V2.1 has no localmusic_page and no localmusic_page_init: the Library root is not a page of its own. Phase 4.4 (Library) decided it: the root is the payload's library_open page (m1plus_nav_library.c), on the Q2's page rows."
     },
     "playing_page.bin": {
       "v21": "playing_page.bin",
@@ -330,8 +330,15 @@
     "purpose": "fit ordinary row titles and their containers on every native relayout",
     "sites": []
   },
-  "private_prologues": {},
-  "event_abi_words": {},
+  "private_prologues": {
+    "stock_search": "4e001c3ccc0b9c2721e09903"
+  },
+  "event_abi_words": {
+    "0x534f70": "ff000524",
+    "0x534fbc": "13010524",
+    "0x534ff4": "02010524",
+    "0x535010": "00010524"
+  },
   "settings_icons": {
     "playset_foldercover.png": "95a2776f7511146c7005235f139452f9206b952a946e97a869f938cb52ecab46",
     "pset_balance.png": "7bbe7bdcf861dac336a43194bbbf05df5b1daeb407269a6272eb852b2afd100a",

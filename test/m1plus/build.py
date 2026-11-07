@@ -656,6 +656,55 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     sysset_c = (ROOT/'patch/m1plus_nav_sysset.c').read_text()
     roles = re.findall(r'"(\w+)"', sysset_c[sysset_c.index('sysset_roles[]'):sysset_c.index('#define SYSSET_ROLES')])
     assert set(roles) == set(tables[0] + tables[1]) - {'sset_prove'} and len(roles) == 16, roles
+    # ipod-ui 4.4, the Library. V2.1's library rows: each builder's own constructor makes a row 60 high (Folders' 64), and
+    # All Songs' and the class lists' an inner button 56 high (Folders' 60) that holds the row's children. Each row's
+    # children are laid out by its own default(r=1,c=0,...) layouter (one row, every child its height), set by a jalr
+    # widget_set_children_layout with the params a GOT page plus an addiu: All Songs (music_create_tablerow), the class
+    # lists (localclass_create_tablerow), Folders (folder_create_tablerow), Albums (album_listitem_layout, x=0, the cover
+    # flush left), an album's tracks (albumdeinfo_listitem_layout) and Playlists (playlist_listitem_layout). All Songs'
+    # title and its artist line, and Albums' two lines, sit in a text view at fixed y: 10 and 30, and 10 and 32.
+    def li(reg, value): return 0x24000000 | reg << 16 | value
+    library = {'music_create_tablerow': {0x528570: li(2, 60), 0x5285a0: li(17, 56), 0x528734: li(6, 10), 0x5287b8: li(6, 30)},
+               'localclass_create_tablerow': {0x5368bc: li(2, 60), 0x5368e8: li(17, 56)},
+               'folder_create_tablerow': {0x53320c: li(2, 64), 0x533238: li(17, 60)},
+               'album_listitem_layout': {0x5245f0: li(2, 60)},  # list_item_create's h, for album_listitem_layout's row
+               'airplay_page_init': {0x522918: li(6, 10), 0x5229c0: li(6, 32)},  # Albums' text view (0x52289c)
+               'albumdeinfo_listitem_layout': {0x52667c: li(2, 60)}}
+    for fn, sites in library.items():
+        start = stock_syms[fn]
+        for a, w in sites.items():
+            assert start < a < start + 0x1000 and words(a, 1) == (w,), (fn, hex(a))
+    layouts = {0x528624: 'default(r=1,c=0,x=12,s=8)', 0x53696c: 'default(r=1,c=0,x=12,s=8)', 0x5332bc: 'default(r=1,c=0,x=12,s=8)',
+               0x524494: 'default(r=1,c=0,x=0,s=8)', 0x52651c: 'default(r=1,c=0,x=12,s=8)', 0x53e6ec: 'default(r=1,c=0,x=12,s=8)'}
+    for call, params in layouts.items():
+        assert words(call, 1) == (0x0320f809,) and got(call - 4) == stock_syms['widget_set_children_layout'] and \
+            compared(call - 8, call + 4)[1] == params.encode(), hex(call)
+    # V2.1's default children layouter: a 0x1c-byte children_layouter_default_t whose children_layouter_t holds a 12-byte
+    # str_t, so the vtable (0x904924, "default", its layout at [2]) is at 0xc, rows and cols at 0x10 and 0x12, and the x,
+    # y and spacing bytes at 0x14, 0x15 and 0x16 (set_param's switch on the key's letter, its jump table at 0x75c420).
+    create = stock_syms['children_layouter_default_create']
+    assert words(create + 0x1c, 1) == (0x2405001c,) and words(create + 0x6c, 2) == (0x24424924, 0xae02000c)  # calloc 0x1c; vt @0xc
+    assert m1plus_inc('DEFAULT_LAYOUT_VTABLE') == 0x904924 and cstr(words(0x904924, 1)[0]) == 'default' and words(0x904924 + 8, 1) == (0x63a444,)
+    assert m1plus_inc('CHILDREN_LAYOUT_VTABLE') == 0xc and m1plus_inc('DEFAULT_LAYOUT_X_MARGIN') == 0x14 and m1plus_inc('DEFAULT_LAYOUT_SPACING') == 0x16
+    params = {chr(97 + i): (w + M1PLUS_GP) & 0xffffffff for i, w in enumerate(struct.unpack_from('<25i', stock, fileoff(stock, 0x75c420)))}
+    assert words(params['x'], 2) == (0x1000fff0, 0xa2020014) and words(params['y'], 2) == (0x1000ffec, 0xa2020015)
+    assert words(params['s'], 2) == (0x1000ffea, 0xa2020016)  # b out; sb v0, 0x14/0x15/0x16(s0)
+    # The rows' rebinds: Folders' (0x532f6c) and an album's tracks' (0x527918) resize the row's label each time (200 or
+    # 220, and 200 or 250, by multi-select), as the Q2's folder rebind does (0x522410).
+    for call in (0x532f6c, 0x527918):
+        assert words(call, 1) == (0x0320f809,) and got(call - 8) == stock_syms['widget_resize'], hex(call)
+    # Search: the library title bar's Search button (search_style, at 183) opens V2.1's search_page; its click
+    # (0x523304) is navigator_to("search_page"), which pull to search calls (stock_search).
+    assert M1PLUS_PRIVATE_FUNCTIONS['stock_search'] == 0x523304 and got(0x523318) == stock_syms['navigator_to'] and compared(0x523314, 0x523328)[1] == b'search_page'
+    assert compared(0x52307c, 0x523088)[1] == b'search_style' and got(0x5230a0) == stock_syms['widget_on'] and \
+        words(0x52308c, 1) == (0x2405010c,) and words(0x5230a8, 1)[0] & 0xffff == 0x3304 and got(0x52309c) == 0x520000
+    # Hold: AWTK's key-down arms a 1000 ms timer (0x6a48a0) for every key; it sends EVT_KEY_LONG (0x110) for a key held
+    # 1000 ms or more. on_wm_keylong_fun (ringnav_keylong) acts on the power key's (0xd2) alone, so Previous's
+    # (KEY_BACK_BTN, or KEY_FWD_BTN rotated) does nothing in stock.
+    assert words(0x6a4778, 1) == (0x240603e8,) and got(0x6a4780) == stock_syms['timer_add'] and words(0x6a4964, 1) == (0x2c4203e8,)
+    assert words(0x6a497c, 1) == (0x24050110,) and m1plus_inc('EVT_KEY_LONG') == 0x110
+    keylong = stock_syms['on_wm_keylong_fun']
+    assert [w & 0xffff for w in words(keylong, 0x10c // 4) if w >> 16 == 0x2403] == [2, 0xd2, 1, 10]  # standby and car mode 2, the key 0xd2
     assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
     bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
     assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'

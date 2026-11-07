@@ -43,9 +43,12 @@
 #define W_EMITTER 0x5c
 #define W_CHILDREN_LAYOUT 0x64
 #define W_VT 0x70
-#define CHILDREN_LAYOUT_VTABLE 0x10
-#define DEFAULT_LAYOUT_X_MARGIN 0x18
-#define DEFAULT_LAYOUT_SPACING 0x1a
+/* children_layouter_t: V2.1's str_t params is 12 bytes (V1.32's 16), so its vtable is at 0xc
+ * (children_layouter_default_create, 0x63af2c). The default layouter's rows and cols follow at 0x10
+ * and 0x12, then its x, y and spacing bytes (its set_param, 0x63a0e4: x 0x14, y 0x15, s 0x16). */
+#define CHILDREN_LAYOUT_VTABLE 0x0c
+#define DEFAULT_LAYOUT_X_MARGIN 0x14
+#define DEFAULT_LAYOUT_SPACING 0x16
 #define EMIT_TYPE 0x08
 #define EMIT_PENDING_REMOVE 0x14 /* emitter_remove_item sets it there; V2.1 keeps no other flag */
 #define EMIT_NEXT 0x20
@@ -833,8 +836,9 @@ static inline int arc_out(int r, int y) {
 /* The confirm pop-up's prompt (4.7): 0 matches no child (y + h > 0), so confirm_prompt leaves it alone. */
 #define CONFIRM_TOP M1_UNPORTED
 #define CONFIRM_PROMPT_PX M1_UNPORTED
-/* Addresses read by routines the M1 doesn't hook (compact_*: 4.4). */
-#define DEFAULT_LAYOUT_VTABLE M1_UNPORTED_ADDR
+/* The default children layouter's vtable ("default", 8 words: the layout at [2]), which compact_set_row_layout
+ * copies for the library rows (ipod-ui 4.4). */
+#define DEFAULT_LAYOUT_VTABLE 0x904924
 /* V2.1's list_view layouter (children_layouter_list_view_create, 0x60b79c): its vtable 0x9047a0's layout slot,
  * which patch_code points at ipod_list_layout, and the layout it held (ipod-ui 4.3). */
 #define LIST_VIEW_LAYOUT 0x60abb0

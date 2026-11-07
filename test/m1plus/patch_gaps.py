@@ -303,10 +303,8 @@ GAPS = {
     '3791f9c29f': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3320 for cancel in (below,horizontal,upward,midlist,outside,edge0,edge30,edge31
     'd1d94c7d11': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3366 for distance in (7,48):
     'c2221ae651': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3383 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
-    '830fe27fdf': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3396 m=SearchNavigationMachine();w,es=m.page_list(6,height=240,name=localmusic_page);
-    '909058c712.2': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3397 m.order=[page];m.sync_order()
     'cdc3f66699': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3400 assert m.nodes[m.top][name]==dialog/search_dialog and m.order[0]==page
-    '909058c712.3': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3404 m.order.remove(m.top);m.sync_order()
+    '0463f7c258': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3406 assert m.top==page
     # Home and the Q2 Pod page (ipod-ui 4.5)
     '4f7dbcae47': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5371 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
     'f43abcdfc1': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5371 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
