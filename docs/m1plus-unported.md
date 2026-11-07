@@ -29,7 +29,7 @@ to its [progress](m1plus-progress.md) section.
 | [Battery: Tidal's stream thread parked](#battery-fixes) | 1.4.5 | `STREAM_POLL_CALLS` and `get_tidal_trackurl` (1.5.0; 1.4.5's `STREAM_POLLS`) | Native; live validation pending |
 | [Battery: the kernel modules' idle clocks](#battery-fixes) | 1.5.0 | `tools/aic.py`, `rotator.py`, `pwm.py`, `mcu_park.py` (`--aic-idle-wait`, `--rotator-lazy-clock`, `--pwm-idle-clock`, `--mcu-idle-sleep`) | Planned |
 | [FLAC fast paths](#flac-fast-paths) | 1.5.0 | `tools/flac.py`, `patch/flac_*.c` (`tools/peq.py`, `--flac-experiments`) | Planned |
-| [Display's sub-pages](#displays-sub-pages) | 1.5.0 | `ringnav_display`'s Appearance, Coverflow and Controls, `display_sub` | Planned |
+| [Display's sub-pages](#displays-sub-pages) | 1.5.0 | `ringnav_display`'s Appearance, Coverflow and Controls, `display_sub` | In progress |
 | [Videos in Folder view](#videos-in-folder-view) | 1.5.0 | `folder_click`, `books_video`, `LOAD_DIRECTORY_RET` (1.5.5) | Planned |
 | [A reboot keeping the place](#a-reboot-keeping-the-place) | 1.5.0 | `device_reboot`, `dialog_checkfw_dialog_init` | Planned |
 | [SyncLink's keys past the Buttons lock](#synclinks-keys) | 1.5.0 | `main_loop_post_key_event` | Planned |
@@ -168,9 +168,14 @@ decoder's routines are to be found by the same callers.
 ### Display's sub-pages
 
 1.5.0 splits Display into Appearance (iPod), Coverflow and Controls, each reopening stock's page with its
-own rows. The M1 keeps one list (`m1plus_nav_display.c`): its Controls would hold the knob rows alone,
-with no Return key for Hold Return and no wheel for Wheel QS or Wheel Sensitivity. Worth porting only if
-Display grows; V2.1's page reopened over itself is to be checked first.
+own rows. Ported with the iPod settings pages (ipod-ui 4.3, progress 66), awaiting its device pass:
+- **Appearance:** Theme, Light Mode, Accent and Battery.
+- **Coverflow:** Artist Albums, Coverflow Sort and Refresh Coverflow.
+- **Controls:** Smart Awake, then the knob and its direction.
+
+Home and Shortcut come with Home (4.5), Hold Return with the Library (4.4), and Centred Now Playing with Now
+Playing (4.6). Corners (square glass), Wheel QS, Wheel Sensitivity and Click With Headphones (no wheel, no
+buzzer) stay Q2-only. V2.1's page reopens over itself as the Q2's does.
 
 ### Videos in Folder view
 

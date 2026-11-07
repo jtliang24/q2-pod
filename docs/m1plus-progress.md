@@ -3607,6 +3607,91 @@ to clear all three first. Each was reproduced in qemu on `g2` (`V039m`) first.
 `ipod_light`, `lockscreen_init` and `peq_paint`. `draw_spaced`, `paint_battery` and `ringnav_about` keep their
 instruction bytes: only a constant-pool label's number (`$CPI305_0` to `$CPI309_0`) or a relocation record differs.
 
+## 66. Phase 4.3: the settings pages (Nov 6)
+
+On `feature/m1-ipod`, per the plan's Part B (the user's choices of Nov 6):
+- the title bar hidden, as on the Q2, with the chevron's tap wider;
+- six 72 px rows;
+- each sub-page row landing with the item that makes it work.
+
+**The audit** (pinned in `test/m1plus/build.py`):
+- **The layout slot:** V2.1's `list_view` layouter (`children_layouter_list_view_create`, 0x60b79c) uses the vtable at
+  0x9047a0, whose layout slot 0x9047a8 holds 0x60abb0.
+- **The rows:** V2.1's settings rows have no inner button. A `list_item_style` item holds its children, centred on a
+  60 px body in a 64 px row:
+  - a 40 px icon at 12,10;
+  - the label at 60,20 (12,20 without an icon);
+  - trailing images ending at x 308: a 57x28 switch at 251, `right_arrow` at 295, a 26 px tick at 282.
+
+  The builders make them 0 high (the list's default) or 64. The pins are the `li` words at six builders.
+- **The icons:** V2.1's 43 square 40 px `pset_`, `sset_`, `system_` and `playset_` icons, already `SET_ICON`, are
+  hashed in `m1plus_ipod.json`'s `settings_icons`. Several are red discs (System Update, Display).
+
+**The pages** (`tools/m1plus_ipod.py`):
+- **The rewrite:** `ipod.settings_page` is the Q2's `NAVBAR_ONLY` branch, factored out, and the Q2's pages come out
+  byte-identical. 32 of V2.1's 33 `navbar_only` pages lose their `navigationbar_view`: hidden and disabled, its
+  return button still enabled. A disabled bar takes no taps, so a tap at the top of the first row opens it.
+- **The lists:** each list sits `SET_TOP` under the bar in Minimal (flush in Classic) and holds `SET_ROWS` 6 of
+  `SET_ROW` 72. V2.1's scroll view and bar have fixed heights, so they take the list's (the Q2's follows, h=100%).
+- **The Lock Screen page** keeps its title bar, which holds its on/off switch.
+- **Date & Time and Power** are slide pages. Each slide is rewritten with its own bar, and the standby slide's list
+  stops above the slide indicator (five rows).
+
+**The code:**
+- **The layout slot:** `patch_code` points it at `ipod_list_layout`, the manifest's one `compact_code` change.
+- **The row mapping:** `set_button` takes a V2.1 row as its own button until a custom prop (`_set_row`) marks it
+  mapped. Only rows V2.1 made are taken (64 high, or 0 and laid out at 72), as the Q2 leaves another builder's rows
+  alone. `set_row` lines the trailing images up by their right edges.
+- **Back:** `back_of` searches a hidden `navigationbar_view`, so Previous and the chevron click the page's own back
+  (`on_back_onclick`). The chevron's tap is `BAR_BACK_HIT_W` (64) wide, and in Minimal it reaches `SET_TOP` into
+  the page. The image stays 32 px.
+- **Display:** the Q2's `ringnav_display` runs on the M1, with its icon and view names per model, and
+  `m1plus_nav_display.c` is retired. After V2.1's four rows come Appearance (Theme, Light Mode, Accent, Battery),
+  Coverflow (Artist Albums, Coverflow Sort, Refresh) and Controls (Smart Awake, the knob's two rows).
+- **Theme's preset on the M1:** it leaves Corners and Home alone, and skips `np_theme` (Now Playing is V2.1's until
+  4.6).
+- **The icons:** the image hook's `SETTINGS_ICON_NAMES` now lists V2.1's icons, which keep their category colours
+  under every accent.
+- **Kept:** `m1plus_nav_rows.c`, `m1plus_nav_audioset.c` and `m1plus_nav_sysset.c` (see ipod-ui 4.3).
+
+**Seen in qemu** (Classic, as `boot.py` runs it):
+- six complete rows, icons at 28 and text at 80;
+- the chevron and Previous going back from list pages, both slide pages and the slider pages;
+- the payload's Playback rows mapped like V2.1's;
+- Display's three sub-pages.
+
+For the visual pass: labels now run from 80 to 268, 32 px narrower than V2.1's. Long ones scroll, as V2.1's
+"Atmosphere Lamp Settings" already did ("Resume Songs: 30 min"). An iconless row's text starts at 22, not 20.
+
+**Tests:**
+- **`build.py`:** the slot, row and icon pins; the built pages' bars, back buttons and list geometry; the
+  `SET_*` fit; one proven failing pin.
+- **`patch.py`:**
+  - the chevron's tap edges in both themes;
+  - the M1's Display sub-pages and Theme's preset;
+  - the settings icons' colours under each model's names.
+
+  The 4.3 gap group is gone: the checks that pass left it, and the rest drive the Q2's row shape and wait for Phase 5
+  (`Display and settings scenarios on V2.1's rows`).
+- **`boot.py`:** past System Setting the walk is the patched demo's alone, on the 72 px rows, with the chevron (its
+  far edge once) as the settings pages' back, and the knob row through Controls.
+
+**Gates.** Every commit was built and checked by `build.py`, `patch.py` and the plain walk. The full set ran three
+times, serially: on `b1` (the audit), `b5` (through the chevron) and `b8` (`V03Jm`, the last code commit). Each run:
+- `q2compare.py 1.5.9 --suites`: `update.tar` byte-identical, 33 suite runs passed;
+- `build.py --build`; `patch.py` (870 in 13 gaps on `b8`, none unlisted);
+- `boot.py` plain 3 of 3, `--home-menu` and `--media`;
+- `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports.py`.
+
+`b1`'s `--media` failed once (`books_back`) while other qemu walks ran beside it, and passed when rerun alone: the
+walks share the CPU badly, so they run one at a time.
+
+`fndiff.py` against `a2` (`V03Bm`, on the device): 9 changed and 4 added, of 1280.
+- **Changed:** `back_of`, `ipod_list_layout`, `set_button`, `settings_list` (`SET_ROW`), `ringnav_display`, and
+  `ringnav_input` and `ringnav_dispatch`, which inline the chevron's tap and `back_of`.
+- **Added:** `setting_click`, `setting_text`, `display_open` and `keep_selected`, reachable on the M1 now.
+- **Unchanged in code:** `draw_spaced` and `ringnav_about` differ only in a constant-pool label, as in section 65.
+
 ## How to check a build now
 
 ```sh

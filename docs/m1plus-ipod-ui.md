@@ -207,6 +207,25 @@ Each feature follows the same steps:
      Display/Appearance/Controls pages;
    - retire `m1plus_nav_rows.c`, `m1plus_nav_display.c`, `m1plus_nav_sysset.c`,
      `m1plus_nav_audioset.c` and the M1 branches of `pod_rows`.
+
+   Code and gates done on Nov 6 (progress 66):
+   - **The rows:** V2.1's 32 settings pages hide their title bar and hold six 72 px rows. The Lock Screen page keeps
+     its title bar, which holds its switch.
+   - **The layout:** the list_view layout slot points at `ipod_list_layout`, which maps V2.1's buttonless rows.
+   - **Back:** the chevron's tap is 64 px wide, and the hidden title bar's back button is still Previous's.
+   - **Display:** Appearance (Theme, Light Mode, Accent, Battery), Coverflow and Controls (Smart Awake, the knob's
+     two rows).
+   - **Icons:** V2.1's settings icons keep their colours.
+
+   `m1plus_nav_display.c` is retired. Three M1 files stay:
+   - `m1plus_nav_rows.c`: V2.1's row shape for `list_row`. V2.1 lacks the Q2's row styles.
+   - `m1plus_nav_audioset.c`: V2.1 rebuilds Playback's list on each return, so the payload's rows are added again.
+   - `m1plus_nav_sysset.c`: V2.1's own System Setting order, Apps before Update. The Q2's order by role waits for
+     the user's choice of where V2.1's extra rows go.
+
+   The M1 branches of `pod_rows`' callers are features, not V2.1's look (no Wake row, no volume guard, the knob
+   rows), so they stay. Rows waiting for later items: Home and Shortcut (4.5), Hold Return (4.4), Centred Now
+   Playing (4.6). The device pass is next.
 4. **Library:**
    - compact rows: the local pages, `compact_set_row_layout` at V2.1's row-layout calls, and the
      immediates (the `immediates`, `row_layout_calls`, `private_prologues` and `event_abi_words` sections,
@@ -228,7 +247,9 @@ Each feature follows the same steps:
    - Games (they need a design without the Return key and the wheel);
    - the click sound (`buzzeer_switch`), unless the M1 has a buzzer;
    - `chord_gate`'s rim presses;
-   - `WHEEL_TS_READ`.
+   - `WHEEL_TS_READ`;
+   - Display's Corners (the glass is square), and Wheel QS, Wheel Sensitivity and Click With Headphones (no wheel,
+     no buzzer) (4.3).
 
 ## Phase 5: Tests
 
