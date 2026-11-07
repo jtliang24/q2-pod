@@ -5334,8 +5334,10 @@ static void set_child(void *c, int row_w, int row_h, int shift) {
  * another builder made, which keeps its own height and geometry. */
 static void *set_button(void *item) {
     if (tk_strcmp(widget_get_type(item), "list_item")) return (void *)0;
-#if M1PLUS /* V2.1's rows hold their children (m1plus_nav_rows.c): the row is its own, until mapped */
-    return widget_get_prop_int(item, SET_MAPPED, 0) ? (void *)0 : item;
+#if M1PLUS /* V2.1's rows hold their children (m1plus_nav_rows.c): a row V2.1 made (SET_STOCK_ROW high, or 0 and laid
+            * out at SET_ROW) is its own, until mapped; another height is another builder's */
+    int h = I(item, W_H);
+    return (h == SET_STOCK_ROW || h == SET_ROW) && !widget_get_prop_int(item, SET_MAPPED, 0) ? item : (void *)0;
 #endif
     for (unsigned i = 0; i < widget_count_children(item); ++i) {
         void *b = widget_get_child(item, i);
