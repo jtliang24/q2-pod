@@ -296,14 +296,6 @@ GAPS = {
     # Q2 Return key and window-manager ABI (Phase 5)
     'dfe4cdaacb': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3181 for existing in (False,True):
     '06388513e1': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3204 assert m.call(170,gap=0)==11
-    # pull to search on iPod lists (ipod-ui 4.4)
-    'b8767f31f8': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3273 for page_name in (folder_page,localmusic_page,allmusic_page,radio_page):
-    '22ec0013d1': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3315 assert len(m.searches())==1 and m.get(w+O[TABLE_ROWS])==count and m.get(w+O[TABL
-    '3791f9c29f': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3320 for cancel in (below,horizontal,upward,midlist,outside,edge0,edge30,edge31
-    'd1d94c7d11': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3366 for distance in (7,48):
-    'c2221ae651': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3383 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
-    'cdc3f66699': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3400 assert m.nodes[m.top][name]==dialog/search_dialog and m.order[0]==page
-    '0463f7c258': 'pull to search on iPod lists (ipod-ui 4.4)',  # patch.py:3406 assert m.top==page
     # Home and the Q2 Pod page (ipod-ui 4.5)
     '4f7dbcae47': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5371 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
     'f43abcdfc1': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5371 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
@@ -885,4 +877,7 @@ GAPS = {
     'b42e571763': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9135 m.paint(view); assert [m.bands[i][4] for i in (0,1,47)]==[color_t(ACCENTS[3][i])
     'c547892cd4.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9143 assert m.nodes[m.slider][FG]==-1; centre(m,50); assert m.nodes[m.slider][FG]==si
     'f1671ac043': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9148 for config,listw,roww,shown in (({HOME:1},375,O[HOME_FULL_ROW],0),({},O[HOME_SPL
+    # Q2 pointer dispatch ABI (Phase 5)
+    'c2221ae651': 'Q2 pointer dispatch ABI (Phase 5)',  # patch.py:3383 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
+    '4fbeccd763': 'Q2 pointer dispatch ABI (Phase 5)',  # PullDispatchMachine uses Q2 vtable and emitter fixtures; V2.1 needs its own fixture
 }

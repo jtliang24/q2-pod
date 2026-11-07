@@ -439,7 +439,9 @@ MEDIA_WALK = LIBRARY_WALK + [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PA
               ('radio_back', CHEVRON, 4, ('as', 'q2pod_end')),
               ('configuration', q2pod_end_row(11), 4, ('not', 'q2pod_end')),
               ('configuration_back', CHEVRON, 4, ('as', 'q2pod_end')),
-              ('q2pod_top', UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
+              # The first fling reaches the Library's top; the second pull opens V2.1's search (4.4).
+              ('q2pod_search', UP_LIST + ['wait 800'] + UP_LIST, 4, ('not', 'media_q2pod')),
+              ('q2pod_search_back', CHEVRON, 4, ('as', 'media_q2pod')),
               ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
               ('shuffle_songs', tap(160, 110), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
 

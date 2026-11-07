@@ -1509,14 +1509,10 @@ static int pull_event(void *page, void *event) {
     if (release) {
         pull_cancel(); /* clear before stock search can navigate or destroy anything */
         if (ready) {
-#if M1PLUS /* stock_search is a V1.32 routine, and only iPod's pages use it */
-            radio_search();
-#else
             if (!tk_strcmp(widget_get_prop_str(page, "name", ""), "radio_page"))
                 radio_search();
             else
                 stock_search(page, event);
-#endif
         }
         return STOP;
     }
@@ -1540,6 +1536,19 @@ static int pull_event(void *page, void *event) {
     return STOP;
 }
 
+#if M1PLUS
+/* The pages pull to search opens V2.1's search on: its library lists (the title bar's Search button, which the iPod
+ * rewrite hides, opens it there: stock_search) and the Q2 Pod page. Not the Add to Playlist picker, which shares
+ * playlist_page's name: its add mode tells them apart (m1plus_nav_playlist_hold.inc). */
+static int m1_search_page(const char *name) {
+    if (!tk_strcmp(name, "playlist_page") && I(PLAYLIST_ADD_MODE, 0)) return 0;
+    static const char *const pages[] = { "allmusic_page", "album_page",  "albuminfo_page", "localclass_page",
+                                         "playlist_page", "folder_page", "library_page" };
+    for (unsigned i = 0; i < sizeof pages / sizeof *pages; ++i)
+        if (!tk_strcmp(name, pages[i])) return 1;
+    return 0;
+}
+#endif
 static void pull_begin(void *event) {
     pull_cancel();
     if (!event || I(event, EVENT_Y) < QUICK_EDGE_PX) return;
@@ -1547,7 +1556,11 @@ static void pull_begin(void *event) {
     if (!page) return;
     /* Local Songs' is stock's search; Internet Radio's is its own. */
     const char *name = widget_get_prop_str(page, "name", "");
+#if M1PLUS /* V2.1's library lists and the Q2 Pod page, whose search is V2.1's search_page (ipod-ui 4.4) */
+    if (tk_strcmp(name, "radio_page") && !m1_search_page(name)) return;
+#else
     if (tk_strcmp(name, "radio_page") && tk_strcmp(name, "localmusic_page")) return;
+#endif
     void *w = surface((void *)0, (void *)0);
     if (!w) return;
     prop(w, PULL_SUPPRESS, 0);

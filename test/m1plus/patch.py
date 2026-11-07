@@ -3311,6 +3311,9 @@ if is_m1plus:  # WM_VTABLE: window_manager_create's lw $6,<page>($gp); addiu $6,
 passed()
 passed()
 
+# The page pull to search opens the library's search from: Local Songs on the Q2; on the M1 Plus, V2.1's All Songs
+# (allmusic_page), one of the library lists it opens V2.1's search_page from (ipod-ui 4.4), with Folders.
+LOCAL_SONGS,SEARCH_PAGE='allmusic_page' if is_m1plus else 'localmusic_page','search_page' if is_m1plus else 'dialog/search_dialog'
 for page_name in ('folder_page','localmusic_page','allmusic_page','radio_page'):
     for empty in (False,True):
         for distance in (0,7,8,47,48,49):
@@ -3322,7 +3325,7 @@ for page_name in ('folder_page','localmusic_page','allmusic_page','radio_page'):
             page=m.top;m.start_pull(page,w)
             m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=60+distance)
             # Local Songs' stock search is iPod's; Internet Radio's own search is in both.
-            enabled=page_name in ('radio_page','localmusic_page')
+            enabled=page_name in (('radio_page','allmusic_page','folder_page') if is_m1plus else ('radio_page','localmusic_page'))
             assert bool(m.prompt(page)['visible'])==(enabled and distance>=8)
             if enabled and distance>=8:
                 assert m.prompt(page)['text']==('Release to search' if distance>=48 else 'Pull to search')
@@ -3350,7 +3353,7 @@ for fail in ('EVT_WINDOW_BACKGROUND','EVT_POINTER_UP_BEFORE'):
     passed()
 
 # Local Songs' virtual table keeps its rows and top offset across a search.
-m=PullMachine();w,rows,es=m.table_page(name='localmusic_page');page=m.top
+m=PullMachine();w,rows,es=m.table_page(name=LOCAL_SONGS);page=m.top
 m.start_pull(page,w);count=m.get(w+O['TABLE_ROWS'])
 m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=120);m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=120)
 assert len(m.searches())==1 and m.get(w+O['TABLE_ROWS'])==count and m.get(w+O['TABLE_TOP'])==0
@@ -3360,7 +3363,7 @@ assert m.click(es[0])==0
 passed()
 for cancel in ('below','horizontal','upward','midlist','outside','edge0','edge30','edge31',
                'wheel','button','screen','navigate','background','close','destroy','surface','abort','move_hook'):
-    m=PullMachine();w,es=m.page_list(8,height=240,name='localmusic_page');page=m.top
+    m=PullMachine();w,es=m.page_list(8,height=240,name=LOCAL_SONGS);page=m.top
     y=30 if cancel=='edge30' else 0 if cancel=='edge0' else 31 if cancel=='edge31' else 60
     if cancel=='midlist':m.word(w+O['SCROLL_Y'],20)
     m.start_pull(page,w,x=250 if cancel=='outside' else 100,y=y)
@@ -3379,7 +3382,7 @@ for cancel in ('below','horizontal','upward','midlist','outside','edge0','edge30
         # The native wm move-before (0x102) tail-calls the down-before hook (0x100).
         # The move type must not restart the pull.
         m.word(m.event+O['EVENT_Y'],y+60)
-        m.call(key=100,address=syms['on_wm_tsmove_before_fun'],event_type=O['EVT_POINTER_MOVE_BEFORE'],gap=0,clear=False)
+        m.call(key=100,address=syms['on_wm_before_tsmove_fun' if is_m1plus else 'on_wm_tsmove_before_fun'],event_type=O['EVT_POINTER_MOVE_BEFORE'],gap=0,clear=False)
     m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=y+(47 if cancel=='below' else 60))
     assert len(m.searches())==(1 if cancel in ('edge31','move_hook') else 0),cancel
     assert not m.prompt(page)['visible'],cancel
@@ -3405,7 +3408,7 @@ class PullDispatchMachine(PullMachine):
         self.returns(0)
 
 for distance in (7,48):
-    m=PullDispatchMachine();w,es=m.page_list(5,height=240,name='localmusic_page');page=m.top
+    m=PullDispatchMachine();w,es=m.page_list(5,height=240,name=LOCAL_SONGS);page=m.top
     m.start_pull(page,w)
     m.word(page+O['W_VT'],1);m.word(page+O['W_EMITTER'],page)
     m.word(m.event+O['EVENT_Y'],60+distance)
@@ -3417,7 +3420,7 @@ for distance in (7,48):
     assert len(m.searches())==(distance>=48)
     passed()
 # Native abort delivery follows the pressed target chain; it is not an EVT_CLICK.
-m=PullMachine();w,es=m.page_list(3,height=240,name='localmusic_page');page=m.top
+m=PullMachine();w,es=m.page_list(3,height=240,name=LOCAL_SONGS);page=m.top
 m.start_pull(page,w);m.handlers.pop(syms['widget_dispatch_event_to_target_recursive'])
 m.word(page+0x4c,w);m.word(w+0x4c,es[0])
 m.calls=[];m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=120)
@@ -3433,12 +3436,12 @@ class SearchNavigationMachine(PullMachine,NavigationMachine):
         super().__init__()
         self.handlers.pop(syms['stock_search'],None)
         self.handlers.pop(syms['navigator_to'],None)
-        self.mock('dialog_search_dialog_init',prefix='nav:'); self.mock('widget_on')
-m=SearchNavigationMachine();w,es=m.page_list(6,height=240,name='localmusic_page');page=m.top
+        self.mock('search_page_init' if is_m1plus else 'dialog_search_dialog_init',prefix='nav:'); self.mock('widget_on')
+m=SearchNavigationMachine();w,es=m.page_list(6,height=240,name=LOCAL_SONGS);page=m.top
 m.order=[page];m.sync_order()
 m.start_pull(page,w);m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=120)
 m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=120)
-assert m.nodes[m.top]['name']=='dialog/search_dialog' and m.order[0]==page
+assert m.nodes[m.top]['name']==SEARCH_PAGE and m.order[0]==page
 # The stock dialog owns its Back handling and its callbacks are outside this harness;
 # model the window manager popping it. The Local Songs page must still be the same
 # instance with its offset and rows untouched.
