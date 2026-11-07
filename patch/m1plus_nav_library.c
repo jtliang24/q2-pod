@@ -60,7 +60,7 @@ int library_open(void *ctx, void *event) {
  * M1 compile takes the unused page; nothing calls it, so it isn't linked. */
 static void *const m1_unported_tidal_downloads __attribute__((unused)) = (void *)tidal_downloads;
 /* No trailing dots on a playlist row (navigation.c more_image, the Q2's qm_hold, 1.3.8): they open
- * playlistsmore_page, which V2.1 doesn't have; the M1's hold opens the editor itself
- * (m1plus_nav_playlist_hold.inc). Named as tidal_downloads is. */
+ * playlistsmore_page, which V2.1 doesn't have; the M1's hold opens the hold menu, whose More… is the
+ * editor (m1plus_nav_playlist_hold.inc). Named as tidal_downloads is. */
 static void *const m1_unported_more_image __attribute__((unused)) = (void *)more_image;
 #endif

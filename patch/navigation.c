@@ -8580,7 +8580,11 @@ static int qm_run(const void *unused) {
         } else
             navigator_to("playerqueue_page");
     } else if (a == QA_MORE && st.qm_kind == QM_PLAYLIST) {
+#if M1PLUS /* no playlistsmore_page: the playlist's editor (m1plus_nav_playlist_hold.inc) */
+        if (r) ple_open((void *)(long)st.qm_idx, 0);
+#else
         if (r) navigator_to_with_context("localmusic/playlistsmore_page", (void *)(long)st.qm_idx);
+#endif
     } else if (a == QA_MORE) {
         void *more = np_more(); /* clicked as a tap would, so stock's own handler opens it */
         char click[0x30];

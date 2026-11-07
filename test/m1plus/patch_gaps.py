@@ -37,7 +37,6 @@ GAPS = {
     '4cb62ca34f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5506 assert (stock_showface,bar) in [c[:2] for c in m.calls] and m.nodes[state][visib
     '0a9fe5785b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5508 for mode in (1,2,3,0,1,2,3,0):
     # Library rows (ipod-ui 4.4)
-    'a44d2b3708': 'Library rows (ipod-ui 4.4)',  # patch.py:5703 if localmusic_playlistsmore_page_init in HOOKS or is_m1plus:  # M1 Plus: no play
     '068a8e2bb8': 'Library rows (ipod-ui 4.4)',  # patch.py:9844 assert m.nodes[title][style]==m.nodes[detail][style] and m.nodes[title][style]==
     '90bd3c3315': 'Library rows (ipod-ui 4.4)',  # patch.py:10104 assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[
     '1735956559': 'Library rows (ipod-ui 4.4)',  # patch.py:10107 assert m.call(address=LIBRARY_INIT,args=(m.top,5,0,0),gap=0)==0 and len(m.nodes[

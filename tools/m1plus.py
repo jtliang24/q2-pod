@@ -389,7 +389,8 @@ M1PLUS_PORTS = {
     'mclSetOutputWay': ('native', "each output's own level on a switch (1.3.8); V2.1's set_devicevolume takes "
                         "btsource_volume while the output is Bluetooth"),
     'localmusic_playlistsmore_page_init': ('ported', "V2.1 has no playlistsmore_page: a playlist row's hold opens "
-                                           'its editor (m1plus_nav_playlist_hold.inc)'),
+                                           "the hold menu's playlist rows, whose More… is its editor "
+                                           '(m1plus_nav_playlist_hold.inc, ipod-ui 4.4)'),
     'systemset_fwupdate_page_init': ('unported', "Network Update (1.3.8) fetches DiamondBond's Q2 update.tar; off "
                                      "until it points at the M1 releases. fwupdate_tf is M1PLUS_UNRESOLVED"),
     # The iPod UI's hooks (docs/m1plus-ipod-ui.md Phase 4): the shared C compiles with IPOD=1, but each of these is

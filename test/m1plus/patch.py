@@ -5741,7 +5741,7 @@ def finger(m,view,points,ms=400,kinds=None):
         m.word(ev,k); m.word(ev+O['EVENT_X'],x); m.word(ev+O['EVENT_Y'],y)
         f,ctx=m.handler(view,k); assert m.call(address=f,args=(ctx,ev,0,0),gap=0,clear=False)==0
 
-if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no playlistsmore_page; a row's hold opens the editor
+if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no playlistsmore_page; the hold menu's More… opens the editor
     # Local playlist editor: real MIPS UI/control code and real SQLite transactions at its ABI boundary.
     class PlaylistEditMachine(CoverflowMachine):
         def __init__(self,count=3):
@@ -5809,7 +5809,11 @@ if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no pl
                 self.stack.remove(self.page); self.top=self.stack[-1]
             self.returns(ret,clobber=True)
         def open_editor(self):
-            if is_m1plus: return self.open_from_hold()
+            if is_m1plus:  # More… on a playlist row's hold menu (playlist_hold below): ple_open with the row's index
+                assert self.call(address=payload_syms['ple_open'],args=(0,0,0,0),gap=0)==0
+                self.page=self.top; self.view=self.find('scroll_view'); self.paint(self.view)
+                assert self.nodes[self.page]['name']=='playlistedit_page'
+                return 11
             more=self.node('window','playlistsmore_page'); self.word(more+O['W_PARENT'],self.wm)
             self.top=more; self.stack.append(more)
             deleted=self.node('hscroll_label',name='label_del')
@@ -5833,16 +5837,11 @@ if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no pl
             assert self.nodes[self.page]['name']=='playlistedit_page'
         def open_from_hold(self,mode=0):
             """M1 Plus: V2.1's playlist_page, its New row first and each playlist's entry named its pdeq_playlist
-            index (playlist_listitem_layout); Play/Pause held on the highlighted playlist opens the editor."""
+            index (playlist_listitem_layout), in the add mode given; Play/Pause held on the highlighted playlist."""
             self.surface,_,es=self.table_page(4,'playlist_page',rebind=True); self.word(self.surface+O['TABLE_ROWS'],4)
             for i,e in enumerate(es): self.nodes[e]['name']='img_new' if not i else str(i-1)
             self.word(O['PLAYLIST_ADD_MODE'],mode); self.paint(self.surface); self.call(); self.paint(self.surface)
-            self.press(7100); held=self.hold()
-            if mode or held!=11: return held
-            assert self.release()==0  # the hold's release never toggles playback
-            self.page=self.top; self.view=self.find('scroll_view'); self.paint(self.view)
-            assert self.nodes[self.page]['name']=='playlistedit_page'
-            return held
+            self.press(7100); return self.hold()
         def showlabels(self):
             self.view=self.find('scroll_view'); return self.labels()
         def ticks(self):  # rows holding stock's "select" check (V2.1's "selected"): songs already in the playlist
@@ -5860,16 +5859,17 @@ if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no pl
             records=[self.record(self.db.execute('select * from playlist where id=?',(i,)).fetchone()) if i else 0 for i in (a,b)]
             return self.call(address=payload_syms['ple_mutate'],args=(dest,*records,0),gap=0)
 
-    # iPod: the wheel reaches Edit Playlist below stock's Rename and Delete, and Centre opens the editor.
-    m=PlaylistEditMachine(); more=m.node('window','playlistsmore_page'); m.word(more+O['W_PARENT'],m.wm)
-    m.word(more+O['W_W'],375); m.word(more+O['W_H'],290); m.top=more; m.stack.append(more)
-    for i,name in enumerate(('label_rename','label_del')):
-        row=m.node('list_item',children=[m.entry(0)]); m.word(row+O['W_Y'],10+i*72); m.word(row+O['W_PARENT'],more)
-        m.word(m.nodes[row]['children'][0]+O['W_PARENT'],row); m.nodes[more]['children'].append(row)
-    m.call(address=HOOKS['localmusic_playlistsmore_page_init'][0],args=(more,0,0,0),gap=0)
-    m.on_click=lambda w,e: m.nested(*m.handler(w,O['EVT_CLICK']),e)
-    assert m.call()==11 and m.call()==11 and m.selected(more)==2
-    assert m.confirm()==11 and m.nodes[m.top]['name']=='playlistedit_page'; passed()
+    if not is_m1plus:  # V2.1 has no playlistsmore_page; its hold-menu route is checked below.
+        # iPod: the wheel reaches Edit Playlist below stock's Rename and Delete, and Centre opens the editor.
+        m=PlaylistEditMachine(); more=m.node('window','playlistsmore_page'); m.word(more+O['W_PARENT'],m.wm)
+        m.word(more+O['W_W'],375); m.word(more+O['W_H'],290); m.top=more; m.stack.append(more)
+        for i,name in enumerate(('label_rename','label_del')):
+            row=m.node('list_item',children=[m.entry(0)]); m.word(row+O['W_Y'],10+i*72); m.word(row+O['W_PARENT'],more)
+            m.word(m.nodes[row]['children'][0]+O['W_PARENT'],row); m.nodes[more]['children'].append(row)
+        m.call(address=HOOKS['localmusic_playlistsmore_page_init'][0],args=(more,0,0,0),gap=0)
+        m.on_click=lambda w,e: m.nested(*m.handler(w,O['EVT_CLICK']),e)
+        assert m.call()==11 and m.call()==11 and m.selected(more)==2
+        assert m.confirm()==11 and m.nodes[m.top]['name']=='playlistedit_page'; passed()
 
     m=PlaylistEditMachine(); m.open_editor()
     # The wheel still selects rows and Centre opens the selected song's actions.
@@ -5937,8 +5937,8 @@ if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no pl
     # Return from the box applies its text, and a filtered pick can close the page cleanly.
     m.choose(0); m.nodes[m.find('edit')]['text']='t1'; assert m.key()==11
     assert m.showlabels()==['Search: t1','T1']; m.close(); passed()
-    # M1 Plus: holding Play/Pause on a playlist row opens its editor (m1plus_nav_playlist_hold.inc), the
-    # playlist the row's name gives; the New row isn't one, and the Add to Playlist picker keeps stock's hold.
+    # M1 Plus: the playlist editor (More… on a playlist row's hold menu, m1plus_nav_playlist_hold.inc), the playlist
+    # the row's name gives; the New row isn't one, and the Add to Playlist picker keeps stock's hold.
     if is_m1plus:
         m=PlaylistEditMachine(); m.open_editor(); assert m.nodes[m.nodes[m.page]['children'][0]]['text']=='Editing: Mix'
         m.close(); passed()
@@ -5952,30 +5952,35 @@ if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no pl
     # them); More… opens the same More page as its trailing dots. The Add to Playlist picker shares
     # playlist_page's name and keeps stock's hold. The playlist is the index in the dots' name: row
     # positions also count Import/Export.
-    if not is_m1plus:  # the M1's hold opens the editor (above)
+    # M1 Plus (ipod-ui 4.4): V2.1 names a playlist's row its pdeq_playlist index (its New row isn't one), and More…
+    # opens the playlist's editor (ple_open): V2.1 has no playlistsmore_page.
+    if True:
         def playlist_hold(steps=2):
             m=QueueMachine(page='playlist_page',rows=3); m.word(O['PLAYLIST_ADD_MODE'],0)
+            if is_m1plus: m.handlers[payload_syms['ple_open']]='ple_open'
             for i,e in enumerate(m.nodes[r]['children'][0] for r in m.nodes[m.surface]['children']):
-                if i: dots=m.node('image',f'img_more{i-1}'); m.word(dots+O['W_PARENT'],e); m.nodes[e]['children'].append(dots)
+                if is_m1plus: m.nodes[e]['name']=str(i-1) if i else 'img_new'
+                elif i: dots=m.node('image',f'img_more{i-1}'); m.word(dots+O['W_PARENT'],e); m.nodes[e]['children'].append(dots)
             lists=[m.song(f'List {i}',4) for i in range(2)]
             for i,r in enumerate(lists): m.word(r+O['REC_DISC'],7+i)
             m.word(syms['p_deque_playlist'],m.deque(lists)); m.found.append(m.song('Book.m4b'))
             m.word(m.surface+O['W_H'],144); m.paint(m.surface)  # every row on screen: the dots stay on their rows
             for _ in range(steps): m.call(); m.paint(m.surface)
             return m
-        m=playlist_hold(0); m.press(7000); assert m.hold()!=11 and not m.opened  # Import: no dots, stock keeps the hold
+        def more_opened(m): return [c[1] for c in m.calls if c[0]=='ple_open'] if is_m1plus else [o[1] for o in m.opened if o[0]=='localmusic/playlistsmore_page']
+        m=playlist_hold(0); m.press(7000); assert m.hold()!=11 and not m.opened  # Import (New on V2.1): stock keeps the hold
         m=playlist_hold(); m.press(7100); assert m.hold()==11 and m.release()==0  # the locked hold's release never toggles playback
         assert m.labels()==['Play Next','Add to Queue','Shuffle','More…'] and m.nodes[m.title]['text']=='List 1'
-        m.pick(3); m.advance(0); assert m.opened[-1]==('localmusic/playlistsmore_page',1) and m.names()==['A','B','C']; passed()
+        m.pick(3); m.advance(0,clear=False); assert more_opened(m)[-1:]==[1] and m.names()==['A','B','C']; passed()
         for row,want in ((0,['A','T1','T2','B','C']),(1,['A','B','C','T1','T2'])):
             m=playlist_hold(); assert m.run(row) is None and m.names()==want and m.query[:2]==('getMusicByPlayList',8)
             assert not m.playback(); passed()
         m=playlist_hold(1); m.found=[m.song('dir',4)]; assert m.run(0)=='Queue unchanged' and m.names()==['A','B','C']; passed()
         m=playlist_hold(); m.press(7100); assert m.hold()==11 and m.release()==0
-        m.word(syms['p_deque_playlist'],m.deque([m.song('Other',4)])); m.pick(3); m.advance(0)
-        assert not [o for o in m.opened if o[0]=='localmusic/playlistsmore_page']; passed()  # the list changed: nothing
+        m.word(syms['p_deque_playlist'],m.deque([m.song('Other',4)])); m.calls=[]; m.pick(3); m.advance(0,clear=False)
+        assert not more_opened(m); passed()  # the list changed: nothing
         m=playlist_hold(1); m.word(O['PLAYLIST_ADD_MODE'],1); m.press(7300)
-        assert m.hold()!=11 and not [o for o in m.opened if o[0]=='localmusic/playlistsmore_page']; passed()
+        assert m.hold()!=11 and not more_opened(m); passed()
     if not is_m1plus:  # the side keys (key-down hook): Q2 only
         for count in (0,1):
             m=PlaylistEditMachine(count); m.open_editor(); before=m.order()
