@@ -8620,6 +8620,11 @@ ACTIVE=('drop_wifiopen','drop_btopen','drop_keylockopen','drop_highgain','drop_l
 INACTIVE=('drop_wifi','drop_bt','drop_keylock','drop_lowgain','drop_po','drop_usbstorage','drop_playset','drop_sysset')
 disc=[(0xff1448,255),(0xffffff,255),(0xffc0d0,255),(0xff1448,0),(0x000000,0)]  # disc, glyph, glyph edge, transparent
 def perceived(c): return ((c>>16)*299+(c>>8&255)*587+(c&255)*114)//1000
+# Settings rows' category icons, by each model's names: V1.32's, or V2.1's own (m1plus_ipod.json's settings_icons,
+# ipod-ui 4.3), red ones (System Update, Display) included.
+SETTINGS_SAMPLE=(('sset_netservice','system_update','sset_wifiset','sset_display','system_language') if is_m1plus else
+                 ('system_netservice','netservice_dlna','wifiset_wifi','display_backlight','system_language'))
+NETSERVICE=SETTINGS_SAMPLE[0]
 for preset in CLASSIC:
     config={'ACCENT':str(preset),'THEME':'1'}
     tone=0xff1448 if preset==O['CRIMSON'] else ACCENTS[preset][3]
@@ -8657,7 +8662,7 @@ for preset in CLASSIC:
     # The settings rows' category icons keep their stock colours, red ones included, and
     # list_into its white.
     pink=[(0xcf2f53,255),(0xff1448,255),(0xffffff,255)]
-    for name in ('system_netservice','netservice_dlna','wifiset_wifi','display_backlight','system_language'):
+    for name in SETTINGS_SAMPLE:
         assert rgba(config,name,pink)==pink,(preset,name)
     assert rgba(config,'list_into',[(0xffffff,255),(0xffffff,0)])==[(0xffffff,255),(0xffffff,0)]
     # A cover whose file name starts like an asset stays unmapped.
@@ -8669,10 +8674,10 @@ for preset in CLASSIC:
 ink=O['MINIMAL_CHEVRON']
 px=[(0xff1448,255),(0xff8aa4,255),(0xffffff,255),(0xff1448,128),(0xffffff,0)]
 for icon in (px,[(0x00a0ff,255),(0xffffff,255)],[(0xc425ff,255),(0xffffff,255)]):
-    got=rgba({},'system_netservice',icon)
+    got=rgba({},NETSERVICE,icon)
     assert got[0]==(ink,255) and (0xffffff,255) in got,got
 for config in ({},{'ACCENT':'2'}):
-    assert rgba(config,'system_netservice',px)==[(ink,255),(0xbcbcbc,255),(0xffffff,255),(ink,128),(0xffffff,0)]
+    assert rgba(config,NETSERVICE,px)==[(ink,255),(0xbcbcbc,255),(0xffffff,255),(ink,128),(0xffffff,0)]
     assert rgba(config,'list_into',px)==[(O['MINIMAL_CHEVRON'],a) for _,a in px]
     assert rgba(config,'list_delete',[(0xffffff,255),(0xffffff,0)])==[(O['MINIMAL_CHEVRON'],255),(O['MINIMAL_CHEVRON'],0)]
     # Codec badges take SUDO_MUTED, legible on black and on the selected card; other img_ art doesn't.

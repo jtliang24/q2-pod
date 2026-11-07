@@ -1030,7 +1030,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         data = cat('usr/lib/'+lib); (out/lib).write_bytes(data)
         address = symbols(out/lib)[fn+'@@OPENSSL_1_1_0']
         check(struct.unpack_from('<I', data, address + at)[0] == word, f'{lib}: {fn} layout changed')
-    from ipod import SETTINGS_ICONS, imagemagick, patch_word, sized_art
+    from ipod import imagemagick, patch_word, sized_art
     import m1plus_ipod
     m1plus_names(sq, out)  # every V2.1 name the payload uses is in V2.1's rootfs
     demo = out/'stock-demo'; demo.write_bytes(raw_demo)
@@ -1052,8 +1052,9 @@ def build(target_path, out, logo, dev=False, m1_release=None):
                        f'#define {name} ((const unsigned char *){M1PLUS_STUB}{name})']
         else:
             header.append(f'#define {name} ((const unsigned char *)0x{syms[name]:x}u)')
-    # iPod's image hook leaves the settings icons' category colours alone (navigation.c settings_icon).
-    names = ''.join(n.removesuffix('.png') + '\\0' for n in SETTINGS_ICONS)
+    # iPod's image hook leaves the settings icons' category colours alone (navigation.c settings_icon): V2.1's own
+    # (m1plus_ipod.json's settings_icons, ipod-ui 4.3), which its settings rows and the payload's draw.
+    names = ''.join(n.removesuffix('.png') + '\\0' for n in m1plus_ipod.AUDIT['settings_icons'])
     header.append(f'#define SETTINGS_ICON_NAMES "{names}"')
     header.append(f'#define ROCKBOX_FLAG "{ROCKBOX_FLAG}"')  # Home's Rockbox row, for S90play
     # About: the stock firmware's version on its own row, and this build's on the CFW. Version row.
