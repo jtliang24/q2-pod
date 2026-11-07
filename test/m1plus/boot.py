@@ -242,7 +242,8 @@ WALK = [
     ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, HOME3_ROWS),
     ('sysset', tap(82, 318), 4, 'differs'),  # the iPod settings rows
 ]
-PATCHED_ONLY = [# Its end: Apps (netupdate.c) before System Update, Formatting Card, Reset and About, the last row.
+PATCHED_ONLY = [# System Setting in the iPod order (m1plus_nav_sysset.c): its end is System Update, Reset, Formatting Card and
+                # About, the last row.
                 ('sysset_end', DOWN_LIST + ['wait 800'] + DOWN_LIST, 4, ('not', 'sysset')),
                 ('about', set_row(5), 4, ('not', 'sysset_end')),
                 # Back on Home, V2.1's refresh retitles the bottom bar (y 414 on) without the asset's full stop.
@@ -270,7 +271,7 @@ PATCHED_ONLY = [# Its end: Apps (netupdate.c) before System Update, Formatting C
                 # (its outline drawn), and the volume, in the status bar, stays as it was.
                 ('knob_home', CHEVRON, 5, ('not', 'crossfade_back')),
                 ('knob_sysset', tap(82, 318) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('as', 'sysset')),
-                ('display', set_row(3), 4, ('not', 'knob_sysset')),
+                ('display', set_row(2), 4, ('not', 'knob_sysset')),  # Wireless, Network Service, then Display
                 # Lock screen: switched on, V2.1's grid shows its pictures, the built-ins drawn, in
                 # the payload's scroll view; scrolled to its end, Time show, Clock and About. Switched
                 # off again, then the chevron returns to Display: on V2.1's pages it clicks their own back

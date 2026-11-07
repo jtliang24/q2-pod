@@ -14511,26 +14511,41 @@ def boot_row(value=None,mode=0o100755):
     m.handlers[syms['memcmp@GLIBC_2.0']]='boot_memcmp'
     m.handlers[int(manifest['patch_symbols']['stock_systemset_trampoline'],16)]='stock_systemset'
     m.mock('ferror@GLIBC_2.0','fflush@GLIBC_2.0','fsync@GLIBC_2.0','fileno@GLIBC_2.0','navigator_to_with_context')
-    entries=[m.entry(0) for _ in range(12)]
-    if is_m1plus:  # V2.1's System Update row, by its icon (m1plus_nav_sysset.c), the ninth here
-        icon=m.node('image'); m.nodes[icon]['image']='system_update'; m.nodes[entries[8]]['children'].append(icon)
+    # M1 Plus: V2.1's rows, each drawing its get_systemset_showinfo icon, in syssetMenu's order (test/m1plus/build.py
+    # pins the table), with sset_prove (Chinese only) as a row the iPod's roles don't name.
+    V21=('system_language','sset_wifiset','sset_netservice','sset_display','sset_powermanager','system_time','sset_carmode',
+         'sset_tswake','sset_keylock','system_scrotate','sset_theme','system_update','system_formatcard','system_reset','sset_about','sset_prove')
+    entries=[m.entry(0) for _ in range(len(V21) if is_m1plus else 12)]
+    if is_m1plus:
+        for e,name in zip(entries,V21):
+            icon=m.node('image'); m.nodes[icon]['image']=name; m.nodes[e]['children'].append(icon)
     view=m.node('scroll_view',NAMES['VIEW_SYSSET'],entries.copy())
     m.top=m.node('window','sysset_page',[m.node('list_view','list_view_sysset',[view])])
     assert m.call(address=HOOKS['systemset_sysset_page_init'][0],args=(m.top,5,0,0),gap=0)==0
     assert m.calls[0][:3]==('stock_systemset',m.top,5)
-    # sysset_order is V1.32's row ids: M1 Plus keeps V2.1's order and appends Boot to.
-    order=list(range(12)) if is_m1plus else [1,2,3,4,8,7,5,0,6,9,10,11]  # 1.5.0: About last, below Reset Settings
     kids=m.nodes[view]['children']
-    # Apps (System Update's icon, netupdate.c's page) before Update; on M1 Plus before V2.1's System Update.
-    at=8 if is_m1plus else 9
-    apps=row_button(m,kids[at]); icon,label=m.nodes[apps]['children'][:2]
+    if is_m1plus:  # the iPod's order by role (m1plus_nav_sysset.c), Boot to and App Store after In-Vehicle, the unnamed row after Theme
+        order=['sset_wifiset','sset_netservice','sset_display','sset_powermanager','sset_keylock','system_time','system_language',
+               'sset_carmode','boot','apps','sset_tswake','system_scrotate','sset_theme','sset_prove','system_update','system_reset',
+               'system_formatcard','sset_about']
+        if mode!=0o100755: order.remove('boot')
+        at={n:i for i,n in enumerate(order)}
+        apps=row_button(m,kids[at['apps']])
+        assert [V21[entries.index(k)] if k in entries else None for k in kids]==[None if n in ('boot','apps') else n for n in order]
+    else:
+        # sysset_order is V1.32's row ids.
+        order=[1,2,3,4,8,7,5,0,6,9,10,11]  # 1.5.0: About last, below Reset Settings
+        # Apps (System Update's icon, netupdate.c's page) before Update.
+        apps=row_button(m,kids[9])
+    icon,label=m.nodes[apps]['children'][:2]
     assert m.nodes[icon]['image']=='system_update' and m.nodes[label]['text']=='App Store' and m.handler(apps,O['EVT_CLICK'])[0]==payload_syms['shelf_open']
     if mode!=0o100755:  # no Boot to
-        assert kids[:at]+kids[at+1:]==[entries[i] for i in order]
+        if not is_m1plus: assert kids[:9]+kids[10:]==[entries[i] for i in order]
         return m,None,None
-    at,added=(13,1) if is_m1plus else (9,2)  # Boot to's row, last on M1 Plus; it and Apps
-    assert len(kids)==14 if is_m1plus else len(kids)==12+added
-    assert (kids[:8]+kids[9:13] if is_m1plus else kids[:at]+kids[at+added:])==[entries[i] for i in order]
+    if is_m1plus: at=at['boot']
+    else:
+        at=9  # Boot to's row, then Apps
+        assert len(kids)==14 and kids[:at]+kids[at+2:]==[entries[i] for i in order]
     button=row_button(m,kids[at])
     label=m.nodes[button]['children'][1]
     return m,button,label

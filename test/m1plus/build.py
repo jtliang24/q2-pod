@@ -636,6 +636,26 @@ def m1plus_checks(directory, manifest, stock, demo, read):
             assert n[1][1] == m1['SET_TOP'] and n[1][3] == rows * m1['SET_ROW'] and n[2]['default_item_height'] == str(m1['SET_ROW']), page
             assert [c[1][3] for c in n[3]] == [n[1][3]] * 2, page  # its scroll view and bar, as tall
     assert sum(1 for p in M1_AUDIT['navbar_only'] if p in m1plus_ipod.REWRITES) == 32
+    # System Setting in the iPod order (m1plus_nav_sysset.c sysset_ipod_order). V2.1's builder makes a row per
+    # syssetMenu entry (0..14, or 15 with sset_prove), names it by its index and draws get_systemset_showinfo's icon:
+    # one of two tables, memcpy'd by a GPIO, which differ only in Double Tap's. The rows' click
+    # (on_syssetback_onclick) reads the name back with atoi and indexes syssetMenu, so a restacked row keeps its click.
+    def cstr(a): return stock[fileoff(stock, a):stock.index(b'\0', fileoff(stock, a))].decode()
+    tables = [[cstr(p) for p in words(t, 16)] for t in (0x97c988, 0x97c9c8)]
+    assert words(stock_syms['syssetMenu'], 16) == tuple(range(16))
+    assert tables[0] == ['system_language', 'sset_wifiset', 'sset_netservice', 'sset_display', 'sset_powermanager', 'system_time',
+                         'sset_carmode', 'sset_tswake', 'sset_keylock', 'system_scrotate', 'sset_theme', 'system_update',
+                         'system_formatcard', 'system_reset', 'sset_about', 'sset_prove']
+    assert tables[1] == tables[0][:7] + ['sset_doublewake'] + tables[0][8:]
+    showinfo = stock_syms['get_systemset_showinfo']
+    assert words(showinfo + 0x70, 1)[0] & 0xffff == 0x10000 - 0x3678 and words(showinfo + 0xb4, 1)[0] & 0xffff == 0x10000 - 0x3638
+    assert got(showinfo + 0x80) == 0x743570  # strcpy(buf, table[id])
+    click = stock_syms['on_syssetback_onclick'] + 0x260  # the row click (0x4ad7b0), bound at 0x4adde0
+    assert click == 0x4ad7b0 and words(0x4adde8, 1)[0] & 0xffff == 0x10000 - 0x2850 and got(0x4adddc) == 0x4b0000
+    assert got(0x4ad7c0) == 0x7435b0 and words(0x4ad7e0, 1) == (0x8c840010,) and got(0x4ad7f0) == stock_syms['syssetMenu']  # atoi(name)
+    sysset_c = (ROOT/'patch/m1plus_nav_sysset.c').read_text()
+    roles = re.findall(r'"(\w+)"', sysset_c[sysset_c.index('sysset_roles[]'):sysset_c.index('#define SYSSET_ROLES')])
+    assert set(roles) == set(tables[0] + tables[1]) - {'sset_prove'} and len(roles) == 16, roles
     assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
     bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
     assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'

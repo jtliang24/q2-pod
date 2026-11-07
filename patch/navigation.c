@@ -5068,7 +5068,7 @@ int ringnav_systemset(void *win, void *ctx) {
     if (view)
         widget_set_text_utf8(list_row_into(view, "system_update", shelf_open, 0), "App Store");
 #if M1PLUS
-    apps_before_update(view);
+    void *apps = last_row(view), *boot = (void *)0;
 #endif
     if (view && rockbox_available()) {
         char value[16];
@@ -5085,10 +5085,16 @@ int ringnav_systemset(void *win, void *ctx) {
             fclose(f);
         }
         void *label = list_row(view, ICON_POWER, 0, 0);
+#if M1PLUS
+        boot = last_row(view);
+#endif
         void *button = P(label, W_PARENT);
         widget_on(button, EVT_CLICK, boot_click, label);
         boot_text(label);
     }
+#if M1PLUS /* the iPod's order by role (reorder takes the Q2's row ids) */
+    sysset_ipod_order(view, apps, boot);
+#endif
     /* Without Rockbox there is no Boot to (13): the order less it. */
     unsigned char order[sizeof sysset_order];
     unsigned n = 0, rows = view ? widget_count_children(view) : 0;
