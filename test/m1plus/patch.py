@@ -50,6 +50,7 @@ if is_m1plus:
     from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
     inc_m1 = run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c', '-I', '.', str(ROOT/'patch/offsets.inc'))
     O = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b', inc_m1, re.M)}
+    O.update({m[1]: O[m[2]] for m in re.finditer(r'^#define\s+(SPOT_\w+)\s+(NP_\w+)\b', inc_m1, re.M)})
     Q2_HOOKS, HOOKS = HOOKS, dict(M1PLUS_HOOKS)
     HOOKS['playermore_page_init'] = HOOKS['dialog_playmore_dialog_init']
     HOOKS['on_wm_keyup_before_fun'] = M1PLUS_HOOKS['on_wm_keyup_fun']
@@ -12303,6 +12304,27 @@ for backend in (BrowseMachine,SoloifyMachine):
     spot_click(m,queue); assert m.asked()==('queue',); m.advance(0); assert 'navigator_back' in [c[0] for c in m.calls]; passed()
     m,np,info,msg,back,seek,row=spot_np_page(backend); prev,play,nxt,mode,queue=m.nodes[row]['children']
     spot_click(m,mode); assert m.asked()==('settings',); m.advance(0); assert 'navigator_back' in [c[0] for c in m.calls]; passed()
+# The Theme on Spotify's page, as on Now Playing (np_view_theme): Classic's album is its label, Minimal's paint_caps' capitals over
+# a transparent one, scrolled when wider than it; a new track writes the labels and restarts the album.
+def spot_labels(m,info): return [w for w in m.nodes[info]['children'] if m.nodes[w]['type']=='hscroll_label']
+for backend in (BrowseMachine,SoloifyMachine):
+    for theme in ('0','1'):
+        CONFIG.clear(); CONFIG.update(THEME=theme); m,np,info,msg,back,seek,row=spot_np_page(backend)
+        m.state('playing',position=10000,title='One',artist='Band',album='Kid A'); m.poll(); m.advance(250)
+        tag,title,artist,album,elapsed,remain=spot_labels(m,info)
+        minimal=theme=='0'
+        assert [m.nodes[w].get('text') for w in (title,artist,album)]==['One','Band','Kid A'],texts(info)
+        assert m.u.mem_read(album+0x34,1)==bytes([0 if minimal else 255])
+        def border(w): m.lines=[]; m.call(address=HOOKS['widget_on_paint_border'][0],args=(w,m.canvas,0,0),gap=0); return m.lines  # BooksMachine's canvas_draw_text
+        m.clip=(0,0,O['UI_W'],O['UI_H']); letters=border(info)
+        if not minimal: assert not letters,letters; passed(); continue
+        assert ''.join(l[0] for l in letters)=='KID A' and letters[0][1]==O['NP_TEXT_X']+O['NP_CAPS_INSET']
+        assert {l[3] for l in letters}=={color_t(O['NP_ALBUM_RGB'])}; passed()
+        # Wider than its label, it holds, then scrolls; a new album starts it over.
+        m.word(album+O['W_W'],40+O['NP_CAPS_INSET']); border(info); x0=O['NP_TEXT_X']+O['NP_CAPS_INSET']
+        m.advance(O['MARQUEE_HOLD_MS']); assert ('widget_invalidate_force',album) in [c[:2] for c in m.calls] and border(info)[0][1]==x0-2
+        m.state('playing',position=10000,title='One',artist='Band',album='Amnesiac'); m.poll(); m.advance(0); assert border(info)[0][1]==x0; passed()
+CONFIG.clear()
 # Hold Return and Home's row (compact_now_playing) open the page of whatever owns playback (media_owner, 1 local, 2 Spotify
 # or Soloify, 3 radio), from a page or from Home, and on that page go back to where they began.
 def hold_return(m): assert m.call(address=payload_syms['compact_now_playing'],args=(0,0,0,0),gap=0,clear=False,count=5_000_000)==0

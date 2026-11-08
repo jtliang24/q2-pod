@@ -388,20 +388,20 @@ static inline int arc_out(int r, int y) {
 #define RADIO_HEART_Y 0
 /* Spotify's Now Playing (spotify.c spot_np, for both backends): Now Playing's layout (ipod-ui 4.6). The bar's view holds the
  * Theme's line at its top, its middle on NP_BAR_CY in Classic's 8 px; the seek's slider takes the touch around it. */
-#define SPOT_ART_X 56
-#define SPOT_ART_Y 44
-#define SPOT_ART_PX 208
-#define SPOT_TEXT_X 16
-#define SPOT_TEXT_W 288
-#define SPOT_TITLE_Y 258
-#define SPOT_ARTIST_Y 290
-#define SPOT_ALBUM_Y 316
-#define SPOT_BAR_X 12
+#define SPOT_ART_X NP_ART_X
+#define SPOT_ART_Y NP_ART_Y
+#define SPOT_ART_PX NP_ART
+#define SPOT_TEXT_X NP_TEXT_X
+#define SPOT_TEXT_W NP_TEXT_W
+#define SPOT_TITLE_Y NP_TITLE_Y
+#define SPOT_ARTIST_Y NP_ARTIST_Y
+#define SPOT_ALBUM_Y NP_ALBUM_Y
+#define SPOT_BAR_X NP_BAR_X
+#define SPOT_BAR_H NP_BAR_CLASSIC
 #define SPOT_BAR_Y 358
-#define SPOT_BAR_W 296
-#define SPOT_BAR_H 8
-#define SPOT_TIMES_Y 368
-#define SPOT_TIME_X 12
+#define SPOT_BAR_W NP_BAR_W
+#define SPOT_TIMES_Y NP_TIMES_Y
+#define SPOT_TIME_X NP_BAR_X
 #define SPOT_TAG_X 56
 /* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic flush, and
  * holds SET_ROWS complete SET_ROW rows (ipod-ui 4.3: six 72 px rows in the 450 px under the bar). V2.1 builds

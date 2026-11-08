@@ -41,7 +41,10 @@ print('Dev build tag checks passed.')
 # the payload, and tools/m1plus_ipod.py's second copy with the M1's, every other name still the Q2's.
 import re, ipod, m1plus_ipod
 def defines(name):
-    return {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b', (ROOT/'patch'/name).read_text(), re.M)}
+    text = (ROOT/'patch'/name).read_text()
+    found = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b', text, re.M)}
+    # SPOT_* name Now Playing's (m1plus_offsets.inc)
+    return {**found, **{m[1]: found[m[2]] for m in re.finditer(r'^#define\s+(SPOT_\w+)\s+(NP_\w+)\b', text, re.M)}}
 q2, m1 = defines('m1plus_q2.inc'), defines('m1plus_offsets.inc')
 SCREEN = ('UI_W', 'UI_H', 'STATUS_H', 'BOTTOM')
 assert [getattr(ipod, n) for n in SCREEN] == [q2[n] for n in SCREEN] == [375, 320, 30, 290]
@@ -666,9 +669,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert centred['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=100%,h=-20)' and centred['label_lyricmsg'][2]['self_layout'] == 'default(x=0,y=100,w=100%,h=28)'
     assert m1plus_ipod.playing_stock(read('stock.squashfs', 'release/assets/default/raw/ui/playing_page.bin')) == read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK)
     # Spotify's page shares Now Playing's layout, and Radio keeps its stack.
-    assert [L[f'SPOT_{n}'] for n in 'ART_X ART_Y ART_PX TEXT_X TEXT_W TITLE_Y ARTIST_Y ALBUM_Y BAR_X BAR_W TIMES_Y TIME_X TAG_X'.split()] == [
+    S = defines('m1plus_offsets.inc')
+    assert [S[f'SPOT_{n}'] for n in 'ART_X ART_Y ART_PX TEXT_X TEXT_W TITLE_Y ARTIST_Y ALBUM_Y BAR_X BAR_W TIMES_Y TIME_X TAG_X'.split()] == [
         L[f'NP_{n}'] for n in 'ART_X ART_Y ART TEXT_X TEXT_W TITLE_Y ARTIST_Y ALBUM_Y BAR_X BAR_W TIMES_Y BAR_X'.split()] + [L['NP_BACK_W'] + 8]
-    assert L['SPOT_BAR_Y'] == L['NP_BAR_CY'] - L['SPOT_BAR_H'] // 2 and L['SPOT_BAR_H'] == L['NP_BAR_CLASSIC']
+    assert S['SPOT_BAR_Y'] == L['NP_BAR_CY'] - S['SPOT_BAR_H'] // 2 and S['SPOT_BAR_H'] == L['NP_BAR_CLASSIC']
     assert [L[f'RADIO_{n}'] for n in 'ART_X ART_Y ART_PX TITLE_Y TIMES_Y'.split()] == [50, 50, 220, 280, 392]
     # ipod-ui 4.6, the big cover: V2.1's page, full screen, the art a centred square with the shade and title on its foot; the
     # artist transparent, as its refresh (0x52958c) shows it. V2.1 opens it only from Enlarged Art's countdown, whose word and reset

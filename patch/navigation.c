@@ -5,6 +5,9 @@
 #include "playback.h"
 #include "stock.h"
 #include "m1plus_nav.h" /* the M1 Plus's declarations and V2.1 stand-ins (docs/m1plus-roadmap.md U1c) */
+#if M1PLUS
+#include "m1plus_np_view.h"
+#endif
 #undef select /* the UI selection helper below; headset.c uses libc select */
 extern int stock_sorted_query_trampoline(const char *, const char *, void *, int);
 extern int stock_dbquery_trampoline(const char *, const char *, void *, int),
@@ -2097,12 +2100,22 @@ static int draw_spaced(void *canvas, const unsigned *s, int x, int y, unsigned p
 static int np_marquee(const void *info) {
     st.np_marquee = 0;
     /* Covered or dark, paint_caps restarts it on Now Playing's next paint. */
+#if M1PLUS /* the page on top's: Spotify's has one too */
+    void *top = window_manager_get_top_window(window_manager());
+    void *album = top == st.np_win ? st.np_album : spot_page(top) ? spot_album() : (void *)0;
+    if (!album || st.np_over <= 0 || !g_backlight_status) return 0;
+#else
     if (!st.np_album || st.np_over <= 0 || !g_backlight_status ||
         window_manager_get_top_window(window_manager()) != st.np_win)
         return 0;
+#endif
     int end = st.np_off >= st.np_over;
     st.np_off = end ? 0 : st.np_off + MARQUEE_PX > st.np_over ? st.np_over : st.np_off + MARQUEE_PX;
+#if M1PLUS
+    widget_invalidate_force(album, (void *)0);
+#else
     widget_invalidate_force(st.np_album, (void *)0);
+#endif
     st.np_marquee = timer_add(np_marquee, (void *)0,
                               end || st.np_off >= st.np_over ? MARQUEE_HOLD_MS : MARQUEE_MS);
     return 0;
@@ -2120,8 +2133,15 @@ static void paint_caps(void *w, void *canvas) {
                     RGBA(0xaaaaaa), UI_W);
         return;
     }
+#if M1PLUS /* Spotify's page paints its album as this page does */
+    void *a = st.np_album && w == P(st.np_album, W_PARENT) ? st.np_album
+              : spot_album() && w == P(spot_album(), W_PARENT) ? spot_album()
+                                                                : (void *)0;
+    if (a) {
+#else
     if (st.np_album && w == P(st.np_album, W_PARENT)) {
         void *a = st.np_album;
+#endif
         int old[4], clip[4];
         if (!clip_within(canvas, old, clip, I(canvas, CANVAS_X) + I(a, W_X),
                          I(canvas, CANVAS_Y) + I(a, W_Y), I(a, W_W), I(a, W_H)))
@@ -3636,6 +3656,9 @@ int bold_label(void *w, int was) {
     return bold;
 }
 
+#if M1PLUS
+#include "m1plus_np_view.c"
+#else
 /* Now Playing's "3 of 12", album and remaining time (slider max less value, stock's seconds, so a
  * drag or scrub previews it). Labels are written only when their source changes. */
 static void np_sync(void *top) {
@@ -3663,6 +3686,7 @@ static void np_sync(void *top) {
     st.np_left = left;
     clock_text(st.np_remain, 1, left);
 }
+#endif
 
 /* Scrub (docs/internals.md#scrub-ipod) follows stock's own key seek (0x52c754): the page's 250 ms
  * timer stops, the slider and label_playtime preview the target, player_seek_time commits it once
@@ -3690,14 +3714,22 @@ static void np_theme(void) {
     static const char *const radius[] = { "style:normal:round_radius", "style:pressed:round_radius",
                                           "style:over:round_radius", "style:disable:round_radius",
                                           "style:focused:round_radius" };
+#if !M1PLUS
     void *glyph = st.np_win ? widget_lookup(st.np_win, "img_playstate", 1) : (void *)0;
+#endif
     int h = np_bar_h();
     for (unsigned i = 0; st.np_slider && i < sizeof radius / sizeof *radius; ++i)
         widget_set_prop_int(st.np_slider, radius[i], h / 2);
     if (st.np_slider) widget_set_prop_int(st.np_slider, "bar_size", h);
+#if M1PLUS
+    np_view_t v = np_view_local();
+    np_view_theme(&v);
+    spot_theme();
+#else
     if (glyph) widget_set_opacity(glyph, ipod_classic() ? 255 : 0);
     /* Minimal: the album is paint_caps' capitals. */
     if (st.np_album) widget_set_opacity(st.np_album, ipod_classic() ? 255 : 0);
+#endif
 }
 
 /* Paused, the seek waits for Play (scrub_end) and the player's second stands still until then,

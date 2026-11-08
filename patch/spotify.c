@@ -7,6 +7,9 @@
  * whose Now Playing is the page for it. */
 #include "offsets.inc"
 #include "peq.h"
+#if M1PLUS
+#include "m1plus_np_view.h"
+#endif
 #ifndef PEQ_HOST
 #include "stock.h"
 #endif
@@ -132,6 +135,7 @@ static struct {
 static struct {
 #if M1PLUS
     void *play, *seek; /* the transport row's Play and the bar's touch (np_controls) */
+    np_view_t view; /* the page's labels, as np_write writes them */
     int level; /* the browser's level np_browse opens */
 #endif
     void *page, *info, *msg, *art, *bar, *glyph, *title, *artist, *album, *elapsed, *remain, *note,
@@ -461,6 +465,7 @@ int spot_band(void *win, void **bar, void **times) {
 }
 #endif
 
+#if !M1PLUS
 static void times(unsigned ms) {
     char t[24];
     toolsTimeItoa(t, (int)(ms / 1000));
@@ -469,6 +474,7 @@ static void times(unsigned ms) {
     toolsTimeItoa(t + 1, (int)(sp.duration / 1000 - ms / 1000));
     widget_set_text_utf8(ui.remain, t);
 }
+#endif
 
 /* The page from sp: the track, or why there is none. Labels are written only when they change. */
 static void spot_refresh(void) {
@@ -490,6 +496,7 @@ static void spot_refresh(void) {
         widget_set_text_utf8(ui.sub, sub);
         return;
     }
+#if !M1PLUS /* np_write, below */
     void *fields[] = { ui.title, ui.artist, ui.album };
     const char *values[] = { sp.title, sp.artist, sp.album };
     for (unsigned i = 0; i < 3; ++i)
@@ -497,6 +504,7 @@ static void spot_refresh(void) {
             widget_set_text_utf8(fields[i], values[i]);
             widget_set_prop_int(fields[i], "xoffset", 0);
         }
+#endif
     /* ponytail: the cover is sized on the UI thread, one decode a track; a worker if it stutters */
     /* A cover that fails (written after its state line, or bad) is tried again on the next 3 ticks. */
     if (tk_strcmp(ui.art_tried, sp.track)) ui.art_tries = 0;
@@ -514,24 +522,27 @@ static void spot_refresh(void) {
         image_base_set_image(ui.art, PLACEHOLDER);
     }
     unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
+#if M1PLUS
+    np_src_t src = { .title = sp.title, .artist = sp.artist, .album = sp.album, .pos_ms = ms, .dur_ms = sp.duration, .playing = sp.playing };
+    np_write(&ui.view, &src);
+#else
     if (ms / 1000 + 1 != ui.shown) {
         ui.shown = ms / 1000 + 1;
         times(ms);
     }
+#endif
     /* only when the drawn width (spot_paint's) or the scrub's colour moves: this runs every tick */
     unsigned bar = (unsigned)((ms >> 4) * SPOT_BAR_W / ((sp.duration >> 4) | 1)) << 1 | (ui.scrub != 0);
     if (bar + 1 != ui.bar_drawn) {
         ui.bar_drawn = bar + 1;
         widget_invalidate_force(ui.bar, 0);
     }
+#if !M1PLUS /* the M1's transport row shows it: np_write */
     if (ui.playing != (unsigned)sp.playing + 1) {
         ui.playing = (unsigned)sp.playing + 1;
-#if M1PLUS /* the transport row's Play shows it */
-        widget_use_style(ui.play, sp.playing ? "btn_imgpause_style" : "btn_imgplay_style");
-#else
         widget_invalidate_force(ui.glyph, 0);
-#endif
     }
+#endif
 }
 
 static int tick(const void *unused) {
@@ -709,6 +720,9 @@ static void spot_np(void) {
         label(ui.msg, CF_EDGE, 134, UI_W - 2 * CF_EDGE, 24, STYLE_SCRLABEL_WHITE20C, 16, SPOT_GREY);
 #if M1PLUS
     np_controls();
+    ui.view = (np_view_t){ .win = page, .title = ui.title, .artist = ui.artist, .album = ui.album, .elapsed = ui.elapsed,
+                           .remain = ui.remain, .play = ui.play, .bold = -1 };
+    np_view_theme(&ui.view);
 #endif
     ui.timer = timer_add(tick, 0, 250);
     spot_refresh();
@@ -1403,6 +1417,12 @@ int spot_hold(void *w) {
 
 /* iPod's Now Playing corners (navigation.c paint_cover) round the art too. */
 void *spot_art(void) { return ui.art; }
+#if M1PLUS
+void *spot_album(void) { return ui.album; }
+void spot_theme(void) {
+    if (ui.page) np_view_theme(&ui.view);
+}
+#endif
 
 static struct {
     unsigned until;
