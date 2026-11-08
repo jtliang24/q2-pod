@@ -305,6 +305,9 @@ The screenshots are under `work/phase4/4.5/device-pass/` (Phase 4.5's pass on `V
 - **Classic's settings icons take different colours.** V2.1's rows keep their own colours (System: purple, teal,
   orange, green, red), and the payload's rows take theirs (Display: Appearance red, Coverflow blue; Controls: orange),
   with no common scheme (`141-system.png`, `143-controls.png`, `180-display.png`).
+- **Split's cover is zoomed in too much.** The art panel is 320x200, so a square cover fills the width and its top and
+  bottom are cropped (the Vergecast cover on `V04Om`: `work/phase4/4.5f/device-pass/301-home.png`). The user would
+  rather see the whole cover in the same 200 px of height.
 - **Display's first rows are shifted and clipped.** The rows without icons (Brightness, Screen Off, Lock screen,
   Atmosphere Lamp Settings) start at the left edge, and "Atmosphere Lamp Settings" loses its first letters in both
   themes (`112-display.png`; again on `V04Om`, `work/phase4/4.5f/device-pass/008-display.png`). It may be a marquee
