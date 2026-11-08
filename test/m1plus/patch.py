@@ -12022,6 +12022,16 @@ m.answer(*OK,[track('spotify:track:early','Early')]); m.row(0)
 m.state('playing',track='early',title='Early'); m.poll(); m.answer(*OK,[])
 info,msg=np_views(m,m.top); assert m.nodes[info]['visible'] and texts(info)[1]=='Early'
 passed()
+# F0: AWTK's hit test skips insensitive children, not hidden ones, and tries the newest first. msg is
+# made after info at the same size, so while a track shows it must be insensitive or it takes every
+# tap meant for the bar and the transport row. On the M1 only: the Q2's page is as it was.
+def takes_taps(m,v): return int(m.nodes[v]['visible']) and (not is_m1plus or m.nodes[v].get('sensitive')==1)
+def hides_taps(m,v): return not m.nodes[v]['visible'] and (not is_m1plus or m.nodes[v].get('sensitive')==0)
+assert takes_taps(m,info) and hides_taps(m,msg)
+m.state('none',track=''); m.poll(); m.advance(250)
+assert takes_taps(m,msg) and hides_taps(m,info)
+m.state('playing',track='early',title='Early'); m.poll(); m.advance(250)
+assert takes_taps(m,info) and hides_taps(m,msg); passed()
 # A relinked track (another id than asked for) is the play's too.
 m=BrowseMachine(); m.open(); m.answer(*ME); m.row(0)
 m.answer(*OK,[track('spotify:track:asked','Asked')]); m.row(0); m.answer(*OK,[])
