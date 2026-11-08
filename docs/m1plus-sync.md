@@ -221,6 +221,14 @@ release, or at once after a structural step.
 7. **Release.** Add a `- **<tag>-m1.1**:` entry to [m1plus-changelog.md](m1plus-changelog.md), then
    release by [m1plus-releasing.md](m1plus-releasing.md).
 
+## Now Playing's Q2-only code
+
+Since progress 72 the M1's Now Playing is `patch/m1plus_np_view.c`. Upstream's edits to these merge cleanly and **don't reach the M1**:
+- in `navigation.c`: `np_sync`, the `glyph` and album branch of `np_theme`, `scrub_start`, `scrub_end`, `settle_poll` and `np_key`;
+- in `spotify.c`: `scrub_commit`, the `#if !M1PLUS` key and scrub functions, and `spot_refresh`'s label loop.
+
+`test/m1plus/q2only.py <tag>` lists them, as it does any change in a Q2-only branch. Make each in `m1plus_np_view.c`, or rule it out, before `UPSTREAM_BASE` moves. A new label or Theme rule belongs in `np_write` or `np_view_theme`, where both of the M1's pages get it.
+
 ## Footprint
 
 How much of upstream's own files the M1 changes, after U1 and after each sync:

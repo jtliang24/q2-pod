@@ -105,6 +105,15 @@ lists each iPod hook as `unported` with the Phase 4 item that ports it (`style_g
 `image_manager_add`, `widget_on_paint_background` and `ui_loader_load_widget_with_parent` 4.1;
 `systembar_showface` 4.2; `list_get_img_pic` 4.4; `playlist_rebuild` 4.7). `bigcover_page_init` is ported (4.6, progress 71).
 
+### Now Playing's owners and pages
+
+`compact_now_playing` opens the page of `media_owner()` (progress 72), with these left as they are:
+- **A video (owner 4) keeps the local path.** It has no Now Playing of its own to open, so Hold Return and Home's row open `playing_page` as before.
+- **Hold Return again, to go back,** is reachable on a device only from Radio's page, by the held chevron. The chevron is hidden on the local and Spotify pages, and Previous's hold skips both. The suite checks those two by a direct call.
+- **Spotify's page has no heart, More, lyrics, info, visualizer or big cover,** and its Mode icon is static: neither backend's contract carries them (progress 71).
+- **The Theme's glyph and bold title do nothing on the M1.** It has no on-page `img_playstate` and no bold font (`BOLD_RANGES` is empty), so `np_view_theme` reaches only the album.
+- **V2.1's VOLUME page closes 3 s after it opens,** with no check of what is happening on it. That's stock's timer (`0x47d9f8`, in `dialog_volume_dialog_init`). Cancelling it in `vol_paint`'s page 2 branch would keep the page open, if that is ever wanted.
+
 ### Games
 
 Games are the iPod UI's. `games.c` has compiled on the M1 since the iPod path did, but its Library row is

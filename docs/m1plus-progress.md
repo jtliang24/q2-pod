@@ -4079,6 +4079,42 @@ the pass, and the config, boot target, volume, theme, accent, Light Mode, knob m
   counter lags a track change; Soloify's hardware Next leaves the page showing paused; Hold Return while Soloify is paused opens the local Now Playing;
   smaller cosmetic and "is this stock?" notes in `work/phase4/4.6/pass/findings.md`.
 
+## 72. Phase 4.6's pass fixes: one Now Playing for local and streaming (Nov 8)
+
+The plan was `.plan/phase4-6-fixes.md`, from the device pass on `V053m` (section 71). That pass found one blocker (the Soloify page ignored touch) and a set of smaller
+findings, and showed why: `spot_np` built a second Now Playing in code, with its own labels, bar, scrub and entry point. Commits, one an item:
+`50f47f19`, `6487f0cc` (F0); `5455a9ca`, `86cc398b`, `1e5f4312` (F13); `5979d81c`, `ceb67b9f`, `a7f2184a` (the shared layer); `51e62b9a` (F1), `25926b22` (F5), `2ba9faf8` (F6); then these tests and this record.
+
+**What changed:**
+
+1. **F0, the Soloify page's taps.** `spot_refresh` hid its message view with `widget_set_visible` alone. V2.1's hit test skips insensitive children, not hidden ones, and tries the newest child first,
+   so the message view, made after the track's view and as large, took every tap on the bar and the transport row. Back is the page's own later child, so it worked. Both views now go through `view_show`.
+   `qp.msg` in `addon.c` has the same pattern and no touch child, so it stays.
+2. **F13, Hold Return's page.** `compact_now_playing` always opened `playing_page`. It now opens by `media_owner()`: Spotify's page for 2 (`spot_now_playing`), Radio's for 3 (`radio_now_playing`, since `radio.c` already had
+   an opener), and the local page otherwise. Home's row and every other caller go through it. **An addition to the plan:** a page opened this way has no browser under it, so its Queue and Mode would have gone dead. `np_browse` closes the page
+   and opens the browser at that level, and Back goes down the levels and then to where the hold began.
+3. **The shared layer, `patch/m1plus_np_view.{c,h}`.** `navigation.c` includes it where the Q2 has `np_sync`, under `M1PLUS`. Each page fills an `np_src_t` from its player and owns an `np_view_t`; `np_write` writes one from the other, `np_view_theme` applies the
+   Theme, `np_bar_fill` gives both bars their numbers and colours, and one state machine (`np_scrub_start`, `_drag`, `_end`, `_gone`, `settle_poll`) runs the scrub through an `np_page_t` of the page's operations. Changed from the plan: `np_src_t` has no cover or media callback, since nothing reads them, and the seek
+   moved to `np_page_t`. The M1 has no on-page `img_playstate` and no bold font, so of the Theme only Minimal's album capitals and marquee reach Spotify's page. The local page's scenarios stayed unchanged through all three commits. Three of Spotify's changed on purpose: its expiry runs on a timer, a second scrub
+   starts from the held target, and Minimal's bar sits at y 2 of its view.
+4. **F1, the counter.** A probe on `V053m` showed that only a Next **within one album** leaves the old count on screen: `MCL_POS` changes at once and `label_ipod_pos` about 200 ms later, but the screen stays old for 4 s and more. Across albums the new cover's repaint hides it, as ten changes in a mixed queue did. `np_sync` writes during a
+   paint, and AWTK drops what a paint invalidates, so `np_repaint` forces the counter and album once after the frame. The timer sits in `np_sync`, not `np_write` as the plan said: Spotify's page writes from its timer, not in a paint.
+5. **F5, the visualizer.** `showing()` accepts a top window named `volume_dialog` directly over the page, so the bars keep moving under the band. They also keep running under V2.1's opaque VOLUME page for its up to 3 s.
+6. **F6, the status bar's play icon.** While the icon shows, the chevron's tap inside the bar stops at x 36 (`BAR_BACK_PLAY_W`, the chevron and its gap). Minimal's strip below the bar stays 64 wide. **The plan's "stock has no handler there" was wrong:** a tap past the chevron is V2.1's `on_wm_tsup_fun`, which opens the VOLUME page. So a tap on the icon now opens VOLUME, as the rest of the bar does.
+
+**Findings that needed no code:** F7 and F8 are V2.1's own: its volume dialog closes 3 s after it opens, and each `q.sh` call came after that. F11 and F12 were a stale favourite and a stale framebuffer. F14 (Soloify's hardware Next showing paused) has no assumed state in the payload, so a fix would belong in `q2-soloify`; F2, F3, F4 and F10 are stock comparisons. These are the device pass's probes.
+
+**Tests.**
+
+- **`boot.py --soloify`, new: the first test of this page under QEMU with a track on it.** `FakeSoloify` plays the backend at the page's contract: the state file, the cover and the control socket, in a directory bound to `/tmp`. For both themes it checks the layout, the bar's rows and fill, Minimal's album row against Classic's; that Previous, Play and Next each send their one command and the
+  glyph follows the state; a bar tap and a drag each seek once; a paused seek holds the target and lets go once the player reports it; the knob's scrub (turns send nothing, the press sends `S65000`); the volume band; Mode and Queue; Back; Hold Return paused and playing, with no browser under it; and the message view with no session.
+- **It reproduces F0:** on `V053m` it fails at the first tap, `Previous sent [], not ['b']`. `patch.py` calls the handlers directly, which is why the suite passed that build.
+- **Its limit:** the fake has no browse socket, so Mode and Queue fall back to the browser's base (the old add-on's). Their real levels are the device pass's.
+- **`patch.py`:** a scenario for each fix. Each new check fails on the build before its fix. Known gaps stayed at 418 throughout.
+- **`build.py`:** pins the view file's seams (included under `M1PLUS` only, and guarded itself), the painters' symbols, the absence of the Q2's scrub, `SPOT_*` naming `NP_*`, and `BAR_BACK_PLAY_W`.
+- **`np_sheets.py`:** a `pages-<theme>.png` sheet with the local page and Spotify's side by side.
+- **The Q2's `update.tar` stayed byte-identical.** `q2compare` caught one slip on the way: a rewrite of `visualizer.c`'s `showing()` outside `#if M1PLUS`.
+
 ## How to check a build now
 
 ```sh
@@ -4087,6 +4123,7 @@ python3 test/m1plus/build.py --build build-m1   # hook jumps, demo and rootfs di
 python3 test/m1plus/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
 python3 test/m1plus/boot.py build-m1 --home-menu  # saved V2.1 Home cards change nothing: the same build without them is the control
 python3 test/m1plus/boot.py build-m1 --now-playing  # Now Playing and Centred in both themes: back, bar, art, the volume band, the big cover
+python3 test/m1plus/boot.py build-m1 --soloify  # Spotify's page on a fake Soloify in both themes: layout, touch, scrub, the band, Hold Return, the message view
 python3 test/m1plus/boot.py build-m1 --media    # Home in Split, a card with long songs, a book and two photos: the Library, Folder, Coverflow, Streaming, Shuffle Songs
 python3 test/m1plus/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/m1plus/playback.py build-m1        # and test/m1plus/m4b, id3, headset_io; test/ldac, bluealsa

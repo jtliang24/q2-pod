@@ -258,12 +258,14 @@ Each feature follows the same steps:
    - **Art:** the shared pan, at the M1's panel, with `DRIFT_TEXELS` four panels, V2.1's cover types,
      `savecover_path` as `g_lastcover_url`, and an unload by name on V2.1's lookup and unload.
    - `m1plus_coverflow_home.c` and `m1plus_nav_home.c` are retired.
-6. **Now Playing (implemented and gated on Nov 8, progress §71; the device pass is next):** the iPod layout with V2.1's
+6. **Now Playing (implemented Nov 8, progress §71; device-passed on `V053m` except the Soloify page's touch, whose fixes are progress §72, gated, their device pass next):** the iPod layout with V2.1's
    transport row, Centred Now Playing on V2.1's own page, `bigcover`, the volume dialog, the quiet icons (the `quiet_icons`
    section) and the NP bar. Back is a large button in the page's top row; the chevron hides there. The knob stays the
    volume on the lyrics page, which scrolls by touch. The Spotify page, for both backends, takes the same layout; Radio
    keeps its stack. The scrub on the knob landed early (progress 58): `patch/m1plus_nav_np.c`, with `playing_timer_*`
    aliased to V2.1's.
+   Both pages now share `patch/m1plus_np_view.c`: one source interface, painters, scrub and entry point (`compact_now_playing` opens the page that owns playback). Only the page trees, the slides and the cover
+   pipelines stay separate.
 7. **Quick Settings and dialogs:** `statusbar_dialog.bin`, the confirm and add-to-playlist dialogs. The
    wheel QS swipe becomes a touch swipe down from the status bar; `qs_*`'s fake-finger path stays Q2-only.
 8. **Left Q2-only, as `NOT PORTED` rows:**
