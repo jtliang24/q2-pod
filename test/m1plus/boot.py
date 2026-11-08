@@ -17,7 +17,7 @@ must not; the Library and Streaming from Home's rows, by touch and by the knob. 
 card selection must change nothing: the control is the same build without it.
 Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
-import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
+import argparse, bisect, collections, json, os, pathlib, re, shutil, socket, struct, subprocess, sys, tempfile, time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]/'tools'))
 from build import BASE, SCRATCH, fileoff, source_sha256, symbols, run
 from m1plus import M1PLUS_GP, M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
@@ -189,9 +189,10 @@ def net_address(build):
     return struct.unpack_from('<I', stock_demo, fileoff(stock_demo, M1PLUS_GP - 0x7f4c))[0] - 0x53c8
 
 
-def start(image, out, seconds, sn_addr, net_addr, trace='', home_menu='', card=None, home=HOME_FULL):
+def start(image, out, seconds, sn_addr, net_addr, trace='', home_menu='', card=None, home=HOME_FULL, tmp=None):
     """Unpack image as a sandbox root and start dbus-daemon, then demo for seconds; returns the bwrap.
-    With card, a directory mounted as the card, and V2.1's library database listing its songs."""
+    With card, a directory mounted as the card, and V2.1's library database listing its songs. With tmp, a directory
+    mounted as /tmp, for what the test plays of a backend there (FakeSoloify)."""
     root = out/'root'
     run('unsquashfs', '-q', '-no-xattrs', '-d', root, image)
     for d in ('mnt/data', 'mnt/mmc', 'var/run/dbus'): (root/d).mkdir(parents=True, exist_ok=True)
@@ -211,7 +212,7 @@ def start(image, out, seconds, sn_addr, net_addr, trace='', home_menu='', card=N
     (out/'inner.sh').write_text(INNER.format(qemu=qemu, seconds=seconds, trace=trace))
     return subprocess.Popen([tool('bwrap'), '--bind', root, '/', *(['--bind', card, '/mnt/mmc'] if card else []),
                              '--bind', out, '/out', '--ro-bind', '/nix/store', '/nix/store',
-                             '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-all', '--uid', '0', '--gid', '0',
+                             '--dev', '/dev', '--proc', '/proc', *(['--bind', tmp, '/tmp'] if tmp else ['--tmpfs', '/tmp']), '--unshare-all', '--uid', '0', '--gid', '0',
                              '--die-with-parent', '--new-session', tool('bash'), '/out/inner.sh'])
 
 def screen(out):
@@ -586,6 +587,182 @@ def now_playing(build):
     print('M1 Plus Now Playing under qemu: the iPod page and Centred in both themes, their back, bar and art, the volume band and the big cover passed.')
 
 
+# --soloify (ipod-ui 4.6's fixes): Spotify's page on a real track, with its touch hit tested. FakeSoloify plays the backend at the page's
+# contract: the state file, the cover beside it, and the control socket, where the test reads what each tap sent. patch.py calls the
+# handlers directly, so it never saw V053m's message view take the page's taps; here they arrive as the device's do.
+class FakeSoloify:
+    def __init__(self, tmp):
+        self.tmp, self.state = tmp, dict(state='paused', track='spotify:track:fake', title='A Title', artist='An Artist',
+                                         album='An Album', duration=200000, position=50000, cover=1)
+        from ipod import imagemagick
+        (tmp/'q2-librespot.state.jpg').write_bytes(imagemagick('-size', '300x300', 'gradient:red-blue', 'jpg:-', data=b''))
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.sock.bind(str(tmp/'q2-librespot.sock'))
+        self.sock.setblocking(False)
+        self.write()
+
+    def write(self, **fields):
+        self.state.update(fields)
+        self.state['at'] = int(time.monotonic() * 1000)
+        (self.tmp/'state.new').write_text(''.join(f'{k}={v}\n' for k, v in self.state.items()))
+        (self.tmp/'state.new').rename(self.tmp/'q2-librespot.state')
+
+    def sent(self):
+        """The commands since the last call, oldest first."""
+        out = []
+        while True:
+            try: out.append(self.sock.recv(64).decode())
+            except BlockingIOError: return out
+
+SOLO_ROW = 3  # Streaming's: Tidal, HiFi Music, Spotify, Soloify
+def soloify(build, captures=None, themes=(0, 1)):
+    sn, net = symbols(build/'stock-demo')['product_sncode'], net_address(build)
+    def px(shot, x, y): return shot[(y * W + x) * 4:(y * W + x) * 4 + 3]
+    def ink(shot, x0, y0, x1, y1): return any(px(shot, x, y) != b'\0\0\0' for y in range(y0, y1) for x in range(x0, x1))
+    def rows(a, b, y0, y1): return sum(a[y * W * 4:(y + 1) * W * 4] != b[y * W * 4:(y + 1) * W * 4] for y in range(y0, y1))
+    def strip(shot, y0, y1): return shot[y0 * W * 4:y1 * W * 4]
+    track = M1['TRACK_COLOR'].to_bytes(3, 'big')[::-1]  # BGRA's first three
+    bar_y, row_y = STATUS_H + M1['NP_BAR_CY'], STATUS_H + M1['NP_BUTTONS_Y'] + (H - STATUS_H - M1['NP_BUTTONS_Y']) // 2
+    bar_x = lambda fraction: M1['NP_BAR_X'] + int(M1['NP_BAR_W'] * fraction)
+    PREV, PLAY, NEXT, MODE, QUEUE = tap(58 + 32, row_y), tap(123 + 40, row_y), tap(203 + 29, row_y), tap(24, row_y), tap(296, row_y)
+    album_band = (STATUS_H + M1['NP_ALBUM_Y'], STATUS_H + M1['NP_ALBUM_Y'] + 22)
+    albums = {}
+    global IPOD_CLASSIC
+    for theme in themes:
+        name = f'theme {theme}'
+        with tempfile.TemporaryDirectory(prefix='m1-solo-') as tmp, tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
+            run_dir, card = pathlib.Path(tmp)/'p', pathlib.Path(cards)/'p'
+            run_dir.mkdir(); card.mkdir(); (run_dir/'tmp').mkdir()
+            media_card(card)
+            (card/'.soloify').mkdir()
+            for f in ('q2-soloify', 'run'): (card/'.soloify'/f).write_text('exit 0\n')
+            fake = FakeSoloify(run_dir/'tmp')
+            IPOD_CLASSIC = f'[IPOD]\nTHEME={theme}\nACCENT=1\n'
+            p = start(build/'rootfs.squashfs', run_dir, 300, sn, net, '', '', card, HOME_SPLIT, tmp=run_dir/'tmp')
+            def step(lines, settle=4):
+                send(run_dir, lines); time.sleep(settle)
+                assert b'uncaught target signal' not in (run_dir/'demo.err').read_bytes(), f'{name}: the demo crashed'
+                return screen(run_dir)
+            def shot(label, pixels):
+                if captures:
+                    captures.mkdir(parents=True, exist_ok=True)
+                    png(pixels, captures/f't{theme}-{label}.png')
+                return pixels
+            def only(lines, want, what):
+                step(lines, 3)
+                got = fake.sent()
+                assert got == want, f'{name}: {what} sent {got}, not {want}'
+            time.sleep(45)
+            step(DOWN_LIST)
+            streaming = shot('streaming', step(home_row(STREAMING, True, HOME_END)))
+            browser = shot('browser', step(page_row(SOLO_ROW), 6))  # no browse socket, a state file: the old add-on's row opens the page
+            assert rows(streaming, browser, STATUS_H, H) > 100, f'{name}: the Soloify row did not open its page'
+            page = shot('page', step(page_row(0), 5))
+
+            # What it shows: no chevron, its back, the cover, the labels, the times, and the bar.
+            assert rows(browser, page, STATUS_H, H) > 100, f'{name}: the browser\'s row did not open the page'
+            assert not ink(page, 13, 0, 18, STATUS_H), f'{name}: the chevron shows on the page'
+            assert ink(page, 0, STATUS_H, M1['NP_BACK_W'], STATUS_H + M1['NP_TOP_H']), f'{name}: no back at the top left'
+            assert ink(page, 150, 150, 170, 170), f'{name}: no cover'
+            for label, y in (('title', 'NP_TITLE_Y'), ('artist', 'NP_ARTIST_Y'), ('album', 'NP_ALBUM_Y')):
+                assert ink(page, 0, STATUS_H + M1[y], W, STATUS_H + M1[y] + 20), f'{name}: no {label}'
+            assert ink(page, 0, STATUS_H + M1['NP_TIMES_Y'], W, STATUS_H + M1['NP_TIMES_Y'] + 14), f'{name}: no times'
+            albums[theme] = strip(page, *album_band)
+            line = [y for y in range(bar_y - 12, bar_y + 12) if px(page, bar_x(.9), y) == track]
+            assert len(line) == (M1['NP_BAR_CLASSIC'] if theme else 4), f'{name}: the bar\'s track is {len(line)} rows, at {line}'
+            fill = px(page, bar_x(.1), bar_y)
+            assert fill != track and fill != b'\0\0\0', f'{name}: no fill before the position ({fill.hex()})'
+            assert px(page, bar_x(.4), bar_y) == track, f'{name}: the fill runs past the position'
+
+            # The transport row's taps, as the device's: V053m's hidden view took all of these.
+            only(PREV, ['b'], 'Previous')
+            only(NEXT, ['n'], 'Next')
+            only(PLAY, ['p'], 'Play')
+            fake.write(state='playing')
+            playing = step([], 2)
+            assert rows(page, playing, STATUS_H + M1['NP_BUTTONS_Y'], H) > 0, f'{name}: the play glyph did not change with the state'
+            only(PLAY, ['p'], 'Pause')
+            fake.write(state='paused', position=50000)
+            assert rows(page, step([], 2), STATUS_H + M1['NP_BUTTONS_Y'], H) == 0, f'{name}: the play glyph did not come back'
+
+            # The bar: a tap seeks; a paused seek holds the target until the player reports one, then the bar follows the player again.
+            step(tap(bar_x(.5), bar_y), 3)
+            got = fake.sent()
+            assert len(got) == 1 and got[0][0] == 'S' and abs(int(got[0][1:]) - 100000) < 6000, f'{name}: a tap at the bar\'s middle sent {got}'
+            held = step([], 2)
+            assert px(held, bar_x(.45), bar_y) != track, f'{name}: the bar did not hold the seek\'s target'
+            fake.write(position=int(got[0][1:]))
+            step([], 2)
+            fake.write(position=20000)
+            moved = shot('seek_settled', step([], 2))
+            assert px(moved, bar_x(.45), bar_y) == track, f'{name}: the bar kept the target after the player reported it'
+            # A drag previews and seeks once, on its release.
+            step(swipe(bar_x(.2), bar_y, bar_x(.75), bar_y), 3)
+            got = fake.sent()
+            assert len(got) == 1 and got[0][0] == 'S' and abs(int(got[0][1:]) - 150000) < 8000, f'{name}: a drag along the bar sent {got}'
+            fake.write(position=int(got[0][1:]))
+            step([], 2)
+            fake.write(position=50000)
+            step([], 2)
+
+            # The knob (Knob: Navigation, as this card's): a press starts the scrub, in the scrub's colour; turns only preview it; a press seeks.
+            scrub = shot('scrub', step([PRESS], 2))
+            line = [y for y in range(bar_y - 12, bar_y + 12) if px(scrub, bar_x(.1), y) == b'\xff\xff\xff']
+            assert len(line) == M1['NP_BAR_CLASSIC'], f'{name}: the scrub\'s fill is {len(line)} rows'
+            step([KNOB_UP] * 3, 0)
+            assert fake.sent() == [], f'{name}: a scrub\'s turn sent a command'
+            step([PRESS], 2)  # before SCRUB_MS, which would end it by itself
+            got = fake.sent()
+            assert got == ['S65000'], f'{name}: the scrub\'s press sent {got}, not three of its 5 s steps on'
+            fake.write(position=int(got[0][1:]))
+            step([], 2)
+            fake.write(position=50000)
+            before = step([], 2)
+
+            # The volume band over the bar, and gone again.
+            band = shot('volume', step([KNOB_UP], 0.6))
+            assert rows(before, band, STATUS_H, bar_y - 40) == 0, f'{name}: the volume changed the page above its band'
+            assert rows(before, band, bar_y - 6, bar_y + 6) > 0, f'{name}: no volume band over the bar'
+            assert rows(before, step([], 5), STATUS_H, H) == 0, f'{name}: the volume\'s band did not close'
+
+            # Mode and Queue leave the page for the browser and send nothing. The fake has no browse socket, so their levels fall back to the
+            # browser's base (the old add-on's: the levels themselves are the device pass's). The page's Back is that base too.
+            for label, button in (('mode', MODE), ('queue', QUEUE)):
+                level = shot(label, step(button, 4))
+                assert rows(browser, level, STATUS_H, H) == 0, f'{name}: {label} did not open the browser'
+                assert fake.sent() == [], f'{name}: {label} sent a command'
+                step(page_row(0), 5)
+            assert rows(browser, step(NP_BACK), STATUS_H, H) == 0, f'{name}: the page\'s Back is not the browser\'s base'
+
+            # Hold Return, from Streaming with the session paused: this page, with no browser under it; its Queue opens one, whose
+            # Back returns where the hold began. Then playing, and with no session the message view: no track, and its Back.
+            assert rows(streaming, step(CHEVRON), STATUS_H, H) == 0, f'{name}: the browser\'s Back is not Streaming'
+            held = shot('hold_paused', step([f'hold {PREVIOUS} 1400'], 5))
+            assert rows(before, held, STATUS_H, H) == 0, f'{name}: Hold Return while paused did not open the page'
+            assert rows(browser, step(QUEUE, 5), STATUS_H, H) == 0, f'{name}: the hold\'s Queue did not open the browser'
+            assert rows(streaming, step(CHEVRON), STATUS_H, H) == 0, f'{name}: Back from the hold\'s Queue is not where the hold began'
+            fake.write(state='playing')
+            time.sleep(2)
+            held = shot('hold_playing', step([f'hold {PREVIOUS} 1400'], 5))
+            assert rows(streaming, held, STATUS_H, H) > 100, f'{name}: Hold Return while playing did not open the page'
+            fake.write(state='paused', position=50000)
+            time.sleep(2)
+            assert rows(streaming, step(NP_BACK), STATUS_H, H) == 0, f'{name}: the page\'s Back is not where the hold began'
+            step(page_row(SOLO_ROW), 4)
+            fake.write(state='none', track='', title='', artist='', album='', duration=0, position=0, cover=0)
+            time.sleep(2)
+            none = shot('message', step(page_row(0), 5))
+            assert not ink(none, 40, STATUS_H + M1['NP_BAR_CY'] - 4, W - 40, STATUS_H + M1['NP_BAR_CY'] + 4), f'{name}: the bar shows with no track'
+            only(NEXT, [], 'the message view\'s Next')
+            after = step(NP_BACK)
+            assert rows(none, after, STATUS_H, H) > 0, f'{name}: the message view\'s Back did nothing'
+            p.kill()
+    if len(albums) == 2:
+        assert albums[0] != albums[1], 'the album row is the same in Minimal and Classic'
+    print('M1 Plus Soloify page under qemu, on a fake backend, both themes: its layout and bar, every transport tap, Mode and Queue, a bar tap and drag, the '
+          'knob scrub, the volume band, Back, Hold Return paused and playing, and the message view passed.')
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('build', type=pathlib.Path)
@@ -597,12 +774,18 @@ if __name__ == '__main__':
                     help='Home in Split, a card with long songs, a book and two photos: the Library, Long Songs, Books, Photos, '
                          'Folder, Coverflow and Streaming by touch, Shuffle Songs')
     ap.add_argument('--now-playing', action='store_true', help='Now Playing and Centred in both themes: their layout, the volume band, the big cover')
+    ap.add_argument('--soloify', action='store_true', help="Spotify's page on a fake Soloify in both themes: its layout, its touch, the scrub, the band, Hold Return")
     args = ap.parse_args()
     if args.home_menu and args.media: raise SystemExit('--home-menu and --media are separate runs')
     if args.now_playing:
         if json.loads((args.build/'manifest.json').read_text()).get('source_sha256') != source_sha256():
             raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
         now_playing(args.build)
+        raise SystemExit(0)
+    if args.soloify:
+        if json.loads((args.build/'manifest.json').read_text()).get('source_sha256') != source_sha256():
+            raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
+        soloify(args.build, args.captures)
         raise SystemExit(0)
     # The Library walk precedes the original media walk, and the logins' follow Streaming's: give their steps their
     # settling budget too, and the logins' their waits.

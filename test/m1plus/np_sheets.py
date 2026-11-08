@@ -2,9 +2,11 @@
 """M1 Plus: review sheets of Now Playing (ipod-ui 4.6), captured under qemu. Not a test: it checks nothing; boot.py's
 walks do. For each theme (Minimal, Classic) one sheet, a row per layout (the iPod's, Centred), each row the same steps:
 the art, lyrics, info, the visualizer, back on the art, the knob's volume band, the big cover and its close, the panel
-over the list after Back, and V2.1's VOLUME page from a tap on the status bar.
+over the list after Back, and V2.1's VOLUME page from a tap on the status bar. A third sheet per theme sets the local page and
+Spotify's side by side, Spotify's on boot.py's fake Soloify (the walk's own shots: it checks them; not with --light, whose
+page its checks don't know).
 
-usage: np_sheets.py BUILD OUT_DIR   (ImageMagick's montage; four runs, about two minutes each)"""
+usage: np_sheets.py BUILD OUT_DIR   (ImageMagick's montage; four runs of about two minutes, two of about five)"""
 import argparse, json, pathlib, shutil, subprocess, sys, tempfile, time
 
 sys.path[:0] = [str(pathlib.Path(__file__).resolve().parent), str(pathlib.Path(__file__).resolve().parents[2]/'tools')]
@@ -70,3 +72,12 @@ for t, theme in THEMES.items():
     subprocess.run([montage, *(['-font', font] if font else []), *tiles, '-tile', f'{len(STEPS)}x{len(LAYOUTS)}',
                     '-geometry', '200x+6+6', '-pointsize', '13', str(args.out/f'np-{theme}.png')], check=True)
     print(args.out/f'np-{theme}.png')
+if not args.light and args.layout in (None, 0):
+    boot.soloify(args.build, args.out/'soloify', tuple(THEMES))
+    for t, theme in THEMES.items():
+        tiles = [str(args.out/f't{t}-c0/00-art.png'), str(args.out/f't{t}-c0/05-volume.png'), str(args.out/f'soloify/t{t}-page.png'),
+                 str(args.out/f'soloify/t{t}-volume.png'), str(args.out/f'soloify/t{t}-scrub.png'), str(args.out/f'soloify/t{t}-message.png')]
+        labels = ('local', 'local: volume', 'Soloify', 'Soloify: volume', 'Soloify: scrub', 'Soloify: no track')
+        subprocess.run([montage, *(['-font', font] if font else []), *[a for label, tile in zip(labels, tiles) for a in ('-label', label, tile)],
+                        '-tile', f'{len(tiles)}x1', '-geometry', '240x+6+6', '-pointsize', '13', str(args.out/f'pages-{theme}.png')], check=True)
+        print(args.out/f'pages-{theme}.png')
