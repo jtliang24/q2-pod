@@ -4119,8 +4119,8 @@ findings, and showed why: `spot_np` built a second Now Playing in code, with its
 
 What the pass found:
 - **F6 is half of what item 6 above says.** A tap on the status bar's play icon no longer goes Back, but it does nothing, on a list page (x 42) as on Now Playing. VOLUME opens only from further along the bar (x 160).
-- **F4 is ours.** A dot tap switches slides on Centred, V2.1's page, and does nothing on the iPod page.
-- **F14 is the relay's, and not only the hardware key's.** A Next soon after a track start, resume or seek leaves `state=paused` and the old title (`boundary op=n`, then `pause drop`, `pause bookmark valid=0`), by touch as by key. The skip waits: Play then starts the next track. A Next 23 s into a track played normally. A fix belongs to `q2-soloify`.
+- **F4, dropped.** A dot tap switches slides on Centred, V2.1's page, and does nothing on the iPod page. The dots are too small to be reasonable touch targets, so the user chose not to fix it.
+- **F14, intended behaviour (the user's explanation).** A Next soon after a track start, resume or seek can leave `state=paused` and the old title (`boundary op=n`, then `pause drop`, `pause bookmark valid=0`), by touch as by key; Play then starts the next track. Pausing stops the M1's audio at once, while Soloist has to rewind a few seconds so playback can resume at the same place, and at a track's border that can mean going back to the previous track. No fix is planned.
 - **The message view can't be reached from the menu.** With `state=none` the Soloify menu has no Now Playing row (`has_track`), so only a card without the browse socket or a direct call opens it. `patch.py` still covers it.
 - **A paused Soloify session stops after 30 s with the browser shut** (`SPOT_IDLE_MS`, as designed). Hold then opens the local page, and reopening Soloify resumes the session.
 - **A flash or a reboot returns to the last power-off's place.** `/mnt/data/memoryfile` kept its 07:10:58 record through the flash and a shell `reboot`, and both came back paused on that track and second. `A reboot keeping the place` in `docs/m1plus-unported.md` is the gap. Not prioritized.
