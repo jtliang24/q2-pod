@@ -179,6 +179,15 @@ IPOD_CLASSIC = '[IPOD]\nTHEME=1\nACCENT=1\n'
 # The iPod Home (ipod-ui 4.5): the plain and --home-menu walks lay it out Full (HOME=1), the media walk Split (0).
 HOME_FULL, HOME_SPLIT = 'HOME=1\n', 'HOME=0\n'
 
+def net_address(build):
+    """The word the shim's "net" lines set: V2.1's network flag, as networkGetConnectStatus reads it
+    (lw v0, -0x7f4c(gp); jr ra; lw v0, -0x53c8(v0))."""
+    stock_demo = (build/'stock-demo').read_bytes()
+    at = fileoff(stock_demo, symbols(build/'stock-demo')['networkGetConnectStatus'])
+    assert struct.unpack_from('<3I', stock_demo, at + 12) == (0x8f8280b4, 0x03e00008, 0x8c42ac38), 'networkGetConnectStatus'
+    return struct.unpack_from('<I', stock_demo, fileoff(stock_demo, M1PLUS_GP - 0x7f4c))[0] - 0x53c8
+
+
 def start(image, out, seconds, sn_addr, net_addr, trace='', home_menu='', card=None, home=HOME_FULL):
     """Unpack image as a sandbox root and start dbus-daemon, then demo for seconds; returns the bwrap.
     With card, a directory mounted as the card, and V2.1's library database listing its songs."""
@@ -547,11 +556,7 @@ if __name__ == '__main__':
         raise SystemExit('test/m1plus/boot.py emulates M1 Plus builds only')
     stock_syms = symbols(args.build/'stock-demo')
     sn_addr = stock_syms['product_sncode']
-    # networkGetConnectStatus: lw v0, -0x7f4c(gp); jr ra; lw v0, -0x53c8(v0), the word the shim's "net" lines set
-    stock_demo = (args.build/'stock-demo').read_bytes()
-    at = fileoff(stock_demo, stock_syms['networkGetConnectStatus'])
-    assert struct.unpack_from('<3I', stock_demo, at + 12) == (0x8f8280b4, 0x03e00008, 0x8c42ac38), 'networkGetConnectStatus'
-    net_addr = struct.unpack_from('<I', stock_demo, fileoff(stock_demo, M1PLUS_GP - 0x7f4c))[0] - 0x53c8
+    net_addr = net_address(args.build)
     with tempfile.TemporaryDirectory(prefix='m1-boot-') as tmp, \
          tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
         tmp = pathlib.Path(tmp)

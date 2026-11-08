@@ -25,7 +25,7 @@ if json.loads((args.build/'manifest.json').read_text()).get('source_sha256') != 
     raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
 montage = shutil.which('montage')
 if not montage: raise SystemExit('ImageMagick (montage) is required')
-sn = symbols(args.build/'stock-demo')['product_sncode']
+sn, net = symbols(args.build/'stock-demo')['product_sncode'], boot.net_address(args.build)
 args.out.mkdir(parents=True, exist_ok=True)
 for t in THEMES:
     for m in LAYOUTS:  # one run at a time: side by side, qemu falls behind the step budget
@@ -36,7 +36,7 @@ for t in THEMES:
             run.mkdir(); card.mkdir()
             boot.media_card(card)  # with a card the run starts in Knob: Navigation (boot.start)
             boot.IPOD_CLASSIC = f'[IPOD]\nTHEME={t}\nACCENT=1\n'  # read by start's config.ini
-            p = boot.start(args.build/'rootfs.squashfs', run, BOOT_S + STEP_S * (len(STEPS) + 2), sn, '', '', card, f'HOME={m}\n')
+            p = boot.start(args.build/'rootfs.squashfs', run, BOOT_S + STEP_S * (len(STEPS) + 2), sn, net, '', '', card, f'HOME={m}\n')
             time.sleep(BOOT_S)
             (args.out/name).mkdir(exist_ok=True)
             for i, (step, lines) in enumerate([('home', [])] + STEPS):
