@@ -103,7 +103,7 @@ styles and code layout. The M1 version reflows it for the 320x480 portrait touch
 rewrites V2.1's assets the same way. Phase 1 is done: the M1 compiles the iPod path, and the port report
 lists each iPod hook as `unported` with the Phase 4 item that ports it (`style_get_color`,
 `image_manager_add`, `widget_on_paint_background` and `ui_loader_load_widget_with_parent` 4.1;
-`systembar_showface` 4.2; `list_get_img_pic` 4.4; `bigcover_page_init` 4.6; `playlist_rebuild` 4.7).
+`systembar_showface` 4.2; `list_get_img_pic` 4.4; `playlist_rebuild` 4.7). `bigcover_page_init` is ported (4.6, progress 71).
 
 ### Games
 
@@ -175,7 +175,7 @@ own rows. Ported with the iPod settings pages (ipod-ui 4.3, progress 66), device
 
 Home (in Appearance) and Shortcut came with Home (4.5, progress 69). The M1's Shortcut offers Favorites, Shuffle,
 Rated Albums, Artists and Albums: Rockbox and Games stay Q2-only, and a stored value for either reads as Favorites
-until the row is changed. Centred Now Playing comes with Now Playing (4.6). Hold Return is
+until the row is changed. Centred Now Playing came with Now Playing (4.6, progress 71): it opens V2.1's own page. Hold Return is
 ported with the Library (4.4): hold Previous in Knob: Navigation wherever it is Back, or hold the status bar
 chevron in either Knob mode. Corners (square glass), Wheel QS, Wheel Sensitivity and Click With Headphones (no wheel, no
 buzzer) stay Q2-only. V2.1's page reopens over itself as the Q2's does.

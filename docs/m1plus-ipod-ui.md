@@ -258,10 +258,12 @@ Each feature follows the same steps:
    - **Art:** the shared pan, at the M1's panel, with `DRIFT_TEXELS` four panels, V2.1's cover types,
      `savecover_path` as `g_lastcover_url`, and an unload by name on V2.1's lookup and unload.
    - `m1plus_coverflow_home.c` and `m1plus_nav_home.c` are retired.
-6. **Now Playing:** the iPod layout, Centred Now Playing, `bigcover`, the volume dialog and the quiet
-   icons (the `quiet_icons` section) and the NP bar. The scrub on the knob landed early (progress 58):
-   `patch/m1plus_nav_np.c`, with
-   `playing_timer_*` aliased to V2.1's.
+6. **Now Playing (implemented and gated on Nov 8, progress §71; the device pass is next):** the iPod layout with V2.1's
+   transport row, Centred Now Playing on V2.1's own page, `bigcover`, the volume dialog, the quiet icons (the `quiet_icons`
+   section) and the NP bar. Back is a large button in the page's top row; the chevron hides there. The knob stays the
+   volume on the lyrics page, which scrolls by touch. The Spotify page, for both backends, takes the same layout; Radio
+   keeps its stack. The scrub on the knob landed early (progress 58): `patch/m1plus_nav_np.c`, with `playing_timer_*`
+   aliased to V2.1's.
 7. **Quick Settings and dialogs:** `statusbar_dialog.bin`, the confirm and add-to-playlist dialogs. The
    wheel QS swipe becomes a touch swipe down from the status bar; `qs_*`'s fake-finger path stays Q2-only.
 8. **Left Q2-only, as `NOT PORTED` rows:**
@@ -298,6 +300,7 @@ Once the branch reaches parity (Phases 1 to 4.7 pass on the device):
 
 Looks left for the visual pass once the M1's functions are all ported. None is a fault; each was seen on the device.
 The screenshots are under `work/phase4/4.5/device-pass/` (Phase 4.5's pass on `V04Hm`).
+The Nov 4 finding that Now Playing needs a prominent back is closed by Phase 4.6's large top-row button.
 - **Split's knob walk clips the top row.** Walking down Split's menu with the knob scrolls the list so that the row
   above the selection sits half under the art (`53-fav-sel.png`: Library cut at the top, Favorites selected).
 - **Classic's Settings card is grey.** In Classic the Carousel's other cards keep V2.1's colours; Settings keeps its
@@ -308,6 +311,9 @@ The screenshots are under `work/phase4/4.5/device-pass/` (Phase 4.5's pass on `V
 - **Split's cover is zoomed in too much.** The art panel is 320x200, so a square cover fills the width and its top and
   bottom are cropped (the Vergecast cover on `V04Om`: `work/phase4/4.5f/device-pass/301-home.png`). The user would
   rather see the whole cover in the same 200 px of height.
+- **Now Playing's transport glyphs keep V2.1's colours.** Previous, Play and Next are its orange in both themes, on the
+  iPod page, Centred and Spotify's (Phase 4.6; `work/phase4/4.6/i6-sheets/`). The accent or the theme's ink would suit
+  them. Centred's art also sits 3 px right of centre, as V2.1 has it (`img_playcover` x 36, its DLNA twin 33).
 - **Display's first rows are shifted and clipped.** The rows without icons (Brightness, Screen Off, Lock screen,
   Atmosphere Lamp Settings) start at the left edge, and "Atmosphere Lamp Settings" loses its first letters in both
   themes (`112-display.png`; again on `V04Om`, `work/phase4/4.5f/device-pass/008-display.png`). It may be a marquee

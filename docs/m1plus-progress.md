@@ -4000,6 +4000,68 @@ any pace that loses detents, so the current setting stays and no fix is planned.
 
 `graphify update .` refreshed the AST graph.
 
+## 71. Phase 4.6: Now Playing on V2.1's pages (Nov 8)
+
+The plan was `.plan/phase4-6.md`, on branch `feature/m1-ipod`, from the device-passed `V04Om`. Commits, one an item:
+`59dd3a93` (names), `2c3ff785` (the iPod page), `e9566167` (Centred), `5fd095ec` (the big cover), `1827e975` (the volume),
+`3dc1eb0c` (Spotify's page), then the tests and this record.
+
+**What changed:**
+
+1. **Name seams.** The shared hook looked up V1.32's names, so on the M1 it found no cover, big cover art, lyric page, dots,
+   More or volume bar, and V2.1's page ran alone. They are `VIEW_*`/`ICON_BIGCOVER` in the device includes.
+2. **The iPod page** (`tools/m1plus_ipod.py playing_page`). V2.1's tree stays (`app_gesture` > `view_local` + `view_dlna`) with its
+   transport row: a top row with a 48 px `btn_return`, the position, the HR badge, the heart and More; the art slide holding a
+   208 px art, title, artist and album; the dots, the bar at V2.1's x and width, and the times. The chevron hides on the page. The
+   Theme preset applies again (Minimal's album capitals and bar). The controls are `ipod.quiet_icon`'s treatment of V2.1's own `p_*`.
+3. **Centred Now Playing** opens V2.1's own page, emitted as `playing_page_stock.bin`, with the iPod's bar, marquee holds, the
+   page's black and lyrics across their column. Its column is already the screen's width, so full-screen lyrics only reach the dots.
+4. **The big cover.** `bigcover_page_init` is hooked (the port report's row is gone) and the page is the Q2's: full screen, a 320 px
+   square, a shade and title on its foot. `BC_IDLE` is V2.1's word (`0x97ccd0`), reset 20, through `BC_IDLE_T`.
+5. **The volume.** The dialog is full screen and clear, and `vol_paint` draws the band over Now Playing's bar and times and the panel
+   elsewhere. The band follows its widgets through their parents, since Centred's times sit above its bar in the column.
+6. **The Spotify page**, for Spotify and Soloify: Now Playing's positions (`SPOT_*`), its own back, V2.1's transport row (Previous,
+   Play and Next send the keys' commands; Queue and Mode open the browser's levels; Mode's icon is static), a touch on the bar that seeks
+   (an invisible slider, which grabs the drag itself), the knob's scrub, the band, and Previous a media key. Radio keeps its stack through
+   `RADIO_*`. Heart, More, lyrics, info, the visualizer and the big cover stay out: neither backend's contract has them.
+
+**What the audit of V2.1 found** (the plan's open questions):
+
+- **All 38 `widget_lookup`s of Now Playing's code recurse** (`playing.recursive_lookups`), and the heart, More and transport bind in a
+  `widget_foreach` visit, which recurses, so widgets can change parents.
+- **`getx_by_playtime`'s A-B dots** are 296 x position / length + 12, at y 364 (`playing.ab_dots`). The layout keeps them: no code edit.
+- **Cover types differ from the plan's "type 3":** on V2.1 3 is the folder's, and no cover is **4**, its own `random_cover%d`, which stays.
+- **V2.1 has no tap that opens the big cover**, only Enlarged Art's countdown. `np_art_click` binds the art (`clickable`), as the Q2's stock does.
+- **V2.1's big cover refresh shows the artist each time** (`0x52958c`), and the volume's refresh shows `img_vol` (`0x47d78c`), so these stay
+  transparent rather than hidden.
+- **The volume's openers:** the knob and keys pass context 1, the strip. `on_wm_tsup_fun` passes 2, `view_page2`, V2.1's full VOLUME page, for any
+  pointer-up in x 80..270 and the top 42 px, on every window: it is a window manager handler. A tap on the strip's top 30 px switches to it too. That page
+  stays V2.1's. **New code edit:** the 42 becomes 30 (`playing.status_tap`), or the top row's heart and position would open the page as well.
+- **The `y=360` move the plan feared is another dialog's** (`0x47e560`, bound at `0x47e7c0`). The volume init only moves to 0,0 (`playing.volume_init`).
+- **`view_tidalinfo` is never created:** `playing_choiceshowpage` only destroys it if found, so its Tidal branch is harmless on the rewrite.
+- **V2.1 draws an unknown style as the widget's default**, so `s_ipod_progress` kept the slider's `rounded_*` thumb until each state's icon was emptied.
+- **`btn_imgrandom_style` is only in `styles/playing_page.bin`,** which a payload page doesn't load (the suite's theme check caught it), so Spotify's Mode
+  draws `p_random` itself.
+- **`toolsTimeItoa` pads minutes on V2.1:** `-02:05`, not the Q2's `-2:05`.
+
+**Tests.** `test/m1plus/patch.py` moved onto V2.1's names and the knob: all 268 of Now Playing's and the big cover's gaps pass, and 5 others with them
+(4 of iPod UI assets, 1 of Display's). Known gaps went from 691 at the start of the phase to 418, with no new ones, and the scenarios from 1,842 to 1,894.
+
+- **The plan said lyric checks needing the wheel would move to the Q2-only group.** They pass instead: the shared code still reads the raw travel, which the
+  fixture sets, so they stay and pin the hold and glide that touch also reaches. The statements about wheel ticks were replaced by the M1's: a knob turn on the
+  lyrics page is V2.1's volume in both modes and moves no lyric, and a scrub begun there keeps the turns.
+- **New:** `boot.py --now-playing` (both themes, both layouts: no chevron, the back, the bar's row, the art, the band, the big cover and its close, Back),
+  `test/m1plus/np_sheets.py` (review sheets, with `--light`; `work/phase4/4.6/i6-sheets/`), and the Spotify scenarios on both backends. These cover the page in the
+  fake backend only: QEMU has no backend to show a track.
+- **A deliberately broken build** (chevron always on, `spot_knob_on` always 0, no `fullscreen`) failed the audit, the boot walk (`the chevron shows on Now Playing`)
+  and the suite (7 of the Spotify page's knob checks).
+- **Gate coverage per commit:** items 1 and 2 ran the full set (2 without `q2compare --suites`, only its byte compare). Item 3 ran audit, patch, boot and media. Items 4, 5 and 6 ran audit and boot (6 also media),
+  because `patch.py`'s gap list only agrees once all the sources are in. The full set, 14 gates with `--now-playing` and `q2compare --suites` (33 suite runs), passed on the final build `V053m`
+  (`work/phase4/4.6/i7`). The Q2's `update.tar` stayed byte-identical throughout.
+- **A later fix inside item 6:** the bar's seek first divided 64 bits, which calls libgcc's helper; it now uses `spot_paint`'s 32-bit form.
+
+**Device pass:** next, on `V053m`, with the plan's checklist.
+
 ## How to check a build now
 
 ```sh
@@ -4007,6 +4069,7 @@ python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses un
 python3 test/m1plus/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
 python3 test/m1plus/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
 python3 test/m1plus/boot.py build-m1 --home-menu  # saved V2.1 Home cards change nothing: the same build without them is the control
+python3 test/m1plus/boot.py build-m1 --now-playing  # Now Playing and Centred in both themes: back, bar, art, the volume band, the big cover
 python3 test/m1plus/boot.py build-m1 --media    # Home in Split, a card with long songs, a book and two photos: the Library, Folder, Coverflow, Streaming, Shuffle Songs
 python3 test/m1plus/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/m1plus/playback.py build-m1        # and test/m1plus/m4b, id3, headset_io; test/ldac, bluealsa
