@@ -954,7 +954,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # The Library's Ratings and Most Played row icons; the iPod Home's (ipod-ui 4.5) Carousel card art, pressed too, its
     # arrows, and Split's placeholder.
     added |= {xx+f'{n}.png' for n in ('local_fav', 'local_frequentplay', 'home_left', 'home_right', 'default_album_home')}
-    added |= {xx+f'home_card_{row}{s}.png' for row in m1plus_ipod.HOME_CARD_ART for s in ('', '_down')}
+    added |= {xx+f'home_card_{row}{s}.png' for row in m1ipod.HOME_ROWS for s in ('', '_down')}
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C} | {
         'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles']),
                                                                       *('images/xx/' + q for q in M1_AUDIT['status_icons'])]}
@@ -979,6 +979,17 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         differ = {p for p in set(old) & set(new) if os.path.isfile(old[p]) and not os.path.islink(old[p])
                   and not filecmp.cmp(old[p], new[p], shallow=False)}
         assert differ - {logo} == replaced, differ ^ replaced
+        # The Carousel's card art (ipod-ui 4.5): each role's V2.1 Home card art at CARD_ART, pressed too; the Shortcut's
+        # its own (Phase 4.5 fixes, item 3: not Favorites' heart, whatever the Shortcut's target).
+        card = lambda n: pathlib.Path(new[xx+f'home_card_{n}.png']).read_bytes()
+        art_of = lambda n: m1ipod.sized_art(pathlib.Path(old[xx+n]).read_bytes(), m1plus_ipod.CARD_ART)
+        assert set(m1ipod.HOME_ROWS) == {*m1plus_ipod.HOME_CARD_ART, 'rockbox'}
+        for s in ('', '_down'):
+            for row, art in m1plus_ipod.HOME_CARD_ART.items():
+                assert card(row+s) == art_of(f'{art}{s}.png'), row+s
+            assert card('rockbox'+s) == m1plus_ipod.home_card_shortcut(down=bool(s))
+            assert all(m1ipod.png_header(card(row+s)) == (m1plus_ipod.CARD_ART,)*2 + (8, 6) for row in m1ipod.HOME_ROWS)
+        assert card('rockbox') != card('rockbox_down') and card('rockbox') != art_of('fav.png')
         logo_new = pathlib.Path(new[logo]).read_bytes()
         assert sha(logo_new) == manifest['logo_sha256'] and (logo not in differ) == (manifest['logo_source'] == 'stock')
         # The boot hook's assumptions about V2.1: the card script announces a mounted card, and

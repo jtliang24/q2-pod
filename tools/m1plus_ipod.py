@@ -207,10 +207,11 @@ HOME_LABEL_STYLE = 'srlabel_leftwhite20_style'  # patch/m1plus_offsets.inc STYLE
 CARD_LABEL_STYLE = 'label_centerwhite20_style'  # STYLE_LABEL_WHITE20C
 # Carousel: V1.32's slide_menu card (a CARD square: its 190 px art 23 from the top, the caption at 232), centred
 # on the screen and in the page's height, with the previous and next arrows at the screen's edges; each card's art is
-# the V2.1 Home card art of its role, at 190 px (tools/m1plus.py home_cards).
+# the V2.1 Home card art of its role, at 190 px (tools/m1plus.py home_cards), but the Shortcut's: its target is a
+# setting (Controls: Shortcut), so its card has art of its own (home_card_shortcut) and the caption names the target.
 CARD, CARD_ART, ARROW_W = M1['HOME_CARD'], 190, 48
 HOME_CARD_ART = {'playing': 'mymusic', 'localmusic': 'playlist', 'coverflow': 'album', 'folder': 'folder',
-                 'rockbox': 'fav', 'stream': 'hifimusic', 'settings': 'sysset'}
+                 'stream': 'hifimusic', 'settings': 'sysset'}
 
 
 def home_list(name, rows, extra=None):
@@ -262,6 +263,22 @@ def home_arrow(name):
     draw = f'scale 4,4 fill none stroke-width 3 stroke white stroke-linecap round stroke-linejoin round path {path}'
     return ipod.imagemagick('-size', f'{ARROW_W * 4}x{ARROW_W * 4}', 'xc:none', '-draw', draw, '-filter', 'Lanczos',
                             '-resize', f'{ARROW_W}x{ARROW_W}!', *ipod.PNG_OUT, data=b'')
+
+
+def home_card_shortcut(down=False):
+    """The Carousel's Shortcut card art, CARD_ART square, rendered at 4x: the Controls page's Shortcut row icon
+    (V2.1's pset_covermode, 40 px) as a Home card, an accent-blue disc with a white box and the arrow out of its corner.
+    Pressed (down), at half brightness, as V2.1's *_down card art."""
+    box = "'M52,100 L52,64 Q52,52 64,52 L126,52 Q138,52 138,64 L138,126 Q138,138 126,138 L90,138'"
+    corner = "'M56,116 L70,116 Q74,116 74,120 L74,134 Q74,138 70,138 L56,138 Q52,138 52,134 L52,120 Q52,116 56,116 Z'"
+    arrow = "'M88,102 L118,72 M96,72 L118,72 L118,94'"
+    half = CARD_ART / 2
+    draw = ['-fill', '#5B7CF9', '-draw', f'scale 4,4 circle {half},{half} {half},0.5', '-fill', 'none', '-stroke', 'white',
+            '-strokewidth', '10', '-draw',
+            f'scale 4,4 stroke-linecap round stroke-linejoin round path {box} path {corner} path {arrow}']
+    shade = ['-channel', 'RGB', '-evaluate', 'multiply', '0.5', '+channel'] if down else []
+    return ipod.imagemagick('-size', f'{CARD_ART * 4}x{CARD_ART * 4}', 'xc:none', *draw, '-filter', 'Lanczos',
+                            '-resize', f'{CARD_ART}x{CARD_ART}!', *shade, *ipod.PNG_OUT, data=b'')
 
 
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.

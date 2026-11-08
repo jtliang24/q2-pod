@@ -1229,11 +1229,13 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     icons['local_era.png'] = ('pset_playmode.png', sized_art(cat(xx+'genre.png'), 40))
     icons['local_fav.png'] = ('pset_playmode.png', sized_art(cat(xx+'fav.png'), 40))
     icons['local_frequentplay.png'] = ('pset_playmode.png', sized_art(cat(xx+'many.png'), 40))
-    # The iPod Home (ipod-ui 4.5): each Carousel card's art, its role's V2.1 Home card art at 190 px, pressed too; the
-    # carousel's arrows; Split's placeholder at the panel's width (coverflow.c HOME_PLACEHOLDER).
+    # The iPod Home (ipod-ui 4.5): each Carousel card's art, its role's V2.1 Home card art at 190 px, pressed too, and the
+    # Shortcut card's own; the carousel's arrows; Split's placeholder at the panel's width (coverflow.c HOME_PLACEHOLDER).
     for row, art in m1plus_ipod.HOME_CARD_ART.items():
         for s in ('', '_down'):
             icons[f'home_card_{row}{s}.png'] = (f'{art}{s}.png', sized_art(cat(f'{xx}{art}{s}.png'), m1plus_ipod.CARD_ART))
+    for s in ('', '_down'):
+        icons[f'home_card_rockbox{s}.png'] = (f'fav{s}.png', m1plus_ipod.home_card_shortcut(down=bool(s)))
     for n in ('home_left', 'home_right'):
         icons[f'{n}.png'] = ('arrow_left_n.png', m1plus_ipod.home_arrow(n))
     icons['default_album_home.png'] = ('defaultcover.png', sized_art((ROOT/'assets/icons/default_album_home.png').read_bytes(),
