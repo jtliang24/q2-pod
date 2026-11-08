@@ -6271,6 +6271,13 @@ from build import run
 quiet=[int(l.split()[1],16)+int(l.split()[2])-4 for l in run('readelf','-Ws',str(B/'patch.elf')).splitlines() if l.split()[-1:]==['vz']][0]
 m.now+=1000; assert vis_paint()==[] and len(m.timers)==1
 m.word(quiet,1); assert vis_paint()==['Charge \xb7 Elbow']; passed()
+# The volume's band keeps the bars: a volume_dialog directly over the page still shows it, where any other window hides it.
+vdlg,other=m.node('dialog','volume_dialog'),m.node('window','saverscreen_page')
+for w in (vdlg,other): m.word(w+O['W_PARENT'],m.wm)
+m.nodes[m.wm]={'children':[win,vdlg]}; m.top=vdlg; assert vis_paint()==['Charge \xb7 Elbow']
+m.nodes[m.wm]={'children':[other,vdlg]}; assert vis_paint()==[]
+m.nodes[m.wm]={'children':[vdlg,other]}; m.top=other; assert vis_paint()==[]
+m.nodes[m.wm]={'children':[win]}; m.top=win; m.timers.clear(); passed()
 # VIS_W (288 px; 10 px a letter mocked): too long, the artist goes, then the title ends in an ellipsis.
 m.nodes[title]['text']='T'*28; assert vis_paint()==['T'*28],vis_paint()
 m.nodes[title]['text']='T'*40; assert vis_paint()==['T'*27+'\u2026'],vis_paint(); passed()

@@ -160,9 +160,17 @@ static int on_page(void) {
     return vz.page && widget_get_prop_int(vz.slide, "value", 0) == (int)widget_count_children(vz.slide) - 1;
 }
 
-/* Now Playing is on top, on this page, with the screen on. */
+/* Now Playing is on top, on this page, with the screen on. On the M1 the volume's band leaves it showing: a transparent
+ * dialog over the page (vol_paint). */
 static int showing(void) {
+#if M1PLUS
+    void *wm = window_manager(), *top = window_manager_get_top_window(wm);
+    if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog") && widget_count_children(wm) > 1)
+        top = widget_get_child(wm, widget_count_children(wm) - 2);
+    return on_page() && g_backlight_status && top == vz.win;
+#else
     return on_page() && g_backlight_status && window_manager_get_top_window(window_manager()) == vz.win;
+#endif
 }
 
 /* Showing and still: no window sliding, and the page last painted at the slide area's left edge, so
