@@ -169,11 +169,13 @@ decoder's routines are to be found by the same callers.
 
 1.5.0 splits Display into Appearance (iPod), Coverflow and Controls, each reopening stock's page with its
 own rows. Ported with the iPod settings pages (ipod-ui 4.3, progress 66), device-checked through progress 66 and 68:
-- **Appearance:** Theme, Light Mode, Accent and Battery.
+- **Appearance:** Theme, Light Mode, Accent, Home and Battery.
 - **Coverflow:** Artist Albums, Coverflow Sort and Refresh Coverflow.
-- **Controls:** Smart Awake, Hold Return (Recent or Home), then the knob and its direction.
+- **Controls:** Shortcut, Smart Awake, Hold Return (Recent or Home), then the knob and its direction.
 
-Home and Shortcut come with Home (4.5), and Centred Now Playing with Now Playing (4.6). Hold Return is
+Home (in Appearance) and Shortcut came with Home (4.5, progress 69). The M1's Shortcut offers Favorites, Shuffle,
+Rated Albums, Artists and Albums: Rockbox and Games stay Q2-only, and a stored value for either reads as Favorites
+until the row is changed. Centred Now Playing comes with Now Playing (4.6). Hold Return is
 ported with the Library (4.4): hold Previous in Knob: Navigation wherever it is Back, or hold the status bar
 chevron in either Knob mode. Corners (square glass), Wheel QS, Wheel Sensitivity and Click With Headphones (no wheel, no
 buzzer) stay Q2-only. V2.1's page reopens over itself as the Q2's does.

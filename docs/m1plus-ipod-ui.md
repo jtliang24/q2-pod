@@ -243,6 +243,21 @@ Each feature follows the same steps:
      row since the 1.5.9 sync);
    - the Coverflow card;
    - retire `m1plus_coverflow_home.c` and `m1plus_nav_home.c`.
+
+   Implemented and gated on Nov 7 (progress §69; plan `.plan/phase4-5.md`):
+   - **Entry pages:** `library_open` is the complete Library (upstream's order, V2.1's categories bound to its
+     Home card click `0x533b80` by its Home ids, then CD Ripper and Update Local Music); `streaming_open` is
+     Streaming (native Tidal and HiFi Music, then the payload's services and Configuration).
+   - **The asset:** `home_page.bin` drops V2.1's grid, dots and playing strip, keeping the serial-error label;
+     the Q2's Home lists and a portrait carousel take their place. V2.1's initializer and refresh still run:
+     their returns with the grid gone are pinned (`m1plus_ipod.json` `home`), the playing strip's pointer-up
+     binding is skipped, and the boot resume is `ringnav_boot`'s.
+   - **Layouts:** Split is a 320x200 art panel over 64 px rows; Full the rows from the top; Carousel 290 px cards
+     with 190 px art and arrows. Settings opens Playback and System from every layout; the chevron and
+     Previous (Knob: Navigation) go back. Appearance has Home; Controls has Shortcut (no Rockbox or Games).
+   - **Art:** the shared pan, at the M1's panel, with `DRIFT_TEXELS` four panels, V2.1's cover types,
+     `savecover_path` as `g_lastcover_url`, and an unload by name on V2.1's lookup and unload.
+   - `m1plus_coverflow_home.c` and `m1plus_nav_home.c` are retired.
 6. **Now Playing:** the iPod layout, Centred Now Playing, `bigcover`, the volume dialog and the quiet
    icons (the `quiet_icons` section) and the NP bar. The scrub on the knob landed early (progress 58):
    `patch/m1plus_nav_np.c`, with

@@ -3810,14 +3810,100 @@ matched after an idle cycle. Backups remain in `work/phase4/4.4/device-before/` 
 `.q2/config-pass-V041m.ini` and `.q2/boot-target-pass-V041m`. The previous card-root image is preserved as
 `.q2/update-pre-V041m.bin`.
 
+## 69. Phase 4.5: the portrait iPod Home (Nov 7)
+
+The plan is `.plan/phase4-5.md`; work paused once (`docs/m1plus-phase4-5-status.md`) and resumed the same day.
+
+**Entry pages** (`patch/m1plus_nav_library.c`). V2.1 has no Library or Streaming page: its Home grid held both
+as cards. `library_open` lists upstream's rows in upstream's order with V2.1's own categories bound to its Home
+card click (`m1_home_click`, `0x533b80`) by its Home ids, then Composers, the card's media, CD Ripper and Update
+Local Music. `streaming_open` lists native Tidal and HiFi Music, then Spotify, Soloify, the card apps, Internet
+Radio, AirPlay and Configuration, with the existing visibility keys. The ids come from V2.1's own table
+(`get_homemenu_showinfo`, `0x97c940`): the paused work had Genres and Composers swapped and bound Tidal to the
+CD ripper (id 15); the tests now read the table.
+
+**The asset** (`tools/m1plus_ipod.py` `home_page`). V2.1's `home_page.bin` is a gesture view holding the grid,
+its dots and the playing strip, then the serial-error label. The rewrite keeps the label (last, over everything)
+and puts the Q2's Home in the gesture view's place: the art (`img_homeart`, 320x200), the main and Settings lists
+(64 px rows, literal labels: V2.1 translates none of them), and a portrait carousel (290 px cards, 190 px art from
+V2.1's own Home icons, arrows drawn at build time).
+
+**V2.1's initializer and refresh** stay. Their returns with the grid gone are pinned (`m1plus_ipod.json` `home`):
+the grid builder (`0x534064`) finds no `home_sview`, the strip's title and cover refreshes find no labels, and the
+init's visit binds the grid's swipe only on `app_gesture`. Its pointer-up handler (`0x53439c`, Now Playing for a
+release below y 415) is not bound. Its boot resume is `ringnav_boot`'s: the queue starts paused through
+`start_player` (V2.1's `player_start`, now an alias) and Home stays; car mode keeps Now Playing.
+
+**Layouts** (`patch/coverflow.c`, M1 seams; the Q2's `update.tar` is unchanged). Split: the art across the top, the
+menu under it to the window's foot, scrolling; Full: the menu from the top; both full width (Full's chevron shift).
+Carousel: the cards and arrows, the menus hidden and insensitive. The payload binds every row, card and arrow
+through `home_click`. Settings opens Playback and System from every layout; the status bar's chevron shows while it
+is open, and the chevron or Previous (Knob: Navigation) goes back to the menu it came from, its row or card kept.
+On Home's own menu Previous stays a track key. Appearance has Home; Controls has Shortcut, which offers Favorites,
+Shuffle, Rated Albums, Artists and Albums (no Rockbox or Games on the M1; a stored one reads as Favorites, kept until
+changed). Shortcut paths are V2.1's (`LOCAL_UI`).
+
+**Art.** The shared pan at the M1's panel: `DRIFT_TEXELS` is four panels (256,000), the player cover table is
+V2.1's types (2 embedded, 3 and 5 the folder's or downloaded), `g_lastcover_url` is V2.1's `savecover_path` (its
+cover thread writes the track's path after the files, `0x4df1a0`), and `image_manager_unload_bitmap_by_name` is now
+V2.1's `image_manager_lookup` then `image_manager_unload_bitmap`. Missing art falls back to the Coverflow cache, then
+the placeholder (`default_album_home`, shipped at 320).
+
+**A V2.1 defect found in QEMU.** V2.1's `image_base_on_event` (`0x654444`) sets an image's press on pointer down and
+clears it only on an abort, not on the clicking release. After a row had opened its page, a fling starting on the
+art (which takes no touch, so nothing grabs) and released over that row opened it again. `home_click` ends the
+image's press with V2.1's own abort before going on; the media walk's `art_fling` step covers it.
+
+**Retired:** `m1plus_coverflow_home.c`, `m1plus_nav_home.c`, the grid's state, offsets and imports
+(`view_create`, `slide_indicator_set_max`, `slide_view_set_active_ex`, `pdeq_choicemenu`), the Q2 Pod card's icons,
+the Library's interim Coverflow and Streaming rows.
+
+**Tests.** `patch.py`: `m1_entry_pages`, `m1_home_init` (V2.1's Home routines on the asset; the bindings and their
+table; the abort), `m1_home_modes` (every layout in both themes, Settings and Back from each, knob and Centre,
+carousel turns and arrows), the shared art and pan scenarios at the M1's panel and cover types, boot resume at
+V2.1's addresses, and the M1 Display test with Home and Shortcut. No 4.5 gap group remains: the shared Home list
+checks pass; the Q2 Display page's Home rows move to Phase 5 (its fixture), and one wheel-timed confirm to 4.8.
+`boot.py`: stock is the startup control; Home is checked for itself (the accent bar on Now Playing, Split's art);
+the plain walk is Full and reaches every page through Home's rows and Settings list; the media walk is Split
+(Library, Folder, Coverflow, Streaming, Settings, the art fling); `--home-menu` compares the same build with and
+without saved V2.1 cards. The build audit pins the Home edits and refuses a damaged pin.
+
+**Verification:** the Q2 comparison passes all 33 suites with a byte-identical `update.tar`. The final build,
+`work/phase4/4.5/h6` (`V04Hm`, dev, with q2remote; update SHA-256 `dae62c65…4aa4403`), passes the build audit
+and the full MIPS run: 1,840 scenarios, with 691 expected failures in 10 later-phase groups and no unlisted
+failures, stale entries or passing gaps. All three emulator walks (plain, Home-menu and media) pass on this exact
+image, as do playback, M4B, ID3, headset I/O, LDAC, Bluetooth and the port report (661 entries, each classified).
+The function diff against dev 57 (`work/phase4/4.4/final4`) is 66 changed, 9 added and 6 removed. The removals are
+the grid (`home_card`, `home_card_again`, `home_slides`, `ink_canvas_fill_rounded_rect`), the Library's interim
+Coverflow row (`coverflow_row`) and the `player_start` shim, now an alias. The additions are Home's bindings and
+pages (`home_bind`, `home_click`, `home_page`, `home_playing`, `home_arrow`, `home_carousel_show`,
+`coverflow_home_sets`, `m1_native_row`, `streaming_open`).
+
+Three test faults surfaced on the final image; none was in the payload:
+- `test/coverflow.py`'s host build of `coverflow.c` lacked a prototype for `pointer_event_init`, which
+  `home_click` calls on the M1.
+- `m1_home_modes` built the carousel from the asset without what `slide_menu_create` sets: its index read
+  leftover memory (48) and stock's scroll-done commit found no child array. The fixture now sets both, as
+  `Machine.page` does, and mocks the animator's start and pause so the machine's slide animator moves the cards.
+- The media walk's `shuffle_again` compared against a capture with no selection, but the press that reopens
+  Shuffle selects its first row. The step now checks that a page opened; the Shuffle Songs step after it is
+  unchanged.
+
+Home review sheets (`test/m1plus/home_sheets.py`, a new capture tool; `work/phase4/4.5/h6-sheets/home-minimal.png`
+and `home-classic.png`) show each layout in both themes, from Home through the knob's walk, Settings, Playback, and the chevron back to the row or card it left.
+Two cosmetic points remain for the aesthetics pass: the Split knob walk leaves the top row clipped, and Classic's
+Settings card is grey where the other cards take the accent.
+
+`graphify update .` refreshed the AST graph.
+
 ## How to check a build now
 
 ```sh
 python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses unknown inputs and V2.1 names
 python3 test/m1plus/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
 python3 test/m1plus/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
-python3 test/m1plus/boot.py build-m1 --home-menu  # the same with six Home cards: the Q2 Pod card on a page of its own
-python3 test/m1plus/boot.py build-m1 --media    # a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Streaming, Shuffle Songs
+python3 test/m1plus/boot.py build-m1 --home-menu  # saved V2.1 Home cards change nothing: the same build without them is the control
+python3 test/m1plus/boot.py build-m1 --media    # Home in Split, a card with long songs, a book and two photos: the Library, Folder, Coverflow, Streaming, Shuffle Songs
 python3 test/m1plus/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/m1plus/playback.py build-m1        # and test/m1plus/m4b, id3, headset_io; test/ldac, bluealsa
 ```
