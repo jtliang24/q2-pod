@@ -39,7 +39,7 @@ volume were restored. [§69](m1plus-progress.md#69-phase-45-the-portrait-ipod-ho
 
 ## Fixes and the second pass (Nov 8)
 
-The five findings are done except the Carousel's knob rate ([§70](m1plus-progress.md#70-phase-45-the-device-pass-fixes-and-a-second-pass-nov-8)):
+The five findings are done (the Carousel's knob rate was closed as not an issue; [§70](m1plus-progress.md#70-phase-45-the-device-pass-fixes-and-a-second-pass-nov-8)):
 the login Back (`698976fd`, `a8ab1ec7`), the Settings list's first selection (no fix; `34dae142` pins the Q2's
 behaviour), the Shortcut card's art (`b6f9945d`, `8ef0a607`), the q2remote knob pace (`423e8bcd`) and the cosmetics
 (the aesthetics queue in [m1plus-ipod-ui.md](m1plus-ipod-ui.md#aesthetics-queue)). `V04Om` (`work/phase4/4.5f/a7`)
@@ -47,7 +47,6 @@ passed every gate and a second device pass, and Knob Up: List Down and a cover-l
 
 ## Remaining
 
-1. The Carousel drops knob detents that come within about 200-250 ms of the last one that moved it (a 5-detent turn at
-   40 ms moves one card; at 250 ms and slower, five). The lists count every detent. A fix needs its own plan, and a
-   fast turn on the real knob is still untried.
+1. None open. The Carousel drops knob detents that come within about 200-250 ms of the last one that moved it, but
+   the physical knob does not turn that fast (the user's call), so there is no fix.
 2. Not covered: car-mode boot resume (car mode was not switched on).

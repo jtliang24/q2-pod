@@ -3970,8 +3970,8 @@ suites, `update.tar` byte-identical to 1.5.9's).
   | Full list, down and up | 5, 5 | 5, 5 | 5, 5 | 5, 5 | 5, 5 | | | | |
 
   The list counts every detent, even in one write. The Carousel counts only those at least about 200-250 ms after the
-  last one that moved it, so a fast turn loses detents; this is not an artifact of the tool. Whether it is stock's tick
-  filter or the card animation is not established, and a real knob was not turned.
+  last one that moved it; this is not an artifact of the tool. Whether it is stock's tick filter or the card animation
+  is not established. The user judged it not an issue: the physical knob does not turn that fast.
 - **Knob Up: List Down** flips the direction: on the Full list a detent that went up now goes down, and on the
   carousel the cards reverse.
 - **A cover-less track** (a generated WAV on the card, since every album has art): Split's art shows the grey disc
@@ -3993,7 +3993,8 @@ pass had added `HOME=0` and `SHORTCUT=3`, and Minimal's accent), the boot target
 `q2pod` for three reboots), and the volume to 21. The test WAV was removed. The card keeps `V04Om` as `update.bin` and
 `V04Hm` as `.q2/update-V04Hm.bin`; the playing queue is now the Vergecast, paused.
 
-**Item 4's outcome:** the Carousel's loss is real, so an input fix is planned after this pass; the lists need none.
+**Item 4's outcome:** closed by the user. The Carousel's loss is real in a burst, but the physical knob is slower than
+any pace that loses detents, so the current setting stays and no fix is planned.
 
 `graphify update .` refreshed the AST graph.
 
