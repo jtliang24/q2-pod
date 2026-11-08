@@ -477,6 +477,14 @@ static inline int arc_out(int r, int y) {
 /* Now Playing's heart and its stock click, which toggles My Fav for the playing track (manage_myfav)
  * and the heart with it; playing_page_init binds it with the window. */
 #define VIEW_FAV "btn_fav"
+/* Now Playing's, the big cover's and the volume dialog's other widgets, by V2.1's names. */
+#define VIEW_COVER "img_playcover"
+#define VIEW_BIGCOVER "img_playcover"
+#define VIEW_LYRIC "view_lyrics"
+#define VIEW_DOTS "slide_indicator"
+#define VIEW_MORE "btn_more"
+#define VIEW_VOL "progressbar_vol"
+#define ICON_BIGCOVER "p_bigdefault"
 #define FAV_CLICK_ADDR 0x53b480
 #define STYLE_FAV "btn_imgfav_style"
 #define ICON_FAV "p_fav"

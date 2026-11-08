@@ -55,6 +55,7 @@ GAPS = {
     'baa6580069.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8909 click(1); home_bounds(False,True); carousel(False); passed()
     # boot resume to Home (ipod-ui 4.5)
     # Now Playing (ipod-ui 4.6)
+    'ebad058966': 'Now Playing (ipod-ui 4.6)',  # patch.py:6705 if 'mclLoadExLyric' in HOOKS:
     'ed2910cddb': 'Now Playing (ipod-ui 4.6)',  # patch.py:6102 assert shown()==[2 of 3,Album 1,-2:05]; passed()
     'afd9cd9841': 'Now Playing (ipod-ui 4.6)',  # patch.py:6104 m.nodes[slider][value]=101; assert repaint()==[label_ipod_remain] and shown()[2]
     '92fb5f57fe': 'Now Playing (ipod-ui 4.6)',  # patch.py:6115 for mx,v,want in ((3725,0,-1:02:05),(3600,0,-1:00:00),(3599,0,-59:59),(90,90,-0:
@@ -256,8 +257,9 @@ GAPS = {
     '87cd1c1941': 'Now Playing (ipod-ui 4.6)',  # patch.py:6637 assert follow(m,0)==20 and not m.starts and not m.timers; passed()
     'b1c92aab98.37': 'Now Playing (ipod-ui 4.6)',  # patch.py:6639 loop(m); assert raw(m)==0 and not m.starts and not m.timers; passed()
     'f670786de6': 'Now Playing (ipod-ui 4.6)',  # patch.py:6639 loop(m); assert raw(m)==0 and not m.starts and not m.timers; passed()
-    '828d5aab4e': 'Now Playing (ipod-ui 4.6)',  # patch.py:6644 if mclLoadExLyric in HOOKS:
     # big cover page (ipod-ui 4.6)
+    '95769d5fbf': 'big cover page (ipod-ui 4.6)',  # patch.py:6329 b.nodes[img]['image']='p_bigdefault'; assert fit()==bc_mv and geo(img)==sq; pass
+    '61014f9965': 'big cover page (ipod-ui 4.6)',  # patch.py:6302 img=b.node('image','img_playcover'); b.nodes[bw]['children'].append(img); b.word
     '185fc82d53': 'big cover page (ipod-ui 4.6)',  # patch.py:6204 m.nodes[title][text]=T*30; assert vis_paint()==[T*30]
     'a38d0b0245': 'big cover page (ipod-ui 4.6)',  # patch.py:6205 m.nodes[title][text]=T*40; assert vis_paint()==[T*33+\u2026]; passed()
     '0e46124c66': 'big cover page (ipod-ui 4.6)',  # patch.py:6210 assert struct.unpack_from(<I,demo,fileoff(demo,big))[0]==j(payload_syms[ringnav_
@@ -285,7 +287,6 @@ GAPS = {
     'a136c8b8e0': 'big cover page (ipod-ui 4.6)',  # patch.py:6240 b,bw,alpha=bigcover(); shade,title=b.nodes[bw][children]; b.word(bw+O[W_PARENT],
     '4dfee25352': 'big cover page (ipod-ui 4.6)',  # patch.py:6241 img=b.node(image,img_bigcover); b.nodes[bw][children].append(img); b.word(img+O[
     '951b0913b8': 'big cover page (ipod-ui 4.6)',  # patch.py:6241 img=b.node(image,img_bigcover); b.nodes[bw][children].append(img); b.word(img+O[
-    'fb5e21c22d': 'big cover page (ipod-ui 4.6)',  # patch.py:6241 img=b.node(image,img_bigcover); b.nodes[bw][children].append(img); b.word(img+O[
     '42812995cc': 'big cover page (ipod-ui 4.6)',  # patch.py:6247 put(img,*sq); put(shade,sq[0],sq[1]+BC_ART-60,BC_ART,60); put(title,sq[0]+12,sq[
     '6c6e19108a': 'big cover page (ipod-ui 4.6)',  # patch.py:6247 put(img,*sq); put(shade,sq[0],sq[1]+BC_ART-60,BC_ART,60); put(title,sq[0]+12,sq[
     'bf7c4f0afa': 'big cover page (ipod-ui 4.6)',  # patch.py:6247 put(img,*sq); put(shade,sq[0],sq[1]+BC_ART-60,BC_ART,60); put(title,sq[0]+12,sq[
@@ -320,7 +321,6 @@ GAPS = {
     '5ed1bec45f': 'big cover page (ipod-ui 4.6)',  # patch.py:6267 b.u.mem_write(syms[g_lastcover_url],bc_track(2)); b.nodes[img][image]=file:///tm
     'd12242c8b0.2': 'big cover page (ipod-ui 4.6)',  # patch.py:6267 b.u.mem_write(syms[g_lastcover_url],bc_track(2)); b.nodes[img][image]=file:///tm
     '74fa668bc8.3': 'big cover page (ipod-ui 4.6)',  # patch.py:6268 b.nodes[img][image]=default_bigcover; assert fit()==bc_mv and geo(img)==sq; pass
-    'c573122d1f': 'big cover page (ipod-ui 4.6)',  # patch.py:6268 b.nodes[img][image]=default_bigcover; assert fit()==bc_mv and geo(img)==sq; pass
     '55202c380d': 'big cover page (ipod-ui 4.6)',  # patch.py:6345 m.call(address=big,args=(bigwin,7,0,0),gap=0)  # ringnav_bigcover keeps the wind
     '85fba7fef6': 'big cover page (ipod-ui 4.6)',  # patch.py:6352 assert any(0<a<255 for a in pixels.values())
     '9d2b5f1ad7': 'big cover page (ipod-ui 4.6)',  # patch.py:6522 for page,left in ((1,O[BC_IDLE_FULL]),(0,3)):

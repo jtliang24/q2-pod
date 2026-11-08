@@ -6189,7 +6189,7 @@ assert repaint()==[] and shown()[0]==''; passed()
 # bitmap dropped first, or stock's placeholder for a track with none; nothing for the cover init
 # loaded, the same one again, one not yet this track's, or the screen off.
 m=QueueMachine(queue=3,pos=1); m.handlers[playing+12]='stock_playing'; m.handlers[sleep_hook+12]='stock_sleep'
-cover=m.node('image','img_cover',image='play_defaultcover'); win=m.node('window','playing_page',[cover])
+cover=m.node('image','img_playcover',image='play_defaultcover'); win=m.node('window','playing_page',[cover])
 m.word(win+O['W_PARENT'],m.wm); m.top=win
 def cover_is(path,kind): m.u.mem_write(syms['g_lastcover_url'],path+b'\0'); m.byte(syms['g_playcover_type'],kind)
 def art_pass():
@@ -6299,7 +6299,7 @@ assert not b.timers; passed()
 # refits without a decode.
 from ipod import BC_ART
 b,bw,alpha=bigcover(); shade,title=b.nodes[bw]['children']; b.word(bw+O['W_PARENT'],b.wm)
-img=b.node('image','img_bigcover'); b.nodes[bw]['children'].append(img); b.word(img+O['W_PARENT'],bw)
+img=b.node('image','img_playcover'); b.nodes[bw]['children'].append(img); b.word(img+O['W_PARENT'],bw)
 def put(w,*g):
     for k,v in zip(('W_X','W_Y','W_W','W_H'),g): b.word(w+O[k],v)
 def geo(w): return [signed(b.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H')]
@@ -6326,7 +6326,7 @@ x,y,w,h=geo(img); assert h>BC_ART and w==h*900//1600 and x==(375-w)//2,geo(img)
 b.nodes[img]['image']='file:///tmp/album_tidal.jpg'; b.u.mem_write(syms['g_lastcover_url'],b'\0')
 assert fit()==bc_mv and geo(img)==sq  # Tidal
 b.u.mem_write(syms['g_lastcover_url'],bc_track(2)); b.nodes[img]['image']='file:///tmp/externpic.jpg'; fit()
-b.nodes[img]['image']='default_bigcover'; assert fit()==bc_mv and geo(img)==sq; passed()
+b.nodes[img]['image']='p_bigdefault'; assert fit()==bc_mv and geo(img)==sq; passed()
 
 # Volume: with the stock volume dialog directly over Now Playing, the dialog's own paint draws
 # the band from the progress bar to the times: black, the track, a white fill to the volume and
@@ -6343,7 +6343,7 @@ for theme,bh in (('0',4),('1',8)):
   put(win,0,30,375,290); put(slider,24,240,327,30); put(elapsed,16,265,80,16)
   m.word(syms['system_bar'],m.node('window','system_bar'))
   assert m.call(address=playing,args=(win,7,0,0),gap=0)==0
-  sv,lv=m.node('slider','slider_vol',max=100,value=40),m.node('label','label_vol')
+  sv,lv=m.node('slider','progressbar_vol',max=100,value=40),m.node('label','label_vol')
   for w in (sv,lv): m.nodes[w]['visible']=0  # hidden by the asset before any paint
   dlg=m.node('dialog','volume_dialog',[sv,lv]); m.word(dlg+O['W_PARENT'],m.wm); put(dlg,0,0,375,320)
   def paint(w): m.call(address=HOOKS['widget_on_paint_background'][0],args=(w,m.canvas,0,0))
@@ -6367,7 +6367,7 @@ assert m.rounded[-1]['rect'][2]==327 and m.letters[0]['text']=='Volume 100' and 
 m.nodes[m.wm]['children']=[win]; m.top=win; m.advance(O['VOL_POLL_MS']); assert not m.timers; passed()  # closed: it stops
 # Over any other window (Quick Settings included) a rounded panel in the fast-scroll letter's
 # style holds a pill bar on a grey track and the number, clear of the glass corners.
-other=m.node('window','home_page'); m.word(other+O['W_PARENT'],m.wm); sv2,lv2=m.node('slider','slider_vol',max=100,value=7),m.node('label','label_vol')
+other=m.node('window','home_page'); m.word(other+O['W_PARENT'],m.wm); sv2,lv2=m.node('slider','progressbar_vol',max=100,value=7),m.node('label','label_vol')
 dlg2=m.node('dialog','volume_dialog',[sv2,lv2]); m.word(dlg2+O['W_PARENT'],m.wm); put(dlg2,0,0,375,320)
 m.nodes[m.wm]['children']=[win,other,dlg2]; m.top=dlg2; paint(dlg2)
 X,Y,H,P,T=(O['VOL_PANEL_'+k] for k in ('X','Y','H','PAD','TEXT')); panel=(X,Y,375-2*X,H); bw=panel[2]-2*P-T
@@ -6383,7 +6383,7 @@ R=O['LETTER_RADIUS']; assert math.hypot(80-(X+R),Y+H-R-240)+R<=80  # its rounded
 # The art's corners: after the image (the border hook), each of the NP_ART_RADIUS rows of a
 # corner is black outside the arc, then one edge pixel at the alpha it leaves uncovered.
 m=QueueMachine(queue=3,pos=1); m.handlers[playing+12]='stock_playing'
-cover=m.node('image','img_cover'); win=m.node('window','playing_page',[cover]); m.word(win+O['W_PARENT'],m.wm); m.top=win
+cover=m.node('image','img_playcover'); win=m.node('window','playing_page',[cover]); m.word(win+O['W_PARENT'],m.wm); m.top=win
 put(cover,16,10,166,166); m.call(address=playing,args=(win,7,0,0),gap=0)
 m.word(m.lcd+O['LCD_FILL_COLOR'],0x12345678)
 m.bands.clear(); m.call(address=HOOKS['widget_on_paint_border'][0],args=(cover,m.canvas,0,0))
@@ -6399,7 +6399,7 @@ m.bands.clear(); m.call(address=HOOKS['widget_on_paint_border'][0],args=(win,m.c
 
 # Full-screen corners use destination pixels, independent of source-image scaling.
 from ipod import BC_ART
-bigart=m.node('image','img_bigcover')
+bigart=m.node('image','img_playcover')
 bx,by=(375-BC_ART)//2,(320-BC_ART)//2
 put(bigart,bx,by,BC_ART,BC_ART)
 bigwin=m.node('window','bigcover_page',[bigart]); m.handlers[big+12]='stock_bigcover'
@@ -6983,9 +6983,9 @@ if 'mclLoadExLyric' in HOOKS:
             self.returns(ret,clobber=True)
         def show(self,playtime=0,lrc=None):  # stock's page: the title, the column (its slide_view and dots), the bar
             self.playtime=playtime; self.lrc=self.node('scroll_view','scroll_lrc'); self.build()
-            self.lyric=self.node('view','view_lyric',[self.node('list_view','view_lrc',[self.lrc])])
+            self.lyric=self.node('view','view_lyrics',[self.node('list_view','view_lrc',[self.lrc])])
             self.slide=self.node('slide_view','slide_view',[self.lyric],value=1)
-            self.dots=self.node('slide_indicator','slide_indicator1'); self.word(self.dots+O['W_Y'],270)
+            self.dots=self.node('slide_indicator','slide_indicator'); self.word(self.dots+O['W_Y'],270)
             self.col=self.node('view','slide_view_view',[self.slide,self.dots]); self.word(self.slide+O['W_PARENT'],self.col)
             self.bar=self.node('slider','slider_play')
             self.win=self.top=self.node('window','playing_page',[self.node('hscroll_label','scrlabel_title'),self.col,self.bar])
@@ -7980,7 +7980,7 @@ class RolloverMachine(CoverflowMachine):
         bar=self.node('window','system_bar'); self.word(syms['system_bar'],bar); self.word(bar+O['W_PARENT'],self.wm)
         home_list(self); self.home=self.top; self.art=named(self,self.home,'img_homeart')
         self.call(address=home_hook[0],args=(self.home,0,0,0),gap=0)
-        self.cover=self.node('image','img_cover'); self.songlabel=self.node('hscroll_label','scrlabel_title')
+        self.cover=self.node('image','img_playcover'); self.songlabel=self.node('hscroll_label','scrlabel_title')
         self.albumlabel=self.node('label','label_ipod_album'); self.poslabel=self.node('label','label_ipod_pos')
         self.win=self.node('window','playing_page',[self.cover,self.songlabel,self.albumlabel,self.poslabel])
         self.word(self.win+O['W_PARENT'],self.wm); self.top=self.win
@@ -10124,12 +10124,12 @@ assert m.tap()==0 and m.favs=={'B'} and m.kept()==[] and m.badge() is None; pass
 assert m.tap()==0 and m.favs==set(); m.heart(); m.call(O['KEY_NEXT']); m.call(O['KEY_NEXT']); m.call(O['KEY_CENTER'])
 m2=RateMachine(m.files['/mnt/data/ringnav-ratings']); assert m2.badge()=='2'
 m2.word(O['MCL_POS'],0); m2.advance(500); assert m2.badge() is None; passed()
-# Hold Play/Pause on Now Playing: Rate last, with the hearts, and no Next/Previous album outside Shuffle Albums/Folders; its row opens the same picker.
+# Hold Play/Pause on Now Playing: Rate, with the hearts, then V2.1's page's More…, and no Next/Previous album outside Shuffle Albums/Folders; its row opens the same picker.
 m2.word(O['MCL_POS'],1); m2.handlers[syms['navigator_to']]='q:navigator_to'; m2.press(100)
-assert m2.hold()==11 and m2.labels()[-2:]==['Group by: Album','Rate  ♥♥♡♡♡'] and m2.release()==0
-m2.pick(len(m2.labels())-1); m2.advance(0); m2.top=m2.np; assert m2.caption()=='2 of 5' and m2.call(O['KEY_RETURN'])==11; passed()
-# More…: last, below Rate, while Now Playing has its img_more; its row clicks that as a tap would
-m3=RateMachine(); more=m3.node('image','img_more'); m3.nodes[m3.np]['children'].append(more); m3.word(more+O['W_PARENT'],m3.np)
+assert m2.hold()==11 and m2.labels()[-3:]==['Group by: Album','Rate  ♥♥♡♡♡','More…'] and m2.release()==0
+m2.pick(len(m2.labels())-2); m2.advance(0); m2.top=m2.np; assert m2.caption()=='2 of 5' and m2.call(O['KEY_RETURN'])==11; passed()
+# More…: last, below Rate, on V2.1's btn_more; its row clicks that as a tap would
+m3=RateMachine(); more=named(m3,m3.np,'btn_more')
 m3.handlers[syms['navigator_to']]='q:navigator_to'; m3.press(100)
 assert m3.hold()==11 and m3.labels()[-2:]==['Rate','More…'] and m3.release()==0
 m3.pick(len(m3.labels())-1); m3.advance(0)

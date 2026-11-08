@@ -2041,7 +2041,7 @@ static void paint_cover(void *w, void *canvas) {
     if (!w || !P(canvas, CANVAS_LCD)) return;
     int x = 0, y0 = 0;
     if (w == st.bc[2]) {
-        w = widget_lookup(w, "img_bigcover", 1);
+        w = widget_lookup(w, VIEW_BIGCOVER, 1);
         if (!w) return;
         x = I(w, W_X), y0 = I(w, W_Y); /* after the title's shade, in the page's canvas */
     } else if (w != st.np_cover && w != spot_art())
@@ -3850,7 +3850,7 @@ static void keep_lit_poll(void) {
 #define NP_COLUMN_W 225
 #define NP_COLUMN_SLIDE_H 198
 static void np_full(int on) {
-    void *col = P(st.np_slide, W_PARENT), *dots = widget_lookup(col, "slide_indicator1", 1);
+    void *col = P(st.np_slide, W_PARENT), *dots = widget_lookup(col, VIEW_DOTS, 1);
     st.np_full = on;
     widget_restack(col, on ? widget_count_children(st.np_win) : widget_index_of(st.np_slider));
     widget_set_prop_str(col, "style:normal:bg_color", on ? "#000000" : "#00000000");
@@ -4053,8 +4053,13 @@ static unsigned np_art(const char **file) {
     unsigned at, n;
     void *r = queue_now(&at, &n);
     unsigned char type = now_cover(r, file);
+#if M1PLUS /* none is type 4, V2.1's own random_cover%d, which stays: a key for the change, nothing to load */
+    int none = type == 4;
+#else
+    int none = 0;
     if (type == 3) *file = "play_defaultcover"; /* none: stock's placeholder */
-    return *file ? fnv(hash_bytes(FNV_SEED, &type, 1), (const unsigned char *)P(r, REC_PATH)) : 0;
+#endif
+    return *file || none ? fnv(hash_bytes(FNV_SEED, &type, 1), (const unsigned char *)P(r, REC_PATH)) : 0;
 }
 static void np_art_poll(void) {
     const char *file;
@@ -4104,14 +4109,14 @@ int ringnav_playing(void *win, void *ctx) {
     st.np_slider = widget_lookup(win, "slider_play", 1);
     st.np_remain = widget_lookup(win, "label_ipod_remain", 1);
     st.np_elapsed = widget_lookup(win, "label_playtime", 1);
-    st.np_cover = widget_lookup(win, "img_cover", 1);
+    st.np_cover = widget_lookup(win, VIEW_COVER, 1);
     st.np_title = widget_lookup(win, "scrlabel_title", 1);
     st.np_bold = -1;
     st.np_slide = widget_lookup(win, "slide_view", 1);
     st.np_lrc = widget_lookup(win, "scroll_lrc", 1);
     st.lyric_song = st.lyric_rows_song = np_track(); /* no song change at the start */
     lyric_init();                                    /* the rows stock's init built */
-    void *lyric = widget_lookup(win, "view_lyric", 1);
+    void *lyric = widget_lookup(win, VIEW_LYRIC, 1);
     static const unsigned touch[] = { EVT_POINTER_DOWN, EVT_POINTER_UP_BEFORE, EVT_POINTER_ABORT };
     for (unsigned i = 0; lyric && st.np_centred && i < sizeof touch / sizeof *touch; ++i)
         widget_on(lyric, touch[i], np_lyric_touch, (void *)0);
@@ -4190,7 +4195,7 @@ static int bc_repaint(const void *info) {
  * the square once that changes. The file is decoded past the image manager's cached copy, which may
  * be the last track's. Stock's default_bigcover placeholder is the square. */
 static void bc_fit(void *win) {
-    void *img = widget_lookup(win, "img_bigcover", 1), *shade = st.bc[1], *title = st.bc[0];
+    void *img = widget_lookup(win, VIEW_BIGCOVER, 1), *shade = st.bc[1], *title = st.bc[0];
     const char *name = img ? widget_get_prop_str(img, "image", "") : "";
     unsigned at, n;
     const char *cover;
@@ -4200,17 +4205,26 @@ static void bc_fit(void *win) {
     if (!img || !shade || !title || (key == st.bc_key && box == st.bc_box)) return;
     int player = tk_str_end_with(name, "/tmp/coverpic.jpg") ||
                  tk_str_end_with(name, "/tmp/externpic.jpg") ||
+#if M1PLUS
+                 tk_str_end_with(name, "/tmp/hifi_album.jpg") ||
+#endif
                  tk_str_end_with(name, "/tmp/album_tidal.jpg");
+#if M1PLUS /* V2.1's types (coverflow.c player_covers) */
+    const char *own = type == 2                ? "/tmp/coverpic.jpg"
+                      : type == 3 || type == 5 ? "/tmp/externpic.jpg"
+                                               : "";
+#else
     const char *own = type == 1                ? "/tmp/coverpic.jpg"
                       : type == 2 || type == 4 ? "/tmp/externpic.jpg"
                                                : "";
+#endif
     unsigned bitmap[64], url = fnv(0, (const unsigned char *)g_lastcover_url);
     if (key != st.bc_key && player && !(*own && tk_str_end_with(name, own))) {
         if (url != st.bc_url) st.bc_shape = 1 << 16 | 1;
     } else if (key != st.bc_key) {
         st.bc_shape = 1 << 16 | 1,
         st.bc_url = url; /* the square when it won't load or is past 4:1 */
-        if (tk_strcmp(name, "default_bigcover")) {
+        if (tk_strcmp(name, ICON_BIGCOVER)) {
             image_manager_unload_bitmap_by_name(image_manager(), name);
             if (!widget_load_image(img, name, bitmap)) {
                 if (bitmap[0] && bitmap[1] && bitmap[0] < 1 << 16 && bitmap[1] < 1 << 16 &&
@@ -4273,7 +4287,7 @@ int ringnav_bigcover(void *win, void *ctx) {
  * bar would stop following the wheel after a tick or two. */
 static int vol_poll(const void *info) {
     void *top = window_manager_get_top_window(window_manager());
-    void *vol = top && top == st.vol_dialog ? widget_lookup(top, "slider_vol", 1) : (void *)0;
+    void *vol = top && top == st.vol_dialog ? widget_lookup(top, VIEW_VOL, 1) : (void *)0;
     if (!vol) {
         st.vol_timer = 0;
         st.vol_dialog = (void *)0;
@@ -4296,7 +4310,7 @@ static void vol_paint(void *top, void *canvas) {
     void *wm = window_manager(), *lcd = P(canvas, CANVAS_LCD);
     if (!lcd || tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog")) return;
     unsigned n = widget_count_children(wm);
-    void *vol = widget_lookup(top, "slider_vol", 1), *label = widget_lookup(top, "label_vol", 1);
+    void *vol = widget_lookup(top, VIEW_VOL, 1), *label = widget_lookup(top, "label_vol", 1);
     if (n < 2 || !vol) return;
     int np = widget_get_child(wm, n - 2) == st.np_win && st.np_slider && st.np_elapsed;
     rect_t area, bar, text;
@@ -5636,7 +5650,7 @@ static unsigned qm_album_id(void *r) {
 
 /* Now Playing's More… (img_more, on both layouts), while that page is open; else 0. */
 static void *np_more(void) {
-    if (st.np_win) return widget_lookup(st.np_win, "img_more", 1);
+    if (st.np_win) return widget_lookup(st.np_win, VIEW_MORE, 1);
     return (void *)0;
 }
 

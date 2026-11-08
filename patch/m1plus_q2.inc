@@ -62,6 +62,14 @@
 /* Now Playing's heart and its stock click, which toggles My Fav for the playing track (manage_myfav)
  * and the heart with it; playing_page_init binds it with the window. */
 #define VIEW_FAV "img_fav"
+/* Now Playing's, the big cover's and the volume dialog's other widgets, by the names the shared code looks up. */
+#define VIEW_COVER "img_cover"
+#define VIEW_BIGCOVER "img_bigcover"
+#define VIEW_LYRIC "view_lyric"
+#define VIEW_DOTS "slide_indicator1"
+#define VIEW_MORE "img_more"
+#define VIEW_VOL "slider_vol"
+#define ICON_BIGCOVER "default_bigcover"
 #define FAV_CLICK_ADDR 0x52b154
 #define ICON_FAV "play_fav"
 #define ICON_UNFAV "play_unfav"

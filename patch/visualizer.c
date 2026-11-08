@@ -504,12 +504,12 @@ static int gone(void *win, void *event) {
 
 /* ringnav_playing: the page joins the slide_view's art, lyrics and info pages, and its dots. */
 void visualizer_attach(void *win) {
-    void *slide = widget_lookup(win, "slide_view", 1), *dots = widget_lookup(win, "slide_indicator1", 1);
+    void *slide = widget_lookup(win, "slide_view", 1), *dots = widget_lookup(win, VIEW_DOTS, 1);
     if (!slide) return;
     vz.style = config_value("IPOD", "VIS", STYLES, 0);
     vz.win = win;
     vz.slide = slide;
-    vz.cover = widget_lookup(win, "img_cover", 1);
+    vz.cover = widget_lookup(win, VIEW_COVER, 1);
     vz.w = I(slide, W_W) > 0 && I(slide, W_W) <= UI_W ? I(slide, W_W) : UI_W;
     vz.page = list_item_create(slide, 0, 0, vz.w, VIS_H);
     widget_use_style(vz.page, STYLE_LISTITEM_BLACK);
