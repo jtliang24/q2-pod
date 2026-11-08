@@ -9818,6 +9818,82 @@ if not is_m1plus:  # the M1's own below (m1_home_modes): no Rockbox, no Return k
     home_carousel()
     for full in (0,1):
         home_settings(full); home_settings(full,1); home_back(full)
+def m1_home_modes():
+    # M1 Plus (ipod-ui 4.5): Home in each layout and theme. Split: the art across the top (UI_W x HOME_ART_H), the menu
+    # under it to the window's foot, scrolling; Full: no art, the menu from the top; both full width, Minimal's
+    # HOME_TOP inset, its rows HOME_FULL_ROW (Classic: HOME_CLASSIC_ROW). Carousel: the cards and arrows, the menus and
+    # the art hidden and taking no taps. Every layout shows the Shortcut row (no Rockbox on the M1: Favorites).
+    geometry=lambda m,w: [signed(m.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H')]
+    def home(mode,theme,**config):
+        CONFIG.clear(); CONFIG.update(HOME=str(mode),THEME=str(theme),**config); m=ShuffleMachine(); CONFIG.clear()
+        view,imgs=home_list(m); assert m.call(address=home_hook[0],args=(m.top,0,0,0),gap=0)==0
+        w={n:named(m,m.top,n) for n in ('img_homeart','list_view_home','list_view_homeset','slide_menu','img_left','img_right','btn_rockbox')}
+        s=w['slide_menu']; m.word(s+O['SLIDE_INDEX'],int(m.nodes[s]['asset'].get('value',0)))  # slide_menu_create's: the asset's card
+        if not m.get(s+O['W_CHILDREN']): m.word(s+O['W_CHILDREN'],m.alloc())  # stock completion checks the child array (Machine.page)
+        return m,view,w
+    for theme in (0,1):
+        for mode in (0,1,2):
+            m,view,w=home(mode,theme)
+            top=(O['HOME_ART_H'] if mode==0 else 0)+(0 if theme else O['HOME_TOP'])
+            row=O['HOME_CLASSIC_ROW'] if theme else O['HOME_FULL_ROW']
+            x0,end=(O['HOME_CLASSIC_TEXT_X'],O['CHEVRON_W']-10) if theme else (HOME_TEXT_X,O['HOME_LABEL_END'])  # HOME_CLASSIC_LABEL_END
+            for name in ('list_view_home','list_view_homeset'):
+                assert geometry(m,w[name])==[0,top,O['UI_W'],O['BOTTOM']-top],(mode,theme,name,geometry(m,w[name]))
+                for r in m.nodes[m.nodes[w[name]]['children'][0]]['children']:
+                    x,y,width,height=cf_geometry(m,m.nodes[r]['children'][0])
+                    assert m.get(r+O['W_W'])==row and x==x0 and x+width==row-end,(mode,theme,cf_geometry(m,m.nodes[r]['children'][0]))
+            assert geometry(m,w['img_homeart'])==[0,0,O['UI_W'],O['HOME_ART_H']] or mode==0  # Split fits the cover in it
+            assert m.nodes[w['img_homeart']]['visible']==(mode==0)
+            shown=lambda n: (m.nodes[w[n]]['visible'],m.nodes[w[n]].get('sensitive',int(m.nodes[w[n]]['asset'].get('sensitive')!='false')))
+            for n in ('slide_menu','img_left','img_right'): assert shown(n)==((1,1) if mode==2 else (0,0)),(mode,n)
+            assert shown('list_view_home')==((0,0) if mode==2 else (1,1)) and shown('list_view_homeset')==(0,0),mode
+            assert m.nodes[w['btn_rockbox']]['visible'] and m.nodes[named(m,m.top,'label_rockbox')]['text']=='Favorites'
+    passed()
+    # Seven rows of HOME_ROW in Split's 250 px (Classic) under the art: the knob walks them (the list follows: the
+    # QEMU walks scroll it, boot.py home_end), and Centre opens the chosen one.
+    m,view,w=home(0,1); m.paint(view); assert m.selected(view)==0
+    for i in range(1,7): assert m.call()==11 and m.selected(view)==i
+    click_target(m,named(m,m.top,'img_settings'))  # Centre opens the chosen row's image: Settings
+    assert m.confirm()==11 and m.dispatched()[-1][1]==named(m,m.top,'img_settings'); passed()
+    # Settings, from the list or a card, puts the Settings list (Playback and System, bound to V2.1's pages) in the
+    # menu's place, the art staying in Split; the chevron and Previous (Knob: Navigation) bring back the menu it came from,
+    # its row or card kept. On Home's own menu, Previous stays a track key.
+    for mode in (0,1,2):
+        m,view,w=home(mode,0)
+        menu=w['slide_menu'] if mode==2 else w['list_view_home']; sets=w['list_view_homeset']
+        m.mock('widget_animator_start','widget_animator_pause')  # the cards glide by the machine's slide animator (advance)
+        if mode==2:
+            for k in (O['KEY_NEXT'],O['KEY_NEXT'],O['KEY_PREV']): m.call(k); m.advance(1000)  # a card on, two, one back: Library
+            card=m.get(menu+O['SLIDE_INDEX'])
+        m.mock('widget_animator_prop_create','widget_animator_prop_set_params')
+        img=named(m,menu,'img_settings'); f,ctx=m.handler(img,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,home_tap(m,img),0,0),gap=0)==0
+        assert m.nodes[sets]['visible'] and m.nodes[sets]['sensitive']==1 and not m.nodes[menu]['visible'] and m.nodes[menu]['sensitive']==0
+        assert m.nodes[w['img_homeart']]['visible']==(mode==0) and m.call(address=payload_syms['coverflow_home_sets'],args=(m.top,0,0,0),gap=0)==1
+        if mode==2: assert not m.nodes[w['img_left']]['visible'] and not m.nodes[w['img_right']]['visible']
+        m.calls=[]; assert m.call(O['KEY_BACK_BTN'])==11 and ('timer_add',payload_syms['previous_back']) in [c[:2] for c in m.calls]
+        m.advance(200)
+        assert not m.nodes[sets]['visible'] and m.nodes[sets]['sensitive']==0 and m.nodes[menu]['visible'] and m.nodes[menu]['sensitive']==1,mode
+        assert m.call(address=payload_syms['coverflow_home_sets'],args=(m.top,0,0,0),gap=0)==0
+        if mode==2: assert m.get(menu+O['SLIDE_INDEX'])==card==1 and m.nodes[w['img_left']]['visible']
+        m.calls=[]; m.call(O['KEY_BACK_BTN']); assert ('timer_add',payload_syms['previous_back']) not in [c[:2] for c in m.calls]
+        # The chevron's tap is the same back (previous_back), also with Knob: Volume.
+        f,ctx=m.handler(img,O['EVT_CLICK']); m.call(address=f,args=(ctx,home_tap(m,img),0,0),gap=0); m.advance(200)
+        assert m.call(address=payload_syms['previous_back'],args=(0,0,0,0),gap=0)==0; m.advance(200)
+        assert m.nodes[menu]['visible'] and not m.nodes[sets]['visible']
+    passed()
+    # Carousel: the knob's turns step the cards (wrapping), a fast spin by HOME_FAST_SLIDE_MS; the arrows step one
+    # card each way; a card's press opens its page as its row does.
+    m,view,w=home(2,1); menu=w['slide_menu']; m.mock('widget_animator_start','widget_animator_pause')
+    at=lambda: m.call(address=payload_syms['slide_index'],args=(menu,0,0,0),gap=0) if 'slide_index' in payload_syms else None
+    for k,want in ((O['KEY_NEXT'],1),(O['KEY_NEXT'],2),(O['KEY_PREV'],1),(O['KEY_PREV'],0),(O['KEY_PREV'],6)):
+        assert m.call(k)==11; m.advance(1000); assert m.get(menu+O['SLIDE_INDEX'])==want,(want,m.get(menu+O['SLIDE_INDEX']))
+    for arrow,want in (('img_right',0),('img_right',1),('img_left',0)):
+        f,ctx=m.handler(w[arrow],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,home_tap(m,w[arrow]),0,0),gap=0)==0
+        m.advance(1000); assert m.get(menu+O['SLIDE_INDEX'])==want,(arrow,want,m.get(menu+O['SLIDE_INDEX']))
+    for card in (1,2,5):  # Library, Coverflow, Streaming, as their rows (home_clicks' index)
+        assert m.handler(m.nodes[m.nodes[menu]['children'][card]]['children'][0],O['EVT_CLICK'])==(payload_syms['home_click'],card)
+    passed()
+if is_m1plus: m1_home_modes()
 # Most Played opens a black mostplayed_page list (nothing played: "No plays yet", no rows); a second
 # press while it is open does nothing. Its rows are the top PLAYS_TOP, most played first and, among
 # equal counts, the most recently counted (earlier slot) first; a row plays that ranked list as a

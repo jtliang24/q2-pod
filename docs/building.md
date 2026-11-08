@@ -110,6 +110,7 @@ python3 test/headset_io.py /tmp/q2-build   # real MIPS headset worker with simul
 python3 test/bluealsa.py /tmp/q2-build     # the patched bluealsa's DROP paths against stock's, delayed encoder signal
 python3 test/alsa.py BUILD QEMU_MIPSEL     # ALSA startup lock regression (see internals.md)
 python3 test/m1plus/boot.py /tmp/m1plus-build     # M1 Plus: the build's demo and V2.1's under qemu-mipsel, started and walked by touch and keys
+python3 test/m1plus/home_sheets.py /tmp/m1plus-build OUT_DIR  # not a test: M1 Plus Home review sheets, each layout and theme captured under qemu (ImageMagick)
 python3 test/ui_preview.py BEFORE AFTER OUT_DIR  # not a test: side-by-side iPod layout review sheets of two builds (or one build's two themes; --themes, ImageMagick)
 ```
 
