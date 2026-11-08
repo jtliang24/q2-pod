@@ -424,6 +424,30 @@ def playing_page(root):
     return root
 
 
+# Display's Centred Now Playing (IPOD NPCENTRED) opens V2.1's own page, as PLAYING_STOCK (navigation.c ringnav_ui_load), named
+# playing_page too, as the Q2's opens its stock one. It keeps V2.1's layout and transport, with the iPod's bar (the accent and
+# Theme), the marquee holds, the page's black under the art's corners, and lyrics across their column. Its back is V2.1's
+# top-left btn_return, as on the iPod page, with no chevron.
+PLAYING_STOCK = 'playing_page_stock.bin'
+NP_STOCK_BAR_CY = 342 + 30 // 2
+
+
+def playing_stock(data):
+    """V2.1's Now Playing with the light fixes, for Centred Now Playing."""
+    check(sha(data) == UI_ASSETS[PLAYING_PAGE], f'{PLAYING_PAGE}: unaudited UI asset')
+    root = ipod.decode(data)
+    _, _, named = np_tree(root)
+    root[2]['style:normal:bg_color'] = '#000000'
+    for name in ('scrlabel_title', 'scrlabel_artist'):
+        named[name][2].update(delay=str(ipod.inc('MARQUEE_HOLD_MS')), lull=str(ipod.inc('MARQUEE_HOLD_MS')))
+    np_bar(named['slider_play'], NP_STOCK_BAR_CY, 30)
+    view, msg = named['view_lrc'], named['label_lyricmsg']
+    check(view[1] == [33, 26, 254, 228] and msg[1] == [0, 100, ipod.UI_W, 28] and 'self_layout' not in msg[2], 'Unexpected lyrics page')
+    view[2]['self_layout'] = 'default(x=0,y=0,w=100%,h=-20)'
+    msg[2]['self_layout'] = 'default(x=0,y=100,w=100%,h=28)'
+    return ipod.encode(root)
+
+
 def quiet_icon(name, data):
     """The audited V2.1 control image (`quiet_icons`) as the iPod's quiet glyph of the same name, greyer when pressed."""
     check(sha(data) == AUDIT['quiet_icons'].get(name), f'{name}: unaudited control icon')

@@ -1246,7 +1246,9 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     # the card apps' rows on the Q2 Pod page (addon.c), at V2.1's 40 px as row_spotify
     icons['stream_app.png'] = ('tidal.png', sized_art((ROOT/'assets/icons/stream_app.png').read_bytes(), 40))
     added = []
+    ui = 'release/assets/default/raw/ui/'
     helper_items = {
+        ui+m1plus_ipod.PLAYING_STOCK: (ui+m1plus_ipod.PLAYING_PAGE, m1plus_ipod.playing_stock(cat(ui+m1plus_ipod.PLAYING_PAGE))),  # Centred Now Playing (ipod-ui 4.6)
         HELPER: (HELPER_LIKE, compile_helper(out, cat, 'video', 'q2video', HELPER_LIBS)),
         SCROBBLE_CA: ('etc/hosts', (ROOT/'assets/scrobble-ca.pem').read_bytes()),
         BOOT: (HELPER_LIKE, compile_helper(out, cat, 'boot', 'q2boot', HELPER_LIBS[:1])),

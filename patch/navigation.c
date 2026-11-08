@@ -1697,8 +1697,7 @@ static int accent(void) {
         st.rounded = config_value("IPOD", "ROUNDED", 2, 0); /* Square unless chosen */
         st.light = config_value("IPOD", "LIGHT", 3, 0);     /* dark unless chosen; 2 Auto */
         st.keep_lit = config_value("IPOD", "KEEPLIT", 2, 0);
-        /* M1 Plus: the stock page Centred Now Playing opens (playing_page_stock) is built in 4.6 */
-        st.np_centred = M1PLUS ? 0 : config_value("IPOD", "NPCENTRED", 2, 0);
+        st.np_centred = config_value("IPOD", "NPCENTRED", 2, 0);
         st.keytone_hp = config_value("IPOD", "KEYTONEHP", 2, 0);
         int buf[11];
         st.light_day = light_day(clock_now(buf));
@@ -3849,13 +3848,11 @@ static void keep_lit_poll(void) {
  * tools/ipod.py PLAYING_STOCK) goes over the page's other widgets, black and the window's width,
  * its slide_view down to the page dots, and the lines wrap at the new width (lyrics_fit), back on
  * the playing line; off, stock's place again, before the progress bar. */
-#define NP_COLUMN_X 80 /* stock's column: its x and width, and its slide_view's height */
-#define NP_COLUMN_W 225
-#define NP_COLUMN_SLIDE_H 198
 static void np_full(int on) {
     void *col = P(st.np_slide, W_PARENT), *dots = widget_lookup(col, VIEW_DOTS, 1);
     st.np_full = on;
-    widget_restack(col, on ? widget_count_children(st.np_win) : widget_index_of(st.np_slider));
+    /* M1 Plus: the column is view_local's child, beside the bar, as the Q2's are the window's */
+    widget_restack(col, on ? widget_count_children(M1PLUS ? P(col, W_PARENT) : st.np_win) : widget_index_of(st.np_slider));
     widget_set_prop_str(col, "style:normal:bg_color", on ? "#000000" : "#00000000");
     widget_move_resize(col, on ? 0 : NP_COLUMN_X, I(col, W_Y), on ? I(st.np_win, W_W) : NP_COLUMN_W,
                        I(col, W_H));
@@ -5056,8 +5053,8 @@ int ringnav_display(void *win, void *ctx) {
         pod_rows(win, VIEW_DISPLAY, POD_CF_SORT, 2, cf_icons + 1);
         return result;
     }
-#if M1PLUS /* Corners: the glass is square; Centred Now Playing (4.6); Click With Headphones: Key Tone, no buzzer */
-    static const unsigned char appearance[] = { 3, 6, 0, 1, 2 }, controls[] = { 4, 7 };
+#if M1PLUS /* Corners: the glass is square; Click With Headphones: Key Tone, no buzzer */
+    static const unsigned char appearance[] = { 3, 6, 0, 1, 2, 8 }, controls[] = { 4, 7 };
 #else
     /* Theme, Light Mode, Accent, Corners, Home, Battery, Centred Now Playing; Shortcut, Smart
      * Awake, Click With Headphones. */

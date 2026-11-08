@@ -8482,7 +8482,7 @@ for config,preset in (({},0),({**C,'ACCENT':'1'},1),({**C,'ACCENT':'2'},2),({**C
         want=ACCENTS[preset][3 if name.endswith('text_color') else 2]
         assert style_color(m,red,name)[1]==(red if preset==O['CRIMSON'] else color_t(want)),(config,name)
     assert style_color(m,grey)[1]==grey
-    assert len(m.config_reads)==(10 if is_m1plus else 11)  # every key, once, on first use (M1 Plus: not NPCENTRED, 4.6's)
+    assert len(m.config_reads)==11  # every key, once, on first use
     passed()
 # Real paint order, no persistent widget styles: normal, metadata, disabled alpha,
 # recycled text, touch hiding, Home siblings, and every accent.
@@ -8533,7 +8533,7 @@ for label_name in ('label_del','label_rename'):
 passed()
 
 m=Machine(); style_color(m,red)
-assert m.config_reads==[('/mnt/data/config.ini','IPOD',key,'0') for key in ('ACCENT','HOME','BATTERY','THEME')]+[('/mnt/data/config.ini','IPOD','SHORTCUT','7'),('/mnt/data/config.ini','IPOD','MINIMAL_ACCENT','7'),('/mnt/data/config.ini','IPOD','ROUNDED','0'),('/mnt/data/config.ini','IPOD','LIGHT','0'),('/mnt/data/config.ini','IPOD','KEEPLIT','0')]+([] if is_m1plus else [('/mnt/data/config.ini','IPOD','NPCENTRED','0')])+[('/mnt/data/config.ini','IPOD','KEYTONEHP','0')]; passed()
+assert m.config_reads==[('/mnt/data/config.ini','IPOD',key,'0') for key in ('ACCENT','HOME','BATTERY','THEME')]+[('/mnt/data/config.ini','IPOD','SHORTCUT','7'),('/mnt/data/config.ini','IPOD','MINIMAL_ACCENT','7'),('/mnt/data/config.ini','IPOD','ROUNDED','0'),('/mnt/data/config.ini','IPOD','LIGHT','0'),('/mnt/data/config.ini','IPOD','KEEPLIT','0')]+[('/mnt/data/config.ini','IPOD','NPCENTRED','0')]+[('/mnt/data/config.ini','IPOD','KEYTONEHP','0')]; passed()
 
 # Gradients: the leaf's null checks, then the caller's stops mapped (nr @8, stops @0xc).
 def gradient(config,stops,same_out=True,vt_get=True,style=True):
@@ -13978,8 +13978,16 @@ else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow an
     passed()
     # Appearance: Home cycles Split, Full and Carousel, saved; Theme's preset is Split, saved only when it changes.
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=1)
-    assert [t.split(':')[0] for t in texts()]==['Theme','Light Mode','Accent','Home','Battery'] and texts()[0]=='Theme: Minimal'
-    assert icons==['sset_display']*3+['pset_covermode','sset_powermanager'] and texts()[3]=='Home: Split'
+    assert [t.split(':')[0] for t in texts()]==['Theme','Light Mode','Accent','Home','Battery','Centred Now Playing'] and texts()[0]=='Theme: Minimal'
+    assert icons==['sset_display']*3+['pset_covermode','sset_powermanager','pset_covermode'] and texts()[3]=='Home: Split'
+    # Centred Now Playing (ipod-ui 4.6): a switch that only saves; the next Now Playing opens V2.1's own page.
+    load=HOOKS['ui_loader_load_widget_with_parent'][0]; m.handlers[int(manifest['patch_symbols']['stock_ui_load_trampoline'],16)]='stock_ui_load'
+    def loaded(name):
+        m.calls=[]; m.call(address=load,args=(m.string(name),0,0,0),gap=0)
+        return [m.text(c[1]) for c in m.calls if c[0]=='stock_ui_load']
+    assert loaded('playing_page')==['playing_page']
+    assert click(5)==[(1,'IPOD','NPCENTRED')] and loaded('playing_page')==['playing_page_stock'] and loaded('home_page')==['home_page']
+    assert click(5)==[(0,'IPOD','NPCENTRED')] and loaded('playing_page')==['playing_page']
     for value,name in ((1,'Full'),(2,'Carousel'),(0,'Split')):
         assert click(3)==[(value,'IPOD','HOME')] and texts()[3]=='Home: '+name
     m.nodes[m.wm]={'type':'window_manager','children':[m.top]}  # Theme lays every settings list out again

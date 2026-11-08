@@ -656,6 +656,15 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert np['slider_play'][2]['style'] == 's_ipod_progress' and all(np['slider_play'][2][f'style:{st}:icon'] == '' for st in ('normal', 'pressed', 'over', 'disable', 'focused'))
     np_old = {n[2].get('name'): n for n in walk(np_stock)}
     assert np['view_buttons'][3] == np_old['view_buttons'][3] and np['view_dlna'][3] == np_old['view_dlna'][3]
+    # Centred Now Playing's page: V2.1's, named playing_page, its layout and transport, the iPod's bar and lyrics across their column.
+    centred_page = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK))
+    assert centred_page[2]['name'] == 'playing_page' and centred_page[3][0][1] == np_stock[3][0][1]
+    centred = {n[2].get('name'): n for n in walk(centred_page)}
+    for name in ('slide_view_view', 'img_playcover', 'btn_return', 'scrlabel_title', 'label_playtime', 'view_buttons', 'btn_fav', 'btn_more'):
+        assert centred[name][1] == np_old[name][1], name
+    assert centred['slider_play'][1] == np_old['slider_play'][1] and centred['slider_play'][2]['style'] == 's_ipod_progress'
+    assert centred['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=100%,h=-20)' and centred['label_lyricmsg'][2]['self_layout'] == 'default(x=0,y=100,w=100%,h=28)'
+    assert m1plus_ipod.playing_stock(read('stock.squashfs', 'release/assets/default/raw/ui/playing_page.bin')) == read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK)
     try:
         m1plus_ipod.playing_page(['window', [0, 0, 0, 0], {'name': 'playing_page'}, []])
     except ValueError as e:
@@ -1004,6 +1013,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # arrows, and Split's placeholder.
     added |= {xx+f'{n}.png' for n in ('local_fav', 'local_frequentplay', 'home_left', 'home_right', 'default_album_home')}
     added |= {xx+f'home_card_{row}{s}.png' for row in m1ipod.HOME_ROWS for s in ('', '_down')}
+    added.add('release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK)  # Centred Now Playing (4.6)
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C} | {
         'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles']),
                                                                       *('images/xx/' + q for q in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons']})]}

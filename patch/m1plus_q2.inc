@@ -63,6 +63,9 @@
  * and the heart with it; playing_page_init binds it with the window. */
 #define VIEW_FAV "img_fav"
 /* Now Playing's, the big cover's and the volume dialog's other widgets, by the names the shared code looks up. */
+#define NP_COLUMN_X 80 /* stock's column: its x and width, and its slide_view's height (Centred Now Playing's np_full) */
+#define NP_COLUMN_W 225
+#define NP_COLUMN_SLIDE_H 198
 #define VIEW_COVER "img_cover"
 #define VIEW_BIGCOVER "img_bigcover"
 #define VIEW_LYRIC "view_lyric"

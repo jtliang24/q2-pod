@@ -501,6 +501,9 @@ static inline int arc_out(int r, int y) {
  * and the heart with it; playing_page_init binds it with the window. */
 #define VIEW_FAV "btn_fav"
 /* Now Playing's, the big cover's and the volume dialog's other widgets, by V2.1's names. */
+#define NP_COLUMN_X 0 /* V2.1's column, its x and width, and its slide_view's height (Centred Now Playing's np_full) */
+#define NP_COLUMN_W 320
+#define NP_COLUMN_SLIDE_H 254
 #define VIEW_COVER "img_playcover"
 #define VIEW_BIGCOVER "img_playcover"
 #define VIEW_LYRIC "view_lyrics"
