@@ -15309,6 +15309,22 @@ if is_m1plus:
         m=beside(status); assert touch((PRESS,x-1,10),(LIFT,x-1,10),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN
         y=O['STATUS_H']; m=beside(status); assert touch((PRESS,x,y),(LIFT,x,y),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN
     x=O['BAR_BACK_HIT_W']-1; m=beside(0); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN; passed()
+    # The play state sits in the right group (ipod-ui 4.2): while it shows it counts toward BATT_ROOM, so the plain glyph, the icon, Wi-Fi and
+    # the widest battery still fit, and a badge that fitted without it now falls back to the icon. V2.1's lookups find it by name there.
+    def right_group(status,image):
+        b=Machine(); b.config={'BATTERY':'2'}; b.handlers.pop(syms['mclGetPlayStatus'],None); b.word(PLAY_STATUS,status)
+        w={k:b.node(t,NAMES['STATUSW_'+k],list(c),visible=v,**kw) for k,t,c,v,kw in (
+            ('BT','image',(),1,dict(image=image)),('STATE','image',(),0,{}),('WIFI','image',(),1,{}),
+            ('SLOT','view',(),0,{}),('PCT','progress_bar',(),0,{}),('ICON','image',(),1,dict(image='bar_battery')))}
+        b.word(w['WIFI']+O['W_W'],14); b.word(w['STATE']+O['W_W'],12); b.word(w['SLOT']+O['W_H'],30); b.word(syms['power_capacity'],100)
+        bar=b.node('system_bar','system_bar',[b.node('view','view_bar_right',list(w.values()))]); b.word(bar+O['W_PARENT'],b.wm); b.word(syms['system_bar'],bar)
+        b.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,b.canvas,0,0),gap=0)
+        assert b.nodes[w['STATE']]['visible']==(status in (2,3))
+        return b.get(w['SLOT']+O['W_W'])
+    wide,narrow=O['BATT_BODY_W']+O['BATT_NUB_W']+O['BATT_GAP']+O['BATT_PCT_W'],O['BATT_BODY_W']+O['BATT_NUB_W']
+    assert O['BT_REACH']+3*O['STATUS_GAP']+12+14+wide==110<=O['BATT_ROOM']
+    for status in (2,3): assert right_group(status,O_GLYPH)==wide and right_group(status,'bar_sbc')==narrow
+    assert right_group(0,O_GLYPH)==wide and right_group(0,'bar_sbc')==wide; passed()
     # page_title centres a plain title on the screen, clear of the top left the back button had (4.4 and 4.5 relay it).
     m=input_machine(); body=m.node('view'); title=m.call(address=payload_syms['page_title'],args=(body,m.string('Photos'),0,0),gap=0)
     assert not [c for c in m.nodes[body]['children'] if m.nodes[c]['type']=='button']

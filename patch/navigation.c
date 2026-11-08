@@ -3474,6 +3474,9 @@ static void bar_sync(void *bar) {
                     : mode == 3 ? BATT_INSIDE_W + BATT_NUB_W
                                 : BATT_BODY_W + BATT_NUB_W + BATT_GAP + BATT_PCT_W;
         if (widget_get_visible(st.bar_wifi)) reach += I(st.bar_wifi, W_W) + STATUS_GAP;
+#if M1PLUS /* the play state is in this group on the M1 (ipod-ui 4.2) */
+        if (st.bar_state && widget_get_visible(st.bar_state)) reach += I(st.bar_state, W_W) + STATUS_GAP;
+#endif
         if (shown)
             reach +=
                 STATUS_GAP +

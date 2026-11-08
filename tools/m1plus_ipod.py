@@ -50,17 +50,19 @@ STATUS_BAR = 'system_bar.bin'
 STATUS_NAMES = ['view_bar_left', 'bar_dclock', 'view_bar_right', 'pgbar_battery', 'img_battery']
 STATUS_LEFT = ['img_playstate', 'img_volume', 'label_volume', 'img_digital']
 STATUS_RIGHT = ['img_btclass', 'img_synclink', 'img_wifi']
-# Shown on the iPod bar: the back chevron and the play state on the left; Bluetooth, Wi-Fi and the payload's battery
+# Shown on the iPod bar: the back chevron on the left; Bluetooth, the play state, Wi-Fi and the payload's battery
 # (view_battery) on the right. The volume, the digital badge, the link badge and V2.1's own battery stay in the bar,
-# still updated by V2.1, but never drawn.
-STATUS_SHOWN = ['img_back', 'img_playstate', 'img_btclass', 'img_wifi', 'view_battery']
+# still updated by V2.1, but never drawn. The play state sits right of Bluetooth, whose 42 px canvas has its ink at the
+# right edge: left of it the icon would stand BT_REACH's 32 px hole away and in the clock, and it would move as a codec
+# badge fades. V2.1 finds them all by recursive lookups and never names the groups.
+STATUS_SHOWN = ['img_back', 'img_btclass', 'img_playstate', 'img_wifi', 'view_battery']
 STATUS_HIDDEN = ['img_volume', 'label_volume', 'img_digital', 'img_synclink', 'pgbar_battery', 'img_battery']
 BACK_W = M1['BAR_BACK_W']  # the chevron's image and tap width, the bar's height tall
 CLOCK_W = 90  # V2.1's digit_clock width; "12:59 PM" is CLOCK_TEXT px at the bar's font
 
 
 def status_bar(root):
-    """V2.1's status bar as the iPod's: square-cornered margins, the play state, Bluetooth, Wi-Fi and the payload's
+    """V2.1's status bar as the iPod's: square-cornered margins, Bluetooth, the play state, Wi-Fi and the payload's
     battery slot, the clock centred, and a back chevron at the far left (shown by the payload when a page is open)."""
     check(root[0] == 'system_bar' and [n[2].get('name') for n in root[3]] == STATUS_NAMES, 'Unexpected status bar')
     left, clock, right, pgbar, battery = root[3]
@@ -76,8 +78,8 @@ def status_bar(root):
                                               'visible': 'false'}, []]
     # The payload's battery (view_battery) is sized and painted at run time; it hides until the first sync.
     slot = ['view', [0, 0, ipod.BATT_H_W, 0], {'name': 'view_battery', 'visible': 'false'}, []]
-    left[3] = [back, named['img_playstate']]
-    right[3] = [named['img_btclass'], named['img_wifi'], slot]
+    left[3] = [back]
+    right[3] = [named['img_btclass'], named['img_playstate'], named['img_wifi'], slot]
     shown = [left, right]
     left[1], right[1] = [0, 0, ipod.UI_W // 2 - CLOCK_W // 2, height], [ipod.UI_W // 2 + CLOCK_W // 2, 0, ipod.UI_W // 2 - CLOCK_W // 2, height]
     left[2]['children_layout'] = f'default(r=1,c=0,x=0,s={gap})'
@@ -85,11 +87,11 @@ def status_bar(root):
     # The clock: V2.1's own digit_clock, centred.
     clock[1] = [(ipod.UI_W - CLOCK_W) // 2, 0, CLOCK_W, 100]
     clock[2]['self_layout'] = f'default(x={(ipod.UI_W - CLOCK_W) // 2},y=0,w={CLOCK_W},h=100%)'
-    # Room: the right group's ink, with every glyph, stays clear of the widest clock text; the left's play state too.
+    # Room: the right group's ink, with every glyph, stays clear of the widest clock text; the left's chevron too.
     room = int(ipod.UI_W - margin - (ipod.UI_W / 2 + ipod.CLOCK_TEXT / 2 + ipod.CLOCK_GAP))
-    reach = ipod.BT_REACH + 2 * gap + 14 + max(ipod.BATT_PCT_W, ipod.BATT_H_W, ipod.inc('BATT_INSIDE_W') + ipod.inc('BATT_NUB_W'))
+    reach = ipod.BT_REACH + 3 * gap + 12 + 14 + max(ipod.BATT_PCT_W, ipod.BATT_H_W, ipod.inc('BATT_INSIDE_W') + ipod.inc('BATT_NUB_W'))
     check(ipod.BATT_ROOM == room and reach <= room, f'Status bar battery needs {reach}px of {room}px')
-    check(BACK_W + gap + 12 <= ipod.UI_W // 2 - ipod.CLOCK_TEXT // 2 - ipod.CLOCK_GAP, 'Status bar left group meets the clock')
+    check(BACK_W <= ipod.UI_W // 2 - ipod.CLOCK_TEXT // 2 - ipod.CLOCK_GAP, 'Status bar left group meets the clock')
     # Widgets V2.1 shows each second but the iPod doesn't draw: at the bar's left, transparent (opacity 0, which AWTK
     # doesn't paint), not off-screen as the Q2's are. V2.1's face resizes and sets them each second, and on V2.1 an
     # invalidate left of the screen loses that frame's flush to the panel: the page painted with it stays in the back

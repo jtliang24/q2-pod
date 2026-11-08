@@ -615,8 +615,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     want = dict(re.findall(r'^#define STATUSW_(\w+) "([^"]+)"', (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M))
     assert {n for k, n in want.items() if k not in ('IDLE', 'EQ')} <= set(named) and not {want['IDLE'], want['EQ']} & set(named)
     assert named['img_back'][1] == [0, 0, 32, 30] and named['img_back'][2]['visible'] == 'false' and named['img_back'][2]['image'] == 'bar_back'
-    # Beside the play state's icon, the next in the group, the chevron's tap stops where the icon starts (m1plus_nav_back.c chevron_input).
-    assert named['view_bar_left'][3][:2] == [named['img_back'], named['img_playstate']]
+    # The chevron has the left group to itself; the play state sits right of Bluetooth's canvas, whose ink is at its right edge.
+    assert named['view_bar_left'][3] == [named['img_back']]
+    assert named['view_bar_right'][3] == [named[n] for n in ('img_btclass', 'img_playstate', 'img_wifi', 'view_battery')]
+    assert [n for n in m1plus_ipod.STATUS_SHOWN if n != 'img_back'] == [n[2]['name'] for n in named['view_bar_right'][3]]
     clock = named['bar_dclock'][1]
     assert clock[0] + clock[2] // 2 == 160
     # The widgets the iPod doesn't draw stay inside the bar, transparent: on V2.1 an invalidate off the screen's left
