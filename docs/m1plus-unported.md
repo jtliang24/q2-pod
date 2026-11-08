@@ -202,6 +202,9 @@ until that click handler is ported; shared queue filtering still excludes video 
 Restart and the firmware update's dialog save the queue first, as power-off does. V2.1's
 `device_reboot` is `0x4e743c`; V2.1 has no `dialog_checkfw_dialog_init` by name, and its updates come
 from the card.
+On `V054m` a flash and a shell `reboot` both came back to `memoryfile`'s last power-off (progress §72).
+Centre's long press offers only Shutdown, and `device_reboot`'s one direct caller is `on_wm_idle_status`, so the
+M1 shows no Restart to hook there.
 
 ### SyncLink's keys
 

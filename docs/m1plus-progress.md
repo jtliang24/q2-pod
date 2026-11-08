@@ -4115,6 +4115,18 @@ findings, and showed why: `spot_np` built a second Now Playing in code, with its
 - **`np_sheets.py`:** a `pages-<theme>.png` sheet with the local page and Spotify's side by side.
 - **The Q2's `update.tar` stayed byte-identical.** `q2compare` caught one slip on the way: a rewrite of `visualizer.c`'s `showing()` outside `#if M1PLUS`.
 
+**Device pass on `V054m` (Nov 8), Minimal and Classic, over q2remote.** The Soloify page's Prev, Play, Next, Mode, Queue (their real browser levels), bar tap and drag, Back, knob scrub, volume band and Previous key all work, so F0 is fixed. Hold Return and Home's row open the owner's page for Soloify (playing and paused), local music and Radio, so F13 is fixed; a second Hold on Radio's page goes back. The counter follows Next at once within one album, by button and hardware key (F1), and the visualizer's bars keep moving under the band (F5). A paused seek's hold ends once the player reports it. Minimal's album capitals and bar reach the Soloify page.
+
+What the pass found:
+- **F6 is half of what item 6 above says.** A tap on the status bar's play icon no longer goes Back, but it does nothing, on a list page (x 42) as on Now Playing. VOLUME opens only from further along the bar (x 160).
+- **F4 is ours.** A dot tap switches slides on Centred, V2.1's page, and does nothing on the iPod page.
+- **F14 is the relay's, and not only the hardware key's.** A Next soon after a track start, resume or seek leaves `state=paused` and the old title (`boundary op=n`, then `pause drop`, `pause bookmark valid=0`), by touch as by key. The skip waits: Play then starts the next track. A Next 23 s into a track played normally. A fix belongs to `q2-soloify`.
+- **The message view can't be reached from the menu.** With `state=none` the Soloify menu has no Now Playing row (`has_track`), so only a card without the browse socket or a direct call opens it. `patch.py` still covers it.
+- **A paused Soloify session stops after 30 s with the browser shut** (`SPOT_IDLE_MS`, as designed). Hold then opens the local page, and reopening Soloify resumes the session.
+- **A flash or a reboot returns to the last power-off's place.** `/mnt/data/memoryfile` kept its 07:10:58 record through the flash and a shell `reboot`, and both came back paused on that track and second. `A reboot keeping the place` in `docs/m1plus-unported.md` is the gap. Not prioritized.
+- **Switching Minimal to Classic with Ivory set turned Light Mode on** (`LIGHT` 0 to 1), and Classic to Minimal reset `MINIMAL_ACCENT` to 0, the latter already noted in section 70. Not investigated.
+- **Other observations.** Four knob detents scrub 25 s on both pages, where 2 and 3 detents step 5 s each. Radio's third line can show raw stream metadata (`amgoArtistId="0"`). Queue's long label is a marquee (F2); a long-named local queue wasn't tried.
+
 ## How to check a build now
 
 ```sh

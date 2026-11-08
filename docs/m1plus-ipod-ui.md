@@ -258,7 +258,7 @@ Each feature follows the same steps:
    - **Art:** the shared pan, at the M1's panel, with `DRIFT_TEXELS` four panels, V2.1's cover types,
      `savecover_path` as `g_lastcover_url`, and an unload by name on V2.1's lookup and unload.
    - `m1plus_coverflow_home.c` and `m1plus_nav_home.c` are retired.
-6. **Now Playing (implemented Nov 8, progress §71; device-passed on `V053m` except the Soloify page's touch, whose fixes are progress §72, gated, their device pass next):** the iPod layout with V2.1's
+6. **Now Playing (implemented Nov 8, progress §71; device-passed on `V053m`, and the Soloify page's touch and the other fixes of progress §72 on `V054m`; that pass's open findings are in §72):** the iPod layout with V2.1's
    transport row, Centred Now Playing on V2.1's own page, `bigcover`, the volume dialog, the quiet icons (the `quiet_icons`
    section) and the NP bar. Back is a large button in the page's top row; the chevron hides there. The knob stays the
    volume on the lyrics page, which scrolls by touch. The Spotify page, for both backends, takes the same layout; Radio
