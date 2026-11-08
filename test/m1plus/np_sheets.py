@@ -27,6 +27,7 @@ ap.add_argument('build', type=pathlib.Path)
 ap.add_argument('out', type=pathlib.Path)
 ap.add_argument('--theme', type=int, choices=THEMES, help='this theme only')
 ap.add_argument('--layout', type=int, choices=LAYOUTS, help='this layout only')
+ap.add_argument('--light', action='store_true', help='in Light Mode')
 args = ap.parse_args()
 if args.theme is not None: THEMES = {args.theme: THEMES[args.theme]}
 if args.layout is not None: LAYOUTS = {args.layout: LAYOUTS[args.layout]}
@@ -45,7 +46,7 @@ for t in THEMES:
             run.mkdir(); card.mkdir()
             boot.media_card(card)
             boot.CARD_KNOB = 0  # the knob's volume everywhere: its band here, its panel over the list
-            boot.IPOD_CLASSIC = f'[IPOD]\nTHEME={t}\nACCENT=1\nNPCENTRED={c}\n'
+            boot.IPOD_CLASSIC = f'[IPOD]\nTHEME={t}\nACCENT=1\nNPCENTRED={c}\nLIGHT={int(args.light)}\n'
             p = boot.start(args.build/'rootfs.squashfs', run, BOOT_S + STEP_S * (len(STEPS) + len(OPEN) + 6), sn, net, '', '', card, 'HOME=0\n')
             time.sleep(BOOT_S)
             (args.out/name).mkdir(exist_ok=True)

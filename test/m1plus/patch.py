@@ -6160,9 +6160,9 @@ def shown(): return [m.nodes[w].get('text') for w in (pos,album,remain)]
 def written(): return [m.nodes[c[1]]['name'] for c in m.calls if c[0]=='widget_set_text_utf8']
 def repaint(w=win): m.call(address=HOOKS['widget_on_paint_background'][0],args=(w,m.canvas,0,0)); return written()
 assert m.call(address=playing,args=(win,7,0,0),gap=0)==0 and m.calls[0][:3]==('stock_playing',win,7)
-assert shown()==['2 of 3','Album 1','-2:05']; passed()
+assert shown()==['2 of 3','Album 1','-02:05'],shown(); passed()
 assert repaint()==[] and repaint(bar)==[]; passed()
-m.nodes[slider]['value']=101; assert repaint()==['label_ipod_remain'] and shown()[2]=='-2:04'; passed()
+m.nodes[slider]['value']=101; assert repaint()==['label_ipod_remain'] and shown()[2]=='-02:04'; passed()
 m.word(O['MCL_POS'],2); assert repaint(bar)==['label_ipod_pos','label_ipod_album'] and shown()[:2]==['3 of 3','Album 2']; passed()
 # A rebuilt queue can reuse the same string address with new text; the text itself is hashed.
 m.u.mem_write(m.get(m.items(m.get(syms['mcl_pdeqplaylist']))[2]+O['REC_ALBUM']),b'Other\0')
@@ -6173,7 +6173,7 @@ id3=syms['g_play_id3_info']; m.u.mem_write(id3+O['ID3_ALBUM'],b'Parsed\0')
 m.u.mem_write(id3,b'/p/other\0'); assert repaint()==[] and shown()[1]=='Other'
 m.u.mem_write(id3,b'/p/C\0'); assert repaint()==['label_ipod_pos','label_ipod_album'] and shown()[1]=='Parsed'
 m.u.mem_write(id3,b'\0'); assert repaint()==['label_ipod_pos','label_ipod_album'] and shown()[1]=='Other'; passed()
-for mx,v,want in ((3725,0,'-1:02:05'),(3600,0,'-1:00:00'),(3599,0,'-59:59'),(90,90,'-0:00'),(90,95,'-0:00')):
+for mx,v,want in ((3725,0,'-01:02:05'),(3600,0,'-01:00:00'),(3599,0,'-59:59'),(90,90,'-00:00'),(90,95,'-00:00')):
     m.nodes[slider].update(max=mx,value=v); repaint(); assert shown()[2]==want,(mx,v)
 passed()
 queue=m.deqs[m.get(syms['mcl_pdeqplaylist'])][1]
@@ -6194,14 +6194,16 @@ m.word(win+O['W_PARENT'],m.wm); m.top=win
 def cover_is(path,kind): m.u.mem_write(syms['g_lastcover_url'],path+b'\0'); m.byte(syms['g_playcover_type'],kind)
 def art_pass():
     m.call(address=sleep_hook,args=(0x1234,0,0,0),gap=0)
-    return [c[0] for c in m.calls if c[0] in ('image_manager_unload_bitmap_by_name','image_base_set_image')],m.nodes[cover].get('image')
-reload=['image_manager_unload_bitmap_by_name','image_base_set_image']
-cover_is(b'/p/B',1); m.call(address=playing,args=(win,7,0,0),gap=0); assert art_pass()==([],'play_defaultcover')
+    return [c[0] for c in m.calls if c[0] in ('image_manager_unload_bitmap','image_base_set_image')],m.nodes[cover].get('image')
+reload=['image_manager_unload_bitmap','image_base_set_image']
+cover_is(b'/p/B',2); m.call(address=playing,args=(win,7,0,0),gap=0); assert art_pass()==([],'play_defaultcover')
 m.word(O['MCL_POS'],2); cover_is(b'/p/B',0); assert art_pass()==([],'play_defaultcover')
-cover_is(b'/p/C',2); assert art_pass()==(reload,'file:///tmp/externpic.jpg') and art_pass()[0]==[]
-m.word(O['MCL_POS'],1); cover_is(b'/p/B',1); assert art_pass()==(reload,'file:///tmp/coverpic.jpg')
-m.word(O['MCL_POS'],2); cover_is(b'/p/C',3); assert art_pass()==(reload,'play_defaultcover')
-cover_is(b'/p/C',4); m.byte(syms['g_backlight_status'],0); assert art_pass()[0]==[]
+cover_is(b'/p/C',3); assert art_pass()==(reload,'file:///tmp/externpic.jpg'); assert art_pass()[0]==[]
+m.word(O['MCL_POS'],1); cover_is(b'/p/B',2); assert art_pass()==(reload,'file:///tmp/coverpic.jpg')
+# V2.1's types: none is 4, its own random_cover%d, which it loads itself: nothing here; HiFi Music's and Tidal's (6, 7) are its too.
+m.word(O['MCL_POS'],2); cover_is(b'/p/C',4); assert art_pass()==([],'file:///tmp/coverpic.jpg')
+for kind in (6,7): cover_is(b'/p/C',kind); assert art_pass()==([],'file:///tmp/coverpic.jpg')
+cover_is(b'/p/C',5); m.byte(syms['g_backlight_status'],0); assert art_pass()[0]==[]
 m.byte(syms['g_backlight_status'],1); assert art_pass()==(reload,'file:///tmp/externpic.jpg'); passed()
 # Minimal (docs/ipod.md#now-playing): the album is drawn in capitals over its transparent label;
 # nothing else is drawn and the text keeps the asset's places. Classic draws nothing.
@@ -6246,7 +6248,7 @@ for theme in ('0','1'): minimal_np(theme)
 # playing) the track's title and artist show at the bottom.
 m=QueueMachine(queue=3,pos=1); m.handlers[playing+12]='stock_playing'
 title,artist=m.node('hscroll_label','scrlabel_title',text='Charge'),m.node('hscroll_label','scrlabel_artist',text='Elbow')
-vslide=m.node('slide_view','slide_view',value=0); m.word(vslide+O['W_H'],186); m.word(vslide+O['W_W'],375)
+vslide=m.node('slide_view','slide_view',value=0); m.word(vslide+O['W_H'],296); m.word(vslide+O['W_W'],O['UI_W'])
 box=m.node('view','slide_view_view',[vslide]); m.word(box+O['W_Y'],40)
 win=m.node('window','playing_page',[box,title,artist])
 for w,parent in ((vslide,box),(box,win),(title,win),(artist,win),(win,m.wm)): m.word(w+O['W_PARENT'],parent)
@@ -6261,9 +6263,9 @@ from build import run
 quiet=[int(l.split()[1],16)+int(l.split()[2])-4 for l in run('readelf','-Ws',str(B/'patch.elf')).splitlines() if l.split()[-1:]==['vz']][0]
 m.now+=1000; assert vis_paint()==[] and len(m.timers)==1
 m.word(quiet,1); assert vis_paint()==['Charge \xb7 Elbow']; passed()
-# VIS_W (343 px; 10 px a letter mocked): too long, the artist goes, then the title ends in an ellipsis.
-m.nodes[title]['text']='T'*30; assert vis_paint()==['T'*30]
-m.nodes[title]['text']='T'*40; assert vis_paint()==['T'*33+'\u2026']; passed()
+# VIS_W (288 px; 10 px a letter mocked): too long, the artist goes, then the title ends in an ellipsis.
+m.nodes[title]['text']='T'*28; assert vis_paint()==['T'*28],vis_paint()
+m.nodes[title]['text']='T'*40; assert vis_paint()==['T'*27+'\u2026'],vis_paint(); passed()
 
 # The full-screen art: stock init runs first; the song name and its shade show BC_MS, then fade
 # out together over BC_STEPS steps. Closing it mid-fade stops the fade.
@@ -6297,32 +6299,32 @@ assert not b.timers; passed()
 # square once that is another's (as Tidal, whose URL is never a queue path). Stock's placeholder
 # is the square. An unchanged paint decodes and bc_mv nothing; a layout back to the square
 # refits without a decode.
-from ipod import BC_ART
+from m1plus_ipod import BC_ART
 b,bw,alpha=bigcover(); shade,title=b.nodes[bw]['children']; b.word(bw+O['W_PARENT'],b.wm)
 img=b.node('image','img_playcover'); b.nodes[bw]['children'].append(img); b.word(img+O['W_PARENT'],bw)
 def put(w,*g):
     for k,v in zip(('W_X','W_Y','W_W','W_H'),g): b.word(w+O[k],v)
 def geo(w): return [signed(b.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H')]
 def bc_track(i): return b.text(b.get(b.items(b.get(syms['mcl_pdeqplaylist']))[i]+O['REC_PATH'])).encode()+b'\0'
-sq=[(375-BC_ART)//2,(320-BC_ART)//2,BC_ART,BC_ART]
+sq=[(320-BC_ART)//2,(480-BC_ART)//2,BC_ART,BC_ART]
 put(img,*sq); put(shade,sq[0],sq[1]+BC_ART-60,BC_ART,60); put(title,sq[0]+12,sq[1]+BC_ART-45,BC_ART-24,30)
 b.nodes[img]['image']='file:///tmp/coverpic.jpg'; b.image_size=(1600,900)
-bc_dec=['image_manager_unload_bitmap_by_name','widget_load_image']; bc_mv=['widget_move_resize']*3
+bc_dec=['image_manager_unload_bitmap','widget_load_image']; bc_mv=['widget_move_resize']*3
 def fit():
     b.call(address=HOOKS['widget_on_paint_background'][0],args=(bw,b.canvas,0,0),gap=0)
     return [c[0] for c in b.calls if c[0] in bc_dec+bc_mv]
-b.byte(syms['g_playcover_type'],1); b.u.mem_write(syms['g_lastcover_url'],b'/p/other\0')
+b.byte(syms['g_playcover_type'],2); b.u.mem_write(syms['g_lastcover_url'],b'/p/other\0')
 assert fit()==[] and geo(img)==sq  # the last track's cover file
 b.u.mem_write(syms['g_lastcover_url'],bc_track(1)); assert fit()==bc_dec+bc_mv
-x,y,w,h=geo(img); assert w>BC_ART and h==w*900//1600 and x==(375-w)//2 and y==(320-h)//2,geo(img)
+x,y,w,h=geo(img); assert w==BC_ART and h==w*900//1600 and x==(320-w)//2 and y==(480-h)//2,geo(img)
 assert geo(shade)==[x,y+h-60,w,60] and geo(title)==[x+12,y+h-45,w-24,30] and len(b.timers)==2
 assert fit()==[]
 put(img,*sq); assert fit()==bc_mv and geo(img)==[x,y,w,h]
 b.word(O['MCL_POS'],2); assert fit()==[] and geo(img)==[x,y,w,h]  # a skip: still the last cover
-b.byte(syms['g_playcover_type'],1); b.nodes[img]['image']='file:///tmp/externpic.jpg'
-b.u.mem_write(syms['g_lastcover_url'],bc_track(2)); assert fit()==bc_mv and geo(img)==sq  # not type 1's file
-b.image_size=(900,1600); b.byte(syms['g_playcover_type'],2); assert fit()==bc_dec+bc_mv
-x,y,w,h=geo(img); assert h>BC_ART and w==h*900//1600 and x==(375-w)//2,geo(img)
+b.byte(syms['g_playcover_type'],2); b.nodes[img]['image']='file:///tmp/externpic.jpg'
+b.u.mem_write(syms['g_lastcover_url'],bc_track(2)); assert fit()==bc_mv and geo(img)==sq  # not type 2's file
+b.image_size=(900,1600); b.byte(syms['g_playcover_type'],3); assert fit()==bc_dec+bc_mv
+x,y,w,h=geo(img); assert h==480 and w==h*900//1600 and x==(320-w)//2,geo(img)  # the portrait screen's height
 b.nodes[img]['image']='file:///tmp/album_tidal.jpg'; b.u.mem_write(syms['g_lastcover_url'],b'\0')
 assert fit()==bc_mv and geo(img)==sq  # Tidal
 b.u.mem_write(syms['g_lastcover_url'],bc_track(2)); b.nodes[img]['image']='file:///tmp/externpic.jpg'; fit()
@@ -6398,9 +6400,9 @@ assert m.get(m.lcd+O['LCD_FILL_COLOR'])==0x12345678; passed()  # restored
 m.bands.clear(); m.call(address=HOOKS['widget_on_paint_border'][0],args=(win,m.canvas,0,0)); assert not m.bands; passed()
 
 # Full-screen corners use destination pixels, independent of source-image scaling.
-from ipod import BC_ART
+from m1plus_ipod import BC_ART
 bigart=m.node('image','img_playcover')
-bx,by=(375-BC_ART)//2,(320-BC_ART)//2
+bx,by=(320-BC_ART)//2,(480-BC_ART)//2
 put(bigart,bx,by,BC_ART,BC_ART)
 bigwin=m.node('window','bigcover_page',[bigart]); m.handlers[big+12]='stock_bigcover'
 m.call(address=big,args=(bigwin,7,0,0),gap=0)  # ringnav_bigcover keeps the window
@@ -6416,7 +6418,7 @@ for (x,y),alpha in pixels.items():
     assert pixels.get((x,BC_ART-1-y))==alpha
 assert m.get(m.lcd+O['LCD_FILL_COLOR'])==0x12345678; passed()
 
-# Scrub: a double centre press toggles it; the wheel then moves a target of SCRUB_STEP
+# Scrub (Knob: Navigation): the knob's press toggles it; its turns then move a target of SCRUB_STEP
 # seconds times the ramp, previewed on the slider and both labels however far apart the ticks,
 # and committed once through player_seek_time (track seconds) when the scrub ends. Stock's page
 # timer stops meanwhile.
@@ -6428,26 +6430,30 @@ def scrub_page(value=100,mx=225,m=None):  # m: Now Playing opened again on that 
     m.win=m.top=m.node('window','playing_page',[m.slider,m.elapsed,m.remain])
     m.word(m.win+O['W_PARENT'],m.wm)
     assert m.call(address=playing,args=(m.win,7,0,0),gap=0)==0
+    m.mock('on_wm_keyup_fun')
     return m
 def did(m,name): return [c[1] for c in m.calls if c[0]==name]
 def keep(m):
     m.seeks=getattr(m,'seeks',[])+did(m,'player_seek_time'); m.starts=getattr(m,'starts',[])+did(m,'playing_timer_start')
-def step(m,*a,**k):  # one input or timer step, keeping every seek and timer restart it makes
-    r=(m.advance if k.pop('wait',False) else m.call)(*a,**k); keep(m); return r
-def centre(m,gap=1000):  # a double press
-    assert m.call(O['KEY_CENTER'],gap=gap)==11 and not did(m,'playing_timer_clear')
-    assert m.call(O['KEY_CENTER'],gap=100,clear=False)==11
-    m.advance(DC,clear=False); keep(m); assert not m.screens  # no single press left behind
+def step(m,*a,**k):  # one input or timer step, keeping every seek and timer restart it makes; the knob's turn, by default forward
+    wait=k.pop('wait',False)
+    if not wait and 'address' not in k:
+        knob={O['KEY_NEXT']:O['KEY_VOLUMEUP'],O['KEY_PREV']:O['KEY_VOLUMEDOWN'],O['KEY_CENTER']:O['KEY_POWER']}
+        a=(knob.get(a[0],a[0]),*a[1:]) if a else (O['KEY_VOLUMEUP'],)
+    r=(m.advance if wait else m.call)(*a,**k); keep(m); return r
+def centre(m,gap=1000):  # the knob's press: a single one starts the scrub, DOUBLE_CLICK_MS on; scrubbing, it ends it at once
+    assert m.call(O['KEY_POWER'],gap=gap)==11
+    m.advance(DC,clear=False); keep(m); assert not m.screens  # no second press waited for
 def ended(m,seeks,label=''):  # the scrub is over: fill, stock timer and the wheel's volume are back
     assert m.seeks==seeks and m.starts==[m.win], (label,m.seeks,m.starts)
-    assert m.nodes[m.slider][FG]==FILL_HI and not m.timers and m.call()==0 and not did(m,'player_seek_time'), label
+    assert m.nodes[m.slider][FG]==FILL_HI and not m.timers and m.call(O['KEY_VOLUMEUP'])==0 and not did(m,'player_seek_time'), label
 m=scrub_page(); centre(m)
 assert did(m,'playing_timer_clear')==[m.win] and m.nodes[m.slider][FG]==-1 and not m.screens; passed()
 # Ticks a second apart, far past the old 150 ms seek, each preview at once and none seeks.
-assert step(m)==11 and m.nodes[m.slider]['value']==105 and m.nodes[m.elapsed]['text']=='1:45'
-assert m.nodes[m.remain]['text']=='-2:00'
-assert step(m,gap=1500)==11 and m.nodes[m.slider]['value']==110 and m.nodes[m.elapsed]['text']=='1:50'
-assert m.nodes[m.remain]['text']=='-1:55'
+assert step(m)==11 and m.nodes[m.slider]['value']==105 and m.nodes[m.elapsed]['text']=='01:45'
+assert m.nodes[m.remain]['text']=='-02:00'
+assert step(m,gap=1500)==11 and m.nodes[m.slider]['value']==110 and m.nodes[m.elapsed]['text']=='01:50'
+assert m.nodes[m.remain]['text']=='-01:55'
 step(m,O['SCRUB_MS']-100,wait=True); assert m.seeks==[] and m.nodes[m.slider]['value']==110; passed()
 # A spin ramps the step as in a long list and still only previews.
 for _ in range(12): assert step(m,gap=20)==11
@@ -6481,7 +6487,7 @@ def reopen(m):
     m.starts=[]; m.calls.clear(); scrub_page(m=m); keep(m)
 m=scrub_page(); m.handlers.pop(syms['mclGetPlayStatus']); m.word(PLAY_STATUS,3); m.playtime=100
 centre(m); step(m); centre(m,50); assert did(m,'mclSetSeek')==[105]
-reopen(m); assert m.nodes[m.slider]['value']==105 and m.nodes[m.elapsed]['text']=='1:45'
+reopen(m); assert m.nodes[m.slider]['value']==105 and m.nodes[m.elapsed]['text']=='01:45'
 assert did(m,'playing_timer_clear')==[m.win]; step(m,5000,wait=True); assert not m.starts
 centre(m); step(m); assert m.nodes[m.slider]['value']==110; passed()
 centre(m,50); m.playtime=111; reopen(m); assert m.nodes[m.slider]['value']==111 and m.starts==[]
@@ -6501,20 +6507,18 @@ for end in ('centre','timeout','bound'):
     if end=='timeout': step(m,O['SCRUB_MS'],wait=True)
     else: centre(m,50)
     ended(m,[],end); passed()
-# Another double press, Return (swallowed) and touch each end it, committing the target once.
+# Another press, a key that is not the knob's and touch each end it, committing the target once.
 for end in ('centre','return','touch'):
     m=scrub_page(); centre(m); step(m)
     if end=='centre': centre(m,50)
-    elif end=='return': assert step(m,O['KEY_RETURN'],gap=50)==11
+    elif end=='return': assert step(m,O['KEY_RETURN'],gap=50)==0  # no knob key: on to V2.1
     else: step(m,address=HOOKS['on_wm_tsdown_before_fun'][0],event_type=O['EVT_POINTER_DOWN'],gap=50)
     step(m,O['SCRUB_MS'],wait=True); ended(m,[105],end); passed()
-# A single press turns the screen off DOUBLE_CLICK_MS later, not a millisecond sooner, and
-# leaves no toggle behind.
+# A double press is V2.1's key-up, which turns the screen off, and leaves no scrub behind.
 m=scrub_page()
-assert Machine.release(m)==11; m.advance(DC-1,clear=False); assert not m.screens
-m.advance(1,clear=False); assert m.screens==[0] and not m.u.mem_read(syms['g_backlight_status'],1)[0]
-keep(m); m.byte(syms['g_backlight_status'],1); step(m,1000+O['SCRUB_MS'],wait=True)
-assert m.seeks==[] and not did(m,'playing_timer_clear') and not m.timers and m.call()==0; passed()
+assert m.call(O['KEY_POWER'])==11 and m.call(O['KEY_POWER'],gap=100,clear=False)==0 and 'on_wm_keyup_fun' in [c[0] for c in m.calls]
+keep(m); step(m,1000+O['SCRUB_MS'],wait=True)
+assert m.seeks==[] and not did(m,'playing_timer_clear') and not m.timers and m.call(O['KEY_VOLUMEUP'])==0; passed()
 # Scrubbing, a single press commits at once and the screen stays on; a second as quick (a
 # double press) is swallowed too.
 for presses in (1,2):
@@ -6537,7 +6541,7 @@ for end in ('tick','timeout','return'):
     m=scrub_page(); centre(m); step(m); m.word(O['MCL_POS'],2)
     if end=='tick': assert step(m)==11 and m.nodes[m.slider]['value']==105
     elif end=='timeout': step(m,O['SCRUB_MS'],wait=True)
-    else: assert step(m,O['KEY_RETURN'],gap=50)==11
+    else: assert step(m,O['KEY_RETURN'],gap=50)==0
     ended(m,[],end); passed()
 # The lyrics page (slide value 1) with lyrics, on stock's rows, which the page keeps when it has no
 # memory for its table (lyrics.c; its own rows below). Each UI loop pass (ringnav_sleep) takes the wheel
@@ -6553,7 +6557,7 @@ sleep_hook=HOOKS['main_loop_sleep_default'][0]
 def lyric_page(page=1,size=9,lines=len(ROWS),config=None):  # stock's rows: no memory for the page's table
     m=scrub_page(); m.mock('calloc@GLIBC_2.0','pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0')
     m.fail_calloc=True  # preserve this fixture's allocation-failure path with scope's allocator mock
-    m.word(0xa2638c,0x1000010); m.handlers[0x1000010]='free'  # free's GOT slot, as Coverflow's
+    m.word(FREE_GOT,0x1000010); m.handlers[0x1000010]='free'  # free's GOT slot, as Coverflow's
     m.lyric_size=size; m.handlers[sleep_hook+12]='stock_sleep'; m.config.update(config or {})
     rows=[m.node('label') for _ in range(lines)]
     for i,r in enumerate(rows): m.word(r+O['W_Y'],sum(ROWS[:i])); m.word(r+O['W_H'],ROWS[i])
@@ -6581,7 +6585,7 @@ for kw in ({'page':0},{'size':0},{'lines':0}):
 # Enlarged Album Art (#153): off the art page each pass holds stock's countdown full, so the art never
 # opens there; on the art page it runs.
 for page,left in ((1,O['BC_IDLE_FULL']),(0,3)):
-    m=lyric_page(page=page); m.byte(O['BC_IDLE'],3); loop(m); assert m.u.mem_read(O['BC_IDLE'],1)[0]==left,page
+    m=lyric_page(page=page); m.word(O['BC_IDLE'],3); loop(m); assert m.get(O['BC_IDLE'])==left,page
 passed()
 # Following, a lone tick meets a list end's resistance: it nudges them BUMP_PX while the finger
 # stays, and they spring back on release, still following; slower ticks only nudge again.
@@ -6631,7 +6635,7 @@ m=lyric_page(); loop(m); loop(m,-56); settle(m); m.word(O['MCL_POS'],1); assert 
 # The page's row rebuild (LYRIC_ROWS, stock's mocked) keeps the same song's place; another song's
 # rows start at the top whatever moved the view since, and drop the hold.
 def rows(m): m.call(address=payload_syms['ringnav_lyric_rows'],args=(m.win,0,0,0),gap=0,clear=False); return y(m)
-m=lyric_page(); m.handlers[0x529f0c]='stock_lyric_rows'; loop(m); loop(m,-56); settle(m)
+m=lyric_page(); m.handlers[O['LYRIC_ROW_BUILDER']]='stock_lyric_rows'; loop(m); loop(m,-56); settle(m)
 assert rows(m)==40 and follow(m,0)==40; passed()
 m.word(O['MCL_POS'],2); m.word(m.lrc+O['SCROLL_Y'],60); assert rows(m)==0 and loop(m)==0
 follow(m,20); assert settle(m)[-1]==20; passed()  # the follow is back
@@ -6642,7 +6646,7 @@ m.word(m.lrc+O['SCROLL_Y'],60); loop(m); m.pressed=0; loop(m); follow(m,0); asse
 m=lyric_page(); loop(m); a=m.alloc(0x80); m.word(m.lrc+O['VIEW_ANIMATOR'],a); m.pressed=1; loop(m)
 assert m.get(m.lrc+O['VIEW_ANIMATOR'])==0 and ('widget_animator_destroy',a) in [c[:2] for c in m.calls]; passed()
 # The report: scroll, swipe away, screen off, next song, screen on, swipe back: the new song's top.
-m=lyric_page(); m.handlers[0x529f0c]='stock_lyric_rows'; loop(m); loop(m,-56); settle(m)
+m=lyric_page(); m.handlers[O['LYRIC_ROW_BUILDER']]='stock_lyric_rows'; loop(m); loop(m,-56); settle(m)
 m.nodes[m.slide]['value']=0; loop(m); assert follow(m,20)==20  # off the page: stock's jump
 m.byte(syms['g_backlight_status'],0); loop(m); m.word(O['MCL_POS'],2); assert loop(m)==0
 m.word(m.lrc+O['SCROLL_Y'],60); assert rows(m)==0  # a stale follow, then the new song's rows
@@ -6677,19 +6681,15 @@ assert follow(m,0)==40; m.pressed=0; loop(m); assert follow(m,0)==40 and settle(
 m=lyric_page(); loop(m); m.pressed=1; loop(m); m.pressed=0; loop(m); follow(m,20); assert settle(m)[-1]==20; passed()
 m=lyric_page(); loop(m); m.top=m.node('window','home_page'); m.pressed=1; loop(m); m.word(m.lrc+O['SCROLL_Y'],40)
 m.pressed=0; loop(m); m.top=m.win; loop(m); follow(m,0); assert settle(m)[-1]==0; passed()  # another window's touch
-# A tick (before a pass took the wheel raw) glides to the next or previous row's top, quick ticks
-# adding up from the glide's target, ahead of scrub and the volume.
-m=lyric_page()
-assert step(m)==11 and y(m)==0 and settle(m)[-1]==20
-ys=[]
-for _ in range(5): assert step(m,gap=200)==11; ys.append(settle(m)[-1])
-assert ys==[70,90,110,110,110],ys
-for _ in range(3): assert step(m,O['KEY_PREV'],gap=200)==11
-assert settle(m)[-1]==20 and not did(m,'playing_timer_clear') and not m.starts and follow(m,0)==20; passed()
-# A scrub begun on the lyrics page ends at the next tick, committing once, and the tick scrolls;
-# the seek's settle wait brings stock's timer back.
-m=lyric_page(); centre(m); m.nodes[m.slide]['value']=0; step(m); m.nodes[m.slide]['value']=1
-assert step(m)==11 and m.seeks==[105] and settle(m)[-1]==20
+# The knob stays the volume on the lyrics page, in both its modes (ipod-ui 4.6; the lyrics scroll by touch): a turn reaches V2.1's
+# key-up, whose volume it is, and no lyric moves.
+for mode in ('1','0'):
+    m=lyric_page(config={'KNOB':mode}); loop(m); hold(m); start=y(m); m.calls=[]
+    assert m.call(O['KEY_VOLUMEUP'])==0 and 'on_wm_keyup_fun' in [c[0] for c in m.calls] and settle(m)[-1]==start,mode; passed()
+# A scrub begun on the lyrics page keeps the turns, whose target moves, and no lyric; its press seeks once, and the seek's
+# settle wait brings stock's timer back.
+m=lyric_page(); centre(m); assert step(m)==11 and m.nodes[m.slider]['value']==105 and settle(m)[-1]==0
+centre(m,50); assert m.seeks==[105] and settle(m)[-1]==0
 step(m,O['SCRUB_MS'],wait=True); assert m.starts==[m.win] and not m.timers; passed()
 # The scrub's own touch end (np_cancel) keeps the hold; the page's destruction drops it and the
 # wheel's raw travel.
@@ -6828,7 +6828,7 @@ if 'mclLoadExLyric' in HOOKS:
             def __init__(self,tags={}):
                 super().__init__(tags)
                 self.k_inks=[]  # self.lrc: the page's scroll_lrc
-                self.handlers[playing+12]='stock_playing'; self.handlers[0x529f0c]='k:rows'
+                self.handlers[playing+12]='stock_playing'; self.handlers[O['LYRIC_ROW_BUILDER']]='k:rows'
                 for n in ('widget_layout_children','widget_get_canvas','canvas_draw_text','canvas_measure_text'):
                     self.handlers[syms[n]]='k:'+n
                 self.handlers.pop(syms['mclGetPlayStatus']); self.word(PLAY_STATUS,2)
@@ -6979,17 +6979,19 @@ if 'mclLoadExLyric' in HOOKS:
                 assert a==self.col       # and the scroll view's relayout clamps their offset (to the top here)
                 self.word(self.lrc+O['W_W'],self.get(self.slide+O['W_W'])); self.word(self.lrc+O['W_H'],self.get(self.slide+O['W_H'])-20)
                 self.word(self.lrc+O['SCROLL_Y'],0)
-            else: ret=self.nodes[self.win]['children'].index(a)
+            else: ret=self.nodes[self.local]['children'].index(a)
             self.returns(ret,clobber=True)
-        def show(self,playtime=0,lrc=None):  # stock's page: the title, the column (its slide_view and dots), the bar
+        def show(self,playtime=0,lrc=None):  # V2.1's page: view_local holds the title, the column (its slide_view and dots) and the bar
             self.playtime=playtime; self.lrc=self.node('scroll_view','scroll_lrc'); self.build()
             self.lyric=self.node('view','view_lyrics',[self.node('list_view','view_lrc',[self.lrc])])
             self.slide=self.node('slide_view','slide_view',[self.lyric],value=1)
             self.dots=self.node('slide_indicator','slide_indicator'); self.word(self.dots+O['W_Y'],270)
             self.col=self.node('view','slide_view_view',[self.slide,self.dots]); self.word(self.slide+O['W_PARENT'],self.col)
             self.bar=self.node('slider','slider_play')
-            self.win=self.top=self.node('window','playing_page',[self.node('hscroll_label','scrlabel_title'),self.col,self.bar])
-            for w,box in ((self.win,(0,30,375,290)),(self.col,(80,0,225,290)),(self.slide,(0,0,225,198)),(self.lrc,(0,0,225,178))):
+            self.local=self.node('view','view_local',[self.node('hscroll_label','scrlabel_title'),self.col,self.bar])
+            self.win=self.top=self.node('window','playing_page',[self.local])
+            self.word(self.col+O['W_PARENT'],self.local); self.word(self.local+O['W_PARENT'],self.win)
+            for w,box in ((self.win,(0,30,320,450)),(self.col,(0,46,320,313)),(self.slide,(0,0,320,254)),(self.lrc,(0,0,320,234))):
                 for k,v in zip(('W_X','W_Y','W_W','W_H'),box): self.word(w+O[k],v)
             self.word(self.win+O['W_PARENT'],self.wm); self.stack=[self.win]
             assert self.call(address=playing,args=(self.win,7,0,0),gap=0)==0
@@ -7002,19 +7004,19 @@ if 'mclLoadExLyric' in HOOKS:
             self.touch('EVT_POINTER_DOWN',x,y); self.pressed=1; loop(self)
             self.touch('EVT_POINTER_UP_BEFORE',x+dx,y+dy); self.pressed=0; loop(self)
         def full(self):  # the column's place, x and width, its slide_view's size and background, the rows' width
-            return (self.nodes[self.win]['children'].index(self.col),self.get(self.col+O['W_X']),self.get(self.col+O['W_W']),
+            return (self.nodes[self.local]['children'].index(self.col),self.get(self.col+O['W_X']),self.get(self.col+O['W_W']),
                     self.get(self.slide+O['W_W']),self.get(self.slide+O['W_H']),self.nodes[self.col].get('style:normal:bg_color'),
                     {self.get(r+O['W_W']) for r in self.nodes[self.lrc]['children']})
-    COLUMN,FULL=(1,80,225,225,198,'#00000000',{225}),(3,0,375,375,270,'#000000',{375})  # last: past the visualizer's Halo art too
+    COLUMN,FULL=(1,0,320,320,254,'#00000000',{320}),(2,0,320,320,270,'#000000',{320})  # V2.1's column is the screen's width: only over the page, to the dots
     def centred(lines=((5,'x'*15),(9,'Two two'),(12,'Three')),playtime=9,**kw):
         m=CentredMachine(**kw); m.lines=list(lines); m.show(playtime); return m
     def centre_of(m,i,view):  # the offset that centres line i's row in a view that high (C's division)
         r=m.lyric_row(i); return m.get(r+O['W_Y'])+int((m.get(r+O['W_H'])-view)/2)
-    m=centred(); assert m.full()[1:3]==(80,225) and m.get(m.lyric_row(0)+O['W_H'])==2*38+SLOT-38  # two rows in the column
-    assert settle(m)[-1]==centre_of(m,1,178); loop(m,-56); m.word(payload_syms['wheel_held'],0); held=settle(m)[-1]  # the wheel holds them
+    m=centred(); assert m.full()[1:3]==(0,320) and m.get(m.lyric_row(0)+O['W_H'])==SLOT  # the column is already the screen's width: one row
+    assert settle(m)[-1]==centre_of(m,1,234); loop(m,-56); m.word(payload_syms['wheel_held'],0); held=settle(m)[-1]  # the wheel holds them
     m.tap(dx=8,dy=-8); assert m.full()==FULL,m.full()
     assert m.get(m.lyric_row(0)+O['W_H'])==SLOT and settle(m)[-1]==centre_of(m,1,250)!=held; passed()  # one row; the playing line
-    m.tap(); assert m.full()==COLUMN and settle(m)[-1]==centre_of(m,1,178); passed()
+    m.tap(); assert m.full()==COLUMN and settle(m)[-1]==centre_of(m,1,234); passed()
     for end in ('return','abort','page'):
         m=centred(); m.tap(); assert m.full()==FULL,end
         if end=='return': assert m.call(O['KEY_RETURN'],gap=50)==11  # Return stays on the page
@@ -11195,8 +11197,9 @@ def spot_open(m,button):
     m.page=m.top; assert m.nodes[m.page]['name']=='spotify_page'; return m.page
 def texts(w): return [t for t in labels(w) if t is not None]
 def np_views(m,page):
-    """Spotify's Now Playing page's two views, its only children (M1 Plus: the status bar's chevron is its back)."""
-    info,msg=m.nodes[page]['children']
+    """Spotify's Now Playing page's two views; its other child is its own back (ipod-ui 4.6)."""
+    info,msg,back=m.nodes[page]['children']
+    assert m.nodes[back]['type']=='button' and m.nodes[back]['style']==NAMES['STYLE_NAVBAR_RETURN']
     return info,msg
 BIN='/mnt/mmc/.spotify/librespot'
 # The row follows stock's, with its icon. Without librespot on the card the page says so and
@@ -11251,14 +11254,14 @@ assert m.nodes[info]['visible'] and not m.nodes[msg]['visible']
 assert m.thumbs==[(STATE+'.jpg','/tmp/q2spot.jpg',O['SPOT_ART_PX'],O['SPOT_ART_PX'])] and 'file:///tmp/q2spot.jpg' in [m.text(c[2]) for c in m.calls if c[0]=='widget_load_image']
 art=next(w for w in m.nodes if under(w,info) and m.nodes[w]['type']=='image')
 assert ('widget_invalidate_force',art) in [c[:2] for c in m.calls]
-assert texts(info)==['Spotify','Song','A, B','LP','0:10','-3:10']
+assert texts(info)==['Spotify','Song','A, B','LP','00:10','-03:10']
 for value in ('Song','A, B','LP'):
     w=next(w for w in m.nodes if under(w,info) and m.nodes[w].get('text')==value)
     assert m.nodes[w]['hscroll_label_set_only_focus']==0 and m.nodes[w]['hscroll_label_set_ellipses']==0
 for text, rgb in [('Song', 0xffffff), ('A, B', O['NP_ARTIST_RGB']), ('LP', O['NP_ALBUM_RGB'])]:
     label=next(w for w in m.nodes if under(w,info) and m.nodes[w].get('text')==text)
     assert m.nodes[label]['style:normal:text_color']==signed(color_t(rgb))
-m.advance(2500); assert texts(info)[4:]==['0:12','-3:08'] and len(m.thumbs)==1
+m.advance(2500); assert texts(info)[4:]==['00:12','-03:08'] and len(m.thumbs)==1
 # Every replacement at the same file URL repaints the entire image, even if the URL is unchanged.
 for track in ('t2','t3'):
     m.state('playing',position=12500,at=m.now+500,cover=1,track=track); m.poll()
@@ -11299,21 +11302,23 @@ names=start(); assert m.sent[0][1]=='s' and names[-1]=='stock_start_player' and 
 m.on_sleep=None; names=start(); assert not m.sent and names.count('sleep_ms')==0 and names[-1]=='stock_start_player'
 # A librespot that never answers holds local music back at most SPOT_YIELD_MS.
 m.state('playing'); m.play=1; m.poll(); t0=m.now; start(); assert 1500<=m.now-t0<=1540; passed()
-# On the page, a double centre press starts a scrub: the wheel moves it 5 s a tick (not the volume),
-# shown on the bar in white, and a press or SCRUB_MS later seeks there. A single press otherwise turns
-# the screen off, as on Now Playing. Without a scrub the wheel is stock's volume.
+# On the page, as on Now Playing, the knob's press starts a scrub (Knob: Navigation, ipod-ui 4.6): its turns move it 5 s (not the
+# volume), shown on the bar in white, and a press or SCRUB_MS later seeks there. A double press turns the screen off. Without a
+# scrub the knob is V2.1's volume.
 m.state('paused',position=60000); m.poll(); m.top=page
-assert m.key(O['KEY_NEXT'])!=11
-m.mock('on_wm_keyup_fun')  # stock's screen toggle
-def double(): return m.key(O['KEY_CENTER'])==11 and m.key(O['KEY_CENTER'])==11
-assert double() and m.key(O['KEY_NEXT'])==11 and m.key(O['KEY_NEXT'])==11 and m.key(O['KEY_PREV'])==11 and not m.sent
-m.advance(250); assert texts(info)[4]=='1:05' and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
+m.mock('on_wm_keyup_fun')  # stock's volume and screen toggle
+assert m.key(O['KEY_VOLUMEUP'])!=11
+def scrub_press():
+    assert m.key(O['KEY_POWER'])==11; m.advance(DC,clear=False); return True
+assert scrub_press() and m.key(O['KEY_VOLUMEUP'])==11 and m.key(O['KEY_VOLUMEUP'])==11 and m.key(O['KEY_VOLUMEDOWN'])==11 and not m.sent
+m.advance(250); assert texts(info)[4]=='01:05' and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
 m.poll(O['SCRUB_MS']-260); assert not m.sent; m.poll(); assert m.sent[0][1]=='S65000'  # 250 ms already passed
-assert double() and m.key(O['KEY_PREV'])==11 and m.key(O['KEY_CENTER'])==11 and m.sent[0][1]=='S55000'
-m.advance(O['DOUBLE_CLICK_MS']); assert m.key(O['KEY_CENTER'])==11; m.advance(O['DOUBLE_CLICK_MS']); assert 'on_wm_keyup_fun' in [c[0] for c in m.calls] and not m.sent
-# Scrubbing, a single press seeks at once and the screen stays on.
-m.advance(200); assert double() and m.key(O['KEY_PREV'])==11; m.sent=[]; assert m.key(O['KEY_CENTER'])==11 and m.sent[0][1]=='S55000'
-m.advance(O['DOUBLE_CLICK_MS']); assert 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
+assert scrub_press() and m.key(O['KEY_VOLUMEDOWN'])==11 and m.key(O['KEY_POWER'])==11 and m.sent[0][1]=='S55000'
+m.advance(DC); assert m.key(O['KEY_POWER'])==11; m.now+=100; assert m.call(O['KEY_POWER'],gap=0,clear=False)==0
+assert 'on_wm_keyup_fun' in [c[0] for c in m.calls] and not m.sent
+# Scrubbing, a press seeks at once and the screen stays on.
+m.advance(DC+200); assert scrub_press() and m.key(O['KEY_VOLUMEDOWN'])==11; m.sent=[]; assert m.key(O['KEY_POWER'])==11 and m.sent[0][1]=='S55000'
+m.advance(DC); assert 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
 # Return goes back to Streaming.
 assert m.call(O['KEY_RETURN'],address=m.handler(page,O['EVT_KEY_UP'])[0],args=(0,m.event,0,0),event_type=O['EVT_KEY_UP'],gap=0)==11
 m.advance(0); assert 'navigator_back' in [c[0] for c in m.calls]; m.close(); passed()
@@ -12216,6 +12221,78 @@ if is_m1plus:
     m=SoloifyMachine({BIN:bytearray()}); streaming(m); m.click(streaming(m)['Spotify']); m.page=m.top; systems=len(m.systems)
     m.click(streaming(m)['Configuration']); m.page=m.top; m.row(3); assert len(m.systems)==systems and m.files[DELAY]==b'1000'  # Spotify runs: left alone
     passed()
+# The Now Playing page (ipod-ui 4.6), for either backend: Now Playing's layout. Its own back, a child of the page so the
+# message view has it too; the transport row at V2.1's places, Previous, Play and Next sending the keys' commands, Play's
+# style showing the state; Queue and Mode opening the browser's levels; the bar's touch; and the knob.
+def spot_np_page(cls):
+    m=cls(); m.open(); m.answer(*ME); m.row(0); m.answer(*OK,[track('spotify:track:a','A')]); m.row(0); m.answer(*OK,[])
+    np=m.top; assert m.nodes[np]['name']=='spotify_page'
+    info,msg,back=m.nodes[np]['children']; assert m.nodes[back]['type']=='button'
+    m.state('playing',position=10000); m.poll(); m.advance(250)
+    seek=[w for w in m.nodes[info]['children'] if m.nodes[w]['type']=='slider']; assert len(seek)==1,[m.nodes[w]['type'] for w in m.nodes[info]['children']]; seek=seek[0]
+    row,=[w for w in m.nodes[info]['children'] if m.nodes[w]['type']=='view' and cf_geometry(m,w)[1]==O['NP_BUTTONS_Y']]
+    return m,np,info,msg,back,seek,row
+def spot_click(m,w,kind='EVT_CLICK'):
+    f,ctx=m.handler(w,O[kind]); m.sent=[]; m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,clear=False)==0
+for backend in (BrowseMachine,SoloifyMachine):
+    m,np,info,msg,back,seek,row=spot_np_page(backend)
+    assert m.nodes[info]['visible'] and not m.nodes[msg]['visible'] and cf_geometry(m,back)==(0,0,O['NP_BACK_W'],O['NP_TOP_H'])
+    assert cf_geometry(m,seek)==(O['NP_BAR_X'],O['NP_BAR_CY']-O['NP_BAR_TOUCH']//2,O['NP_BAR_W'],O['NP_BAR_TOUCH']) and m.nodes[seek]['max']==1000
+    art=next(w for w in m.nodes[info]['children'] if m.nodes[w]['type']=='image')
+    assert cf_geometry(m,art)==(O['NP_ART_X'],O['NP_ART_Y'],O['NP_ART'],O['NP_ART'])
+    prev,play,nxt,mode,queue=m.nodes[row]['children']
+    assert [cf_geometry(m,w)[0::2] for w in (prev,play,nxt,mode,queue)]==[(58,65),(123,80),(203,59),(0,48),(272,48)]
+    assert m.nodes[prev]['style:normal:bg_image']=='prev' and m.nodes[nxt]['style:pressed:bg_image']=='next_down' and m.nodes[queue]['style:normal:bg_image']=='p_playqueue'
+    assert m.nodes[play]['style']=='btn_imgpause_style' and m.nodes[mode]['style:normal:bg_image']=='p_random'; passed()
+    m.state('paused',position=10000); m.poll(); m.advance(250); assert m.nodes[play]['style']=='btn_imgplay_style'
+    for w,c in ((prev,'b'),(play,'p'),(nxt,'n')):
+        spot_click(m,w); assert [x[1] for x in m.sent]==[c],(c,m.sent)
+    passed()
+for backend in (BrowseMachine,SoloifyMachine):
+    # The bar's touch: a drag previews as a scrub, its release seeks.
+    m.state('playing',position=10000); m.poll(); m.advance(250); m.nodes[seek]['value']=500; spot_click(m,seek,'EVT_VALUE_CHANGING')
+    assert not m.sent and texts(info)[-2:]==['01:40','-01:40'],texts(info)
+    m.nodes[seek]['value']=250; spot_click(m,seek,'EVT_VALUE_CHANGED'); assert [x[1] for x in m.sent]==['S50000']; passed()
+for backend in (BrowseMachine,SoloifyMachine):
+    # Previous stays a media key, where any other page with a back has it Back; Play's too.
+    m.top=np; assert m.key(O['KEY_BACK_BTN'])==11 and [x[1] for x in m.sent]==['b'] and m.top==np; passed()
+for backend in (BrowseMachine,SoloifyMachine):
+    # The knob: a single press starts the scrub DOUBLE_CLICK_MS on, turns move its target, a press seeks.
+    m,np,info,msg,back,seek,row=spot_np_page(backend); m.mock('on_wm_keyup_fun')
+    m.state('paused',position=10000); m.poll(); m.advance(250)
+    assert m.key(O['KEY_POWER'])==11; m.advance(DC-1); assert texts(info)[-2]=='00:10'
+    m.sent=[]; m.advance(1)
+    assert m.key(O['KEY_VOLUMEUP'])==11 and texts(info)[-2]=='00:15' and not m.sent
+    assert m.key(O['KEY_VOLUMEDOWN'])==11 and m.key(O['KEY_VOLUMEUP'])==11 and texts(info)[-2]=='00:15'
+    assert m.key(O['KEY_POWER'])==11 and [x[1] for x in m.sent]==['S15000']; passed()
+for backend in (BrowseMachine,SoloifyMachine):
+    # Not scrubbing, a turn is V2.1's volume; a double press is V2.1's, the screen off.
+    m,np,info,msg,back,seek,row=spot_np_page(backend); m.mock('on_wm_keyup_fun')
+    assert m.key(O['KEY_VOLUMEUP'])==0 and 'on_wm_keyup_fun' in [c[0] for c in m.calls]
+    m.advance(1000); assert m.key(O['KEY_POWER'])==11 and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
+    m.now+=100; assert m.call(O['KEY_POWER'],gap=0,clear=False)==0 and 'on_wm_keyup_fun' in [c[0] for c in m.calls]; passed()
+for backend in (BrowseMachine,SoloifyMachine):
+    # The volume's band over the page's bar and times, as Now Playing's.
+    m,np,info,msg,back,seek,row=spot_np_page(backend)
+    sv,lv=m.node('slider','progressbar_vol',max=100,value=40),m.node('label','label_vol')
+    for w in (sv,lv): m.nodes[w]['visible']=0
+    dlg=m.node('dialog','volume_dialog',[sv,lv]); m.word(dlg+O['W_PARENT'],m.wm)
+    m.word(np+O['W_Y'],30); m.word(np+O['W_W'],O['UI_W']); m.word(syms['system_bar'],m.node('window','system_bar'))
+    m.nodes[m.wm]={'type':'window_manager','children':[np,dlg]}; m.top=dlg; m.bands=[]; m.letters=[]
+    m.call(address=HOOKS['widget_on_paint_background'][0],args=(dlg,m.canvas,0,0))
+    top=30+O['SPOT_BAR_Y']; assert [b[:4] for b in m.bands][0]==(0,top,O['UI_W'],30+O['SPOT_TIMES_Y']+16-top),m.bands[:1]
+    assert m.letters[0]['text']=='Volume 40'; passed()
+for backend in (BrowseMachine,SoloifyMachine):
+    # Back, its own button: a click leaves on a timer, a scrub seeking first.
+    m,np,info,msg,back,seek,row=spot_np_page(backend); m.nodes[seek]['value']=500; spot_click(m,seek,'EVT_VALUE_CHANGING')
+    spot_click(m,back); assert [x[1] for x in m.sent]==['S100000'] and m.top==np
+    spot_click(m,back); m.advance(0); assert 'navigator_back' in [c[0] for c in m.calls]; passed()
+for backend in (BrowseMachine,SoloifyMachine):
+    # Queue and Mode close the page and open the browser's Queue and Playback Settings.
+    m,np,info,msg,back,seek,row=spot_np_page(backend); prev,play,nxt,mode,queue=m.nodes[row]['children']
+    spot_click(m,queue); assert m.asked()==('queue',); m.advance(0); assert 'navigator_back' in [c[0] for c in m.calls]; passed()
+    m,np,info,msg,back,seek,row=spot_np_page(backend); prev,play,nxt,mode,queue=m.nodes[row]['children']
+    spot_click(m,mode); assert m.asked()==('settings',); m.advance(0); assert 'navigator_back' in [c[0] for c in m.calls]; passed()
 
 def run(m,name,*args): return m.call(address=payload_syms[name],args=(*args,0,0,0,0)[:4],gap=0,clear=False)
 

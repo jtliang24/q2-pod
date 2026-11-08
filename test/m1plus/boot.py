@@ -535,6 +535,57 @@ def png(pixels, path):
     from ipod import imagemagick
     path.write_bytes(imagemagick('-size', f'{W}x{H}', '-depth', '8', 'bgra:-', '-alpha', 'off', 'png:-', data=pixels))
 
+# --now-playing (ipod-ui 4.6): for each theme, the iPod page and Centred, on a card's song: no chevron on the page and its own back
+# at the top left, the bar's track at its row, the art; the knob's volume band; the big cover, full screen with the bar gone, a tap
+# closing it back to the page; Back to the album. Centred's bar is V2.1's, inside the gesture view that V2.1's layout centres.
+NP_OPEN = [home_row(LIBRARY, True), page_row(2), lib_row(0), tap(160, 160)]  # the Library, Albums, the first album, its first track, under the head
+def now_playing(build):
+    sn, net = symbols(build/'stock-demo')['product_sncode'], net_address(build)
+    def px(shot, x, y): return shot[(y * W + x) * 4:(y * W + x) * 4 + 3]
+    def ink(shot, x0, y0, x1, y1): return any(px(shot, x, y) != b'\0\0\0' for y in range(y0, y1) for x in range(x0, x1))
+    def rows(a, b, y0, y1): return sum(a[y * W * 4:(y + 1) * W * 4] != b[y * W * 4:(y + 1) * W * 4] for y in range(y0, y1))
+    track = M1['TRACK_COLOR'].to_bytes(3, 'big')[::-1]  # BGRA's first three
+    global IPOD_CLASSIC
+    for theme in (0, 1):
+        for centred in (0, 1):
+            name = f'theme {theme}, centred {centred}'
+            with tempfile.TemporaryDirectory(prefix='m1-np-') as tmp, tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
+                run_dir, card = pathlib.Path(tmp)/'p', pathlib.Path(cards)/'p'
+                run_dir.mkdir(); card.mkdir()
+                media_card(card)
+                IPOD_CLASSIC = f'[IPOD]\nTHEME={theme}\nACCENT=1\nNPCENTRED={centred}\n'
+                p = start(build/'rootfs.squashfs', run_dir, 45 + 8 * 6 + 40, sn, net, '', '', card, 'HOME=0\n')
+                time.sleep(45)
+                for step in NP_OPEN:
+                    send(run_dir, step); time.sleep(6)
+                page = screen(run_dir)
+                bar_y = STATUS_H + (M1['NP_BAR_CY'] if not centred else 6 + 342 + 15)
+                assert not ink(page, 13, 0, 18, STATUS_H), f'{name}: the chevron shows on Now Playing'
+                assert ink(page, 0, STATUS_H, M1['NP_BACK_W'], STATUS_H + M1['NP_TOP_H']), f'{name}: no back at the top left'
+                assert px(page, 200, bar_y) == track, f'{name}: the bar\'s track is not at row {bar_y} ({px(page, 200, bar_y).hex()})'
+                assert ink(page, 150, 150, 170, 170), f'{name}: no art'
+                send(run_dir, [KNOB_UP]); time.sleep(1)
+                band = screen(run_dir)
+                assert rows(page, band, STATUS_H, bar_y - 40) == 0, f'{name}: the volume changed the page above its band'
+                assert rows(page, band, bar_y - 6, bar_y + 6) > 0, f'{name}: no volume band over the bar'
+                time.sleep(4)
+                assert rows(page, screen(run_dir), STATUS_H, H) == 0, f'{name}: the volume\'s band did not close'
+                send(run_dir, tap(160, 150)); time.sleep(5)
+                big = screen(run_dir)
+                assert not ink(big, 0, 0, W, 70), f'{name}: the big cover is not full screen'
+                assert ink(big, 150, 200, 170, 220), f'{name}: no art on the big cover'
+                send(run_dir, tap(160, 240)); time.sleep(5)
+                back = screen(run_dir)
+                assert rows(page, back, STATUS_H, H) == 0, f'{name}: the big cover did not close back to the page'
+                assert ink(back, 200, 0, 300, STATUS_H), f'{name}: the status bar did not come back'
+                send(run_dir, NP_BACK); time.sleep(5)
+                assert rows(page, screen(run_dir), STATUS_H, H) > 100, f'{name}: Back did not leave the page'
+                err = (run_dir/'demo.err').read_bytes()
+                assert b'uncaught target signal' not in err, f'{name}: the demo crashed: {err[-400:].decode("latin-1")}'
+                p.kill()
+    print('M1 Plus Now Playing under qemu: the iPod page and Centred in both themes, their back, bar and art, the volume band and the big cover passed.')
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('build', type=pathlib.Path)
@@ -545,8 +596,14 @@ if __name__ == '__main__':
     ap.add_argument('--media', action='store_true',
                     help='Home in Split, a card with long songs, a book and two photos: the Library, Long Songs, Books, Photos, '
                          'Folder, Coverflow and Streaming by touch, Shuffle Songs')
+    ap.add_argument('--now-playing', action='store_true', help='Now Playing and Centred in both themes: their layout, the volume band, the big cover')
     args = ap.parse_args()
     if args.home_menu and args.media: raise SystemExit('--home-menu and --media are separate runs')
+    if args.now_playing:
+        if json.loads((args.build/'manifest.json').read_text()).get('source_sha256') != source_sha256():
+            raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
+        now_playing(args.build)
+        raise SystemExit(0)
     # The Library walk precedes the original media walk, and the logins' follow Streaming's: give their steps their
     # settling budget too, and the logins' their waits.
     waits = lambda walk: sum(int(line.split()[1]) / 1000 for step in walk for line in step[1] if line.startswith('wait '))
