@@ -4324,6 +4324,10 @@ static int vol_poll(const void *info) {
 static void vol_paint(void *top, void *canvas) {
     void *wm = window_manager(), *lcd = P(canvas, CANVAS_LCD);
     if (!lcd || tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog")) return;
+#if M1PLUS /* V2.1's full VOLUME page (view_page2, tools/m1plus_ipod.py volume_dialog) draws itself */
+    void *strip = widget_lookup(top, "view_page1", 1);
+    if (strip && !widget_get_visible(strip)) return;
+#endif
     unsigned n = widget_count_children(wm);
     void *vol = widget_lookup(top, VIEW_VOL, 1), *label = widget_lookup(top, "label_vol", 1);
     if (n < 2 || !vol) return;
@@ -4331,11 +4335,22 @@ static void vol_paint(void *top, void *canvas) {
     rect_t area, bar, text;
     if (np) {
         void *slider = st.np_slider, *times = st.np_elapsed;
+#if M1PLUS /* Centred's V2.1 page: the times are above the bar, in the column under the gesture view */
+        int dy = I(st.np_win, W_Y) - I(top, W_Y), y = dy, ty = dy,
+            bh = widget_get_prop_int(slider, "bar_size", 8);
+        for (void *p = slider; p && p != st.np_win; p = P(p, W_PARENT)) y += I(p, W_Y);
+        for (void *p = times; p && p != st.np_win; p = P(p, W_PARENT)) ty += I(p, W_Y);
+        int from = y < ty ? y : ty, to = y + I(slider, W_H) > ty + I(times, W_H) ? y + I(slider, W_H) : ty + I(times, W_H);
+        area = (rect_t){ 0, from, I(st.np_win, W_W), to - from };
+        bar = (rect_t){ I(slider, W_X), y + (I(slider, W_H) - bh) / 2, I(slider, W_W), bh };
+        text = (rect_t){ 0, ty, area.w, I(times, W_H) };
+#else
         int dy = I(st.np_win, W_Y) - I(top, W_Y), y = dy + I(slider, W_Y),
             bh = widget_get_prop_int(slider, "bar_size", 8);
         area = (rect_t){ 0, y, I(st.np_win, W_W), dy + I(times, W_Y) + I(times, W_H) - y };
         bar = (rect_t){ I(slider, W_X), y + (I(slider, W_H) - bh) / 2, I(slider, W_W), bh };
         text = (rect_t){ 0, dy + I(times, W_Y), area.w, I(times, W_H) };
+#endif
     } else {
         area = (rect_t){ VOL_PANEL_X, VOL_PANEL_Y, I(top, W_W) - 2 * VOL_PANEL_X, VOL_PANEL_H };
         int x = area.x + VOL_PANEL_PAD, bw = area.w - 2 * VOL_PANEL_PAD - VOL_PANEL_TEXT;

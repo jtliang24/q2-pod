@@ -675,6 +675,14 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert big[3][0][1] == [0, art_y, 320, 320] and big[3][1][1] == [0, foot, 320, m1plus_ipod.BC_SHADE_H] and foot <= big[3][2][1][1] < art_y + 320
     assert big[3][3][2]['opacity'] == '0' and m1plus_ipod.BC_ART == m1ipod.UI_W
     assert words(0x53d0f4, 1) == (0x24020014,) and words(0x53d0fc, 1) == (0xae22ccd0,) and L['BC_IDLE'] == 0x97ccd0 and L['BC_IDLE_FULL'] == 20
+    # ... and the volume dialog: clear and full screen for vol_paint, the strip's children hidden; view_page2, V2.1's VOLUME page, as V2.1 has it.
+    vol_old, vol = (decode(read(i, 'release/assets/default/raw/ui/dialog/volume_dialog.bin')) for i in ('stock.squashfs', 'rootfs.squashfs'))
+    assert 'highlight' not in vol[2] and vol[1] == [0, 0, m1ipod.UI_W, m1ipod.UI_H] and vol[3][1] == vol_old[3][1]
+    assert all(vol[2][f'style:{st}:bg_color'] == vol[3][0][2][f'style:{st}:bg_color'] == '#00000000' for st in ('normal', 'disable', 'focused'))
+    assert vol[3][0][2]['self_layout'] == 'default(x=0,y=0,w=100%,h=100%)'
+    assert [(n[2].get('visible'), n[2].get('opacity')) for n in vol[3][0][3]] == [(None, '0'), ('false', None), ('false', None)]
+    for a, w, why in playing['volume_init']:
+        assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
     try:
         m1plus_ipod.playing_page(['window', [0, 0, 0, 0], {'name': 'playing_page'}, []])
     except ValueError as e:

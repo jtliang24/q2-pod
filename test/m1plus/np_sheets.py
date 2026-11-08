@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """M1 Plus: review sheets of Now Playing (ipod-ui 4.6), captured under qemu. Not a test: it checks nothing; boot.py's
 walks do. For each theme (Minimal, Classic) one sheet, a row per layout (the iPod's, Centred), each row the same steps:
-the art, lyrics, info, the visualizer, back on the art, the knob's volume band, the panel over the list after Back, and
-the big cover and its close.
+the art, lyrics, info, the visualizer, back on the art, the knob's volume band, the big cover and its close, the panel
+over the list after Back, and V2.1's VOLUME page from a tap on the status bar.
 
 usage: np_sheets.py BUILD OUT_DIR   (ImageMagick's montage; four runs, about two minutes each)"""
 import argparse, json, pathlib, shutil, subprocess, sys, tempfile, time
@@ -18,7 +18,7 @@ SLIDE = boot.swipe(260, 150, 60, 150)
 UNSLIDE = boot.swipe(60, 150, 260, 150)
 STEPS = [('art', []), ('lyrics', SLIDE), ('info', SLIDE), ('visualizer', SLIDE), ('art_again', UNSLIDE + ['wait 800'] + UNSLIDE + ['wait 800'] + UNSLIDE),
          ('volume', [boot.KNOB_UP]), ('bigcover', ['wait 3500'] + boot.tap(160, 150)), ('bigcover_title', ['wait 4000']), ('closed', boot.tap(160, 150)),
-         ('back', boot.NP_BACK), ('panel', [boot.KNOB_UP])]
+         ('back', boot.NP_BACK), ('panel', [boot.KNOB_UP]), ('volume_page', ['wait 3500'] + boot.tap(160, 15)), ('volume_page_back', boot.tap(30, 55))]
 BOOT_S, STEP_S = 45, 4
 WAIT = {'volume': 1, 'panel': 1, 'bigcover': 2}  # V2.1's volume closes itself after 3 s; the big cover's title fades after 3 s
 

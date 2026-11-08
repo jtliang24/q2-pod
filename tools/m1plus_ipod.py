@@ -450,6 +450,37 @@ def playing_stock(data):
     return ipod.encode(root)
 
 
+# The volume dialog: V2.1's 320x42 strip over the status bar becomes the payload's drawing (navigation.c vol_paint), as the
+# Q2's does: the dialog full screen and clear, the strip's children hidden, the band over Now Playing's bar and times, the
+# panel elsewhere. V2.1 shows the strip's img_vol each time (0x47d78c), so it stays, transparent. The knob's and keys'
+# opener passes context 1, the strip (on_wm_keyup_fun); a tap on the status bar passes 2 (on_wm_tsup_fun), and a tap on the
+# strip's top 30 px switches to 2 (on_volume_tsup_fun): view_page2, V2.1's full VOLUME page, which stays as V2.1 has it, under
+# the status bar, and vol_paint leaves alone. Any other tap on the strip closes it, now anywhere on the screen. The init's
+# move is to 0,0 (`playing.volume_init`).
+VOLUME = 'dialog/volume_dialog.bin'
+
+
+def volume_dialog(root):
+    """V2.1's volume dialog, clear and full screen, for vol_paint."""
+    check(root[2].get('name') == 'volume_dialog' and root[2].get('highlight') == 'default(alpha=0)' and root[1] == [0, 0, ipod.UI_W, 42],
+          'Unexpected volume dialog')
+    check([n[2].get('name') for n in root[3]] == ['view_page1', 'view_page2'], 'Unexpected volume pages')
+    strip, page = root[3]
+    check([n[2].get('name') for n in strip[3]] == ['img_vol', M1_STR['VIEW_VOL'], 'label_vol'] and
+          page[2].get('self_layout') == f'default(x=0,y={ipod.STATUS_H},w=100%,h={ipod.BOTTOM})', 'Unexpected volume strip')
+    del root[2]['highlight']
+    root[1] = [0, 0, ipod.UI_W, ipod.UI_H]
+    for state in TEXT_STATES:
+        for node in (root, strip):
+            node[2][f'style:{state}:bg_color'] = '#00000000'
+        root[2][f'style:{state}:border_color'] = '#00000000'
+    strip[2]['self_layout'] = 'default(x=0,y=0,w=100%,h=100%)'
+    icon, bar, label = strip[3]
+    icon[2]['opacity'] = '0'
+    bar[2]['visible'] = label[2]['visible'] = 'false'
+    return root
+
+
 # The big cover (a tap on Now Playing's art or Enlarged Art's countdown opens it, any tap closes it): V2.1's page, as the
 # Q2's: full screen, its art a centred square, a shade with the title on its foot. bigcover_page_init (0x529a24) binds the
 # window's tap and fills the labels by name; each time, its refresh (0x52952c) sets the artist visible, so the artist stays,
@@ -490,7 +521,7 @@ def quiet_icon(name, data):
 
 
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
-REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page, BIGCOVER: bigcover_page} | {
+REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page, BIGCOVER: bigcover_page, VOLUME: volume_dialog} | {
     p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
     p: library_page(p) for p in LIBRARY_PAGES}
 
@@ -542,7 +573,7 @@ def patch_code(data, symbols):
     playing = AUDIT['playing']
     for address, instruction, new, purpose in playing['status_tap']:
         word(int(address, 16), int(instruction, 16), int(new, 16), purpose)
-    for group in ('recursive_lookups', 'ab_dots'):
+    for group in ('recursive_lookups', 'ab_dots', 'volume_init'):
         for address, instruction, purpose in playing[group]:
             pin(data, int(address, 16), int(instruction, 16), purpose)
     # 4.5: Home. V2.1's initializer and refresh stay, each returning where a widget the iPod Home removes is gone (pinned);

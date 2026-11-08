@@ -863,6 +863,18 @@
         "0x2406016c",
         "the B dot's row, 364"
       ]
+    ],
+    "volume_init": [
+      [
+        "0x47e438",
+        "0x3025",
+        "dialog_volume_dialog_init moves the dialog to y 0"
+      ],
+      [
+        "0x47e458",
+        "0x2825",
+        "dialog_volume_dialog_init moves the dialog to x 0"
+      ]
     ]
   }
 }
