@@ -474,8 +474,8 @@ static void spot_refresh(void) {
     if (sp.loading == 1 && time_now_ms() - sp.load_at >= SPOT_WAIT_MS) sp.loading = 2;
     if (sp.loading == 2 && spot_started()) sp.loading = 0; /* a paused track writes no new state */
     int track = sp.auth >= 0 && !sp.loading && sp.track[0] && strcmp(sp.state, "none"), installed = sp.launched;
-    widget_set_visible(ui.info, track, 0);
-    widget_set_visible(ui.msg, !track, 0);
+    view_show(ui.info, track); /* hidden is not insensitive: ui.msg, made last, would take the info view's taps */
+    view_show(ui.msg, !track);
     if (!track) {
         const char *note = "Loading…", *sub = SPOT_T_WAIT_SUB;
         if (!installed) note = SPOT_T_MISSING_NOTE, sub = SPOT_T_MISSING_SUB;
