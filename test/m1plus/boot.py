@@ -97,6 +97,8 @@ static unsigned tlen;
 /* "net 1" holds V2.1's network status (the word networkGetConnectStatus returns, NET_ADDR) at connected, as the
  * touch thread waits, until "net 0" clears it: the sandbox has no network, and Tidal and HiFi Music open only with one. */
 static int net;
+/* "bar 1" holds V2.1's bluetoothflag and wififlag up, which show the status bar's two icons (show_sysbar_face): the sandbox has neither radio. */
+static int bar_flags;
 static void nap(long ms) { long t[2] = { ms / 1000, ms % 1000 * 1000000 }; nanosleep(t, 0); }
 void *ts_open(const char *dev, int nonblock) { (void)dev; (void)nonblock; static int ts; return &ts; }
 int ts_config(void *ts) { (void)ts; return 0; }
@@ -104,6 +106,7 @@ int ts_close(void *ts) { (void)ts; return 0; }
 static void next_line(char *line) {
     for (;;) {
         if (net) *(volatile int *)NET_ADDR = 1;
+        if (bar_flags) *(volatile char *)BT_FLAG = *(volatile char *)WIFI_FLAG = 1;
         for (unsigned i = 0; i < tlen; i++)
             if (tbuf[i] == '\n') {
                 for (unsigned j = 0; j < i; j++) line[j] = tbuf[j];
@@ -136,6 +139,7 @@ int ts_read(void *ts, struct ts_sample *s, int nr) {
         const char *p = line;
         if (line[0] == 'w') { p += 4; nap(num(&p)); continue; }
         if (line[0] == 'n') { p += 4; net = num(&p); *(volatile int *)NET_ADDR = net; continue; }
+        if (line[0] == 'b') { p += 4; bar_flags = num(&p); continue; }
         s->x = num(&p); s->y = num(&p); s->pressure = num(&p);
         gettimeofday(&s->tv, 0);
         return 1;
@@ -165,9 +169,10 @@ def tool(name):
 def shim(out, root, sn_addr, net_addr):
     """SHIM, compiled for V2.1's ABI (o32, nan2008, FR=1) against its own glibc 2.28."""
     src = out/'shim.c'
+    syms = symbols(root/'release/bin/demo')
     src.write_text(f'#define W {W}\n#define H {H}\n#define FB_FILE "/out/fb.raw"\n#define TOUCH_FILE "/out/touch"\n'
                    f'#define KEYS_FILE "/out/keys"\n#define KNOB_FILE "/out/knob"\n#define SN_ADDR {sn_addr:#x}u\n'
-                   f'#define NET_ADDR {net_addr:#x}u\n' + SHIM)
+                   f'#define NET_ADDR {net_addr:#x}u\n#define BT_FLAG {syms["bluetoothflag"]:#x}u\n#define WIFI_FLAG {syms["wififlag"]:#x}u\n' + SHIM)
     run('clang', '--target=mipsel-linux-gnu', '-march=mips32r2', '-mabi=32', '-mfp64', '-mnan=2008', '-mabs=2008', '-fPIC',
         '-ffreestanding', '-fno-builtin', '-fno-stack-protector', '-O2', '-Wall', '-Werror', '-c', src, '-o', out/'shim.o')
     run('ld.lld', '-m', 'elf32ltsmip', '-shared', '--hash-style=sysv', '-soname', 'shim.so', out/'shim.o',
@@ -180,6 +185,7 @@ IPOD_CLASSIC = '[IPOD]\nTHEME=1\nACCENT=1\n'
 HOME_FULL, HOME_SPLIT = 'HOME=1\n', 'HOME=0\n'
 
 CARD_KNOB = 1  # Knob: Navigation with a card (start); a review sheet may want the volume
+BATTERY_UV = None  # a review sheet's battery voltage (start), which V2.1 reads for its level; the sandbox has none, and the level is garbage
 def net_address(build):
     """The word the shim's "net" lines set: V2.1's network flag, as networkGetConnectStatus reads it
     (lw v0, -0x7f4c(gp); jr ra; lw v0, -0x53c8(v0))."""
@@ -202,6 +208,9 @@ def start(image, out, seconds, sn_addr, net_addr, trace='', home_menu='', card=N
     # Knob: Volume, so the walk starts on V2.1's own knob; it turns Knob: Navigation on itself (patch.py has the default).
     # The media walk's Library steps go back and hold with Previous, so it starts in Navigation (the M1's default).
     (root/'mnt/data/config.ini').write_text(f'[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB={CARD_KNOB if card else 0}\n' + IPOD_CLASSIC + home + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
+    if BATTERY_UV:
+        (root/'sys/class/power_supply/battery').mkdir(parents=True, exist_ok=True)
+        (root/'sys/class/power_supply/battery/voltage_now').write_text(f'{BATTERY_UV}\n')
     conf = (root/'etc/dbus-1/system.conf').read_text()
     # No other users exist in the sandbox: the bus runs as its caller.
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))
