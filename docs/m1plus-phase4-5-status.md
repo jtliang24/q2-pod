@@ -49,4 +49,5 @@ passed every gate and a second device pass, and Knob Up: List Down and a cover-l
 
 1. None open. The Carousel drops knob detents that come within about 200-250 ms of the last one that moved it, but
    the physical knob does not turn that fast (the user's call), so there is no fix.
-2. Not covered: car-mode boot resume (car mode was not switched on).
+2. Vehicle mode's cable behaviour was confirmed by the user by hand (unplug: countdown, then off; plug in: boots).
+   Whether the boot resumes into Now Playing was not reported.

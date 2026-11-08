@@ -3977,7 +3977,9 @@ suites, `update.tar` byte-identical to 1.5.9's).
 - **A cover-less track** (a generated WAV on the card, since every album has art): Split's art shows the grey disc
   placeholder, and Now Playing shows one of V2.1's default covers (a different one each play). The carousel's Now
   Playing card is the generic note icon whatever plays.
-- **Not covered:** car-mode boot resume, because car mode was not switched on.
+- **Vehicle mode** (confirmed by the user by hand, not driven over q2remote): with it on, unplugging the charging cable
+  starts a countdown and then shuts the player off, and plugging the cable back in boots it. Whether the boot resumes
+  into Now Playing was not reported.
 
 Seen, not changed:
 - Switching the theme to Classic and back to Minimal reset Minimal's accent from Ivory to Graphite (`MINIMAL_ACCENT`
