@@ -37,9 +37,17 @@ Flashed by the user and driven over q2remote on Nov 7: every Home destination in
 themes, Settings and Back, both knob modes, artwork and a reboot. The device's configuration, boot target and
 volume were restored. [§69](m1plus-progress.md#69-phase-45-the-portrait-ipod-home-nov-7) has the record.
 
+## Fixes and the second pass (Nov 8)
+
+The five findings are done except the Carousel's knob rate ([§70](m1plus-progress.md#70-phase-45-the-device-pass-fixes-and-a-second-pass-nov-8)):
+the login Back (`698976fd`, `a8ab1ec7`), the Settings list's first selection (no fix; `34dae142` pins the Q2's
+behaviour), the Shortcut card's art (`b6f9945d`, `8ef0a607`), the q2remote knob pace (`423e8bcd`) and the cosmetics
+(the aesthetics queue in [m1plus-ipod-ui.md](m1plus-ipod-ui.md#aesthetics-queue)). `V04Om` (`work/phase4/4.5f/a7`)
+passed every gate and a second device pass, and Knob Up: List Down and a cover-less track are now covered.
+
 ## Remaining
 
-1. Plan the five findings from the pass (`.plan/`): Tidal and HiFi Music login Back skips Streaming, the Settings
-   list's first selection, the Carousel's stale Shortcut icon, the carousel's tick filter on a burst, and the
-   cosmetics. The two Split and Classic cosmetics wait for the aesthetics pass.
-2. Not covered: Knob Up: List Down, car-mode boot resume and a cover-less track.
+1. The Carousel drops knob detents that come within about 200-250 ms of the last one that moved it (a 5-detent turn at
+   40 ms moves one card; at 250 ms and slower, five). The lists count every detent. A fix needs its own plan, and a
+   fast turn on the real knob is still untried.
+2. Not covered: car-mode boot resume (car mode was not switched on).

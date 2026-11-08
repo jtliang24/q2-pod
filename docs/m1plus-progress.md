@@ -3931,6 +3931,72 @@ Not covered: Knob Up: List Down, car-mode boot resume (the emulator walks cover 
 
 `graphify update .` refreshed the AST graph.
 
+## 70. Phase 4.5: the device-pass fixes and a second pass (Nov 8)
+
+The plan was `.plan/phase4-5-fixes.md`, one item per commit with its test.
+
+1. **Tidal and HiFi Music login Back** (`698976fd`, `a8ab1ec7`). Back from either login returns to Streaming on its
+   row, by the page's button, the status bar's chevron and Previous. HiFi's login opens under AWTK's input-method
+   keyboard, its own window, so the chevron and Previous had been a Return in the keyboard; `back_window()` now acts on
+   the page under it.
+2. **The Settings list's first selection:** no fix (`34dae142`, a test). The Q2 does the same: the list keeps its own
+   selection for the Home window's life (Playback on the first open, then the last used). The device's "System first"
+   came from the Screen Off change made through System before the pass. `m1_home_modes` pins it in all three layouts.
+3. **The Carousel's Shortcut card** (`b6f9945d`, `8ef0a607`). It no longer keeps the Favorites heart. It draws V2.1's
+   own Shortcut icon (the arrow-in-box glyph on the accent disc, grey in Minimal), whatever the Shortcut is; the
+   caption names the target.
+4. **q2remote `knob N [--step-ms MS]`** (`423e8bcd`). The plan took the old `knob` for zero-spaced; it already put
+   20 ms between a press and its release, about 45 ms a detent. The default is now 40 ms and a pace is a flag.
+5. **Cosmetics** went to the aesthetics queue (`m1plus-ipod-ui.md`).
+
+**Build `V04Om`** (`work/phase4/4.5f/a7`, update SHA-256 `45b7ffc2…`, from `423e8bcd`) passed every gate: the audit,
+the MIPS suite (691 expected failures in 10 later-phase groups), the boot, Home-menu and media walks (with the Tidal
+and HiFi Back steps), playback, M4B, ID3, headset, LDAC, Bluetooth, the port report and the Q2 comparison (all 33
+suites, `update.tar` byte-identical to 1.5.9's).
+
+**Device pass (Nov 8).** The user flashed `V04Om` through the TF card update; the installed `release/bin/demo`
+(`f27e607d…`) matches `a7`'s manifest. Over q2remote, Screen Off set to Off. Screenshots:
+`work/phase4/4.5f/device-pass/`.
+- **Login Back:** Tidal and HiFi Music, each by the page's button, the chevron and Previous, returned to Streaming.
+- **Settings' first selection:** fresh after a reboot, Playback in Split (touch), Full (knob) and the Carousel (knob).
+  Choosing System, Back and reopening gave System, by the other input; Back from Settings kept the Home row or card.
+- **The Shortcut card:** the new art in both themes across all five values (Favorites, Shuffle, Rated Albums,
+  Artists, Albums), the caption following. Minimal's card is grey, Classic's the accent blue.
+- **Knob pace** (5 detents a turn, `--step-ms` as shown; cards or rows moved):
+
+  | `--step-ms` | 0 | 20 | 40 | 80 | 150 | 200 | 250 | 400 | 600 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | Carousel (7 cards), two turns each | 5, 1 | 1, 1 | 1, 1 | 2, 2 | 3, 3 | 3, 3, 3 | 5, 5 | 5, 5 | 5, 5 |
+  | Full list, down and up | 5, 5 | 5, 5 | 5, 5 | 5, 5 | 5, 5 | | | | |
+
+  The list counts every detent, even in one write. The Carousel counts only those at least about 200-250 ms after the
+  last one that moved it, so a fast turn loses detents; this is not an artifact of the tool. Whether it is stock's tick
+  filter or the card animation is not established, and a real knob was not turned.
+- **Knob Up: List Down** flips the direction: on the Full list a detent that went up now goes down, and on the
+  carousel the cards reverse.
+- **A cover-less track** (a generated WAV on the card, since every album has art): Split's art shows the grey disc
+  placeholder, and Now Playing shows one of V2.1's default covers (a different one each play). The carousel's Now
+  Playing card is the generic note icon whatever plays.
+- **Not covered:** car-mode boot resume, because car mode was not switched on.
+
+Seen, not changed:
+- Switching the theme to Classic and back to Minimal reset Minimal's accent from Ivory to Graphite (`MINIMAL_ACCENT`
+  7 to 0). Whether the Q2 does the same is unchecked.
+- After a single-track queue ended (the WAV, seeked to its end), playback went on to another track: Sample Track in
+  `ZZTest`, then the last Vergecast episode.
+- A mistaken tap opened Playback's EQ page and its taps landed on it (Off, 0 dB shown); `peq-active` was rewritten at
+  that moment and its earlier content was not saved.
+- The display page's clipped label is in the aesthetics queue.
+
+**Restored:** Screen Off to 1 min through the UI (`LIGHTTIME=3`), the configuration byte for byte (`f132ba43…`; the
+pass had added `HOME=0` and `SHORTCUT=3`, and Minimal's accent), the boot target to `rockbox` (`7c538425…`, switched to
+`q2pod` for three reboots), and the volume to 21. The test WAV was removed. The card keeps `V04Om` as `update.bin` and
+`V04Hm` as `.q2/update-V04Hm.bin`; the playing queue is now the Vergecast, paused.
+
+**Item 4's outcome:** the Carousel's loss is real, so an input fix is planned after this pass; the lists need none.
+
+`graphify update .` refreshed the AST graph.
+
 ## How to check a build now
 
 ```sh

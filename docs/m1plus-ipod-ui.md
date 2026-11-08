@@ -294,6 +294,22 @@ Once the branch reaches parity (Phases 1 to 4.7 pass on the device):
   `drift.py` then plans 1.6.0 and 1.6.3. The saved `work/sync/1.6.0-wip/` resolutions are reference only.
 - The 1.6.x iPod features then arrive as ordinary port rows.
 
+## Aesthetics queue
+
+Looks left for the visual pass once the M1's functions are all ported. None is a fault; each was seen on the device.
+The screenshots are under `work/phase4/4.5/device-pass/` (Phase 4.5's pass on `V04Hm`).
+- **Split's knob walk clips the top row.** Walking down Split's menu with the knob scrolls the list so that the row
+  above the selection sits half under the art (`53-fav-sel.png`: Library cut at the top, Favorites selected).
+- **Classic's Settings card is grey.** In Classic the Carousel's other cards keep V2.1's colours; Settings keeps its
+  grey gear (`131-card.png`).
+- **Classic's settings icons take different colours.** V2.1's rows keep their own colours (System: purple, teal,
+  orange, green, red), and the payload's rows take theirs (Display: Appearance red, Coverflow blue; Controls: orange),
+  with no common scheme (`141-system.png`, `143-controls.png`, `180-display.png`).
+- **Display's first rows are shifted and clipped.** The rows without icons (Brightness, Screen Off, Lock screen,
+  Atmosphere Lamp Settings) start at the left edge, and "Atmosphere Lamp Settings" loses its first letters in both
+  themes (`112-display.png`; again on `V04Om`, `work/phase4/4.5f/device-pass/008-display.png`). It may be a marquee
+  caught mid-scroll.
+
 ## Files
 
 - **Edited:** `tools/m1plus.py`, `patch/m1plus_offsets.inc`, `patch/m1plus_q2.inc`, `patch/navigation.c`,
