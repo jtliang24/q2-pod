@@ -10,6 +10,7 @@ Every other layout name keeps the Q2's value until its item.
 Phase 3 adds the V2.1 patch around that copy: patch/m1plus_ipod.json (V1.32's pages mapped onto V2.1's, every
 other section empty), and patch_asset and patch_code, which m1plus.build() runs on every build. A Phase 4 item adds
 its page to REWRITES and its sites to the JSON; 4.1 adds the `styles` section, through patch_style."""
+import copy
 import functools
 import importlib.util
 import json
@@ -34,6 +35,9 @@ def load(profile=PROFILE):
 
 
 ipod = load()
+
+M1_STR = {m[1]: m[2] for m in re.finditer(r'^#define\s+(\w+)\s+"([^"]*)"', (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M)}
+M1_VIEW_COVER, M1_VIEW_FAV, M1_VIEW_MORE = M1_STR['VIEW_COVER'], M1_STR['VIEW_FAV'], M1_STR['VIEW_MORE']
 
 AUDIT = json.loads((ROOT/'patch/m1plus_ipod.json').read_text())
 UI_ASSETS = AUDIT['assets'] | AUDIT['navbar_only'] | AUDIT['slide_only']
@@ -281,8 +285,156 @@ def home_card_shortcut(down=False):
                             '-resize', f'{CARD_ART}x{CARD_ART}!', *shade, *ipod.PNG_OUT, data=b'')
 
 
+# 4.6: V2.1's Now Playing is app_gesture > view_local + view_dlna, where the Q2's is flat. The iPod page keeps V2.1's tree
+# and its transport row (view_buttons, unchanged inside): the top row (btn_return, the back; the position; the HR badge,
+# the heart and More), the art slide holding the art, title, artist and album, the dots, the bar and the times. The gesture
+# and its views span the window, so the band vol_paint draws over the bar and the times is in the window's coordinates:
+# both are view_local's children. V2.1's lookups of all of them are recursive (`playing.recursive_lookups`). The bar keeps
+# V2.1's x and width, which getx_by_playtime's A-B dots assume, as they assume the row under the bar
+# (`playing.ab_dots`). label_index and label_playlen stay, hidden: V2.1 still writes them. view_dlna stays as V2.1 has it.
+PLAYING_PAGE = 'playing_page.bin'
+NP_LOCAL = ['slide_view_view', 'img_hr', 'scrlabel_title', 'scrlabel_artist', 'btn_return', 'slider_play', 'img_repeata',
+            'img_repeatb', 'view_buttons']
+NP_COLUMN = ['slide_view', 'slide_indicator', 'label_playtime', 'label_playlen', 'label_index', 'btn_more', 'btn_fav']
+NP_BUTTONS = ['btn_playmode', 'btn_prev', 'btn_play', 'image_wait', 'btn_next', 'btn_queue']
+TEXT_STATES = ('normal', 'disable', 'focused')
+
+
+def np_text(node, px, color, hold=False):
+    """A Now Playing label's size and colour in every state a label styles, left-aligned unless it is a time."""
+    node[2].update({f'style:{s}:font_size': str(px) for s in TEXT_STATES})
+    node[2].update({f'style:{s}:text_color': color for s in TEXT_STATES})
+    if hold:
+        # V2.1's lull only pauses between loops; delay holds a new song's start too, as the album's marquee
+        node[2].update({f'style:{s}:text_align_h': 'left' for s in TEXT_STATES})
+        node[2].update(delay=str(ipod.inc('MARQUEE_HOLD_MS')), lull=str(ipod.inc('MARQUEE_HOLD_MS')))
+
+
+def np_tree(root):
+    """V2.1's exact Now Playing, checked: its named widgets, and view_local's and the column's own children."""
+    check(root[2].get('name') == 'playing_page' and [n[2].get('name') for n in root[3]] == ['app_gesture'],
+          'Unexpected Now Playing page')
+    gesture, = root[3]
+    check([n[2].get('name') for n in gesture[3]] == ['view_local', 'view_dlna'], 'Unexpected Now Playing views')
+    local = gesture[3][0]
+    check([n[2].get('name') for n in local[3]] == NP_LOCAL, 'Unexpected Now Playing view')
+    named = {n[2].get('name'): n for n in ipod.walk(local)}
+    check([n[2].get('name') for n in named['slide_view_view'][3]] == NP_COLUMN, 'Unexpected Now Playing column')
+    check([n[2].get('name') for n in named['view_buttons'][3]] == NP_BUTTONS, 'Unexpected transport row')
+    check([n[2].get('name') for n in named['slide_view'][3]] == ['view', 'view_lyrics', 'view_info'], 'Unexpected Now Playing pages')
+    return gesture, local, named
+
+
+def np_bar(slider, cy, touch):
+    """The progress bar, through ipod.np_slider, in a touch-high slider centred on row cy, at V2.1's x and width."""
+    check(slider[1] == [12, 342, 296, 30] and slider[1][::2] == [M1['NP_BAR_X'], M1['NP_BAR_W']], 'Unexpected progress bar')
+    ipod.np_slider(slider, M1['NP_BAR_X'], cy, M1['NP_BAR_W'], ipod.inc('NP_BAR_MINIMAL'))
+    slider[1] = [M1['NP_BAR_X'], cy - touch // 2, M1['NP_BAR_W'], touch]
+    # V2.1 draws a style it doesn't know as the widget's default, whose thumb is the rounded_* icon: none, in every state.
+    slider[2].update({f'style:{state}:icon': '' for state in ('normal', 'pressed', 'over', 'disable', 'focused')})
+
+
+def playing_page(root):
+    """V2.1's Now Playing as the iPod's, keeping its transport row."""
+    gesture, local, named = np_tree(root)
+    view_dlna = gesture[3][1]
+    width, height = ipod.UI_W, ipod.BOTTOM
+    check(gesture[1] == [0, 0, width, 438] and local[1] == view_dlna[1] == [0, 0, width, 438], 'Unexpected Now Playing size')
+    gesture[1], local[1], view_dlna[1] = [0, 0, width, height], [0, 0, width, height], [0, 0, width, height]
+    gesture[2]['self_layout'] = f'default(x=0,y=0,w={width},h={height})'
+    root[2]['style:normal:bg_color'] = '#000000'  # paint_cover's corners are the page's black
+
+    column, slide = named['slide_view_view'], named['slide_view']
+    art_page, lyrics_page, info_page = slide[3]
+    slide_y, slide_h = M1['NP_SLIDE_Y'], M1['NP_DOTS_Y'] - M1['NP_SLIDE_Y']
+    column[1] = [0, slide_y, width, slide_h + 10]
+    check(slide[2]['self_layout'] == 'default(x=0,y=0,w=100%,h=254)', 'Unexpected Now Playing slides')
+    slide[1][3] = slide_h
+    slide[2]['self_layout'] = f'default(x=0,y=0,w=100%,h={slide_h})'
+
+    # The art slide: the art, then the title, artist and album under it.
+    cover, = art_page[3]
+    check(cover[2]['name'] == M1_VIEW_COVER, 'Unexpected Now Playing art')
+    cover[1] = [M1['NP_ART_X'], M1['NP_ART_Y'] - slide_y, M1['NP_ART'], M1['NP_ART']]
+    title, artist = named['scrlabel_title'], named['scrlabel_artist']
+    album = copy.deepcopy(artist)
+    album[2].update(name='label_ipod_album', text='')
+    title[1] = [M1['NP_TEXT_X'], M1['NP_TITLE_Y'] - slide_y, M1['NP_TEXT_W'], 28]
+    artist[1] = [M1['NP_TEXT_X'], M1['NP_ARTIST_Y'] - slide_y, M1['NP_TEXT_W'], 22]
+    album[1] = [M1['NP_TEXT_X'], M1['NP_ALBUM_Y'] - slide_y, M1['NP_TEXT_W'], 22]
+    np_text(title, ipod.NP_TITLE_PX, '#FFFFFF', hold=True)
+    np_text(artist, ipod.NP_META_PX, f'#{ipod.inc("NP_ARTIST_RGB"):06X}', hold=True)
+    np_text(album, ipod.NP_META_PX, f'#{ipod.inc("NP_ALBUM_RGB"):06X}', hold=True)
+    art_page[3] += [title, artist, album]
+
+    # The lyrics page is the payload's (patch/lyrics.c): its rows span the page and start a slot down, ending 20 px above
+    # the page's foot; "No lyrics" stays in its middle. The info page keeps V2.1's rows.
+    view_lrc, msg = named['view_lrc'], named['label_lyricmsg']
+    lrc = named['scroll_lrc']
+    check(view_lrc[1] == [33, 26, 254, 228] and lrc[2].get('self_layout') == 'default(x=0,y=0,w=100%,h=100%)' and
+          'children_layout' not in lrc[2] and msg[1] == [0, 100, width, 28], 'Unexpected lyrics page')
+    check(3 * ipod.inc('LYRIC_SLOT') <= slide_h - 20, 'Three lyric lines must fit the page')
+    view_lrc[1] = [0, 0, width, slide_h - 20]
+    lrc[2]['children_layout'] = f'list_view(x=0,y={ipod.inc("LYRIC_SLOT")},s=0)'
+    msg[1][1] = (slide_h - 28) // 2
+
+    dots = named['slide_indicator']
+    for key in dots[2]:
+        if key.endswith(':selected_fg_color'): dots[2][key] = '#eeeeee'
+        elif key.endswith(':fg_color'): dots[2][key] = '#555555'
+    dots[1] = [0, slide_h, width, 10]
+    # Without an anchor, the indicator centres its dots as the slide_view stands, mid-swipe too (tools/ipod.py).
+    dots[2].update(self_layout=f'default(x=0,y={slide_h},w=100%,h=10)', anchor_x=f'{width // 2}px', anchor_y='0px')
+
+    # The top row: the back, the position, the HR badge, then the heart and More at its right.
+    top, back_w, icon_w = M1['NP_TOP_H'], M1['NP_BACK_W'], M1['NP_ICON_W']
+    fav, more, index = named[M1_VIEW_FAV], named[M1_VIEW_MORE], named['label_index']
+    back, badge = named['btn_return'], named['img_hr']
+    check(back[1] == [0, 0, 80, 36] and badge[1] == [280, 10, 28, 18] and badge[2].get('visible') == 'false', 'Unexpected top row')
+    back[1] = [0, 0, back_w, top]
+    more[1], fav[1] = [width - icon_w, 0, icon_w, top], [width - 2 * icon_w, 0, icon_w, top]
+    badge[1] = [width - 2 * icon_w - badge[1][2] - 4, (top - badge[1][3]) // 2, *badge[1][2:]]
+    pos = copy.deepcopy(index)
+    pos[1] = [back_w + 8, 0, badge[1][0] - back_w - 8, top]
+    pos[2].update(name='label_ipod_pos', text='')
+    pos[2].update({f'style:{s}:text_align_h': 'left' for s in TEXT_STATES})
+    np_text(pos, 16, ipod.NP_GREY)
+    index[2]['visible'] = 'false'
+
+    # The bar and the times, each view_local's child; the A-B dots' row stays V2.1's, under the bar.
+    slider, elapsed, total = named['slider_play'], named['label_playtime'], named['label_playlen']
+    np_bar(slider, M1['NP_BAR_CY'], M1['NP_BAR_TOUCH'])
+    remain = copy.deepcopy(total)
+    remain[2].update(name='label_ipod_remain', text='')
+    total[2]['visible'] = 'false'
+    times_y, time_w = M1['NP_TIMES_Y'], 80
+    elapsed[1] = [M1['NP_BAR_X'], times_y, time_w, 16]
+    remain[1] = [width - M1['NP_BAR_X'] - time_w, times_y, time_w, 16]
+    for n in (elapsed, remain):
+        np_text(n, ipod.inc('NP_TIMES_PX'), ipod.NP_GREY)
+    for name in ('img_repeata', 'img_repeatb'):
+        check(named[name][1][0] == M1['NP_BAR_X'], f'Unexpected {name}')
+        named[name][1][1] = M1['NP_AB_Y']
+    buttons = named['view_buttons']
+    check(buttons[1] == [0, 372, width, 66], 'Unexpected transport row')
+    buttons[1][1] = M1['NP_BUTTONS_Y']
+
+    column[3] = [slide, dots, total, index]
+    local[3] = [column, pos, badge, fav, more, back, slider, named['img_repeata'], named['img_repeatb'], elapsed, remain, buttons]
+    return root
+
+
+def quiet_icon(name, data):
+    """The audited V2.1 control image (`quiet_icons`) as the iPod's quiet glyph of the same name, greyer when pressed."""
+    check(sha(data) == AUDIT['quiet_icons'].get(name), f'{name}: unaudited control icon')
+    return ipod.imagemagick('png:-', '-trim', '+repage', '-filter', 'Lanczos', '-resize', '24x24',
+                            '-channel', 'RGB', '-fill', '#aaaaaa' if name.endswith('down.png') else '#eeeeee',
+                            '-colorize', '100', '+channel', '-gravity', 'center', '-background', 'none',
+                            '-extent', '28x28', *ipod.PNG_OUT, data=data)
+
+
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
-REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page} | {
+REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page} | {
     p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
     p: library_page(p) for p in LIBRARY_PAGES}
 
@@ -328,6 +480,15 @@ def patch_code(data, symbols):
     # 4.3: the settings rows, through V2.1's list_view layouter's layout slot (data, vtable 0x9047a0 + 8).
     word(M1['LIST_VIEW_LAYOUT_SLOT'], M1['LIST_VIEW_LAYOUT'], symbols['ipod_list_layout'],
          'settings lists stack SET_ROW rows and map their children')
+    # 4.6: V2.1's status bar tap opens the VOLUME page (on_wm_tsup_fun, a window manager handler: any window's pointer-up)
+    # within 42 px of the screen's top, its stock title's first rows. The iPod's top row starts under the 30 px bar, and
+    # its heart must not open the page too. The other names the page relies on are pinned as they are.
+    playing = AUDIT['playing']
+    for address, instruction, new, purpose in playing['status_tap']:
+        word(int(address, 16), int(instruction, 16), int(new, 16), purpose)
+    for group in ('recursive_lookups', 'ab_dots'):
+        for address, instruction, purpose in playing[group]:
+            pin(data, int(address, 16), int(instruction, 16), purpose)
     # 4.5: Home. V2.1's initializer and refresh stay, each returning where a widget the iPod Home removes is gone (pinned);
     # the playing strip's tap is not bound; the boot resume stays on Home, as the Q2's (ipod.patch_code).
     home = AUDIT['home']

@@ -481,7 +481,20 @@
     "system_time.png": "c1d67adaea5e33384a1fc998bfa094fd9a44adfb1ef94c8adec59f86e6a1f53b",
     "system_update.png": "35c443cb8a9576403c6ef5cee2be13f52d36d7a761bb1aa2f69e6c6f444cc8c6"
   },
-  "quiet_icons": {},
+  "quiet_icons": {
+    "p_cycle.png": "c6ef968c4c218148eb8447c4c60c7eda4961ade831f44a760e4bf2cc8834c369",
+    "p_cycle1.png": "e1b71a2f984db58e82b2fc12e917d4a1665548b0e09f72891344cdb1ecb8f553",
+    "p_fav.png": "61abbf78e1102a316fc236771aa4f038fecc060fc05e84be8a54333115b57f3d",
+    "p_favdown.png": "9d786dd17697327a7bdf758b52af5a1a146e7d192c1080cd11d8a964e153a351",
+    "p_more.png": "252fca3298294b3c5eb8bcbd14161a4db82298a8ed5e8c90b6078c7760ae22a1",
+    "p_moredown.png": "68ea964dedb99e5afff6dc23acd9fd8210404488d1b6c0214c703dd23a7d2156",
+    "p_order.png": "142e690857a8fac68dac14b1f0c9b37ea173a3290ad0af75ecbc0db1e3b25db3",
+    "p_playqueue.png": "37b9774ebcaafa169ad6f46a5e530e8fabbf1bcbe68a06ad923bddbf2c94f409",
+    "p_playqueuedown.png": "1d2c4bd1b0205ccc9e4395087ea5e8f22f58d55f6f24cc830c614ed0bee7947a",
+    "p_random.png": "e4eeae87a8443b5b2dbd1778213417300e1e8f2e5b3ef84f43734e84a47ded20",
+    "p_unfav.png": "e9c9494962b570c4d5b571b48db472c9dbef7fd85074687a940134e021fdf9e8",
+    "p_unfavdown.png": "e109f2a535faf16cc1bd3061c76c1303fa94d219ddfd89e8d9270e0f4f3e64f2"
+  },
   "status_icons": {
     "bar_bt.png": "c14288c2d869c6f4d92e3a662b5a8ac3eed835c0c9a2f331c5c4da6aeb51fd9d",
     "bar_btcon.png": "a00eb3eab090ba96c3ccff5f60a1d0db422dd74bf90c9b164886772b8eeea7de",
@@ -616,5 +629,240 @@
       "home_page_init's memory-play resume, navigator_to_with_context(\"playing_page\", {queue, index, class, mode}) (mode 2 in car mode, else 3): ringnav_boot starts the queue paused and stays on Home outside car mode"
     ],
     "menu_names": "0x97c940"
+  },
+  "playing": {
+    "status_tap": [
+      [
+        "0x4cd938",
+        "0x2842002a",
+        "0x2842001e",
+        "the status bar's tap opens the VOLUME page within its own 30 px, not 42"
+      ],
+      [
+        "0x4cd94c",
+        "0x2842002a",
+        "0x2842001e",
+        "the status bar's tap opens the VOLUME page within its own 30 px, not 42"
+      ]
+    ],
+    "recursive_lookups": [
+      [
+        "0x539740",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x5397f4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53989c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539c54",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539c94",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539cb4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539cd4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539cf4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53a254",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53a294",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53a66c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53a9e4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53aab8",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ab1c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ab9c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53abe0",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53aed0",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53aee8",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53b904",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53b92c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53bbc8",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53be14",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53bf24",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53bf38",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53bf58",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53c354",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53c6d4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53c90c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53c93c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cb7c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cb94",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cd14",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cd3c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ce50",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ce7c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ceb0",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cef0",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cf88",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ]
+    ],
+    "ab_dots": [
+      [
+        "0x53b8d4",
+        "0x24020128",
+        "getx_by_playtime: the bar's 296 px width"
+      ],
+      [
+        "0x53b8ec",
+        "0x2442000c",
+        "getx_by_playtime: the bar's x, 12"
+      ],
+      [
+        "0x53b9c4",
+        "0x2406016c",
+        "the A dot's row, 364"
+      ],
+      [
+        "0x53ba48",
+        "0x2406016c",
+        "the A dot's row, 364"
+      ],
+      [
+        "0x53ba64",
+        "0x2406016c",
+        "the B dot's row, 364"
+      ]
+    ]
   }
 }

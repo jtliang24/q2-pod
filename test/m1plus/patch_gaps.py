@@ -8,7 +8,6 @@ GAPS = {
     # iPod UI assets (ipod-ui 3)
     '2212dfddf4': 'iPod UI assets (ipod-ui 3)',  # patch.py:1383 m=Machine(); root=asset_node(m,decode((B/ui/localmusic/album_page.bin).read_byte
     'ff3de6c4e5': 'iPod UI assets (ipod-ui 3)',  # patch.py:1383 m=Machine(); root=asset_node(m,decode((B/ui/localmusic/album_page.bin).read_byte
-    '200658faae': 'iPod UI assets (ipod-ui 3)',  # patch.py:2091 node=next(n for n in ui_walk(decode((B/ui/playing_page.bin).read_bytes())) if n[
     '5965b040da': 'iPod UI assets (ipod-ui 3)',  # patch.py:2092 for x in (22,187,353):
     'cd20baf1b9': 'iPod UI assets (ipod-ui 3)',  # patch.py:11138 assert texts(info)==[Spotify,Song,A, B,LP,0:10,-3:10]
     '35b96a16c8': 'iPod UI assets (ipod-ui 3)',  # patch.py:11145 m.advance(2500); assert texts(info)[4:]==[0:12,-3:08] and len(m.thumbs)==1

@@ -3404,13 +3404,16 @@ static int bar_repaint(const void *info) {
  * state and relayouts the view for a new one. */
 #if M1PLUS
 /* The back chevron shows whenever the top window is not Home (ipod-ui 4.2), or Home shows its Settings list (4.5),
- * which it closes. Only a paint changes it: the top window's
+ * which it closes, and not on Now Playing, whose top row has its large back (4.6). The volume, drawn by a transparent
+ * dialog over the page, leaves the page's bar as it was. Only a paint changes it: the top window's
  * (or the bar's) background reaches bar_sync, which then repaints the bar after the frame; the 1 s tick leaves it, as
  * nothing paints after a change made there. Returns whether it changed. */
 static int chevron_sync(void) {
     if (!st.bar_back) return 0;
-    void *top = window_manager_get_top_window(window_manager());
-    int show = !home_menu(top) || coverflow_home_sets(top),
+    void *wm = window_manager(), *top = window_manager_get_top_window(wm);
+    if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog") && widget_count_children(wm) > 1)
+        top = widget_get_child(wm, widget_count_children(wm) - 2);
+    int show = top != st.np_win && (!home_menu(top) || coverflow_home_sets(top)),
         changed = show != !!widget_get_visible(st.bar_back);
     widget_set_visible(st.bar_back, show, 0);
     return changed;
@@ -4944,12 +4947,12 @@ static int setting_click(void *ctx, void *event) {
             theme_preset();
             coverflow_home_layout();
             settings_layout(window_manager());
-#if M1PLUS /* Now Playing is V2.1's until ipod-ui 4.6; Appearance has no Corners row */
+            np_theme();
+#if M1PLUS /* Appearance has no Corners row */
             keep_selected(st.setting_label[3]);
             for (int k = 0; k < 7; ++k)
                 if (k != 3 && k != 4 && k != 5) setting_text(k); /* the preset's rows */
 #else
-            np_theme();
             keep_selected(st.setting_label[3]);
             for (int k = 0; k < 7; ++k)
                 if (k != 3 && k != 4) setting_text(k); /* the preset's rows */

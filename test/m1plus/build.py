@@ -375,13 +375,22 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     home_edits = [dict(address=a, original=hex(int(w, 16)), patched='0x0', purpose=why) for _, _, a, w, why in home['unbound']]
     a, w, why = home['boot_resume']
     home_edits.append(dict(address=a, original=hex(int(w, 16)), patched=hex(m1ipod.jal(ps['ringnav_boot'])), purpose=why))
-    assert 'variant' not in manifest and manifest['compact_code'] == edits + [slot] + home_edits, manifest['compact_code']
+    # 4.6's: the status bar's tap opens the VOLUME page within the bar's 30 px, not 42 (the top row's first 12 px); V2.1's
+    # Now Playing lookups all recurse, and the A-B dots' arithmetic is the bar's x, width and row, pinned as they are.
+    playing = M1_AUDIT['playing']
+    np_edits = [dict(address=a, original=w, patched=n, purpose=why) for a, w, n, why in playing['status_tap']]
+    assert 'variant' not in manifest and manifest['compact_code'] == edits + [slot] + np_edits + home_edits, manifest['compact_code']
+    assert len(playing['recursive_lookups']) == 38 and all(w == '0x24060001' for _, w, _ in playing['recursive_lookups'])
+    assert [int(w, 16) & 0xffff for _, w, _ in playing['ab_dots']] == [
+        m1plus_ipod.M1['NP_BAR_W'], m1plus_ipod.M1['NP_BAR_X'], *[m1plus_ipod.M1['NP_AB_Y']] * 3]
+    for a, w, why in playing['recursive_lookups'] + playing['ab_dots']:
+        assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
     for a, w, why in home['safe_returns'] + [r[:2] + ['the pointer-up event id'] for r in home['unbound']]:
         assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
     raw_styles = 'release/assets/default/raw/styles/'
     assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
         raw_styles + p for p in M1_AUDIT['styles']} | {
-        'release/assets/default/raw/images/xx/' + p for p in M1_AUDIT['status_icons']}
+        'release/assets/default/raw/images/xx/' + p for p in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons']}}
     stock_syms = symbols(directory/'stock-demo')
     # Each V2.1 iPod page is the stock page the inventory hashed, decodes and re-encodes exactly, and its init
     # function is in V2.1's demo.
@@ -450,9 +459,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         refuses(page, dialog, 'expected a window')
     finally:
         m1plus_ipod.UI_ASSETS.clear(); m1plus_ipod.UI_ASSETS.update(hashed)
-    assert m1plus_ipod.patch_code(bytearray(stock), ps) == edits + [slot] + home_edits
+    assert m1plus_ipod.patch_code(bytearray(stock), ps) == edits + [slot] + np_edits + home_edits
     # the slot as audited, or nothing; and Home's pinned returns (4.5) and its edits' words likewise
-    for at, what in ((0x9047a8, 'a changed layout slot'), (0x5340dc, "a changed Home builder's return"),
+    for at, what in ((0x9047a8, 'a changed layout slot'), (0x4cd938, "a changed status bar tap's limit"),
+                     (0x53b8d4, "a changed A-B dots' width"), (0x53cd14, "a changed Now Playing lookup"), (0x5340dc, "a changed Home builder's return"),
                      (0x534e2c, "a changed Home pointer-up binding"), (0x534f04, 'a changed boot resume call')):
         try:
             damaged = bytearray(stock); damaged[fileoff(stock, at)] ^= 1
@@ -613,6 +623,45 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         assert sha(read('stock.squashfs', path)) == digest and sha(shipped) == manifest['changed_assets'][path]['sha256']
         assert png_header(shipped) == (14 if icon.startswith('bar_wifi') else 42 if icon.startswith('bar_bt') else 12, 16, 8, 6), icon
     assert png_header(read('rootfs.squashfs', 'release/assets/default/raw/images/xx/bar_back.png')) == (32, 30, 8, 6)
+    # ipod-ui 4.6, Now Playing's controls: V2.1's own (hashed), as the iPod's quiet glyphs, 28 px.
+    assert set(M1_AUDIT['quiet_icons']) == {f'p_{n}.png' for n in ('fav', 'unfav', 'favdown', 'unfavdown', 'cycle', 'cycle1', 'order', 'random',
+                                                                   'more', 'moredown', 'playqueue', 'playqueuedown')}
+    for icon, digest in M1_AUDIT['quiet_icons'].items():
+        path = 'release/assets/default/raw/images/xx/' + icon
+        shipped = read('rootfs.squashfs', path)
+        assert sha(read('stock.squashfs', path)) == digest and sha(shipped) == manifest['changed_assets'][path]['sha256']
+        assert png_header(shipped) == (28, 28, 8, 6), icon
+    # ... and its page: V2.1's tree with the top row, the art slide's text, the dots, the bar, the times and the transport
+    # at the layout's places. view_buttons and view_dlna are V2.1's inside.
+    np_stock, np_page = (decode(read(i, 'release/assets/default/raw/ui/playing_page.bin')) for i in ('stock.squashfs', 'rootfs.squashfs'))
+    np = {n[2].get('name'): n for n in walk(np_page)}
+    L = m1plus_ipod.M1
+    assert [n[2]['name'] for n in np['view_local'][3]] == ['slide_view_view', 'label_ipod_pos', 'img_hr', 'btn_fav', 'btn_more', 'btn_return', 'slider_play',
+                                                           'img_repeata', 'img_repeatb', 'label_playtime', 'label_ipod_remain', 'view_buttons']
+    for name, box in {'app_gesture': [0, 0, 320, 450], 'view_local': [0, 0, 320, 450], 'view_dlna': [0, 0, 320, 450],
+                      'slide_view_view': [0, L['NP_SLIDE_Y'], 320, L['NP_DOTS_Y'] - L['NP_SLIDE_Y'] + 10],
+                      'btn_return': [0, 0, L['NP_BACK_W'], L['NP_TOP_H']], 'btn_more': [320 - L['NP_ICON_W'], 0, L['NP_ICON_W'], L['NP_TOP_H']],
+                      'btn_fav': [320 - 2 * L['NP_ICON_W'], 0, L['NP_ICON_W'], L['NP_TOP_H']],
+                      'img_playcover': [L['NP_ART_X'], L['NP_ART_Y'] - L['NP_SLIDE_Y'], L['NP_ART'], L['NP_ART']],
+                      'scrlabel_title': [L['NP_TEXT_X'], L['NP_TITLE_Y'] - L['NP_SLIDE_Y'], L['NP_TEXT_W'], 28],
+                      'scrlabel_artist': [L['NP_TEXT_X'], L['NP_ARTIST_Y'] - L['NP_SLIDE_Y'], L['NP_TEXT_W'], 22],
+                      'label_ipod_album': [L['NP_TEXT_X'], L['NP_ALBUM_Y'] - L['NP_SLIDE_Y'], L['NP_TEXT_W'], 22],
+                      'slider_play': [L['NP_BAR_X'], L['NP_BAR_CY'] - L['NP_BAR_TOUCH'] // 2, L['NP_BAR_W'], L['NP_BAR_TOUCH']],
+                      'label_playtime': [L['NP_BAR_X'], L['NP_TIMES_Y'], 80, 16], 'label_ipod_remain': [320 - L['NP_BAR_X'] - 80, L['NP_TIMES_Y'], 80, 16],
+                      'view_buttons': [0, L['NP_BUTTONS_Y'], 320, 66]}.items():
+        assert np[name][1] == box, (name, np[name][1])
+    assert np[name][1][1] + np[name][1][3] == m1ipod.BOTTOM and L['NP_TOP_H'] <= L['NP_SLIDE_Y'] and L['NP_TIMES_Y'] + 16 == L['NP_BUTTONS_Y']
+    assert [n[2]['name'] for n in np['view'][3]] == ['img_playcover', 'scrlabel_title', 'scrlabel_artist', 'label_ipod_album']
+    assert np['label_index'][2]['visible'] == np['label_playlen'][2]['visible'] == 'false'
+    assert np['slider_play'][2]['style'] == 's_ipod_progress' and all(np['slider_play'][2][f'style:{st}:icon'] == '' for st in ('normal', 'pressed', 'over', 'disable', 'focused'))
+    np_old = {n[2].get('name'): n for n in walk(np_stock)}
+    assert np['view_buttons'][3] == np_old['view_buttons'][3] and np['view_dlna'][3] == np_old['view_dlna'][3]
+    try:
+        m1plus_ipod.playing_page(['window', [0, 0, 0, 0], {'name': 'playing_page'}, []])
+    except ValueError as e:
+        assert 'Unexpected Now Playing' in str(e)
+    else:
+        raise AssertionError('playing_page took a page with other names')
     # ipod-ui 4.3, the settings pages. V2.1's list_view layouter (children_layouter_list_view_create) uses the vtable at
     # 0x9047a0: its type name, then the layout slot ipod_list_layout takes (LIST_VIEW_LAYOUT_SLOT) holding
     # LIST_VIEW_LAYOUT.
@@ -957,7 +1006,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added |= {xx+f'home_card_{row}{s}.png' for row in m1ipod.HOME_ROWS for s in ('', '_down')}
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C} | {
         'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles']),
-                                                                      *('images/xx/' + q for q in M1_AUDIT['status_icons'])]}
+                                                                      *('images/xx/' + q for q in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons']})]}
     logo = xx+'logo.jpg'
     with tempfile.TemporaryDirectory(prefix='m1-rootfs-') as tmp:
         trees = {}

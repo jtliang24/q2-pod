@@ -179,6 +179,7 @@ IPOD_CLASSIC = '[IPOD]\nTHEME=1\nACCENT=1\n'
 # The iPod Home (ipod-ui 4.5): the plain and --home-menu walks lay it out Full (HOME=1), the media walk Split (0).
 HOME_FULL, HOME_SPLIT = 'HOME=1\n', 'HOME=0\n'
 
+CARD_KNOB = 1  # Knob: Navigation with a card (start); a review sheet may want the volume
 def net_address(build):
     """The word the shim's "net" lines set: V2.1's network flag, as networkGetConnectStatus reads it
     (lw v0, -0x7f4c(gp); jr ra; lw v0, -0x53c8(v0))."""
@@ -199,7 +200,7 @@ def start(image, out, seconds, sn_addr, net_addr, trace='', home_menu='', card=N
     # followed by |, as saveHomemenu 0x4d7940 writes them).
     # Knob: Volume, so the walk starts on V2.1's own knob; it turns Knob: Navigation on itself (patch.py has the default).
     # The media walk's Library steps go back and hold with Previous, so it starts in Navigation (the M1's default).
-    (root/'mnt/data/config.ini').write_text(f'[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB={1 if card else 0}\n' + IPOD_CLASSIC + home + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
+    (root/'mnt/data/config.ini').write_text(f'[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB={CARD_KNOB if card else 0}\n' + IPOD_CLASSIC + home + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
     conf = (root/'etc/dbus-1/system.conf').read_text()
     # No other users exist in the sandbox: the bus runs as its caller.
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))
@@ -243,6 +244,7 @@ UP_LIST = swipe(160, 100, 160, 460)    # and back towards its start
 def set_row(i): return tap(160, STATUS_H + M1['SET_ROW'] * i + M1['SET_ROW'] // 2)
 def set_band(i): return (STATUS_H + M1['SET_ROW'] * i, STATUS_H + M1['SET_ROW'] * (i + 1))
 CHEVRON_EDGE = tap(BAR_BACK_HIT_W - 4, STATUS_H // 2)  # its tap's far edge, past the image (BAR_BACK_W)
+NP_BACK = tap(M1['NP_BACK_W'] // 2, STATUS_H + M1['NP_TOP_H'] // 2)  # Now Playing's large back (ipod-ui 4.6): the page has no chevron
 CHEVRON = tap(BAR_BACK_W // 2, STATUS_H // 2)  # the status bar's back chevron: the payload's pages' only back (ipod-ui 4.2),
                                                # and V2.1's pages' too, which previous_back clicks the button of
 # Keys, as Linux reports them (keyboard_gpio_add.sh, keyboard_encoder): "keys CODE" on the buttons'
@@ -406,7 +408,7 @@ MID = 2 * DRAG_PX
 # The Library (ipod-ui 4.4) and V2.1's library lists, from Home's rows in Split (the art above them): V2.1's lists
 # without their title bar, in LIB_PITCH rows from the top; each closes by the chevron or Previous (Knob: Navigation, the
 # M1's default). On an album's tracks, Previous held (V2.1's key-long, after 1000 ms) opens Now Playing, and so does
-# the chevron held (LONG_PRESS_MS); Now Playing's chevron goes back to the list. Home's list shows four rows under the
+# the chevron held (LONG_PRESS_MS); Now Playing's own back button goes back to the list. Home's list shows four rows under the
 # art: a fling to its end (HOME_END px on) brings Streaming and Settings up.
 LIB_PITCH = M1['LIB_PITCH']
 HOME_END = 7 * HOME_ROW - (H - STATUS_H - HOME_ART_H)
@@ -420,9 +422,9 @@ LIBRARY_WALK = [('lib', home_row(LIBRARY, True), 5, ('not', 'home')),
                 ('lib_albums', page_row(2), 5, ('not', 'lib')),
                 ('lib_album', lib_row(0), 5, ('not', 'lib_albums')),  # the first album's tracks
                 ('lib_hold', [f'hold {PREVIOUS} 1400'], 5, ('not', 'lib_album')),
-                ('lib_hold_back', CHEVRON, 5, ('as', 'lib_album')),
+                ('lib_hold_back', NP_BACK, 5, ('as', 'lib_album')),
                 ('lib_chevron_hold', CHEVRON_HOLD, 5, ('not', 'lib_album')),
-                ('lib_chevron_back', CHEVRON, 5, ('as', 'lib_album')),
+                ('lib_chevron_back', NP_BACK, 5, ('as', 'lib_album')),
                 ('lib_album_back', [PREVIOUS], 4, ('as', 'lib_albums')),
                 ('lib_albums_back', CHEVRON, 4, ('as', 'lib'))]
 LOGIN_BACK = tap(50, STATUS_H + 25)  # V2.1's login pages' back button, its title bar's first 80 px, clear of the edge

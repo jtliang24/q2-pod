@@ -349,6 +349,29 @@ static inline int arc_out(int r, int y) {
 #define LYRIC_LIT 0xffffff
 #define LYRIC_DIM 0x808080
 #define LYRIC_REST 0x5f5f5f
+/* Now Playing (ipod-ui 4.6, tools/m1plus_ipod.py playing_page), in the 320x450 window: the top row, the art slide with the
+ * art and the text under it, the dots, the bar (V2.1's x and width, a touch high around its row), the times, then V2.1's
+ * transport row. */
+#define NP_TOP_H 40
+#define NP_BACK_W 48
+#define NP_ICON_W 46
+#define NP_SLIDE_Y 44
+#define NP_ART_X 56
+#define NP_ART_Y 44
+#define NP_ART 208
+#define NP_TEXT_X 16
+#define NP_TEXT_W 288
+#define NP_TITLE_Y 258
+#define NP_ARTIST_Y 290
+#define NP_ALBUM_Y 316
+#define NP_DOTS_Y 340
+#define NP_BAR_X 12
+#define NP_BAR_W 296
+#define NP_BAR_CY 362
+#define NP_BAR_TOUCH 28
+#define NP_AB_Y 364 /* getx_by_playtime's row for the A-B dots (0x53b9c4) */
+#define NP_TIMES_Y 368
+#define NP_BUTTONS_Y 384
 /* Spotify's and Internet Radio's Now Playing layout (tools/ipod.py NP_*, which checks they match):
  * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners.
  * The title, artist and album beside the art on the Q2; on the M1's portrait screen, under it, with
@@ -784,7 +807,7 @@ static inline int arc_out(int r, int y) {
 #define PEQ_PLOT_TOP 8
 #define PEQ_PLOT_BOTTOM 98
 
-#define VIS_H 240
+#define VIS_H (NP_DOTS_Y - NP_SLIDE_Y) /* the visualizer's page: the slide's height */
 #define BOOK_ROWS 16
 #define PH_GREY 0xff333333 /* color_t #333333 */
 #define PHOTOS_MAX 500 /* ponytail: ringnav navigates at most MAX_ENTRIES (512) rows; page beyond */
