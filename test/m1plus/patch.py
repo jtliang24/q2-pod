@@ -6165,6 +6165,11 @@ assert shown()==['2 of 3','Album 1','-02:05'],shown(); passed()
 assert repaint()==[] and repaint(bar)==[]; passed()
 m.nodes[slider]['value']=101; assert repaint()==['label_ipod_remain'] and shown()[2]=='-02:04'; passed()
 m.word(O['MCL_POS'],2); assert repaint(bar)==['label_ipod_pos','label_ipod_album'] and shown()[:2]==['3 of 3','Album 2']; passed()
+# The write is in a paint, which drops its own invalidates: on a Next within an album nothing else repaints the top row,
+# so the counter and the album repaint once, after the frame. An unchanged paint arms nothing.
+def redrawn(): return [c[1] for c in m.calls if c[0]=='widget_invalidate_force' and c[1] in (pos,album)]
+assert redrawn()==[]; m.advance(0); assert redrawn()==[pos,album],redrawn()
+repaint(); m.advance(0); assert redrawn()==[]; passed()
 # A rebuilt queue can reuse the same string address with new text; the text itself is hashed.
 m.u.mem_write(m.get(m.items(m.get(syms['mcl_pdeqplaylist']))[2]+O['REC_ALBUM']),b'Other\0')
 assert 'label_ipod_album' in repaint() and shown()[1]=='Other'; passed()
@@ -6183,7 +6188,9 @@ queue.clear(); repaint(); assert shown()[:2]==['','']; passed()
 # Another top window, or the page once destroyed, leaves the labels alone.
 queue.append(m.copy('stSongInfo',m.song('X'))); m.top=m.node('window','home_page'); m.word(m.top+O['W_PARENT'],m.wm)
 assert repaint(m.top)==[] and repaint(bar)==[]; m.top=win
+repaint(); queue.clear(); repaint(); queue.append(m.copy('stSongInfo',m.song('X')))  # a repaint due, the labels as they were
 f,ctx=m.handler(win,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+m.advance(0); assert redrawn()==[]
 assert repaint()==[] and shown()[0]==''; passed()
 # Now Playing's art follows the player's cover each lit pass (np_art_poll), whatever stock's
 # one-shot flags did: the playing track's file once g_lastcover_url is its path, its cached

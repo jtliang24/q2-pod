@@ -466,6 +466,7 @@ typedef struct {
     int scrub, scrub_to, scrub_moved, settle_played;
 #if M1PLUS
     const void *scrub_page; /* the np_page_t the scrub runs or settles on, 0 for the local page (m1plus_np_view.c) */
+    unsigned np_repaint;    /* np_sync's repaint, after the frame that wrote the labels */
 #endif
     int held_sec; /* a paused seek to scrub_to on scrub_track: the player's second then, +1; 0 none
                    */
@@ -4087,6 +4088,9 @@ static int np_gone(void *win, void *event) {
         st.scrub_moved = 0; /* the page is going: no seek */
         st.np_off = st.np_full = 0;
         stop_timer(&st.np_marquee);
+#if M1PLUS
+        stop_timer(&st.np_repaint);
+#endif
         np_cancel();
         lyrics_gone(); /* the next page's rows may take its rows' place */
     }

@@ -82,11 +82,22 @@ static np_src_t np_src_local(void) {
                        .playing = mclGetPlayStatus() == 2 };
 }
 
+/* np_sync writes in a paint, and AWTK drops what a paint invalidates. V2.1's own writes leave the top row out of the frame
+ * when the cover stays, so a Next within an album kept the old count on screen until something repainted the row. Once,
+ * after the frame. Spotify's page writes from its timer, which needs none of this. */
+static int np_repaint(const void *info) {
+    st.np_repaint = 0;
+    if (st.np_pos) widget_invalidate_force(st.np_pos, (void *)0);
+    if (st.np_album) widget_invalidate_force(st.np_album, (void *)0);
+    return 0; /* RET_REMOVE */
+}
+
 static void np_sync(void *top) {
     if (!top || top != st.np_win) return;
     np_view_t v = np_view_local();
     np_src_t s = np_src_local();
     np_write(&v, &s);
+    if (v.hash != st.np_hash) rearm(&st.np_repaint, np_repaint, 0);
     st.np_hash = v.hash;
     st.np_bold = v.bold;
 }
