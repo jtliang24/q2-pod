@@ -372,27 +372,37 @@ static inline int arc_out(int r, int y) {
 #define NP_AB_Y 364 /* getx_by_playtime's row for the A-B dots (0x53b9c4) */
 #define NP_TIMES_Y 368
 #define NP_BUTTONS_Y 384
-/* Spotify's and Internet Radio's Now Playing layout (tools/ipod.py NP_*, which checks they match):
- * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners.
- * The title, artist and album beside the art on the Q2; on the M1's portrait screen, under it, with
- * the page's tag after the back button and Radio's heart at the top right. */
-#define SPOT_ART_X 50
-#define SPOT_ART_Y 50
-#define SPOT_ART_PX 220
+/* Internet Radio's Now Playing keeps its stack (ipod-ui 4.6). */
+#define RADIO_ART_X 50
+#define RADIO_ART_Y 50
+#define RADIO_ART_PX 220
+#define RADIO_TEXT_X 16
+#define RADIO_TEXT_W 288
+#define RADIO_TITLE_Y 280
+#define RADIO_ARTIST_Y 312
+#define RADIO_ALBUM_Y 338
+#define RADIO_TIMES_Y 392
+#define RADIO_TIME_X 12
+#define RADIO_TAG_X BACK_W
+#define RADIO_HEART_X (UI_W - 54)
+#define RADIO_HEART_Y 0
+/* Spotify's Now Playing (spotify.c spot_np, for both backends): Now Playing's layout (ipod-ui 4.6). The bar's view holds the
+ * Theme's line at its top, its middle on NP_BAR_CY in Classic's 8 px; the seek's slider takes the touch around it. */
+#define SPOT_ART_X 56
+#define SPOT_ART_Y 44
+#define SPOT_ART_PX 208
 #define SPOT_TEXT_X 16
 #define SPOT_TEXT_W 288
-#define SPOT_TITLE_Y 280
-#define SPOT_ARTIST_Y 312
-#define SPOT_ALBUM_Y 338
+#define SPOT_TITLE_Y 258
+#define SPOT_ARTIST_Y 290
+#define SPOT_ALBUM_Y 316
 #define SPOT_BAR_X 12
-#define SPOT_BAR_Y 374
+#define SPOT_BAR_Y 358
 #define SPOT_BAR_W 296
 #define SPOT_BAR_H 8
-#define SPOT_TIMES_Y 392
+#define SPOT_TIMES_Y 368
 #define SPOT_TIME_X 12
-#define SPOT_TAG_X BACK_W
-#define SPOT_HEART_X (UI_W - 54)
-#define SPOT_HEART_Y 0
+#define SPOT_TAG_X 56
 /* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic flush, and
  * holds SET_ROWS complete SET_ROW rows (ipod-ui 4.3: six 72 px rows in the 450 px under the bar). V2.1 builds
  * each row as a list_item_style list_item holding its children itself, no inner button (m1plus_nav_rows.c):

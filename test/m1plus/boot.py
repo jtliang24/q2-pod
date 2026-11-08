@@ -484,7 +484,7 @@ MEDIA_WALK = LIBRARY_WALK + [
               ('home_end', DOWN_LIST, 4, ('not', 'coverflow_back')),
               ('streaming', home_row(STREAMING, True, HOME_END), 4, ('not', 'home_end')),
               ('spotify', page_row(2), 4, ('not', 'streaming')),
-              ('spotify_back', CHEVRON, 4, ('as', 'streaming')),
+              ('spotify_back', NP_BACK, 4, ('as', 'streaming')),
               ('radio', page_row(3), 5, ('not', 'streaming')),
               ('radio_back', CHEVRON, 4, ('as', 'streaming')),
               ('configuration', page_row(5), 4, ('not', 'streaming')),

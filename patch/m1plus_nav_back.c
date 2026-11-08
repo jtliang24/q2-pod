@@ -131,12 +131,13 @@ int ringnav_knob_nav(void) { return knob_nav_active(); }
 /* Previous is Back wherever ringnav navigates, and on V2.1's pages that keep the knob's volume but have a back
  * button: its sliders (Channel Balance, Startup and Max Volume, Brightness, Bluetooth volume, and the payload's
  * Crossfade, on Startup Volume's page) and the lock screen's About. On V039m Previous stayed a media key there.
- * Now Playing's enlarged art keeps it a media key, as Now Playing does. */
+ * Now Playing's enlarged art and Spotify's page, with its own back, keep it a media key, as Now Playing does. */
 static int knob_back_active(void) {
     if (!knob_gate()) return 0;
     void *top = back_window(); /* a page under the keyboard too */
     return allowed_top(top) ||
-           (back_of(top, 0) && tk_strcmp(widget_get_prop_str(top, "name", ""), "bigcover_page"));
+           (back_of(top, 0) && tk_strcmp(widget_get_prop_str(top, "name", ""), "bigcover_page") &&
+            tk_strcmp(widget_get_prop_str(top, "name", ""), "spotify_page"));
 }
 /* Hold Return (ipod-ui 4.4): Previous held wherever it is Back (knob_back_active), V2.1's key-long for it (AWTK's,
  * after 1000 ms: HOLD_KEYS is Q2 only), opens Now Playing, as Return's hold does on the Q2 (or goes Home, with Hold

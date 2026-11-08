@@ -665,6 +665,11 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert centred['slider_play'][1] == np_old['slider_play'][1] and centred['slider_play'][2]['style'] == 's_ipod_progress'
     assert centred['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=100%,h=-20)' and centred['label_lyricmsg'][2]['self_layout'] == 'default(x=0,y=100,w=100%,h=28)'
     assert m1plus_ipod.playing_stock(read('stock.squashfs', 'release/assets/default/raw/ui/playing_page.bin')) == read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK)
+    # Spotify's page shares Now Playing's layout, and Radio keeps its stack.
+    assert [L[f'SPOT_{n}'] for n in 'ART_X ART_Y ART_PX TEXT_X TEXT_W TITLE_Y ARTIST_Y ALBUM_Y BAR_X BAR_W TIMES_Y TIME_X TAG_X'.split()] == [
+        L[f'NP_{n}'] for n in 'ART_X ART_Y ART TEXT_X TEXT_W TITLE_Y ARTIST_Y ALBUM_Y BAR_X BAR_W TIMES_Y BAR_X'.split()] + [L['NP_BACK_W'] + 8]
+    assert L['SPOT_BAR_Y'] == L['NP_BAR_CY'] - L['SPOT_BAR_H'] // 2 and L['SPOT_BAR_H'] == L['NP_BAR_CLASSIC']
+    assert [L[f'RADIO_{n}'] for n in 'ART_X ART_Y ART_PX TITLE_Y TIMES_Y'.split()] == [50, 50, 220, 280, 392]
     # ipod-ui 4.6, the big cover: V2.1's page, full screen, the art a centred square with the shade and title on its foot; the
     # artist transparent, as its refresh (0x52958c) shows it. V2.1 opens it only from Enlarged Art's countdown, whose word and reset
     # are BC_IDLE and BC_IDLE_FULL, and its image names are the ones the payload reads.

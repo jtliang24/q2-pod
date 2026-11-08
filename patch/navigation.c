@@ -186,6 +186,11 @@ extern int books_key(void *top, unsigned key), video_on(void), books_video(const
 extern void games_paint(void *w, void *canvas);
 extern int games_key(void *top, unsigned key), games_open(void *ctx, void *event);
 extern void spot_poll(void), spot_yield(void), spot_paint(void *w, void *canvas), *spot_art(void);
+#if M1PLUS
+extern int spot_knob_on(void *top), spot_scrubbing(void), spot_band(void *win, void **bar, void **times);
+extern void spot_scrub_start(void), spot_scrub_end(void);
+static int spot_page(void *w) { return w && !tk_strcmp(widget_get_prop_str(w, "name", ""), "spotify_page"); }
+#endif
 extern int spot_media(unsigned key), spot_key(void *top, unsigned key),
     spot_open(void *ctx, void *event), spot_hold(void *top);
 extern void up_next(int (*closed)(void *, void *), int (*keyup)(void *, void *)),
@@ -3412,7 +3417,7 @@ static int chevron_sync(void) {
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
     if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog") && widget_count_children(wm) > 1)
         top = widget_get_child(wm, widget_count_children(wm) - 2);
-    int show = top != st.np_win && (!home_menu(top) || coverflow_home_sets(top)),
+    int show = top != st.np_win && !spot_page(top) && (!home_menu(top) || coverflow_home_sets(top)),
         changed = show != !!widget_get_visible(st.bar_back);
     widget_set_visible(st.bar_back, show, 0);
     return changed;
@@ -4332,19 +4337,25 @@ static void vol_paint(void *top, void *canvas) {
     void *vol = widget_lookup(top, VIEW_VOL, 1), *label = widget_lookup(top, "label_vol", 1);
     if (n < 2 || !vol) return;
     int np = widget_get_child(wm, n - 2) == st.np_win && st.np_slider && st.np_elapsed;
+#if M1PLUS /* the band over Spotify's page too, which paints its bar (spot_paint): the Theme's line */
+    void *under = widget_get_child(wm, n - 2), *spot_bar = (void *)0, *spot_times = (void *)0;
+    int spot = spot_band(under, &spot_bar, &spot_times);
+    np = np || spot;
+#endif
     rect_t area, bar, text;
     if (np) {
-        void *slider = st.np_slider, *times = st.np_elapsed;
 #if M1PLUS /* Centred's V2.1 page: the times are above the bar, in the column under the gesture view */
-        int dy = I(st.np_win, W_Y) - I(top, W_Y), y = dy, ty = dy,
-            bh = widget_get_prop_int(slider, "bar_size", 8);
-        for (void *p = slider; p && p != st.np_win; p = P(p, W_PARENT)) y += I(p, W_Y);
-        for (void *p = times; p && p != st.np_win; p = P(p, W_PARENT)) ty += I(p, W_Y);
+        void *win = spot ? under : st.np_win, *slider = spot ? spot_bar : st.np_slider, *times = spot ? spot_times : st.np_elapsed;
+        int dy = I(win, W_Y) - I(top, W_Y), y = dy, ty = dy,
+            bh = spot ? np_bar_h() : widget_get_prop_int(slider, "bar_size", 8);
+        for (void *p = slider; p && p != win; p = P(p, W_PARENT)) y += I(p, W_Y);
+        for (void *p = times; p && p != win; p = P(p, W_PARENT)) ty += I(p, W_Y);
         int from = y < ty ? y : ty, to = y + I(slider, W_H) > ty + I(times, W_H) ? y + I(slider, W_H) : ty + I(times, W_H);
-        area = (rect_t){ 0, from, I(st.np_win, W_W), to - from };
+        area = (rect_t){ 0, from, I(win, W_W), to - from };
         bar = (rect_t){ I(slider, W_X), y + (I(slider, W_H) - bh) / 2, I(slider, W_W), bh };
         text = (rect_t){ 0, ty, area.w, I(times, W_H) };
 #else
+        void *slider = st.np_slider, *times = st.np_elapsed;
         int dy = I(st.np_win, W_Y) - I(top, W_Y), y = dy + I(slider, W_Y),
             bh = widget_get_prop_int(slider, "bar_size", 8);
         area = (rect_t){ 0, y, I(st.np_win, W_W), dy + I(times, W_Y) + I(times, W_H) - y };

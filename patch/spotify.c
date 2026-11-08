@@ -130,6 +130,9 @@ static struct {
 
 /* The page, while open. */
 static struct {
+#if M1PLUS
+    void *play, *seek; /* the transport row's Play and the bar's touch (np_controls) */
+#endif
     void *page, *info, *msg, *art, *bar, *glyph, *title, *artist, *album, *elapsed, *remain, *note,
         *sub;
     unsigned timer, leave, scrub_at, shown, playing, press, press_at, bar_drawn; /* bar_drawn: its state + 1 */
@@ -265,6 +268,12 @@ static void scrub_commit(void) {
     ui.scrub = 0;
     dgram_send(&sp.sock, SPOT_SOCK, c, (unsigned)n);
 }
+#if M1PLUS
+int spot_scrubbing(void) { return ui.scrub; }
+void spot_scrub_end(void) {
+    if (ui.scrub) scrub_commit();
+}
+#endif
 
 static void spot_refresh(void);
 static void *browsing(void);
@@ -433,6 +442,24 @@ int spot_key(void *top, unsigned key) {
     return 1;
 }
 
+#if M1PLUS
+/* m1plus_nav_np.c's knob on the page: whether it has a track to scrub, as spot_key asks; a scrub's start. */
+int spot_knob_on(void *top) {
+    return ui.page && top == ui.page && !sp.loading && sp.auth >= 0 && sp.track[0] && sp.duration;
+}
+void spot_scrub_start(void) {
+    if (ui.scrub) return;
+    ui.scrub = 1, ui.scrub_ms = (int)spot_position(), ui.scrub_at = time_now_ms();
+    spot_refresh();
+}
+/* vol_paint: the page's bar and elapsed time, the band's place, as Now Playing's. */
+int spot_band(void *win, void **bar, void **times) {
+    if (!ui.page || win != ui.page) return 0;
+    *bar = ui.bar, *times = ui.elapsed;
+    return 1;
+}
+#endif
+
 static void times(unsigned ms) {
     char t[24];
     toolsTimeItoa(t, (int)(ms / 1000));
@@ -498,7 +525,11 @@ static void spot_refresh(void) {
     }
     if (ui.playing != (unsigned)sp.playing + 1) {
         ui.playing = (unsigned)sp.playing + 1;
+#if M1PLUS /* the transport row's Play shows it */
+        widget_use_style(ui.play, sp.playing ? "btn_imgpause_style" : "btn_imgplay_style");
+#else
         widget_invalidate_force(ui.glyph, 0);
+#endif
     }
 }
 
@@ -518,7 +549,7 @@ static void box(void *canvas, int x, int y, int w, int h, unsigned color, unsign
 /* ringnav_paint, every widget after stock painted it: the bar, as Now Playing's capsule (the
  * accent's light tone), and the play state in the top row. */
 void spot_paint(void *w, void *canvas) {
-    if (!ui.page || !w || !P(canvas, CANVAS_LCD) || (w != ui.bar && w != ui.glyph)) return;
+    if (!ui.page || !w || !P(canvas, CANVAS_LCD) || (w != ui.bar && (M1PLUS || w != ui.glyph))) return;
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
     unsigned tone = rgba(accent_tone(2), 255);
     if (w == ui.bar) {
@@ -571,6 +602,72 @@ void *label(void *parent, int x, int y, int w, int h, const char *style, int px,
     return l;
 }
 
+#if M1PLUS
+/* The page's own back (ipod-ui 4.6): a Return's, a scrub seeking first. */
+static int np_back(void *ctx, void *event) {
+    if (ui.scrub)
+        scrub_commit();
+    else
+        rearm(&ui.leave, leave, 0);
+    return 0;
+}
+/* The transport row's Previous, Play and Next, as the keys' commands (spot_media). */
+static int np_transport(void *ctx, void *event) {
+    spot_media((unsigned)(long)ctx);
+    return 0;
+}
+/* The bar's touch: a slider nothing draws (opacity 0), which grabs the drag itself, its value a thousandth of the track: a
+ * drag previews as a scrub does, and its release seeks. */
+#define SEEK_MAX 1000
+static int np_seek(void *ctx, void *event) {
+    int at = widget_get_prop_int(ui.seek, "value", 0);
+    if (!sp.duration) return 0;
+    ui.scrub = 1;
+    ui.scrub_ms = (int)(((sp.duration >> 4) * (unsigned)at / SEEK_MAX) << 4); /* 32-bit to 19 h, as spot_paint */
+    ui.scrub_at = time_now_ms();
+    if (ctx) scrub_commit();
+    spot_refresh();
+    return 0;
+}
+/* A button on the page, in V2.1's style, its images (normal, pressed) when it draws them as its background. */
+static void *np_button(void *parent, int x, int y, int w, int h, const char *style, const char *image, const char *down) {
+    static const char *const shown[] = { "style:normal:bg_image", "style:over:bg_image", "style:disable:bg_image", "style:focused:bg_image" };
+    void *b = widget_factory_create_widget(widget_factory(), "button", parent, x, y, w, h);
+    widget_use_style(b, style);
+    widget_set_prop_str(b, "style:normal:bg_color", "#00000000");
+    for (unsigned i = 0; image && i < sizeof shown / sizeof *shown; ++i) widget_set_prop_str(b, shown[i], image);
+    if (image) widget_set_prop_str(b, "style:pressed:bg_image", down);
+    return b;
+}
+static void np_level(int menu); /* the browser's */
+static int np_queue(void *ctx, void *event) {
+    np_level((int)(long)ctx);
+    return 0;
+}
+/* The back in the top row, the seek's touch, and V2.1's transport row at Now Playing's place (its x and widths): Previous,
+ * Play and Next send the keys' commands, Queue and Mode open the browser's Queue and Playback Settings, Mode's icon static:
+ * the page's state doesn't carry the mode. */
+static void np_controls(void) {
+    void *back = np_button(ui.page, 0, 0, NP_BACK_W, NP_TOP_H, STYLE_NAVBAR_RETURN, 0, 0);
+    widget_on(back, EVT_CLICK, np_back, 0);
+    ui.seek = widget_factory_create_widget(widget_factory(), "slider", ui.info, NP_BAR_X, NP_BAR_CY - NP_BAR_TOUCH / 2, NP_BAR_W, NP_BAR_TOUCH);
+    widget_set_prop_str(ui.seek, "slide_with_bar", "true");
+    widget_set_prop_int(ui.seek, "max", SEEK_MAX);
+    widget_set_opacity(ui.seek, 0);
+    widget_on(ui.seek, EVT_VALUE_CHANGING, np_seek, (void *)0);
+    widget_on(ui.seek, EVT_VALUE_CHANGED, np_seek, (void *)1);
+    void *row = widget_factory_create_widget(widget_factory(), "view", ui.info, 0, NP_BUTTONS_Y, UI_W, UI_H - STATUS_H - NP_BUTTONS_Y);
+    int h = UI_H - STATUS_H - NP_BUTTONS_Y;
+    widget_on(np_button(row, 58, 0, 65, h, "img_btn_style", "prev", "prev_down"), EVT_CLICK, np_transport, (void *)(long)KEY_BACK_BTN);
+    ui.play = np_button(row, 123, 0, 80, h, "btn_imgplay_style", 0, 0);
+    widget_on(ui.play, EVT_CLICK, np_transport, (void *)(long)KEY_PLAY);
+    widget_on(np_button(row, 203, 0, 59, h, "img_btn_style", "next", "next_down"), EVT_CLICK, np_transport, (void *)(long)KEY_FWD_BTN);
+    /* its image directly: V2.1's btn_imgrandom_style is playing_page.bin's, no style a payload page has */
+    widget_on(np_button(row, 0, 0, 48, h, "img_btn_style", "p_random", "p_random"), EVT_CLICK, np_queue, (void *)1);
+    widget_on(np_button(row, 272, 0, 48, h, "img_btn_style", "p_playqueue", "p_playqueuedown"), EVT_CLICK, np_queue, (void *)0);
+}
+#endif
+
 /* The Now Playing page: the browser's row, a track it started, or without librespot on the card. */
 static void spot_np(void) {
     if (ui.page || !(ui.page = page_open("spotify_page", closed, keyup))) return;
@@ -580,7 +677,9 @@ static void spot_np(void) {
     ui.msg = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     widget_set_text_utf8(label(ui.info, SPOT_TAG_X, 12, 200, 16, STYLE_SCRLABEL_WHITE20L, 16, SPOT_GREY),
                          SPOT_T_LABEL);
+#if !M1PLUS /* the M1's transport row shows it */
     ui.glyph = widget_factory_create_widget(f, "view", ui.info, UI_W - 38, 13, 14, 14); /* NP's top row */
+#endif
     ui.art = image_create(ui.info, SPOT_ART_X, SPOT_ART_Y, SPOT_ART_PX, SPOT_ART_PX);
     image_set_draw_type(ui.art, 4); /* as Coverflow's covers */
     image_base_set_image(ui.art, PLACEHOLDER);
@@ -607,6 +706,9 @@ static void spot_np(void) {
         label(ui.msg, CF_EDGE, 100, UI_W - 2 * CF_EDGE, 30, STYLE_SCRLABEL_WHITE20C, 20, 0xffffffffu);
     ui.sub =
         label(ui.msg, CF_EDGE, 134, UI_W - 2 * CF_EDGE, 24, STYLE_SCRLABEL_WHITE20C, 16, SPOT_GREY);
+#if M1PLUS
+    np_controls();
+#endif
     ui.timer = timer_add(tick, 0, 250);
     spot_refresh();
 }
@@ -1247,6 +1349,17 @@ int spot_open(void *ctx, void *event) {
     show();
     return 0;
 }
+
+#if M1PLUS
+/* The Now Playing page's Queue (0) and Mode (1): the browser's Queue and Playback Settings levels, the page gone. */
+static void np_level(int menu) {
+    if (!br.page) return;
+    if (ui.scrub) scrub_commit();
+    rearm(&ui.leave, leave, 0);
+    int r = menu ? M_SETTINGS : M_QUEUE;
+    push(L_LIST, r == M_QUEUE ? "queue" : "settings", "", "", MENU[r]);
+}
+#endif
 
 /* ringnav_keylong: Play/Pause held on a track row adds it to Spotify's queue, on a playlist row
  * downloads it, the reply toasted; 1 when it was one. */

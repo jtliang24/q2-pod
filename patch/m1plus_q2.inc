@@ -67,6 +67,20 @@
 #define NP_COLUMN_W 225
 #define NP_COLUMN_SLIDE_H 198
 #define BC_IDLE_T signed char /* BC_IDLE's type */
+/* Internet Radio's Now Playing is Spotify's layout here; the M1's has its own (patch/m1plus_offsets.inc) */
+#define RADIO_TAG_X SPOT_TAG_X
+#define RADIO_ART_X SPOT_ART_X
+#define RADIO_ART_Y SPOT_ART_Y
+#define RADIO_ART_PX SPOT_ART_PX
+#define RADIO_TEXT_X SPOT_TEXT_X
+#define RADIO_TEXT_W SPOT_TEXT_W
+#define RADIO_TITLE_Y SPOT_TITLE_Y
+#define RADIO_ARTIST_Y SPOT_ARTIST_Y
+#define RADIO_ALBUM_Y SPOT_ALBUM_Y
+#define RADIO_TIME_X SPOT_TIME_X
+#define RADIO_TIMES_Y SPOT_TIMES_Y
+#define RADIO_HEART_X SPOT_HEART_X
+#define RADIO_HEART_Y SPOT_HEART_Y
 #define VIEW_COVER "img_cover"
 #define VIEW_BIGCOVER "img_bigcover"
 #define VIEW_LYRIC "view_lyric"
