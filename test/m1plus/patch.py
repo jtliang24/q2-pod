@@ -15294,6 +15294,21 @@ if is_m1plus:
     assert touch((PRESS,10,y-1),(LIFT,10,y-1),m=m)==[]
     m,back=chevron('home_page'); assert not m.nodes[back]['visible']
     assert touch((PRESS,10,10),(LIFT,10,10),m=m)==[(PRESS,10),(LIFT,10)]; m.advance(0); assert dispatched(m)==[]; passed()
+    # The play state's icon beside it is no Back: while it shows, a press on it is V2.1's, as the rest of the bar's, and the
+    # chevron keeps its image and gap; below the bar, Minimal's strip stays its full width.
+    def beside(status):
+        m=input_machine(); m.config['THEME']='0'; m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,status)
+        back,state=m.node('image','img_back',visible=0),m.node('image','img_playstate',visible=0)
+        bar=m.node('system_bar','system_bar',[back,state]); m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar)
+        m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0); dispatched(m)
+        assert m.nodes[back]['visible'] and m.nodes[state]['visible']==(status in (2,3)); return m
+    assert O['BAR_BACK_PLAY_W']==O['BAR_BACK_W']+O['STATUS_GAP']==36
+    for status in (2,3):
+        x=O['BAR_BACK_PLAY_W']; m=beside(status); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[(PRESS,x),(LIFT,x)]
+        m.advance(0); assert dispatched(m)==[]
+        m=beside(status); assert touch((PRESS,x-1,10),(LIFT,x-1,10),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN
+        y=O['STATUS_H']; m=beside(status); assert touch((PRESS,x,y),(LIFT,x,y),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN
+    x=O['BAR_BACK_HIT_W']-1; m=beside(0); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN; passed()
     # page_title centres a plain title on the screen, clear of the top left the back button had (4.4 and 4.5 relay it).
     m=input_machine(); body=m.node('view'); title=m.call(address=payload_syms['page_title'],args=(body,m.string('Photos'),0,0),gap=0)
     assert not [c for c in m.nodes[body]['children'] if m.nodes[c]['type']=='button']
