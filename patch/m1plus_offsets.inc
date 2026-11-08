@@ -22,9 +22,6 @@
  * the page too, above a settings list's first row (Classic's sits flush under the bar); the image keeps its slim
  * look. */
 #define BAR_BACK_HIT_W 64
-/* Beside the play state's icon, which starts here, the bar's tap keeps to the chevron and its gap (BAR_BACK_W + STATUS_GAP):
- * the icon's tap is V2.1's, as the rest of the bar's (on_wm_tsup_fun). */
-#define BAR_BACK_PLAY_W 36
 #define BAR_CORNER_R 0
 #define I(p, o) (*(int *)((char *)(p) + (o)))
 #define P(p, o) (*(void **)((char *)(p) + (o)))

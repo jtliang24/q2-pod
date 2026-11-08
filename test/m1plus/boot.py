@@ -588,8 +588,11 @@ def now_playing(build):
                 back = screen(run_dir)
                 assert rows(page, back, STATUS_H, H) == 0, f'{name}: the big cover did not close back to the page'
                 assert ink(back, 200, 0, 300, STATUS_H), f'{name}: the status bar did not come back'
-                send(run_dir, NP_BACK); time.sleep(5)
-                assert rows(page, screen(run_dir), STATUS_H, H) > 100, f'{name}: Back did not leave the page'
+                # Back's corner: x 64 is past it; inside, a tap from the screen's top goes Back through the page's button (the page's own back is NP_BACK).
+                send(run_dir, tap(BAR_BACK_HIT_W, 10)); time.sleep(5)
+                assert rows(page, screen(run_dir), STATUS_H, H) == 0, f'{name}: a tap past Back\'s corner left the page'
+                send(run_dir, tap(BAR_BACK_HIT_W - 1, 5)); time.sleep(5)
+                assert rows(page, screen(run_dir), STATUS_H, H) > 100, f'{name}: Back\'s corner did not leave the page'
                 err = (run_dir/'demo.err').read_bytes()
                 assert b'uncaught target signal' not in err, f'{name}: the demo crashed: {err[-400:].decode("latin-1")}'
                 p.kill()
@@ -742,7 +745,7 @@ def soloify(build, captures=None, themes=(0, 1)):
                 assert rows(browser, level, STATUS_H, H) == 0, f'{name}: {label} did not open the browser'
                 assert fake.sent() == [], f'{name}: {label} sent a command'
                 step(page_row(0), 5)
-            assert rows(browser, step(NP_BACK), STATUS_H, H) == 0, f'{name}: the page\'s Back is not the browser\'s base'
+            assert rows(browser, step(tap(BAR_BACK_HIT_W - 1, 5)), STATUS_H, H) == 0, f'{name}: Back\'s corner is not the browser\'s base'
 
             # Hold Return, from Streaming with the session paused: this page, with no browser under it; its Queue opens one, whose
             # Back returns where the hold began. Then playing, and with no session the message view: no track, and its Back.

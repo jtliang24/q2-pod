@@ -71,7 +71,7 @@ assert m1ipod.SET_TOP + m1ipod.SET_ROWS * m1ipod.SET_ROW <= m1ipod.BOTTOM and m1
 assert (m1ipod.SET_ROW, m1ipod.SET_ROWS, m1ipod.SET_TOP, m1ipod.SET_STOCK_ROW) == (72, 6, 8, 64)
 assert m1ipod.BATT_ROOM == m1['BATT_ROOM'] == 115 and m1['STATUS_MARGIN'] == m1ipod.STATUS_MARGIN == 6 and m1['BAR_BACK_W'] == m1plus_ipod.BACK_W
 # 4.6's fixes: the chevron's tap, beside the play state's icon, is the chevron and its gap; Spotify's page has Now Playing's places.
-assert m1['BAR_BACK_PLAY_W'] == m1['BAR_BACK_W'] + m1['STATUS_GAP'] == 36 < m1['BAR_BACK_HIT_W'] == 64
+assert m1['BAR_BACK_W'] == 32 and m1['BAR_BACK_HIT_W'] == 64
 assert all(m1[f'SPOT_{n}'] == m1[f'NP_{n}'] for n in ('TEXT_X', 'TEXT_W', 'TITLE_Y', 'ARTIST_Y', 'ALBUM_Y', 'BAR_X', 'BAR_W', 'TIMES_Y', 'ART_X', 'ART_Y'))
 assert sys.modules['ipod'] is ipod and m1ipod is not ipod
 print('iPod screen profile checks passed.')

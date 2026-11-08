@@ -15294,21 +15294,39 @@ if is_m1plus:
     assert touch((PRESS,10,y-1),(LIFT,10,y-1),m=m)==[]
     m,back=chevron('home_page'); assert not m.nodes[back]['visible']
     assert touch((PRESS,10,10),(LIFT,10,10),m=m)==[(PRESS,10),(LIFT,10)]; m.advance(0); assert dispatched(m)==[]; passed()
-    # The play state's icon beside it is no Back: while it shows, a press on it is V2.1's, as the rest of the bar's, and the
-    # chevron keeps its image and gap; below the bar, Minimal's strip stays its full width.
-    def beside(status):
-        m=input_machine(); m.config['THEME']='0'; m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,status)
+    # The whole corner is Back, its tap and its hold, with the play state showing or not: the icon has moved to the right group. x 64 is the page's.
+    def corner(page='sysset_page',status=0,theme='0'):
+        m=input_machine(page); m.config['THEME']=theme; m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,status)
         back,state=m.node('image','img_back',visible=0),m.node('image','img_playstate',visible=0)
         bar=m.node('system_bar','system_bar',[back,state]); m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar)
         m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0); dispatched(m)
-        assert m.nodes[back]['visible'] and m.nodes[state]['visible']==(status in (2,3)); return m
-    assert O['BAR_BACK_PLAY_W']==O['BAR_BACK_W']+O['STATUS_GAP']==36
-    for status in (2,3):
-        x=O['BAR_BACK_PLAY_W']; m=beside(status); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[(PRESS,x),(LIFT,x)]
-        m.advance(0); assert dispatched(m)==[]
-        m=beside(status); assert touch((PRESS,x-1,10),(LIFT,x-1,10),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN
-        y=O['STATUS_H']; m=beside(status); assert touch((PRESS,x,y),(LIFT,x,y),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN
-    x=O['BAR_BACK_HIT_W']-1; m=beside(0); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN; passed()
+        return m
+    assert O['BAR_BACK_HIT_W']==64
+    for status in (0,2,3):
+        for x in (0,40,63):
+            m=corner(status=status); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[]; m.advance(0); assert dispatched(m)==RETURN,(status,x)
+            m=corner(status=status); m.handlers[payload_syms['compact_now_playing']]='held'; m.calls=[]
+            assert touch((PRESS,x,10),m=m)==[]; m.advance(O['LONG_PRESS_MS'],clear=False); assert 'held' in [c[0] for c in m.calls],(status,x)
+            assert touch((LIFT,x,10),m=m)==[]; m.advance(0); assert dispatched(m)==[],(status,x)
+        x=O['BAR_BACK_HIT_W']; m=corner(status=status); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[(PRESS,x),(LIFT,x)]; m.advance(0); assert dispatched(m)==[]
+    passed()
+    # Now Playing's pages hide the chevron, for their own back under the bar: the corner still goes Back through that button, to the foot of its row, with the
+    # same hold. Spotify's here; the local page's in boot.py's walk (st.np_win is set by its paint). Any other page keeps its rows that low, as Folder's first
+    # starts there, and a dark screen's tap is no Back.
+    def np_corner():
+        m=corner('spotify_page'); back=m.node('button',style='navbar_btnreturn_style')
+        m.top=m.node('window','spotify_page',[m.node('view','view_page',[back])]); m.handlers[payload_syms['compact_now_playing']]='np_hold'; m.calls=[]
+        return m,back
+    foot=O['STATUS_H']+O['NP_TOP_H']
+    for x,y in ((0,0),(40,10),(63,foot-1)):
+        m,back=np_corner(); assert touch((PRESS,x,y),(LIFT,x,y),m=m)==[]; m.advance(0); assert m.clicks==[back] and dispatched(m)==[],(x,y)
+        m,back=np_corner(); assert touch((PRESS,x,y),m=m)==[]; m.advance(O['LONG_PRESS_MS']+50,clear=False); assert [c[0] for c in m.calls].count('np_hold')==1,(x,y)
+        assert touch((LIFT,x,y),m=m)==[]; m.advance(0); assert not m.clicks and dispatched(m)==[],(x,y)
+    for x,y in ((O['BAR_BACK_HIT_W'],10),(10,foot)):
+        m,back=np_corner(); assert touch((PRESS,x,y),(LIFT,x,y),m=m)==[(PRESS,x),(LIFT,x)]; m.advance(0); assert not m.clicks,(x,y)
+    m,back=np_corner(); m.byte(syms['g_backlight_status'],0); assert touch((PRESS,40,10),(LIFT,40,10),m=m)==[(PRESS,40),(LIFT,40)]; m.advance(0); assert not m.clicks
+    m=corner('folder_page',theme='0'); y=O['STATUS_H']+O['SET_TOP']; assert touch((PRESS,10,y),(LIFT,10,y),m=m)==[(PRESS,10),(LIFT,10)]; m.advance(0); assert dispatched(m)==[]
+    passed()
     # The play state sits in the right group (ipod-ui 4.2): while it shows it counts toward BATT_ROOM, so the plain glyph, the icon, Wi-Fi and
     # the widest battery still fit, and a badge that fitted without it now falls back to the icon. V2.1's lookups find it by name there.
     def right_group(status,image):

@@ -62,11 +62,13 @@ static int previous_back(const void *info) {
 }
 
 /* The status bar's back chevron (img_back, the left BAR_BACK_W of the bar): shown while the top window is not Home
- * (chevron_sync). Its tap area is BAR_BACK_HIT_W wide (in the bar, BAR_BACK_PLAY_W while the play state shows), the bar's
- * height, and in Minimal SET_TOP into the page, the gap
+ * (chevron_sync). Its tap area is BAR_BACK_HIT_W wide, the bar's height, and in Minimal SET_TOP into the page, the gap
  * above a settings list's first row (Classic's lists sit flush under the bar). A press there belongs to it, release
  * included: the window manager gives no other window the pointer, and the tap, made when the finger lifts inside that
- * area, is previous_back. Nothing else sees either event. */
+ * area, is previous_back. Nothing else sees either event.
+ * Now Playing's pages hide it for their own back, under the bar (NP_TOP_H tall): there the same area runs from the
+ * screen's top to that row's foot, a press in it goes Back through the page's button (previous_back), and its hold is
+ * the chevron's. Only those pages reach so low: Folder's first row starts inside it. */
 /* Hold Return by touch (ipod-ui 4.4): the chevron held LONG_PRESS_MS, as a row's hold (lp_input), opens Now Playing
  * as Previous's hold does (hold_previous), in either Knob mode; its release is then spent. */
 static int chevron_hold(const void *unused) {
@@ -77,6 +79,10 @@ static int chevron_hold(const void *unused) {
     st.chev_held = 1;
     compact_now_playing();
     return 0; /* RET_REMOVE */
+}
+static int chevron_np_corner(void) {
+    void *top = window_manager_get_top_window(window_manager());
+    return usable() && top && (top == st.np_win || spot_page(top));
 }
 static int chevron_input(void *e) {
     if (!e || !st.bar_back) return 0;
@@ -89,12 +95,12 @@ static int chevron_input(void *e) {
     }
     if (type != EVT_INPUT_POINTER_DOWN && type != EVT_INPUT_POINTER_MOVE && type != EVT_POINTER_UP) return 0;
     int x = I(e, EVENT_X), y = I(e, EVENT_Y);
-    int wide = y >= STATUS_H || !st.bar_state || !widget_get_visible(st.bar_state);
-    int in = x < (wide ? BAR_BACK_HIT_W : BAR_BACK_PLAY_W) && y < STATUS_H + (ipod_classic() ? 0 : SET_TOP);
+    int corner = chevron_np_corner();
+    int in = x < BAR_BACK_HIT_W && y < STATUS_H + (corner ? NP_TOP_H : ipod_classic() ? 0 : SET_TOP);
     if (type == EVT_INPUT_POINTER_DOWN) {
         stop_timer(&st.chev_timer);
         st.chev_held = 0;
-        st.chev_down = in && widget_get_visible(st.bar_back);
+        st.chev_down = in && (corner || widget_get_visible(st.bar_back));
         st.chev_x = x;
         st.chev_y = y;
         if (st.chev_down) rearm(&st.chev_timer, chevron_hold, LONG_PRESS_MS);
