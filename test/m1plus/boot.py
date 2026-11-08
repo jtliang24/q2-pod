@@ -19,8 +19,8 @@ Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
 import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]/'tools'))
-from build import BASE, SCRATCH, source_sha256, symbols, run
-from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
+from build import BASE, SCRATCH, fileoff, source_sha256, symbols, run
+from m1plus import M1PLUS_GP, M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
 from m1plus_ipod import M1
 # Each accent's selection top (patch/m1plus_offsets.inc ACCENTS, { top, bottom, light, red, highlight } a row)
 ACCENT_TOPS = [int(r, 16) for r in re.findall(r'\{ 0x([0-9a-fA-F]{6}),', (pathlib.Path(__file__).resolve().parents[2]/'patch/m1plus_offsets.inc')
@@ -94,12 +94,16 @@ int gettimeofday(void *, void *), nanosleep(const void *, void *), read(int, voi
 static int touch_fd = -1;
 static char tbuf[256];
 static unsigned tlen;
+/* "net 1" holds V2.1's network status (the word networkGetConnectStatus returns, NET_ADDR) at connected, as the
+ * touch thread waits, until "net 0" clears it: the sandbox has no network, and Tidal and HiFi Music open only with one. */
+static int net;
 static void nap(long ms) { long t[2] = { ms / 1000, ms % 1000 * 1000000 }; nanosleep(t, 0); }
 void *ts_open(const char *dev, int nonblock) { (void)dev; (void)nonblock; static int ts; return &ts; }
 int ts_config(void *ts) { (void)ts; return 0; }
 int ts_close(void *ts) { (void)ts; return 0; }
 static void next_line(char *line) {
     for (;;) {
+        if (net) *(volatile int *)NET_ADDR = 1;
         for (unsigned i = 0; i < tlen; i++)
             if (tbuf[i] == '\n') {
                 for (unsigned j = 0; j < i; j++) line[j] = tbuf[j];
@@ -131,6 +135,7 @@ int ts_read(void *ts, struct ts_sample *s, int nr) {
         next_line(line);
         const char *p = line;
         if (line[0] == 'w') { p += 4; nap(num(&p)); continue; }
+        if (line[0] == 'n') { p += 4; net = num(&p); *(volatile int *)NET_ADDR = net; continue; }
         s->x = num(&p); s->y = num(&p); s->pressure = num(&p);
         gettimeofday(&s->tv, 0);
         return 1;
@@ -157,11 +162,12 @@ def tool(name):
     if not path: raise SystemExit(f'{name} not found: run inside the flake devShell (nix develop)')
     return str(pathlib.Path(path).resolve())
 
-def shim(out, root, sn_addr):
+def shim(out, root, sn_addr, net_addr):
     """SHIM, compiled for V2.1's ABI (o32, nan2008, FR=1) against its own glibc 2.28."""
     src = out/'shim.c'
     src.write_text(f'#define W {W}\n#define H {H}\n#define FB_FILE "/out/fb.raw"\n#define TOUCH_FILE "/out/touch"\n'
-                   f'#define KEYS_FILE "/out/keys"\n#define KNOB_FILE "/out/knob"\n#define SN_ADDR {sn_addr:#x}u\n' + SHIM)
+                   f'#define KEYS_FILE "/out/keys"\n#define KNOB_FILE "/out/knob"\n#define SN_ADDR {sn_addr:#x}u\n'
+                   f'#define NET_ADDR {net_addr:#x}u\n' + SHIM)
     run('clang', '--target=mipsel-linux-gnu', '-march=mips32r2', '-mabi=32', '-mfp64', '-mnan=2008', '-mabs=2008', '-fPIC',
         '-ffreestanding', '-fno-builtin', '-fno-stack-protector', '-O2', '-Wall', '-Werror', '-c', src, '-o', out/'shim.o')
     run('ld.lld', '-m', 'elf32ltsmip', '-shared', '--hash-style=sysv', '-soname', 'shim.so', out/'shim.o',
@@ -173,7 +179,7 @@ IPOD_CLASSIC = '[IPOD]\nTHEME=1\nACCENT=1\n'
 # The iPod Home (ipod-ui 4.5): the plain and --home-menu walks lay it out Full (HOME=1), the media walk Split (0).
 HOME_FULL, HOME_SPLIT = 'HOME=1\n', 'HOME=0\n'
 
-def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None, home=HOME_FULL):
+def start(image, out, seconds, sn_addr, net_addr, trace='', home_menu='', card=None, home=HOME_FULL):
     """Unpack image as a sandbox root and start dbus-daemon, then demo for seconds; returns the bwrap.
     With card, a directory mounted as the card, and V2.1's library database listing its songs."""
     root = out/'root'
@@ -188,7 +194,7 @@ def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None, home=
     conf = (root/'etc/dbus-1/system.conf').read_text()
     # No other users exist in the sandbox: the bus runs as its caller.
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))
-    shim(out, root, sn_addr)
+    shim(out, root, sn_addr, net_addr)
     (out/'touch').write_text('')
     for fifo in ('keys', 'knob'): os.mkfifo(out/fifo)
     qemu = tool('qemu-mipsel')
@@ -410,6 +416,23 @@ LIBRARY_WALK = [('lib', home_row(LIBRARY, True), 5, ('not', 'home')),
                 ('lib_chevron_back', CHEVRON, 5, ('as', 'lib_album')),
                 ('lib_album_back', [PREVIOUS], 4, ('as', 'lib_albums')),
                 ('lib_albums_back', CHEVRON, 4, ('as', 'lib'))]
+LOGIN_BACK = tap(50, STATUS_H + 25)  # V2.1's login pages' back button, its title bar's first 80 px, clear of the edge
+# Streaming's logins, from its page (MEDIA_WALK): with the network up (the shim's "net 1") and no login stored, Tidal's
+# row opens its login page in its main page's place, and HiFi Music's page replaces itself with its own, its account
+# field focused under AWTK's keyboard. Back from either, by the chevron, Previous or the page's own back button, is
+# Streaming again (V04Hm's went Home; on HiFi's, the chevron and Previous were a Return in the keyboard).
+LOGIN_WALK = [('tidal', ['net 1'] + page_row(0), 6, ('not', 'streaming')),
+              ('tidal_back', CHEVRON, 4, ('as', 'streaming')),
+              ('tidal_again', page_row(0), 6, ('not', 'streaming')),
+              ('tidal_previous', [PREVIOUS], 4, ('as', 'streaming')),
+              ('tidal_third', page_row(0), 6, ('not', 'streaming')),
+              ('tidal_button', LOGIN_BACK, 4, ('as', 'streaming')),
+              ('hifi', page_row(1), 8, ('not', 'streaming', 'tidal')),
+              ('hifi_back', CHEVRON, 4, ('as', 'streaming')),
+              ('hifi_again', page_row(1), 8, ('not', 'streaming')),
+              ('hifi_previous', [PREVIOUS], 4, ('as', 'streaming')),
+              ('hifi_third', page_row(1), 8, ('not', 'streaming')),
+              ('hifi_button', LOGIN_BACK + ['net 0'], 4, ('as', 'streaming'))]
 MEDIA_WALK = LIBRARY_WALK + [
               # At the Library's top, a pull opens V2.1's search (4.4).
               ('lib_search', UP_LIST, 4, ('not', 'lib')),
@@ -455,6 +478,7 @@ MEDIA_WALK = LIBRARY_WALK + [
               ('radio_back', CHEVRON, 4, ('as', 'streaming')),
               ('configuration', page_row(5), 4, ('not', 'streaming')),
               ('configuration_back', CHEVRON, 4, ('as', 'streaming')),
+             ] + LOGIN_WALK + [
               # Back at Home's end, Streaming chosen (the fling chose the visible row nearest the list's middle).
               ('streaming_back', CHEVRON, 4, ('as', 'home_end')),
               # Settings, the last row: its list in the menu's place, under the art; its chevron goes back.
@@ -512,14 +536,22 @@ if __name__ == '__main__':
                          'Folder, Coverflow and Streaming by touch, Shuffle Songs')
     args = ap.parse_args()
     if args.home_menu and args.media: raise SystemExit('--home-menu and --media are separate runs')
-    # The Library walk precedes the original media walk; give its new steps their settling budget too.
-    walk_seconds = WALK_SECONDS + (sum(step[2] for step in LIBRARY_WALK) if args.media else 0)
+    # The Library walk precedes the original media walk, and the logins' follow Streaming's: give their steps their
+    # settling budget too, and the logins' their waits.
+    waits = lambda walk: sum(int(line.split()[1]) / 1000 for step in walk for line in step[1] if line.startswith('wait '))
+    walk_seconds = WALK_SECONDS + (sum(step[2] for step in LIBRARY_WALK + LOGIN_WALK) + waits(LOGIN_WALK) if args.media else 0)
     manifest = json.loads((args.build/'manifest.json').read_text())
     if manifest.get('source_sha256') != source_sha256():
         raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
     if manifest.get('model') != 'Shanling M1 Plus':
         raise SystemExit('test/m1plus/boot.py emulates M1 Plus builds only')
-    sn_addr = symbols(args.build/'stock-demo')['product_sncode']
+    stock_syms = symbols(args.build/'stock-demo')
+    sn_addr = stock_syms['product_sncode']
+    # networkGetConnectStatus: lw v0, -0x7f4c(gp); jr ra; lw v0, -0x53c8(v0), the word the shim's "net" lines set
+    stock_demo = (args.build/'stock-demo').read_bytes()
+    at = fileoff(stock_demo, stock_syms['networkGetConnectStatus'])
+    assert struct.unpack_from('<3I', stock_demo, at + 12) == (0x8f8280b4, 0x03e00008, 0x8c42ac38), 'networkGetConnectStatus'
+    net_addr = struct.unpack_from('<I', stock_demo, fileoff(stock_demo, M1PLUS_GP - 0x7f4c))[0] - 0x53c8
     with tempfile.TemporaryDirectory(prefix='m1-boot-') as tmp, \
          tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
         tmp = pathlib.Path(tmp)
@@ -533,7 +565,7 @@ if __name__ == '__main__':
                 card = pathlib.Path(cards)/name
                 card.mkdir()
                 media_card(card)
-            runs[name] = start(args.build/image, tmp/name, args.seconds + walk_seconds, sn_addr, trace,
+            runs[name] = start(args.build/image, tmp/name, args.seconds + walk_seconds, sn_addr, net_addr, trace,
                                HOME_MENU if args.home_menu and name == 'patched' else '', card,
                                HOME_SPLIT if args.media else HOME_FULL)
         deadline = time.monotonic() + args.seconds

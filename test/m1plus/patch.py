@@ -15075,6 +15075,90 @@ if is_m1plus:
     # V2.1's slider pages keep the knob's volume (they are no context: knob() below) and have a back button, which
     # Previous presses too. On V039m it stayed a media key on Channel Balance and Crossfade (Startup Volume's page).
     for page in SLIDER_PAGES: assert previous(page=page)==(True,False,False),page
+    # The Tidal and HiFi Music logins (V04Hm's pass: their Back went Home, past Streaming). Streaming's rows bind V2.1's
+    # Home dispatcher (0x533b80), which opens tidal/tidal_main and hifi/hifimusic_page with the network up, else
+    # msg_notnetwork's dialog. With no session, Tidal's main page puts its login page in its own place
+    # (m1_tidal_login, TIDAL_LOGIN) unless a saved login keeps it, built, under the login; HiFi Music's page replaces
+    # itself with its login (V2.1's timer, 0x487e98). Each login's back button runs V2.1's handler (0x4c703c, 0x49aa54:
+    # the bindings pinned below), now navigator_back (LOGIN_BACK): its tap, the chevron and Previous each leave
+    # Streaming on top, the same page, its row as it was. HiFi Music's login opens with its account field focused, under
+    # AWTK's keyboard (kb_ascii_t9, a window of its own): the chevron and Previous are the page's Back there too, not a
+    # Return in the keyboard (on V04Hm the first moved the focus to the password field).
+    from m1plus import M1PLUS_GP
+    site_patched('TIDAL_LOGIN'); site_patched('LOGIN_BACK')
+    half=lambda a: (m.get(a)&0xffff)-((m.get(a)&0x8000)<<1)  # an instruction's signed immediate
+    m=Machine(); NET=m.get(M1PLUS_GP-0x7f4c)-0x53c8  # networkGetConnectStatus's word (0x5d7cb8: lw -0x7f4c(gp), lw -0x53c8)
+    assert (m.get(0x5d7cb8),m.get(0x5d7cc0))==(0x8f8280b4,0x8c42ac38)
+    LOGINS={}
+    for service,row_id,page,login,style_at,lw_at,add_at in (
+            ('tidal','1','tidal/tidal_main','tidal/tidal_userlongin',0x4c7594,0x4c75a8,0x4c75b4),
+            ('hifi','0','hifi/hifimusic_page','hifi/userlogin_page',0x49b4f0,0x49b504,0x49b510)):
+        # The login page's init styles its back button navbar_btnreturn_style and binds its click: lw $a2, page(gp);
+        # addiu $a2, offset.
+        assert m.text((m.get(M1PLUS_GP-0x58f8)+half(style_at))&0xffffffff)=='navbar_btnreturn_style'
+        assert m.get(lw_at)>>16==0x8f86 and m.get(add_at)>>16==0x24c6
+        LOGINS[service]=(row_id,page,login,(m.get(M1PLUS_GP+half(lw_at))+half(add_at))&0xffffffff)
+    assert [v[3] for v in LOGINS.values()]==[0x4c703c,0x49aa54]
+    assert m.get(0x4b9ea0)==0x82220929  # tidal_tidal_main_init's lb $v0, TIDAL_SAVED_LOGIN($s1) after the call
+    assert O['TIDAL_SAVED_LOGIN']==0x929
+    def navigate(m,stack):
+        """stack, by page name, after m's navigator calls."""
+        for name,a,*_ in m.calls:
+            if name=='navigator_to': stack.append(m.text(a))
+            elif name=='navigator_replace': stack[-1]=m.text(a)
+            elif name=='navigator_back': stack.pop()
+            elif name=='navigator_back_to_home': del stack[1:]
+        return stack
+    def login_back(service,how):
+        """Streaming's row for service, its page's login as V2.1 opens it, then Back by how ('button', 'chevron',
+        'previous'): the window stack after, by page name. HiFi Music's login has AWTK's keyboard over it."""
+        row_id,page,login,on_back=LOGINS[service]
+        m,_=chevron('streaming_page'); m.config['KNOB']='1'
+        m.mock('media_key','navigator_to','navigator_replace','navigator_back','navigator_back_to_home',
+               'load_qrcode','clearTidalLoginInfo','dialog_quit')
+        m.handlers.pop(syms['m1_home_click'],None)  # V2.1's dispatcher itself, not the bindings' stand-in
+        row=m.node('list_item',row_id); m.word(row+0x10,m.string(row_id)); stream=m.top; stack=['home_page','streaming_page']
+        m.word(NET,1)
+        assert m.call(address=syms['m1_home_click'],args=(row,m.event,0,0),gap=0)==0
+        assert navigate(m,stack)[-1]==page,(stack,[c[0] for c in m.calls])
+        win=m.node('window',page.split('/')[1])
+        if service=='tidal':
+            assert m.call(address=syms['tidal_tidal_main_init'],args=(win,0,0,0),gap=0)==0
+            assert 'navigator_to' not in [c[0] for c in m.calls]  # m1_tidal_login, no saved login: in its place
+        else:  # the login thread done (2), no user (0x3a90 set): the page's timer replaces it
+            m.byte(syms['hifilogin_thread_running'],2); m.byte(0xa03a90,1); info=m.alloc(0x30); m.word(info+0x24,win)
+            m.call(address=0x487e98,args=(info,0,0,0),gap=0)
+        assert navigate(m,stack)==['home_page','streaming_page',login]
+        button=m.node('button',style='navbar_btnreturn_style')
+        m.top=m.node('window',login.split('/')[1],[m.node('view','navigationbar_view',[m.node('label'),button])])
+        m.nodes[button]['handlers']=[(O['EVT_CLICK'],on_back,m.top)]  # the page's own window, its init's ctx
+        if service=='hifi':
+            m.nodes[m.wm]=dict(type='window_manager',name='',children=[stream,m.top],visible=1)
+            m.top=m.node('keyboard','kb_ascii_t9',[m.node('button',style='button_style')]); m.nodes[m.wm]['children'].append(m.top)
+        if how=='chevron':
+            assert touch((PRESS,10,10),(LIFT,10,10),m=m)==[]; m.advance(0); assert m.clicks==[button]
+        elif how=='previous':
+            m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0); assert m.clicks==[button]
+        (_,f,ctx),=m.nodes[button]['handlers']; m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+        return navigate(m,stack)
+    for service in LOGINS:
+        for how in ('button','chevron','previous'):
+            assert login_back(service,how)==['home_page','streaming_page'],(service,how)
+    # Logged out, a saved login keeps Tidal's main page, built, under its login (its own threads post to it).
+    m=Machine(); m.mock('navigator_to','navigator_replace')
+    for saved,want in ((1,'navigator_to'),(0,'navigator_replace')):
+        m.byte(syms['theTidal']+O['TIDAL_SAVED_LOGIN'],saved)
+        m.call(address=payload_syms['m1_tidal_login'],args=(m.string('tidal/tidal_userlongin'),0,0,0),gap=0)
+        assert [(c[0],m.text(c[1])) for c in m.calls]==[(want,'tidal/tidal_userlongin')]
+    # With no network, either row shows V2.1's msg_notnetwork dialog and nothing opens.
+    for row_id in ('1','0'):
+        m=Machine(); m.mock('navigator_to','navigator_to_with_context','getFormatString','memset@GLIBC_2.0')
+        m.handlers.pop(syms['m1_home_click'],None)
+        row=m.node('list_item',row_id); m.word(row+0x10,m.string(row_id)); m.word(NET,0)
+        assert m.call(address=syms['m1_home_click'],args=(row,m.event,0,0),gap=0)==0
+        assert [m.text(c[1]) for c in m.calls if c[0]=='getFormatString']==['msg_notnetwork']
+        assert [m.text(c[1]) for c in m.calls if c[0].startswith('navigator')]==['dialog/msginfo_dialog']
+    passed()
     # A page that is no context and has no back button keeps it a media key: the volume dialog.
     m=input_machine('volume_dialog'); m.config['KNOB']='1'; m.calls=[]
     m.call(O['KEY_BACK_BTN'],gap=1000); m.advance(0,clear=False)
