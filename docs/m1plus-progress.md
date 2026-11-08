@@ -4124,7 +4124,7 @@ What the pass found:
 - **The message view can't be reached from the menu.** With `state=none` the Soloify menu has no Now Playing row (`has_track`), so only a card without the browse socket or a direct call opens it. `patch.py` still covers it.
 - **A paused Soloify session stops after 30 s with the browser shut** (`SPOT_IDLE_MS`, as designed). Hold then opens the local page, and reopening Soloify resumes the session.
 - **A flash or a reboot returns to the last power-off's place.** `/mnt/data/memoryfile` kept its 07:10:58 record through the flash and a shell `reboot`, and both came back paused on that track and second. `A reboot keeping the place` in `docs/m1plus-unported.md` is the gap. Not prioritized.
-- **Switching Minimal to Classic with Ivory set turned Light Mode on** (`LIGHT` 0 to 1), and Classic to Minimal reset `MINIMAL_ACCENT` to 0, the latter already noted in section 70. Not investigated.
+- **Switching Minimal to Classic with Ivory set turned Light Mode on** (`LIGHT` 0 to 1), and Classic to Minimal reset `MINIMAL_ACCENT` to 0, the latter already noted in section 70. Both are upstream's theme presets (`theme_preset`), left as they are.
 - **Other observations.** Four knob detents scrub 25 s on both pages, where 2 and 3 detents step 5 s each. Radio's third line can show raw stream metadata (`amgoArtistId="0"`). Queue's long label is a marquee (F2); a long-named local queue wasn't tried.
 
 ## How to check a build now
