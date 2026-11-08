@@ -20,6 +20,21 @@ static void *back_of(void *w, int depth) {
     }
     return (void *)0;
 }
+static int keyboard(void *w) { return w && !tk_strcmp(widget_get_type(w), "keyboard"); }
+/* The top window, or under AWTK's input-method keyboard (a kb_* window over the page whose edit has the focus, as on
+ * HiFi Music's login) the window it types into: Back is that page's, not a Return in the keyboard, which only moves the
+ * focus to the next edit. */
+static void *back_window(void) {
+    void *wm = window_manager(), *top = window_manager_get_top_window(wm);
+    if (!keyboard(top)) return top;
+    int under = 0; /* past the keyboard, down the window manager's children */
+    for (unsigned i = widget_count_children(wm); i-- > 0;) {
+        void *w = widget_get_child(wm, i);
+        if (under && !keyboard(w)) return w;
+        under |= w == top;
+    }
+    return top;
+}
 /* Back, from Previous in Knob: Navigation (after its key's dispatch: the click closes the page) and from the
  * status bar's chevron: the top page's back button, clicked; else a dialog closes, as its tap outside does; else a
  * payload page (Coverflow, Photos, Books, Radio, Spotify, the PEQ, the QR page) takes a Return, which its key-up
@@ -32,7 +47,7 @@ static int previous_back(const void *info) {
         qm_close();
         return 0;
     }
-    void *top = window_manager_get_top_window(window_manager()), *button = back_of(top, 0);
+    void *top = back_window(), *button = back_of(top, 0);
     if (coverflow_home_back(top)) return 0;
     char click[0x30];
     if (button && widget_get_prop_bool(button, "enable", 1))
@@ -119,7 +134,7 @@ int ringnav_knob_nav(void) { return knob_nav_active(); }
  * Now Playing's enlarged art keeps it a media key, as Now Playing does. */
 static int knob_back_active(void) {
     if (!knob_gate()) return 0;
-    void *top = window_manager_get_top_window(window_manager());
+    void *top = back_window(); /* a page under the keyboard too */
     return allowed_top(top) ||
            (back_of(top, 0) && tk_strcmp(widget_get_prop_str(top, "name", ""), "bigcover_page"));
 }

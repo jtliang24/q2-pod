@@ -48,6 +48,7 @@ M1PLUS_FUNCTIONS = {
  'dmrSendPlayMode': ('int', 'int'),
  'volume_refresh': ('void', 'void *'),  # the volume dialog shows the output's level
  'text_edit_set_select': ('int', 'void *, unsigned, unsigned'),  # the M1 Plus's edit_set_select (patch/m1plus_peq.h)
+ 'navigator_replace': ('int', 'const char *'),  # Tidal's login in its main page's place (m1_tidal_login)
 }
 WM_PAINT_LEAF_M1PLUS = ('window_manager_paint', 0x677b44, 'ringnav_wm_paint', (0x10800009, 0, 0x8c820088))
 # style_get_gradient (docs/m1plus-ipod-ui.md 4.1) is the Q2's leaf again: beqz a0; nop; lw v0, 0(a0), then the
@@ -302,6 +303,16 @@ CALL_SITES = {
         # parseplaycover_thd's toolsGetExternCover after a local track's embedded art failed (0x4df1e8),
         # under parse_cover_mutex: m1plus_player_cover drops it for ffmpeg (patch/m1plus_player_cover.c).
         'PLAYER_COVER': ((0x4df218, 0x8f99b880, None), (0x4df228, 0x0320f809, 'm1plus_player_cover')),
+        # Tidal's main page with no session opens its login page from its init (tidal_tidal_main_init, 0x4b9e44):
+        # bal navigator_to("tidal/tidal_userlongin"), its lw $t9 pinned, becomes jal m1_tidal_login, which replaces
+        # the page when it stays unbuilt under the login (no saved login), as HiFi Music's page replaces itself
+        # with its login (0x487eec). Back from the login then unwinds to the page that opened Tidal.
+        'TIDAL_LOGIN': ((0x4b9e94, 0x8f99a704, None), (0x4b9e98, 0x04115fb9, 'm1_tidal_login')),
+        # The Tidal and HiFi Music login pages' back buttons (0x4c703c, 0x49aa54; HiFi's dialog_quit first, which
+        # returns at once on a window) call navigator_back_to_home: they call navigator_back (GOT -0x5528)
+        # instead. Tidal's is a bal with its $t9, HiFi's a jalr; login success and logout keep their Home.
+        'LOGIN_BACK': ((0x4c704c, 0x8f99ade4, 0x8f99aad8), (0x4c7058, 0x04112c11, 0x04112c20),
+                       (0x49aa7c, 0x8f99ade4, 0x8f99aad8)),
     },
 }
 CALL_SITE_PURPOSES = {
@@ -349,6 +360,8 @@ CALL_SITE_PURPOSES = {
     'COVER_SAVE': 'covers saved beside the song',
     'TIDAL_PAGE_DONE': 'Tidal lists load every page',
     'M3U_DIR_CALL': 'card apps import only their own playlists',
+    'TIDAL_LOGIN': "Tidal's login replaces its unbuilt main page",
+    'LOGIN_BACK': 'Back from the Tidal and HiFi Music logins goes back, not Home',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
@@ -478,9 +491,9 @@ M1PLUS_GLOBAL_ALIASES = {
 # is 2, and `volume` stays the jacks'. on_wm_keyup_fun swaps Previous and Next, and the volume keys,
 # while rotate_mode is 1 (the rotated screen, 0x4cd9f8).
 M1PLUS_GLOBALS = ['g_btvolume', 'g_rotate_mode']
-# V2.1 data V1.32 lacks, read as CONTEXT_DATA is (sizes checked). None since the iPod Home (ipod-ui 4.5) replaced the
-# grid, whose cards were pdeq_choicemenu's.
-M1PLUS_CONTEXT_DATA = {}
+# V2.1 data V1.32 lacks, read as CONTEXT_DATA is (sizes checked). The grid's cards (pdeq_choicemenu) left with the iPod
+# Home (ipod-ui 4.5); Tidal's session holds the saved login m1_tidal_login reads (TIDAL_SAVED_LOGIN).
+M1PLUS_CONTEXT_DATA = {'theTidal': 2628}
 # Renamed in V2.1; each has the size of its V1.32 counterpart (checked in m1plus_symbols).
 M1PLUS_CONTEXT_ALIASES = {
     # The track whose cover the player's files hold (ipod-ui 4.5, Home's art): parseplaycover_thd clears it while it

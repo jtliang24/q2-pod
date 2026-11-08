@@ -28,6 +28,14 @@ static void m1_native_row(void *view, const char *icon, const char *name, const 
     widget_on(row, EVT_CLICK, m1_home_click, row);
 }
 
+/* Tidal's main page with no session opens its login page from its init (tidal_tidal_main_init's navigator_to,
+ * 0x4b9e98, CALL_SITES TIDAL_LOGIN). With a saved login it builds itself under the login and stays; without one it
+ * returns unbuilt, so the login takes its place, as HiFi Music's page replaces itself with its login (0x487eec):
+ * the login's Back (navigator_back, LOGIN_BACK) then returns to Streaming, not to an empty page. */
+int m1_tidal_login(const char *name) {
+    return theTidal[TIDAL_SAVED_LOGIN] ? navigator_to(name) : navigator_replace(name);
+}
+
 int streaming_open(void *ctx, void *event) {
     if (st.stream_page || !(st.stream_page = page_open("streaming_page", page_closed, page_keyup))) return 0;
     int apps = addon_scan(), soloify = soloify_installed();

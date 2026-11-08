@@ -847,3 +847,6 @@ extern unsigned char m1_return_latch;
 extern signed char m1_bc_idle;
 #define BC_IDLE ((unsigned)&m1_bc_idle)
 #define BC_IDLE_FULL 40
+/* Tidal's saved login, a string in theTidal (0xa44 bytes) that tidal_tidal_main_init (0x4b9e44) tests before it builds
+ * its page under its login page (m1_tidal_login, CALL_SITES TIDAL_LOGIN). */
+#define TIDAL_SAVED_LOGIN 0x929
