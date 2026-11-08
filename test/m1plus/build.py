@@ -70,6 +70,9 @@ assert (ipod.PITCH, ipod.BODY, ipod.ART) == (72, 68, 52) and 'LIB_PITCH' not in 
 assert m1ipod.SET_TOP + m1ipod.SET_ROWS * m1ipod.SET_ROW <= m1ipod.BOTTOM and m1['SET_STOCK_BODY'] <= m1ipod.SET_ROW
 assert (m1ipod.SET_ROW, m1ipod.SET_ROWS, m1ipod.SET_TOP, m1ipod.SET_STOCK_ROW) == (72, 6, 8, 64)
 assert m1ipod.BATT_ROOM == m1['BATT_ROOM'] == 115 and m1['STATUS_MARGIN'] == m1ipod.STATUS_MARGIN == 6 and m1['BAR_BACK_W'] == m1plus_ipod.BACK_W
+# 4.6's fixes: the chevron's tap, beside the play state's icon, is the chevron and its gap; Spotify's page has Now Playing's places.
+assert m1['BAR_BACK_PLAY_W'] == m1['BAR_BACK_W'] + m1['STATUS_GAP'] == 36 < m1['BAR_BACK_HIT_W'] == 64
+assert all(m1[f'SPOT_{n}'] == m1[f'NP_{n}'] for n in ('TEXT_X', 'TEXT_W', 'TITLE_Y', 'ARTIST_Y', 'ALBUM_Y', 'BAR_X', 'BAR_W', 'TIMES_Y', 'ART_X', 'ART_Y'))
 assert sys.modules['ipod'] is ipod and m1ipod is not ipod
 print('iPod screen profile checks passed.')
 
@@ -347,6 +350,15 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     from m1plus import (pic_gp, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS, GRADIENT_LEAF_M1PLUS, PDR_M1PLUS, RTC_READ_M1PLUS,
                         call_site_words, M1PLUS_PRIVATE_FUNCTIONS, M1PLUS_SHIMS, M1PLUS_UNRESOLVED, m1plus_inc)
     ps = symbols(directory/'patch.elf')
+    # One Now Playing for the local page and Spotify's (m1plus_np_view.c): navigation.c takes the file under M1PLUS where the Q2 has its
+    # np_sync, and the file guards itself, so the Q2 never compiles it. Both pages' painters and the one scrub are in the payload, and the
+    # Q2's scrub isn't.
+    assert '#if M1PLUS\n#include "m1plus_np_view.c"\n#else\n' in (ROOT/'patch/navigation.c').read_text()
+    view_c = (ROOT/'patch/m1plus_np_view.c').read_text()
+    assert re.fullmatch(r'/\*.*?\*/\n#if M1PLUS\n.*\n#endif\n', view_c, re.S) and view_c.count('#endif') == view_c.count('#if ')
+    assert {'np_write', 'np_view_theme', 'np_bar_fill', 'np_scrub_start', 'np_scrub_drag', 'np_scrub_end', 'np_scrub_gone', 'np_scrubbing',
+            'np_scrub_shown', 'np_repaint', 'settle_poll', 'spot_np_page', 'spot_now_playing', 'radio_now_playing'} <= set(ps)
+    assert not {'scrub_start', 'scrub_end', 'scrub_commit'} & set(ps)
     # A shim is a stand-in some payload source calls (a row nothing uses is dropped), and the stand-in is defined once.
     nav = (ROOT/'patch/m1plus_nav.h').read_text()
     users = ''.join(f.read_text() for f in (ROOT/'patch').glob('*.[ch]') if f.name != 'm1plus_nav.h')
@@ -603,6 +615,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     want = dict(re.findall(r'^#define STATUSW_(\w+) "([^"]+)"', (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M))
     assert {n for k, n in want.items() if k not in ('IDLE', 'EQ')} <= set(named) and not {want['IDLE'], want['EQ']} & set(named)
     assert named['img_back'][1] == [0, 0, 32, 30] and named['img_back'][2]['visible'] == 'false' and named['img_back'][2]['image'] == 'bar_back'
+    # Beside the play state's icon, the next in the group, the chevron's tap stops where the icon starts (m1plus_nav_back.c chevron_input).
+    assert named['view_bar_left'][3][:2] == [named['img_back'], named['img_playstate']]
     clock = named['bar_dclock'][1]
     assert clock[0] + clock[2] // 2 == 160
     # The widgets the iPod doesn't draw stay inside the bar, transparent: on V2.1 an invalidate off the screen's left
