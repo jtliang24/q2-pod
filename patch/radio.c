@@ -737,6 +737,10 @@ int radio_open(void *ctx, void *event) {
     show(MENU);
     return 0;
 }
+#if M1PLUS
+/* compact_now_playing's, while the radio owns playback (media_owner). */
+void radio_now_playing(void) { np_open(); }
+#endif
 int radio_status(void) { return rd.active ? (rd.pid ? 2 : 3) : 0; }
 unsigned radio_session(void) { return rd.serial; }
 void radio_set_playing(int playing) {

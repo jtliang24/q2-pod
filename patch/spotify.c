@@ -1378,6 +1378,8 @@ static void np_level(int menu) {
     rearm(&ui.leave, leave, 0);
     np_push(menu);
 }
+/* compact_now_playing's, while Spotify or Soloify owns playback (media_owner). */
+void spot_now_playing(void) { spot_np(); }
 #endif
 
 /* ringnav_keylong: Play/Pause held on a track row adds it to Spotify's queue, on a playlist row

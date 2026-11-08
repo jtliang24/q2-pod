@@ -5526,10 +5526,18 @@ void ringnav_boot(const char *page, const int *ctx) {
 /* Called by stock long Return and short Return on Home, after their gates.
  * Elsewhere it opens Now Playing over the page, remembered as np_origin; on Now Playing it goes
  * back to that page while it lies right under it, else Home. With Hold Return: Home it goes Home
- * from any page but Home itself, where it still opens Now Playing.
+ * from any page but Home itself, where it still opens Now Playing. On the M1, Now Playing is the page
+ * of whatever owns playback (media_owner): Spotify's or Soloify's, the radio's, else V2.1's.
  * ponytail: going Home leaves the latch to the stock release filter, as stock's own Home call
  * here did, relying on the hold's key-up reaching it once the windows close; clearing it would
  * let that release act on Home. */
+#if M1PLUS
+extern void spot_now_playing(void), radio_now_playing(void);
+#define on_now_playing(top, name) \
+    (!tk_strcmp(name, "playing_page") || spot_page(top) || !tk_strcmp(name, "radionp_page"))
+#else
+#define on_now_playing(top, name) (!tk_strcmp(name, "playing_page"))
+#endif
 int compact_now_playing(void) {
     pull_cancel();
     drop_input();
@@ -5542,7 +5550,7 @@ int compact_now_playing(void) {
         if (st.hold_home && tk_strcmp(name, "home_page")) {
             st.np_origin = (void *)0;
             navigator_back_to_home();
-        } else if (!tk_strcmp(name, "playing_page")) {
+        } else if (on_now_playing(top, name)) {
             /* ponytail: np_origin is only compared, never followed; a reused address goes Back
              * instead of Home */
             unsigned n = st.np_origin ? widget_count_children(wm) : 0;
@@ -5556,6 +5564,14 @@ int compact_now_playing(void) {
         } else {
             static const int context[4] = { 0, 0, 0xff, 2 };
             st.np_origin = top;
+#if M1PLUS
+            int owner = media_owner();
+            if (owner == 2)
+                spot_now_playing();
+            else if (owner == 3)
+                radio_now_playing();
+            else
+#endif
             navigator_switch_to_with_context("playing_page", context, 0);
             /* The window switch stops the hold's key-up from reaching the stock release
              * filter, so the latch it armed would otherwise swallow the next Return. Drop it
