@@ -12303,6 +12303,59 @@ for backend in (BrowseMachine,SoloifyMachine):
     spot_click(m,queue); assert m.asked()==('queue',); m.advance(0); assert 'navigator_back' in [c[0] for c in m.calls]; passed()
     m,np,info,msg,back,seek,row=spot_np_page(backend); prev,play,nxt,mode,queue=m.nodes[row]['children']
     spot_click(m,mode); assert m.asked()==('settings',); m.advance(0); assert 'navigator_back' in [c[0] for c in m.calls]; passed()
+# Hold Return and Home's row (compact_now_playing) open the page of whatever owns playback (media_owner, 1 local, 2 Spotify
+# or Soloify, 3 radio), from a page or from Home, and on that page go back to where they began.
+def hold_return(m): assert m.call(address=payload_syms['compact_now_playing'],args=(0,0,0,0),gap=0,clear=False,count=5_000_000)==0
+def holds(m): return [c[0] for c in m.calls if c[0] in ('navigator_back','navigator_back_to_home','navigator_switch_to_with_context')]
+def owner_page(m,opened,origin='sysset_page'):
+    """Hold Return from origin opens `opened`, never V2.1's page; held again it goes back, then with something between, Home."""
+    m.mock('navigator_back'); m.calls=[]; was=m.top=m.node('window',origin)
+    m.nodes[m.wm]={'type':'window_manager','children':[was]}; hold_return(m)
+    assert m.nodes[m.top]['name']==opened and holds(m)==[],(m.nodes[m.top]['name'],holds(m))
+    page=m.top; other=m.node('window','folder_page')
+    for between,want in (((),'navigator_back'),((other,),'navigator_back_to_home')):
+        m.nodes[m.wm]={'type':'window_manager','children':[was,*between,page]}; m.calls=[]; hold_return(m)
+        assert holds(m)==[want],(between,holds(m))
+        m.top=was; hold_return(m); m.top=page
+    return page
+for backend in (BrowseMachine,SoloifyMachine):
+    for origin in ('sysset_page','home_page'):
+        m=backend(); m.open(); m.answer(*ME); m.close(); m.state('playing',position=10000); m.poll()
+        owner_page(m,'spotify_page',origin); passed()
+    # Paused still owns it: F13's case.
+    m=backend(); m.open(); m.answer(*ME); m.close(); m.state('paused',position=10000); m.poll()
+    owner_page(m,'spotify_page'); passed()
+# Nothing else owns it: V2.1's page, with the context its playing strip gives.
+m=BrowseMachine(); m.mock('navigator_back'); m.calls=[]; m.top=m.node('window','sysset_page'); hold_return(m)
+got=[c for c in m.calls if c[0]=='navigator_switch_to_with_context']
+assert holds(m)==['navigator_switch_to_with_context'] and m.text(got[0][1])=='playing_page' and [m.get(got[0][2]+4*i) for i in range(4)]==[0,0,255,2]; passed()
+# The radio: its own page, with no radio list under it.
+m=RadioMachine({RDIR+'/favourites.m3u':bytearray(b'#EXTM3U\n#EXTINF:-1,One\nhttp://one/a\n')}); radio_open(m); m.row(0)
+m.forked=4343; m.row(0); np=m.top; assert m.nodes[np]['name']=='radionp_page'; m.destroy(np); m.top=m.page; m.close()
+page=owner_page(m,'radionp_page'); m.advance(500); assert m.labels(page)[:2]==['Internet Radio','One'],m.labels(page); passed()
+# Opened by the hold there is no browser under the page: Queue and Mode close it, unseen and first, and open the browser at
+# their level, the session left running; Back goes down the levels.
+for backend in (BrowseMachine,SoloifyMachine):
+    for i,op in ((3,'settings'),(4,'queue')):
+        m=backend(); m.open(); m.answer(*ME); m.close(); m.state('playing',position=10000); m.poll(); started=len(m.systems)
+        m.mock('window_manager_close_window_force'); page=owner_page(m,'spotify_page'); m.top=page
+        info,msg=np_views(m,page); row,=[w for w in m.nodes[info]['children'] if m.nodes[w]['type']=='view' and cf_geometry(m,w)[1]==O['NP_BUTTONS_Y']]
+        spot_click(m,m.nodes[row]['children'][i]); assert m.top==page
+        m.calls=[]; m.advance(0,clear=False); names=[c[0] for c in m.calls]
+        assert m.nodes[m.top]['name']=='spotbrowse_page' and [c[2] for c in m.calls if c[0]=='window_manager_close_window_force']==[page]
+        assert names.index('window_manager_close_window_force')<names.index('window_create'),names
+        assert m.asked()==(op,) and len(m.systems)==started,(m.asked(),m.systems)
+        m.destroy(page); m.page=m.top; m.answer(*OK,[]); m.back(); assert m.asked()==('account',),m.asked(); m.answer(*ME)
+        assert m.labels()[0]==('Soloify' if backend is SoloifyMachine else 'Spotify'),m.labels(); passed()
+# Previous's hold, wherever it is Back: the page, and its release spent, no skip on the page it opened.
+for backend in (BrowseMachine,SoloifyMachine):
+    m=backend(); m.open(); m.answer(*ME); m.close(); m.state('playing',position=10000); m.poll(); m.config['KNOB']='1'
+    back=m.node('button',style='navbar_btnreturn_style')
+    m.top=m.node('window','sysset_page',[m.node('view','navigationbar_view',[back]),m.node()]); m.sent=[]; m.calls=[]
+    assert m.call(O['KEY_BACK_BTN'],address=HOOKS['on_wm_keylong_fun'][0],event_type=O['EVT_KEY_LONG'],gap=0,clear=False)==11
+    assert m.nodes[m.top]['name']=='spotify_page' and m.u.mem_read(payload_syms['m1_return_latch'],1)[0]==1
+    m.call(O['KEY_BACK_BTN'],gap=1000); assert not m.sent and not m.u.mem_read(payload_syms['m1_return_latch'],1)[0],m.sent
+    m.call(O['KEY_BACK_BTN'],gap=1000); assert [x[1] for x in m.sent]==['b'],m.sent; passed()
 
 def run(m,name,*args): return m.call(address=payload_syms[name],args=(*args,0,0,0,0)[:4],gap=0,clear=False)
 
