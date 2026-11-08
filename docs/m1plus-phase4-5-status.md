@@ -1,7 +1,7 @@
 # Phase 4.5 status — November 7, 2026
 
-Phase 4.5, the portrait iPod Home, is implemented and passes every emulator and Q2 gate. The device pass is
-pending. The plan is [.plan/phase4-5.md](../.plan/phase4-5.md) and the record is
+Phase 4.5, the portrait iPod Home, is implemented, passes every emulator and Q2 gate, and passed its device pass
+on `V04Hm` (the findings below are to be planned). The plan is [.plan/phase4-5.md](../.plan/phase4-5.md) and the record is
 [m1plus-progress.md §69](m1plus-progress.md#69-phase-45-the-portrait-ipod-home-nov-7). Branch: `feature/m1-ipod`.
 
 ## What is in place
@@ -31,17 +31,15 @@ was built. It passes:
 Its function diff against dev 57 and its Home review sheets are under `work/phase4/4.5/` (`h6-fndiff.log`,
 `h6-sheets/`).
 
+## Device pass
+
+Flashed by the user and driven over q2remote on Nov 7: every Home destination in all three layouts and both
+themes, Settings and Back, both knob modes, artwork and a reboot. The device's configuration, boot target and
+volume were restored. [§69](m1plus-progress.md#69-phase-45-the-portrait-ipod-home-nov-7) has the record.
+
 ## Remaining
 
-1. Flash `V04Hm` through the menu updater; the user confirms the update.
-2. Run the device pass over q2remote, with Screen Off set to Off and restored afterwards:
-   - every Home destination;
-   - all modes in both themes;
-   - Settings and Back;
-   - both knob modes;
-   - artwork;
-   - reboot.
-
-   Record the pass in §69.
-3. Leave the two cosmetic points from the review sheets to the aesthetics pass: the Split knob walk clips the
-   top row, and Classic's Settings card is grey.
+1. Plan the five findings from the pass (`.plan/`): Tidal and HiFi Music login Back skips Streaming, the Settings
+   list's first selection, the Carousel's stale Shortcut icon, the carousel's tick filter on a burst, and the
+   cosmetics. The two Split and Classic cosmetics wait for the aesthetics pass.
+2. Not covered: Knob Up: List Down, car-mode boot resume and a cover-less track.

@@ -3894,6 +3894,41 @@ and `home-classic.png`) show each layout in both themes, from Home through the k
 Two cosmetic points remain for the aesthetics pass: the Split knob walk leaves the top row clipped, and Classic's
 Settings card is grey where the other cards take the accent.
 
+**Device pass (Nov 7, `V04Hm` flashed by the user through the TF card update; the installed `release/bin/demo`
+matched `h6`'s manifest, `04f6b43b…`).** Over q2remote, with Screen Off set to Off for the pass. Screenshots:
+`work/phase4/4.5/device-pass/`. Passed, with the findings below. Nothing was fixed during the pass.
+- **Split, Minimal:** every Home row opened and came back to the row it left: Now Playing, Library (Albums
+  opens), Coverflow, Folder, Favorites, Streaming (all eight rows scroll; Podcasts, Internet Radio, AirPlay,
+  Configuration, File Browser and Soloify open; Tidal and HiFi Music open their login pages) and Settings (Playback
+  and System open). Back from Settings by the status bar's chevron and by Previous, and from Playback and System.
+  The art follows the track at the same cache filename (five tracks).
+- **Full, Minimal and Classic:** every row, touch and knob, with Back to the row it left. **Classic Split:**
+  Settings, Streaming and Back.
+- **Carousel, both themes:** seven cards (Now Playing, Library, Coverflow, Folder, Favorites, Streaming, Settings),
+  each opened with Centre and returned to its card by the chevron; Settings and its Back; a swipe and a card tap;
+  the knob wraps.
+- **Knob: Volume** (Carousel): a detent opens the volume bar, the next changes it, cards stay put; touch swipes and
+  taps; Centre locks the screen, as in stock. Knob: Navigation walks every list and the carousel. The Shortcut row
+  cycles Artists, Albums, Favorites, Shuffle and Rated Albums, and the Carousel card follows its label.
+- **Reboot** (`reboot` from the shell): Home returned in Split and Minimal with the art up. The art is the saved
+  resume track's, as a shell reboot is not a power-off.
+- **Restored:** Screen Off to 1 min through the UI (`LIGHTTIME=3`), the configuration byte for byte (`0c2eac84…`;
+  the pass had added `HOME=0` and `SHORTCUT=3`), the boot target to `rockbox` (`dca2f95b…`), and the volume to 21.
+  The card keeps `V04Hm` as `update.bin`, and `V041m` as `.q2/update-V041m.bin`.
+
+Findings for the fix plan (none blocks the phase):
+1. Back from the Tidal and HiFi Music login pages goes to Home, past Streaming. The other Streaming pages return
+   to it.
+2. The Settings list's first selection differs: System on the first open, Playback after a reboot, then the last
+   used.
+3. The Carousel's Shortcut card takes the Shortcut's label but keeps the Favorites heart.
+4. Three detents in one q2remote call moved the carousel one card (stock's tick filter); a real knob's rate is
+   untested.
+5. Cosmetics for the aesthetics pass: the Split knob walk clips the top row (seen on the device), Classic's
+   Settings card is grey, and Classic's settings icons take different colours.
+
+Not covered: Knob Up: List Down, car-mode boot resume (the emulator walks cover it) and a cover-less track.
+
 `graphify update .` refreshed the AST graph.
 
 ## How to check a build now
