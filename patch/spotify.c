@@ -132,6 +132,7 @@ static struct {
 static struct {
 #if M1PLUS
     void *play, *seek; /* the transport row's Play and the bar's touch (np_controls) */
+    int level; /* the browser's level np_browse opens */
 #endif
     void *page, *info, *msg, *art, *bar, *glyph, *title, *artist, *album, *elapsed, *remain, *note,
         *sub;
@@ -1351,13 +1352,31 @@ int spot_open(void *ctx, void *event) {
 }
 
 #if M1PLUS
-/* The Now Playing page's Queue (0) and Mode (1): the browser's Queue and Playback Settings levels, the page gone. */
-static void np_level(int menu) {
-    if (!br.page) return;
-    if (ui.scrub) scrub_commit();
-    rearm(&ui.leave, leave, 0);
+static void np_push(int menu) {
     int r = menu ? M_SETTINGS : M_QUEUE;
     push(L_LIST, r == M_QUEUE ? "queue" : "settings", "", "", MENU[r]);
+}
+/* Hold Return opens the page with no browser under it (spot_now_playing). The page closes first, unanimated and unseen,
+ * as m1plus_play_page closes the stale one, then the browser opens at the level: Back goes down its levels, then to
+ * where the hold began. On a timer: the click that asked is still the page's. */
+static int np_browse(const void *unused) {
+    int menu = ui.level;
+    ui.leave = 0;
+    window_manager_close_window_force(window_manager(), ui.page);
+    spot_open((void *)(long)spot_be, 0);
+    if (br.page) np_push(menu);
+    return 0;
+}
+/* The Now Playing page's Queue (0) and Mode (1): the browser's Queue and Playback Settings levels, the page gone. */
+static void np_level(int menu) {
+    if (ui.scrub) scrub_commit();
+    if (!br.page) {
+        ui.level = menu;
+        rearm(&ui.leave, np_browse, 0);
+        return;
+    }
+    rearm(&ui.leave, leave, 0);
+    np_push(menu);
 }
 #endif
 
