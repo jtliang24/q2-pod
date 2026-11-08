@@ -9824,13 +9824,15 @@ def m1_home_modes():
     # HOME_TOP inset, its rows HOME_FULL_ROW (Classic: HOME_CLASSIC_ROW). Carousel: the cards and arrows, the menus and
     # the art hidden and taking no taps. Every layout shows the Shortcut row (no Rockbox on the M1: Favorites).
     geometry=lambda m,w: [signed(m.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H')]
-    def home(mode,theme,**config):
-        CONFIG.clear(); CONFIG.update(HOME=str(mode),THEME=str(theme),**config); m=ShuffleMachine(); CONFIG.clear()
+    def home_window(m):  # a Home window on top, initialised (coverflow_home)
         view,imgs=home_list(m); assert m.call(address=home_hook[0],args=(m.top,0,0,0),gap=0)==0
         w={n:named(m,m.top,n) for n in ('img_homeart','list_view_home','list_view_homeset','slide_menu','img_left','img_right','btn_rockbox')}
         s=w['slide_menu']; m.word(s+O['SLIDE_INDEX'],int(m.nodes[s]['asset'].get('value',0)))  # slide_menu_create's: the asset's card
         if not m.get(s+O['W_CHILDREN']): m.word(s+O['W_CHILDREN'],m.alloc())  # stock completion checks the child array (Machine.page)
-        return m,view,w
+        return view,w
+    def home(mode,theme,**config):
+        CONFIG.clear(); CONFIG.update(HOME=str(mode),THEME=str(theme),**config); m=ShuffleMachine(); CONFIG.clear()
+        return (m,*home_window(m))
     for theme in (0,1):
         for mode in (0,1,2):
             m,view,w=home(mode,theme)
@@ -9880,6 +9882,31 @@ def m1_home_modes():
         f,ctx=m.handler(img,O['EVT_CLICK']); m.call(address=f,args=(ctx,home_tap(m,img),0,0),gap=0); m.advance(200)
         assert m.call(address=payload_syms['previous_back'],args=(0,0,0,0),gap=0)==0; m.advance(200)
         assert m.nodes[menu]['visible'] and not m.nodes[sets]['visible']
+    passed()
+    # The Settings list's selection (Phase 4.5 device pass, finding 2), as the Q2's: it opens on Playback, and reopens
+    # on the row it was left on, the list keeping its selection (home_page has no position memory: CTX_DYNAMIC), the
+    # menu it came from keeping its row or card. A new Home window (a reboot's) opens it on Playback again. On the
+    # device, System's first open had followed the pass's own Screen Off change, made through System.
+    for mode in (0,1,2):
+        m,view,w=home(mode,0); m.mock('widget_animator_start','widget_animator_pause')
+        def at(w):  # the menu's row or card
+            if mode==2: return m.get(w['slide_menu']+O['SLIDE_INDEX'])
+            v=named(m,w['list_view_home'],'scroll_view_home'); m.paint(v); return m.selected(v)
+        if mode==2:
+            for _ in range(2): m.call(O['KEY_NEXT']); m.advance(1000)
+        else: at(w); m.call(); m.call()
+        assert at(w)==2,mode
+        m.mock('widget_animator_prop_create','widget_animator_prop_set_params')
+        def settings(w):  # Settings tapped: the list's row
+            img=named(m,w['slide_menu'] if mode==2 else w['list_view_home'],'img_settings'); f,ctx=m.handler(img,O['EVT_CLICK'])
+            assert m.call(address=f,args=(ctx,home_tap(m,img),0,0),gap=0)==0; m.advance(200)
+            sview=named(m,w['list_view_homeset'],'scroll_view_homeset'); m.paint(sview); return m.selected(sview)
+        def back(): assert m.call(address=payload_syms['previous_back'],args=(0,0,0,0),gap=0)==0; m.advance(200)
+        assert settings(w)==0,mode
+        assert m.call()==11; back(); assert at(w)==2,mode  # System chosen, then Back
+        assert settings(w)==1,mode; back(); assert at(w)==2,mode
+        view,w=home_window(m); m.mock('widget_animator_start','widget_animator_pause')
+        assert settings(w)==0,mode
     passed()
     # Carousel: the knob's turns step the cards (wrapping), a fast spin by HOME_FAST_SLIDE_MS; the arrows step one
     # card each way; a card's press opens its page as its row does.
