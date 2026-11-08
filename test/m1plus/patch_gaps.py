@@ -36,108 +36,24 @@ GAPS = {
     'c0c216337f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5504 m.word(0xa3beac,2); m.nodes[eq][visible]=1; m.nodes[state][visible]=0
     '4cb62ca34f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5506 assert (stock_showface,bar) in [c[:2] for c in m.calls] and m.nodes[state][visib
     '0a9fe5785b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5508 for mode in (1,2,3,0,1,2,3,0):
-    # Home and the Q2 Pod page (ipod-ui 4.5)
-    '4f7dbcae47': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5371 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
-    'f43abcdfc1': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5371 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
-    '3eaa96bb9c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5372 m.paint(view)
-    'd652ea7b25': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5373 assert m.selected(view)==0
-    '47ba5647cc': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5374 for i in range(1,7): assert m.call()==11 and m.selected(view)==i and m.get(view+
-    '3c4013c003': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5375 m.paint(view); assert m.rounded[0][rect]==(25,6*HOME_ROW+HOME_ROW//2-3,6,6)
-    '3eaa96bb9c.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5375 m.paint(view); assert m.rounded[0][rect]==(25,6*HOME_ROW+HOME_ROW//2-3,6,6)
-    'c48d53e9b2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5376 assert m.call(gap=50)==11 and m.selected(view)==6   # bumped
-    '7f02d59ef4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5377 assert m.call(gap=O[EDGE_PAUSE_MS])==11 and m.selected(view)==0
-    '6585eb09c4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5378 assert m.call(O[KEY_PREV],gap=50)==11 and m.selected(view)==0   # bumped
-    '328966b976': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5379 assert m.call(O[KEY_PREV],gap=O[EDGE_PAUSE_MS])==11 and m.selected(view)==6
-    '093f54b391': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5380 for i in range(5,2,-1): assert m.call(O[KEY_PREV])==11 and m.selected(view)==i
-    '11e3b719f5': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5381 assert m.call(O[KEY_RETURN])==11 and m.selected(view)==0 and not destinations(m)
-    '2fbfc74242': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5382 for i in (1,2): assert m.call(gap=1000)==11 and m.selected(view)==i
-    '707d9c9fa3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5383 assert not m.slides and m.confirm()==11 and m.dispatched()[0][1]==imgs[2]; passe
-    '4f7dbcae47.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5387 m=Machine(); view,imgs=home_list(m); bar=m.node(window,system_bar); m.word(syms[
-    '3eaa96bb9c.3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5389 m.byte(syms[g_backlight_status],0); m.paint(view); assert m.selected(view)==-1 a
-    '56298f1c9a': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5389 m.byte(syms[g_backlight_status],0); m.paint(view); assert m.selected(view)==-1 a
-    '6eaf9d30ac': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5390 paint_bar(); assert (widget_invalidate_force,view) not in [c[:2] for c in m.call
-    '27669fc1eb': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5392 paint_bar(); assert (widget_invalidate_force,view) in [c[:2] for c in m.calls]
-    '3eaa96bb9c.4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5393 m.paint(view); assert m.selected(view)==0 and m.rounded[0][rect]==(25,HOME_ROW//
-    'f92f34df2f': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5393 m.paint(view); assert m.selected(view)==0 and m.rounded[0][rect]==(25,HOME_ROW//
-    '6eaf9d30ac.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5394 paint_bar(); assert (widget_invalidate_force,view) not in [c[:2] for c in m.call
-    '4f7dbcae47.3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5403 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2]); m.clip=(0,0,375,32
-    'f43abcdfc1.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5403 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2]); m.clip=(0,0,375,32
-    '3eaa96bb9c.5': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5404 m.paint(view)
-    '1a714b6666': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5407 assert m.rounded[0][rect]==(25,HOME_ROW//2-3,6,6) and m.icons==bar()
-    '06323174d4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5409 m.call(); m.paint(view); assert m.selected(view)==1 and m.rounded[0][rect][1]>0
-    '3eaa96bb9c.6': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5409 m.call(); m.paint(view); assert m.selected(view)==1 and m.rounded[0][rect][1]>0
-    '2f7883a1cf': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5412 m.touch(); m.paint(view); assert m.icons==bar() and m.selected(view)==1; passed(
-    '3eaa96bb9c.7': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5412 m.touch(); m.paint(view); assert m.icons==bar() and m.selected(view)==1; passed(
-    '3eaa96bb9c.8': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5413 m.byte(syms[g_navbar_status],1); m.paint(view); assert not m.icons and not loade
-    '4f7dbcae47.4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5415 m=Machine(); m.config[THEME]=1; view,imgs=home_list(m); click_target(m,imgs[2]);
-    'f43abcdfc1.3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5415 m=Machine(); m.config[THEME]=1; view,imgs=home_list(m); click_target(m,imgs[2]);
-    '3eaa96bb9c.9': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5416 m.paint(view)
-    'd9bf25c26c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5418 assert m.sel()==(0,0,HOME_LIST_W,HOME_ROW) and m.icons==cbar() and not m.rounded
-    '1801d15492': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5419 assert m.bands[1][4]==color_t(ACCENTS[0][0]) and loaded(m)==[list_into] and m.cl
-    '3eaa96bb9c.10': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5420 m.call(); m.paint(view); assert m.selected(view)==1 and m.sel()[1]>0 and m.icons
-    '9089197301': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:5420 m.call(); m.paint(view); assert m.selected(view)==1 and m.sel()[1]>0 and m.icons
-    'f519682145': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:6030 for theme in (0,1):
-    '1903a0a4b3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:6083 assert not [t for t in m.timers.values() if t[1]==payload_syms[home_drift]] and
-    'd30af9692f': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:6084 assert [signed(m.get(m.art+O[k])) for k in (W_X,W_Y,W_W,W_H)]==[SPLIT,0,PW,290];
-    '4bf024fbb1': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8315 m.art_size=(319,319); m.pixels.clear(); paint_home(); c=tex_of(319,319)
-    '9dbe947d5c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8316 assert m.nodes[m.art][image]== and [signed(m.get(m.art+O[k])) for k in (W_X,W_Y,
-    'f55ac103ea': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8317 assert (c[u0],c[v0],c[rx],c[ry])==((290-PW)//2,0,29,29) and not drifts()
-    '8cef526eea': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8318 assert drawn()==framed(c,0) and (bitmap_lock_buffer_for_write,) in [x[:1] for x
-    '214b860d29': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8319 assert drawn()==framed(c,0) and (bitmap_lock_buffer_for_write,) not in [x[:1] fo
-    'd78c984174': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8320 paint_home(); m.advance(0); assert len(drifts())==1  # it arms on the next paint
-    '4bf4c098d9': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8321 m.calls.clear(); m.advance(TICK); assert set(invalidated())=={(m.home,(SPLIT,0,P
-    'fb9e654bc7': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8322 assert drawn()==framed(c,TICK)!=framed(c,0)  # a tick moves it by a fraction of
-    '1b40e39f5c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8323 m.advance(1000-TICK); assert drawn()==framed(c,1000) and len(drifts())==1; passe
-    '7684b0f340': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8324 m.advance(TICK); instructions[0]=0; assert drawn()==framed(c,1000+TICK); frame_c
-    '41e7830027': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8326 tid=next(t for t,v in m.timers.items() if v[1]==payload_syms[home_drift]); m.tim
-    '8fc3352f1c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8326 tid=next(t for t,v in m.timers.items() if v[1]==payload_syms[home_drift]); m.tim
-    '20aa5be228': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8327 m.advance(5000); t=1000+TICK+O[DRIFT_MAX_STEP_MS]; assert drawn()==framed(c,t);
-    '8856eca524': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8330 for cover_up in (lambda: setattr(m,top,np),lambda: m.byte(syms[g_backlight_statu
-    '20aa5be228.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8343 paint_home(); assert drawn()==framed(c,t); paint_home(); assert len(drifts())==1
-    'd78c984174.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8343 paint_home(); assert drawn()==framed(c,t); paint_home(); assert len(drifts())==1
-    'bb392fd3a1': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8345 instructions[0]=0; paint_home(); filter_cost=instructions[0]; c=tex_of(638,638)
-    '0dbb8cdbd9': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8346 assert drawn()==framed(c,t) and len(drifts())==1
-    '20aa5be228.3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8348 instructions[0]=0; paint_home(); big_cost=instructions[0]; m.u.hook_del(pan_coun
-    'b04fddfbd0': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8348 instructions[0]=0; paint_home(); big_cost=instructions[0]; m.u.hook_del(pan_coun
-    'e71e90c7e3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8352 assert not drifts() and m.nodes[m.art][image].endswith(externpic.jpg) and m.get(
-    '4f7dbcae47.5': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8454 m=Machine(); view,imgs=home_list(m); begin(m,view)
-    'a1af47494f': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8455 labels=[m.nodes[m.get(img+O[W_PARENT])][children][0] for img in imgs]
-    '3d53ed3386': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8457 end(m,labels[0]); begin(m,labels[1]); assert style_color(m,0xffffffff)[1]==0xffa
-    '198848f550': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8833 home=asset_tree(m,HOME_PAGE)
-    '272249ba26': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8866 home_bounds(False); carousel(False)
-    '466012b4b4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8866 home_bounds(False); carousel(False)
-    '272249ba26.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8868 home_bounds(True); carousel(False)
-    '8f720362a9': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8868 home_bounds(True); carousel(False)
-    '84b943d9a0': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8870 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(2,HOME)] and te
-    '927dc434cc.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8870 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(2,HOME)] and te
-    '4fc57e7f8e': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8871 carousel(True); assert not [c for c in m.calls if c[0]==image_manager_unload_all
-    '272249ba26.3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
-    '35d85e600e': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
-    '466012b4b4.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
-    '715ae6bcff': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
-    '4fc57e7f8e.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    '715ae6bcff.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    '715ae6bcff.3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    'c0c3106d02': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    'fd1c55d76c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    '272249ba26.4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8909 click(1); home_bounds(False,True); carousel(False); passed()
-    '715ae6bcff.4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8909 click(1); home_bounds(False,True); carousel(False); passed()
-    'baa6580069.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:8909 click(1); home_bounds(False,True); carousel(False); passed()
-    '4f7dbcae47.6': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9243 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2]); m.paint(view)
-    'f43abcdfc1.4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9243 m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2]); m.paint(view)
-    '99f82b57ad': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9246 assert m.confirm()==11 and m.dispatched()[0][1]==imgs[4]; passed()
-    '09bc2f5c69': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9287 m,view=home_machine(); got=[]
-    '09bc2f5c69.2': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9294 m,view=home_machine()
-    '09bc2f5c69.3': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9301 m,view=home_machine(); seen=[]
-    '0ea534a834': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9337 m,view=home_machine(tone=0)
-    '09bc2f5c69.4': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9339 m,view=home_machine()
-    'f08e7ea68f': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9621 if is_m1plus: q2pod_page()  # its own names: the Librarys machine (m, top) is us
-    '0f3397c13c': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9716 if is_m1plus: q2pod_real_grid()
-    'ff99c8ed8a': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9819 home_carousel()
-    '6557576207': 'Home and the Q2 Pod page (ipod-ui 4.5)',  # patch.py:9820 for full in (0,1):
+    # The Q2 Display page's Home rows (its Corners and Q2 rows around them): the M1's Home layouts and rows are
+    # m1_home_modes and the M1 Display test (ipod-ui 4.5); the fixture itself is Phase 5's
+    '466012b4b4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8866 home_bounds(False); carousel(False)
+    '8f720362a9': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8868 home_bounds(True); carousel(False)
+    '84b943d9a0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8870 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(2,HOME)] and te
+    '927dc434cc.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8870 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(2,HOME)] and te
+    '4fc57e7f8e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8871 carousel(True); assert not [c for c in m.calls if c[0]==image_manager_unload_all
+    '35d85e600e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
+    '466012b4b4.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
+    '715ae6bcff': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
+    '4fc57e7f8e.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
+    '715ae6bcff.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
+    '715ae6bcff.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
+    'c0c3106d02': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
+    'fd1c55d76c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
+    '715ae6bcff.4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8909 click(1); home_bounds(False,True); carousel(False); passed()
+    'baa6580069.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8909 click(1); home_bounds(False,True); carousel(False); passed()
     # boot resume to Home (ipod-ui 4.5)
-    '6bd274c37f': 'boot resume to Home (ipod-ui 4.5)',  # patch.py:4657 assert struct.unpack_from(<I,demo,fileoff(demo,0x523de0))[0]==jal(boot)
-    'ca3db14059': 'boot resume to Home (ipod-ui 4.5)',  # patch.py:4658 for car,cls,want in ((0,1,[(0x5550,4,1,3)]),(0,0xff,[]),(1,0xf003,[])):
     # Now Playing (ipod-ui 4.6)
     'ed2910cddb': 'Now Playing (ipod-ui 4.6)',  # patch.py:6102 assert shown()==[2 of 3,Album 1,-2:05]; passed()
     'afd9cd9841': 'Now Playing (ipod-ui 4.6)',  # patch.py:6104 m.nodes[slider][value]=101; assert repaint()==[label_ipod_remain] and shown()[2]
@@ -412,6 +328,8 @@ GAPS = {
     'a81c9fd1c3': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1945 assert tuple(m.get(prompt+O[k]) for k in (W_X,W_Y,W_W,W_H))==(0,0,375,O[CONFIRM_
     '646f1a6906': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1946 assert m.nodes[prompt][style:normal:font_size]==O[CONFIRM_PROMPT_PX]
     '1e6a4e4689': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1947 assert m.nodes[prompt][style:normal:text_align_h]==center and m.nodes[prompt][st
+    # Home's Centre after the Q2 wheel's timed turns (100 ms gaps): the M1's knob and Centre on Home are m1_home_modes
+    '99f82b57ad': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9246 assert m.confirm()==11 and m.dispatched()[0][1]==imgs[4]; passed()
     # Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)
     '34e658d714': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9227 def turn(m,w,gaps,key=NEXT):
     '18b998b1ce': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9233 for table in (False,True):
@@ -660,7 +578,7 @@ GAPS = {
     '012e45a329': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
     '4df64b387d.11': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
     'c54ae6e308.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10808 key(O[KEY_RETURN]); m.advance(0); pick(1); assert len(frames())==1
-    '7e86233542.19': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10809 m.close(); assert m.get(payload_syms[g])==0 and not frames() and m.get(payload_s
+    '7e86233542.17': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10809 m.close(); assert m.get(payload_syms[g])==0 and not frames() and m.get(payload_s
     '59bdeea4c9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10743 assert word(G_SCREEN)==0 and not frames() and m.get(payload_syms[wheel_raw])==0
     '7b597aa195.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10744 assert m.key()==11; passed()  # Return in the chooser after Vortex goes back to
     # Display and settings scenarios on V2.1's rows (Phase 5)
@@ -714,8 +632,6 @@ GAPS = {
     'd9ba565d32': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8817 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]==Co
     '26bda3c14e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8818 assert [m.text(c[1]) for c in m.calls if c[0]==opendir@GLIBC_2.0]==[/mnt/mmc/.co
     '1cdc7d997d': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8827 assert texts()==[Accent: Ivory,Home: Split,Battery: Icon,Theme: Minimal]; passed
-    'a7f54dea42': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8835 m.call(address=HOOKS[home_page_init][0],args=(home,0,0,0),gap=0)
-    'd3cec3151b': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8836 art=named(m,home,img_homeart)
     '84fb5c2e21': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8861 shortcut_button=m.nodes[shortcut][children][0]
     '5622a7e908': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8862 sf,sc=m.handler(shortcut_button,O[EVT_CLICK])
     'e5e97b6d36': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8863 for label in (Favorites,Shuffle,Rated Albums,Artists,Albums,Games,Rockbox):

@@ -1,11 +1,9 @@
-/* M1 Plus: Library and Streaming entry pages, reached through the Q2 Pod Home card during the Home port. patch/navigation.c includes this where it stood (docs/m1plus-roadmap.md U1c). */
+/* M1 Plus: the Library and Streaming entry pages, Home's Library and Streaming rows. patch/navigation.c includes this where it stood (docs/m1plus-roadmap.md U1c). */
 #if M1PLUS
-extern int coverflow_row(void *ctx, void *event); /* coverflow.c */
 static int airplay_open(void *ctx, void *event);
-/* The Q2 Pod Home card originally collected the Library's added rows and Streaming's services
- * because V2.1 has neither root page. The Library now includes the native categories in upstream
- * order; Streaming has its own page. Coverflow and Streaming stay reachable here during the Home
- * port, until the fixed Home destinations replace the grid card. */
+/* V2.1 has neither page: its Home grid held the library's categories and its services as cards. The iPod Home
+ * (docs/m1plus-ipod-ui.md 4.5) opens the Library, upstream's rows in its order with V2.1's own categories and
+ * maintenance, and Streaming, V2.1's native services with the payload's. */
 extern void videos_open(const char *root); /* m1plus_books_video.c */
 /* The Videos row lists the videos, as on 1.4.5 (videos_open); the Q2's opens Folder view. */
 static int videos_click(void *ctx, void *event) {
@@ -60,7 +58,7 @@ int library_open(void *ctx, void *event) {
     static const char *const icons[] = { "local_podcasts", "local_audiobooks", "local_photos",
                                          "local_books", "local_videos" };
     char path[sizeof st.media_root];
-    int media[VIDEOS], scrobbles = scrobble_ready(), n = 19 + scrobbles;
+    int media[VIDEOS], scrobbles = scrobble_ready(), n = 17 + scrobbles;
     for (int k = 0; k < VIDEOS; k++) n += media[k] = media_find(k + 1, path);
     void *view = page_list(st.lib_page, st.lib_page, 0, "Library", n, LIB_PITCH);
     library_into(view, "local_shuffle", shuffle_menu, 0, "Shuffle");
@@ -81,9 +79,6 @@ int library_open(void *ctx, void *event) {
         if (media[k])
             library_into(view, icons[k], k + 1 == VIDEOS ? videos_click : media_click, (void *)(long)(k + 1), MEDIA[k]);
     m1_native_row(view, "composer", "8", "Composers");
-    library_row(view, "local_coverflow", coverflow_row, 0, "Coverflow");
-    /* Keep services reachable from the grid until the fixed Home routes land. */
-    library_into(view, "row_spotify", streaming_open, 0, "Streaming");
     if (scrobbles) library_row(view, "local_scrobble", upload_scrobbles, 0, "Upload Scrobbles");
     /* Maintenance last, as upstream's Update Local Music: V2.1's CD ripper card (the USB host for the drive) first. */
     m1_native_row(view, "cdripper", "15", "CD Ripper");

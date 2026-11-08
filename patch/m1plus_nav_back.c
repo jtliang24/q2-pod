@@ -23,7 +23,8 @@ static void *back_of(void *w, int depth) {
 /* Back, from Previous in Knob: Navigation (after its key's dispatch: the click closes the page) and from the
  * status bar's chevron: the top page's back button, clicked; else a dialog closes, as its tap outside does; else a
  * payload page (Coverflow, Photos, Books, Radio, Spotify, the PEQ, the QR page) takes a Return, which its key-up
- * handler turns into a close or a step back a screen. Home has no back. */
+ * handler turns into a close or a step back a screen. Home's back is its Settings list's, to the menu it opened from
+ * (coverflow_home_back); Home itself has none. */
 static int previous_back(const void *info) {
     (void)info;
     /* The hold menu has no back button: Previous closes it as OK does */
@@ -32,6 +33,7 @@ static int previous_back(const void *info) {
         return 0;
     }
     void *top = window_manager_get_top_window(window_manager()), *button = back_of(top, 0);
+    if (coverflow_home_back(top)) return 0;
     char click[0x30];
     if (button && widget_get_prop_bool(button, "enable", 1))
         stock_dispatch_trampoline(button, pointer_event_init(click, EVT_CLICK, button, 0, 0));
@@ -123,11 +125,12 @@ static int knob_back_active(void) {
 }
 /* Hold Return (ipod-ui 4.4): Previous held wherever it is Back (knob_back_active), V2.1's key-long for it (AWTK's,
  * after 1000 ms: HOLD_KEYS is Q2 only), opens Now Playing, as Return's hold does on the Q2 (or goes Home, with Hold
- * Return: Home). Home's grid keeps Previous a track key, and Now Playing V2.1's own hold. The latch spends its release
+ * Return: Home). Home keeps Previous a track key but on its Settings list, and Now Playing V2.1's own hold. The latch spends its release
  * (m1plus_nav_knob.inc), which would go back. */
 static int hold_previous(unsigned key) {
     void *top = window_manager_get_top_window(window_manager());
-    if (key != (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) || !top || !knob_back_active() || home_menu(top) ||
+    if (key != (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) || !top || !knob_back_active() ||
+        (home_menu(top) && !coverflow_home_sets(top)) ||
         !tk_strcmp(widget_get_prop_str(top, "name", ""), "playing_page"))
         return 0;
     compact_now_playing();
@@ -135,5 +138,4 @@ static int hold_previous(unsigned key) {
     return 1;
 }
 #endif
-#include "m1plus_nav_home.c"
 #include "m1plus_nav_np.c"

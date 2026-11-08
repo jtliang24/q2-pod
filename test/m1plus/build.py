@@ -52,9 +52,12 @@ assert [ipod.CORNER_R, ipod.BC_ART, ipod.HOME_LIST_W, ipod.STATUS_MARGIN, ipod.N
 m1ipod = m1plus_ipod.ipod
 assert [getattr(m1ipod, n) for n in SCREEN] == [m1[n] for n in SCREEN] == [320, 480, 30, 450]
 assert m1ipod.CORNER_R == m1['GLASS_R'] == 0 and m1ipod.HOME_LIST_W == 320
-# ... and the layout names a Phase 4 item has given V2.1's (4.2: the bar's battery room, which the 320 px bar fits).
+# ... and the layout names a Phase 4 item has given V2.1's (4.2: the bar's battery room, which the 320 px bar fits; 4.5:
+# Home's rows and their labels' insets).
 assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O.get(k)} == {'UI_W', 'UI_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_ROWS',
-                                                                'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART'} == set(m1plus_ipod.PROFILE) - {'STATUS_H', 'SET_TOP'}
+                                                                'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART', 'HOME_ROW',
+                                                                'HOME_DOT_X', 'HOME_LABEL_END'} == set(m1plus_ipod.PROFILE) - {'STATUS_H', 'SET_TOP'}
+assert (m1ipod.HOME_ROW, m1ipod.HOME_TEXT_X, ipod.HOME_ROW, ipod.HOME_TEXT_X) == (64, 26, 39, 39)  # the Q2's unchanged
 # 4.4: LIB_ROWS complete library rows from the top of the screen under the bar, on a body inside each row, the art inside
 # the body; ipod.py's names take the M1's (the Q2's stay 72, 68 and 52).
 assert (m1ipod.PITCH, m1ipod.BODY, m1ipod.ART, m1ipod.ART_INSET) == (m1['LIB_PITCH'], m1['LIB_BODY'], m1['LIB_ART'], m1['LIB_ART_INSET']) == (64, 60, 40, 10)
@@ -366,7 +369,15 @@ def m1plus_checks(directory, manifest, stock, demo, read):
               for a, _ in M1_AUDIT['row_layout_calls']['sites']]
     edits += [dict(address=hex(a), original='0x320f809', patched='0x0', purpose='library rebind retains the width owned by its row layouter')
               for a in (0x532f6c, 0x527918)]
-    assert 'variant' not in manifest and manifest['compact_code'] == edits + [slot], manifest['compact_code']
+    # 4.5's: Home's playing strip's tap is not bound, and its boot resume is ringnav_boot's; the init and refresh's
+    # returns with the grid's widgets gone are pinned as they are (m1plus_ipod.json home).
+    home = M1_AUDIT['home']
+    home_edits = [dict(address=a, original=hex(int(w, 16)), patched='0x0', purpose=why) for _, _, a, w, why in home['unbound']]
+    a, w, why = home['boot_resume']
+    home_edits.append(dict(address=a, original=hex(int(w, 16)), patched=hex(m1ipod.jal(ps['ringnav_boot'])), purpose=why))
+    assert 'variant' not in manifest and manifest['compact_code'] == edits + [slot] + home_edits, manifest['compact_code']
+    for a, w, why in home['safe_returns'] + [r[:2] + ['the pointer-up event id'] for r in home['unbound']]:
+        assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
     raw_styles = 'release/assets/default/raw/styles/'
     assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
         raw_styles + p for p in M1_AUDIT['styles']} | {
@@ -439,14 +450,17 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         refuses(page, dialog, 'expected a window')
     finally:
         m1plus_ipod.UI_ASSETS.clear(); m1plus_ipod.UI_ASSETS.update(hashed)
-    assert m1plus_ipod.patch_code(bytearray(stock), ps) == edits + [slot]
-    try:  # the slot as audited, or nothing
-        damaged = bytearray(stock); damaged[fileoff(stock, 0x9047a8)] ^= 1
-        m1plus_ipod.patch_code(damaged, ps)
-    except ValueError as e:
-        assert 'unexpected instruction' in str(e), e
-    else:
-        raise AssertionError('patch_code took a changed layout slot')
+    assert m1plus_ipod.patch_code(bytearray(stock), ps) == edits + [slot] + home_edits
+    # the slot as audited, or nothing; and Home's pinned returns (4.5) and its edits' words likewise
+    for at, what in ((0x9047a8, 'a changed layout slot'), (0x5340dc, "a changed Home builder's return"),
+                     (0x534e2c, "a changed Home pointer-up binding"), (0x534f04, 'a changed boot resume call')):
+        try:
+            damaged = bytearray(stock); damaged[fileoff(stock, at)] ^= 1
+            m1plus_ipod.patch_code(damaged, ps)
+        except ValueError as e:
+            assert 'unexpected instruction' in str(e), e
+        else:
+            raise AssertionError(f'patch_code took {what}')
     # Native evidence for this batch: options are asset rows, not V1.32's kind table;
     # Tidal creates its URL worker on demand, and check_cpumem does only drop_caches work.
     more = list(walk(decode(read('stock.squashfs', 'release/assets/default/raw/ui/dialog/playmore_dialog.bin'))))
@@ -835,7 +849,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert words(0x5d4cf4, 1) == (0x3c05c004,) and words(0x5d4d04, 1) == (0x24a54d00,)
     assert compared(0x5d4d48, 0x5d4d54)[1] == b'{mcl-setvol\\%d}'
     assert got(0x4d6d40) == got(0x4d6e8c) == got(0x5d50bc) == stock_syms['mclSetVol']
-    # The Q2 Pod Home card (coverflow.c home_card) copies V2.1's Home grid. Its builder (0x534064)
+    # V2.1's Home grid, which the iPod Home (ipod-ui 4.5) replaces: its pages are gone, but its init and refresh still
+    # run its builder (pinned in m1plus_ipod.json home.safe_returns, returning with no home_sview). Its builder (0x534064)
     # lays pdeq_choicemenu's ids six to a page (li $s0, 6), each page a view_create(home_sview, 0, 0,
     # 320, 364) and home_sindicator's max set to the pages; each card (0x533d8c) a 154x118 view, two
     # columns from x 6, rows 0, 118 and 236, holding a 66 px image at 44, 20 and a 154x36 label at 0,
@@ -854,8 +869,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert words(0x533f60, 1) == (0x2405010c,) and got(0x533b90) == stock_syms['atoi@GLIBC_2.0'] and words(0x533ba8, 1) == (0x2c430012,)
     # The grid is rebuilt only from home_page_init and from Home's refresh (0x534858, when
     # homemenu_changeflag is 2), which its to-foreground handler (0x534b88, bound to 0x12d) runs:
-    # the card comes back from its own to-foreground handler. Nothing loaded points to the builder
-    # (.pdr, which isn't loaded, describes it).
+    # Nothing loaded points to the builder (.pdr, which isn't loaded, describes it).
     def bal(i):
         x = struct.unpack_from('<I', stock, text[1] + i)[0]
         return x >> 16 == 0x0411 and text[2] + i + 4 + 4 * struct.unpack_from('<h', stock, text[1] + i)[0] == 0x534064
@@ -937,8 +951,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added |= {xx+'bar_back.png'}  # the status bar's back chevron (ipod-ui 4.2)
     added |= {xx+f'row_{n}.png' for n in ('spotify', 'radio', 'stream_config')}  # the Q2 Pod page's Streaming rows, at 40 px
     added |= {xx+'stream_app.png'}  # its card apps' rows (addon.c), at 40 px too
-    # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
-    added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
+    # The Library's Ratings and Most Played row icons; the iPod Home's (ipod-ui 4.5) Carousel card art, pressed too, its
+    # arrows, and Split's placeholder.
+    added |= {xx+f'{n}.png' for n in ('local_fav', 'local_frequentplay', 'home_left', 'home_right', 'default_album_home')}
+    added |= {xx+f'home_card_{row}{s}.png' for row in m1plus_ipod.HOME_CARD_ART for s in ('', '_down')}
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C} | {
         'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles']),
                                                                       *('images/xx/' + q for q in M1_AUDIT['status_icons'])]}

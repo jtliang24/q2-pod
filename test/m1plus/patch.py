@@ -4697,13 +4697,16 @@ else:
 # iPod boots to Home: home_page_init's memory-play resume, run from its stock context build, starts
 # the restored queue paused (mode 3) through player_start as playing_page_init would, and opens no
 # page; a 0xff class starts nothing, as the page's init. Car mode (mode 2) opens Now Playing as stock.
+# M1 Plus (ipod-ui 4.5): V2.1's init builds the same context (0x534ed0: its queue, index, class, then 2 in car mode,
+# else 3) and its call, at 0x534f04, is ringnav_boot's; the queue starts through start_player, as its playing_page_init.
 boot=payload_syms['ringnav_boot']
-assert struct.unpack_from('<I',demo,fileoff(demo,0x523de0))[0]==jal(boot)
+CALL,FROM,TO,GP=(0x534f04,0x534ed0,0x534f0c,0xa03ed0) if is_m1plus else (0x523de0,0x523dac,0x523de8,0xa26cc0)
+assert struct.unpack_from('<I',demo,fileoff(demo,CALL))[0]==jal(boot)
 for car,cls,want in ((0,1,[(0x5550,4,1,3)]),(0,0xff,[]),(1,0xf003,[])):
     m=Machine(); m.word(syms['g_memory_info'],cls); m.byte(syms['g_carmode'],car)
-    m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0); m.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
+    m.u.reg_write(UC_MIPS_REG_GP,GP); m.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
     m.u.reg_write(UC_MIPS_REG_S0,0x5550); m.u.reg_write(UC_MIPS_REG_S1,4)
-    m.u.emu_start(0x523dac,0x523de8,count=1000)
+    m.u.emu_start(FROM,TO,count=1000)
     nav=[c for c in m.calls if c[0]=='navigator_to_with_context']
     assert m.started==want
     if car:
@@ -5348,11 +5351,14 @@ assert m.names(m.get(syms['p_deque_showlist']))==['Row 0'] and ('stock_localclas
 
 # Coverflow (docs/internals.md): the Home card, the runtime coverflow_page over a stock slide_menu,
 # the tracks query and handoff. The art thread itself runs on the host (test/coverflow.py).
-# Q2 only: the Home card's layout. V2.1's Home has no Coverflow card; the Q2 Pod page's row opens it.
-if not is_m1plus:
-    from ipod import HOME_TEXT_X, HOME_LIST_W, HOME_PAGE, HOME_ROW, HOME_ROWS, HOME_TOP, decode
-    cards=[c[2]['name'] for c in decode((B/'ui'/HOME_PAGE).read_bytes())[3][1][3][0][3]]  # list_view_home's scroll_view's rows
-    assert len(cards)==7 and cards[2]=='btn_coverflow', cards
+# Home's names and sizes, the model's: the Q2's tools/ipod.py, or its M1 copy's (tools/m1plus_ipod.py, ipod-ui 4.5).
+if is_m1plus: from m1plus_ipod import ipod as home_ipod
+else: import ipod as home_ipod
+HOME_TEXT_X, HOME_LIST_W, HOME_PAGE, HOME_ROW, HOME_ROWS, HOME_TOP = (home_ipod.HOME_TEXT_X, home_ipod.HOME_LIST_W,
+    home_ipod.HOME_PAGE, home_ipod.HOME_ROW, home_ipod.HOME_ROWS, home_ipod.HOME_TOP)
+from ipod import decode
+cards=[c[2]['name'] for c in decode((B/'ui'/HOME_PAGE).read_bytes())[3][1][3][0][3]]  # list_view_home's scroll_view's rows
+assert len(cards)==7 and cards[2]=='btn_coverflow', cards
 home_hook=HOOKS['home_page_init']
 assert struct.unpack_from('<I',demo,fileoff(demo,home_hook[0]))[0]==j(payload_syms['coverflow_home'])
 passed()
@@ -5366,7 +5372,7 @@ def asset_tree(m,path):
         kind,g,props,children=n
         a=m.node(kind,props.get('name',''),visible=int(props.get('visible')!='false'))
         m.nodes[a].update(enable=int(props.get('enable')!='false'),asset=props)
-        for off,v in zip(('W_X','W_Y','W_W','W_H'),[0,0,375,290] if kind=='window' else g): m.word(a+O[off],v)
+        for off,v in zip(('W_X','W_Y','W_W','W_H'),[0,0,O['UI_W'],O['BOTTOM']] if kind=='window' else g): m.word(a+O[off],v)
         m.word(a+O['W_PARENT'],parent)
         if kind=='scroll_view':
             m.byte(a+O['VIEW_HORIZONTAL'],props.get('xslidable')=='true' and parent_kind!='list_view')
@@ -5379,7 +5385,7 @@ def click_target(m,w):
     em=m.alloc(4); it=m.alloc(0x28); m.word(w+O['W_EMITTER'],em); m.word(em,it); m.word(it+O['EMIT_TYPE'],O['EVT_CLICK'])
 def home_list(m):
     """iPod Home as built (ui/home_page.bin) on top: its scroll view and the rows' tap images. Stock
-    binds every image but Coverflow's, which the payload binds."""
+    binds every image but Coverflow's, which the payload binds (on the M1, the payload binds every one)."""
     m.top=asset_tree(m,HOME_PAGE)
     imgs=[named(m,m.top,'img_'+r) for r in HOME_ROWS]
     for img in imgs[:2]+imgs[3:]: click_target(m,img)
@@ -5416,7 +5422,7 @@ m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2])
 m.paint(view)
 assert m.selected(view)==0
 for i in range(1,7): assert m.call()==11 and m.selected(view)==i and m.get(view+O['SCROLL_Y'])==0
-m.paint(view); assert m.rounded[0]['rect']==(25,6*HOME_ROW+HOME_ROW//2-3,6,6)
+m.paint(view); assert m.rounded[0]['rect']==(O['HOME_DOT_X'],6*HOME_ROW+HOME_ROW//2-3,6,6)
 assert m.call(gap=50)==11 and m.selected(view)==6   # bumped
 assert m.call(gap=O['EDGE_PAUSE_MS'])==11 and m.selected(view)==0
 assert m.call(O['KEY_PREV'],gap=50)==11 and m.selected(view)==0   # bumped
@@ -5434,7 +5440,7 @@ m.byte(syms['g_backlight_status'],0); m.paint(view); assert m.selected(view)==-1
 paint_bar(); assert ('widget_invalidate_force',view) not in [c[:2] for c in m.calls]
 m.touch(); m.byte(syms['g_backlight_status'],1)
 paint_bar(); assert ('widget_invalidate_force',view) in [c[:2] for c in m.calls]
-m.paint(view); assert m.selected(view)==0 and m.rounded[0]['rect']==(25,HOME_ROW//2-3,6,6)
+m.paint(view); assert m.selected(view)==0 and m.rounded[0]['rect']==(O['HOME_DOT_X'],HOME_ROW//2-3,6,6)
 paint_bar(); assert ('widget_invalidate_force',view) not in [c[:2] for c in m.calls]; passed()
 
 # Chevrons: the stock list_into, where stock rows put img_into, on each visible row of a
@@ -5448,7 +5454,7 @@ m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2]); m.clip=(0,0,375,32
 m.paint(view)
 half=O['CHEVRON_W']-25  # centre of the 50px image, as stock img_into
 bar=lambda: []
-assert m.rounded[0]['rect']==(25,HOME_ROW//2-3,6,6) and m.icons==bar()
+assert m.rounded[0]['rect']==(O['HOME_DOT_X'],HOME_ROW//2-3,6,6) and m.icons==bar()
 assert loaded(m)==[] and m.clip==(0,0,375,320); passed()
 m.call(); m.paint(view); assert m.selected(view)==1 and m.rounded[0]['rect'][1]>0 and m.icons==bar(); passed()  # follows the bar
 # Drawn in touch mode too, with Home's bar, which touch never hides; none while stock
@@ -5456,11 +5462,11 @@ m.call(); m.paint(view); assert m.selected(view)==1 and m.rounded[0]['rect'][1]>
 m.touch(); m.paint(view); assert m.icons==bar() and m.selected(view)==1; passed()
 m.byte(syms['g_navbar_status'],1); m.paint(view); assert not m.icons and not loaded(m); passed()
 # Classic: Home's accent bar spans the list and the chevron rides it alone.
-m=Machine(); m.config['THEME']='1'; view,imgs=home_list(m); click_target(m,imgs[2]); m.clip=(0,0,375,320)
-m.paint(view)
-cbar=lambda: [(HOME_LIST_W-half+O['HOME_CHEVRON_SHIFT'],m.sel()[1]+HOME_ROW//2,(0,0,HOME_LIST_W,7*HOME_ROW))]
+m=Machine(); m.config['THEME']='1'; view,imgs=home_list(m); click_target(m,imgs[2]); m.clip=(0,0,O['UI_W'],O['UI_H'])
+m.paint(view)  # the M1's rows are always full width: Full's chevron shift (ipod-ui 4.5)
+cbar=lambda: [(HOME_LIST_W-half+O['HOME_FULL_CHEVRON_SHIFT' if is_m1plus else 'HOME_CHEVRON_SHIFT'],m.sel()[1]+HOME_ROW//2,(0,0,HOME_LIST_W,7*HOME_ROW))]
 assert m.sel()==(0,0,HOME_LIST_W,HOME_ROW) and m.icons==cbar() and not m.rounded
-assert m.bands[1][4]==color_t(ACCENTS[0][0]) and loaded(m)==['list_into'] and m.clip==(0,0,375,320)
+assert m.bands[1][4]==color_t(ACCENTS[0][0]) and loaded(m)==['list_into'] and m.clip==(0,0,O['UI_W'],O['UI_H'])
 m.call(); m.paint(view); assert m.selected(view)==1 and m.sel()[1]>0 and m.icons==cbar(); passed()
 # Playlists: every row follows the scroll, clipped to the viewport; the half-width
 # Import/Export tiles get none.
@@ -5687,13 +5693,7 @@ class CoverflowMachine(QueueMachine):
         elif name=='pthread_join': self.joins.append(a)
         self.returns(ret,clobber=True)
     def open(self):
-        """Home with the card at index 2: centre confirms its image, whose click opens Coverflow.
-        M1 Plus: V2.1's Home has no Coverflow card; the Q2 Pod page's row opens it."""
-        if is_m1plus:
-            self.home=self.top=self.node('window','library_page'); self.stack=[self.top]
-            assert self.call(address=payload_syms['coverflow_row'],args=(0,self.event,0,0),gap=0)==0
-            self.page=self.top; self.slide=self.find('slide_menu')
-            return self.page
+        """Home with the card at index 2: centre confirms its image, whose click opens Coverflow."""
         view,self.imgs=home_list(self); self.img=self.imgs[2]; self.home=self.top; self.stack=[self.top]
         self.art=named(self,self.top,'img_homeart'); self.list=named(self,self.top,'list_view_home')
         assert self.call(address=home_hook[0],args=(self.top,0,0,0),gap=0)==0
@@ -6074,25 +6074,31 @@ m.call(address=HOOKS['toolsQueryDbTable'][0],args=(m.string('/mnt/data/database.
 assert m.sql.endswith('order by id asc') and m.results==[(101,0),(102,0),(103,0)]; passed()
 
 # Both themes: the art itself follows the playing track, when Home or the status bar paints, in
-# the right panel beside the Split list: the Coverflow thumbnail until the player has parsed this
-# track, then the player's cover. Nothing loads or draws for Now Playing.
+# the right panel beside the Split list (the M1's, ipod-ui 4.5: across the top, the list under it): the Coverflow
+# thumbnail until the player has parsed this track, then the player's cover. Nothing loads or draws for Now Playing.
+# The panel (ART_X, 0, PW, PH) and the list's width; the player's cover type of an embedded cover, and one with
+# no file (V1.32's 1 and 3; V2.1's 2, and 1, which its Home shows as no cover).
+if is_m1plus: ART_X,PW,PH,LIST_W,EMBEDDED,NO_COVER=0,O['UI_W'],O['HOME_ART_H'],O['UI_W'],2,1
+else: ART_X,PW,PH,LIST_W,EMBEDDED,NO_COVER=O['HOME_SPLIT_W'],375-O['HOME_SPLIT_W'],290,O['HOME_SPLIT_W'],1,3
+def home_fit(w,h):  # coverflow.c home_fit: the size just covering the panel at the image's proportions
+    if PW*h>PH*w: return PW,-(-PW*h//w)
+    return -(-PH*w//h),PH
 for theme in ('0','1'):
   CONFIG.clear(); CONFIG.update(THEME=theme); m=CoverflowMachine(); m.open(); m.top=m.home; CONFIG.clear()
   bar=m.node('window','system_bar'); m.word(syms['system_bar'],bar)
   for w in (bar,m.home): m.word(w+O['W_PARENT'],m.wm)
-  SPLIT=O['HOME_SPLIT_W']; PW=375-SPLIT
   def art_image(w):  # no time passes, so the cover's pan (DRIFT_*) holds its phase until advanced
       m.call(address=HOOKS['widget_on_paint_background'][0],args=(w,m.canvas,0,0),gap=0)
       return m.nodes[m.art].get('image')
-  m.byte(syms['g_playcover_type'],1)
-  assert art_image(m.home).startswith('file:///mnt/mmc/.coverflow/') and m.get(m.list+O['W_W'])==SPLIT
+  m.byte(syms['g_playcover_type'],EMBEDDED)
+  assert art_image(m.home).startswith('file:///mnt/mmc/.coverflow/') and m.get(m.list+O['W_W'])==LIST_W
   m.u.mem_write(syms['g_lastcover_url'],b'/p/A\0'); assert art_image(bar)=='file:///tmp/coverpic.jpg'
   m.nodes[m.art]['image']='unchanged'; assert art_image(m.home)=='unchanged'  # same track and cover
   np=m.node('window','playing_page'); m.word(np+O['W_PARENT'],m.wm); m.top=np
   m.u.mem_write(syms['g_lastcover_url'],b'/p/B\0'); art_image(np); art_image(bar)
   assert not [c for c in m.calls if c[0] in ('widget_load_image','canvas_draw_image')]; m.top=m.home
   m.u.mem_write(syms['g_lastcover_url'],b'/p/A\0')
-  m.byte(syms['g_playcover_type'],3); assert art_image(m.home).startswith('file:///mnt/mmc/.coverflow/'); passed()
+  m.byte(syms['g_playcover_type'],NO_COVER); assert art_image(m.home).startswith('file:///mnt/mmc/.coverflow/'); passed()
   # A cover with no pixels to pan (here none decode; on the device a 16-bit decode or one too long
   # for DRIFT_TEXELS) stays still: sized to its proportions, just covering the panel (native fill
   # then draws it whole), centred, and clipped to the panel from the background hook to the
@@ -6104,33 +6110,39 @@ for theme in ('0','1'):
       m.u.mem_write(syms['g_lastcover_url'],b'/p/other\0'); art_image(m.home)
       m.u.mem_write(syms['g_lastcover_url'],b'/p/A\0'); art_image(m.home)
       return geometry()
-  def fit(w=290,h=290): return [SPLIT+int((PW-w)/2),int((290-h)/2),w,h]
-  for (w,h),want in (((300,300),fit()),((2*PW,580),fit(PW)),((600,400),fit(435)),((100,400),fit(PW,4*PW))):
-      assert cover(w,h)==want,((w,h),geometry(),want)
+  def fit(w,h): return [ART_X+int((PW-w)/2),int((PH-h)/2),w,h]
+  for w,h in ((300,300),(2*PW,2*PH),(2*PW,PH),(600,400),(100,400)):
+      want=fit(*home_fit(w,h)); assert cover(w,h)==want,((w,h),geometry(),want)
+  if is_m1plus: assert [cover(*s) for s in ((300,300),(600,200))]==[[0,-60,320,320],[-140,0,600,200]]
+  else: assert cover(300,300)==fit(290,290) and cover(600,400)==fit(435,290)
   passed()
-  m.clip=(0,0,375,320); m.word(m.canvas+O['CANVAS_X'],want[0]); m.word(m.canvas+O['CANVAS_Y'],30+want[1])
+  SCREEN=(0,0,O['UI_W'],O['UI_H'])
+  want=geometry(); m.clip=SCREEN; m.word(m.canvas+O['CANVAS_X'],want[0]); m.word(m.canvas+O['CANVAS_Y'],30+want[1])
   m.call(address=HOOKS['widget_on_paint_background'][0],args=(m.art,m.canvas,0,0),gap=0)
-  assert m.clip==(SPLIT,30,PW,290),m.clip
-  m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.art,m.canvas,0,0),gap=0); assert m.clip==(0,0,375,320)
-  # The list paints only left of the panel; the placeholder (no size) fills the panel.
-  m.word(m.canvas+O['CANVAS_X'],0); m.word(m.canvas+O['CANVAS_Y'],30+HOME_TOP)
+  assert m.clip==(ART_X,30,PW,PH),m.clip
+  m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.art,m.canvas,0,0),gap=0); assert m.clip==SCREEN
+  # The list paints only beside the panel (the M1's: under it, in its own bounds); the placeholder (no size) fills
+  # the panel.
+  list_y=signed(m.get(m.list+O['W_Y'])); m.word(m.canvas+O['CANVAS_X'],0); m.word(m.canvas+O['CANVAS_Y'],30+list_y)
   m.call(address=HOOKS['widget_on_paint_background'][0],args=(m.list,m.canvas,0,0),gap=0)
-  assert m.clip==(0,30+HOME_TOP,SPLIT,7*HOME_ROW),m.clip
-  m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.list,m.canvas,0,0),gap=0); assert m.clip==(0,0,375,320)
+  if is_m1plus: assert list_y==PH+(0 if theme=='1' else HOME_TOP) and m.clip==(0,30+list_y,O['UI_W'],O['BOTTOM']-list_y),m.clip
+  else: assert m.clip==(0,30+list_y,LIST_W,7*HOME_ROW),m.clip
+  m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.list,m.canvas,0,0),gap=0); assert m.clip==SCREEN
   m.image_size=None
   m.u.mem_write(syms['g_lastcover_url'],b'/p/none\0')
-  art_image(m.home); assert m.nodes[m.art]['image']=='default_album_home' and geometry()==[SPLIT,0,PW,290]; passed()
+  art_image(m.home); assert m.nodes[m.art]['image']=='default_album_home' and geometry()==[ART_X,0,PW,PH]; passed()
   # Neither a still cover nor the placeholder pans (the pan itself: after DepthMachine).
   def drifts(): return [t for t in m.timers.values() if t[1]==payload_syms['home_drift']]
   m.advance(O['DRIFT_TICK_MS']); art_image(m.home); assert not drifts()
-  assert cover(300,300)==fit(); art_image(m.home); m.advance(O['DRIFT_TICK_MS']); assert not drifts() and cover(300,300)==fit()
+  assert cover(300,300)==fit(*home_fit(300,300)); art_image(m.home); m.advance(O['DRIFT_TICK_MS'])
+  assert not drifts() and cover(300,300)==fit(*home_fit(300,300))
   passed()
 # Full: the art is hidden on the panel and never pans.
 CONFIG.clear(); CONFIG.update(HOME='1'); m=CoverflowMachine(); m.open(); m.top=m.home; CONFIG.clear()
-m.image_size=(300,300); m.byte(syms['g_playcover_type'],1); m.u.mem_write(syms['g_lastcover_url'],b'/p/A\0')
+m.image_size=(300,300); m.byte(syms['g_playcover_type'],EMBEDDED); m.u.mem_write(syms['g_lastcover_url'],b'/p/A\0')
 for _ in range(3): m.call(address=HOOKS['widget_on_paint_background'][0],args=(m.home,m.canvas,0,0))
 assert not [t for t in m.timers.values() if t[1]==payload_syms['home_drift']] and not m.nodes[m.art]['visible']
-assert [signed(m.get(m.art+O[k])) for k in ('W_X','W_Y','W_W','W_H')]==[SPLIT,0,PW,290]; passed()
+assert [signed(m.get(m.art+O[k])) for k in ('W_X','W_Y','W_W','W_H')]==[ART_X,0,PW,PH]; passed()
 
 # Now Playing: stock init runs first, then "n of m", the album and "-remaining" (slider max less
 # value, in seconds) fill in; later paints rewrite a label only when its source changed.
@@ -8314,18 +8326,19 @@ print(f'Coverflow depth on MIPS: {rest_cost} instructions for the first paint (d
 # image empty) draws the panel from that at the pan's 1/256 px position, cubic B-spline, so it
 # moves by fractions of a pixel at a sharpness that hardly changes with the phase. Each axis is a
 # linear ping-pong of its own period across the zoom's margin, from the unzoomed crop. One timer
-# runs it while Home is on top, lit and still; a step repaints only the panel.
-SPLIT=O['HOME_SPLIT_W']; PW=375-SPLIT; X,Y,TICK=O['DRIFT_X_MS'],O['DRIFT_Y_MS'],O['DRIFT_TICK_MS']
+# runs it while Home is on top, lit and still; a step repaints only the panel (the model's: ART_X, PW, PH above).
+X,Y,TICK=O['DRIFT_X_MS'],O['DRIFT_Y_MS'],O['DRIFT_TICK_MS']
+EXTERN=3 if is_m1plus else 2  # the player's cover type of a folder image (V2.1's, V1.32's)
 m=DepthMachine(); pan_counter=m.u.hook_add(UC_HOOK_BLOCK,count_block,begin=BASE,end=SCRATCH-1)  # before any code is cached
 m.budget=80_000_000  # filtering and sharpening a 1914 px cover passes 50 million
 m.open(); m.top=m.home; m.word(m.home+O['W_PARENT'],m.wm); np=m.node('window','playing_page')
-m.byte(syms['g_playcover_type'],1); m.u.mem_write(syms['g_lastcover_url'],b'/p/A\0')
+m.byte(syms['g_playcover_type'],EMBEDDED); m.u.mem_write(syms['g_lastcover_url'],b'/p/A\0')
 def paint_home(): m.call(address=HOOKS['widget_on_paint_background'][0],args=(m.home,m.canvas,0,0),gap=0)
 def drifts(): return [t for t in m.timers.values() if t[1]==payload_syms['home_drift']]
 def invalidated(): return [(c[1],c[2] and tuple(signed(m.get(c[2]+4*i)) for i in range(4))) for c in m.calls if c[0]=='widget_invalidate_force']
 def tex_of(w,h):  # the last cover loaded (opaque) as home_tex leaves it, and its zoomed size
     url,=m.pixels; px=struct.unpack(f'<{w*h}I',bytes(m.u.mem_read(m.pixels[url],w*h*4)))
-    fw,fh=(PW,-(-PW*h//w)) if PW*h>290*w else (-(-290*w//h),290); tw,th=fw*O['DRIFT_ZOOM_PCT']//100,fh*O['DRIFT_ZOOM_PCT']//100
+    fw,fh=home_fit(w,h); tw,th=fw*O['DRIFT_ZOOM_PCT']//100,fh*O['DRIFT_ZOOM_PCT']//100
     out=[]
     for y in range(th):
         y0=y*h//th; y1=max((y+1)*h//th,y0+1)
@@ -8341,7 +8354,7 @@ def tex_of(w,h):  # the last cover loaded (opaque) as home_tex leaves it, and it
     cols=[sharpen([rows[y][x] for y in range(th)]) for x in range(tw)]
     rows=[[c_[y] for c_ in cols[:1]+cols+cols[-1:]*2] for y in range(th)]  # the edges a texel left and above, two right and below
     rows=rows[:1]+rows+rows[-1:]*2
-    return dict(px=[p for r in rows for p in r],ts=tw+3,u0=(fw-PW)//2,v0=(fh-290)//2,rx=tw-fw,ry=th-fh)
+    return dict(px=[p for r in rows for p in r],ts=tw+3,u0=(fw-PW)//2,v0=(fh-PH)//2,rx=tw-fw,ry=th-fh)
 def at(r,period,t): t%=2*period; return r*256*((t if t<period else 2*period-t)>>4)//(period>>4)
 def bspline(t):  # bspline_w: the cubic B-spline's 4 weights at phase t/256, in 1/256
     s=256-t; w0=(s**3+196608)//393216; w3=(t**3+196608)//393216; w1=(3*t**3+4*16777216-6*256*t*t+196608)//393216
@@ -8352,22 +8365,22 @@ def tap4(a,b,c_,d,w):  # tap4: 4 texels weighted, rounded
 def framed(c,t):  # the panel at phase t, as home_render filters it: across each cover row, then down
     u,v=c['u0']*256+at(c['rx'],X,t),c['v0']*256+at(c['ry'],Y,t); ts,px=c['ts'],c['px']
     wx,wy=bspline(u&255),bspline(v&255); i=(v>>8)*ts+(u>>8)  # texel -1, -1 from u, v
-    rows=[[tap4(*px[j+x:j+x+4],wx) for x in range(PW)] for j in range(i,i+293*ts,ts)]
-    out=[tap4(*k,wy) for y in range(290) for k in zip(*rows[y:y+4])]
+    rows=[[tap4(*px[j+x:j+x+4],wx) for x in range(PW)] for j in range(i,i+(PH+3)*ts,ts)]
+    out=[tap4(*k,wy) for y in range(PH) for k in zip(*rows[y:y+4])]
     return struct.pack(f'<{len(out)}I',*out)
 def drawn():
     n=len(m.draws); m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.art,m.canvas,0,0),gap=0)
-    assert len(m.draws)==n+1 and m.draws[-1][3]==(0,0,PW,290) and m.draws[-1][4]&1,m.draws[n:]
+    assert len(m.draws)==n+1 and m.draws[-1][3]==(0,0,PW,PH) and m.draws[-1][4]&1,m.draws[n:]
     return m.draws[-1][5]
 # 319 square: fits 290 and zooms to 319, a texel a pixel; 638 square: each texel 2 x 2 averaged;
-# 1914 square: 6 x 6 sampled 3 x 3.
+# 1914 square: 6 x 6 sampled 3 x 3. The M1's panel (320 x 200) fits each to 320 and zooms it to 352.
 m.art_size=(319,319); m.pixels.clear(); paint_home(); c=tex_of(319,319)
-assert m.nodes[m.art]['image']=='' and [signed(m.get(m.art+O[k])) for k in ('W_X','W_Y','W_W','W_H')]==[SPLIT,0,PW,290]
-assert (c['u0'],c['v0'],c['rx'],c['ry'])==((290-PW)//2,0,29,29) and not drifts()
+assert m.nodes[m.art]['image']=='' and [signed(m.get(m.art+O[k])) for k in ('W_X','W_Y','W_W','W_H')]==[ART_X,0,PW,PH]
+assert (c['u0'],c['v0'],c['rx'],c['ry'])==((0,60,32,32) if is_m1plus else ((290-PW)//2,0,29,29)) and not drifts()
 assert drawn()==framed(c,0) and ('bitmap_lock_buffer_for_write',) in [x[:1] for x in m.calls]
 assert drawn()==framed(c,0) and ('bitmap_lock_buffer_for_write',) not in [x[:1] for x in m.calls]  # unmoved: not rendered again
 paint_home(); m.advance(0); assert len(drifts())==1  # it arms on the next paint
-m.calls.clear(); m.advance(TICK); assert set(invalidated())=={(m.home,(SPLIT,0,PW,290))},invalidated()
+m.calls.clear(); m.advance(TICK); assert set(invalidated())=={(m.home,(ART_X,0,PW,PH))},invalidated()
 assert drawn()==framed(c,TICK)!=framed(c,0)  # a tick moves it by a fraction of a pixel
 m.advance(1000-TICK); assert drawn()==framed(c,1000) and len(drifts())==1; passed()
 m.advance(TICK); instructions[0]=0; assert drawn()==framed(c,1000+TICK); frame_cost=instructions[0]
@@ -8390,15 +8403,15 @@ passed()
 # and a large one is box filtered.
 m.call(address=payload_syms['coverflow_home_layout'],args=(0,0,0,0),gap=0); assert not drifts()
 paint_home(); assert drawn()==framed(c,t); paint_home(); assert len(drifts())==1
-m.art_size=(638,638); m.pixels.clear(); m.byte(syms['g_playcover_type'],2)
+m.art_size=(638,638); m.pixels.clear(); m.byte(syms['g_playcover_type'],EXTERN)
 instructions[0]=0; paint_home(); filter_cost=instructions[0]; c=tex_of(638,638)
 assert drawn()==framed(c,t) and len(drifts())==1
-m.art_size=(1914,1914); m.pixels.clear(); m.byte(syms['g_playcover_type'],1)
+m.art_size=(1914,1914); m.pixels.clear(); m.byte(syms['g_playcover_type'],EMBEDDED)
 instructions[0]=0; paint_home(); big_cost=instructions[0]; m.u.hook_del(pan_counter); c=tex_of(1914,1914); assert drawn()==framed(c,t); passed()
 # A player cover too long for DRIFT_TEXELS stays still, even with a Coverflow thumbnail that
 # could pan; neither arms the timer.
-m.art_sizes={'externpic.jpg':(4000,100)}; m.byte(syms['g_playcover_type'],2); m.advance(TICK); paint_home(); m.advance(TICK); paint_home()
-assert not drifts() and m.nodes[m.art]['image'].endswith('externpic.jpg') and m.get(m.art+O['W_W'])==290*40; passed()
+m.art_sizes={'externpic.jpg':(4000,100)}; m.byte(syms['g_playcover_type'],EXTERN); m.advance(TICK); paint_home(); m.advance(TICK); paint_home()
+assert not drifts() and m.nodes[m.art]['image'].endswith('externpic.jpg') and m.get(m.art+O['W_W'])==PH*40; passed()
 print(f'Home pan on MIPS: {frame_cost} instructions a frame (every DRIFT_TICK_MS), {filter_cost} and {big_cost} to filter a 638 and a 1914 px cover once (payload only)')
 
 # Accent (docs/internals.md#accent). The mapping: stock red blended with a neutral becomes the same
@@ -8870,13 +8883,13 @@ assert m.nodes[sort_label]['text']=='Coverflow Sort: Album' and m.nodes[refresh_
 f,ctx=m.handler(m.nodes[cf_refresh]['children'][0],O['EVT_CLICK']); m.mock('opendir@GLIBC_2.0'); m.calls=[]
 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]=='Coverflow rebuilds its artwork next time'
 assert [m.text(c[1]) for c in m.calls if c[0]=='opendir@GLIBC_2.0']==['/mnt/mmc/.coverflow'] and m.nodes[refresh_label]['text']=='Refresh Coverflow'; passed()
-# Shortcut: no key is Rockbox on a card with it, else Favorites.
-for card,first in ((True,'Rockbox'),(False,'Favorites')):
+# Shortcut: no key is Rockbox on a card with it, else Favorites (the M1's always Favorites: no Rockbox there).
+for card,first in ((True,'Favorites' if is_m1plus else 'Rockbox'),(False,'Favorites')):
     CONFIG.clear(); d=Machine(); d.rockbox_mode=0o100755 if card else 0
     assert d.text(d.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))==first
     assert d.call(address=payload_syms['ipod_home_rockbox'],args=(0,0,0,0),gap=0)==1  # shown either way
 d.rockbox_mode=0o100755  # a card mounted after the first read: the default follows it
-assert d.text(d.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))=='Rockbox'
+assert d.text(d.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))==('Favorites' if is_m1plus else 'Rockbox')
 passed()
 assert texts()==['Accent: Ivory','Home: Split','Battery: Icon','Theme: Minimal']; passed()
 def click(i):
@@ -9024,8 +9037,8 @@ m,names=rockbox(False)
 assert not {'fopen','player_stop','system'} & set(names)
 assert [m.text(c[1]) for c in m.calls if c[0]=='navigator_to_with_context']==['dialog/msginfo_dialog']; passed()
 # ipod_home_rockbox follows the card.
-m=Machine(); m.rockbox_mode=0; m.config['SHORTCUT']='0'
-assert m.call(address=payload_syms['ipod_home_rockbox'],args=(0,0,0,0),gap=0)==0
+m=Machine(); m.rockbox_mode=0; m.config['SHORTCUT']='0'  # the M1's: a stored Rockbox is Favorites, shown
+assert m.call(address=payload_syms['ipod_home_rockbox'],args=(0,0,0,0),gap=0)==(1 if is_m1plus else 0)
 m.rockbox_mode=0o100755
 assert m.call(address=payload_syms['ipod_home_rockbox'],args=(0,0,0,0),gap=0)==1; passed()
 # The wheel walks onto the new rows and Centre clicks them, as any fixed settings list.
@@ -9606,62 +9619,24 @@ fk,ck=m.handler(page,O['EVT_KEY_UP'])
 ev=m.alloc(0x40); m.word(ev,O['EVT_KEY_UP']); m.word(ev+O['EVENT_KEY'],O['KEY_RETURN'])
 assert m.call(address=fk,args=(ck,ev,0,0),gap=0)==11 and [c[0] for c in m.calls].count('navigator_back')==1
 m.close(); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.top!=page and m.nodes[m.top]['name']=='shuffle_page'; passed()
-def q2pod_page():
-    # M1 Plus: the Library's rows are on the Q2 Pod page, which a Home card opens. V2.1's Home grid
-    # (home_page_init's builder, 0x534064, pinned in test/m1plus/build.py): home_sview, a slide_view, holds
-    # one 320x364 page view per six ids of pdeq_choicemenu, and home_sindicator's max is the pages.
-    # The card takes the next slot as V2.1 lays its cards out (0x533d8c), or a new page when the last
-    # is full. Its image has no name, so V2.1's card click (atoi of the name) never sees it.
-    def v21_home(n,pages=None):
-        m=ShuffleMachine(); pages=(n+5)//6 if pages is None else pages
-        slides=m.node('slide_view','home_sview',[m.node('view',children=[m.node('view') for _ in range(min(6,n-6*p))]) for p in range(pages)])
-        dots=m.node('slide_indicator','home_sindicator')
-        m.top=m.node('window','home_page',[m.node('gesture','app_gesture',[m.node('view','home_svview',[slides,dots])])])
-        m.word(syms['pdeq_choicemenu'],m.deque(list(range(n)),'int'))
-        assert m.call(address=home_hook[0],args=(m.top,0,0,0),gap=0)==0
-        return m,slides,dots
-    geometry=lambda m,w: [signed(m.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H')]
-    def card(m,slides):
-        cards=[w for p in m.nodes[slides]['children'] for w in m.nodes[p]['children'] if m.nodes[w]['name']=='q2pod_card']
-        assert len(cards)<=1; return cards[0] if cards else 0
-    m,slides,dots=v21_home(17); c=card(m,slides)
-    assert len(m.nodes[slides]['children'])==3 and m.get(c+O['W_PARENT'])==m.nodes[slides]['children'][2]
-    assert geometry(m,c)==[160,236,154,118] and not [x for x in m.calls if x[0]=='slide_indicator_set_max']
-    icon,label=m.nodes[c]['children']
-    assert m.nodes[icon]['type']=='image' and geometry(m,icon)==[44,20,66,66] and not m.nodes[icon]['name']
-    assert (m.nodes[icon]['clickable'],m.nodes[icon]['style:normal:bg_image'],m.nodes[icon]['style:pressed:bg_image'])==(1,'home_q2pod','home_q2pod_down')
-    assert m.handler(icon,O['EVT_CLICK'])[0]==payload_syms['library_open']
-    assert m.nodes[label]['type']=='label' and geometry(m,label)==[0,92,154,36] and m.nodes[label]['text']=='Q2 Pod'
-    assert m.nodes[label]['style']=='label_centerwhitehome_white' and ('label_set_line_wrap',label,1) in [x[:3] for x in m.calls]; passed()
-    # A full last page: the card starts a new one, and the dots count it.
-    m,slides,dots=v21_home(18); c=card(m,slides)
-    assert len(m.nodes[slides]['children'])==4 and m.get(c+O['W_PARENT'])==m.nodes[slides]['children'][3] and geometry(m,c)==[6,0,154,118]
-    page=m.nodes[slides]['children'][3]; assert geometry(m,page)==[0,0,320,364]
-    assert [x[1:3] for x in m.calls if x[0]=='slide_indicator_set_max']==[(dots,4)]; passed()
-    # V2.1's rebuild (the Home menu edited, the language changed) destroys every card. Coming to the
-    # front again, after V2.1's own rebuild, puts the card back, once.
-    m,slides,dots=v21_home(17)
-    m.nodes[slides]['children']=[m.node('view',children=[m.node('view') for _ in range(min(6,17-6*p))]) for p in range(3)]
-    fg=[(f,ctx) for t,f,ctx in m.nodes[m.top]['handlers'] if t==O['EVT_WINDOW_FOREGROUND']]
-    assert len(fg)==1 and fg[0][1]==m.top and not card(m,slides)
-    for _ in range(2): assert m.call(address=fg[0][0],args=(fg[0][1],m.event,0,0),gap=0)==0 and card(m,slides)
-    # A grid not as V2.1 builds it (a page short) gets no card.
-    m,slides,dots=v21_home(17,pages=2); assert not card(m,slides); passed()
-    # The card opens the Q2 Pod page: a title bar with the back button over V2.1's 64 px rows (list_row),
-    # in the Library's order, then Streaming's. Podcasts, Audiobooks, Photos, Books and Videos only with
-    # their folders; Upload Scrobbles only with an account. A second press opens nothing new.
-    m,slides,dots=v21_home(17); m.card=[('Podcasts',4),('Photos',4),('Videos',4)]
-    f,ctx=m.handler(m.nodes[card(m,slides)]['children'][0],O['EVT_CLICK'])
-    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0; page=m.top
-    assert m.nodes[page]['name']=='library_page' and m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.top==page
+def m1_entry_pages():
+    # M1 Plus: Home's Library and Streaming rows (ipod-ui 4.5) open the payload's pages, V2.1 having neither: the
+    # Library's rows in upstream's order, V2.1's own categories bound to its Home card click (0x533b80) by their
+    # Home ids, the card's media only with their folders, then maintenance; Streaming's native Tidal and HiFi Music,
+    # then the payload's services. A second press opens nothing new.
+    def library(**config):
+        m=ShuffleMachine(); m.top=m.node('window','home_page'); m.stack=[m.top]; m.config.update(config)
+        return m
+    m=library(); m.card=[('Podcasts',4),('Photos',4),('Videos',4)]
+    assert m.call(address=payload_syms['library_open'],args=(0,m.event,0,0),gap=0)==0; page=m.top
+    assert m.nodes[page]['name']=='library_page' and m.call(address=payload_syms['library_open'],args=(0,m.event,0,0),gap=0)==0 and m.top==page
     m.page=page; view=m.find('scroll_view'); rows=m.nodes[view]['children']
     lv=m.get(view+O['W_PARENT']); assert m.nodes[lv]['item_height']==64
-    assert [b for b in m.nodes[page]['children'] if m.nodes[b].get('style')=='navbar_btnreturn_style']
     assert 'Library' in m.texts()
     labels=[m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]
     base=['Shuffle','Artists','Albums','All Songs','Genres','Era','Playlists','Ratings',
           'Recently Added','Recently Played','Most Played','Frequent','Hi-Res','Long Songs']
-    assert labels==base+['Podcasts','Photos','Videos','Composers','Coverflow','Streaming','CD Ripper','Update Local Music'],labels
+    assert labels==base+['Podcasts','Photos','Videos','Composers','CD Ripper','Update Local Music'],labels
     # V2.1's Home ids (get_homemenu_showinfo's table at 0x97c940), which its dispatcher indexes
     native={'Artists':'6','Albums':'5','All Songs':'3','Genres':'7','Playlists':'14',
             'Recently Added':'13','Recently Played':'12','Frequent':'11','Hi-Res':'9',
@@ -9673,12 +9648,9 @@ def q2pod_page():
             assert m.nodes[row]['name']==native[title]
             assert m.nodes[m.nodes[row]['children'][0]]['draw_type']==O['IMAGE_DRAW_SCALE_DOWN']
             assert m.handler(row,O['EVT_CLICK'])==(syms['m1_home_click'],row)
-    # Shuffle and Coverflow remain reachable while the fixed Home asset is being ported.
     f,ctx=m.handler(rows[0],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='shuffle_page'
-    m.top=page; f,ctx=m.handler(rows[labels.index('Coverflow')],O['EVT_CLICK'])
-    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
-    m.top=page; f,ctx=m.handler(rows[labels.index('Streaming')],O['EVT_CLICK'])
-    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+    m.top=m.node('window','home_page'); m.stack=[m.top]
+    assert m.call(address=payload_syms['streaming_open'],args=(0,m.event,0,0),gap=0)==0
     stream=m.top; assert m.nodes[stream]['name']=='streaming_page'
     m.page=stream; stream_rows=m.nodes[m.find('scroll_view')]['children']
     assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in stream_rows]==['Tidal','HiFi Music','Spotify','Internet Radio','AirPlay','Configuration']
@@ -9686,106 +9658,60 @@ def q2pod_page():
         assert m.handler(r,O['EVT_CLICK'])==(syms['m1_home_click'],r) and m.nodes[r]['name']==i
     assert [m.text(m.get(0x97c940+4*i)) for i in (1,0)]==['tidal','hifimusic']
     assert m.call(address=payload_syms['streaming_open'],args=(0,m.event,0,0),gap=0)==0 and m.top==stream
-    m,slides,dots=v21_home(17); m.config['TOKEN']='tok'; m.card=[('Audiobooks',4),('Books',4)]
-    f,ctx=m.handler(m.nodes[card(m,slides)]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    m=library(TOKEN='tok'); m.card=[('Audiobooks',4),('Books',4)]
+    m.call(address=payload_syms['library_open'],args=(0,m.event,0,0),gap=0)
     m.page=m.top; rows=m.nodes[m.find('scroll_view')]['children']
-    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==base+['Audiobooks','Books','Composers','Coverflow','Streaming','Upload Scrobbles','CD Ripper','Update Local Music']; passed()
-if is_m1plus: q2pod_page()  # its own names: the Library's machine (m, top) is used again below
-def q2pod_real_grid():
-    # The same card on V2.1's own grid: its real home_page asset, and its real builder (0x534064, with
-    # its card builder 0x533d8c) run for every number of cards the Home menu editor can leave on. Each
-    # case is home_page_init's order: V2.1 builds the grid, then the card follows it (the hook's own
-    # call, or its to-foreground handler after a rebuild; one routine, home_card).
-    GRID=0x534064
-    def real_home(ids):
-        m=ShuffleMachine(); win=m.v21_page('home_page'); m.top=win; m.stack=[win]
-        m.mock('get_homemenu_showinfo','widget_set_prop_bool','widget_set_tr_text','slide_indicator_set_value',
-               'hscroll_label_stop','hscroll_label_start','hscroll_label_set_ellipses','hscroll_label_set_speed',
-               'widget_load_image','widget_unload_image','on_backtoplayer_onclick','access@GLIBC_2.0','snprintf@GLIBC_2.0',
-               'memset@GLIBC_2.0')
-        m.word(syms['pdeq_choicemenu'],m.deque(ids,'int'))
-        assert m.call(address=home_hook[0],args=(win,0,0,0),gap=0)==0  # V2.1's own body mocked: no grid yet
-        return m,win
-    def rebuild(m,win,ids=None):
-        if ids is not None: m.word(syms['pdeq_choicemenu'],m.deque(ids,'int'))
-        # The card builder zeroes its name buffer (memset, 0x533e70) before get_homemenu_showinfo fills
-        # it; both are mocked, so the stack starts zeroed, as memset leaves it.
-        m.u.mem_write(0x7000c000,bytes(0x3000))
-        m.calls=[]; assert m.call(address=GRID,args=(win,1,0,0),gap=0,clear=False)==0
-        (f,ctx),=[(f,ctx) for t,f,ctx in m.nodes[win]['handlers'] if t==O['EVT_WINDOW_FOREGROUND']]
-        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,clear=False)==0
-        return [x[2] for x in m.calls if x[0]=='slide_indicator_set_max']
-    def where(m,win):
-        slides=named(m,win,'home_sview'); pages=m.nodes[slides]['children']
-        at=[(i,j) for i,p in enumerate(pages) for j,c in enumerate(m.nodes[p]['children']) if m.nodes[c]['name']=='q2pod_card']
-        assert len(at)==1, at
-        (i,j),=at; c=m.nodes[pages[i]]['children'][j]
-        return len(pages),i,j,[signed(m.get(c+O[k])) for k in ('W_X','W_Y','W_W','W_H')],[len(m.nodes[p]['children']) for p in pages]
-    for n in (1,5,6,12,17,18):
-        m,win=real_home(list(range(n))); maxes=rebuild(m,win)
-        pages,page,slot,geometry,sizes=where(m,win); full=n%6==0
-        assert pages==n//6+1 and page==pages-1 and slot==n%6 and sizes==[6]*(n//6)+[n%6+1], (n,pages,page,slot,sizes)
-        assert geometry==[6+slot%2*154,slot//2*118,154,118] and maxes==[(n+5)//6]+([n//6+1] if full else []), (n,geometry,maxes)
-        # V2.1's cards in the same pages are where the card's copy puts them.
-        p=m.nodes[named(m,win,'home_sview')]['children'][0]; v21=m.nodes[p]['children'][0]
-        assert [signed(m.get(v21+O[k])) for k in ('W_X','W_Y','W_W','W_H')]==[6,0,154,118]
+    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==base+['Audiobooks','Books','Composers','Upload Scrobbles','CD Ripper','Update Local Music']; passed()
+if is_m1plus: m1_entry_pages()
+def home_tap(m,w):
+    """A click event whose target is w, as AWTK's image dispatches it."""
+    ev=m.alloc(0x30); m.word(ev+O['EVENT_TYPE'],O['EVT_CLICK']); m.word(ev+O['EVENT_TARGET'],w); return ev
+def m1_home_init():
+    # M1 Plus (ipod-ui 4.5): V2.1's Home code on the iPod Home as built (its rewritten asset). The payload binds every
+    # row and card, the lists' and the carousel's, and the carousel's arrows: V2.1 binds none of them. V2.1's own init
+    # skips binding the playing strip's tap (0x53439c, pointer up: its widget_on at 0x534e44 is gone), and its grid
+    # builder (0x534064), playing strip refreshes (0x5341f4, 0x5343e8) and to-foreground refresh (0x534858, every flag
+    # that rebuilds the grid or retitles the strip set) find no grid or strip and change nothing. A saved legacy card
+    # selection changes none of it.
+    m=ShuffleMachine(); win=m.v21_page('home_page'); m.top=win; m.stack=[win]
+    m.mock('get_homemenu_showinfo','widget_set_prop_bool','widget_set_tr_text','slide_indicator_set_value',
+           'hscroll_label_stop','hscroll_label_start','hscroll_label_set_ellipses','hscroll_label_set_speed',
+           'widget_load_image','widget_unload_image','on_backtoplayer_onclick','access@GLIBC_2.0','snprintf@GLIBC_2.0',
+           'memset@GLIBC_2.0','navigator_to','reset_homemenu_index')
+    m.word(syms['pdeq_choicemenu'],m.deque(list(range(6)),'int'))
+    assert m.call(address=home_hook[0],args=(win,0,0,0),gap=0)==0
+    assert struct.unpack_from('<2I',demo,fileoff(demo,0x534e40))==(0x8f99a830,0)  # lw $t9, widget_on; no call
+    assert struct.unpack_from('<I',demo,fileoff(demo,0x534e2c))[0]==0x24050103  # for event 0x103 (pointer up)
+    assert [named(m,win,n) for n in ('app_gesture','home_sview','home_bottomview')]==[0,0,0]
+    # Each is home_click with its index in home_clicks: (destination, context).
+    lists=named(m,win,'list_view_home'),named(m,win,'slide_menu')
+    for menu in lists:
+        for i,row in enumerate(HOME_ROWS): assert m.handler(named(m,menu,'img_'+row),O['EVT_CLICK'])==(payload_syms['home_click'],i),row
+    sets=named(m,win,'list_view_homeset')
+    for i,name in enumerate(('img_playset','img_sysset','img_left','img_right')):
+        assert m.handler(named(m,sets if i<2 else win,name),O['EVT_CLICK'])==(payload_syms['home_click'],7+i),name
+    table=payload_syms['home_clicks']
+    want=[('home_playing',None),('library_open',None),('coverflow_open',None),('home_page','folder_page'),('home_shortcut_open',None),
+          ('streaming_open',None),('home_settings',None),('home_page','playset/playset_page'),('home_page','systemset/sysset_page'),
+          ('home_arrow',0),('home_arrow',1)]
+    for i,(f,ctx) in enumerate(want):
+        assert m.get(table+8*i)==payload_syms[f],(i,f)
+        assert (m.text(m.get(table+8*i+4)) if isinstance(ctx,str) else m.get(table+8*i+4))==(ctx or 0),(i,ctx)
+    # A click ends its image's press with V2.1's own abort (its image_base_on_event clears the press only so), then
+    # goes on: Folder, Playback and System open their pages as V2.1's Home cards did (0x533c74's navigator_to).
+    img=named(m,lists[0],'img_folder'); f,ctx=m.handler(img,O['EVT_CLICK']); m.calls=[]
+    assert m.call(address=f,args=(ctx,home_tap(m,img),0,0),gap=0)==0 and [m.text(c[1]) for c in m.calls if c[0]=='navigator_to']==['folder_page']
+    assert [(c[1],m.get(c[2]+O['EVENT_TYPE'])) for c in m.calls if c[0]=='stock_dispatch']==[(img,O['EVT_POINTER_ABORT'])]
     passed()
-    # Cards turned off in the editor: V2.1 rebuilds with fewer (here 17 then 6, a full page), the
-    # card goes with its cards and comes back once, on a page of its own, with the dots counting it;
-    # turned on again (6 then 13), it follows them on the last page.
-    m,win=real_home(list(range(17))); rebuild(m,win); assert where(m,win)[:3]==(3,2,5)
-    assert rebuild(m,win,list(range(6)))==[1,2] and where(m,win)[:3]==(2,1,0)
-    assert rebuild(m,win,list(range(13)))==[3] and where(m,win)[:3]==(3,2,1); passed()
-    # Knob: Navigation on Home (m1plus_nav_home.c), on V2.1's real grid: the turns step a frame
-    # through the cards in reading order, page by page, home_sview following to the card's page; the
-    # press clicks the card's image, V2.1's or the Q2 Pod card's. At an end a turn stops, and one
-    # after a pause wraps. A touch hides the frame, and the next turn shows it on the page in view; a
-    # rebuild drops it. Volume mode leaves Home alone.
-    def knob_home(n,mode='1'):
-        m,win=real_home(list(range(n))); rebuild(m,win); m.config['KNOB']=mode; m.mock('slide_view_set_active_ex')
-        slides=named(m,win,'home_sview')
-        return m,win,slides,[c for p in m.nodes[slides]['children'] for c in m.nodes[p]['children']]
-    def turn(m,slides,key='KEY_VOLUMEDOWN',gap=1000):  # the knob's volume down: Next (Knob Up: List Up)
-        m.call(O[key],gap=gap); slid=[c[1:4] for c in m.calls if c[0]=='slide_view_set_active_ex']
-        if slid: m.nodes[slides]['active']=slid[-1][1]
-        return [(s==slides,page,anim) for s,page,anim in slid]
-    def framed(m,cards):
-        out=[]
-        for i,c in enumerate(cards):
-            m.paint(c,gap=0)
-            if m.rounded: out.append(i); assert m.rounded[0]['rect']==(2,2,150,114),m.rounded[0]
-        return out
-    image=lambda m,c: next(w for w in m.nodes[c]['children'] if m.nodes[w]['type']!='label')
-    m,win,slides,cards=knob_home(11); assert len(cards)==12 and framed(m,cards)==[]
-    assert turn(m,slides)==[] and framed(m,cards)==[0]  # the first turn shows the first card in view
-    for i in range(1,6): assert turn(m,slides)==[] and framed(m,cards)==[i]
-    assert turn(m,slides)==[(True,1,1)] and framed(m,cards)==[6]  # the next page, slid to
-    assert turn(m,slides,'KEY_VOLUMEUP')==[(True,0,1)] and framed(m,cards)==[5]; passed()
-    for _ in range(6): turn(m,slides)
-    assert framed(m,cards)==[11] and [m.nodes[c]['name'] for c in cards].index('q2pod_card')==11
-    assert turn(m,slides)==[] and framed(m,cards)==[11]  # the end stops,
-    assert turn(m,slides,gap=50)==[] and framed(m,cards)==[11]  # a spin keeps stopping,
-    assert turn(m,slides)==[(True,0,1)] and framed(m,cards)==[0]; passed()  # and a turn after a pause wraps
-    assert turn(m,slides,'KEY_VOLUMEUP')==[] and turn(m,slides,'KEY_VOLUMEUP')==[(True,1,1)] and framed(m,cards)==[11]
-    # The press clicks the card: the Q2 Pod card's image (its own click), then a V2.1 card's.
-    m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[image(m,cards[11])]
-    assert m.handler(image(m,cards[11]),O['EVT_CLICK'])[0]==payload_syms['library_open']
-    turn(m,slides,'KEY_VOLUMEUP'); m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[image(m,cards[10])]; passed()
-    # A touch hides the frame; the next turn shows it on the page in view.
-    inp=HOOKS['window_manager_dispatch_input_event'][0]; m.handlers[inp+12]='stock_input'
-    m.call(0,address=inp,event_type=O['EVT_INPUT_POINTER_DOWN'])
-    assert framed(m,cards)==[]
-    m.clicks=[]; m.call(O['KEY_POWER'],gap=1000); assert m.clicks==[]  # no frame: the press isn't a card's
-    m.nodes[slides]['active']=1; assert turn(m,slides)==[] and framed(m,cards)==[6]; passed()
-    # A rebuild (the Home editor) makes new cards: the frame goes, and comes back on a turn.
-    rebuild(m,win); cards=[c for p in m.nodes[slides]['children'] for c in m.nodes[p]['children']]
-    assert framed(m,cards)==[] and turn(m,slides)==[] and framed(m,cards)==[6]; passed()
-    # One page: no slide. Volume mode: the knob stays the volume and Home shows nothing.
-    m,win,slides,cards=knob_home(5)
-    for i in range(6): assert turn(m,slides)==[] and framed(m,cards)==[i]
-    m,win,slides,cards=knob_home(11,mode='0'); m.mock('on_wm_keyup_fun'); turn(m,slides)
-    assert m.get(m.event+O['EVENT_KEY'])==O['KEY_VOLUMEDOWN'] and framed(m,cards)==[]; passed()
-if is_m1plus: q2pod_real_grid()
+    for flag in ('homemenu_changeflag','autochange_refresh','force_refreshflag','parsecover_finishflag'):
+        (m.word if flag=='homemenu_changeflag' else m.byte)(syms[flag],2 if flag=='homemenu_changeflag' else 1)
+    grid=('view_create','slide_indicator_set_max','image_create','label_create','widget_set_text_utf8','image_base_set_image',
+          'on_backtoplayer_onclick','widget_destroy_children')
+    m.calls=[]
+    for routine,args in ((0x534064,(win,1)),(0x5341f4,(win,1)),(0x5343e8,(win,)),(0x534858,(win,1))):
+        m.call(address=routine,args=(*args,0,0,0)[:4],gap=0,clear=False)
+    assert not [c for c in m.calls if c[0] in grid],[c[0] for c in m.calls]; passed()
+if is_m1plus: m1_home_init()
 def home_settings(full,classic=0):
         # Home's Rockbox row shows only while the card has Rockbox: hidden, it moves after Settings, so the
         # list's layout leaves no gap; it comes back after Folder once the card has it.
@@ -9888,9 +9814,10 @@ def home_carousel():
     m.word(w+O['W_PARENT'],m.top); m.word(m.top+O['W_PARENT'],m.wm)
     m.page_list(3,name='display_page'); m.nodes[m.top]['anim_hint']=HINT
     m.paint(w,gap=0); assert not m.drawn() and not m.icons; passed()
-home_carousel()
-for full in (0,1):
-    home_settings(full); home_settings(full,1); home_back(full)
+if not is_m1plus:  # the M1's own below (m1_home_modes): no Rockbox, no Return key, square glass
+    home_carousel()
+    for full in (0,1):
+        home_settings(full); home_settings(full,1); home_back(full)
 # Most Played opens a black mostplayed_page list (nothing played: "No plays yet", no rows); a second
 # press while it is open does nothing. Its rows are the top PLAYS_TOP, most played first and, among
 # equal counts, the most recently counted (earlier slot) first; a row plays that ranked list as a
@@ -10770,10 +10697,12 @@ def games_open():
     f,ctx=m.handler(button,O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0,count=5_000_000)==0
     m.page=m.top; assert m.nodes[m.page]['name']=='games_page' and m.nodes[m.page]['style:normal:bg_color']==-0x1000000
     return m.nodes[m.page]['children']
-assert m.text(m.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))=='Games'
-assert m.call(address=payload_syms['home_shortcut_open'],args=(0,m.event,0,0),gap=0,count=5_000_000)==0
-m.page=m.top; assert m.nodes[m.page]['name']=='games_page'
-m.close()
+if not is_m1plus:  # the M1's Shortcut has no Games (ipod-ui 4.8): a stored Games is Favorites (m1_home_modes)
+    assert m.text(m.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))=='Games'
+    assert m.call(address=payload_syms['home_shortcut_open'],args=(0,m.event,0,0),gap=0,count=5_000_000)==0
+    m.page=m.top; assert m.nodes[m.page]['name']=='games_page'
+    m.close()
+else: assert m.text(m.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))=='Favorites'
 sheet,chooser=games_open(); G=m.get(payload_syms['g'])
 assert labels(chooser)==['Games','Sudoku','Vortex','Solitaire','Snake'] and not m.nodes[sheet]['visible']
 rows=m.nodes[m.find('scroll_view',chooser)]['children']
@@ -13907,10 +13836,10 @@ if not is_m1plus:  # Q2 only: the touch wheel's
     passed()
 else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow and Controls, with V2.1's icons and chevron,
     # each opening the page again (display_sub) with V2.1's rows dropped. Coverflow: Artist Albums, Coverflow Sort and
-    # Refresh Coverflow (1.4.5); Controls: Smart Awake, then the knob and its direction; Appearance: Theme, Light Mode,
-    # Accent and Battery, Theme's preset leaving the square corners and Home alone. Not there: Corners (the glass is
-    # square), Hold Return, Wheel QS and Wheel Sensitivity (no Return key, no wheel), Click With Headphones (no buzzer),
-    # Home and Shortcut (4.5) and Centred Now Playing (4.6).
+    # Refresh Coverflow (1.4.5); Controls: Shortcut (4.5), Smart Awake, then the knob and its direction; Appearance:
+    # Theme, Light Mode, Accent, Home (4.5) and Battery, Theme's preset leaving the square corners alone. Not there:
+    # Corners (the glass is square), Wheel QS and Wheel Sensitivity (no wheel), Click With Headphones (no buzzer) and
+    # Centred Now Playing (4.6).
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4)
     assert texts()==['Appearance','Coverflow','Controls'] and icons==['sset_display','pset_covermode','pset_jumpfolder']
     assert all(m.nodes[m.nodes[r]['children'][-1]].get('image')=='right_arrow' for r in rows)
@@ -13918,29 +13847,46 @@ else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow an
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=2)
     assert texts()==['Artist Albums: Coverflow','Coverflow Sort: Album','Refresh Coverflow']
     assert icons==['pset_covermode','pset_covermode','system_update'] and m.nodes[m.settings_view]['children']==rows
-    # Hold Return (4.4: Previous's hold and the chevron's), then the knob's rows; Knob: Navigation is the default (the
-    # iPod UI has no wheel)
+    # Shortcut (4.5), Hold Return (4.4: Previous's hold and the chevron's), then the knob's rows; Knob: Navigation is
+    # the default (the iPod UI has no wheel)
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=3)
-    assert texts()==['Smart Awake','Hold Return: Recent','Knob: Navigation','Knob Up: List Up']
-    assert icons==['sset_display','pset_jumpfolder','pset_jumpfolder','pset_jumpfolder']
-    assert click(0)==[(1,'IPOD','KEEPLIT')]
-    assert click(1)==[(1,'Q2POD','HOLDRETURN')] and texts()[1]=='Hold Return: Home'
-    assert click(1)==[(0,'Q2POD','HOLDRETURN')] and texts()[1]=='Hold Return: Recent'
-    assert click(2)==[(0,'Q2POD','KNOB')] and texts()[2]=='Knob: Volume'
-    assert click(2)==[(1,'Q2POD','KNOB')] and texts()[2]=='Knob: Navigation'
-    assert click(3)==[(1,'Q2POD','KNOBDIR')] and texts()[3]=='Knob Up: List Down'
-    assert click(3)==[(0,'Q2POD','KNOBDIR')] and texts()[3]=='Knob Up: List Up'
+    assert texts()==['Shortcut: Favorites','Smart Awake','Hold Return: Recent','Knob: Navigation','Knob Up: List Up']
+    assert icons==['pset_covermode','sset_display','pset_jumpfolder','pset_jumpfolder','pset_jumpfolder']
+    assert click(1)==[(1,'IPOD','KEEPLIT')]
+    assert click(2)==[(1,'Q2POD','HOLDRETURN')] and texts()[2]=='Hold Return: Home'
+    assert click(2)==[(0,'Q2POD','HOLDRETURN')] and texts()[2]=='Hold Return: Recent'
+    assert click(3)==[(0,'Q2POD','KNOB')] and texts()[3]=='Knob: Volume'
+    assert click(3)==[(1,'Q2POD','KNOB')] and texts()[3]=='Knob: Navigation'
+    assert click(4)==[(1,'Q2POD','KNOBDIR')] and texts()[4]=='Knob Up: List Down'
+    assert click(4)==[(0,'Q2POD','KNOBDIR')] and texts()[4]=='Knob Up: List Up'
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'1','KNOBDIR':'1'},stock_rows=4,sub=3)
-    assert texts()[2:]==['Knob: Navigation','Knob Up: List Down']
+    assert texts()[3:]==['Knob: Navigation','Knob Up: List Down']
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],{'KNOB':'0'},stock_rows=4,sub=3)
-    assert texts()[2:]==['Knob: Volume','Knob Up: List Up']
+    assert texts()[3:]==['Knob: Volume','Knob Up: List Up']; passed()
+    # Shortcut: the M1's (no Rockbox: S90play would boot the Q2's; no Games, ipod-ui 4.8), with no key Favorites, then
+    # Shuffle, Rated Albums, Artists and Albums, back to Favorites. A stored Rockbox or Games is Favorites, kept as
+    # it is until the row is changed.
+    for stored in ({},{'SHORTCUT':'0'},{'SHORTCUT':'6'}):
+        CONFIG.clear(); CONFIG.update(stored)
+        m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=3); CONFIG.clear()
+        assert texts()[0]=='Shortcut: Favorites' and not [c for c in m.calls if c[0]=='write_int_config'],stored
+        for value,name in ((5,'Shuffle'),(4,'Rated Albums'),(1,'Artists'),(2,'Albums'),(3,'Favorites'),(5,'Shuffle')):
+            assert click(0)==[(value,'IPOD','SHORTCUT')] and texts()[0]=='Shortcut: '+name,(stored,name)
+    passed()
+    # Appearance: Home cycles Split, Full and Carousel, saved; Theme's preset is Split, saved only when it changes.
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=1)
-    assert [t.split(':')[0] for t in texts()]==['Theme','Light Mode','Accent','Battery'] and texts()[0]=='Theme: Minimal'
-    assert icons==['sset_display']*3+['sset_powermanager']
+    assert [t.split(':')[0] for t in texts()]==['Theme','Light Mode','Accent','Home','Battery'] and texts()[0]=='Theme: Minimal'
+    assert icons==['sset_display']*3+['pset_covermode','sset_powermanager'] and texts()[3]=='Home: Split'
+    for value,name in ((1,'Full'),(2,'Carousel'),(0,'Split')):
+        assert click(3)==[(value,'IPOD','HOME')] and texts()[3]=='Home: '+name
     m.nodes[m.wm]={'type':'window_manager','children':[m.top]}  # Theme lays every settings list out again
     keys={w[2] for w in click(0)}
     assert texts()[:2]==['Theme: Classic','Light Mode: On'] and {'THEME','LIGHT'}<=keys and not keys&{'ROUNDED','HOME'}, keys
-    passed()
+    CONFIG.clear(); CONFIG.update(HOME='2')  # [IPOD] keys a new Machine reads
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=1); CONFIG.clear()
+    assert texts()[3]=='Home: Carousel'
+    m.nodes[m.wm]={'type':'window_manager','children':[m.top]}
+    assert (0,'IPOD','HOME') in click(0) and texts()[3]=='Home: Split'; passed()
 # Its row opens stock's Boot volume page re-dressed (crossfade.c): titled, no switch, the percent
 # beside the slider, which runs 50-200 in tens. The wheel and +/- step 10%, live and saved, the
 # slider snaps to a ten, a drag is live but saved once at its release, and Centre goes back (edit_key, as on Brightness).

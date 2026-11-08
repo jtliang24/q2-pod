@@ -2370,7 +2370,17 @@ const char *now_tag(void *r, int field) {
     return P(r, field);
 }
 
-#define HOME_PW (UI_W - HOME_SPLIT_W) /* Split's art panel, BOTTOM high */
+/* Split's art panel: HOME_PW x HOME_PH at HOME_ART_X, 0 in the window. The Q2's is right of the menu, BOTTOM high;
+ * the M1's (portrait, docs/m1plus-ipod-ui.md 4.5) spans the screen above it, HOME_ART_H high. */
+#if M1PLUS
+#define HOME_ART_X 0
+#define HOME_PW UI_W
+#define HOME_PH HOME_ART_H
+#else
+#define HOME_ART_X HOME_SPLIT_W
+#define HOME_PW (UI_W - HOME_SPLIT_W)
+#define HOME_PH BOTTOM
+#endif
 /* iPod Home (docs/ipod.md): the playing track's art beside the list. */
 static struct {
     void *win, *art, *list, *sets; /* sets: the Settings list, in the list's place while open */
@@ -2394,9 +2404,16 @@ extern const char *ipod_home_shortcut(void);
 /* player_parsecover_thd writes the playing track's cover and then sets g_playcover_type, as Now
  * Playing reads it: 1 embedded, 2 folder image, 4 downloaded; 0 while parsing or stopped, 3 none.
  * Tidal's (5) is keyed by its online URL, never a queue path, so Home leaves it out. */
+#if M1PLUS /* V2.1's (its Home's cover refresh, 0x5343e8): 2 embedded, 3 and 5 the folder's or downloaded, 4 a built-in
+            * random cover, 6 HiFi Music's and 7 Tidal's (keyed by their online sources) */
+static const char *const player_covers[] = { 0, 0, "file://" PEQ_ROOT "/tmp/coverpic.jpg",
+                                             "file://" PEQ_ROOT "/tmp/externpic.jpg", 0,
+                                             "file://" PEQ_ROOT "/tmp/externpic.jpg" };
+#else
 static const char *const player_covers[] = { 0, "file://" PEQ_ROOT "/tmp/coverpic.jpg",
                                              "file://" PEQ_ROOT "/tmp/externpic.jpg", 0,
                                              "file://" PEQ_ROOT "/tmp/externpic.jpg" };
+#endif
 
 /* The player's cover of r: its type once the cover thread has parsed r (g_lastcover_url is its
  * path), else 0, and *file that type's file, or 0. */
@@ -2429,7 +2446,7 @@ static int pan_v(void) { return home.v0 * 256 + drift_at(home.ry, DRIFT_Y_MS); }
 /* A step repaints only the panel, once the pan has moved; coverflow_home_clip draws it. */
 static void drift_place(void) {
     if (pan_u() == home.du && pan_v() == home.dv) return;
-    static int pane[4] = { HOME_SPLIT_W, 0, HOME_PW, BOTTOM }; /* rect_t, in the parent */
+    static int pane[4] = { HOME_ART_X, 0, HOME_PW, HOME_PH }; /* rect_t, in the parent */
     widget_invalidate_force(P(home.art, W_PARENT), pane);
 }
 
@@ -2456,7 +2473,7 @@ static int home_drift(const void *unused) {
 
 /* A w x h image's size just covering the panel at its proportions; unknown sizes fill it. */
 static void home_fit(unsigned w, unsigned h, int *fw, int *fh) {
-    int pw = HOME_PW, ph = BOTTOM;
+    int pw = HOME_PW, ph = HOME_PH;
     *fw = pw, *fh = ph;
     if (w && h && w <= 8192 && h <= 8192) {
         if ((unsigned)pw * h > (unsigned)ph * w)
@@ -2506,7 +2523,7 @@ static int home_tex(const char *url) {
     home_fit(w, h, &fw, &fh);
     int tw = fw * DRIFT_ZOOM_PCT / 100, th = fh * DRIFT_ZOOM_PCT / 100;
     const unsigned char *data = 0;
-    if (!home.frame) home.frame = opaque_frame(HOME_PW, BOTTOM);
+    if (!home.frame) home.frame = opaque_frame(HOME_PW, HOME_PH);
     if (home.frame && format < 4 && w && h && w <= 8192 && h <= 8192 && tw <= DRIFT_TEXELS / th) {
         free(home.tex);
         home.tex = calloc((unsigned)(th + 3) * (unsigned)(tw + 3), 4);
@@ -2552,7 +2569,7 @@ static int home_tex(const char *url) {
         for (int y = th + 1; y < th + 3; ++y)
             memcpy(home.tex + y * ts, home.tex + th * ts, (unsigned)ts * 4);
         home.tw = tw, home.rx = tw - fw, home.ry = th - fh;
-        home.u0 = (fw - HOME_PW) / 2, home.v0 = (fh - BOTTOM) / 2, home.du = -1;
+        home.u0 = (fw - HOME_PW) / 2, home.v0 = (fh - HOME_PH) / 2, home.du = -1;
     }
     widget_unload_image(home.art, bitmap);
     return data != 0;
@@ -2586,7 +2603,7 @@ static void home_render(unsigned *d, int pitch, int u, int v) {
     bspline_w((unsigned)u & 255, wx), bspline_w((unsigned)v & 255, wy);
     int ts = home.tw + 3;
     const unsigned *s = home.tex + (v >> 8) * ts + (u >> 8); /* texel -1, -1 from u, v */
-    for (int y = -3; y < BOTTOM; ++y, s += ts) {
+    for (int y = -3; y < HOME_PH; ++y, s += ts) {
         unsigned *o = home.ring[(y + 3) & 3];
         for (int x = 0; x < HOME_PW; ++x) o[x] = tap4(s[x], s[x + 1], s[x + 2], s[x + 3], wx);
         if (y < 0) continue;
@@ -2599,7 +2616,7 @@ static void home_render(unsigned *d, int pitch, int u, int v) {
 
 /* The pan's frame over the art (its image is empty), rendered again only once the pan moved. */
 static void home_paint(void *canvas) {
-    int u = pan_u(), v = pan_v(), r[4] = { 0, 0, HOME_PW, BOTTOM };
+    int u = pan_u(), v = pan_v(), r[4] = { 0, 0, HOME_PW, HOME_PH };
     if (u != home.du || v != home.dv) {
         unsigned *d = (unsigned *)bitmap_lock_buffer_for_write(home.frame);
         if (!d) return;
@@ -2635,7 +2652,7 @@ void coverflow_home_art(void *top) {
     char url[600] = "file://";
     if (r) art_path(url + 7, album, "");
     unsigned size[2] = { 0, 0 };
-    int fw = HOME_PW, fh = BOTTOM;
+    int fw = HOME_PW, fh = HOME_PH;
     home.tw = 0;
     const char *src = cover;
     /* the player writes every track's cover to the same file: drop AWTK's cached bitmap of the
@@ -2653,7 +2670,7 @@ void coverflow_home_art(void *top) {
             image_base_set_image(home.art, HOME_PLACEHOLDER);
         home_fit(size[0], size[1], &fw, &fh);
     }
-    widget_move_resize(home.art, HOME_SPLIT_W + (HOME_PW - fw) / 2, (BOTTOM - fh) / 2, fw, fh);
+    widget_move_resize(home.art, HOME_ART_X + (HOME_PW - fw) / 2, (HOME_PH - fh) / 2, fw, fh);
     rearm(&home.repaint, home_repaint, 0);
 }
 
@@ -2669,10 +2686,16 @@ void coverflow_home_clip(void *w, void *canvas, int begin) {
         home.clipped = 0;
         return;
     }
+#if M1PLUS /* portrait: the art's panel across the top; the menus, under it, each in its own bounds */
+    int clip[4], art = w == home.art;
+    clip_within(canvas, home.clip, clip, I(canvas, CANVAS_X) - I(w, W_X) + (art ? HOME_ART_X : 0),
+                I(canvas, CANVAS_Y) - I(w, W_Y) + (art ? 0 : I(w, W_Y)), art ? HOME_PW : UI_W, art ? HOME_PH : I(w, W_H));
+#else
     int clip[4], art = w == home.art, x = HOME_SPLIT_W, pane = widget_get_visible(home.art) ? x : UI_W;
     clip_within(canvas, home.clip, clip, I(canvas, CANVAS_X) - I(w, W_X) + (art ? x : 0),
                 I(canvas, CANVAS_Y) - I(w, W_Y) + (art ? 0 : I(w, W_Y)), art ? UI_W - x : pane,
                 art ? BOTTOM : I(w, W_H));
+#endif
     canvas_set_clip_rect(canvas, clip);
     home.clipped = 1;
 }
@@ -2687,8 +2710,14 @@ int coverflow_home_owns(void *w) {
 /* Both menus' lists span outer, their rows and tap targets inner; labels start at x and end end
  * before the row's edge (Classic: before the chevron). */
 static void home_width(void *w, int outer, int inner, int x, int end, int depth) {
+#if M1PLUS /* the list starts under Split's art and reaches the window's foot, scrolling its rows */
+    int top = (ipod_home() ? 0 : HOME_PH) + (ipod_classic() ? 0 : HOME_TOP);
+    widget_move_resize(w, I(w, W_X), depth ? I(w, W_Y) : top, depth < 2 ? outer : inner,
+                       depth ? I(w, W_H) : BOTTOM - top);
+#else
     widget_move_resize(w, I(w, W_X), depth ? I(w, W_Y) : ipod_classic() ? 0 : HOME_TOP,
                        depth < 2 ? outer : inner, I(w, W_H));
+#endif
     for (unsigned i = 0, n = widget_count_children(w); i < n; ++i) {
         void *child = widget_get_child(w, i);
         if (!tk_strcmp(widget_get_type(child), "hscroll_label")) {
@@ -2729,13 +2758,16 @@ void coverflow_home_layout(void) {
             widget_set_text_utf8(widget_lookup(home.carousel[0], "label_rockbox", 1),
                                  ipod_home_shortcut());
     }
+#if M1PLUS /* portrait: Split's menu is Full's, under the art */
+    full = 1;
+#endif
     int split = HOME_SPLIT_W, outer = full ? UI_W : split,
         inner = !full ? split : classic ? HOME_CLASSIC_ROW : HOME_FULL_ROW,
         x = classic ? HOME_CLASSIC_TEXT_X : HOME_DOT_X + HOME_DOT + HOME_DOT_GAP,
         end = classic ? HOME_CLASSIC_LABEL_END : full ? HOME_LABEL_END : HOME_SPLIT_LABEL_END;
     home_width(home.list, outer, inner, x, end, 0);
     if (home.sets) home_width(home.sets, outer, inner, x, end, 0);
-    widget_move_resize(home.art, split, 0, UI_W - split, BOTTOM);
+    widget_move_resize(home.art, HOME_ART_X, 0, HOME_PW, HOME_PH);
     widget_set_visible(home.art, !mode, 0);
     if (home.carousel[0] && carousel != widget_get_visible(home.carousel[0])) {
         for (int i = 0; i < 3; ++i) home_show(home.carousel[i], carousel);
@@ -2762,7 +2794,22 @@ static void home_swap(void *from, void *to, int dx) {
     widget_animator_start(a);
 }
 
+#if M1PLUS
+/* M1 Plus: Settings is a Carousel card too (docs/m1plus-ipod-ui.md 4.5), so the Settings list takes the place of
+ * whichever menu shows, and Back brings that one back, at its row or card. */
+static int home_carousel_shown(void) { return home.carousel[0] && widget_get_visible(home.carousel[0]); }
+static void home_carousel_show(int on) {
+    for (int i = 0; i < 3; ++i) home_show(home.carousel[i], on);
+}
+#endif
 static int home_settings(void *ctx, void *event) {
+#if M1PLUS
+    if (home.sets && !widget_get_visible(home.sets) && home_carousel_shown()) {
+        home_carousel_show(0);
+        home_swap(home.carousel[0], home.sets, I(home.sets, W_W));
+        return 0;
+    }
+#endif
     if (home.sets && !widget_get_visible(home.sets)) home_swap(home.list, home.sets, I(home.list, W_W));
     return 0;
 }
@@ -2770,26 +2817,85 @@ static int home_settings(void *ctx, void *event) {
 /* Return on Home with Settings open: 1 when it went back to the list. */
 int coverflow_home_back(void *top) {
     if (!home.sets || top != home.win || !widget_get_visible(home.sets)) return 0;
+#if M1PLUS
+    if (ipod_home() == 2 && home.carousel[0]) {
+        home_show(home.sets, 0);
+        home_carousel_show(1);
+        return 1;
+    }
+#endif
     home_swap(home.sets, home.list, -I(home.list, W_W));
     return 1;
 }
 
-#include "m1plus_coverflow_home.c"
+#if M1PLUS
+/* Whether Home shows its Settings list, which the status bar's chevron and Previous close (m1plus_nav_back.c). */
+int coverflow_home_sets(void *top) { return home.sets && top == home.win && widget_get_visible(home.sets); }
+extern int library_open(void *, void *), streaming_open(void *, void *), compact_now_playing(void);
+extern void slide_step(void *s, int k, int bounded);
+/* Home's destinations V2.1 has no binding for (its init binds no row: the payload binds each, coverflow_home): Now
+ * Playing as V2.1's playing strip opened it (on_backtoplayer_onclick's context), and the pages its Home cards open
+ * (the card click, 0x533b80: Folder, Playback and System settings). */
+static int home_playing(void *ctx, void *event) {
+    compact_now_playing();
+    return 0;
+}
+static int home_page(void *ctx, void *event) {
+    navigator_to((const char *)ctx);
+    return 0;
+}
+/* The carousel's arrows: a card back or on (ctx), as a tap on a side cover. */
+static int home_arrow(void *ctx, void *event) {
+    if (home.carousel[0]) slide_step(home.carousel[0], ctx ? 1 : -1, 0);
+    return 0;
+}
+static const char *const home_names[] = { "img_playing", "img_localmusic", "img_coverflow", "img_folder",
+                                          "img_rockbox", "img_stream",     "img_settings" };
+/* Every Home row's, card's and arrow's click (coverflow_home's bindings, by HOME_CLICKS index): the destination and
+ * its context. */
+enum { HOME_PLAYSET = 7, HOME_SYSSET, HOME_LEFT, HOME_RIGHT, HOME_CLICKS };
+static const struct {
+    int (*click)(void *, void *);
+    const void *ctx;
+} home_clicks[HOME_CLICKS] = { { home_playing, 0 },       { library_open, 0 },         { coverflow_open, 0 },
+                               { home_page, "folder_page" }, { home_shortcut_open, 0 }, { streaming_open, 0 },
+                               { home_settings, 0 },      { home_page, "playset/playset_page" },
+                               { home_page, "systemset/sysset_page" }, { home_arrow, 0 }, { home_arrow, (void *)1 } };
+extern int stock_dispatch_trampoline(void *target, void *event);
+/* V2.1's image_base_on_event (0x654444) sets an image's press (+147) on a pointer down and clears it only on an abort
+ * (0x6545d8), not on the release that clicks: a later release over the image, from a touch pressed where nothing grabs
+ * it (a fling from the art), clicked it again. A Home click ends its image's press with that abort, then goes on. */
+static int home_click(void *ctx, void *event) {
+    void *image = event ? P(event, EVENT_TARGET) : (void *)0;
+    char abort[0x30];
+    if (image) stock_dispatch_trampoline(image, pointer_event_init(abort, EVT_POINTER_ABORT, image, 0, 0));
+    unsigned i = (unsigned)(long)ctx;
+    return i < HOME_CLICKS ? home_clicks[i].click((void *)home_clicks[i].ctx, event) : 0;
+}
+static void home_bind(void *in, const char *name, unsigned i) {
+    widget_on(in ? widget_lookup(in, name, 1) : (void *)0, EVT_CLICK, home_click, (void *)(long)i);
+}
+#endif
 
 /* home_page_init: stock binds the name-matched img_* cards, then the Coverflow card binds here,
  * on its image as stock does, whatever stock returned. */
 int coverflow_home(void *win, void *ctx) {
-#if M1PLUS
-    if (win) widget_on(win, EVT_WINDOW_FOREGROUND, home_card_again, win);
-#endif
     int result = stock_home_trampoline(win, ctx);
-#if M1PLUS
-    home_card(win);
+#if M1PLUS /* every row and card, the lists' and the carousel's: V2.1 binds none */
+    static const char *const sets[] = { "img_playset", "img_sysset" };
+    void *menus[2] = { win ? widget_lookup(win, "list_view_home", 1) : (void *)0,
+                       win ? widget_lookup(win, "slide_menu", 1) : (void *)0 };
+    for (int m = 0; m < 2; ++m)
+        for (unsigned i = 0; i < sizeof home_names / sizeof *home_names; ++i) home_bind(menus[m], home_names[i], i);
+    for (unsigned i = 0; i < 2; ++i)
+        home_bind(win ? widget_lookup(win, "list_view_homeset", 1) : (void *)0, sets[i], HOME_PLAYSET + i);
+    home_bind(win, "img_left", HOME_LEFT);
+    home_bind(win, "img_right", HOME_RIGHT);
 #else
     widget_on(widget_lookup(win, "img_coverflow", 1), EVT_CLICK, coverflow_open, 0);
-#endif
     widget_on(widget_lookup(win, "img_rockbox", 1), EVT_CLICK, home_shortcut_open, 0);
     widget_on(widget_lookup(win, "img_settings", 1), EVT_CLICK, home_settings, 0);
+#endif
     home.win = win;
     void *art = widget_lookup(win, "img_homeart", 1);
     home.art = art;
@@ -2802,9 +2908,11 @@ int coverflow_home(void *win, void *ctx) {
     if (home.sets) widget_set_sensitive(home.sets, 0);
     static const char *const carousel[] = { "slide_menu", "img_left", "img_right" };
     for (int i = 0; i < 3; ++i) home.carousel[i] = widget_lookup(win, carousel[i], 1);
+#if !M1PLUS
     /* The carousel's own Coverflow and Shortcut cards; the lists' come first in the window. */
     widget_on(widget_lookup(home.carousel[0], "img_coverflow", 1), EVT_CLICK, coverflow_open, 0);
     widget_on(widget_lookup(home.carousel[0], "img_rockbox", 1), EVT_CLICK, home_shortcut_open, 0);
+#endif
     coverflow_home_layout();
     return result;
 }

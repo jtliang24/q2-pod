@@ -10,7 +10,6 @@
     }
     if (touch_closes(e) || chevron_input(e)) return 0;
     lp_input(e);
-    home_input(e);
     if (e && video_on()) video_touch(e);
     if (!video_on()) {
         int result = stock_input_trampoline(wm, e);

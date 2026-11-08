@@ -572,5 +572,49 @@
         ]
       ]
     }
+  },
+  "home": {
+    "safe_returns": [
+      [
+        "0x5340dc",
+        "1240003b",
+        "the grid builder (0x534064) returns with no home_sview"
+      ],
+      [
+        "0x5340e4",
+        "12200039",
+        "and with no home_sindicator"
+      ],
+      [
+        "0x534254",
+        "14400007",
+        "the playing strip's title refresh (0x5341f4) returns with no home_scrlabel_title"
+      ],
+      [
+        "0x534430",
+        "1040005a",
+        "the playing strip's cover refresh (0x5343e8) returns with no home_img_icon"
+      ],
+      [
+        "0x5346f8",
+        "14400007",
+        "init's visitor (0x53469c) binds the grid's swipe to the Home editor only on app_gesture"
+      ]
+    ],
+    "unbound": [
+      [
+        "0x534e2c",
+        "24050103",
+        "0x534e44",
+        "0320f809",
+        "home_page_init's pointer-up handler (0x53439c) opens Now Playing for a release below y 415, V2.1's playing strip, which the iPod Home replaces with its rows: the binding (widget_on, event 0x103) is skipped"
+      ]
+    ],
+    "boot_resume": [
+      "0x534f04",
+      "0320f809",
+      "home_page_init's memory-play resume, navigator_to_with_context(\"playing_page\", {queue, index, class, mode}) (mode 2 in car mode, else 3): ringnav_boot starts the queue paused and stays on Home outside car mode"
+    ],
+    "menu_names": "0x97c940"
   }
 }

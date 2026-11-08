@@ -1712,6 +1712,10 @@ static int minimal_card(void) { return !ipod_classic() && st.minimal_accent == M
  * card may mount after the first read. */
 static int shortcut(void) {
     accent();
+#if M1PLUS /* Rockbox and Games are Q2 only (netupdate.c sh_rows; ipod-ui 4.8): either stored, or no key, is
+            * Favorites, the stored value kept until the row is changed */
+    return st.shortcut && st.shortcut < 6 ? st.shortcut : 3;
+#endif
     return st.shortcut < 7 ? st.shortcut : rockbox_available() ? 0 : 3;
 }
 int ipod_classic(void) {
@@ -1745,6 +1749,11 @@ const char *ipod_home_shortcut(void) {
 }
 extern int rockbox_open(void *, void *);
 static int rated_albums(void *, void *), shuffle_menu(void *, void *);
+#if M1PLUS /* V2.1's library pages are at ui/'s top, as its Home card click (0x533b80) opens them */
+#define LOCAL_UI ""
+#else
+#define LOCAL_UI "localmusic/"
+#endif
 int home_shortcut_open(void *ctx, void *event) {
     int s = shortcut();
     if (!s) return rockbox_open(ctx, event);
@@ -1756,10 +1765,10 @@ int home_shortcut_open(void *ctx, void *event) {
             int cls;
             void *record;
         } album = { 0xf003, 0 };
-        return navigator_to_with_context("localmusic/album_page", &album);
+        return navigator_to_with_context(LOCAL_UI "album_page", &album);
     }
-    return navigator_to_with_context(s == 1 ? "localmusic/localclass_page"
-                                            : "localmusic/allmusic_page",
+    return navigator_to_with_context(s == 1 ? LOCAL_UI "localclass_page"
+                                            : LOCAL_UI "allmusic_page",
                                      (void *)(long)(s == 1 ? 0xf004 : 0xf00a));
 }
 enum { TONE_LIGHT = 2, TONE_RED = 3 }; /* columns of ACCENTS */
@@ -1970,7 +1979,7 @@ static void paint_chevrons(void *w, void *canvas) {
             canvas_draw_icon(
                 canvas, lit && i == st.sel_row ? white : bitmap,
                 r.x + r.w - CHEVRON_W + (int)bitmap[0] / 2 +
-                    (home ? (ipod_home() == 1 ? HOME_FULL_CHEVRON_SHIFT : HOME_CHEVRON_SHIFT) : 0),
+                    (home ? (M1PLUS || ipod_home() == 1 ? HOME_FULL_CHEVRON_SHIFT : HOME_CHEVRON_SHIFT) : 0),
                 home ? st.sel_y : r.y + r.h / 2); /* bitmap_t width @0 */
     }
     canvas_set_clip_rect(canvas, &old);
@@ -2329,9 +2338,6 @@ int ringnav_paint(void *w, void *canvas) {
     paint_caps(w, canvas);
     coverflow_home_clip(w, canvas, 0);
     st.paint_w = w ? P(w, W_PARENT) : (void *)0;
-#if M1PLUS
-    home_paint(w, canvas); /* Knob: Navigation's card on V2.1's Home (m1plus_nav_home.c) */
-#endif
     return result;
 }
 
@@ -3397,12 +3403,14 @@ static int bar_repaint(const void *info) {
  * than BATT_ROOM (a wide badge while it shows). widget_set_visible does nothing for an unchanged
  * state and relayouts the view for a new one. */
 #if M1PLUS
-/* The back chevron shows whenever the top window is not Home (ipod-ui 4.2). Only a paint changes it: the top window's
+/* The back chevron shows whenever the top window is not Home (ipod-ui 4.2), or Home shows its Settings list (4.5),
+ * which it closes. Only a paint changes it: the top window's
  * (or the bar's) background reaches bar_sync, which then repaints the bar after the frame; the 1 s tick leaves it, as
  * nothing paints after a change made there. Returns whether it changed. */
 static int chevron_sync(void) {
     if (!st.bar_back) return 0;
-    int show = !home_menu(window_manager_get_top_window(window_manager())),
+    void *top = window_manager_get_top_window(window_manager());
+    int show = !home_menu(top) || coverflow_home_sets(top),
         changed = show != !!widget_get_visible(st.bar_back);
     widget_set_visible(st.bar_back, show, 0);
     return changed;
@@ -4880,10 +4888,10 @@ static void theme_preset(void) {
         setting_put(&st.accent, 4, "ACCENT"); /* Cobalt */
     else
         setting_put(&st.minimal_accent, 0, "MINIMAL_ACCENT"); /* Graphite */
-#if !M1PLUS /* M1 Plus: square glass, no Corners row; Home's layouts wait for ipod-ui 4.5 */
+#if !M1PLUS /* M1 Plus: square glass, no Corners row */
     setting_put(&st.rounded, !classic, "ROUNDED");
-    setting_put(&st.home, 0, "HOME");
 #endif
+    setting_put(&st.home, 0, "HOME");
 }
 
 static int setting_click(void *ctx, void *event) {
@@ -4891,7 +4899,11 @@ static int setting_click(void *ctx, void *event) {
     int *value = minimal ? &st.minimal_accent : setting_values[i];
     const char *key = minimal ? "MINIMAL_ACCENT" : setting_keys[i];
     /* Rockbox, Favorites, Shuffle, Rated Albums, Artists, Albums, Games */
+#if M1PLUS /* no Rockbox or Games: Albums wraps to Favorites */
+    static const int shortcut_next[] = { 3, 2, 3, 5, 1, 4, 3 };
+#else
     static const int shortcut_next[] = { 3, 2, 6, 5, 1, 4, 0 };
+#endif
     /* Graphite, ..., Plum, Green, then Ivory in Minimal or Graphite in Classic */
     static const int accent_next[] = { 1, 2, 3, 4, 5, 6, 8, 0, MINIMAL_ACCENT };
     _Static_assert(sizeof accent_next / sizeof *accent_next == ACCENT_N, "one per ACCENTS row");
@@ -4918,10 +4930,10 @@ static int setting_click(void *ctx, void *event) {
             theme_preset();
             coverflow_home_layout();
             settings_layout(window_manager());
-#if M1PLUS /* Now Playing is V2.1's until ipod-ui 4.6; Appearance has no Home or Corners row */
+#if M1PLUS /* Now Playing is V2.1's until ipod-ui 4.6; Appearance has no Corners row */
             keep_selected(st.setting_label[3]);
             for (int k = 0; k < 7; ++k)
-                if (k != 3 && k != 4 && k != 1 && k != 5) setting_text(k); /* the preset's rows */
+                if (k != 3 && k != 4 && k != 5) setting_text(k); /* the preset's rows */
 #else
             np_theme();
             keep_selected(st.setting_label[3]);
@@ -4997,8 +5009,9 @@ static int display_open(void *ctx, void *event) {
  * (iPod), Hold Return and Wheel Sensitivity, the last opening its slider page (crossfade.c). The
  * value rows show it in the label and have no chevron, since they change in place.
  * M1 Plus (ipod-ui 4.3): V2.1's four rows (Brightness, Screen Off, Lock screen, Atmosphere Lamp), then the
- * same three, with V2.1's icons. Appearance holds Theme, Light Mode, Accent and Battery; Controls Smart Awake
- * and the volume knob's two rows. The rest wait for their item or stay Q2 only (docs/m1plus-unported.md).
+ * same three, with V2.1's icons. Appearance holds Theme, Light Mode, Accent, Home and Battery (4.5); Controls
+ * Shortcut (4.5), Smart Awake and the volume knob's two rows. The rest wait for their item or stay Q2 only
+ * (docs/m1plus-unported.md).
  * ponytail: stock's page opened over itself; its own rows' state is never touched on a sub-page. */
 int ringnav_display(void *win, void *ctx) {
     static const char *const titles[] = { 0, "Appearance", "Coverflow", "Controls" },
@@ -5026,9 +5039,8 @@ int ringnav_display(void *win, void *ctx) {
         pod_rows(win, VIEW_DISPLAY, POD_CF_SORT, 2, cf_icons + 1);
         return result;
     }
-#if M1PLUS /* Corners: the glass is square; Home and Shortcut: Home's layouts (ipod-ui 4.5); Centred Now
-            * Playing (4.6); Click With Headphones: Key Tone, no buzzer */
-    static const unsigned char appearance[] = { 3, 6, 0, 2 }, controls[] = { 7 };
+#if M1PLUS /* Corners: the glass is square; Centred Now Playing (4.6); Click With Headphones: Key Tone, no buzzer */
+    static const unsigned char appearance[] = { 3, 6, 0, 1, 2 }, controls[] = { 4, 7 };
 #else
     /* Theme, Light Mode, Accent, Corners, Home, Battery, Centred Now Playing; Shortcut, Smart
      * Awake, Click With Headphones. */

@@ -125,26 +125,11 @@
 #define ICON_RETURN "return"
 #define ICON_RETURN_DOWN "return_down"
 #define BACK_W 48 /* the width titles keep clear at a payload page's top left, where the button was: 4.4 and 4.5 relay them */
-/* V2.1's Home: home_page_init's grid builder (0x534064) fills home_sview, a slide_view, with one
- * 320x364 page view per HOME_CARDS ids of pdeq_choicemenu and sets home_sindicator's max to the pages.
- * Each card (0x533d8c) is a HOME_CARD_W x HOME_CARD_H view, two columns from HOME_CARD_X, rows from 0:
- * a clickable 66 px image at HOME_ICON_X, HOME_ICON_Y in home_<name>_style (bg_image <name>, pressed
- * <name>_down) and a line-wrapped label under it in STYLE_HOME_LABEL, from Home's own style file. */
-#define VIEW_HOME_SLIDES "home_sview"
-#define VIEW_HOME_DOTS "home_sindicator"
-#define STYLE_HOME_LABEL "label_centerwhitehome_white"
-#define HOME_CARDS 6
-#define HOME_PAGE_W 320
-#define HOME_PAGE_H 364
-#define HOME_CARD_X 6
-#define HOME_CARD_W 154
-#define HOME_CARD_H 118
-#define HOME_ICON_X 44
-#define HOME_ICON_Y 20
-#define HOME_ICON 66
-#define HOME_LABEL_Y 92
-#define HOME_LABEL_H 36
-#define HOME_FRAME_INSET 2 /* Knob: Navigation's frame inside a card (m1plus_nav_home.c) */
+/* The iPod Home in portrait (ipod-ui 4.5, tools/m1plus_ipod.py home_page): HOME_ROW rows, the library's pitch; Split's
+ * art across the top, UI_W x HOME_ART_H, the menu under it; Carousel's cards HOME_CARD square (190 px art, caption). */
+#define HOME_ROW 64
+#define HOME_ART_H 200
+#define HOME_CARD 290
 #define M1PLUS_CONTEXTS "m1plus_contexts.inc" /* V2.1's pages ringnav navigates, for patch/contexts.inc */
 /* A CHOICE picker's checked option: V2.1 has no "select" image; its pickers set "selected", and
  * "unselect" otherwise, as V1.32 (timezone_listitem_layout, 0x4a2388 and 0x4a2420) */
@@ -833,9 +818,9 @@ static inline int arc_out(int r, int y) {
 #define DRIFT_Y_MS 26000
 #define DRIFT_TICK_MS 200
 #define DRIFT_MAX_STEP_MS 500
-/* No drift texture until the iPod Home art is ported (4.5): home_tex's tw <= DRIFT_TEXELS / th then
- * fails, so it draws nothing. */
-#define DRIFT_TEXELS M1_UNPORTED
+/* Split's pan (4.5): a cover whose zoomed fit passes four of the M1's panels (4 x 320 x 200, home_tex's calloc of
+ * a megabyte) stays still, as the Q2's four of its own. */
+#define DRIFT_TEXELS 256000
 /* The screen glass is square (CORNER_R 0), so nothing keeps clear of a rounded corner. */
 #define GLASS_R 0
 #define GLASS_SLACK 4

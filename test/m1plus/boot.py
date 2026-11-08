@@ -5,15 +5,16 @@ come up as stock does. Usage: python3 test/m1plus/boot.py BUILD [--seconds N] [-
 Each runs in a bwrap sandbox (no network, no host files but the Nix store qemu needs) whose root is
 that build's rootfs, with V2.1's own dbus-daemon. A preloaded shim (SHIM) gives demo a 320x480
 framebuffer backed by a file, and the device's serial; config.ini has the first-boot language set.
-So both reach Home. The patched demo must stay up as long as stock, draw the same Home (but the
-status bar's clock and battery), and enter the payload through the hooks startup reaches.
+So both reach Home: stock its grid, the patched demo the iPod Home (ipod-ui 4.5), which the harness checks for itself:
+the art panel and the list's rows in Split, the rows from the top in Full, the selection on Now Playing. The patched
+demo must stay up as long as stock and enter the payload through the hooks startup reaches; stock is the control.
 
-Then both take the same input through WALK: touches (the shim stands in for tslib, as the
-touchscreen's samples) and keys (the buttons' and knob's devices, /dev/input/event1 and event2, are
-FIFOs the harness writes Linux key events to). Home's pages must match stock's, and System Setting differ
-(the iPod settings rows, ipod-ui 4.3); from there the walk is the patched demo's alone: About, Playback
-Setting and its EQ, Display and the slider pages, where the chevron (and Previous, in Knob: Navigation)
-goes back, and the payload's back button must close its EQ and Previous must not.
+Then the patched demo takes the input of WALK: touches (the shim stands in for tslib, as the touchscreen's samples)
+and keys (the buttons' and knob's devices, /dev/input/event1 and event2, are FIFOs the harness writes Linux key events
+to): Home's Settings list, System Setting, About, Playback Setting and its EQ, Display and the slider pages, where the
+chevron (and Previous, in Knob: Navigation) goes back, and the payload's back button must close its EQ and Previous
+must not; the Library and Streaming from Home's rows, by touch and by the knob. With --home-menu, a saved V2.1 Home
+card selection must change nothing: the control is the same build without it.
 Not covered: the card, the DAC, GPIO and battery, and the X2000 CPU.
 """
 import argparse, bisect, collections, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, time
@@ -21,6 +22,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]/'tools'))
 from build import BASE, SCRATCH, source_sha256, symbols, run
 from m1plus import M1PLUS_HOOKS, WM_PAINT_LEAF_M1PLUS
 from m1plus_ipod import M1
+# Each accent's selection top (patch/m1plus_offsets.inc ACCENTS, { top, bottom, light, red, highlight } a row)
+ACCENT_TOPS = [int(r, 16) for r in re.findall(r'\{ 0x([0-9a-fA-F]{6}),', (pathlib.Path(__file__).resolve().parents[2]/'patch/m1plus_offsets.inc')
+                                                    .read_text().split('#define ACCENTS', 1)[1].split('\n\n', 1)[0])]
 BAR_BACK_W, BAR_BACK_HIT_W, STATUS_H = M1['BAR_BACK_W'], M1['BAR_BACK_HIT_W'], M1['STATUS_H']
 
 W, H = 320, 480
@@ -166,8 +170,10 @@ def shim(out, root, sn_addr):
 # The iPod theme's default is Minimal, whose greys recolour the icons' edges: both runs use Classic with Crimson (the
 # stock red), which leaves a stock colour as it was, so a page that differs from stock differs by a change of layout.
 IPOD_CLASSIC = '[IPOD]\nTHEME=1\nACCENT=1\n'
+# The iPod Home (ipod-ui 4.5): the plain and --home-menu walks lay it out Full (HOME=1), the media walk Split (0).
+HOME_FULL, HOME_SPLIT = 'HOME=1\n', 'HOME=0\n'
 
-def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None):
+def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None, home=HOME_FULL):
     """Unpack image as a sandbox root and start dbus-daemon, then demo for seconds; returns the bwrap.
     With card, a directory mounted as the card, and V2.1's library database listing its songs."""
     root = out/'root'
@@ -178,7 +184,7 @@ def start(image, out, seconds, sn_addr, trace='', home_menu='', card=None):
     # followed by |, as saveHomemenu 0x4d7940 writes them).
     # Knob: Volume, so the walk starts on V2.1's own knob; it turns Knob: Navigation on itself (patch.py has the default).
     # The media walk's Library steps go back and hold with Previous, so it starts in Navigation (the M1's default).
-    (root/'mnt/data/config.ini').write_text(f'[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB={1 if card else 0}\n' + IPOD_CLASSIC + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
+    (root/'mnt/data/config.ini').write_text(f'[SYSSET]\nLANGUAGE=2\n[Q2POD]\nKNOB={1 if card else 0}\n' + IPOD_CLASSIC + home + (f'[MAIN]\nHOMEMENU={home_menu}\n' if home_menu else ''))
     conf = (root/'etc/dbus-1/system.conf').read_text()
     # No other users exist in the sandbox: the bus runs as its caller.
     (root/'etc/dbus-1/sandbox.conf').write_text(re.sub(r'\s*<(user|servicehelper)>[^<]*</\1>', '', conf))
@@ -235,101 +241,99 @@ KNOB_DOWN, PRESS = 'knob 114', 'keys 116'   # KEY_VOLUMEDOWN, and the knob's pre
 # step, box): unlike that step, but the box (x0, y0, x1, y1, the status bar's included) as it was then;
 # ('still', step, box): as at that step, the box too.
 # Positions are V2.1's 320x480 layout, the settings pages' the iPod rows' (set_row).
-# Home's last page: V2.1's five cards (seventeen in all), then, patched, the Q2 Pod card in the
-# sixth slot (its row's right half, y 266 to 394 with its label); stock's slot is empty.
-Q2POD_CARD = (237, 318)
-HOME3_ROWS = ('rows', (30, 266), (266, 394))
-WALK = [
-    ('home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, HOME3_ROWS),
-    ('sysset', tap(82, 318), 4, 'differs'),  # the iPod settings rows
-]
-PATCHED_ONLY = [# System Setting in the iPod order (m1plus_nav_sysset.c): its end is System Update, Reset, Formatting Card and
-                # About, the last row.
-                ('sysset_end', DOWN_LIST + ['wait 800'] + DOWN_LIST, 4, ('not', 'sysset')),
-                ('about', set_row(5), 4, ('not', 'sysset_end')),
-                # Back on Home, V2.1's refresh retitles the bottom bar (y 414 on) without the asset's full stop.
-                ('home3_again', CHEVRON + ['wait 2500'] + CHEVRON, 5, ('as', 'home3', (30, 414), (414, 480))),
-                ('playset', tap(237, 230), 4, ('not', 'home3_again')),
-                # The knob turns the volume (Knob: Volume): the iPod bar draws no figure (V2.1's img_volume and label_volume
-                # stay transparent), the chevron and the play state as they were.
-                ('knob', [KNOB_UP, KNOB_UP], 3, ('still', 'playset', (0, 0, 60, 30))),
-                ('eq', set_row(2), 5, ('not', 'playset')),  # the PEQ editor in stock's EQ page
-                ('eq_closed', CHEVRON, 4, ('as', 'playset')),  # the PEQ's back: the chevron; stock's EQ page has its own button
-                ('eq_again', set_row(2), 5, ('as', 'eq')),
-                ('eq_previous', [PREVIOUS], 4, ('as', 'eq')),  # Previous is a media key, not Back: the PEQ stays
-                # Back steps back one screen: Advanced's Preamp row, then Back to Advanced, then out.
-                ('advanced', tap(250, 53), 4, ('not', 'eq')),           # the tab bar's right half
-                ('preamp', tap(160, 414), 4, ('not', 'advanced')),      # the fifth row, after 1.3.8's Reset to defaults
-                ('preamp_back', CHEVRON, 4, ('not', 'preamp', 'playset')),
-                ('advanced_back', CHEVRON, 4, ('as', 'playset')),
-                ('playset_end', (DOWN_LIST + ['wait 800']) * 3 + DOWN_LIST, 4, ('not', 'playset')),
-                ('crossfade', set_row(0), 4, ('not', 'playset_end')),  # the first row at the end, MQA the last
-                ('crossfade_slid', tap(230, 197), 4, ('not', 'crossfade')),  # its slider, up the hidden title bar's 50 px
-                # Back: the list as before (the rows V2.1 rebuilds, then ours again), Crossfade's row now 11 s. Resume Songs'
-                # label (row 2) is wider than its row and scrolls, so the rows compared are the last three.
-                ('crossfade_back', CHEVRON, 4, ('as', 'playset_end', (set_band(3)[0], 480), set_band(0))),
-                # Display's Knob: Navigation. The knob's turns then move System Setting's selection
-                # (its outline drawn), and the volume, in the status bar, stays as it was.
-                ('knob_home', CHEVRON, 5, ('not', 'crossfade_back')),
-                ('knob_sysset', tap(82, 318) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('as', 'sysset')),
-                ('display', set_row(2), 4, ('not', 'knob_sysset')),  # Wireless, Network Service, then Display
-                # Lock screen: switched on, V2.1's grid shows its pictures, the built-ins drawn, in
-                # the payload's scroll view; scrolled to its end, Time show, Clock and About. Switched
-                # off again, then the chevron returns to Display: on V2.1's pages it clicks their own back
-                # button (previous_back), which knob_home and display_back tap.
-                ('lockscreen', set_row(2), 4, ('not', 'display')),  # it keeps its title bar, which holds its switch
-                ('lockscreen_on', tap(221, 53), 4, ('not', 'lockscreen')),
-                ('lockscreen_end', DOWN_LIST, 4, ('not', 'lockscreen_on')),
-                ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
-                ('lockscreen_back', CHEVRON, 4, ('as', 'display')),
-                # Display's end: V2.1's rows, then Appearance, Coverflow and Controls (ipod-ui 4.3), the last row. Controls
-                # holds Smart Awake, Hold Return, then the knob's two rows; Knob becomes Navigation once tapped.
-                ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
-                ('controls', set_row(5), 4, ('not', 'display_end')),
-                ('knob_row', set_row(2), 3, ('as', 'controls', (30, set_band(2)[0]), set_band(2))),
-                ('controls_back', CHEVRON, 4, ('as', 'display_end')),
-                ('display_back', CHEVRON_EDGE, 4, ('as', 'knob_sysset')),
-                ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
-                # With Knob: Navigation, Previous is Back: System Setting closes to Home, where it
-                # stays Previous track (nothing plays) and Home stays.
-                ('previous_back', [PREVIOUS], 4, ('as', 'knob_home')),
-                ('previous_home', [PREVIOUS], 4, ('as', 'previous_back')),
-                # V2.1's slider pages keep the knob's volume (no context) but Previous goes back there too: Max
-                # Volume and Default Vol (bootvol_page, Crossfade's page too). On V039m it stayed a media key there.
-                # Playback Setting reopens where its list was: scrolled back to its start, Max Volume is the fifth row.
-                ('slider_playset', tap(237, 230) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('not', 'previous_home')),
-                ('maxvol', set_row(4), 4, ('not', 'slider_playset')),
-                ('maxvol_previous', [PREVIOUS], 4, ('as', 'slider_playset')),
-                ('bootvol', set_row(5), 4, ('not', 'slider_playset', 'maxvol')),
-                ('bootvol_previous', [PREVIOUS], 4, ('as', 'slider_playset')),
-                ('slider_home', [PREVIOUS], 4, ('as', 'previous_home')),
-                # The Q2 Pod card opens its page (rows of 64 px under the 48 px title bar); its
-                # Shuffle row opens Shuffle, which the back button closes. Previous (Knob:
-                # Navigation) closes the page, and so does the back button.
-                ('q2pod', tap(*Q2POD_CARD), 4, ('not', 'previous_home')),
-                ('q2pod_shuffle', tap(160, 110), 4, ('not', 'q2pod')),
-                ('q2pod_shuffle_back', CHEVRON, 4, ('as', 'q2pod')),
-                ('q2pod_previous', [PREVIOUS], 4, ('as', 'previous_home')),
-                ('q2pod_again', tap(*Q2POD_CARD), 4, ('as', 'q2pod')),
-                ('q2pod_back', CHEVRON, 4, ('as', 'previous_home')),
-                # Knob: Navigation on Home (m1plus_nav_home.c): the first turn frames the first card
-                # of the page in view, five more the Q2 Pod card in its sixth slot, and the press opens
-                # its page. Previous closes it, the frame kept; six turns back cross to the second page.
-                ('home_knob', [KNOB_DOWN], 3, ('not', 'q2pod_back')),
-                ('home_knob_q2pod', [KNOB_DOWN] * 5, 3, ('not', 'home_knob', 'q2pod_back')),
-                ('home_knob_open', [PRESS], 4, ('as', 'q2pod')),
-                ('home_knob_back', [PREVIOUS], 4, ('as', 'home_knob_q2pod')),
-                ('home_knob_page2', [KNOB_UP] * 6, 4, ('not', 'home_knob_back', 'q2pod_back'))]
-# --home-menu: V2.1's Home with six cards (My Music to Composer), a full page, so the Q2 Pod card starts a
-# second page and the dots count it: Home is stock's but for the dots (y 390 to 404). The walk goes to
-# the second page, opens the card (its first slot) and closes the page with the back button.
+# The iPod Home (ipod-ui 4.5) in Classic: its rows HOME_ROW apart from the window's top in Full, under the art
+# (HOME_ART_H) in Split; Home's Settings list takes the menu's place, its rows where the menu's are.
+HOME_ROW, HOME_ART_H = M1['HOME_ROW'], M1['HOME_ART_H']
+NOW, LIBRARY, COVERFLOW, FOLDER, SHORTCUT, STREAMING, SETTINGS = range(7)
+PLAYBACK, SYSTEM = range(2)
+def home_y(i, split=False, scroll=0): return STATUS_H + (HOME_ART_H if split else 0) + HOME_ROW * i - scroll + HOME_ROW // 2
+def home_row(i, split=False, scroll=0): return tap(160, home_y(i, split, scroll))
+WALK = [('settings', home_row(SETTINGS), 4, ('not', 'home')),  # its Playback and System rows, the chevron shown
+        ('sysset', home_row(SYSTEM), 4, ('not', 'settings')),  # the iPod settings rows
+        # System Setting in the iPod order (m1plus_nav_sysset.c): its end is System Update, Reset, Formatting Card and
+        # About, the last row.
+        ('sysset_end', DOWN_LIST + ['wait 800'] + DOWN_LIST, 4, ('not', 'sysset')),
+        ('about', set_row(5), 4, ('not', 'sysset_end')),
+        # Back twice, Home's Settings list again, System (tapped) chosen.
+        ('settings_again', CHEVRON + ['wait 2500'] + CHEVRON, 5, ('not', 'settings', 'about')),
+        ('playset', home_row(PLAYBACK), 4, ('not', 'settings_again')),
+        # The knob turns the volume (Knob: Volume): the iPod bar draws no figure (V2.1's img_volume and label_volume
+        # stay transparent), the chevron and the play state as they were.
+        ('knob', [KNOB_UP, KNOB_UP], 3, ('still', 'playset', (0, 0, 60, 30))),
+        ('eq', set_row(2), 5, ('not', 'playset')),  # the PEQ editor in stock's EQ page
+        ('eq_closed', CHEVRON, 4, ('as', 'playset')),  # the PEQ's back: the chevron; stock's EQ page has its own button
+        ('eq_again', set_row(2), 5, ('as', 'eq')),
+        ('eq_previous', [PREVIOUS], 4, ('as', 'eq')),  # Previous is a media key, not Back: the PEQ stays
+        # Back steps back one screen: Advanced's Preamp row, then Back to Advanced, then out.
+        ('advanced', tap(250, 53), 4, ('not', 'eq')),           # the tab bar's right half
+        ('preamp', tap(160, 414), 4, ('not', 'advanced')),      # the fifth row, after 1.3.8's Reset to defaults
+        ('preamp_back', CHEVRON, 4, ('not', 'preamp', 'playset')),
+        ('advanced_back', CHEVRON, 4, ('as', 'playset')),
+        ('playset_end', (DOWN_LIST + ['wait 800']) * 3 + DOWN_LIST, 4, ('not', 'playset')),
+        ('crossfade', set_row(0), 4, ('not', 'playset_end')),  # the first row at the end, MQA the last
+        ('crossfade_slid', tap(230, 197), 4, ('not', 'crossfade')),  # its slider, up the hidden title bar's 50 px
+        # Back: the list as before (the rows V2.1 rebuilds, then ours again), Crossfade's row now 11 s. Resume Songs'
+        # label (row 2) is wider than its row and scrolls, so the rows compared are the last three.
+        ('crossfade_back', CHEVRON, 4, ('as', 'playset_end', (set_band(3)[0], 480), set_band(0))),
+        # Back at its top before leaving, so Playback Setting's reopening (which glides to its remembered row) starts there.
+        ('playset_top', (UP_LIST + ['wait 800']) * 4, 4, ('not', 'crossfade_back')),
+        # Display's Knob: Navigation. The knob's turns then move System Setting's selection
+        # (its outline drawn), and the volume, in the status bar, stays as it was.
+        ('knob_home', CHEVRON, 5, ('as', 'settings')),  # Playback Setting closes to Home's Settings list
+        ('knob_sysset', home_row(SYSTEM) + ['wait 2000'] + (UP_LIST + ['wait 800']) * 2, 4, ('as', 'sysset')),
+        ('display', set_row(2), 4, ('not', 'knob_sysset')),  # Wireless, Network Service, then Display
+        # Lock screen: switched on, V2.1's grid shows its pictures, the built-ins drawn, in
+        # the payload's scroll view; scrolled to its end, Time show, Clock and About. Switched
+        # off again, then the chevron returns to Display: on V2.1's pages it clicks their own back
+        # button (previous_back), which knob_home and display_back tap.
+        ('lockscreen', set_row(2), 4, ('not', 'display')),  # it keeps its title bar, which holds its switch
+        ('lockscreen_on', tap(221, 53), 4, ('not', 'lockscreen')),
+        ('lockscreen_end', DOWN_LIST, 4, ('not', 'lockscreen_on')),
+        ('lockscreen_off', tap(221, 53), 4, ('as', 'lockscreen')),
+        ('lockscreen_back', CHEVRON, 4, ('as', 'display')),
+        # Display's end: V2.1's rows, then Appearance, Coverflow and Controls (ipod-ui 4.3), the last row. Controls
+        # holds Shortcut (4.5), Smart Awake, Hold Return, then the knob's two rows; Knob becomes Navigation once tapped.
+        ('display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'lockscreen_back')),
+        ('controls', set_row(5), 4, ('not', 'display_end')),
+        ('knob_row', set_row(3), 3, ('as', 'controls', (30, set_band(3)[0]), set_band(3))),
+        ('controls_back', CHEVRON, 4, ('as', 'display_end')),
+        ('display_back', CHEVRON_EDGE, 4, ('as', 'knob_sysset')),
+        ('knob_nav', [KNOB_UP, KNOB_UP], 3, ('kept', 'display_back', (0, 0, 60, 30))),
+        # With Knob: Navigation, Previous is Back: System Setting closes to Home's Settings list, Previous closes that
+        # (ipod-ui 4.5) to the main list, the chevron gone, and there it stays Previous track (nothing plays).
+        ('previous_back', [PREVIOUS], 4, ('as', 'settings_again')),
+        ('previous_settings', [PREVIOUS], 4, ('not', 'previous_back')),
+        ('previous_home', [PREVIOUS], 4, ('as', 'previous_settings')),
+        # V2.1's slider pages keep the knob's volume (no context) but Previous goes back there too: Max
+        # Volume and Default Vol (bootvol_page, Crossfade's page too). On V039m it stayed a media key there.
+        # Playback Setting reopens where its list was left (playset_top): at its start, Max Volume the fifth row.
+        ('slider_playset', home_row(SETTINGS) + ['wait 1500'] + home_row(PLAYBACK) + ['wait 2000'],
+         4, ('not', 'previous_home')),
+        ('maxvol', set_row(4), 4, ('not', 'slider_playset')),
+        ('maxvol_previous', [PREVIOUS], 4, ('as', 'slider_playset')),
+        ('bootvol', set_row(5), 4, ('not', 'slider_playset', 'maxvol')),
+        ('bootvol_previous', [PREVIOUS], 4, ('as', 'slider_playset')),
+        ('slider_home', [PREVIOUS] + ['wait 1500'] + [PREVIOUS], 4, ('as', 'previous_home')),
+        # Home's Library row opens the Library (rows of 64 px under the 48 px title bar); its Shuffle row opens Shuffle,
+        # which the chevron closes. Previous (Knob: Navigation) closes the Library, and so does the chevron.
+        ('library', home_row(LIBRARY), 4, ('not', 'previous_home')),
+        ('library_shuffle', tap(160, 110), 4, ('not', 'library')),
+        ('library_shuffle_back', CHEVRON, 4, ('as', 'library')),
+        ('library_previous', [PREVIOUS], 4, ('not', 'library')),
+        ('library_again', home_row(LIBRARY), 4, ('as', 'library')),
+        ('library_back', CHEVRON, 4, ('as', 'library_previous')),
+        # Knob: Navigation on Home's rows: four turns from Library to Streaming, the press opens it, Previous closes it.
+        ('home_knob', [KNOB_DOWN] * 4, 3, ('not', 'library_back')),
+        ('home_knob_open', [PRESS], 4, ('not', 'home_knob')),
+        ('home_knob_back', [PREVIOUS], 4, ('as', 'home_knob'))]
+# --home-menu: V2.1's Home cards saved ([MAIN] HOMEMENU, six cards from My Music to Composer), which the iPod Home
+# replaces: the control is the same build without them, and both must draw the same Home and pages: the Library from
+# Home's row, closed by the chevron; Home's Settings list, closed by its chevron.
 HOME_MENU = '3|4|5|6|7|8|'
-HOME_DOTS = (390, 404)
-MENU_WALK = [('menu_page2', NEXT_PAGE, 4, ('not', 'home')),
-             ('menu_q2pod', tap(83, 83), 4, ('not', 'menu_page2')),
-             # Back on Home, V2.1's refresh retitles the bottom bar (y 414 on) without the asset's full
-             # stop ("Life is short,Play more", 0x53438c): the rest is as before.
-             ('menu_back', CHEVRON, 4, ('as', 'menu_page2', (30, 414), (414, 480)))]
+MENU_WALK = [('menu_library', home_row(LIBRARY), 4, 'same'),
+             ('menu_back', CHEVRON, 4, 'same'),
+             ('menu_settings', home_row(SETTINGS), 4, 'same'),
+             ('menu_settings_back', CHEVRON, 4, 'same')]
 
 # --media: a card with two 11-minute songs, a book and two photos, and V2.1's songtable listing the
 # songs as its scan writes them (time and time_end 0: not CUE tracks). The card is on a tmpfs: on
@@ -375,52 +379,48 @@ def media_db(path):
 
 # The Library page's rows (patch/m1plus_nav_library.c), 64 px under the 48 px title, upstream's order with V2.1's
 # categories: Shuffle, Artists, Albums, All Songs, Genres, Era, Playlists, Ratings, Recently Added, Recently Played,
-# Most Played, Frequent, Hi-Res, Long Songs, then the card's Photos and Books, Composers, Coverflow, Streaming,
-# CD Ripper and Update Local Music: 21 rows, six showing. A slow drag held before its release scrolls by its
-# length (no fling), from y 420 (a touch lower is V2.1's swipe up to Home): two of DRAG_PX bring Most Played to the top. A fling to the end shows Books to Update Local Music.
-# Tap row centres: a settling scroll must not pick the row above.
-LIB_ROWS, LIB_LIST_Y, LIB_LIST_H, DRAG_PX = 21, STATUS_H + 48, H - STATUS_H - 48, 320
+# Most Played, Frequent, Hi-Res, Long Songs, then the card's Photos and Books, Composers, CD Ripper and Update Local
+# Music: 19 rows, six showing. A slow drag held before its release scrolls by its length (no fling), from y 420 (a touch
+# lower is V2.1's swipe up to Home): two of DRAG_PX bring Most Played to the top. Tap row centres: a settling scroll
+# must not pick the row above.
+LIB_ROWS, LIB_LIST_Y, LIB_LIST_H, DRAG_PX = 19, STATUS_H + 48, H - STATUS_H - 48, 320
 def drag(x, y0, y1, steps=20):
     return [line for i in range(steps + 1) for line in (f'{x} {y0 + (y1 - y0) * i // steps} 200', 'wait 24')] + ['wait 600', f'{x} {y1} 0']
 def page_row(i, scroll=0): return tap(160, LIB_LIST_Y + 64 * i - scroll + 32)
-def end_row(i): return page_row(i, 64 * LIB_ROWS - LIB_LIST_H)
 MID = 2 * DRAG_PX
-# The Library (ipod-ui 4.4), from Home's first page (All Songs, Folder, Album and Artist cards): V2.1's library lists
+# The Library (ipod-ui 4.4) and V2.1's library lists, from Home's rows in Split (the art above them): V2.1's lists
 # without their title bar, in LIB_PITCH rows from the top; each closes by the chevron or Previous (Knob: Navigation, the
 # M1's default). On an album's tracks, Previous held (V2.1's key-long, after 1000 ms) opens Now Playing, and so does
-# the chevron held (LONG_PRESS_MS); Now Playing's chevron goes back to the list.
+# the chevron held (LONG_PRESS_MS); Now Playing's chevron goes back to the list. Home's list shows four rows under the
+# art: a fling to its end (HOME_END px on) brings Streaming and Settings up.
 LIB_PITCH = M1['LIB_PITCH']
-HOME_AGAIN = ('as', 'home', (30, 414), (414, 480))  # back on Home, retitled as home3_again is
+HOME_END = 7 * HOME_ROW - (H - STATUS_H - HOME_ART_H)
 def lib_row(i): return tap(160, STATUS_H + LIB_PITCH * i + LIB_PITCH // 2)
 CHEVRON_HOLD = [f'{BAR_BACK_W // 2} {STATUS_H // 2} 200', f'wait {M1["LONG_PRESS_MS"] + 400}', f'{BAR_BACK_W // 2} {STATUS_H // 2} 0']
-LIBRARY_WALK = [('lib_songs', tap(82, 200), 5, ('not', 'home')),
-                ('lib_songs_back', CHEVRON, 4, HOME_AGAIN),
-                ('lib_folder', tap(237, 200), 5, ('not', 'home')),
-                ('lib_folder_back', [PREVIOUS], 4, HOME_AGAIN),
-                ('lib_artists', tap(237, 318), 5, ('not', 'home')),
-                ('lib_artists_back', CHEVRON, 4, HOME_AGAIN),
-                ('lib_albums', tap(82, 318), 5, ('not', 'home')),
+LIBRARY_WALK = [('lib', home_row(LIBRARY, True), 5, ('not', 'home')),
+                ('lib_songs', page_row(3), 5, ('not', 'lib')),
+                ('lib_songs_back', CHEVRON, 4, ('as', 'lib')),
+                ('lib_artists', page_row(1), 5, ('not', 'lib')),
+                ('lib_artists_back', CHEVRON, 4, ('as', 'lib')),
+                ('lib_albums', page_row(2), 5, ('not', 'lib')),
                 ('lib_album', lib_row(0), 5, ('not', 'lib_albums')),  # the first album's tracks
                 ('lib_hold', [f'hold {PREVIOUS} 1400'], 5, ('not', 'lib_album')),
                 ('lib_hold_back', CHEVRON, 5, ('as', 'lib_album')),
                 ('lib_chevron_hold', CHEVRON_HOLD, 5, ('not', 'lib_album')),
                 ('lib_chevron_back', CHEVRON, 5, ('as', 'lib_album')),
                 ('lib_album_back', [PREVIOUS], 4, ('as', 'lib_albums')),
-                ('lib_albums_back', CHEVRON, 4, HOME_AGAIN),
-                ('lib_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
-                ('lib_playlists', tap(237, 82), 5, ('not', 'lib_home3')),  # Home id 14: playlist_page
-                ('lib_playlists_back', [PREVIOUS], 4, ('as', 'lib_home3')),
-                ('lib_home1', swipe(40, 250, 280, 250) + ['wait 1500'] + swipe(40, 250, 280, 250), 4, HOME_AGAIN)]
-MEDIA_WALK = LIBRARY_WALK + [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
-              ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
+                ('lib_albums_back', CHEVRON, 4, ('as', 'lib'))]
+MEDIA_WALK = LIBRARY_WALK + [
               # At the Library's top, a pull opens V2.1's search (4.4).
-              ('q2pod_search', UP_LIST, 4, ('not', 'media_q2pod')),
-              ('q2pod_search_back', CHEVRON, 4, ('as', 'media_q2pod')),
-              ('era', page_row(5), 4, ('not', 'media_q2pod')),
+              ('lib_search', UP_LIST, 4, ('not', 'lib')),
+              ('lib_search_back', CHEVRON, 4, ('as', 'lib')),
+              ('era', page_row(5), 4, ('not', 'lib')),
               ('era_decade', tap(160, 110), 4, ('not', 'era')),
               ('era_decade_back', CHEVRON, 4, ('as', 'era')),
-              ('era_back', CHEVRON, 4, ('as', 'media_q2pod')),
-              ('lib_mid', drag(160, 420, 420 - DRAG_PX) + ['wait 800'] + drag(160, 420, 420 - DRAG_PX), 4, ('not', 'media_q2pod')),
+              ('era_back', CHEVRON, 4, ('as', 'lib')),
+              ('shuffle', page_row(0), 4, ('not', 'lib')),
+              ('shuffle_back', CHEVRON, 4, ('as', 'lib')),
+              ('lib_mid', drag(160, 420, 420 - DRAG_PX) + ['wait 800'] + drag(160, 420, 420 - DRAG_PX), 4, ('not', 'lib')),
               ('long_songs', page_row(13, MID), 12, ('not', 'lib_mid')),  # measures, then lists
               ('long_songs_back', CHEVRON, 4, ('as', 'lib_mid')),
               ('photos', page_row(14, MID), 6, ('not', 'lib_mid')),
@@ -434,31 +434,46 @@ MEDIA_WALK = LIBRARY_WALK + [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PA
               ('book', tap(160, 110), 5, ('not', 'books')),          # the first book's row
               ('book_back', CHEVRON, 4, ('not', 'book')),
               ('books_back', CHEVRON, 4, ('as', 'lib_mid')),
-              ('lib_end', (DOWN_LIST + ['wait 800']) * 2, 4, ('not', 'lib_mid')),
-              ('coverflow', end_row(17), 10, ('not', 'lib_end')),
+              ('lib_closed', CHEVRON, 4, ('not', 'lib_mid', 'home')),  # Home, its Library row chosen
+              # Home's Folder row: V2.1's Folder view, closed by Previous.
+              ('folder', home_row(FOLDER, True), 5, ('not', 'lib_closed')),
+              ('folder_back', [PREVIOUS], 4, ('not', 'folder', 'lib_closed')),
+              ('coverflow', home_row(COVERFLOW, True), 10, ('not', 'folder_back')),
               ('cover_next', swipe(220, 150, 120, 150), 4, ('not', 'coverflow')),  # one cover: the second album
               ('cover_prev', swipe(120, 150, 220, 150), 4, ('as', 'coverflow')),
               ('cover_open', tap(160, 120), 5, ('not', 'coverflow')),               # the centre cover's tracks
               ('cover_back', CHEVRON, 4, ('as', 'coverflow')),
-              ('coverflow_back', CHEVRON, 4, ('as', 'lib_end')),
-              # The Streaming page: native Tidal and HiFi Music, Spotify, Internet Radio, AirPlay and Configuration.
-              # Spotify, not on the card, says so on its Now Playing page; Internet Radio opens its menu. Each closes
-              # with the chevron.
-              ('streaming', end_row(18), 4, ('not', 'lib_end')),
+              ('coverflow_back', CHEVRON, 4, ('not', 'coverflow', 'folder_back')),
+              # Home's list, flung to its end: Streaming's row opens its page: native Tidal and HiFi Music, Spotify,
+              # Internet Radio, AirPlay and Configuration. Spotify, not on the card, says so on its Now Playing page;
+              # Internet Radio opens its menu. Each closes with the chevron.
+              ('home_end', DOWN_LIST, 4, ('not', 'coverflow_back')),
+              ('streaming', home_row(STREAMING, True, HOME_END), 4, ('not', 'home_end')),
               ('spotify', page_row(2), 4, ('not', 'streaming')),
               ('spotify_back', CHEVRON, 4, ('as', 'streaming')),
               ('radio', page_row(3), 5, ('not', 'streaming')),
               ('radio_back', CHEVRON, 4, ('as', 'streaming')),
               ('configuration', page_row(5), 4, ('not', 'streaming')),
               ('configuration_back', CHEVRON, 4, ('as', 'streaming')),
-              ('streaming_back', CHEVRON, 4, ('as', 'lib_end')),
-              ('lib_closed', CHEVRON, 4, ('not', 'lib_end')),
-              # Opened again, the Library glides back to its last row (Streaming's, 18); the knob (Knob: Navigation)
-              # walks it up to Shuffle, at its top, and the press opens Shuffle, whose first row shuffles the songs.
-              ('lib_again', tap(*Q2POD_CARD), 4, ('not', 'lib_closed', 'media_q2pod')),
-              ('lib_top', [KNOB_UP] * 18, 4, ('not', 'lib_again')),
-              ('shuffle', [PRESS], 4, ('not', 'lib_top')),
-              ('shuffle_songs', tap(160, 110), 5, ('not', 'lib_top'))]  # Shuffle's first row
+              # Back at Home's end, Streaming chosen (the fling chose the visible row nearest the list's middle).
+              ('streaming_back', CHEVRON, 4, ('as', 'home_end')),
+              # Settings, the last row: its list in the menu's place, under the art; its chevron goes back.
+              ('settings', home_row(SETTINGS, True, HOME_END), 4, ('not', 'streaming_back')),
+              ('settings_back', CHEVRON, 4, ('not', 'settings')),
+              # A fling from the art (which takes no touch) released over the Settings row clicks nothing: V2.1's
+              # image kept its press after its click, and on V04Fm the release opened Settings again (home_click).
+              ('art_fling', swipe(160, 100, 160, home_y(SETTINGS, True, HOME_END)), 4, ('as', 'settings_back')),
+              # Opened again, the Library glides back to its last row (Books', 15). The knob (Knob: Navigation) walks it
+              # nine rows up to Playlists (Home id 14: V2.1's playlist_page), which Previous closes, then six more to
+              # Shuffle at its top; the press opens Shuffle, its first row chosen (the tap that opened it before chose
+              # none), and that row shuffles the songs.
+              ('home_top', swipe(160, 260, 160, 450), 4, ('not', 'settings_back')),
+              ('lib_again', home_row(LIBRARY, True), 4, ('not', 'home_top', 'lib')),
+              ('playlists', [KNOB_UP] * 9 + [PRESS], 5, ('not', 'lib_again')),
+              ('playlists_back', [PREVIOUS], 4, ('not', 'playlists')),
+              ('lib_top', [KNOB_UP] * 6, 4, ('not', 'playlists_back')),
+              ('shuffle_again', [PRESS], 4, ('not', 'lib_top')),
+              ('shuffle_songs', tap(160, 110), 5, ('not', 'shuffle_again'))]  # Shuffle's first row
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
@@ -491,9 +506,10 @@ if __name__ == '__main__':
     ap.add_argument('--seconds', type=int, default=60)
     ap.add_argument('--captures', type=pathlib.Path, help='write stock.png and patched.png here')
     ap.add_argument('--home-menu', action='store_true',
-                    help=f'V2.1 Home with six cards ({HOME_MENU}): the Q2 Pod card on a page of its own, and a short walk to it')
+                    help=f'V2.1 Home cards saved ({HOME_MENU}): the iPod Home and its pages as without them')
     ap.add_argument('--media', action='store_true',
-                    help='a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Shuffle Songs')
+                    help='Home in Split, a card with long songs, a book and two photos: the Library, Long Songs, Books, Photos, '
+                         'Folder, Coverflow and Streaming by touch, Shuffle Songs')
     args = ap.parse_args()
     if args.home_menu and args.media: raise SystemExit('--home-menu and --media are separate runs')
     # The Library walk precedes the original media walk; give its new steps their settling budget too.
@@ -508,7 +524,8 @@ if __name__ == '__main__':
          tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
         tmp = pathlib.Path(tmp)
         runs = {}
-        for name, image, trace in (('stock', 'stock.squashfs', ''),
+        # With --home-menu, the control ('stock') is the same build without the saved cards.
+        for name, image, trace in (('stock', 'rootfs.squashfs' if args.home_menu else 'stock.squashfs', ''),
                                    ('patched', 'rootfs.squashfs', f'-d exec,nochain -dfilter {BASE:#x}+{SCRATCH-BASE:#x} -D /out/exec.log')):
             (tmp/name).mkdir()
             card = None
@@ -517,7 +534,8 @@ if __name__ == '__main__':
                 card.mkdir()
                 media_card(card)
             runs[name] = start(args.build/image, tmp/name, args.seconds + walk_seconds, sn_addr, trace,
-                               HOME_MENU if args.home_menu else '', card)
+                               HOME_MENU if args.home_menu and name == 'patched' else '', card,
+                               HOME_SPLIT if args.media else HOME_FULL)
         deadline = time.monotonic() + args.seconds
         while time.monotonic() < deadline:  # startup: either demo dying early fails below
             if any(p.poll() is not None for p in runs.values()): break
@@ -542,16 +560,23 @@ if __name__ == '__main__':
         def differing(a, b, y0=30, y1=H, edits=False):
             return [i // 4 for i in range(y0 * W * 4, y1 * W * 4, 4) if a[i:i+4] != b[i:i+4]
                     and not (edits and edit(a[i:i+3], b[i:i+3]))]
-        if args.home_menu:
-            differ = differing(stock, patched, 30, HOME_DOTS[0], True) + differing(stock, patched, HOME_DOTS[1], H, True)
-            assert differing(stock, patched, *HOME_DOTS), 'six cards: the dots show no page for the Q2 Pod card'
+        # The iPod Home, Classic (ACCENT 1): Now Playing chosen, the accent's bar behind its label, the next row black;
+        # in Split the art's panel above them (the placeholder, no track playing), in Full the rows from the top.
+        def px(shot, x, y): return shot[(y * W + x) * 4:(y * W + x) * 4 + 3]
+        split = args.media
+        bar_rgb = ACCENT_TOPS[1].to_bytes(3, 'big')[::-1]  # BGRA's first three
+        assert px(patched, 200, home_y(NOW, split)) == bar_rgb, f'Home: no accent bar on Now Playing ({px(patched, 200, home_y(NOW, split)).hex()})'
+        assert px(patched, 200, home_y(LIBRARY, split)) == b'\0\0\0', 'Home: the second row is not black'
+        if split: assert px(patched, 160, STATUS_H + HOME_ART_H // 2) != b'\0\0\0', 'Home: no art panel in Split'
+        if args.home_menu:  # the saved cards change nothing
+            differ = differing(stock, patched)
+            assert not differ, f'Home with saved cards differs at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
         else:
-            differ = differing(stock, patched, edits=True)
-        assert not differ, f'patched Home differs from stock at {len(differ)} pixels, first (x, y) {divmod(differ[0], W)[::-1]}'
-        # The walk: the same touches to both, a screen each step.
+            assert differing(stock, patched), 'patched Home is stock\'s grid'
+        # The walk: the patched demo's, and with --home-menu the control's too, a screen each step.
         seen = {'home': patched}
-        walk, patched_only = ((MENU_WALK, MENU_WALK) if args.home_menu else (MEDIA_WALK, MEDIA_WALK) if args.media
-                              else (WALK + PATCHED_ONLY, PATCHED_ONLY))
+        walk, patched_only = ((MENU_WALK, []) if args.home_menu else (MEDIA_WALK, MEDIA_WALK) if args.media
+                              else (WALK, WALK))
         for name, touches, settle, want in walk:
             targets = ['patched'] if (name, touches, settle, want) in patched_only else ['stock', 'patched']
             for t in targets:
@@ -605,7 +630,9 @@ if __name__ == '__main__':
         # crossfade's tap opened crossfade.c's page: its row was there again after EQ, when V2.1
         # rebuilt the list (a tap on a stock row there would change the screens as well).
         assert args.home_menu or args.media or hits['xfade_open'], 'crossfade: the Crossfade row was not there to open its page'
-        assert hits['library_open'], 'q2pod: the card was not there to open its page'
+        assert hits['library_open'], "library: Home's row did not open the Library"
+        assert args.home_menu or hits['streaming_open'], "streaming: Home's row did not open the Streaming page"
+        assert args.home_menu or hits['coverflow_home_back'], "settings: Home's Settings list never went back"
         if args.media:
             data = tmp/'patched/root/mnt/data'
             lengths = (data/'ringnav-lengths').read_bytes() if (data/'ringnav-lengths').exists() else b''
@@ -620,8 +647,8 @@ if __name__ == '__main__':
             assert hits['to_tracks'], 'cover_open: the tap on the centre cover never opened its tracks'
             assert hits['era_menu'] and hits['era_open_decade'] and hits['stream_config']
             assert hits['spot_np'] and hits['radio_open'], 'spotify, radio: the rows never opened their pages'
-            assert hits['streaming_open'], 'streaming: the Library row never opened the Streaming page'
+            assert hits['coverflow_open'] and hits['home_page'], "coverflow, folder: Home's rows never opened them"
             config = (data/'config.ini').read_text(errors='replace')
             assert re.search(r'^PLAYMODE=2$', config, re.M), 'shuffle_songs: Shuffle (2) not saved as the play mode'
-    print(f'M1 Plus under qemu: both demos up, the same Home below the status bar{" but for the dots" if args.home_menu else ""}; the walk ({", ".join(n for n, *_ in walk)}) '
+    print(f'M1 Plus under qemu: both demos up, {"the same iPod Home with saved V2.1 cards and without" if args.home_menu else "the iPod Home"}; the walk ({", ".join(n for n, *_ in walk)}) '
           f'as expected; the payload entered through {len(reached)} hooks ({", ".join(sorted(reached))}), {len(hits)} payload functions ran.')

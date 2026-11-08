@@ -4,7 +4,8 @@ loaded with the M1's PROFILE, so sys.modules['ipod'] stays the Q2's that tools/m
 The profile is the screen from patch/m1plus_offsets.inc: UI_W, UI_H, STATUS_H, and GLASS_R (0, the square corners),
 and the layout names a Phase 4 item has given V2.1's values (4.2: BATT_ROOM, as the 320 px bar fits it; 4.3: the
 settings rows' SET_ROW, SET_TOP, SET_ROWS and V2.1's SET_STOCK_ROW; 4.4: the library rows' LIB_PITCH, LIB_BODY and
-LIB_ART, which ipod.py's PITCH, BODY and ART take). Every other layout name keeps the Q2's value until its item.
+LIB_ART, which ipod.py's PITCH, BODY and ART take; 4.5: Home's HOME_ROW and its labels' HOME_DOT_X and HOME_LABEL_END).
+Every other layout name keeps the Q2's value until its item.
 
 Phase 3 adds the V2.1 patch around that copy: patch/m1plus_ipod.json (V1.32's pages mapped onto V2.1's, every
 other section empty), and patch_asset and patch_code, which m1plus.build() runs on every build. A Phase 4 item adds
@@ -13,12 +14,14 @@ import functools
 import importlib.util
 import json
 import re
-from build import ROOT, check, sha
+import struct
+from build import ROOT, check, fileoff, sha
 
 M1 = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b',
                                                (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M)}
 PROFILE = {name: M1[name] for name in ('UI_W', 'UI_H', 'STATUS_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_TOP', 'SET_ROWS',
-                                       'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART')}
+                                       'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART', 'HOME_ROW', 'HOME_DOT_X',
+                                       'HOME_LABEL_END')}
 
 
 def load(profile=PROFILE):
@@ -187,8 +190,83 @@ def library_page(path):
     return rewrite
 
 
+# 4.5: V2.1's Home (home_page.bin) is a gesture view (app_gesture) holding the card grid (home_svview: home_sview, a
+# slide_view home_page_init's builder 0x534064 fills, and its dots home_sindicator) and the playing strip
+# (home_bottomview), then the serial-error label (label_snerr) its init shows on a bad serial. The iPod Home replaces
+# the gesture view with the Q2's Home (ipod.ipod_home) in portrait: the art (img_homeart) across the top, HOME_ART_H
+# high; the main list (list_view_home) and the Settings list (list_view_homeset, hidden) of HOME_ROW rows; and the
+# carousel (slide_menu with img_left and img_right, hidden and taking no taps until chosen). The serial-error label
+# stays last, over all of it. V2.1 names no Home widget but these (its init's lookups are audited in
+# `home.safe_returns`), so nothing of V2.1's binds the new ones: the payload binds every row (coverflow_home), and every
+# label carries its text.
+HOME_PAGE = 'home_page.bin'
+HOME_GRID = ['home_svview', 'home_bottomview']
+HOME_TEXT = {'playing': 'Now Playing', 'localmusic': 'Library', 'coverflow': 'Coverflow', 'folder': 'Folder',
+             'rockbox': 'Shortcut', 'stream': 'Streaming', 'settings': 'Settings', 'playset': 'Playback', 'sysset': 'System'}
+HOME_LABEL_STYLE = 'srlabel_leftwhite20_style'  # patch/m1plus_offsets.inc STYLE_SCRLABEL_WHITE20L
+CARD_LABEL_STYLE = 'label_centerwhite20_style'  # STYLE_LABEL_WHITE20C
+# Carousel: V1.32's slide_menu card (a CARD square: its 190 px art 23 from the top, the caption at 232), centred
+# on the screen and in the page's height, with the previous and next arrows at the screen's edges; each card's art is
+# the V2.1 Home card art of its role, at 190 px (tools/m1plus.py home_cards).
+CARD, CARD_ART, ARROW_W = M1['HOME_CARD'], 190, 48
+HOME_CARD_ART = {'playing': 'mymusic', 'localmusic': 'playlist', 'coverflow': 'album', 'folder': 'folder',
+                 'rockbox': 'fav', 'stream': 'hifimusic', 'settings': 'sysset'}
+
+
+def home_list(name, rows, extra=None):
+    """ipod.home_list with V2.1's label style and every label's text."""
+    node = ipod.home_list(name, rows, extra)
+    for view, row in zip(node[3][0][3], rows):
+        label = view[3][0]
+        check(label[0] == 'hscroll_label', f'{name}: unexpected Home row')
+        label[2]['style'] = HOME_LABEL_STYLE
+        label[2]['text'] = HOME_TEXT[row]
+    return node
+
+
+def home_card(row):
+    """A Carousel card: its art, clickable as the lists' rows are, and its caption."""
+    art = {'name': 'img_' + row, 'draw_type': 'center', 'clickable': 'true',
+           **{f'style:{s}:bg_image': f'home_card_{row}' for s in ('normal', 'selected', 'disable', 'focused')},
+           'style:pressed:bg_image': f'home_card_{row}_down'}
+    label = {'self_layout': 'default(x=0,y=232,w=100%,h=28)', 'name': 'label_' + row, 'style': CARD_LABEL_STYLE,
+             'text': HOME_TEXT[row]}
+    return ['view', [0, 0, 0, 0], {'name': 'btn_' + row}, [['image', [(CARD - CARD_ART) // 2, 23, CARD_ART, CARD_ART], art, []],
+                                                            ['label', [0, 232, 0, 28], label, []]]]
+
+
+def home_page(root):
+    """V2.1's Home as the iPod's, in portrait."""
+    check([n[2].get('name') for n in root[3]] == ['app_gesture', 'label_snerr'], 'Unexpected Home')
+    gesture, snerr = root[3]
+    check(gesture[0] == 'gesture' and [n[2].get('name') for n in gesture[3]] == HOME_GRID, 'Unexpected Home grid')
+    check(snerr[0] == 'label' and snerr[2].get('text') == 'SN Error', 'Unexpected serial-error label')
+    menu_y, hidden = (ipod.BOTTOM - CARD) // 2, {'visible': 'false', 'sensitive': 'false'}
+    menu = ['slide_menu', [ipod.UI_W // 2 - 750, menu_y, 1500, CARD],
+            {'self_layout': f'default(x={ipod.UI_W // 2 - 750},y={menu_y},w=1500,h={CARD})', 'name': 'slide_menu',
+             'min_scale': '1', 'value': '0', 'dirty_rect_tolerance': '4', 'style:normal:bg_color': '#00000000', **hidden},
+            [home_card(row) for row in ipod.HOME_ROWS]]
+    arrows = [['image', [x, menu_y, ARROW_W, CARD], {'name': name, 'image': name.replace('img_', 'home_'),
+                                                    'draw_type': 'center', 'style:normal:y_offset': '-25',
+                                                    'clickable': 'true', **hidden}, []]
+              for name, x in (('img_left', 0), ('img_right', ipod.UI_W - ARROW_W))]
+    art = ['image', [0, 0, ipod.UI_W, M1['HOME_ART_H']], {'name': 'img_homeart', 'draw_type': 'fill'}, []]
+    root[3] = [art, home_list('home', ipod.HOME_ROWS), home_list('homeset', ipod.HOME_SETS, {'visible': 'false'}), menu,
+               *arrows, snerr]
+    return root
+
+
+def home_arrow(name):
+    """The carousel's previous or next control: a slim white chevron, ARROW_W x ARROW_W, rendered at 4x."""
+    path = "'M30,10 L16,24 L30,38'" if name == 'home_left' else "'M18,10 L32,24 L18,38'"
+    draw = f'scale 4,4 fill none stroke-width 3 stroke white stroke-linecap round stroke-linejoin round path {path}'
+    return ipod.imagemagick('-size', f'{ARROW_W * 4}x{ARROW_W * 4}', 'xc:none', '-draw', draw, '-filter', 'Lanczos',
+                            '-resize', f'{ARROW_W}x{ARROW_W}!', *ipod.PNG_OUT, data=b'')
+
+
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
-REWRITES = {STATUS_BAR: status_bar} | {p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
+REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page} | {
+    p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
     p: library_page(p) for p in LIBRARY_PAGES}
 
 
@@ -233,4 +311,19 @@ def patch_code(data, symbols):
     # 4.3: the settings rows, through V2.1's list_view layouter's layout slot (data, vtable 0x9047a0 + 8).
     word(M1['LIST_VIEW_LAYOUT_SLOT'], M1['LIST_VIEW_LAYOUT'], symbols['ipod_list_layout'],
          'settings lists stack SET_ROW rows and map their children')
+    # 4.5: Home. V2.1's initializer and refresh stay, each returning where a widget the iPod Home removes is gone (pinned);
+    # the playing strip's tap is not bound; the boot resume stays on Home, as the Q2's (ipod.patch_code).
+    home = AUDIT['home']
+    for address, instruction, purpose in home['safe_returns']:
+        pin(data, int(address, 16), int(instruction, 16), purpose)
+    for event_at, event, address, instruction, purpose in home['unbound']:
+        pin(data, int(event_at, 16), int(event, 16), 'the pointer-up event id')
+        word(int(address, 16), int(instruction, 16), 0, purpose)
+    address, instruction, purpose = home['boot_resume']
+    word(int(address, 16), int(instruction, 16), ipod.jal(symbols['ringnav_boot']), purpose)
     return changes
+
+
+def pin(data, address, instruction, purpose):
+    """A V2.1 word the iPod code relies on as it is."""
+    check(struct.unpack_from('<I', data, fileoff(data, address))[0] == instruction, f'{address:#x}: unexpected instruction ({purpose})')

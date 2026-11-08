@@ -29,11 +29,11 @@ M1PLUS_FUNCTIONS = {
  'm1_home_click': ('int', 'void *, void *'),
  'toolsThumbSpecCover': ('int', 'const char *, const char *, int, int'),
  'set_hscroll_label_attribute': ('void', 'void *'),
- 'view_create': ('void *', 'void *, int, int, int, int'),  # the Home card's page and card views
  'label_set_line_wrap': ('int', 'void *, int'),
- 'slide_indicator_set_max': ('int', 'void *, unsigned'),
- # (widget, index, animate): Knob: Navigation slides Home to the focused card's page (m1plus_nav_home.c)
- 'slide_view_set_active_ex': ('int', 'void *, unsigned, int'),
+ # Home's art (ipod-ui 4.5): image_manager_unload_bitmap_by_name (patch/m1plus_nav.h) is V2.1's lookup by name, which
+ # copies the cached bitmap_t, then its unload of that bitmap's entries
+ 'image_manager_lookup': ('int', 'void *, const char *, void *'),
+ 'image_manager_unload_bitmap': ('int', 'void *, void *'),
  # its four corner radii, the width and the edges (0xffff all), as V1.32's wrapper (0x63d034) passes them
  'canvas_stroke_rounded_rect_ex': ('int', 'void *, const void *, const void *, const void *, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned'),
  # Shanling's real signature, (name, readAudioProperties): the M1 Plus passes 1 (V2.1's scanner passes 0)
@@ -478,11 +478,14 @@ M1PLUS_GLOBAL_ALIASES = {
 # is 2, and `volume` stays the jacks'. on_wm_keyup_fun swaps Previous and Next, and the volume keys,
 # while rotate_mode is 1 (the rotated screen, 0x4cd9f8).
 M1PLUS_GLOBALS = ['g_btvolume', 'g_rotate_mode']
-# V2.1 data V1.32 lacks, read as CONTEXT_DATA is (sizes checked). pdeq_choicemenu: the Home menu's
-# chosen cards, a deque of ids that home_page_init's grid builder (0x534064) lays out six to a page.
-M1PLUS_CONTEXT_DATA = {'pdeq_choicemenu': 4}
+# V2.1 data V1.32 lacks, read as CONTEXT_DATA is (sizes checked). None since the iPod Home (ipod-ui 4.5) replaced the
+# grid, whose cards were pdeq_choicemenu's.
+M1PLUS_CONTEXT_DATA = {}
 # Renamed in V2.1; each has the size of its V1.32 counterpart (checked in m1plus_symbols).
 M1PLUS_CONTEXT_ALIASES = {
+    # The track whose cover the player's files hold (ipod-ui 4.5, Home's art): parseplaycover_thd clears it while it
+    # parses (0x4defec) and writes the track's path once its files are written (0x4df1a0), as V1.32's g_lastcover_url.
+    'g_lastcover_url': 'savecover_path',
     'g_folder_path': 'folder_path',
     'g_dacoff_time': 'dacoff_time',
     'g_power_capacity': 'power_capacity',
@@ -542,14 +545,16 @@ M1PLUS_UNRESOLVED = {
 # The shipped payload drops the ones nothing calls. native: V2.1 does it itself; q2only: by design; unported: the
 # docs/m1plus-ipod-ui.md item that ports it. test/m1plus/ports.py reports them.
 M1PLUS_SHIMS = {
-    'player_start': ('native', "ringnav_boot's boot resume (BOOT_MODE_CALL), which V2.1 does itself; no hook calls it"),
     'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
     'tk_str_end_with': ('ported', "its own C: V2.1's AWTK lacks it"),
-    'image_manager_unload_bitmap_by_name': ('unported', "unloading the big cover's and Home's art by name (ipod-ui 4.5, 4.6)"),
+    'image_manager_unload_bitmap_by_name': ('ported', "its own C on V2.1's image_manager_lookup and "
+                                            'image_manager_unload_bitmap (ipod-ui 4.5)'),
 }
 M1PLUS_FUNCTION_ALIASES = {
     'device_set_volume': 'set_devicevolume',
     'config_outputchannel': 'set_outputchannel',
+    # ringnav_boot's paused boot resume (ipod-ui 4.5): (queue, index, class, mode), as playing_page_init (0x53d28c) calls it
+    'player_start': 'start_player',
     'player_stop': 'stop_player',  # mclStop with the mute, seek, play status and headset updates (V1.32 has both)
     'player_play_pause': 'play_pause_music',
     'player_prev_music': 'prev_music',
@@ -931,7 +936,8 @@ def compile_payload(out):
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
     leaf_paint = WM_PAINT_LEAF_M1PLUS
     undefined = [f'--undefined={name}' for _, name, _ in active_hooks.values()]
-    undefined += [f'--undefined={leaf_paint[2]}', f'--undefined={GRADIENT_LEAF_M1PLUS[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set']
+    undefined += [f'--undefined={leaf_paint[2]}', f'--undefined={GRADIENT_LEAF_M1PLUS[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_bootmode', '--undefined=playback_set',
+                  '--undefined=ringnav_boot']
     # every call site's payload routine: a jal from stock code is no reference the linker sees
     undefined += [f'--undefined={new}' for words in CALL_SITES['m1plus'].values() for _, _, new in words if isinstance(new, str)]
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
@@ -1185,9 +1191,9 @@ def build(target_path, out, logo, dev=False, m1_release=None):
                       (WATCHDOG.encode(), out/'watchdog'), (S90PLAY.encode(), out/'S90play'), (S11LOGO.encode(), out/'S11logo'),
                       (b'release/assets/default/raw/images/xx/logo.jpg', logo_target)):
         p = swap_inode(p, path, src)
-    # New inodes, each with its stock image's metadata, as build.py adds them: the Coverflow icons, the Q2 Pod
-    # page's and Streaming rows' icons (drawn in assets/icons/, or a copy of the V2.1 image named), the Home
-    # card's art, and the helpers.
+    # New inodes, each with its stock image's metadata, as build.py adds them: the Coverflow icons, the Library's
+    # and Streaming's rows' icons (drawn in assets/icons/, or a copy of the V2.1 image named), Home's card art, arrows
+    # and placeholder, and the helpers.
     xx = 'release/assets/default/raw/images/xx/'
     mapping = dict(
         shuffle='pset_playmode.png', scrobble='drop_wifi.png', podcasts='dlna.png',
@@ -1201,20 +1207,24 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         icons[f'stream_{n}.png'] = ('tidal.png', (ROOT/'assets/icons'/f'stream_{n}.png').read_bytes())
         # the Q2 Pod page's rows at V2.1's 40 px (list_row_core); the radio's Now Playing art keeps stream_radio's 52
         icons[f'row_{n}.png'] = ('tidal.png', sized_art((ROOT/'assets/icons'/f'stream_{n}.png').read_bytes(), 40))
-    # V2.1's rows draw a 40 px icon (list_row_core) where V1.32's drew 52: the drawn ones at its size,
-    # and the Q2 Pod page's Coverflow row from the Coverflow card's art. The Home card's pair is V2.1's
-    # 66 px card art (mymusic.png's).
+    # V2.1's rows draw a 40 px icon (list_row_core) where V1.32's drew 52: the drawn ones at its size.
     for n in drawn:
         like, data = icons[f'local_{n}.png']
         icons[f'local_{n}.png'] = (like, sized_art(data, 40))
-    icons['local_coverflow.png'] = ('pset_playmode.png', sized_art((ROOT/'assets/icons/menu_coverflow.png').read_bytes(), 40))
     # V1.32's Local Music icons Ratings and Most Played name, which V2.1 lacks: its Favourites and
     # Frequent cards' art at the rows' size.
     icons['local_era.png'] = ('pset_playmode.png', sized_art(cat(xx+'genre.png'), 40))
     icons['local_fav.png'] = ('pset_playmode.png', sized_art(cat(xx+'fav.png'), 40))
     icons['local_frequentplay.png'] = ('pset_playmode.png', sized_art(cat(xx+'many.png'), 40))
-    for n in ('home_q2pod', 'home_q2pod_down'):
-        icons[f'{n}.png'] = ('mymusic.png', (ROOT/'assets/icons'/f'{n}.png').read_bytes())
+    # The iPod Home (ipod-ui 4.5): each Carousel card's art, its role's V2.1 Home card art at 190 px, pressed too; the
+    # carousel's arrows; Split's placeholder at the panel's width (coverflow.c HOME_PLACEHOLDER).
+    for row, art in m1plus_ipod.HOME_CARD_ART.items():
+        for s in ('', '_down'):
+            icons[f'home_card_{row}{s}.png'] = (f'{art}{s}.png', sized_art(cat(f'{xx}{art}{s}.png'), m1plus_ipod.CARD_ART))
+    for n in ('home_left', 'home_right'):
+        icons[f'{n}.png'] = ('arrow_left_n.png', m1plus_ipod.home_arrow(n))
+    icons['default_album_home.png'] = ('defaultcover.png', sized_art((ROOT/'assets/icons/default_album_home.png').read_bytes(),
+                                                                      m1plus_ipod.ipod.UI_W))
     icons['row_stream_config.png'] = ('pset_playmode.png', sized_art(cat(xx+'sset_netservice.png'), 40))
     icons['bar_back.png'] = ('bar_play.png', m1plus_ipod.back_chevron())  # the status bar's back chevron (ipod-ui 4.2)
     icons['stream_airplay.png'] = ('airplay.png', cat(xx+'airplay.png'))

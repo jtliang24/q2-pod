@@ -11,11 +11,5 @@
     unsigned sw_at;
     int sw_px, sw_x, sw_live, sw_drag;
     int qm_opening; /* qm_open's navigator_to is running: its sortselect_dialog is the menu */
-    void *stream_page; /* dedicated Streaming entry page */
-    void *lib_page; /* the Q2 Pod Home card's page (library_open) */
-    /* Knob: Navigation on Home (m1plus_nav_home.c): the focused card's index + 1 (0 none) and the
-     * card, and the end detent's direction and time. */
-    int home_at, home_edge_dir;
-    unsigned home_edge_at;
-    void *home_card;
+    void *lib_page, *stream_page; /* Home's Library and Streaming pages (library_open, streaming_open) */
 #endif
