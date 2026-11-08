@@ -4060,7 +4060,24 @@ The plan was `.plan/phase4-6.md`, on branch `feature/m1-ipod`, from the device-p
   (`work/phase4/4.6/i7`). The Q2's `update.tar` stayed byte-identical throughout.
 - **A later fix inside item 6:** the bar's seek first divided 64 bits, which calls libgcc's helper; it now uses `spot_paint`'s 32-bit form.
 
-**Device pass:** next, on `V053m`, with the plan's checklist.
+**Device pass (Nov 8, `V053m`, over q2remote; shots and the findings list in `work/phase4/4.6/pass/`).** The user flashed it. Screen Off was set to Off for
+the pass, and the config, boot target, volume, theme, accent, Light Mode, knob mode and Play Mode were put back afterwards (the config differs by one
+`NPCENTRED=0` line, the default).
+
+- **Passed:** 1 Now Playing in Classic and Minimal (layout, labels, marquee, art for an embedded cover, a folder cover and no cover); 2 on-screen Previous, Play,
+  Next, Mode and Queue, and the hardware keys, and a bar tap seeks; 3 the heart, its 5-star hold and More; 4 the top-left Back returns to the opener, no chevron,
+  and the held chevron opens Now Playing from other pages; 5 the four slides, lyrics scrolling by touch and following; 6 the knob's band on all four slides in
+  both modes, the Navigation scrub (press, turn, press), and a double press turning the screen off; 7 the panel over Home and a list, and V2.1's VOLUME page
+  opening from the status bar and not from y 36; 8 the big cover by tap and by the countdown, a track change in it, and a tap closing it with the bar back;
+  9 Centred in Minimal, Classic dark and Classic light: V2.1's page, its transport, full-screen lyrics, off again; 11 Soloify's layout in both themes, hardware
+  Next, Previous (it restarts the track), the knob band, the knob scrub, and Back; 13 Internet Radio keeps its layout and panel.
+- **Not reached:** 10 only Tidal's login page (no account) and its Back; no DLNA source. 12 the Soloify menu's Now Playing row opens the paused session's track,
+  so the message view needs a Soloist with no session, and M1's Streaming has no separate Spotify row.
+- **Failed:** the Soloify page's touch controls. On-screen Pause, Play, Next, Mode, Queue and a bar tap do nothing, in both themes, while Back works and the
+  hardware keys and knob do. Everything that fails is built by `np_controls`.
+- **Findings for their own plan:** the VOLUME page's buttons and slider close it without changing the volume, and a knob detent closes it too; the top
+  counter lags a track change; Soloify's hardware Next leaves the page showing paused; Hold Return while Soloify is paused opens the local Now Playing;
+  smaller cosmetic and "is this stock?" notes in `work/phase4/4.6/pass/findings.md`.
 
 ## How to check a build now
 
