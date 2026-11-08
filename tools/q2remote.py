@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive a --dev Q2 over Wi-Fi (Q2_HOST, and Q2_KEY or a key file; see docs/remote.md).
 
-usage: q2remote.py {sh [--timeout S] COMMAND|shot [--settle] OUT.png|state|wake|key NAME [MS]|wheel N [--step-ms MS]|knob N|tap X Y [MS]|swipe X1 Y1 X2 Y2 [MS]|peek NAME...|push LOCAL REMOTE|pull REMOTE LOCAL|install UPDATE.TAR|log [LINES|-f|--clear]|events EVENT [S]|devices|find|reboot [--wait]|prof S [--all] [--build DIR]}"""
+usage: q2remote.py {sh [--timeout S] COMMAND|shot [--settle] OUT.png|state|wake|key NAME [MS]|wheel N [--step-ms MS]|knob N [--step-ms MS]|tap X Y [MS]|swipe X1 Y1 X2 Y2 [MS]|peek NAME...|push LOCAL REMOTE|pull REMOTE LOCAL|install UPDATE.TAR|log [LINES|-f|--clear]|events EVENT [S]|devices|find|reboot [--wait]|prof S [--all] [--build DIR]}"""
 import concurrent.futures
 import contextlib
 import hashlib
@@ -38,6 +38,7 @@ KEY_VOLUMEUP, KEY_VOLUMEDOWN = 115, 114
 M1_FRAME_US = 12000
 USLEEP_US = 2500  # busybox usleep's own start-up on the M1 Plus, taken off each delay
 TAP_HOLD_MS, SWIPE_MS = 100, 300
+KNOB_STEP_MS = 40  # a knob detent, press to press: its release half way (20 ms each, as knob sent before --step-ms)
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 BTN_TOUCH, ABS_X, ABS_Y, ABS_PRESSURE = 0x14a, 0, 1, 0x18
 WHEEL_UNITS, WHEEL_STEP, WHEEL_SETTLE, SAMPLE_US = 28, 11, 4, 20000
@@ -216,6 +217,15 @@ def knob_events(ticks):
     """One press and release a detent: positive turns clockwise."""
     code = KEY_VOLUMEUP if ticks > 0 else KEY_VOLUMEDOWN
     return [batch for _ in range(abs(ticks)) for batch in key_events(code)]
+
+
+def knob_delays(ticks, step_ms=KNOB_STEP_MS):
+    """The gaps between knob_events(ticks)'s batches, for event_writer: a detent every step_ms, its release half way,
+    less busybox usleep's own start-up (USLEEP_US) on each. 0 sends the whole turn in one write."""
+    if not step_ms:
+        return 0
+    half = step_ms * 1000 // 2
+    return ([max(0, half - USLEEP_US), max(0, step_ms * 1000 - half - USLEEP_US)] * abs(ticks))[:-1]
 
 
 def wheel_positions(ticks, units=WHEEL_UNITS, start=100):
@@ -543,10 +553,12 @@ def input_action(kind, args):
         # stdin: a slow swipe's frames outgrow the 4 KB command line
         shell("sh", event_writer(path, batches, [M1_FRAME_US - USLEEP_US] * (len(batches) - 1), once=True).encode())
     elif kind == "knob":
-        try: ticks = int(args[0])
-        except ValueError: raise ValueError("knob turn must be an integer")
+        if args[1:2] not in ([], ["--step-ms"]): raise ValueError("usage: knob N [--step-ms MS]")
+        try: ticks, step_ms = int(args[0]), int(args[2]) if len(args) == 3 else KNOB_STEP_MS
+        except ValueError: raise ValueError("knob turn and --step-ms must be integers")
+        if not 0 <= step_ms <= 1000: raise ValueError("--step-ms must be 0..1000")
         if not -100 <= ticks <= 100 or not ticks: raise ValueError("knob turn must be -100..100 detents, not 0")
-        shell("sh", event_writer(path, knob_events(ticks), once=True).encode())
+        shell("sh", event_writer(path, knob_events(ticks), knob_delays(ticks, step_ms), once=True).encode())
     elif kind == "tap":
         try: x, y = map(int, args[:2]); hold = int(args[2]) if len(args) > 2 else SAMPLE_US // 1000
         except ValueError: raise ValueError("tap coordinates and hold must be integers")
@@ -915,7 +927,7 @@ def main(argv):
             print(f"event{d['event']} {d['name']} handlers={d['handlers']} keys={sorted(bits(d['KEY']))} abs={sorted(bits(d['ABS']))}")
         return 0
     if cmd in ("key", "tap", "swipe", "wheel", "knob"):
-        if len(a) not in {"key": (1, 2), "wheel": (1, 3), "knob": (1,), "tap": (2, 3), "swipe": (4, 5)}[cmd]:
+        if len(a) not in {"key": (1, 2), "wheel": (1, 3), "knob": (1, 3), "tap": (2, 3), "swipe": (4, 5)}[cmd]:
             raise ValueError(f"invalid arguments for {cmd}")
         input_action(cmd, a); return 0
     if cmd == "peek" and a:

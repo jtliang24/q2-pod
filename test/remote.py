@@ -131,6 +131,13 @@ assert q.event_writer("/dev/input/event1", q.key_events(116)).count("> /dev/inpu
 # Two detents clockwise, one back: a press and a release each.
 assert [q.decode_events(b)[0][2:] for b in q.knob_events(2)] == [(q.EV_KEY, 115, 1), (q.EV_KEY, 115, 0)] * 2
 assert [q.decode_events(b)[0][2:] for b in q.knob_events(-1)] == [(q.EV_KEY, 114, 1), (q.EV_KEY, 114, 0)]
+# Paced (--step-ms): a gap between each of the turn's batches, a detent every step with its release half way, each
+# less usleep's start-up; the default is the 20 ms press and 20 ms gap knob always sent; 0 is one write.
+assert q.knob_delays(3, 80) == [40000 - q.USLEEP_US] * 5 and len(q.knob_delays(-3, 80)) == len(q.knob_events(-3)) - 1
+assert q.knob_delays(1) == [20000 - q.USLEEP_US] and q.knob_delays(2, 3) == [0, 0, 0] and q.knob_delays(2, 0) == 0
+paced = q.event_writer("/dev/input/event2", q.knob_events(5), q.knob_delays(5, 150), once=True)
+assert paced.count("usleep 72500") == 9 and paced.count(">&3") == 10
+assert q.event_writer("/dev/input/event2", q.knob_events(5), q.knob_delays(5, 0), once=True).count(">&3") == 1
 
 # A padded framebuffer page with four distinct corners validates metadata, orientation and BGRA conversion.
 w, h, stride = 320, 375, 320 * 4 + 8
