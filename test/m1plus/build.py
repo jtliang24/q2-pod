@@ -665,6 +665,16 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert centred['slider_play'][1] == np_old['slider_play'][1] and centred['slider_play'][2]['style'] == 's_ipod_progress'
     assert centred['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=100%,h=-20)' and centred['label_lyricmsg'][2]['self_layout'] == 'default(x=0,y=100,w=100%,h=28)'
     assert m1plus_ipod.playing_stock(read('stock.squashfs', 'release/assets/default/raw/ui/playing_page.bin')) == read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK)
+    # ipod-ui 4.6, the big cover: V2.1's page, full screen, the art a centred square with the shade and title on its foot; the
+    # artist transparent, as its refresh (0x52958c) shows it. V2.1 opens it only from Enlarged Art's countdown, whose word and reset
+    # are BC_IDLE and BC_IDLE_FULL, and its image names are the ones the payload reads.
+    big = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/bigcover_page.bin'))
+    assert big[2]['fullscreen'] == 'true' and [n[2]['name'] for n in big[3]] == ['img_playcover', 'view_shade', 'scrlabel_title', 'scrlabel_artist']
+    art_y = (m1ipod.UI_H - m1plus_ipod.BC_ART) // 2
+    foot = art_y + m1plus_ipod.BC_ART - m1plus_ipod.BC_SHADE_H
+    assert big[3][0][1] == [0, art_y, 320, 320] and big[3][1][1] == [0, foot, 320, m1plus_ipod.BC_SHADE_H] and foot <= big[3][2][1][1] < art_y + 320
+    assert big[3][3][2]['opacity'] == '0' and m1plus_ipod.BC_ART == m1ipod.UI_W
+    assert words(0x53d0f4, 1) == (0x24020014,) and words(0x53d0fc, 1) == (0xae22ccd0,) and L['BC_IDLE'] == 0x97ccd0 and L['BC_IDLE_FULL'] == 20
     try:
         m1plus_ipod.playing_page(['window', [0, 0, 0, 0], {'name': 'playing_page'}, []])
     except ValueError as e:

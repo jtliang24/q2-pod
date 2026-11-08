@@ -66,6 +66,7 @@
 #define NP_COLUMN_X 80 /* stock's column: its x and width, and its slide_view's height (Centred Now Playing's np_full) */
 #define NP_COLUMN_W 225
 #define NP_COLUMN_SLIDE_H 198
+#define BC_IDLE_T signed char /* BC_IDLE's type */
 #define VIEW_COVER "img_cover"
 #define VIEW_BIGCOVER "img_bigcover"
 #define VIEW_LYRIC "view_lyric"

@@ -878,9 +878,11 @@ extern unsigned char m1_return_latch;
 #define RETURN_RELEASE_LATCH ((unsigned)&m1_return_latch)
 /* Enlarged Album Art's countdown (4.6): V2.1's big cover is unported, so ringnav_sleep's reset goes to a
  * byte of the payload's own that nothing reads. */
-extern signed char m1_bc_idle;
-#define BC_IDLE ((unsigned)&m1_bc_idle)
-#define BC_IDLE_FULL 40
+/* Enlarged Art's countdown: V2.1's word, which Now Playing's 500 ms timer takes down while a song plays there
+ * (playing_choiceshowpage 0x53d0d4); at 0 it opens bigcover_page and sets it back to BC_IDLE_FULL (0x53d0f4), 10 s. */
+#define BC_IDLE 0x97ccd0
+#define BC_IDLE_T int
+#define BC_IDLE_FULL 20
 /* Tidal's saved login, a string in theTidal (0xa44 bytes) that tidal_tidal_main_init (0x4b9e44) tests before it builds
  * its page under its login page (m1_tidal_login, CALL_SITES TIDAL_LOGIN). */
 #define TIDAL_SAVED_LOGIN 0x929

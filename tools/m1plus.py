@@ -411,7 +411,6 @@ M1PLUS_PORTS = {
     # unhooked until its item ports it
     'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
                          "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
-    'bigcover_page_init': ('unported', "the big cover's page (ipod-ui 4.6)"),
     'playlist_rebuild': ('unported', "the playlist rebuild's iPod rows (ipod-ui 4.7)"),
     'mclIsUtf8WithoutBOM': ('unported', "an .lrc's UTF-8 test that reads 4-byte characters (1.5.9); V2.1's "
                             'mclIsUtf8WithoutBOM is 0x5d1824, not yet checked'),
@@ -652,6 +651,7 @@ M1PLUS_HOOKS = {
     'mclStartPlayer': (0x5d5300, 'ringnav_start_player', 'start_player'),
     'mcl_tidalStartPlayer': (0x5d5184, 'tidal_start', 'tidal'),
     'playing_page_init': (0x53d1e4, 'ringnav_playing', 'playing'),
+    'bigcover_page_init': (0x529a24, 'ringnav_bigcover', 'bigcover'),
     'on_wm_keyup_fun': (0x4cd9ac, 'ringnav', 'keyup'),
     'on_wm_before_tsdown_fun': (0x4cd608, 'ringnav_touch', 'touch'),
     'screensaver_page_init': (0x53fd44, 'lockscreen_init', 'saver'),

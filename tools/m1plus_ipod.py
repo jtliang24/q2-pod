@@ -37,7 +37,7 @@ def load(profile=PROFILE):
 ipod = load()
 
 M1_STR = {m[1]: m[2] for m in re.finditer(r'^#define\s+(\w+)\s+"([^"]*)"', (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M)}
-M1_VIEW_COVER, M1_VIEW_FAV, M1_VIEW_MORE = M1_STR['VIEW_COVER'], M1_STR['VIEW_FAV'], M1_STR['VIEW_MORE']
+M1_VIEW_COVER, M1_VIEW_BIGCOVER, M1_VIEW_FAV, M1_VIEW_MORE = (M1_STR[n] for n in ('VIEW_COVER', 'VIEW_BIGCOVER', 'VIEW_FAV', 'VIEW_MORE'))
 
 AUDIT = json.loads((ROOT/'patch/m1plus_ipod.json').read_text())
 UI_ASSETS = AUDIT['assets'] | AUDIT['navbar_only'] | AUDIT['slide_only']
@@ -356,6 +356,7 @@ def playing_page(root):
     cover, = art_page[3]
     check(cover[2]['name'] == M1_VIEW_COVER, 'Unexpected Now Playing art')
     cover[1] = [M1['NP_ART_X'], M1['NP_ART_Y'] - slide_y, M1['NP_ART'], M1['NP_ART']]
+    cover[2]['clickable'] = 'true'  # its tap opens the big cover (navigation.c np_art_click)
     title, artist = named['scrlabel_title'], named['scrlabel_artist']
     album = copy.deepcopy(artist)
     album[2].update(name='label_ipod_album', text='')
@@ -438,6 +439,7 @@ def playing_stock(data):
     root = ipod.decode(data)
     _, _, named = np_tree(root)
     root[2]['style:normal:bg_color'] = '#000000'
+    named[M1_VIEW_COVER][2]['clickable'] = 'true'  # its tap opens the big cover (navigation.c np_art_click)
     for name in ('scrlabel_title', 'scrlabel_artist'):
         named[name][2].update(delay=str(ipod.inc('MARQUEE_HOLD_MS')), lull=str(ipod.inc('MARQUEE_HOLD_MS')))
     np_bar(named['slider_play'], NP_STOCK_BAR_CY, 30)
@@ -446,6 +448,36 @@ def playing_stock(data):
     view[2]['self_layout'] = 'default(x=0,y=0,w=100%,h=-20)'
     msg[2]['self_layout'] = 'default(x=0,y=100,w=100%,h=28)'
     return ipod.encode(root)
+
+
+# The big cover (a tap on Now Playing's art or Enlarged Art's countdown opens it, any tap closes it): V2.1's page, as the
+# Q2's: full screen, its art a centred square, a shade with the title on its foot. bigcover_page_init (0x529a24) binds the
+# window's tap and fills the labels by name; each time, its refresh (0x52952c) sets the artist visible, so the artist stays,
+# transparent. The square glass gives the screen's width: bc_fit sizes the box to the cover's shape on the first paint.
+BIGCOVER = 'bigcover_page.bin'
+BC_ART = ipod.UI_W
+BC_SHADE_H = 50
+
+
+def bigcover_page(root):
+    """V2.1's big cover as the iPod's."""
+    check(root[2].get('name') == 'bigcover_page' and 'fullscreen' not in root[2] and
+          [n[2].get('name') for n in root[3]] == [M1_VIEW_BIGCOVER, 'scrlabel_title', 'scrlabel_artist'], 'Unexpected big cover')
+    art, title, artist = root[3]
+    check(art[1] == [0, 0, BC_ART, BC_ART] and art[2].get('draw_type') == 'scale_auto' and art[2].get('image') == M1_STR['ICON_BIGCOVER'] and
+          title[1] == [0, 340, BC_ART, 22], 'Unexpected big cover layout')
+    root[2]['fullscreen'] = 'true'
+    root[2].update({f'style:{s}:bg_color': '#000000' for s in TEXT_STATES})
+    y = (ipod.UI_H - BC_ART) // 2
+    foot = y + BC_ART - BC_SHADE_H
+    art[1] = [0, y, BC_ART, BC_ART]
+    art[2]['self_layout'] = f'default(x=0,y={y},w={BC_ART},h={BC_ART})'
+    shade = ['view', [0, foot, BC_ART, BC_SHADE_H], {'name': 'view_shade', 'style:normal:bg_color': '#00000082'}, []]
+    pad = ipod.inc('BC_TITLE_PAD')
+    title[1] = [pad, foot + (BC_SHADE_H - title[1][3]) // 2, BC_ART - 2 * pad, title[1][3]]
+    artist[2]['opacity'] = '0'
+    root[3] = [art, shade, title, artist]
+    return root
 
 
 def quiet_icon(name, data):
@@ -458,7 +490,7 @@ def quiet_icon(name, data):
 
 
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
-REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page} | {
+REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page, BIGCOVER: bigcover_page} | {
     p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
     p: library_page(p) for p in LIBRARY_PAGES}
 

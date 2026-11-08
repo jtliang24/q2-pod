@@ -4095,6 +4095,17 @@ static int np_lyric_touch(void *ctx, void *event) {
     return 0;
 }
 
+#if M1PLUS
+/* A tap on the art opens the big cover, as the Q2's stock tap does: V2.1 opens it only from Enlarged Art's countdown,
+ * and binds its art no click. */
+static int np_art_click(void *ctx, void *event) {
+    (void)ctx, (void)event;
+    *(volatile BC_IDLE_T *)BC_IDLE = BC_IDLE_FULL;
+    navigator_to("bigcover_page");
+    return 0;
+}
+#endif
+
 /* playing_page_init: stock builds the page and starts its 250 ms timer, then the iPod labels bind.
  */
 int ringnav_playing(void *win, void *ctx) {
@@ -4110,6 +4121,9 @@ int ringnav_playing(void *win, void *ctx) {
     st.np_remain = widget_lookup(win, "label_ipod_remain", 1);
     st.np_elapsed = widget_lookup(win, "label_playtime", 1);
     st.np_cover = widget_lookup(win, VIEW_COVER, 1);
+#if M1PLUS
+    if (st.np_cover) widget_on(st.np_cover, EVT_CLICK, np_art_click, (void *)0);
+#endif
     st.np_title = widget_lookup(win, "scrlabel_title", 1);
     st.np_bold = -1;
     st.np_slide = widget_lookup(win, "slide_view", 1);
@@ -4236,11 +4250,12 @@ static void bc_fit(void *win) {
     }
     st.bc_key = key, st.bc_box = box;
     unsigned w = st.bc_shape >> 16, h = st.bc_shape & 0xffff;
-    for (int s = UI_W - 1; s > 2; s -= 2) {
+    /* M1 Plus: the square glass and portrait screen: the box only has to fit (tools/m1plus_ipod.py BC_ART) */
+    for (int s = M1PLUS ? UI_H : UI_W - 1; s > 2; s -= 2) {
         int bw = w >= h ? s : (int)(s * w / h), bh = w >= h ? (int)(s * h / w) : s;
         int x = (UI_W - bw) / 2, y = (UI_H - bh) / 2, dx = GLASS_R + GLASS_SLACK - x,
             dy = GLASS_R - y;
-        if (bh > UI_H || (dx > 0 && dy > 0 && dx * dx + dy * dy > GLASS_R * GLASS_R)) continue;
+        if (bh > UI_H || (M1PLUS && bw > UI_W) || (dx > 0 && dy > 0 && dx * dx + dy * dy > GLASS_R * GLASS_R)) continue;
         if (I(img, W_X) == x && I(img, W_Y) == y && I(img, W_W) == bw && I(img, W_H) == bh) return;
         int sh = I(shade, W_H), foot = y + bh - sh;
         widget_move_resize(title, x + BC_TITLE_PAD, foot + I(title, W_Y) - I(shade, W_Y),
@@ -9778,7 +9793,7 @@ int ringnav_sleep(void *loop) {
     keep_lit_poll();
     np_art_poll();
     if (st.np_slide && widget_get_prop_int(st.np_slide, "value", 0)) /* off the art page */
-        *(volatile signed char *)BC_IDLE = BC_IDLE_FULL;
+        *(volatile BC_IDLE_T *)BC_IDLE = BC_IDLE_FULL;
     if (st.bc[0] && np_track() != st.bc_track) bc_show();
     if (!g_backlight_status) {
         st.dark |= 1;

@@ -36,6 +36,4 @@ volatile int wheel_travel __attribute__((section(".scratch")));
 volatile int wheel_held __attribute__((section(".scratch")));
 /* RETURN_RELEASE_LATCH (m1plus_offsets.inc): armed by Previous's hold (hold_previous), spent by its release */
 unsigned char m1_return_latch;
-/* BC_IDLE (m1plus_offsets.inc): V2.1's big cover is unported */
-signed char m1_bc_idle;
 #endif
