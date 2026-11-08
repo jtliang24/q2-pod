@@ -9657,21 +9657,39 @@ def q2pod_page():
     m.page=page; view=m.find('scroll_view'); rows=m.nodes[view]['children']
     lv=m.get(view+O['W_PARENT']); assert m.nodes[lv]['item_height']==64
     assert [b for b in m.nodes[page]['children'] if m.nodes[b].get('style')=='navbar_btnreturn_style']
-    assert 'Q2 Pod' in m.texts()
+    assert 'Library' in m.texts()
     labels=[m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]
-    icons=[m.nodes[m.nodes[r]['children'][0]]['image'] for r in rows]
-    STREAMS=['Spotify','Internet Radio','AirPlay','Configuration']  # Streaming's rows: V2.1 has no Streaming page
-    assert labels==['Shuffle','Ratings','Most Played','Long Songs','Era','Podcasts','Photos','Videos','Coverflow',*STREAMS],labels
-    assert icons==['local_shuffle','local_fav','local_frequentplay','local_longsongs','local_era','local_podcasts','local_photos','local_videos',
-                   'local_coverflow','row_spotify','row_radio','stream_airplay','row_stream_config']
-    assert [len(m.nodes[r]['children']) for r in rows]==[3,3,3,3,3,3,3,3,2,3,3,3,3]  # rows opening pages (as the Q2's): the chevron
-    # Each row's click is the Library's handler; Shuffle's opens its menu, Coverflow's the carousel.
+    base=['Shuffle','Artists','Albums','All Songs','Genres','Era','Playlists','Ratings',
+          'Recently Added','Recently Played','Most Played','Frequent','Hi-Res','Long Songs']
+    assert labels==base+['Podcasts','Photos','Videos','Composers','Coverflow','Streaming','CD Ripper','Update Local Music'],labels
+    # V2.1's Home ids (get_homemenu_showinfo's table at 0x97c940), which its dispatcher indexes
+    native={'Artists':'6','Albums':'5','All Songs':'3','Genres':'7','Playlists':'14',
+            'Recently Added':'13','Recently Played':'12','Frequent':'11','Hi-Res':'9',
+            'Composers':'8','CD Ripper':'15','Update Local Music':'2'}
+    assert [m.text(m.get(0x97c940+4*int(i))) for i in native.values()]==['songer','album','mymusic','genre','playlist',
+        'recentadd','recent','many','hr','composer','cdripper','sset_updatemusic']
+    for row,title in zip(rows,labels):
+        if title in native:
+            assert m.nodes[row]['name']==native[title]
+            assert m.nodes[m.nodes[row]['children'][0]]['draw_type']==O['IMAGE_DRAW_SCALE_DOWN']
+            assert m.handler(row,O['EVT_CLICK'])==(syms['m1_home_click'],row)
+    # Shuffle and Coverflow remain reachable while the fixed Home asset is being ported.
     f,ctx=m.handler(rows[0],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='shuffle_page'
-    m.top=page; f,ctx=m.handler(rows[8],O['EVT_CLICK']); assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
+    m.top=page; f,ctx=m.handler(rows[labels.index('Coverflow')],O['EVT_CLICK'])
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[m.top]['name']=='coverflow_page'
+    m.top=page; f,ctx=m.handler(rows[labels.index('Streaming')],O['EVT_CLICK'])
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+    stream=m.top; assert m.nodes[stream]['name']=='streaming_page'
+    m.page=stream; stream_rows=m.nodes[m.find('scroll_view')]['children']
+    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in stream_rows]==['Tidal','HiFi Music','Spotify','Internet Radio','AirPlay','Configuration']
+    for r,i in zip(stream_rows,('1','0')):
+        assert m.handler(r,O['EVT_CLICK'])==(syms['m1_home_click'],r) and m.nodes[r]['name']==i
+    assert [m.text(m.get(0x97c940+4*i)) for i in (1,0)]==['tidal','hifimusic']
+    assert m.call(address=payload_syms['streaming_open'],args=(0,m.event,0,0),gap=0)==0 and m.top==stream
     m,slides,dots=v21_home(17); m.config['TOKEN']='tok'; m.card=[('Audiobooks',4),('Books',4)]
     f,ctx=m.handler(m.nodes[card(m,slides)]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     m.page=m.top; rows=m.nodes[m.find('scroll_view')]['children']
-    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==['Shuffle','Ratings','Most Played','Long Songs','Era','Audiobooks','Books','Coverflow',*STREAMS,'Upload Scrobbles']; passed()
+    assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==base+['Audiobooks','Books','Composers','Coverflow','Streaming','Upload Scrobbles','CD Ripper','Update Local Music']; passed()
 if is_m1plus: q2pod_page()  # its own names: the Library's machine (m, top) is used again below
 def q2pod_real_grid():
     # The same card on V2.1's own grid: its real home_page asset, and its real builder (0x534064, with
@@ -11106,11 +11124,11 @@ def streaming(m):
         m.top=m.lib_page; return m.streams
     if is_m1plus:
         m.top=m.node('window','home_page'); m.stack=[m.top]
-        assert m.call(address=payload_syms['library_open'],args=(0,m.event,0,0),gap=0,count=5_000_000)==0
-        assert m.nodes[m.top]['name']=='library_page'
+        assert m.call(address=payload_syms['streaming_open'],args=(0,m.event,0,0),gap=0,count=5_000_000)==0
+        assert m.nodes[m.top]['name']=='streaming_page'
         page=m.top; view=next(w for w in m.nodes if m.nodes[w]['type']=='scroll_view' and m.get(m.get(w+O['W_PARENT'])+O['W_PARENT'])==page)
         rows=m.nodes[view]['children']; names=[m.nodes[m.nodes[row_button(m,r)]['children'][1]].get('text') for r in rows]
-        after=names[names.index('Coverflow')+1:]  # the card apps on the card (addon_scan) follow Spotify
+        after=names[2:]  # after native Tidal and HiFi Music; the card apps on the card (addon_scan) follow Spotify
         assert after[0]=='Spotify' and after[after.index('Internet Radio'):][:2]==['Internet Radio','AirPlay'],names
         m.lib_page=page; m.streams={n:row_button(m,r) for n,r in zip(names,rows) if n}
         return m.streams
@@ -12198,8 +12216,8 @@ if 'usbmode_page_init' in HOOKS:
     # Its own icon when it ships one: the rows' 40 px, else the 52 px one.
     for f in ('/mnt/mmc/.deezer/icon.png','/mnt/mmc/.deezer/icon-40.png','/mnt/mmc/.soulseek/icon.png'): m.files[f]=bytearray()
     rows=streaming(m) if is_m1plus else stream_rows(m)
-    if is_m1plus:  # the Q2 Pod page: Spotify, the card apps by name, Internet Radio and AirPlay after Coverflow
-        assert list(rows)[list(rows).index('Coverflow')+1:]==['Spotify','Deezer','File Browser','Soulseek','Internet Radio','AirPlay','Configuration'],list(rows)
+    if is_m1plus:  # the Streaming page: native Tidal and HiFi Music, Spotify, the card apps by name, Internet Radio and AirPlay
+        assert list(rows)==['Tidal','HiFi Music','Spotify','Deezer','File Browser','Soulseek','Internet Radio','AirPlay','Configuration'],list(rows)
     else: assert list(rows)==['Spotify','Deezer','File Browser','Soulseek','Tidal Downloads','Internet Radio','AirPlay','Configuration'],list(rows)
     icons={'Deezer':'file:///mnt/mmc/.deezer/icon-40.png',
            'Soulseek':'file:///mnt/mmc/.soulseek/icon.png','File Browser':'stream_app'}

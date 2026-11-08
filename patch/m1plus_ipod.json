@@ -427,7 +427,8 @@
     ]
   },
   "private_prologues": {
-    "stock_search": "4e001c3ccc0b9c2721e09903"
+    "stock_search": "4e001c3ccc0b9c2721e09903",
+    "m1_home_click": "4d001c3c50039c2721e09903"
   },
   "event_abi_words": {
     "0x534f70": "ff000524",

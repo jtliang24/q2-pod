@@ -26,6 +26,7 @@ def m1_dev_tag(number):
 INPUTS = {M1PLUS_ZIP_SHA: ('M1 Plus Firmware V2.1/update.bin', M1PLUS_BIN_SHA), M1PLUS_BIN_SHA: (None, M1PLUS_BIN_SHA)}
 # Stock routines only the M1 Plus payload calls, beside build.py's FUNCTIONS (compile_common merges them).
 M1PLUS_FUNCTIONS = {
+ 'm1_home_click': ('int', 'void *, void *'),
  'toolsThumbSpecCover': ('int', 'const char *, const char *, int, int'),
  'set_hscroll_label_attribute': ('void', 'void *'),
  'view_create': ('void *', 'void *, int, int, int, int'),  # the Home card's page and card views
@@ -371,8 +372,8 @@ M1PLUS_PORTS = {
     'load_localartist_list': ('ported', "V2.1 has no such function: an artist's albums are loadLocalClassList(0xff01), "
                               'hooked as ringnav_localclass (progress 12)'),
     'screensaver_rows': ('ported', "V2.1 has no rows hook: the Lock screen page's rows are lockscreen_page's (progress 28)"),
-    'stream_page_init': ('ported', 'V2.1 has no Streaming page: Spotify, Internet Radio and AirPlay are Q2 Pod page rows '
-                         '(progress 22)'),
+    'stream_page_init': ('ported', 'V2.1 has no native Streaming page: streaming_open provides native Tidal, Spotify, '
+                         'optional backends and apps, Internet Radio, AirPlay and Configuration'),
     'keylock_rows': ('native', "V2.1's Buttons lock has a switch and Volume, Keys and All modes (roadmap 4)"),
     'quick_lock': ('native', "V2.1's Buttons lock (roadmap 4)"),
     'dialog_statusbar_dialog_init': ('native', "quick settings' lock label, which goes with quick_lock (roadmap 4)"),
@@ -506,6 +507,8 @@ M1PLUS_STUB = 'm1stub_'
 M1PLUS_RAW_GLOBALS = {'g_power_longkey': 0xa041b8}
 # Local V2.1 routines, each checked to be a PIC entry with V2.1's GOT base.
 M1PLUS_PRIVATE_FUNCTIONS = {
+    'm1_home_click': 0x533b80,  # V2.1 Home destination dispatcher; widget name is the native menu id
+
     # The status bar's 1 s tick (docs/m1plus-ipod-ui.md 4.2): systembar_timer_start (0x5453c8) arms a 1000 ms timer on
     # 0x545394, which calls this with 0. It finds the bar's widgets by name from the system_bar global, as the Q2's
     # systembar_showface finds them from its argument, and sets their images and text but not their geometry.

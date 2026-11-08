@@ -564,7 +564,6 @@ GAPS = {
     '8829606b74': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10755 put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a fac
     'b06052aade': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10755 put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a fac
     '3adb6b93ae': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
-    '60d2c2805f.8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
     '89af2aa3aa.8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10756 key(O[KEY_CENTER]); assert word(G_PICKING) and word(48)==7; paint()
     '04c950dde2.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10757 key(O[KEY_FWD_BTN]); key(O[KEY_CENTER]); assert word(G_PICKING)  # not onto the
     '89af2aa3aa.9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10757 key(O[KEY_FWD_BTN]); key(O[KEY_CENTER]); assert word(G_PICKING)  # not onto the
@@ -590,13 +589,11 @@ GAPS = {
     '3b5bfd9a87': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
     '48117aadd2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
     '4df64b387d.6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
-    '60d2c2805f.9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
     'a63f5492f4.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10764 before_sol=sol(); key(O[KEY_PLAY]); assert word(52); paint(); key(O[KEY_RETURN])
     '0265a33ba6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10765 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
     '4df64b387d.7': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10765 key(O[KEY_RETURN]); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser][
     'a8b1b2cfa3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10772 m.page=m.top; pick(3); assert word(G_SCREEN)==4 and len(frames())==1 and m.get(p
     'eff446ceed': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10772 m.page=m.top; pick(3); assert word(G_SCREEN)==4 and len(frames())==1 and m.get(p
-    '60d2c2805f.10': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10773 assert body()==[207,208,209] and sdir()==1 and sstate()==1; paint()
     '78000abffe': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10773 assert body()==[207,208,209] and sdir()==1 and sstate()==1; paint()
     'f8114faee2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10774 snake_before=bytes(m.u.mem_read(G+G_SN,820))
     '144777dfab': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10775 skey(O[KEY_NEXT]); skey(O[KEY_PREV]); assert bytes(m.u.mem_read(G+G_SN,820))==sn
@@ -608,7 +605,6 @@ GAPS = {
     '0a7bec6f95': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10777 m.advance(170); assert body()[-1]==229 and sdir()==3 and made(widget_invalidate_
     '00dddc04a1': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10778 skey(O[KEY_BACK_BTN]); assert sdir()==3  # waits for the next step
     '96b5b20b52': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10778 skey(O[KEY_BACK_BTN]); assert sdir()==3  # waits for the next step
-    '60d2c2805f.11': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
     '8e41ef36eb': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
     'af9a1fb5b9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
     'c37b29e226': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10779 skey(O[KEY_PLAY]); assert word(G_PAUSED)==1 and not frames(); was=body(); m.adva
@@ -621,7 +617,6 @@ GAPS = {
     'eeb61f1ab8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10782 m.word(G+G_SN+812,5); m.advance(170*12); assert sstate()==2 and not frames() and
     '25f19f306a': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10783 best=bytes(m.files[/mnt/data/ringnav-snake]); assert len(best)==12 and best[:8]=
     '33e712f7ef': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10783 best=bytes(m.files[/mnt/data/ringnav-snake]); assert len(best)==12 and best[:8]=
-    '60d2c2805f.12': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
     '7e0adf5d24': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
     'e040fa48bd': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10784 paint(); skey(O[KEY_CENTER]); assert sstate()==1 and body()==[207,208,209] and l
     '00827aff47': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10785 skey(O[KEY_BACK_BTN]); assert sdir()==0  # side Previous turns left, without the
@@ -645,7 +640,6 @@ GAPS = {
     '2dc4376a5f.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10794 skey(O[KEY_FWD_BTN]); assert word(60)==0
     '2fa25e9f4c.5': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10794 skey(O[KEY_FWD_BTN]); assert word(60)==0
     '2fa25e9f4c.6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
-    '60d2c2805f.13': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
     '7e0adf5d24.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10795 skey(O[KEY_FWD_BTN]); paint(); skey(O[KEY_CENTER]); m.advance(0)
     '6c7b308867': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10796 assert word(G_SCREEN)==0 and not frames(); passed()
     '7e86233542.18': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10798 m.close(); assert m.get(payload_syms[g])==0 and not frames()

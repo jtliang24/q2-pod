@@ -373,12 +373,18 @@ def media_db(path):
     db.commit()
     db.close()
 
-# The Q2 Pod page's rows, 64 px under the 48 px title: Shuffle, Ratings, Most Played, Long Songs,
-# Era, Photos, Books (with their folders), Coverflow, Spotify, Internet Radio, AirPlay and
-# Configuration; six show. Scrolled to its end (six rows on), Books is the first showing.
-# Tap row centres, 30 px below the old edge coordinates: a settling scroll must not pick the row above.
-def q2pod_row(i): return tap(160, 110 + 64 * i)
-def q2pod_end_row(i): return tap(160, 110 + 64 * (i - 6))
+# The Library page's rows (patch/m1plus_nav_library.c), 64 px under the 48 px title, upstream's order with V2.1's
+# categories: Shuffle, Artists, Albums, All Songs, Genres, Era, Playlists, Ratings, Recently Added, Recently Played,
+# Most Played, Frequent, Hi-Res, Long Songs, then the card's Photos and Books, Composers, Coverflow, Streaming,
+# CD Ripper and Update Local Music: 21 rows, six showing. A slow drag held before its release scrolls by its
+# length (no fling), from y 420 (a touch lower is V2.1's swipe up to Home): two of DRAG_PX bring Most Played to the top. A fling to the end shows Books to Update Local Music.
+# Tap row centres: a settling scroll must not pick the row above.
+LIB_ROWS, LIB_LIST_Y, LIB_LIST_H, DRAG_PX = 21, STATUS_H + 48, H - STATUS_H - 48, 320
+def drag(x, y0, y1, steps=20):
+    return [line for i in range(steps + 1) for line in (f'{x} {y0 + (y1 - y0) * i // steps} 200', 'wait 24')] + ['wait 600', f'{x} {y1} 0']
+def page_row(i, scroll=0): return tap(160, LIB_LIST_Y + 64 * i - scroll + 32)
+def end_row(i): return page_row(i, 64 * LIB_ROWS - LIB_LIST_H)
+MID = 2 * DRAG_PX
 # The Library (ipod-ui 4.4), from Home's first page (All Songs, Folder, Album and Artist cards): V2.1's library lists
 # without their title bar, in LIB_PITCH rows from the top; each closes by the chevron or Previous (Knob: Navigation, the
 # M1's default). On an album's tracks, Previous held (V2.1's key-long, after 1000 ms) opens Now Playing, and so does
@@ -407,43 +413,52 @@ LIBRARY_WALK = [('lib_songs', tap(82, 200), 5, ('not', 'home')),
                 ('lib_home1', swipe(40, 250, 280, 250) + ['wait 1500'] + swipe(40, 250, 280, 250), 4, HOME_AGAIN)]
 MEDIA_WALK = LIBRARY_WALK + [('media_home3', NEXT_PAGE + ['wait 1500'] + NEXT_PAGE, 4, ('not', 'home')),
               ('media_q2pod', tap(*Q2POD_CARD), 4, ('not', 'media_home3')),
-              ('long_songs', q2pod_row(3), 12, ('not', 'media_q2pod')),  # measures, then lists
-              ('long_songs_back', CHEVRON, 4, ('as', 'media_q2pod')),
-              ('era', q2pod_row(4), 4, ('not', 'media_q2pod')),
+              # At the Library's top, a pull opens V2.1's search (4.4).
+              ('q2pod_search', UP_LIST, 4, ('not', 'media_q2pod')),
+              ('q2pod_search_back', CHEVRON, 4, ('as', 'media_q2pod')),
+              ('era', page_row(5), 4, ('not', 'media_q2pod')),
               ('era_decade', tap(160, 110), 4, ('not', 'era')),
               ('era_decade_back', CHEVRON, 4, ('as', 'era')),
               ('era_back', CHEVRON, 4, ('as', 'media_q2pod')),
-              ('books', DOWN_LIST + ['wait 800'] + q2pod_end_row(6), 4, ('not', 'media_q2pod')),
-              ('book', tap(160, 110), 5, ('not', 'books')),          # the first book's row
-              ('book_back', CHEVRON, 4, ('not', 'book')),
-              ('books_back', CHEVRON + UP_LIST + ['wait 800'] + UP_LIST, 4, ('as', 'media_q2pod')),
-              ('photos', q2pod_row(5), 6, ('not', 'media_q2pod')),
+              ('lib_mid', drag(160, 420, 420 - DRAG_PX) + ['wait 800'] + drag(160, 420, 420 - DRAG_PX), 4, ('not', 'media_q2pod')),
+              ('long_songs', page_row(13, MID), 12, ('not', 'lib_mid')),  # measures, then lists
+              ('long_songs_back', CHEVRON, 4, ('as', 'lib_mid')),
+              ('photos', page_row(14, MID), 6, ('not', 'lib_mid')),
               ('photo', tap(56, 126), 5, ('not', 'photos')),         # the first tile
               # qemu's demo decodes neither photo ("Can't open this photo"), so the move to the
               # second and back shows only in the trace (photos.c moved); the viewer stays open.
               ('photo_swipes', swipe(240, 250, 60, 250) + ['wait 1500'] + swipe(60, 250, 240, 250), 4, ('as', 'photo')),
               ('photo_back', CHEVRON, 4, ('not', 'photo')),
-              ('photos_back', CHEVRON, 4, ('as', 'media_q2pod')),
-              ('q2pod_end', DOWN_LIST, 4, ('not', 'media_q2pod')),
-              ('coverflow', q2pod_end_row(7), 10, ('not', 'q2pod_end')),
+              ('photos_back', CHEVRON, 4, ('as', 'lib_mid')),
+              ('books', page_row(15, MID), 4, ('not', 'lib_mid')),
+              ('book', tap(160, 110), 5, ('not', 'books')),          # the first book's row
+              ('book_back', CHEVRON, 4, ('not', 'book')),
+              ('books_back', CHEVRON, 4, ('as', 'lib_mid')),
+              ('lib_end', (DOWN_LIST + ['wait 800']) * 2, 4, ('not', 'lib_mid')),
+              ('coverflow', end_row(17), 10, ('not', 'lib_end')),
               ('cover_next', swipe(220, 150, 120, 150), 4, ('not', 'coverflow')),  # one cover: the second album
               ('cover_prev', swipe(120, 150, 220, 150), 4, ('as', 'coverflow')),
               ('cover_open', tap(160, 120), 5, ('not', 'coverflow')),               # the centre cover's tracks
               ('cover_back', CHEVRON, 4, ('as', 'coverflow')),
-              ('coverflow_back', CHEVRON, 4, ('as', 'q2pod_end')),
-              # Streaming's rows (V2.1 has no Streaming page): Spotify, not on the card, says so on its
-              # Now Playing page; Internet Radio opens its menu. Each closes with its back button.
-              ('spotify', q2pod_end_row(8), 4, ('not', 'q2pod_end')),
-              ('spotify_back', CHEVRON, 4, ('as', 'q2pod_end')),
-              ('radio', q2pod_end_row(9), 5, ('not', 'q2pod_end')),
-              ('radio_back', CHEVRON, 4, ('as', 'q2pod_end')),
-              ('configuration', q2pod_end_row(11), 4, ('not', 'q2pod_end')),
-              ('configuration_back', CHEVRON, 4, ('as', 'q2pod_end')),
-              # The first fling reaches the Library's top; the second pull opens V2.1's search (4.4).
-              ('q2pod_search', UP_LIST + ['wait 800'] + UP_LIST, 4, ('not', 'media_q2pod')),
-              ('q2pod_search_back', CHEVRON, 4, ('as', 'media_q2pod')),
-              ('shuffle', q2pod_row(0), 4, ('not', 'media_q2pod')),
-              ('shuffle_songs', tap(160, 110), 5, ('not', 'media_q2pod'))]  # Shuffle's first row
+              ('coverflow_back', CHEVRON, 4, ('as', 'lib_end')),
+              # The Streaming page: native Tidal and HiFi Music, Spotify, Internet Radio, AirPlay and Configuration.
+              # Spotify, not on the card, says so on its Now Playing page; Internet Radio opens its menu. Each closes
+              # with the chevron.
+              ('streaming', end_row(18), 4, ('not', 'lib_end')),
+              ('spotify', page_row(2), 4, ('not', 'streaming')),
+              ('spotify_back', CHEVRON, 4, ('as', 'streaming')),
+              ('radio', page_row(3), 5, ('not', 'streaming')),
+              ('radio_back', CHEVRON, 4, ('as', 'streaming')),
+              ('configuration', page_row(5), 4, ('not', 'streaming')),
+              ('configuration_back', CHEVRON, 4, ('as', 'streaming')),
+              ('streaming_back', CHEVRON, 4, ('as', 'lib_end')),
+              ('lib_closed', CHEVRON, 4, ('not', 'lib_end')),
+              # Opened again, the Library glides back to its last row (Streaming's, 18); the knob (Knob: Navigation)
+              # walks it up to Shuffle, at its top, and the press opens Shuffle, whose first row shuffles the songs.
+              ('lib_again', tap(*Q2POD_CARD), 4, ('not', 'lib_closed', 'media_q2pod')),
+              ('lib_top', [KNOB_UP] * 18, 4, ('not', 'lib_again')),
+              ('shuffle', [PRESS], 4, ('not', 'lib_top')),
+              ('shuffle_songs', tap(160, 110), 5, ('not', 'lib_top'))]  # Shuffle's first row
 
 def send(out, lines):
     """A step's input: key lines to their device's FIFO, as a press and a release each with its
@@ -605,6 +620,7 @@ if __name__ == '__main__':
             assert hits['to_tracks'], 'cover_open: the tap on the centre cover never opened its tracks'
             assert hits['era_menu'] and hits['era_open_decade'] and hits['stream_config']
             assert hits['spot_np'] and hits['radio_open'], 'spotify, radio: the rows never opened their pages'
+            assert hits['streaming_open'], 'streaming: the Library row never opened the Streaming page'
             config = (data/'config.ini').read_text(errors='replace')
             assert re.search(r'^PLAYMODE=2$', config, re.M), 'shuffle_songs: Shuffle (2) not saved as the play mode'
     print(f'M1 Plus under qemu: both demos up, the same Home below the status bar{" but for the dots" if args.home_menu else ""}; the walk ({", ".join(n for n, *_ in walk)}) '

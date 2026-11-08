@@ -94,6 +94,7 @@
 { "tidal_quality_select_dialog", CTX_DYNAMIC, BUTTONS },
 { "tidal_sortmode_dialog", CTX_DYNAMIC, BUTTONS },
 #if M1PLUS
-{ "library_page", CTX_FIXED, 0 }, /* runtime window (patch/navigation.c): the Q2 Pod Home card's */
+{ "library_page", CTX_FIXED, 0 }, /* runtime windows (patch/m1plus_nav_library.c): the Library */
+{ "streaming_page", CTX_FIXED, 0 }, /* and Streaming entry pages */
 #include M1PLUS_CONTEXTS /* V2.1's own pages: unquoted, so build.py's V1.32 window check skips it */
 #endif

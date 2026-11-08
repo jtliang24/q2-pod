@@ -120,7 +120,7 @@ static int svc_toggle(int i) {
     }
     toolsWriteConfig("/mnt/data/config.ini", "Q2POD", "STREAMHIDE", hide);
     list_toggle(st.sc_check[i], svc(i, 1), !hidden);
-    void *view = st.lib_page ? widget_lookup(st.lib_page, "scroll_view", 1) : 0;
+    void *view = st.stream_page ? widget_lookup(st.stream_page, "scroll_view", 1) : 0;
     for (unsigned c = 0, rows = view ? widget_count_children(view) : 0; c < rows; ++c)
         if (widget_get_prop_int(widget_get_child(view, c), SVC_PROP, 0) == i + 1)
             widget_set_visible(widget_get_child(view, c), !hidden, 0);

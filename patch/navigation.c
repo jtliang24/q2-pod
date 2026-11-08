@@ -6290,6 +6290,7 @@ static int page_closed(void *ctx, void *event) {
     if (ctx == st.sp_page) st.sp_page = 0;
 #if M1PLUS
     if (ctx == st.lib_page) st.lib_page = 0;
+    if (ctx == st.stream_page) st.stream_page = 0;
 #endif
     upnext_closed(ctx);
     if (ctx == st.ch_page) {
