@@ -51,6 +51,18 @@ void np_view_theme(const np_view_t *v) {
     if (v->album) widget_set_opacity(v->album, ipod_classic() ? 255 : 0);
 }
 
+/* The accent's light tone (Minimal's own accent: MINIMAL_FILL) fills the progress bar; a white fill (Minimal: a thicker line,
+ * its fill near white already) marks the scrub. The line stays centred in its widget. 32-bit to 57 h. */
+np_bar_t np_bar_fill(unsigned pos_ms, unsigned dur_ms, int scrubbing, int w, int h) {
+    int line = scrubbing ? NP_BAR_CLASSIC : np_bar_h(), x = (int)((pos_ms >> 4) * (unsigned)w / ((dur_ms >> 4) | 1));
+    return (np_bar_t){ .x = x && x < line ? line : x,
+                       .y = (h - line) / 2,
+                       .h = line,
+                       .radius = np_bar_h() / 2,
+                       .fill = scrubbing ? 0xffffffffu : RGBA(accent_tone(TONE_LIGHT)),
+                       .track = RGBA(TRACK_COLOR) };
+}
+
 /* The local page, by the names ringnav_playing looked up. */
 static np_view_t np_view_local(void) {
     return (np_view_t){ .win = st.np_win, .title = st.np_title, .album = st.np_album, .remain = st.np_remain,

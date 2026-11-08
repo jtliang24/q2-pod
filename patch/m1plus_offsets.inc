@@ -387,7 +387,7 @@ static inline int arc_out(int r, int y) {
 #define RADIO_HEART_X (UI_W - 54)
 #define RADIO_HEART_Y 0
 /* Spotify's Now Playing (spotify.c spot_np, for both backends): Now Playing's layout (ipod-ui 4.6). The bar's view holds the
- * Theme's line at its top, its middle on NP_BAR_CY in Classic's 8 px; the seek's slider takes the touch around it. */
+ * Theme's line in its middle, on NP_BAR_CY (np_bar_fill); the seek's slider takes the touch around it. */
 #define SPOT_ART_X NP_ART_X
 #define SPOT_ART_Y NP_ART_Y
 #define SPOT_ART_PX NP_ART

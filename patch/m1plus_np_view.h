@@ -20,7 +20,16 @@ typedef struct {
     int bold;
 } np_view_t;
 
+/* The bar's numbers and colours, for a w x h widget (np_bar_fill): the fill's width (0: none), and the line's y and height in
+ * the widget, its corners, the fill's colour and the track's. V2.1's slider draws the local page's from fill and h; Spotify's
+ * view paints all of it. */
+typedef struct {
+    int x, y, h, radius;
+    unsigned fill, track;
+} np_bar_t;
+
 void np_write(np_view_t *v, const np_src_t *s);
+np_bar_t np_bar_fill(unsigned pos_ms, unsigned dur_ms, int scrubbing, int w, int h);
 void np_view_theme(const np_view_t *v);
 void *spot_album(void); /* the Spotify page's album label, which paint_caps draws in Minimal; 0 without the page */
 void spot_theme(void);  /* the Theme's change, on the Spotify page */

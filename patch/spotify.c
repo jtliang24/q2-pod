@@ -532,7 +532,11 @@ static void spot_refresh(void) {
     }
 #endif
     /* only when the drawn width (spot_paint's) or the scrub's colour moves: this runs every tick */
+#if M1PLUS
+    unsigned bar = (unsigned)np_bar_fill(ms, sp.duration, ui.scrub, SPOT_BAR_W, SPOT_BAR_H).x << 1 | (ui.scrub != 0);
+#else
     unsigned bar = (unsigned)((ms >> 4) * SPOT_BAR_W / ((sp.duration >> 4) | 1)) << 1 | (ui.scrub != 0);
+#endif
     if (bar + 1 != ui.bar_drawn) {
         ui.bar_drawn = bar + 1;
         widget_invalidate_force(ui.bar, 0);
@@ -563,6 +567,14 @@ static void box(void *canvas, int x, int y, int w, int h, unsigned color, unsign
 void spot_paint(void *w, void *canvas) {
     if (!ui.page || !w || !P(canvas, CANVAS_LCD) || (w != ui.bar && (M1PLUS || w != ui.glyph))) return;
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
+#if M1PLUS
+    if (w == ui.bar) {
+        unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
+        np_bar_t bar = np_bar_fill(ms, sp.duration, ui.scrub, SPOT_BAR_W, SPOT_BAR_H);
+        box(canvas, 0, bar.y, SPOT_BAR_W, bar.h, bar.track, bar.radius);
+        if (bar.x) box(canvas, 0, bar.y, bar.x, bar.h, bar.fill, bar.radius);
+    }
+#else
     unsigned tone = rgba(accent_tone(2), 255);
     if (w == ui.bar) {
         unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
@@ -577,6 +589,7 @@ void spot_paint(void *w, void *canvas) {
         else
             canvas_fill_rect(canvas, 0, 0, 4, 14), canvas_fill_rect(canvas, 8, 0, 4, 14);
     }
+#endif
     stock_canvas_set_fill_color(canvas, fill);
 }
 

@@ -3699,6 +3699,15 @@ static void slider_fill(void *slider, unsigned color) {
     for (unsigned i = 0; i < sizeof fill / sizeof *fill; ++i)
         widget_set_prop_int(slider, fill[i], (int)color);
 }
+#if M1PLUS
+static void np_fill(int scrub) {
+    if (!st.np_slider) return;
+    np_bar_t bar = np_bar_fill(0, 0, scrub, 0, 0);
+    slider_fill(st.np_slider, bar.fill);
+    if (!ipod_classic()) widget_set_prop_int(st.np_slider, "bar_size", bar.h);
+    widget_invalidate_force(st.np_slider, (void *)0);
+}
+#else
 static void np_fill(int scrub) {
     if (!st.np_slider) return;
     slider_fill(st.np_slider, scrub ? 0xffffffff : RGBA(accent_tone(TONE_LIGHT)));
@@ -3707,6 +3716,7 @@ static void np_fill(int scrub) {
         widget_set_prop_int(st.np_slider, "bar_size", scrub ? NP_BAR_CLASSIC : np_bar_h());
     widget_invalidate_force(st.np_slider, (void *)0);
 }
+#endif
 
 /* The Theme's progress bar over the asset's (Minimal's square 4px line): Classic's NP_BAR_CLASSIC
  * capsule, and stock's play-state glyph, which Minimal hides. */

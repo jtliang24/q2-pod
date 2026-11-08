@@ -11278,11 +11278,11 @@ if is_m1plus:  # portrait: the text under the art, none of it in the top left th
     boxes=[cf_geometry(m,w) for w in m.nodes if m.nodes[w]['type'] in ('hscroll_label','view') and under(w,info) and w!=info]
     assert boxes and not [b for b in boxes if meet(b,art) or meet(b,(0,0,O['BACK_W'],48))],boxes
 # The bar: a TRACK_COLOR capsule and the elapsed share in the accent (iPod) or stock red (Stock).
-bar_height=4  # Minimal's line, at the top of the 8px view
+bar_height=4  # Minimal's line, centred in the 8px view
 bar=[w for w in m.nodes if m.nodes[w]['type']=='view' and cf_geometry(m,w)==(O['SPOT_BAR_X'],O['SPOT_BAR_Y'],O['SPOT_BAR_W'],O['SPOT_BAR_H'])][0]
 m.rounded=[]; m.call(address=HOOKS['widget_on_paint_border'][0],args=(bar,m.canvas,0,0),gap=0,clear=False)
 track,fill=m.rounded
-assert track['rect']==(0,0,O['SPOT_BAR_W'],bar_height) and track['color']==color_t(O['TRACK_COLOR']) and fill['rect']==(0,0,(12500>>4)*O['SPOT_BAR_W']//((200000>>4)|1),bar_height)
+assert track['rect']==(0,2,O['SPOT_BAR_W'],bar_height) and track['color']==color_t(O['TRACK_COLOR']) and fill['rect']==(0,2,(12500>>4)*O['SPOT_BAR_W']//((200000>>4)|1),bar_height)
 assert fill['color']==color_t(O['MINIMAL_FILL']); passed()
 # Play/Pause and the side buttons are Spotify's, on any page, after stock's key-lock filter, while it
 # is the last thing played; stock's downstream handler never sees them.
@@ -12324,6 +12324,19 @@ for backend in (BrowseMachine,SoloifyMachine):
         m.word(album+O['W_W'],40+O['NP_CAPS_INSET']); border(info); x0=O['NP_TEXT_X']+O['NP_CAPS_INSET']
         m.advance(O['MARQUEE_HOLD_MS']); assert ('widget_invalidate_force',album) in [c[:2] for c in m.calls] and border(info)[0][1]==x0-2
         m.state('playing',position=10000,title='One',artist='Band',album='Amnesiac'); m.poll(); m.advance(0); assert border(info)[0][1]==x0; passed()
+CONFIG.clear()
+# The bar, from np_bar_fill as the local page's: Minimal's 4 px line or Classic's 8 px capsule centred on the bar's row, the
+# accent's fill, white and 8 px high while a drag or scrub previews a target.
+def spot_bar(m,info): return next(w for w in m.nodes[info]['children'] if m.nodes[w]['type']=='view' and cf_geometry(m,w)==(O['SPOT_BAR_X'],O['SPOT_BAR_Y'],O['SPOT_BAR_W'],O['SPOT_BAR_H']))
+for backend in (BrowseMachine,SoloifyMachine):
+    for theme,line in (('0',O['NP_BAR_MINIMAL']),('1',O['NP_BAR_CLASSIC'])):
+        CONFIG.clear(); CONFIG.update(THEME=theme); m,np,info,msg,back,seek,row=spot_np_page(backend); bar=spot_bar(m,info)
+        def bars(): m.rounded=[]; m.call(address=HOOKS['widget_on_paint_border'][0],args=(bar,m.canvas,0,0),gap=0,clear=False); return m.rounded
+        m.state('paused',position=50000); m.poll(); m.advance(250); tr,fl=bars(); y=(O['SPOT_BAR_H']-line)//2
+        assert tr['rect']==(0,y,O['SPOT_BAR_W'],line) and tr['color']==color_t(O['TRACK_COLOR'])
+        assert fl['rect']==(0,y,(50000>>4)*O['SPOT_BAR_W']//((200000>>4)|1),line) and fl['color']!=0xffffffff; passed()
+        m.nodes[seek]['value']=500; spot_click(m,seek,'EVT_VALUE_CHANGING'); tr,fl=bars()
+        assert tr['rect']==(0,0,O['SPOT_BAR_W'],O['NP_BAR_CLASSIC']) and fl['rect']==(0,0,(100000>>4)*O['SPOT_BAR_W']//((200000>>4)|1),O['NP_BAR_CLASSIC']) and fl['color']==0xffffffff; passed()
 CONFIG.clear()
 # Hold Return and Home's row (compact_now_playing) open the page of whatever owns playback (media_owner, 1 local, 2 Spotify
 # or Soloify, 3 radio), from a page or from Home, and on that page go back to where they began.
