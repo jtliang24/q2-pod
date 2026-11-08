@@ -28,9 +28,28 @@ typedef struct {
     unsigned fill, track;
 } np_bar_t;
 
+/* What the scrub asks of a page. read: its source, the position being what the page shows. bar: its bar's widget, 0 once the
+ * page is gone. track: the playing track's key. second, status: the player's second, and 2 playing, 3 paused or any other
+ * value. seek: to a target. hold: the page's own timer off (1) or on (0). fill: the scrub's fill on or off. preview: a target
+ * on the page. */
+typedef struct {
+    void (*read)(np_src_t *s);
+    void *(*bar)(void);
+    unsigned (*track)(void);
+    int (*second)(void), (*status)(void);
+    void (*seek)(unsigned ms), (*hold)(int on), (*fill)(int scrub), (*preview)(int sec);
+} np_page_t;
+
 void np_write(np_view_t *v, const np_src_t *s);
 np_bar_t np_bar_fill(unsigned pos_ms, unsigned dur_ms, int scrubbing, int w, int h);
 void np_view_theme(const np_view_t *v);
+void np_scrub_start(const np_page_t *p);
+void np_scrub_drag(const np_page_t *p, int sec, int done);
+void np_scrub_end(void);
+void np_scrub_gone(const np_page_t *p);
+int np_scrubbing(const np_page_t *p);
+unsigned np_scrub_shown(const np_page_t *p, unsigned ms);
+const np_page_t *spot_np_page(void *top); /* the Spotify page's, when top is it with a track to scrub */
 void *spot_album(void); /* the Spotify page's album label, which paint_caps draws in Minimal; 0 without the page */
 void spot_theme(void);  /* the Theme's change, on the Spotify page */
 

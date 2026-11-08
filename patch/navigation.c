@@ -190,8 +190,7 @@ extern void games_paint(void *w, void *canvas);
 extern int games_key(void *top, unsigned key), games_open(void *ctx, void *event);
 extern void spot_poll(void), spot_yield(void), spot_paint(void *w, void *canvas), *spot_art(void);
 #if M1PLUS
-extern int spot_knob_on(void *top), spot_scrubbing(void), spot_band(void *win, void **bar, void **times);
-extern void spot_scrub_start(void), spot_scrub_end(void);
+extern int spot_band(void *win, void **bar, void **times);
 static int spot_page(void *w) { return w && !tk_strcmp(widget_get_prop_str(w, "name", ""), "spotify_page"); }
 #endif
 extern int spot_media(unsigned key), spot_key(void *top, unsigned key),
@@ -465,6 +464,9 @@ typedef struct {
      * scrub_to is the target second, scrub_moved set once the wheel changed it. */
     unsigned np_press, np_press_at, scrub_timer, scrub_track, settle_timer;
     int scrub, scrub_to, scrub_moved, settle_played;
+#if M1PLUS
+    const void *scrub_page; /* the np_page_t the scrub runs or settles on, 0 for the local page (m1plus_np_view.c) */
+#endif
     int held_sec; /* a paused seek to scrub_to on scrub_track: the player's second then, +1; 0 none
                    */
     /* The lyrics (lyric_poll), of the song lyric_song, their rows built for lyric_rows_song:
@@ -3742,6 +3744,7 @@ static void np_theme(void) {
 #endif
 }
 
+#if !M1PLUS /* m1plus_np_view.c */
 /* Paused, the seek waits for Play (scrub_end) and the player's second stands still until then,
  * and the page's timer would put the bar back on it. The bar keeps the
  * target until the player reports it, the track changes or stops, or SETTLE_PLAY_MS of playing
@@ -3799,6 +3802,7 @@ static void scrub_start(void) {
     np_fill(1);
     rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
 }
+#endif
 
 /* The lyrics: stock's 250 ms timer scrolls scroll_lrc to the current line whenever it is elsewhere.
  * Once the wheel or a finger moves them they stay (ringnav_lyric_follow), while the timer keeps the
@@ -4021,6 +4025,7 @@ static int np_lyrics(unsigned key) {
     return 1;
 }
 
+#if !M1PLUS /* m1plus_np_view.c */
 static void np_cancel(void) {
     unsigned settle = st.settle_timer; /* an earlier scrub's wait; the one scrub_end arms stays */
     stop_timer(&st.np_press);
@@ -4071,6 +4076,7 @@ static int np_key(void *top, unsigned key) {
     rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
     return STOP;
 }
+#endif
 
 static int np_gone(void *win, void *event) {
     if (win == st.np_win) {
@@ -10424,7 +10430,11 @@ int ringnav(void *ctx, void *event) {
         if (key == KEY_CENTER || !usable()) drop_spin();
         return result;
     }
+#if M1PLUS /* Spotify's page ends its own, by its keyup */
+    if (key == KEY_RETURN && st.scrub && !spot_page(window_manager_get_top_window(window_manager()))) {
+#else
     if (key == KEY_RETURN && st.scrub) { /* ends the scrub without leaving the page */
+#endif
         np_cancel();
         if (window_manager_get_top_window(window_manager()) == st.np_win) return STOP;
     }
@@ -10493,7 +10503,9 @@ int ringnav(void *ctx, void *event) {
         return result;
     }
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
+#if !M1PLUS /* the M1's below */
     if (spot_key(top, key)) return STOP; /* Spotify's page: Centre scrubs */
+#endif
     if (xfade_key(top, key))
         return STOP; /* Crossfade's page: Centre toggles, the wheel sets the length */
     if (eq_key(top, key))
@@ -10503,6 +10515,16 @@ int ringnav(void *ctx, void *event) {
         return STOP;
     }
 
+#if M1PLUS
+    const np_page_t *np = np_page_on(top);
+    if (!np || (st.scrub && np != SCRUB_PAGE) || window_manager_is_animating(wm) ||
+        window_manager_get_pointer_pressed(wm))
+        np_cancel();
+    else if (key != KEY_CENTER && np_lyrics(key))
+        return STOP;
+    else if (key == KEY_CENTER || (st.scrub && (np == &np_local || key == KEY_NEXT || key == KEY_PREV)))
+        return np_key(top, key);
+#else
     if (top != st.np_win || window_manager_is_animating(wm) ||
         window_manager_get_pointer_pressed(wm))
         np_cancel();
@@ -10510,6 +10532,7 @@ int ringnav(void *ctx, void *event) {
         return STOP;
     else if (key == KEY_CENTER || st.scrub)
         return np_key(top, key);
+#endif
     if (!allowed_top(top) && !usb_prompt()) {
         drop_input();
         return result;

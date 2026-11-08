@@ -267,22 +267,44 @@ static void spot_launch(void) {
     system(SPOT_RUN);
 }
 
+#if !M1PLUS
 static void scrub_commit(void) {
     char c[16];
     int n = tk_snprintf(c, sizeof c, "S%d", ui.scrub_ms);
     ui.scrub = 0;
     dgram_send(&sp.sock, SPOT_SOCK, c, (unsigned)n);
 }
-#if M1PLUS
-int spot_scrubbing(void) { return ui.scrub; }
-void spot_scrub_end(void) {
-    if (ui.scrub) scrub_commit();
-}
+#define SCRUBBING() ui.scrub
 #endif
 
 static void spot_refresh(void);
 static void *browsing(void);
 static void spot_restarting(void);
+
+#if M1PLUS
+/* The page, to the scrub both Now Playing pages share (m1plus_np_view.c). The target's seek goes by the socket; the page's
+ * tick reads the target through spot_src, so nothing here stops it. */
+static void spot_src(np_src_t *s);
+static void *spot_scrub_bar(void) { return ui.page ? ui.bar : 0; }
+static unsigned spot_track(void) { return fnv(FNV_SEED, (const unsigned char *)sp.track); }
+static int spot_second(void) { return (int)(spot_position() / 1000); }
+static int spot_player(void) { return sp.playing ? 2 : sp.paused ? 3 : 0; }
+static void spot_seek(unsigned ms) {
+    char c[16];
+    int n = tk_snprintf(c, sizeof c, "S%u", ms);
+    dgram_send(&sp.sock, SPOT_SOCK, c, (unsigned)n);
+}
+static void spot_keep(int on) {}
+static void spot_show(int unused) { spot_refresh(); }
+static const np_page_t spot_ops = { spot_src, spot_scrub_bar, spot_track, spot_second, spot_player,
+                                    spot_seek, spot_keep, spot_show, spot_show };
+static void spot_src(np_src_t *s) {
+    *s = (np_src_t){ .title = sp.title, .artist = sp.artist, .album = sp.album,
+                     .pos_ms = np_scrub_shown(&spot_ops, spot_position()), .dur_ms = sp.duration, .playing = sp.playing };
+}
+#define SCRUBBING() np_scrubbing(&spot_ops)
+#define scrub_commit np_scrub_end
+#endif
 
 /* SPOT_LOG's length, 0 without one. */
 static long log_size(void) {
@@ -381,7 +403,9 @@ void spot_poll(void) {
         if (browsing()) window_close(browsing()); /* left open dark: shut, as Back would */
         spot_stop();
     }
+#if !M1PLUS /* the M1's scrub has its timer */
     if (ui.scrub && now - ui.scrub_at >= SCRUB_MS) scrub_commit();
+#endif
 }
 
 /* mclStartPlayer's hook (navigation.c): local music is about to open the PCM. A playing librespot
@@ -415,6 +439,7 @@ int spot_media(unsigned key) {
     return 1;
 }
 
+#if !M1PLUS /* the M1's are m1plus_np_view.c's */
 /* A single centre press, DOUBLE_CLICK_MS on, never while scrubbing: it replays the release to stock
  * on_wm_keyup_fun, which turns the screen off, as Now Playing's np_single. */
 static int spot_single(const void *info) {
@@ -447,15 +472,9 @@ int spot_key(void *top, unsigned key) {
     return 1;
 }
 
-#if M1PLUS
-/* m1plus_nav_np.c's knob on the page: whether it has a track to scrub, as spot_key asks; a scrub's start. */
-int spot_knob_on(void *top) {
-    return ui.page && top == ui.page && !sp.loading && sp.auth >= 0 && sp.track[0] && sp.duration;
-}
-void spot_scrub_start(void) {
-    if (ui.scrub) return;
-    ui.scrub = 1, ui.scrub_ms = (int)spot_position(), ui.scrub_at = time_now_ms();
-    spot_refresh();
+#else
+const np_page_t *spot_np_page(void *top) {
+    return ui.page && top == ui.page && !sp.loading && sp.auth >= 0 && sp.track[0] && sp.duration ? &spot_ops : 0;
 }
 /* vol_paint: the page's bar and elapsed time, the band's place, as Now Playing's. */
 int spot_band(void *win, void **bar, void **times) {
@@ -521,11 +540,12 @@ static void spot_refresh(void) {
         ui.art_track[0] = 0;
         image_base_set_image(ui.art, PLACEHOLDER);
     }
-    unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
 #if M1PLUS
-    np_src_t src = { .title = sp.title, .artist = sp.artist, .album = sp.album, .pos_ms = ms, .dur_ms = sp.duration, .playing = sp.playing };
+    np_src_t src;
+    spot_src(&src);
     np_write(&ui.view, &src);
 #else
+    unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
     if (ms / 1000 + 1 != ui.shown) {
         ui.shown = ms / 1000 + 1;
         times(ms);
@@ -533,7 +553,8 @@ static void spot_refresh(void) {
 #endif
     /* only when the drawn width (spot_paint's) or the scrub's colour moves: this runs every tick */
 #if M1PLUS
-    unsigned bar = (unsigned)np_bar_fill(ms, sp.duration, ui.scrub, SPOT_BAR_W, SPOT_BAR_H).x << 1 | (ui.scrub != 0);
+    int scrub = SCRUBBING();
+    unsigned bar = (unsigned)np_bar_fill(src.pos_ms, sp.duration, scrub, SPOT_BAR_W, SPOT_BAR_H).x << 1 | (scrub != 0);
 #else
     unsigned bar = (unsigned)((ms >> 4) * SPOT_BAR_W / ((sp.duration >> 4) | 1)) << 1 | (ui.scrub != 0);
 #endif
@@ -569,8 +590,7 @@ void spot_paint(void *w, void *canvas) {
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
 #if M1PLUS
     if (w == ui.bar) {
-        unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
-        np_bar_t bar = np_bar_fill(ms, sp.duration, ui.scrub, SPOT_BAR_W, SPOT_BAR_H);
+        np_bar_t bar = np_bar_fill(np_scrub_shown(&spot_ops, spot_position()), sp.duration, SCRUBBING(), SPOT_BAR_W, SPOT_BAR_H);
         box(canvas, 0, bar.y, SPOT_BAR_W, bar.h, bar.track, bar.radius);
         if (bar.x) box(canvas, 0, bar.y, bar.x, bar.h, bar.fill, bar.radius);
     }
@@ -602,7 +622,7 @@ static int leave(const void *unused) {
 /* Return: a scrub seeks first, as on Now Playing; then back to the browser. */
 static int keyup(void *ctx, void *event) {
     if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
-    if (ui.scrub)
+    if (SCRUBBING())
         scrub_commit();
     else
         rearm(&ui.leave, leave, 0);
@@ -613,8 +633,13 @@ static int closed(void *ctx, void *event) {
     stop_timer(&ui.timer);
     stop_timer(&ui.leave);
     stop_timer(&ui.press);
+#if M1PLUS /* its target goes with the page, as Now Playing's (np_gone) */
+    memset(&ui, 0, sizeof ui);
+    np_scrub_gone(&spot_ops);
+#else
     if (ui.scrub) scrub_commit();
     memset(&ui, 0, sizeof ui);
+#endif
     return 0;
 }
 
@@ -630,7 +655,7 @@ void *label(void *parent, int x, int y, int w, int h, const char *style, int px,
 #if M1PLUS
 /* The page's own back (ipod-ui 4.6): a Return's, a scrub seeking first. */
 static int np_back(void *ctx, void *event) {
-    if (ui.scrub)
+    if (SCRUBBING())
         scrub_commit();
     else
         rearm(&ui.leave, leave, 0);
@@ -647,11 +672,7 @@ static int np_transport(void *ctx, void *event) {
 static int np_seek(void *ctx, void *event) {
     int at = widget_get_prop_int(ui.seek, "value", 0);
     if (!sp.duration) return 0;
-    ui.scrub = 1;
-    ui.scrub_ms = (int)(((sp.duration >> 4) * (unsigned)at / SEEK_MAX) << 4); /* 32-bit to 19 h, as spot_paint */
-    ui.scrub_at = time_now_ms();
-    if (ctx) scrub_commit();
-    spot_refresh();
+    np_scrub_drag(&spot_ops, (int)(((sp.duration >> 4) * (unsigned)at / SEEK_MAX) << 4) / 1000, ctx != 0); /* 32-bit to 19 h */
     return 0;
 }
 /* A button on the page, in V2.1's style, its images (normal, pressed) when it draws them as its background. */
@@ -1396,7 +1417,7 @@ static int np_browse(const void *unused) {
 }
 /* The Now Playing page's Queue (0) and Mode (1): the browser's Queue and Playback Settings levels, the page gone. */
 static void np_level(int menu) {
-    if (ui.scrub) scrub_commit();
+    if (SCRUBBING()) scrub_commit();
     if (!br.page) {
         ui.level = menu;
         rearm(&ui.leave, np_browse, 0);

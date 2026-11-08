@@ -11313,8 +11313,9 @@ def scrub_press():
     assert m.key(O['KEY_POWER'])==11; m.advance(DC,clear=False); return True
 assert scrub_press() and m.key(O['KEY_VOLUMEUP'])==11 and m.key(O['KEY_VOLUMEUP'])==11 and m.key(O['KEY_VOLUMEDOWN'])==11 and not m.sent
 m.advance(250); assert texts(info)[4]=='01:05' and 'on_wm_keyup_fun' not in [c[0] for c in m.calls]
-m.poll(O['SCRUB_MS']-260); assert not m.sent; m.poll(); assert m.sent[0][1]=='S65000'  # 250 ms already passed
-assert scrub_press() and m.key(O['KEY_VOLUMEDOWN'])==11 and m.key(O['KEY_POWER'])==11 and m.sent[0][1]=='S55000'
+m.advance(O['SCRUB_MS']-260,clear=False); assert not m.sent; m.advance(10,clear=False); assert m.sent[0][1]=='S65000'  # 250 ms already passed
+# The paused player not there yet, the bar keeps that target (settle_poll), and the next scrub starts from it.
+assert scrub_press() and m.key(O['KEY_VOLUMEDOWN'])==11 and m.key(O['KEY_POWER'])==11 and m.sent[0][1]=='S60000'
 m.advance(DC); assert m.key(O['KEY_POWER'])==11; m.now+=100; assert m.call(O['KEY_POWER'],gap=0,clear=False)==0
 assert 'on_wm_keyup_fun' in [c[0] for c in m.calls] and not m.sent
 # Scrubbing, a press seeks at once and the screen stays on.
@@ -12338,6 +12339,43 @@ for backend in (BrowseMachine,SoloifyMachine):
         m.nodes[seek]['value']=500; spot_click(m,seek,'EVT_VALUE_CHANGING'); tr,fl=bars()
         assert tr['rect']==(0,0,O['SPOT_BAR_W'],O['NP_BAR_CLASSIC']) and fl['rect']==(0,0,(100000>>4)*O['SPOT_BAR_W']//((200000>>4)|1),O['NP_BAR_CLASSIC']) and fl['color']==0xffffffff; passed()
 CONFIG.clear()
+# One scrub for both pages (m1plus_np_view.c). Scrubbing, the wheel's ramp grows the step as on Now Playing; SCRUB_MS without a
+# tick seeks. After a seek the bar keeps the target until the player reports it (settle_poll), so it doesn't jump back; a second
+# scrub starts from the target. Paused the wait holds; playing it ends SETTLE_PLAY_MS on; another track ends it at once.
+def spot_scrub(m,*turns):
+    assert m.key(O['KEY_POWER'])==11; m.advance(DC,clear=False)
+    for k in turns: assert m.key(O[k])==11
+def sent(m): return [x[1] for x in m.sent]
+for backend in (BrowseMachine,SoloifyMachine):
+    m,np,info,msg,back,seek,row=spot_np_page(backend); m.mock('on_wm_keyup_fun')
+    m.state('paused',position=60000); m.poll(); m.advance(250); assert texts(info)[-2:]==['01:00','-02:20'],texts(info)
+    # The ramp: a sustained run's step grows, as lists' do.
+    spot_scrub(m,'KEY_VOLUMEUP'); ticks=1
+    while ticks<20: m.now+=100; assert m.key(O['KEY_VOLUMEUP'])==11; ticks+=1
+    assert int(texts(info)[-2][:2])*60+int(texts(info)[-2][3:])>60+5*ticks,texts(info); passed()
+    assert m.key(O['KEY_POWER'])==11 and len(m.sent)==1 and m.sent[0][1].startswith('S'); passed()
+    # Expiry, by the scrub's timer, not the poll.
+    m,np,info,msg,back,seek,row=spot_np_page(backend); m.mock('on_wm_keyup_fun'); m.state('paused',position=60000); m.poll(); m.advance(250)
+    spot_scrub(m,'KEY_VOLUMEUP'); m.sent=[]; m.advance(O['SCRUB_MS']-1,clear=False); assert not m.sent; m.advance(1,clear=False); assert sent(m)==['S65000'],m.sent; passed()
+    # Paused and not there yet, the page keeps the target, over the tick and the state.
+    m.advance(1000); m.poll(); m.advance(250); assert texts(info)[-2]=='01:05',texts(info); passed()
+    # A second scrub starts from it.
+    spot_scrub(m,'KEY_VOLUMEDOWN'); m.sent=[]; assert m.key(O['KEY_POWER'])==11 and sent(m)==['S60000'],m.sent; passed()
+    # The player there: the page is the player's again.
+    m.state('paused',position=60000); m.poll(); m.advance(250); m.state('paused',position=90000); m.poll(); m.advance(500); assert texts(info)[-2]=='01:30',texts(info); passed()
+    # Playing without getting there, SETTLE_PLAY_MS on it gives up.
+    spot_scrub(m,'KEY_VOLUMEUP'); m.sent=[]; assert m.key(O['KEY_POWER'])==11 and sent(m)==['S95000'],m.sent
+    m.state('playing',position=10000); m.poll(); m.advance(1000); assert texts(info)[-2]=='01:35',texts(info)
+    m.state('playing',position=10000); m.poll(); m.advance(1000+250); assert texts(info)[-2]<'01:00',texts(info); passed()
+    # Another track drops the target: nothing seeks, and the page is the new track's.
+    m.state('paused',position=60000,track='t1'); m.poll(); m.advance(500)
+    spot_scrub(m,'KEY_VOLUMEUP'); m.sent=[]; m.state('paused',position=1000,track='t2'); m.poll(); m.sent=[]
+    assert m.key(O['KEY_VOLUMEUP'])==11 and not m.sent; m.advance(250); assert texts(info)[-2]=='00:01',texts(info); passed()
+    # Unmoved, a press seeks nothing, as on Now Playing.
+    m.advance(1000); spot_scrub(m); m.sent=[]; assert m.key(O['KEY_POWER'])==11 and not m.sent; passed()
+    # The page closing drops a target, as Now Playing's: nothing seeks, and the next page starts clean.
+    m.advance(1000); spot_scrub(m,'KEY_VOLUMEUP'); m.sent=[]; f,ctx=m.handler(np,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0,clear=False)
+    assert not m.sent and not any(v[1]==payload_syms['scrub_expire'] for v in m.timers.values()) and m.key(O['KEY_VOLUMEUP'])!=11; passed()
 # Hold Return and Home's row (compact_now_playing) open the page of whatever owns playback (media_owner, 1 local, 2 Spotify
 # or Soloify, 3 radio), from a page or from Home, and on that page go back to where they began.
 def hold_return(m): assert m.call(address=payload_syms['compact_now_playing'],args=(0,0,0,0),gap=0,clear=False,count=5_000_000)==0
