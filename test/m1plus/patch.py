@@ -15375,6 +15375,22 @@ if is_m1plus:
                dict(setup=lambda m:page_over(m,'dialog')),dict(setup=lambda m:m.nodes[m.top].update(fullscreen=1))):
         m=play_bar(**kw); assert touch((PRESS,237,10),(LIFT,237,10),m=m)==[(PRESS,237),(LIFT,237)],kw; m.advance(0); assert dispatched(m)==[],kw
     passed()
+    # A press takes AWTK's key target for the window under it, the bar's too, and only another press moves it (widget_on_pointer_down_children), so after a tap in the bar
+    # a payload page's Return and other keys went to the bar. The lift or abort, after V2.1's dispatch, gives it to the page, or the page under a keyboard. V2.1 reads the
+    # field where the offset says. Not on the press, and not while another window holds it, as VOLUME's dialog does until it closes.
+    assert struct.unpack('<I',bytes(Machine().u.mem_read(0x670e44,4)))[0]==0x8e040000|O['W_KEY_TARGET']  # widget_on_keyup's lw a0,key_target(s0)
+    def bar_focus(*points,holder='bar',setup=lambda m:None):
+        m=play_bar(); setup(m); m.word(m.wm+O['W_KEY_TARGET'],{'bar':m.get(syms['system_bar']),'none':0,'page':m.top}[holder]); m.calls=[]
+        touch(*points,m=m)
+        return m,[c[1:3] for c in m.calls if c[0]=='widget_set_focused']
+    for last,x in ((LIFT,70),(O['EVT_POINTER_ABORT'],70),(LIFT,237)):  # beside the icon, an abort, and the icon's own press, which V2.1 sees too
+        m,focused=bar_focus((PRESS,x,10),(last,x,10)); assert focused==[(m.top,1)],(last,x)
+    m,focused=bar_focus((PRESS,70,10)); assert focused==[]
+    for holder in ('page','none'):
+        m,focused=bar_focus((PRESS,70,10),(LIFT,70,10),holder=holder); assert focused==[],holder
+    def under_keyboard(m):
+        m.page=m.top; m.top=m.node('keyboard','kb_ascii_t9',[m.node('button',style='button_style')]); m.nodes[m.wm]=dict(type='window_manager',name='',children=[m.page,m.top],visible=1)
+    m,focused=bar_focus((PRESS,70,10),(LIFT,70,10),setup=under_keyboard); assert focused==[(m.page,1)]; passed()
     # The play state sits in the right group (ipod-ui 4.2): while it shows it counts toward BATT_ROOM, so the plain glyph, the icon, Wi-Fi and
     # the widest battery still fit, and a badge that fitted without it now falls back to the icon. V2.1's lookups find it by name there.
     def right_group(status,image):

@@ -157,6 +157,18 @@ static void bar_play_input(void *e) {
     I(e, EVENT_X) = 0;
 }
 
+/* A press takes AWTK's key target for the window under it (widget_on_pointer_down_children: at the window manager, any
+ * window), the bar's as much as a page's, and only another press moves it. So after a tap in the bar every key went to
+ * the bar: a payload page's Return (previous_back) and its other keys never reached its key-up handler, and Back and
+ * Previous did nothing until the page was tapped. The press ends here, so the page has its keys back. VOLUME's dialog
+ * takes the target itself and returns it on closing; this leaves it to do so. */
+static void bar_key_target(void *e) {
+    unsigned type = e ? (unsigned)I(e, EVENT_TYPE) : 0;
+    if (type != EVT_POINTER_UP && type != EVT_POINTER_ABORT) return;
+    void *bar = *(void *const *)system_bar;
+    if (bar && P(window_manager(), W_KEY_TARGET) == bar) widget_set_focused(back_window(), 1);
+}
+
 /* Display's Knob: Navigation. The knob's turns are Previous and Next (volume up is Previous, up the
  * list, unless Knob Up: List Down) and its press Centre, on their release, which is where V2.1
  * changes the volume (on_wm_keyup_fun opens the volume dialog for 220/221); V2.1 binds no key-down

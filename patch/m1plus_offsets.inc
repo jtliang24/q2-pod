@@ -41,6 +41,7 @@
  * window_close and widget_to_global, emitter widget_off_by_func, children layout
  * widget_set_children_layout, vtable widget_get_type 0x70); subclasses still start at 0x78. */
 #define W_PARENT 0x44
+#define W_KEY_TARGET 0x54 /* the child that takes keys: widget_on_keyup @0x670e44, widget_on_pointer_down_children @0x671588 */
 #define W_CHILDREN 0x58
 #define W_EMITTER 0x5c
 #define W_CHILDREN_LAYOUT 0x64

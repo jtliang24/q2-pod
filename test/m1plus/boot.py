@@ -810,6 +810,49 @@ def soloify(build, captures=None, themes=(0, 1)):
           'knob scrub, the volume band, Back, Hold Return paused and playing, and the message view passed.')
 
 
+# --bar-keys: a press takes AWTK's key target for the window under it, the status bar's too. A payload page's Back is a Return through that target
+# (previous_back), so a tap in the bar used to leave Back and Previous dead there until the page was tapped. Each page: a control, then its Back after a
+# tap in the bar past the corner, compared with where the control's Back landed, not just with the page: an unanswered Return still draws the first key's
+# highlight, which once passed for a Back. The page with V2.1's button goes back by a click and has never been affected.
+def bar_keys(build):
+    sn, net = symbols(build/'stock-demo')['product_sncode'], net_address(build)
+    def rows(a, b, y0, y1): return sum(a[y * W * 4:(y + 1) * W * 4] != b[y * W * 4:(y + 1) * W * 4] for y in range(y0, y1))
+    global IPOD_CLASSIC, CARD_KNOB
+    IPOD_CLASSIC, CARD_KNOB = '[IPOD]\nTHEME=1\nACCENT=1\n', 1  # Knob: Navigation, where Previous is Back
+    with tempfile.TemporaryDirectory(prefix='m1-bar-') as tmp, tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
+        run_dir, card = pathlib.Path(tmp)/'p', pathlib.Path(cards)/'p'
+        run_dir.mkdir(); card.mkdir()
+        media_card(card)
+        p = start(build/'rootfs.squashfs', run_dir, 420, sn, net, '', '', card, HOME_SPLIT)
+        time.sleep(45)
+        def step(lines, settle=4):
+            send(run_dir, lines); time.sleep(settle)
+            assert b'uncaught target signal' not in (run_dir/'demo.err').read_bytes(), 'the demo crashed'
+            return screen(run_dir)
+        def page(name, opener, settle, taps, backs=(CHEVRON,)):
+            before = screen(run_dir)
+            opened = step(opener, settle)
+            assert rows(before, opened, STATUS_H, H) > 100, f'{name}: did not open'
+            parent = step(CHEVRON)
+            assert rows(opened, parent, STATUS_H, H) > 100, f'{name}: its Back with no tap in the bar did nothing, the control failed'
+            for back in backs:
+                for bar_tap in taps:
+                    step(opener, settle)
+                    step(tap(*bar_tap), 5)  # V2.1's VOLUME closes itself after 3 s
+                    assert rows(parent, step(back), STATUS_H, H) == 0, f'{name}: {back} did not go back after a tap in the bar at {bar_tap}'
+        MISSES = [(BAR_BACK_HIT_W, 8), (70, 8), (W - 20, 8)]
+        page('Coverflow', home_row(COVERFLOW, True), 10, MISSES)
+        step(DOWN_LIST)
+        step(home_row(STREAMING, True, HOME_END))
+        page('Internet Radio', page_row(3), 5, MISSES + [(200, 8)])  # 200: V2.1's VOLUME, whose dialog holds the target until it closes
+        page('Internet Radio by Previous', page_row(3), 5, [(70, 8)], ([PREVIOUS],))
+        step(CHEVRON)
+        step(home_row(SETTINGS, True, HOME_END))
+        page('System Setting', home_row(SYSTEM, True), 4, [(70, 8)])
+        p.kill()
+    print('M1 Plus status bar under qemu: Back and Previous still go back after a tap in the bar on Coverflow, Internet Radio and a V2.1 page, each with its control, passed.')
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('build', type=pathlib.Path)
@@ -822,6 +865,7 @@ if __name__ == '__main__':
                          'Folder, Coverflow and Streaming by touch, Shuffle Songs')
     ap.add_argument('--now-playing', action='store_true', help='Now Playing and Centred in both themes: their layout, the volume band, the big cover')
     ap.add_argument('--soloify', action='store_true', help="Spotify's page on a fake Soloify in both themes: its layout, its touch, the scrub, the band, Hold Return")
+    ap.add_argument('--bar-keys', action='store_true', help='Back and Previous after a tap in the status bar, on Coverflow, Internet Radio and a V2.1 page')
     args = ap.parse_args()
     if args.home_menu and args.media: raise SystemExit('--home-menu and --media are separate runs')
     if args.now_playing:
@@ -833,6 +877,11 @@ if __name__ == '__main__':
         if json.loads((args.build/'manifest.json').read_text()).get('source_sha256') != source_sha256():
             raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
         soloify(args.build, args.captures)
+        raise SystemExit(0)
+    if args.bar_keys:
+        if json.loads((args.build/'manifest.json').read_text()).get('source_sha256') != source_sha256():
+            raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
+        bar_keys(args.build)
         raise SystemExit(0)
     # The Library walk precedes the original media walk, and the logins' follow Streaming's: give their steps their
     # settling budget too, and the logins' their waits.

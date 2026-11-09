@@ -14,6 +14,7 @@
     if (e && video_on()) video_touch(e);
     if (!video_on()) {
         int result = stock_input_trampoline(wm, e);
+        bar_key_target(e);
         if (e && I(e, EVENT_TYPE) == EVT_POINTER_UP) st.lp_swallow = 0; /* its click is past */
         return result;
     }
