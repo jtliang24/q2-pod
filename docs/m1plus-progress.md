@@ -4144,6 +4144,15 @@ The plan was `.plan/status-bar-play-icon.md`, from F6 in the `V054m` pass (secti
 
 **`V056m`** (`work/phase4/4.6b/k2`, `--dev`, `43e80c4c`, `update.bin` sha256 `0eef7375...`). All 15 gates pass (`k2-gates`): 418 gaps, none unlisted, and the Q2's `update.tar` byte-identical. `fndiff` against `V054m`, of 1331 functions: `bar_play_key` and `dispatch_key` added; `dispatch_key_return`, `ringnav_input` and `ringnav_paint_bg` changed for this work; `ringnav_about` by its version string and `draw_spaced` by a renumbered compiler label. Sheets in `k2-sheets`. `V055m` (`k1`) was built before the repaint fix and never flashed. The device pass is still to come.
 
+**Device pass on `V056m` (Nov 8), Classic and Minimal, over q2remote.** Local music, Soloify and Radio: the icon pauses and resumes the owner (Soloify's state file confirms it) and shows ❚❚ while playing, ▶ while paused; a near miss at x 200 opens VOLUME without pausing; Back's tap and hold work across x 0-63 on the pages tried, including y 55 on local and Soloify Now Playing, and x 64 is not Back. The bar clears the clock at a true 100% with Wi-Fi on, and a tap on a dark screen or the lock screen's icon doesn't pause.
+
+What the pass found, none fixed yet:
+- **Back goes dead on Radio's page after a tap in the bar just past the corner.** After a tap at x 64 or x 70 (y 8), Back ignores taps, at 5 s later and on repeats, until the page itself is tapped. Reproduced every time in Classic; not tried in Minimal, and not compared with `V054m`.
+- **The lock screen opens VOLUME.** A tap in the bar's x 80-270 range there opens V2.1's VOLUME over the lock screen (x 249 and x 120). The icon's own button stays off, but the plan's "no tap effect" isn't met. Not compared with `V054m`.
+- **A restored, paused Soloify session doesn't respond.** Opened from the menu's Now Playing row while its session isn't active, the page's Play does nothing, and the icon and Play key go to local music, so the bar and the page's button can disagree. Starting a track from Liked Songs clears it.
+
+Not run: Wi-Fi off (it would cut q2remote), Bluetooth showing, and a digit-count change of the percent (the battery stayed at 100%, so the repaint fix is still unproved).
+
 ## How to check a build now
 
 ```sh
