@@ -4127,6 +4127,23 @@ What the pass found:
 - **Switching Minimal to Classic with Ivory set turned Light Mode on** (`LIGHT` 0 to 1), and Classic to Minimal reset `MINIMAL_ACCENT` to 0, the latter already noted in section 70. Both are upstream's theme presets (`theme_preset`), left as they are.
 - **Other observations.** Four knob detents scrub 25 s on both pages, where 2 and 3 detents step 5 s each. Radio's third line can show raw stream metadata (`amgoArtistId="0"`). Queue's long label is a marquee (F2); a long-named local queue wasn't tried.
 
+## 73. The status bar: Back gets the corner, the play icon becomes a button (Nov 8)
+
+The plan was `.plan/status-bar-play-icon.md`, from F6 in the `V054m` pass (section 72): the chevron's tap stopped at x 36 beside the play icon, Back was still hard to hit, and a tap on the icon did nothing. This corrects section 72's item 6: `BAR_BACK_PLAY_W` is gone, and the icon's tap is no longer V2.1's.
+
+1. **The icon moves right, but not where the plan said.** The group is Bluetooth, the icon, Wi-Fi, the battery (`view_bar_right`). The plan had the icon left of Bluetooth, which doesn't fit: Bluetooth's images are 42 px canvases with their ink at the right edge, so that order measures 142 px against `BATT_ROOM`'s 115, with the icon in the clock. This order measures 110, and the icon stays put as a codec badge fades. `bar_sync` counts the icon toward the reach while it shows, so a badge that would crowd the clock falls back to the battery's icon. V2.1 never names the groups, and all its lookups of these widgets recurse (`show_sysbar_face`, `dropdown_showface`).
+2. **Back has the corner.** The chevron's tap and hold are `BAR_BACK_HIT_W` (64) wide on every page. Now Playing's local and Soloify pages hide the chevron for their own back, so the same width there runs from the screen's top to the foot of that row (`STATUS_H + NP_TOP_H`, 70), goes Back through the page's button and has the chevron's hold. Other pages keep their rows at that height, as Folder's first starts inside it. A dark screen's tap on those pages is not Back. Radio's page keeps the bar's chevron.
+3. **The icon is a button.** `BAR_PLAY_HIT_W` (45) round the icon's real position, the bar's height. A still tap is the Play key's press and release (`dispatch_key`), so it follows whichever player the key does. **V2.1 keeps the press and its moves:** its dropdown opens from a pull down at any x (`on_wm_tsmove_fun`), so owning the press as the chevron does would have lost that here. Only the lift's x changes, out of the x 80 to 270 where `on_wm_tsup_fun` opens the VOLUME page; that handler still resets the power timers. A drag does nothing. There is no button with no icon, on a dark or locked screen, or with a dialog, a video or a full-screen page on top. The bar past x 270 has never opened VOLUME; V2.1's range is unchanged.
+4. **The icon shows the action.** ❚❚ while playing, ▶ while paused, as the big transport button. V2.1's two faces and `bar_state_sync` pick `bar_play` while playing and no UI file names either image, so each ships the other's glyph (`STATUS_DRAWN`). Themes, Light Mode, Soloify, Radio and the dropdown's bar all follow.
+
+5. **Found by the sheets: a second battery.** One frame showed two battery bodies beside "30%". A level with another digit count (100% to 99%, or 10% to 9%) resizes the slot and moves the whole group, but `bar_sync` invalidated only the slot, in a paint, which AWTK drops (#116). The stale pixels stayed until something else repainted the bar. It predates this work, but the play icon now moves with the group too. `bar_sync` repaints the bar once after the frame, on the M1 only.
+
+**Tests.** `patch.py` covers the corner on a list page and Spotify's page (tap and hold at x 0, 40 and 63, not at 64), the button's edges, drag, abort, each state with no button, the reach, and the repaint when the width moves. `boot.py --now-playing` and `--soloify` tap the real UI: the corner from y 5, the icon's pause and resume, the glyph's shape in both states, Soloify's `p`, and a near miss opening VOLUME without pausing. `build.py` pins the group and the swap. `test/m1plus/bar_sheets.py` is new: the bar under QEMU with Bluetooth, Wi-Fi and percent showing, in both themes, dark and light.
+
+**Harness notes.** V2.1's VOLUME closes itself after about 3 s, so a check for it must look within that. The sandbox's battery level is garbage that V2.1 rewrites, which moves the slot between frames: poking it made a false overlap at "100%". A `voltage_now` file steadies it (`boot.BATTERY_UV`), though the sandbox reads as charging and its level isn't under test control, so the percent at 100 isn't measured. By the numbers, Bluetooth's ink starts at x 208 there, clear of the 195 where the widest clock text ends.
+
+**`V056m`** (`work/phase4/4.6b/k2`, `--dev`, `43e80c4c`, `update.bin` sha256 `0eef7375...`). All 15 gates pass (`k2-gates`): 418 gaps, none unlisted, and the Q2's `update.tar` byte-identical. `fndiff` against `V054m`, of 1331 functions: `bar_play_key` and `dispatch_key` added; `dispatch_key_return`, `ringnav_input` and `ringnav_paint_bg` changed for this work; `ringnav_about` by its version string and `draw_spaced` by a renumbered compiler label. Sheets in `k2-sheets`. `V055m` (`k1`) was built before the repaint fix and never flashed. The device pass is still to come.
+
 ## How to check a build now
 
 ```sh
@@ -4137,6 +4154,7 @@ python3 test/m1plus/boot.py build-m1 --home-menu  # saved V2.1 Home cards change
 python3 test/m1plus/boot.py build-m1 --now-playing  # Now Playing and Centred in both themes: back, bar, art, the volume band, the big cover
 python3 test/m1plus/boot.py build-m1 --soloify  # Spotify's page on a fake Soloify in both themes: layout, touch, scrub, the band, Hold Return, the message view
 python3 test/m1plus/boot.py build-m1 --media    # Home in Split, a card with long songs, a book and two photos: the Library, Folder, Coverflow, Streaming, Shuffle Songs
+python3 test/m1plus/bar_sheets.py build-m1 sheets  # review sheets of the status bar at its busiest, both themes, dark and light (checks nothing)
 python3 test/m1plus/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
 python3 test/m1plus/playback.py build-m1        # and test/m1plus/m4b, id3, headset_io; test/ldac, bluealsa
 ```
