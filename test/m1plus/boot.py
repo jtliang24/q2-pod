@@ -261,6 +261,7 @@ CHEVRON = tap(BAR_BACK_W // 2, STATUS_H // 2)  # the status bar's back chevron: 
 # device, "knob CODE" on the knob's; each a press and a release.
 PREVIOUS, KNOB_UP = 'keys 165', 'knob 115'  # KEY_PREVIOUSSONG, KEY_VOLUMEUP
 KNOB_DOWN, PRESS = 'knob 114', 'keys 116'   # KEY_VOLUMEDOWN, and the knob's press, KEY_POWER
+PLAY_KEY = 'keys 164'  # KEY_PLAYPAUSE
 # (name, touches for both, seconds to settle, expectation): 'same', stock's below the status bar;
 # ('rows', same, differ), the y bands that match stock's and that must not; 'differs'; ('as', step),
 # the patched screen as it was at that step; ('not', step, ...), unlike it at each of those steps;
@@ -810,6 +811,101 @@ def soloify(build, captures=None, themes=(0, 1)):
           'knob scrub, the volume band, Back, Hold Return paused and playing, and the message view passed.')
 
 
+# A paused session that local music has interrupted: spot_poll keeps sp.local set until Soloify plays, so the session isn't active, and on its own page the
+# glyph you press decides. The page's buttons are Soloify's, stopping local first; the bar's icon and the Play key follow the bar's own glyph, so local playing
+# pauses, and the next press is Soloify's. The browser keeps the keys as they were. Each case plays a local track again, as Soloify playing stopped the last.
+def soloify_paused(build, captures=None):
+    sn, net = symbols(build/'stock-demo')['product_sncode'], net_address(build)
+    row_y = STATUS_H + M1['NP_BUTTONS_Y'] + (H - STATUS_H - M1['NP_BUTTONS_Y']) // 2
+    PREV, PLAY, NEXT = tap(58 + 32, row_y), tap(123 + 40, row_y), tap(203 + 29, row_y)
+    global IPOD_CLASSIC, CARD_KNOB
+    IPOD_CLASSIC, CARD_KNOB = '[IPOD]\nTHEME=1\nACCENT=1\n', 1
+    with tempfile.TemporaryDirectory(prefix='m1-solo-') as tmp, tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
+        run_dir, card = pathlib.Path(tmp)/'p', pathlib.Path(cards)/'p'
+        run_dir.mkdir(); card.mkdir(); (run_dir/'tmp').mkdir()
+        media_card(card)
+        (card/'.soloify').mkdir()
+        for f in ('q2-soloify', 'run'): (card/'.soloify'/f).write_text('exit 0\n')
+        fake = FakeSoloify(run_dir/'tmp')
+        p = start(build/'rootfs.squashfs', run_dir, 590, sn, net, '', '', card, HOME_SPLIT, tmp=run_dir/'tmp')
+        def step(lines, settle=4):
+            send(run_dir, lines); time.sleep(settle)
+            assert b'uncaught target signal' not in (run_dir/'demo.err').read_bytes(), 'the demo crashed'
+            return screen(run_dir)
+        def glyph(what, want):
+            shot = step([], 1)
+            got = bar_glyph(shot, bar_icon(shot))
+            if captures:
+                captures.mkdir(parents=True, exist_ok=True)
+                png(shot, captures/f'paused-{what.replace(" ", "_")}.png')
+            assert got == want, f'{what}: the bar shows {("no", "play", "pause")[got] if got < 3 else got}, not {("no", "play", "pause")[want]}'
+        def press(lines, what, want):
+            step(lines, 4)  # past a poll: if local still played, the session would be inactive again
+            got = fake.sent()
+            assert got == want, f'{what} sent {got}, not {want}'
+        def to_page():
+            """Local music playing, then the session's page; the session paused and not active."""
+            step(swipe(160, 260, 160, 450))  # Home's list to its top
+            for lines in NP_OPEN: step(lines, 6)
+            for lines in (NP_BACK, CHEVRON, CHEVRON, CHEVRON): step(lines)
+            step(DOWN_LIST)
+            step(home_row(STREAMING, True, HOME_END))
+            step(page_row(SOLO_ROW), 6)
+            glyph('the browser with local playing', 2)
+        def open_page():
+            step(page_row(0), 5)
+            glyph('its page with local playing', 2)
+            assert fake.sent() == [], 'opening the page sent a command'
+        def leave(what):
+            """Soloify plays and pauses, and the bar follows; then back to Home."""
+            fake.write(state='playing'); time.sleep(3)
+            glyph(f'{what}, Soloify playing', 2)
+            fake.write(state='paused', position=50000); time.sleep(3)
+            glyph(f'{what}, Soloify paused again', 1)
+            for lines in (NP_BACK, CHEVRON, CHEVRON): step(lines)
+            fake.sent()
+        time.sleep(45)
+        # The browser keeps the keys: Play is local's both ways.
+        to_page()
+        press([PLAY_KEY], 'Play on the browser with local playing', [])
+        glyph('the browser, Play pausing local', 1)
+        press([PLAY_KEY], 'Play on the browser with local paused', [])
+        glyph('the browser, Play resuming local', 2)
+        # Local playing, the key pauses it as the bar's glyph says, and the next press, the icon, is Soloify's.
+        open_page()
+        press([PLAY_KEY], 'Play on the page with local playing', [])
+        glyph('Play pausing local', 1)
+        shot = step([], 1)
+        press(tap(*bar_icon(shot)), 'the icon on the page with local paused', ['p'])
+        glyph('the icon claiming the session', 1)
+        leave('the icon\'s claim')
+        # And the other way round: the icon pauses, the key claims.
+        to_page(); open_page()
+        shot = step([], 1)
+        press(tap(*bar_icon(shot)), 'the icon on the page with local playing', [])
+        glyph('the icon pausing local', 1)
+        press([PLAY_KEY], 'Play on the page with local paused', ['p'])
+        leave('the key\'s claim')
+        # The page's buttons claim with local playing, which stops it: past a poll, the session is still the owner.
+        to_page(); open_page()
+        press(PLAY, 'the page\'s Play with local playing', ['p'])
+        glyph('the page\'s Play claiming the session', 1)
+        leave('the page\'s Play')
+        to_page(); open_page()
+        press(NEXT, 'the page\'s Next with local playing', ['n'])
+        glyph('the page\'s Next claiming the session', 1)
+        leave('the page\'s Next')
+        # With local paused.
+        to_page(); open_page()
+        shot = step([], 1)
+        press(tap(*bar_icon(shot)), 'the icon pausing local', [])
+        press(PREV, 'the page\'s Previous with local paused', ['b'])
+        glyph('the page\'s Previous claiming the session', 1)
+        leave('the page\'s Previous')
+        p.kill()
+    print('M1 Plus paused Soloify session under qemu, with local music played: its page takes its buttons, the bar\'s icon and the Play key follow the bar\'s glyph, and the browser keeps its keys.')
+
+
 # --bar-keys: a press takes AWTK's key target for the window under it, the status bar's too. A payload page's Back is a Return through that target
 # (previous_back), so a tap in the bar used to leave Back and Previous dead there until the page was tapped. Each page: a control, then its Back after a
 # tap in the bar past the corner, compared with where the control's Back landed, not just with the page: an unanswered Return still draws the first key's
@@ -877,6 +973,7 @@ if __name__ == '__main__':
         if json.loads((args.build/'manifest.json').read_text()).get('source_sha256') != source_sha256():
             raise SystemExit(f'{args.build}/manifest.json does not match the current sources; rebuild into a fresh directory')
         soloify(args.build, args.captures)
+        soloify_paused(args.build, args.captures)
         raise SystemExit(0)
     if args.bar_keys:
         if json.loads((args.build/'manifest.json').read_text()).get('source_sha256') != source_sha256():

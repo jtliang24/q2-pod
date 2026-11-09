@@ -426,6 +426,18 @@ void spot_yield(void) {
     sp.playing = !strcmp(state, "playing"); /* the next track's start need not ask again */
 }
 
+#if M1PLUS
+/* A paused session's own page. sp.local stays set from local music until Soloify plays, so the session isn't active,
+ * the page's buttons did nothing and the keys were local's, while the page showed it ready to play. On its page on top,
+ * a press may claim it. The browser's keys are as they were. */
+static int spot_claim(void) {
+    if (sp.active || !sp.paused || !ui.page || window_manager_get_top_window(window_manager()) != ui.page) return 0;
+    sp.local = 0;
+    sp.active = 1;
+    return 1;
+}
+#endif
+
 /* ringnav(), any page, after stock's key-lock filter: while Spotify is the last thing played,
  * Play/Pause and the side buttons are its. */
 int spot_media(unsigned key) {
@@ -433,6 +445,9 @@ int spot_media(unsigned key) {
                     : key == KEY_FWD_BTN  ? "n"
                     : key == KEY_BACK_BTN ? "b"
                                           : 0;
+#if M1PLUS /* the glyph pressed is right: with local playing, the bar's icon and these keys pause it, as the bar shows; the next press claims */
+    if (c && mclGetPlayStatus() != 2) spot_claim();
+#endif
     if (!c || !sp.active) return 0;
     headset_manual();
     dgram_send(&sp.sock, SPOT_SOCK, c, 1);
@@ -661,8 +676,10 @@ static int np_back(void *ctx, void *event) {
         rearm(&ui.leave, leave, 0);
     return 0;
 }
-/* The transport row's Previous, Play and Next, as the keys' commands (spot_media). */
+/* The transport row's Previous, Play and Next, as the keys' commands (spot_media). They are the session's even with local
+ * playing, which stops first: the next poll would otherwise hand the keys straight back to it (sp.local). */
 static int np_transport(void *ctx, void *event) {
+    if (spot_claim()) spot_take();
     spot_media((unsigned)(long)ctx);
     return 0;
 }
