@@ -119,6 +119,44 @@ static int chevron_input(void *e) {
     return 1;
 }
 
+/* The status bar's play state is a Play/Pause button (ipod-ui 4.2), over BAR_PLAY_HIT_W round the icon wherever the right
+ * group has put it, the bar's height, only while the bar shows it and takes the touch: no dark or locked screen, dialog
+ * or full-screen page, which all have that press for themselves. V2.1 keeps the press and its moves, so a pull down from
+ * here still opens its dropdown (on_wm_tsmove_fun); only the lift's x changes, out of the x 80 to 270 where on_wm_tsup_fun
+ * opens the VOLUME page, which still resets the power timers. A still tap is the Play key itself, so it follows whichever
+ * player the key does; a drag is nothing. The rest of the bar keeps VOLUME. */
+static int bar_play_key(const void *unused) {
+    (void)unused;
+    dispatch_key(KEY_PLAY);
+    return 0;
+}
+static int bar_play_hit(int x, int y) {
+    void *wm = window_manager(), *top = window_manager_get_top_window(wm);
+    if (y >= STATUS_H || !st.bar_state || !widget_get_visible(st.bar_state) || !usable() || !top || video_on() ||
+        window_manager_is_animating(wm) || tk_strcmp(widget_get_type(top), "window") ||
+        widget_get_prop_bool(top, "fullscreen", 0))
+        return 0;
+    int left = I(P(st.bar_state, W_PARENT), W_X) + I(st.bar_state, W_X) + I(st.bar_state, W_W) / 2 - BAR_PLAY_HIT_W / 2;
+    return x >= left && x < left + BAR_PLAY_HIT_W;
+}
+static void bar_play_input(void *e) {
+    unsigned type = e ? (unsigned)I(e, EVENT_TYPE) : 0;
+    if (type == EVT_INPUT_POINTER_DOWN) {
+        st.bar_play_x = I(e, EVENT_X);
+        st.bar_play_y = I(e, EVENT_Y);
+        st.bar_play_down = bar_play_hit(st.bar_play_x, st.bar_play_y);
+    } else if (type == EVT_POINTER_ABORT)
+        st.bar_play_down = 0;
+    if (!st.bar_play_down || (type != EVT_INPUT_POINTER_MOVE && type != EVT_POINTER_UP)) return;
+    int dx = I(e, EVENT_X) - st.bar_play_x, dy = I(e, EVENT_Y) - st.bar_play_y;
+    if (dx >= PULL_CLAIM_PX || -dx >= PULL_CLAIM_PX || dy >= PULL_CLAIM_PX || -dy >= PULL_CLAIM_PX)
+        st.bar_play_down = 2;
+    if (type != EVT_POINTER_UP) return;
+    if (st.bar_play_down == 1) timer_add(bar_play_key, (void *)0, 0); /* not inside this pointer's dispatch */
+    st.bar_play_down = 0;
+    I(e, EVENT_X) = 0;
+}
+
 /* Display's Knob: Navigation. The knob's turns are Previous and Next (volume up is Previous, up the
  * list, unless Knob Up: List Down) and its press Centre, on their release, which is where V2.1
  * changes the volume (on_wm_keyup_fun opens the volume dialog for 220/221); V2.1 binds no key-down

@@ -525,6 +525,7 @@ typedef struct {
 #if M1PLUS
     unsigned chev_timer; /* its long-press, Hold Return's (chevron_hold), armed at the press */
     int chev_x, chev_y, chev_held; /* the press's point; the hold fired, so the release is spent */
+    int bar_play_down, bar_play_x, bar_play_y; /* a press on the bar's play state: 1 still, 2 dragged; its point */
 #endif
 } scratch_t;
 static scratch_t st __attribute__((section(".scratch")));

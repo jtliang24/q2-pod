@@ -22,7 +22,7 @@ STEPS = [('art', []), ('lyrics', SLIDE), ('info', SLIDE), ('visualizer', SLIDE),
          ('volume', [boot.KNOB_UP]), ('bigcover', ['wait 3500'] + boot.tap(160, 150)), ('bigcover_title', ['wait 4000']), ('closed', boot.tap(160, 150)),
          ('back', boot.NP_BACK), ('panel', [boot.KNOB_UP]), ('volume_page', ['wait 3500'] + boot.tap(160, 15)), ('volume_page_back', boot.tap(30, 55))]
 BOOT_S, STEP_S = 45, 4
-WAIT = {'volume': 1, 'panel': 1, 'bigcover': 2}  # V2.1's volume closes itself after 3 s; the big cover's title fades after 3 s
+WAIT = {'volume': 1, 'panel': 1, 'bigcover': 2, 'volume_page': 1}  # V2.1's volume closes itself after 3 s; the big cover's title fades after 3 s
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument('build', type=pathlib.Path)

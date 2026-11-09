@@ -22,6 +22,8 @@
  * the page too, above a settings list's first row (Classic's sits flush under the bar); the image keeps its slim
  * look. */
 #define BAR_BACK_HIT_W 64
+/* The status bar's play state as a Play/Pause button: its tap's width, centred on the icon (m1plus_nav_back.c). */
+#define BAR_PLAY_HIT_W 45
 #define BAR_CORNER_R 0
 #define I(p, o) (*(int *)((char *)(p) + (o)))
 #define P(p, o) (*(void **)((char *)(p) + (o)))

@@ -15298,7 +15298,7 @@ if is_m1plus:
     def corner(page='sysset_page',status=0,theme='0'):
         m=input_machine(page); m.config['THEME']=theme; m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,status)
         back,state=m.node('image','img_back',visible=0),m.node('image','img_playstate',visible=0)
-        bar=m.node('system_bar','system_bar',[back,state]); m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar)
+        bar=m.node('system_bar','system_bar',[back,state]); m.word(bar+O['W_PARENT'],m.wm); m.word(state+O['W_PARENT'],bar); m.word(syms['system_bar'],bar)
         m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0); dispatched(m)
         return m
     assert O['BAR_BACK_HIT_W']==64
@@ -15326,6 +15326,40 @@ if is_m1plus:
         m,back=np_corner(); assert touch((PRESS,x,y),(LIFT,x,y),m=m)==[(PRESS,x),(LIFT,x)]; m.advance(0); assert not m.clicks,(x,y)
     m,back=np_corner(); m.byte(syms['g_backlight_status'],0); assert touch((PRESS,40,10),(LIFT,40,10),m=m)==[(PRESS,40),(LIFT,40)]; m.advance(0); assert not m.clicks
     m=corner('folder_page',theme='0'); y=O['STATUS_H']+O['SET_TOP']; assert touch((PRESS,10,y),(LIFT,10,y),m=m)==[(PRESS,10),(LIFT,10)]; m.advance(0); assert dispatched(m)==[]
+    passed()
+    # The bar's play state is a Play/Pause button: BAR_PLAY_HIT_W round wherever the group put it. A still tap is the Play key's press and release, after this
+    # pointer's dispatch; V2.1 sees the press and moves as ever, and a lift at x 0, out of the x 80 to 270 where on_wm_tsup_fun opens VOLUME. A tap beside it, a
+    # drag or a press with no icon is V2.1's, as is every press while the bar has no say: dark, locked, a dialog or a full-screen page on top.
+    PLAY=[(O['EVT_KEY_DOWN'],O['KEY_PLAY']),(O['EVT_KEY_UP'],O['KEY_PLAY'])]
+    def play_bar(status=2,view_x=205,state_x=26,setup=lambda m:None):
+        m=input_machine(); m.config['THEME']='0'; m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,status)
+        state=m.node('image','img_playstate',visible=0); m.word(state+O['W_W'],12); m.word(state+O['W_X'],state_x)
+        right=m.node('view','view_bar_right',[state]); m.word(right+O['W_X'],view_x); m.word(state+O['W_PARENT'],right)
+        back=m.node('image','img_back',visible=0)
+        bar=m.node('system_bar','system_bar',[back,right]); m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar)
+        m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0); dispatched(m); setup(m)
+        return m
+    assert O['BAR_PLAY_HIT_W']==45
+    left,right=205+26+6-22,205+26+6-22+45  # the icon's centre, 237, less half the width
+    for status in (2,3):
+        for x in (left,237,right-1):
+            m=play_bar(status); assert touch((PRESS,x,10),(MOVE,x,11),(LIFT,x,11),m=m)==[(PRESS,x),(MOVE,x),(LIFT,0)],(status,x)
+            m.advance(0); assert dispatched(m)==PLAY,(status,x); m.advance(1000); assert dispatched(m)==[]
+        for x in (left-1,right):
+            m=play_bar(status); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[(PRESS,x),(LIFT,x)],(status,x); m.advance(0); assert dispatched(m)==[]
+        m=play_bar(status); d=O['PULL_CLAIM_PX']  # a drag: V2.1 keeps its moves for its dropdown, with no key and no VOLUME
+        assert touch((PRESS,237,10),(MOVE,237,10+d),(LIFT,237,10),m=m)==[(PRESS,237),(MOVE,237),(LIFT,0)]; m.advance(0); assert dispatched(m)==[]
+        m=play_bar(status); assert touch((PRESS,237,10),(LIFT,237+d,10),m=m)==[(PRESS,237),(LIFT,0)]; m.advance(0); assert dispatched(m)==[]
+        m=play_bar(status); assert touch((PRESS,237,10),(O['EVT_POINTER_ABORT'],237,10),(LIFT,237,10),m=m)==[(PRESS,237),(O['EVT_POINTER_ABORT'],237),(LIFT,237)]; m.advance(0); assert dispatched(m)==[]
+        m=play_bar(status); y=O['STATUS_H']; assert touch((PRESS,237,y),(LIFT,237,y),m=m)==[(PRESS,237),(LIFT,237)]; m.advance(0); assert dispatched(m)==[]
+    # It follows the icon when the group's width moves it.
+    m=play_bar(state_x=60); assert touch((PRESS,270,10),(LIFT,270,10),m=m)==[(PRESS,270),(LIFT,0)]; m.advance(0); assert dispatched(m)==PLAY
+    m=play_bar(state_x=60); assert touch((PRESS,237,10),(LIFT,237,10),m=m)==[(PRESS,237),(LIFT,237)]; m.advance(0); assert dispatched(m)==[]
+    # No icon, no button; and each state in which the press isn't the bar's.
+    def page_over(m,kind,name='volume_dialog',**props): m.top=m.node(kind,name,[m.node()]); m.nodes[m.top].update(props)
+    for kw in (dict(status=0),dict(setup=lambda m:m.byte(syms['g_backlight_status'],0)),dict(setup=lambda m:m.byte(syms['g_lockscreen_pageflag'],1)),
+               dict(setup=lambda m:page_over(m,'dialog')),dict(setup=lambda m:m.nodes[m.top].update(fullscreen=1))):
+        m=play_bar(**kw); assert touch((PRESS,237,10),(LIFT,237,10),m=m)==[(PRESS,237),(LIFT,237)],kw; m.advance(0); assert dispatched(m)==[],kw
     passed()
     # The play state sits in the right group (ipod-ui 4.2): while it shows it counts toward BATT_ROOM, so the plain glyph, the icon, Wi-Fi and
     # the widest battery still fit, and a badge that fitted without it now falls back to the icon. V2.1's lookups find it by name there.

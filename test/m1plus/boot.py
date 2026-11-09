@@ -541,6 +541,11 @@ def send(out, lines):
             os.close(fd)
         time.sleep(0.4)
 
+def bar_icon(shot, y=STATUS_H // 2):
+    """The x and y of the status bar's play state, at the sandbox's plain bar (no Bluetooth or Wi-Fi: "bar 1" adds them): the first ink past the
+    clock, in a theme whose bar is black, and half the icon's 12 px on."""
+    return next(x for x in range(200, W) for r in range(STATUS_H) if shot[4 * (W * r + x):4 * (W * r + x) + 3] != b'\0\0\0') + 6, y
+
 def png(pixels, path):
     from ipod import imagemagick
     path.write_bytes(imagemagick('-size', f'{W}x{H}', '-depth', '8', 'bgra:-', '-alpha', 'off', 'png:-', data=pixels))
@@ -564,7 +569,7 @@ def now_playing(build):
                 run_dir.mkdir(); card.mkdir()
                 media_card(card)
                 IPOD_CLASSIC = f'[IPOD]\nTHEME={theme}\nACCENT=1\nNPCENTRED={centred}\n'
-                p = start(build/'rootfs.squashfs', run_dir, 45 + 8 * 6 + 40, sn, net, '', '', card, 'HOME=0\n')
+                p = start(build/'rootfs.squashfs', run_dir, 45 + 8 * 6 + 60, sn, net, '', '', card, 'HOME=0\n')
                 time.sleep(45)
                 for step in NP_OPEN:
                     send(run_dir, step); time.sleep(6)
@@ -588,6 +593,21 @@ def now_playing(build):
                 back = screen(run_dir)
                 assert rows(page, back, STATUS_H, H) == 0, f'{name}: the big cover did not close back to the page'
                 assert ink(back, 200, 0, 300, STATUS_H), f'{name}: the status bar did not come back'
+                # The bar's play state is Play/Pause, by the Play key: the icon and the transport change, and it opens no VOLUME page. A near miss is V2.1's bar,
+                # which opens it and doesn't pause.
+                x, y = bar_icon(back)
+                send(run_dir, tap(x, y)); time.sleep(1.2)  # V2.1's volume closes itself after 3 s
+                assert rows(back, screen(run_dir), STATUS_H, STATUS_H + M1['NP_BUTTONS_Y']) == 0, f'{name}: a tap on the bar\'s icon opened a page'
+                time.sleep(2)
+                paused = screen(run_dir)
+                assert rows(back, paused, 0, STATUS_H) > 0, f'{name}: a tap on the bar\'s icon left it as it was'
+                assert rows(back, paused, STATUS_H + M1['NP_BUTTONS_Y'], H) > 0, f'{name}: a tap on the bar\'s icon did not pause'
+                send(run_dir, tap(x, y)); time.sleep(3)
+                assert rows(back, screen(run_dir), 0, H) == 0, f'{name}: a second tap on the bar\'s icon did not resume'
+                send(run_dir, tap(x - M1['BAR_PLAY_HIT_W'] // 2 - 2, y)); time.sleep(1.2)
+                assert rows(back, screen(run_dir), STATUS_H, H) > 100, f'{name}: a tap beside the bar\'s icon did not open VOLUME'
+                time.sleep(4)  # V2.1's volume closes itself after 3 s
+                assert rows(back, screen(run_dir), STATUS_H, H) == 0, f'{name}: a tap beside the bar\'s icon paused'
                 # Back's corner: x 64 is past it; inside, a tap from the screen's top goes Back through the page's button (the page's own back is NP_BACK).
                 send(run_dir, tap(BAR_BACK_HIT_W, 10)); time.sleep(5)
                 assert rows(page, screen(run_dir), STATUS_H, H) == 0, f'{name}: a tap past Back\'s corner left the page'
@@ -694,6 +714,10 @@ def soloify(build, captures=None, themes=(0, 1)):
             fake.write(state='playing')
             playing = step([], 2)
             assert rows(page, playing, STATUS_H + M1['NP_BUTTONS_Y'], H) > 0, f'{name}: the play glyph did not change with the state'
+            # The bar's icon is the Play key, and opens no VOLUME page (which closes itself after 3 s; the labels below the art move as it plays).
+            over = step(tap(*bar_icon(playing)), 1.2)
+            assert rows(playing, over, STATUS_H, STATUS_H + M1['NP_TITLE_Y']) == 0, f'{name}: the bar\'s icon opened a page'
+            only([], ['p'], 'The bar\'s icon')
             only(PLAY, ['p'], 'Pause')
             fake.write(state='paused', position=50000)
             assert rows(page, step([], 2), STATUS_H + M1['NP_BUTTONS_Y'], H) == 0, f'{name}: the play glyph did not come back'

@@ -9,6 +9,7 @@
         return result;
     }
     if (touch_closes(e) || chevron_input(e)) return 0;
+    bar_play_input(e);
     lp_input(e);
     if (e && video_on()) video_touch(e);
     if (!video_on()) {
