@@ -15371,9 +15371,23 @@ if is_m1plus:
     m=play_bar(state_x=60); assert touch((PRESS,237,10),(LIFT,237,10),m=m)==[(PRESS,237),(LIFT,237)]; m.advance(0); assert dispatched(m)==[]
     # No icon, no button; and each state in which the press isn't the bar's.
     def page_over(m,kind,name='volume_dialog',**props): m.top=m.node(kind,name,[m.node()]); m.nodes[m.top].update(props)
-    for kw in (dict(status=0),dict(setup=lambda m:m.byte(syms['g_backlight_status'],0)),dict(setup=lambda m:m.byte(syms['g_lockscreen_pageflag'],1)),
+    for kw in (dict(status=0),dict(setup=lambda m:m.byte(syms['g_backlight_status'],0)),
                dict(setup=lambda m:page_over(m,'dialog')),dict(setup=lambda m:m.nodes[m.top].update(fullscreen=1))):
         m=play_bar(**kw); assert touch((PRESS,237,10),(LIFT,237,10),m=m)==[(PRESS,237),(LIFT,237)],kw; m.advance(0); assert dispatched(m)==[],kw
+    passed()
+    # The lock screen has no button and no VOLUME, which on_wm_tsup_fun doesn't check for: a lift from a press in V2.1's band moves out of its x 80 to 270, as the icon's
+    # does, with the Play key untouched. The handler's own band is the bar's height in this build. A press or a lift below that is the lock screen's own gesture, its x as it was.
+    demo=Machine().u
+    assert [struct.unpack('<I',bytes(demo.mem_read(a,4)))[0] for a in (0x4cd938,0x4cd94c)]==[0x28420000|O['STATUS_H']]*2  # slti v0,v0,STATUS_H: the lift's y, then pressdown_y
+    lock=lambda m:m.byte(syms['g_lockscreen_pageflag'],1)
+    for x in (80,200,237,269):
+        for y in (10,O['STATUS_H']-1):
+            m=play_bar(setup=lock); assert touch((PRESS,x,y),(LIFT,x,y),m=m)==[(PRESS,x),(LIFT,0)],(x,y); m.advance(0); assert dispatched(m)==[],(x,y)
+    for x in (80,200,269):
+        m=play_bar(status=0); assert touch((PRESS,x,10),(LIFT,x,10),m=m)==[(PRESS,x),(LIFT,x)],x
+    y=O['STATUS_H']
+    for points in (((PRESS,200,y),(LIFT,200,y)),((PRESS,200,300),(LIFT,200,10)),((PRESS,200,10),(LIFT,200,y)),((PRESS,200,300),(MOVE,200,200),(LIFT,200,100))):
+        m=play_bar(setup=lock); assert touch(*points,m=m)==[(k,x) for k,x,_ in points],points
     passed()
     # A press takes AWTK's key target for the window under it, the bar's too, and only another press moves it (widget_on_pointer_down_children), so after a tap in the bar
     # a payload page's Return and other keys went to the bar. The lift or abort, after V2.1's dispatch, gives it to the page, or the page under a keyboard. V2.1 reads the

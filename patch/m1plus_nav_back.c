@@ -124,7 +124,9 @@ static int chevron_input(void *e) {
  * or full-screen page, which all have that press for themselves. V2.1 keeps the press and its moves, so a pull down from
  * here still opens its dropdown (on_wm_tsmove_fun); only the lift's x changes, out of the x 80 to 270 where on_wm_tsup_fun
  * opens the VOLUME page, which still resets the power timers. A still tap is the Play key itself, so it follows whichever
- * player the key does; a drag is nothing. The rest of the bar keeps VOLUME. */
+ * player the key does; a drag is nothing. The rest of the bar keeps VOLUME, but not on the lock screen, which V2.1's
+ * handler doesn't check: there a lift from a press in the bar changes as the icon's does. A press from lower down is the
+ * lock screen's own gesture, its lift left alone. */
 static int bar_play_key(const void *unused) {
     (void)unused;
     dispatch_key(KEY_PLAY);
@@ -147,6 +149,8 @@ static void bar_play_input(void *e) {
         st.bar_play_down = bar_play_hit(st.bar_play_x, st.bar_play_y);
     } else if (type == EVT_POINTER_ABORT)
         st.bar_play_down = 0;
+    if (type == EVT_POINTER_UP && g_lockscreen_pageflag && st.bar_play_y < STATUS_H && I(e, EVENT_Y) < STATUS_H)
+        I(e, EVENT_X) = 0;
     if (!st.bar_play_down || (type != EVT_INPUT_POINTER_MOVE && type != EVT_POINTER_UP)) return;
     int dx = I(e, EVENT_X) - st.bar_play_x, dy = I(e, EVENT_Y) - st.bar_play_y;
     if (dx >= PULL_CLAIM_PX || -dx >= PULL_CLAIM_PX || dy >= PULL_CLAIM_PX || -dy >= PULL_CLAIM_PX)
