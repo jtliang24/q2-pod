@@ -3510,6 +3510,9 @@ static void bar_sync(void *bar) {
     /* Resize only relayouts the slot's own children; the right-aligned row must
      * position it again even when Icon + Percent -> Icon keeps it visible. */
     if (resized) widget_layout_children(P(st.bar_slot, W_PARENT));
+#if M1PLUS /* the row moved with it, and what this paint invalidates is dropped (#116): 100% to 99% left a second battery beside the first */
+    if (resized && !st.bar_timer) st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
+#endif
     if (key == st.batt_key && mode == st.batt_mode && !resized) return;
     st.batt_mode = mode;
     st.batt_key = key;
