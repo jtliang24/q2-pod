@@ -1125,7 +1125,7 @@ def battery_checks():
         if image: b.nodes[w['img_battery']]['image']=NAMES['STATUS_LOWCHARGE'] if image=='bar_lowcharge' else image
     def shown(b,w): return [n for n in ('img_battery','label_battery','view_battery') if b.nodes[w[n]]['visible']]
     def alpha(b,w): return b.get(w['img_bt']+0x34)&255
-    b,bar,w,paint=battery_bar(1); paint()
+    b,bar,w,paint=battery_bar(1); paint(); b.advance(0)  # the first paint measures the digits, and the resize repaints the bar after the frame (bar_repaint)
     # LDAC's badge (36px of ink) and Wi-Fi leave no room for the percentage: the icon, until it fades.
     assert b.nodes[w['img_bt']]['image']=='bar_ldac' and alpha(b,w)==255 and shown(b,w)==['view_battery'] and len(b.timers)==1
     b.advance(O['CODEC_MS']-1); paint(); assert b.nodes[w['img_bt']]['image']=='bar_ldac' and alpha(b,w)==255
