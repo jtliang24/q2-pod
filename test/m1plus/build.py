@@ -642,6 +642,14 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         assert sha(read('stock.squashfs', path)) == digest and sha(shipped) == manifest['changed_assets'][path]['sha256']
         assert png_header(shipped) == (14 if icon.startswith('bar_wifi') else 42 if icon.startswith('bar_bt') else 12, 16, 8, 6), icon
     assert png_header(read('rootfs.squashfs', 'release/assets/default/raw/images/xx/bar_back.png')) == (32, 30, 8, 6)
+    # The play state shows the tap's action: V2.1 picks bar_play while playing (status 2, its faces' only users; no UI file names them), which ships pause's glyph.
+    xx = 'release/assets/default/raw/images/xx/'
+    m1ipod.STATUS_ICONS = M1_AUDIT['status_icons']
+    pause_glyph, play_glyph = (m1ipod.status_icon(n, read('stock.squashfs', xx + n)) for n in ('bar_pause.png', 'bar_play.png'))
+    assert play_glyph != pause_glyph and read('rootfs.squashfs', xx + 'bar_play.png') == pause_glyph and read('rootfs.squashfs', xx + 'bar_pause.png') == play_glyph
+    for addiu, name in ((0x47589c, b'bar_play'), (0x475934, b'bar_pause'), (0x544d54, b'bar_play'), (0x544dec, b'bar_pause')):
+        assert stock[fileoff(stock, 0x744678 if name == b'bar_play' else 0x744684):][:len(name) + 1] == name + b'\0'
+        assert struct.unpack_from('<h', stock, fileoff(stock, addiu))[0] == (0x4678 if name == b'bar_play' else 0x4684)
     # ipod-ui 4.6, Now Playing's controls: V2.1's own (hashed), as the iPod's quiet glyphs, 28 px.
     assert set(M1_AUDIT['quiet_icons']) == {f'p_{n}.png' for n in ('fav', 'unfav', 'favdown', 'unfavdown', 'cycle', 'cycle1', 'order', 'random',
                                                                    'more', 'moredown', 'playqueue', 'playqueuedown')}

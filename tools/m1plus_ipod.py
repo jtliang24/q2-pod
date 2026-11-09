@@ -111,10 +111,18 @@ def back_chevron():
                             '-resize', f'{BACK_W}x{ipod.STATUS_H}!', *ipod.PNG_OUT, data=b'')
 
 
+# The play state shows what a tap on it does, as the big transport button: pause while playing, play while paused.
+# V2.1's two faces (show_sysbar_face, dropdown_showface) and the payload's bar_state_sync pick bar_play while playing,
+# and no UI file names either image, so each ships the other's glyph.
+STATUS_DRAWN = {'bar_play.png': 'bar_pause.png', 'bar_pause.png': 'bar_play.png'}
+
+
 def status_icon(name, data):
-    """The audited V2.1 status image (hashed in `status_icons`) as the iPod's slim glyph of the same name."""
-    ipod.STATUS_ICONS = AUDIT['status_icons']  # the copy checks V2.1's hashes, not the Q2's
-    return ipod.status_icon(name, data)
+    """The audited V2.1 status image (hashed in `status_icons`) as the iPod's slim glyph, of the same name but for
+    STATUS_DRAWN."""
+    drawn = STATUS_DRAWN.get(name, name)
+    ipod.STATUS_ICONS = {**AUDIT['status_icons'], drawn: AUDIT['status_icons'][name]}  # the copy checks V2.1's hashes, not the Q2's
+    return ipod.status_icon(drawn, data)
 
 
 # 4.3: V2.1's settings pages (navbar_only) lose their navigationbar_view as the Q2's lose view_navbar

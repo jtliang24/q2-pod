@@ -546,6 +546,11 @@ def bar_icon(shot, y=STATUS_H // 2):
     clock, in a theme whose bar is black, and half the icon's 12 px on."""
     return next(x for x in range(200, W) for r in range(STATUS_H) if shot[4 * (W * r + x):4 * (W * r + x) + 3] != b'\0\0\0') + 6, y
 
+def bar_glyph(shot, xy):
+    """The play state's shape, by its runs of inked columns (bar_icon's x): 2 is pause's two strokes, 1 play's triangle."""
+    columns = [any(shot[4 * (W * r + x):4 * (W * r + x) + 3] != b'\0\0\0' for r in range(STATUS_H)) for x in range(xy[0] - 6, xy[0] + 6)]
+    return sum(on and not before for before, on in zip([False] + columns, columns))
+
 def png(pixels, path):
     from ipod import imagemagick
     path.write_bytes(imagemagick('-size', f'{W}x{H}', '-depth', '8', 'bgra:-', '-alpha', 'off', 'png:-', data=pixels))
@@ -596,14 +601,16 @@ def now_playing(build):
                 # The bar's play state is Play/Pause, by the Play key: the icon and the transport change, and it opens no VOLUME page. A near miss is V2.1's bar,
                 # which opens it and doesn't pause.
                 x, y = bar_icon(back)
+                assert bar_glyph(back, (x, y)) == 2, f'{name}: the bar shows no pause glyph while playing'
                 send(run_dir, tap(x, y)); time.sleep(1.2)  # V2.1's volume closes itself after 3 s
                 assert rows(back, screen(run_dir), STATUS_H, STATUS_H + M1['NP_BUTTONS_Y']) == 0, f'{name}: a tap on the bar\'s icon opened a page'
                 time.sleep(2)
                 paused = screen(run_dir)
-                assert rows(back, paused, 0, STATUS_H) > 0, f'{name}: a tap on the bar\'s icon left it as it was'
+                assert bar_glyph(paused, (x, y)) == 1, f'{name}: the bar shows no play glyph while paused'
                 assert rows(back, paused, STATUS_H + M1['NP_BUTTONS_Y'], H) > 0, f'{name}: a tap on the bar\'s icon did not pause'
                 send(run_dir, tap(x, y)); time.sleep(3)
-                assert rows(back, screen(run_dir), 0, H) == 0, f'{name}: a second tap on the bar\'s icon did not resume'
+                resumed = screen(run_dir)  # the page and the glyph: the sandbox's battery level moves in the bar
+                assert rows(back, resumed, STATUS_H, H) == 0 and bar_glyph(resumed, (x, y)) == 2, f'{name}: a second tap on the bar\'s icon did not resume'
                 send(run_dir, tap(x - M1['BAR_PLAY_HIT_W'] // 2 - 2, y)); time.sleep(1.2)
                 assert rows(back, screen(run_dir), STATUS_H, H) > 100, f'{name}: a tap beside the bar\'s icon did not open VOLUME'
                 time.sleep(4)  # V2.1's volume closes itself after 3 s
@@ -715,12 +722,15 @@ def soloify(build, captures=None, themes=(0, 1)):
             playing = step([], 2)
             assert rows(page, playing, STATUS_H + M1['NP_BUTTONS_Y'], H) > 0, f'{name}: the play glyph did not change with the state'
             # The bar's icon is the Play key, and opens no VOLUME page (which closes itself after 3 s; the labels below the art move as it plays).
+            assert bar_glyph(playing, bar_icon(playing)) == 2, f'{name}: the bar shows no pause glyph while playing'
             over = step(tap(*bar_icon(playing)), 1.2)
             assert rows(playing, over, STATUS_H, STATUS_H + M1['NP_TITLE_Y']) == 0, f'{name}: the bar\'s icon opened a page'
             only([], ['p'], 'The bar\'s icon')
             only(PLAY, ['p'], 'Pause')
             fake.write(state='paused', position=50000)
-            assert rows(page, step([], 2), STATUS_H + M1['NP_BUTTONS_Y'], H) == 0, f'{name}: the play glyph did not come back'
+            resumed = step([], 2)
+            assert rows(page, resumed, STATUS_H + M1['NP_BUTTONS_Y'], H) == 0, f'{name}: the play glyph did not come back'
+            assert bar_glyph(resumed, bar_icon(resumed)) == 1, f'{name}: the bar shows no play glyph while paused'
 
             # The bar: a tap seeks; a paused seek holds the target until the player reports one, then the bar follows the player again.
             step(tap(bar_x(.5), bar_y), 3)

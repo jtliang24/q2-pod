@@ -62,11 +62,11 @@ for t, theme in THEMES.items():
             for lines in OPEN:
                 boot.send(run, lines)
                 time.sleep(STEP_S + 2)
-            shots = [('playing', [])] + [('paused', [PLAY])] + [('list', boot.NP_BACK), ('home', (BACK + ['wait 2500']) * 4)]
+            shots = [('playing', [])] + [('paused', [PLAY])] + [('list', boot.NP_BACK), ('home', (BACK + ['wait 2500']) * 3)]
             for step, lines in shots:
                 if lines:
                     boot.send(run, lines)
-                    time.sleep(STEP_S + 1)
+                    time.sleep(STEP_S + (8 if step == 'home' else 1))  # the taps' waits run in the shim
                 if b'uncaught target signal' in (run/'demo.err').read_bytes(): raise SystemExit(f'{name}: the demo crashed')
                 shot = args.out/f'{name}-{step}.png'
                 pixels = boot.screen(run)
