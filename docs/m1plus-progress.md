@@ -4142,16 +4142,41 @@ The plan was `.plan/status-bar-play-icon.md`, from F6 in the `V054m` pass (secti
 
 **Harness notes.** V2.1's VOLUME closes itself after about 3 s, so a check for it must look within that. The sandbox's battery level is garbage that V2.1 rewrites, which moves the slot between frames: poking it made a false overlap at "100%". A `voltage_now` file steadies it (`boot.BATTERY_UV`), though the sandbox reads as charging and its level isn't under test control, so the percent at 100 isn't measured. By the numbers, Bluetooth's ink starts at x 208 there, clear of the 195 where the widest clock text ends.
 
-**`V056m`** (`work/phase4/4.6b/k2`, `--dev`, `43e80c4c`, `update.bin` sha256 `0eef7375...`). All 15 gates pass (`k2-gates`): 418 gaps, none unlisted, and the Q2's `update.tar` byte-identical. `fndiff` against `V054m`, of 1331 functions: `bar_play_key` and `dispatch_key` added; `dispatch_key_return`, `ringnav_input` and `ringnav_paint_bg` changed for this work; `ringnav_about` by its version string and `draw_spaced` by a renumbered compiler label. Sheets in `k2-sheets`. `V055m` (`k1`) was built before the repaint fix and never flashed. The device pass is still to come.
+**`V056m`** (`work/phase4/4.6b/k2`, `--dev`, `43e80c4c`, `update.bin` sha256 `0eef7375...`). All 15 gates exit 0 (`k2-gates`), and the Q2's `update.tar` is byte-identical. The "418 gaps, none unlisted" first written here was wrong: there were 419, one of them unlisted (section 74). `fndiff` against `V054m`, of 1331 functions: `bar_play_key` and `dispatch_key` added; `dispatch_key_return`, `ringnav_input` and `ringnav_paint_bg` changed for this work; `ringnav_about` by its version string and `draw_spaced` by a renumbered compiler label. Sheets in `k2-sheets`. `V055m` (`k1`) was built before the repaint fix and never flashed. The device pass is still to come.
 
 **Device pass on `V056m` (Nov 8), Classic and Minimal, over q2remote.** Local music, Soloify and Radio: the icon pauses and resumes the owner (Soloify's state file confirms it) and shows ❚❚ while playing, ▶ while paused; a near miss at x 200 opens VOLUME without pausing; Back's tap and hold work across x 0-63 on the pages tried, including y 55 on local and Soloify Now Playing, and x 64 is not Back. The bar clears the clock at a true 100% with Wi-Fi on, and a tap on a dark screen or the lock screen's icon doesn't pause.
 
-What the pass found, none fixed yet:
-- **Back goes dead on Radio's page after a tap in the bar just past the corner.** After a tap at x 64 or x 70 (y 8), Back ignores taps, at 5 s later and on repeats, until the page itself is tapped. Reproduced every time in Classic; not tried in Minimal, and not compared with `V054m`.
+What the pass found, all fixed in section 74:
+- **Back goes dead on Radio's page after a tap in the bar just past the corner.** After a tap at x 64 or x 70 (y 8), Back ignores taps, at 5 s later and on repeats, until the page itself is tapped. Reproduced every time in Classic; not tried in Minimal, and not compared with `V054m`. Section 74 corrects the scope: any tap in the bar that doesn't open a page, on every page whose Back is a Return, and `V054m` has it too.
 - **The lock screen opens VOLUME.** A tap in the bar's x 80-270 range there opens V2.1's VOLUME over the lock screen (x 249 and x 120). The icon's own button stays off, but the plan's "no tap effect" isn't met. Not compared with `V054m`.
 - **A restored, paused Soloify session doesn't respond.** Opened from the menu's Now Playing row while its session isn't active, the page's Play does nothing, and the icon and Play key go to local music, so the bar and the page's button can disagree. Starting a track from Liked Songs clears it.
 
 Not run: Wi-Fi off (it would cut q2remote), Bluetooth showing, and a digit-count change of the percent (the battery stayed at 100%, so the repaint fix is still unproved).
+
+## 74. The V056m pass's fixes: keys after a bar tap, the lock screen, a paused session (Nov 9)
+
+The plan was `.plan/status-bar-pass-fixes.md`, from the three findings in section 73.
+
+1. **Back after a tap in the bar: the bar kept the key target.** At the window manager, a press gives AWTK's key target to whichever window is under it (`widget_on_pointer_down_children`), the bar's as well, and only another press moves it. A shim probe under QEMU logged `wm.key_target` (`+0x54`, now `W_KEY_TARGET`) at each step: after a tap in the bar it is `system_bar`, `return_key` doesn't run, and a tap on the page puts it back.
+   - **The scope was wider than section 73 said.** Radio and Coverflow at x 64, 70 and 300, and Radio after a tap on the play icon, whose press V2.1 also sees. On Radio, Previous in Knob: Navigation dies with Back. `V054m` has it too, so the corner work didn't cause it. The knob and its press still work, because ringnav handles them itself. V2.1's pages keep Back, which clicks their button, though the bar holds the target there too.
+   - **Why x 80-270 never showed it:** those taps open VOLUME, whose dialog takes the target and hands it back on closing.
+   - **The first miss that seemed to leave Back working was the harness.** The Return never reached the page on that tap either (`return_key` 0 times, Radio still on top). It drew ringnav's first-key highlight on the top row, and comparing the screen with the page read that as a Back. Later misses already had the highlight, so nothing changed. `--bar-keys` compares with where the control's Back landed.
+   - **The fix:** after V2.1's dispatch of a lift or an abort, if the bar holds the target it goes to the page, or to the page under a keyboard (`bar_key_target`, `back_window`). This fixes every key, not only Back.
+2. **No VOLUME on the lock screen.** `on_wm_tsup_fun`'s three guards are `standby_mode`, `boot_guidestep` and `carmode_startflag`, so nothing there checks the lock screen. While `lockscreen_pageflag` is set, a lift from a press in the bar moves to x 0, as the icon's does, and the handler still resets the power timers. A press or a lift below the bar is the lock screen's own gesture and isn't touched. The bar's height is V2.1's own limit here: this build already patches the handler's 42 to `STATUS_H`, which `patch.py` now pins. QEMU can't lock the screen, so the device pass checks the real page.
+3. **A paused Soloify session on its own page.** `spot_poll` sets `sp.local` once local music plays and only Soloify playing clears it, so the session stayed inactive. `boot.py --soloify` shows the symptom on `V056m`: the first press meant for the session sends nothing. On that page, while the session is paused and not active, a press can now claim it (`spot_claim`). The rule is that the glyph you press is right:
+
+   | On Soloify's page, session paused and inactive | Page's Play, Next, Previous | Icon and Play key |
+   |---|---|---|
+   | Local music paused or stopped | Soloify | Soloify |
+   | Local music playing | Soloify, and local stops | Pause local, as the bar's ❚❚ says |
+
+   So with local playing the icon and Play key pause local first, and the next press starts Soloify. `np_transport` stops local before its command (`spot_take`), or the next poll would set `sp.local` straight back. The browser (`spotbrowse_page`) and every other page keep today's routing. The fake backend can't show whether the relay answers `p` on a session that was only restored; the device pass decides that.
+
+**A gate that couldn't fail.** Phase 4.6's gate script ran `patch.py` with `GAPS_DUMP` set, and `gaprun` exits 0 with that set, whatever fails, because the flag is for rekeying `patch_gaps.py`. So `V056m`'s gate passed with one unlisted failure: the repaint fix (`43e80c4c`) left `bar_repaint` pending after `battery_checks()`'s first paint, its first assert failed, and the rest of that function stopped running. The code was right and the check was stale (`bc54e824`). `work/phase4/4.6c/gates.sh` no longer sets it. The `gaps.json` files of the three gates before it (`V053m`, `V054m`, `V055m`) list nothing unlisted; older ones can't be compared, because a check's key follows its text, which has changed since. Don't set `GAPS_DUMP` in a gate.
+
+**Tests.** `boot.py --bar-keys` is new: Coverflow, Radio and a V2.1 page, each with a control, Back after bar taps at x 64, 70 and 300 (and x 200's VOLUME on Radio), and Previous on Radio. It fails on `V056m`. `boot.py --soloify` now also runs `soloify_paused`: the table above with local music really played, what each press sends, the bar's glyph past a poll, and the browser unchanged. `patch.py` adds the key target at its seam (a lift, an abort, not a press, not while another window holds it, under a keyboard) and the lock screen's lifts, with V2.1's bytes pinned; both fail without their fix.
+
+**`V057m`** (`work/phase4/4.6c/l1`, `--dev`, `a7b19971`, `update.bin` sha256 `0cd7f9b6...`). All 16 gates pass (`l1-gates`, `l1-gates2`), with `patch.py` able to fail this time: 418 gaps, none unlisted, and the Q2's `update.tar` byte-identical. `fndiff` against `V056m`, of 1333 functions: `spot_claim` added; `np_transport`, `spot_media` and `ringnav_input` (which `bar_play_input` and `bar_key_target` inline into) changed for this work; `spot_take` now stands alone, having a second caller, which also changes `spot_poll`; `ringnav_about` by its version string. The device pass is still to come.
 
 ## How to check a build now
 
@@ -4161,7 +4186,8 @@ python3 test/m1plus/build.py --build build-m1   # hook jumps, demo and rootfs di
 python3 test/m1plus/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
 python3 test/m1plus/boot.py build-m1 --home-menu  # saved V2.1 Home cards change nothing: the same build without them is the control
 python3 test/m1plus/boot.py build-m1 --now-playing  # Now Playing and Centred in both themes: back, bar, art, the volume band, the big cover
-python3 test/m1plus/boot.py build-m1 --soloify  # Spotify's page on a fake Soloify in both themes: layout, touch, scrub, the band, Hold Return, the message view
+python3 test/m1plus/boot.py build-m1 --soloify  # Spotify's page on a fake Soloify in both themes: layout, touch, scrub, the band, Hold Return, the message view, and a paused session after local music
+python3 test/m1plus/boot.py build-m1 --bar-keys  # Back and Previous after a tap in the status bar, on Coverflow, Internet Radio and a V2.1 page
 python3 test/m1plus/boot.py build-m1 --media    # Home in Split, a card with long songs, a book and two photos: the Library, Folder, Coverflow, Streaming, Shuffle Songs
 python3 test/m1plus/bar_sheets.py build-m1 sheets  # review sheets of the status bar at its busiest, both themes, dark and light (checks nothing)
 python3 test/m1plus/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines

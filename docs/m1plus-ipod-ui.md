@@ -199,7 +199,8 @@ Each feature follows the same steps:
    stay a listed gap. The device pass (Nov 4, progress 64) passed. Since progress 73 the left group is the chevron
    alone, with Back's tap across the whole 64 px corner (down to the page's back row on Now Playing); the right group
    is Bluetooth, the play icon, Wi-Fi and the battery. The icon shows the action (❚❚ while playing) and its tap is the
-   Play key. For the visual pass: the chevron is small and
+   Play key. Since progress 74 the bar gives the keys back when a press in it lifts, and a tap in it opens no VOLUME on
+   the lock screen. For the visual pass: the chevron is small and
    hard to hit with a case on, so it can stay small only where Previous goes back; pages where the knob doesn't
    navigate (Now Playing) need a prominent back button, and pages showing both the chevron and V2.1's navbar back
    settle on one. Previous now goes back on V2.1's slider pages too, and the PEQ's tab focus card shows only in
