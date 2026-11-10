@@ -364,7 +364,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     id3_gain = symbols(directory/'peq'/'peq.elf')['id3_gain']
     assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in profile['id3_calls']} == {0x0c000000 | id3_gain >> 2}
     if m1plus:  # the second gate branches to the EQ's insert (a jal), as peq.py's 0x42fd84, not past scaletempo's
-        insert, _, _ = profile['eq_rate_gates'][1]
+        insert, _, _ = next(g for g in profile['eq_rate_gates'] if g[2])  # the loads and first gate are nops
         target = insert + 4 + (struct.unpack_from('<h', old, fileoff(old, insert))[0] << 2)
         assert struct.unpack_from('<I', old, fileoff(old, target))[0] >> 26 == 3, hex(target)
     if m1plus:  # the filter's decoded() calls written_audio_pts(sh, ds) on every block: a leaf, as V1.32's 0x44641c
@@ -1189,7 +1189,7 @@ def validate_assets(directory):
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_TOUCH, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
                       STATUS_ICONS, status_icon, QUIET_ICONS, quiet_icon, SET_ICON, SET_STOCK_ICON, SETTINGS_ICONS, SETTINGS_SLIDERS, decode, slider_plain, imagemagick, inc, png_header, settings_icon, walk,
-                      patch_asset, patch_code, patch_style, style_props, SLIDE)
+                      patch_asset, patch_code, patch_style, style_props, SLIDE, SET0, status_metrics, CLASSIC_LIGHT_FONT_SRC)
     from build import source_sha256
     manifest = json.loads((directory/'manifest.json').read_text())
     assert manifest['source_sha256'] == source_sha256(), f'{directory} was built from other sources; rebuild into a fresh directory'
@@ -1285,8 +1285,11 @@ def validate_assets(directory):
         values = mean(runtime, '#000000')  # Minimal's black list: neutral grey
         assert max(values) - min(values) < 0.001, name
     # Classic's bold ships, cut to what BOLD_RANGES lists
-    from build import BOLD_TTF, bold_font
+    from build import BOLD_TTF, CLASSIC_LIGHT_TTF, CLASSIC_LIGHT_NOTICE, FONT_NOTICES, bold_font, subset_font
     assert read('rootfs.squashfs', BOLD_TTF) == bold_font()[0]
+    assert read('rootfs.squashfs', CLASSIC_LIGHT_TTF) == subset_font(ROOT/'assets/fonts/texgyreheros-bold.otf', 'Q2 Pod Classic Light', 'CLASSIC_LIGHT_RANGES', CLASSIC_LIGHT_NOTICE)[0]
+    for name in FONT_NOTICES:
+        assert read('rootfs.squashfs', 'release/assets/default/raw/fonts/' + name) == (ROOT/'assets/fonts'/name).read_bytes()
     # Centred Now Playing's page is English, as the iPod page is (english_ui)
     from build import CJK
     from ipod import PLAYING_STOCK
@@ -1461,8 +1464,8 @@ def validate_assets(directory):
         slides = short not in (HOME_PAGE, STATUS_BAR, PLAYING_PAGE, QUICK_SETTINGS, CONFIRM, BIGCOVER)
         assert root[2].get('anim_hint') == (SLIDE if slides else None), short
         # screen coordinates: the bar, full-screen dialogs (quick settings slides down from -320), windows
-        origin, window = {STATUS_BAR: (0, (0, 30)), QUICK_SETTINGS: (320, (0, 320)), CONFIRM: (0, (0, 320)),
-                          BIGCOVER: (0, (0, 320))}.get(short, (30, (30, 320)))
+        origin, window = {STATUS_BAR: (0, (0, SET0.bar)), QUICK_SETTINGS: (320, (0, 320)), CONFIRM: (0, (0, 320)),
+                          BIGCOVER: (0, (0, 320))}.get(short, (SET0.bar, (SET0.bar, 320)))
         corners(short, root, 0, origin, window)
         if short == QUICK_SETTINGS:  # iPod only: the stock 4x2 grid, even label areas, a slim brightness track
             menu, light = root[3]
@@ -1509,7 +1512,7 @@ def validate_assets(directory):
             assert sg == [0, HOME_TOP, HOME_LIST_W, 2*HOME_ROW] and [r[2]['name'] for r in ss[3]] == ['btn_playset', 'btn_sysset']
             assert [r[3][1][2]['name'] for r in ss[3]] == ['img_playset', 'img_sysset'] and [r[3][0][2]['text'] for r in ss[3]] == ['Playback', 'System']
             # The art fills the right panel below the status bar; the payload fits and crops it.
-            assert art[0] == 'image' and art[1] == [0, 0, 375, 290] and art[2]['draw_type'] == 'fill' and HOME_LIST_W == 375
+            assert art[0] == 'image' and art[1] == [0, 0, 375, BOTTOM] and art[2]['draw_type'] == 'fill' and HOME_LIST_W == 375
             assert all(v == '#00000000' for k,v in root[3][1][2].items() if k.startswith('style:'))
             assert [r[2]['name'] for r in sv[3]] == ['btn_'+n for n in HOME_ROWS] and HOME_ROWS[2] == 'coverflow'
             for name, (_, _, _, (label, image)) in zip(HOME_ROWS, sv[3]):
@@ -1518,7 +1521,7 @@ def validate_assets(directory):
                 # Labels end before the chevron's glyph; longer ones scroll (only_focus) or end in an ellipsis.
                 assert label[1][0] + label[1][2] == image[1][2] - HOME_LABEL_END and label[1][2] >= 100
                 assert label[2]['only_focus'] == 'true' and label[2]['ellipses'] == 'true'
-            assert [r[3][0][2].get('text') for r in sv[3]] == [None, 'Library', 'Coverflow', None, 'Rockbox', None, 'Settings']
+            assert [r[3][0][2].get('text') for r in sv[3]] == [None, 'Library', 'Cover Flow', None, 'Rockbox', None, 'Settings']
             assert lg == [0, HOME_TOP, HOME_LIST_W, 7*HOME_ROW] and HOME_TOP + 7*HOME_ROW <= BOTTOM - HOME_TOP
             # Home: Carousel's: stock's carousel and arrows after the lists, hidden and taking no taps
             # until chosen (coverflow_home_layout); its cards stock's in their places, Library's label
@@ -1529,7 +1532,7 @@ def validate_assets(directory):
                 assert n[:2] == old[:2] and n[2] == {**old[2], 'visible': 'false', 'sensitive': 'false'}
             slide = carousel[0]
             assert [c[2]['name'] for c in slide[3]] == ['btn_'+n for n in ('playing', 'localmusic', 'coverflow', 'folder', 'rockbox', 'stream', 'playset', 'sysset')]
-            assert [c[3][1][2].get('text') for c in slide[3]] == [stock_root[3][0][3][0][3][1][2]['text'], 'Library', 'Coverflow', None, 'Rockbox', None, None, None]
+            assert [c[3][1][2].get('text') for c in slide[3]] == [stock_root[3][0][3][0][3][1][2]['text'], 'Library', 'Cover Flow', None, 'Rockbox', None, None, None]
             for card in slide[3]:
                 image = card[3][0][2]
                 assert {v for k, v in image.items() if k.endswith(':bg_image')} == {'menu_' + image['name'][4:].replace('localmusic', 'music'),
@@ -1537,20 +1540,16 @@ def validate_assets(directory):
             dot = inc('HOME_DOT_X'), inc('HOME_DOT')
             assert HOME_TEXT_X == sum(dot) + inc('HOME_DOT_GAP')
             # The dot and the labels clear the bottom row's corner.
-            assert dot[0] >= corner_x(30 + HOME_TOP + 6*HOME_ROW + (HOME_ROW - dot[1])//2, dot[1])
-            assert HOME_TEXT_X >= corner_x(30 + HOME_TOP + 6*HOME_ROW + 9, 20)
-            # Split (coverflow_home_layout) gives Minimal's menu 45% of the screen, Classic's half, the art the rest;
-            # Full's rows end at HOME_CLASSIC_ROW, so the chevron's glyph (x 20 to 31, y 16 to 34 of
-            # list_into, centred on the row) mirrors the labels' margin and, on the last row, clears
-            # the bottom-right corner as the label clears the bottom-left.
+            assert dot[0] >= corner_x(SET0.bar + HOME_TOP + 6*HOME_ROW + (HOME_ROW - dot[1])//2, dot[1])
+            assert HOME_TEXT_X >= corner_x(SET0.bar + HOME_TOP + 6*HOME_ROW + 9, 20)
+            # Split (coverflow_home_layout) gives the menu half the screen, the art the rest;
+            # Split's glyph ends 13px before the art, as in the Home concept.
             assert inc('HOME_SPLIT_W') == 375 // 2
-            glyph_end = inc('HOME_CLASSIC_ROW') - inc('CHEVRON_W') + 31
-            glyph_y = 30 + HOME_TOP + 6*HOME_ROW + (HOME_ROW - 50) // 2 + 16
-            assert 375 - glyph_end == inc('HOME_CLASSIC_TEXT_X') >= corner_x(glyph_y, 34 - 16)
-            assert inc('HOME_CLASSIC_TEXT_X') >= corner_x(30 + HOME_TOP + 6*HOME_ROW + 9, 20)
-            # Classic's labels stop short of Split's glyph (x 20 to 30 of list_into) and Full's.
-            for row, shift in ((inc('HOME_SPLIT_W'), inc('HOME_CHEVRON_SHIFT')), (inc('HOME_CLASSIC_ROW'), inc('HOME_FULL_CHEVRON_SHIFT'))):
-                assert row - inc('HOME_CLASSIC_LABEL_END') + 5 <= row - inc('CHEVRON_W') + shift + 20
+            assert inc('CHEVRON_W') - 30 - inc('HOME_CHEVRON_SHIFT') == 13
+            assert inc('HOME_MODERN_TEXT_X') >= corner_x(SET0.bar + HOME_TOP + 6*HOME_ROW + 9, 20)
+            # Modern's labels stop short of Split's glyph (x 20 to 30 of list_into) and Full's.
+            for row, shift in ((inc('HOME_SPLIT_W'), inc('HOME_CHEVRON_SHIFT')), (inc('HOME_MODERN_ROW'), inc('HOME_FULL_CHEVRON_SHIFT'))):
+                assert row - inc('HOME_MODERN_LABEL_END') + 5 <= row - inc('CHEVRON_W') + shift + 20
             continue
         if short == STATUS_BAR:  # iPod only: play state left, title between, four icons right
             left, right, *rest = root[3]
@@ -1560,11 +1559,11 @@ def validate_assets(directory):
             assert title[0] == 'hscroll_label' and title[2]['name'] == 'label_clock'
             x, _, w, _ = title[1]
             assert x + w/2 == 375/2 and w >= CLOCK_MIN  # centred on the screen, clear of both groups (corners below)
-            assert inc('CLOCK_EDGE') >= corner_x((30 - 20) // 2, 20) and x >= inc('CLOCK_EDGE')
+            assert inc('CLOCK_EDGE') >= corner_x((SET0.bar - 20) // 2, 20) and x >= inc('CLOCK_EDGE')
             assert title[2]['style:normal:font_size'] == '16'
             assert all(v[2]['children_layout'].endswith(f'xm={STATUS_MARGIN},s={inc("STATUS_GAP")})') for v in (left, right))
             idle = rest.pop()
-            assert idle[1] == [STATUS_MARGIN, 0, 28, 30] and idle[2]['text'] == 'Q2' and idle[2]['visible'] == 'false'
+            assert idle[1] == [STATUS_MARGIN, 0, 28, SET0.bar] and idle[2]['text'] == 'Q2' and idle[2]['visible'] == 'false'
             assert idle[2]['style:normal:font_size'] == '18' and STATUS_MARGIN >= corner_x(6, 18)
             assert STATUS_MARGIN + 28 < x
             assert [n[2]['name'] for n in rest] == STATUS_HIDDEN and all(n[1][0] + n[1][2] < 0 for n in rest)
@@ -1609,7 +1608,7 @@ def validate_assets(directory):
             lrc, slot = named['view_lrc'][3][0][2], inc('LYRIC_SLOT')
             assert named['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=375,h=178)' and 3 * slot <= 178 < 4 * slot
             assert lrc['self_layout'] == 'default(x=0,y=0,w=100%,h=100%)' and lrc['children_layout'] == f'list_view(x=0,y={slot},s=0)'
-            assert inc('LYRIC_X') == NP_MARGIN >= corner_x(30 + NP_TOP, 178)
+            assert inc('LYRIC_X') == NP_MARGIN >= corner_x(SET0.bar + NP_TOP, 178)
             slider = named['slider_play']
             assert slider[1] == [NP_BAR[0], 233, NP_BAR[2], NP_TOUCH] and NP_TOUCH >= 44
             assert slider[2]['bar_size'] == '4' and slider[2]['slide_with_bar'] == 'true'
@@ -1650,7 +1649,7 @@ def validate_assets(directory):
         if short == 'localmusic/playlist_page.bin':
             old_nav = next(n for n in decode(original)[3] if n[2].get('name') == 'view_navbar')
             gif, old = (next(n for n in p[3] if n[2].get('name') == 'gif_returnplay') for p in (nav, old_nav))
-            assert gif[1] == [375 - corner_x(30, old[1][3]) - old[1][2], *old[1][1:]]
+            assert gif[1] == [375 - corner_x(SET0.bar, old[1][3]) - old[1][2], *old[1][1:]]
             assert nav[2].get('visible') != 'false' and nav[2].get('enable') != 'false'
             gif[1][0] = old[1][0]
             assert nav == old_nav, 'only the right button keeps clear of the glass'
@@ -1674,6 +1673,79 @@ def validate_assets(directory):
         try: patch_asset(short, original[:-1]+b'x')
         except ValueError: pass
         else: raise AssertionError('Accepted a changed asset')
+    # Every geometry set's built list windows take the row height of the page's pitch
+    # immediates (art pages take art_pitch), and its rows fit.
+    from theme import builtins, geometry_sets, SCHEMA
+    from ipod import PAGE_KIND as page_kind, page_rows
+    built = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').split())
+    for g in geometry_sets(builtins()):
+        assert g.body <= g.pitch and g.art_body <= g.art_pitch and g.song_body <= g.song_pitch, g.name
+        assert g.art + 2*g.art_inset <= g.art_body, g.name
+        assert g.text_art + 2*g.text_art_inset <= g.body or not g.text_art, g.name   # text rows' artwork fits, or none
+        for y, h, body in ((g.title24_y, 24, g.body), (g.title_y, 20, g.body), (g.meta_y, 16, g.body), (g.count_y, 16, g.body),
+                           (g.art_title24_y, 24, g.art_body), (g.art_meta_y, 16, g.art_body),
+                           (g.song_title24_y, 24, g.song_body), (g.song_meta_y, 16, g.song_body)):
+            assert 0 <= y and y + h <= body, (g.name, y, h, body)                    # every stock row label inside its body
+        checked = set()
+        for short, kind in page_kind.items():
+            folder, _, base = short.rpartition('/')
+            mine = ui + (folder and folder + '/') + f'{g.name}_{base}'
+            new = decode(read('rootfs.squashfs', mine if 'squashfs-root/' + mine in built else ui + short))
+            old = {n[2].get('name'): n[2] for n in walk(decode(read('stock.squashfs', ui + short)))}
+            for n in walk(new):
+                for prop in ('row_height', 'default_item_height'):
+                    if old.get(n[2].get('name'), {}).get(prop) == '78':
+                        assert n[2][prop] == str(page_rows(g, kind)[0]), (g.name, short, prop)
+                        checked.add(short)
+        assert checked == set(page_kind) - {'localmusic/album_page.bin'}, checked  # album_page's grid keeps 160
+        assert g.set_top + g.set_rows*g.set_row <= 320 - g.bar, g.name
+        # Home's rows are the set's and fit; a theme with Home's chevron ends its labels short of the
+        # glyph (x 20 of list_into) in both widths, as Classic's below.
+        mine = ui + f'{g.name}_{HOME_PAGE}'
+        listed = {n[2].get('name'): n for n in walk(decode(read('rootfs.squashfs', mine if 'squashfs-root/' + mine in built else ui + HOME_PAGE)))}['list_view_home']
+        assert listed[2]['item_height'] == str(g.home_row) and HOME_TOP + 7*g.home_row <= 320 - g.bar, g.name
+        for t in builtins():
+            if g in geometry_sets([t]) and t['chevron_home']:
+                # a theme's own chevron in Split: the label ends at it
+                assert t['home_label_end[0]'] >= (inc('HOME_SPLIT_W') - t['home_chevron_x'] if t['home_chevron_x']
+                                                  else inc('CHEVRON_W') - inc('HOME_CHEVRON_SHIFT') - 15), t['id']
+                assert t['home_label_end[1]'] >= inc('CHEVRON_W') - inc('HOME_FULL_CHEVRON_SHIFT') - 15, t['id']
+        for rel in UI_ASSETS:
+            folder, _, base = rel.rpartition('/')
+            mine = ui + (folder and folder + '/') + f'{g.name}_{base}'
+            if 'squashfs-root/' + mine not in built: continue
+            for n in walk(decode(read('rootfs.squashfs', mine))):
+                if n[0] != 'list_view' or n[2].get('default_item_height') != str(g.set_row): continue
+                if rel in NAVBAR_ONLY:  # settings lists: the set's rows from its top
+                    h = 320 - g.bar - g.set_top if g.list_end else g.set_rows*g.set_row
+                    assert n[1] == [0, g.set_top, 375, h] and 'item_height' not in n[2], (g.name, rel)
+                else:                   # any other list with that row height is not one (settings_list)
+                    assert n[2].get('item_height') == str(g.set_row), (g.name, rel)
+        if g.text_x:  # text from text_x clears the glass at the first row and at list_end's last; the lists take the window
+            assert g.text_x >= corner_x(g.bar + 6, g.pitch - 12) and g.list_end % g.pitch == 0, g.name
+            assert corner_x(g.bar + g.list_end - g.pitch + 6, g.pitch - 12) <= g.text_x < corner_x(g.bar + g.list_end + 6, g.pitch - 12), g.name
+            ends = {}
+            for rel in UI_ASSETS:  # every list box the transform resizes ends at the window's end
+                folder, _, base = rel.rpartition('/')
+                mine = ui + (folder and folder + '/') + f'{g.name}_{base}'
+                if 'squashfs-root/' + mine not in built or rel in NAVBAR_ONLY: continue
+                was = {n[2].get('name'): n[1] for n in decode(read('stock.squashfs', ui + rel))[3]}
+                for n in decode(read('rootfs.squashfs', mine))[3]:
+                    old = was.get(n[2].get('name'))
+                    if n[0] in ('list_view', 'table_view') and old and old[1] in (50, 100) and n[1] != old:
+                        ends[rel] = n[1][1] + n[1][3]
+            assert ends and set(ends.values()) == {320 - g.bar}, (g.name, ends)
+        if g.bar_px:  # Classic's bar: one cap centre, the title clear of the glass, the clock centred, no idle mark
+            m = status_metrics(g, CLASSIC_LIGHT_FONT_SRC)
+            bar = {n[2].get('name'): n for n in walk(decode(read('rootfs.squashfs', ui + f'{g.name}_system_bar.bin')))}
+            assert bar['label_title'][1] == m['title'] and bar['label_clock'][1] == m['clock'] and 'label_idle' not in bar, g.name
+            assert 2 * m['cap_top'] + m['cap'] in (g.bar - 3, g.bar - 2) and m['inset'] >= corner_inset(m['cap_top']), g.name
+            assert 2 * m['clock'][0] + m['clock'][2] == 375, g.name
+            # the battery's nub ends clear of the glass, at its top row, above the bar's two lines
+            xm = g.bar_right
+            assert xm >= corner_inset((g.bar - 2 - g.batt_h) // 2) and g.batt_h <= g.bar - 1 and bar['view_right'][2]['children_layout'].endswith(f'xm={xm},s={inc("STATUS_GAP")})'), g.name
+            size = SCHEMA['bar.title.font_size'].field
+            assert {t[size] for t in builtins() if g in geometry_sets([t])} == {g.bar_px}, g.name  # the theme's bar text is the set's
     payload_symbols = symbols(directory/'patch.elf')
     for address in [AUDIT['immediates'][0]['sites'][0][0], '0x522410', '0x523de0', '0x4b3130', AUDIT['row_layout_calls']['sites'][0][0],
                     hex(inc('LIST_VIEW_LAYOUT_SLOT'))]:
