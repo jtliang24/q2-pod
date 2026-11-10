@@ -12085,7 +12085,7 @@ static int tick_gate(void *e) {
     return 1;
 }
 int ringnav_input(void *wm, void *e) {
-    if (e && tick_gate(e)) return 0;
+    if (!M1PLUS && e && tick_gate(e)) return 0; /* the touch wheel's: the M1's knob ticks have no ring frame */
     if (e && (chord_gate(e) || wake_gate(e))) return 0;
     st.last_input = time_now_ms();
     unsigned type = e ? (unsigned)I(e, EVENT_TYPE) : 0;
