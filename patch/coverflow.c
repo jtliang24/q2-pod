@@ -3277,11 +3277,13 @@ int coverflow_home(void *win, void *ctx) {
     home.list = list; /* a new Home window's own, so still the asset's width */
     home.sets = widget_lookup(win, "list_view_homeset", 1);
     if (home.sets) widget_set_sensitive(home.sets, 0);
+#if !M1PLUS
     home.lib = widget_lookup(win, "list_view_homelib", 1);
     if (home.lib) {
         widget_set_sensitive(home.lib, 0);
         widget_on(widget_lookup(win, "img_library", 1), EVT_CLICK, home_library, win);
     }
+#endif
     static const char *const carousel[] = { "slide_menu", "img_left", "img_right" };
     for (int i = 0; i < 3; ++i) home.carousel[i] = widget_lookup(win, carousel[i], 1);
 #if !M1PLUS
@@ -3290,13 +3292,16 @@ int coverflow_home(void *win, void *ctx) {
     widget_on(widget_lookup(home.carousel[0], "img_rockbox", 1), EVT_CLICK, home_shortcut_open, 0);
 #endif
     coverflow_home_layout();
+#if !M1PLUS
     if (theme()->pane_icon_x) {
         widget_on(win, EVT_WINDOW_FOREGROUND, home_foreground, 0);
         rearm(&home.count_timer, home_counts, PANE_BOOT_MS);
     }
+#endif
     return result;
 }
 
 /* A library scan is running: its thread has started and not finished. Card apps (addon.c) wait for
  * it as Coverflow does, since the scan rewrites the records and directory lists they would read. */
 int library_scanning(void) { return *(volatile int *)SCAN_THREAD && !*(volatile int *)SCAN_DONE; }
+#include "m1plus_coverflow_unported.c"
