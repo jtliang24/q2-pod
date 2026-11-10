@@ -4263,6 +4263,65 @@ its suites passing. On the M1, `--dev` `V053m` in `work/sync/1.6.3/` (update sha
 `pytest test/unit` (527). The function diff against `V057m` (`work/sync/1.6.3-gates/fndiff.txt`): 276 changed,
 51 added. Not flashed: 1.6.7 is the first flash. Footprint +2,608/−490 over 34 files.
 
+## 77. Merge step: sync to 1.6.4 on `feature/m1-ipod` (Nov 10)
+
+The catch-up's second step. `drift.py --fetch` kept the plan: 1.6.3 → 1.6.4 → 1.6.7 (`link.ld`, flash) → 1.7.1
+(`link.ld`, flash) → 1.7.3 → 1.7.6. `sync/1.6.4` from `feature/m1-ipod` (backup `refs/backup/pre-sync-1.6.4`).
+14 commits: the settings restacked by use, EQ per Output, an empty Library list that closes with a toast, Recently
+Added by the card's creation stamp, Wi-Fi off while Rockbox runs, and the Q2's stale press backstop with its queue
+leaf (#189).
+
+**Conflicts** (`5d875ea`), 4 files:
+- `navigation.c`, 17 hunks. The settings restack (Playback's Library & Folders, System's Controls row with Key
+  Tone and Buttons Lock, In-Vehicle Mode and Boot to on Power, Smart Awake on Display) is the Q2's. The M1 keeps
+  its pages, whose builders move out of `navigation.c`: `m1plus_nav_display.c` (Display and its sub-pages, on
+  upstream's new `setting_row`), `m1plus_nav_sysset.c` (`ringnav_systemset`: App Store, Boot to by `boot_row`,
+  the iPod's order) and `m1plus_nav_audioset.c` (`audioset_rows`). `setting_row` and `boot_row` name their icons
+  `ICON_*`. The pod rows take `POD_EQ_OUTPUT`, `POD_KEYTONE` and `POD_CARMODE` before the M1's knob rows.
+  `ringnav_input` keeps the M1's include after upstream's `type` and `key`; the M1's gates take `pointer_down()`.
+- `peq_ui.c`: the graph heads Advanced's list, with `UI_W`, `UI_H` and `STYLE_LISTITEM_BLACK`.
+- `tools/build.py` (`Q2_TAR_SHA` kept) and `internals.md` (the M1 sentences after Crossfade's).
+- unifdef: each merged file's Q2 side is 1.6.4's but for the seams' equivalents and formatting.
+
+**Follow-ups.**
+- `2184db5`: upstream's new static `library_open` (Library & Folders) clashed with the M1's Home Library page,
+  now `library_page_open`.
+- `b17ae81`:
+  - `toolsGetFileCreateTime` is hooked at V2.1's `0x5e4ac8` (`ringnav_file_created`). It's V1.32's: an access
+    check, then stat, with the field picked by the filesystem.
+  - `WINDOW_STAGE_OPENED` is 3 on V2.1 too (`window_base_on_event` sets it on `0x12b` at `0x676c24`).
+    `EVT_POINTER_FIRST` 0xff, `LOOP_POST` 0x18 (V2.1's `main_loop_queue_event` is the same leaf, not taken),
+    `EMPTY_POLL_MS`, `STALE_TOUCH_MS`; `LOOP_PRESSED` unported.
+  - `stale_heal` runs on the Q2 only. The M1's `ringnav_input` returns before it notes a finger, so on the M1 it
+    would lift every touch held 5 s.
+  - `Q2POD_DEV` in the M1's header. `g_carmode_state` is a stub (only Power's In-Vehicle row writes it).
+- Checked and fine: the `q2only` lines (113) are the restack, Wheel QS's leaf and `pointer_down()`; the hex
+  literals are the Q2's; no stand-in function changed; `quick_poll` matches only `statusbar_dialog`, inert on the
+  M1. `BOOT_HOOK`'s Wi-Fi off reaches the M1 as is: V2.1's rootfs has `wifi_connect.sh`, `udhcpc` and
+  `wpa_supplicant`. `WHEEL_LOG_HOOK` is the Q2's.
+- Unported rows: the settings restack, and the stale press backstop.
+
+**Suites.**
+- `test/m1plus/build.py` (`e6800895`): `boot_check` runs S90play under the PC's own sh, so it
+  replaces `WIFI_OFF` with a log line and asserts no `killall`, `ifconfig` or `wlan0` is left before it runs.
+  `usleep 200000`'s replace takes its newline, or it ate the start of `usleep 2000000`.
+- `patch.py`: Playback's checks keep the M1's flat rows. Boot to's `boot_row` stubs `stock_systemset` again
+  (suitemerge took upstream's `stock_power`, so V2.1's real builder ran and crashed). `stale_heal`'s cases are the
+  Q2's, with a `not_ported` line. 7 Display checks rekey into the Display gap, 8 stale entries dropped: 432
+  expected failures in 8 gaps. EQ per Output's cases run on the M1 and pass.
+- `playback.py`: the queue leaf's and Wheel QS's new cases are in its Q2-only section.
+
+**Gates** (from `work/gatetree`): q2compare against 1.6.4, `update.tar` byte-identical (`411831e08bff`), its
+suites passing. On the M1, `--dev` `V054m` in `work/sync/1.6.4/` (update sha256 `1341973b…`) passes
+`build.py --build`, `patch.py`, `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`, `--soloify`,
+`--bar-keys`), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and `pytest test/unit`
+(527). The function diff against `V057m` (`work/sync/1.6.4-gates/fndiff.txt`): 309 changed, 66 added, 4 removed.
+
+**For 1.6.7's device pass**, beside 1.6.3's list: EQ per Output (Advanced EQ's switch; 3.5 mm, 4.4 mm, Bluetooth
+and USB each keep their EQ), an empty Albums, Artists, Composers or Genres list closing with "No albums" (and the
+rest), Recently Added after Update Local Music, Wi-Fi off under Rockbox and back after it (Bluetooth kept), and
+the settings pages unchanged (Display, Controls, Playback, Power, System with Boot to).
+
 ## How to check a build now
 
 ```sh

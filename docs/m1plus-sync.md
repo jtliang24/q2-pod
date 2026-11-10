@@ -275,3 +275,4 @@ stay flat or fall.
 | Merge step: sync to 1.5.9 on `feature/m1-ipod` (Nov 3) | 1.5.9 (`43a611f`) | +1,712/−345 over 32 files: Stock's outline moved to `m1plus_nav_outline.c`, Soloify's `special[]` row, the card apps' caps and `library_poll` seams |
 | Phases 2 to 4.6 and Soloify on `feature/m1-ipod` (Nov 9) | 1.5.9 (`43a611f`) | +2,599/−499 over 33 files |
 | Merge step: sync to 1.6.3 on `feature/m1-ipod` (Nov 9) | 1.6.3 (`cea52bb`) | +2,608/−490 over 34 files: `nightshift.c`'s and the watchdog's `M1PLUS` returns, the btvol `volume_dialog` seam, `ADDON_CAPS` without `game` |
+| Merge step: sync to 1.6.4 on `feature/m1-ipod` (Nov 10) | 1.6.4 (`fb1890d`) | +2,579/−480 over 35 files: the M1's Display, System and Playback builders moved to `m1plus_nav_display.c`, `m1plus_nav_sysset.c` and `m1plus_nav_audioset.c`; `stale_heal`'s `!M1PLUS` |

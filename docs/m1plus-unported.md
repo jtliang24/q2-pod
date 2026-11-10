@@ -60,6 +60,8 @@ to its [progress](m1plus-progress.md) section.
 | [Night Shift](#night-shift) | 1.6.0 | `nightshift.c`, `night_row`, `LCD_*` (`offsets.inc`) | Planned |
 | [The watchdog and the crash log](#the-watchdog-and-the-crash-log) | 1.6.1, 1.6.2 | `wdt_poll`, `state_poll`, `WDT_MS`, `WDT_LONG_MS` (`navigation.c`) | Planned |
 | [A USB DAC across a gapless change](#a-usb-dac-across-a-gapless-change) | 1.6.1 | `ao_init` (`peq_player.c`), `AO_INIT_SLOT`, `USB_BUFFER` (`tools/peq.py`) | Planned |
+| [The settings restack](#the-settings-restack) | 1.6.4 | `library_open`, `playset_sub`, `library_order`, `keylock_open`, `boot_row` on Power, `POD_KEYTONE`, `POD_CARMODE` (`navigation.c`) | Planned |
+| [The stale press backstop](#the-stale-press-backstop) | 1.6.4 | `stale_heal`, `stale_note`, `LOOP_PRESSED`, `QUEUE_LEAF` (`ringnav_queue_event`), `WHEEL_LOG_HOOK` | Planned (`stale_heal`); the rest Q2 only |
 
 Era, Western tag/CUE text, hidden-folder exclusions, Streaming Configuration, user-space idle
 changes and lyrics passed the combined device checks in [progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28).
@@ -386,3 +388,26 @@ V2.1's own (`libhardware2`) already feeds it.
 1.5.6's Q2 build changes its default `COVERMODE` from 1 to 0 in the reset config. The M1 build does
 not copy that Q2 asset edit. Audit V2.1's own reset defaults before applying it; existing saved
 settings are unaffected.
+
+### The settings restack
+
+1.6.4 restacks the settings by use. Playback's library rows move to a Library & Folders page (stock's Playback
+page opened again, `library_open` and `playset_sub`, keeping its rows 13 and 14). System gets a Controls row, which
+opens Display's Controls page; Key Tone, Click With Headphones, Buttons Lock, Wake and Volume Guard move there.
+In-Vehicle Mode (`POD_CARMODE`) and Boot to (`boot_row`) move to Power, and Smart Awake to Display's own page.
+Stock's System rows stay, hidden. The M1 keeps its pages as they were: `m1plus_nav_display.c`,
+`m1plus_nav_sysset.c` (the iPod's order by role) and `m1plus_nav_audioset.c` (V2.1 rebuilds Playback on each
+return to the front). V2.1's System rows differ (Double Tap, the rotation, Format card), its Power page has
+no icons, and `reorder`'s row ids are V1.32's. Port it with the next settings pass, by role as
+`sysset_ipod_order` does, after Phase 4.7's Quick Settings.
+
+### The stale press backstop
+
+1.6.4 lifts a touch the window manager still holds pressed after `STALE_TOUCH_MS` with no pointer event
+(`stale_heal`), and notes each on `--dev` builds in `q2-wheel.log` (`stale_note`, `LOOP_PRESSED`,
+`WHEEL_LOG_HOOK`). Its found cause, Wheel QS's lift flooding the UI queue with the touch thread's empty events,
+is closed by `main_loop_queue_event`'s leaf (`QUEUE_LEAF`, `ringnav_queue_event`), which also stamps a rim
+button for Wheel QS. The M1 has no wheel, so the leaf and the log are the Q2's. `stale_heal` itself would
+help the M1's touch, but it reads the last pointer event that `ringnav_input` notes, and the M1's
+`ringnav_input` returns before that (`m1plus_nav_input.inc`): it runs on the Q2 only until the M1 notes its
+fingers. V2.1's `main_loop_queue_event` (`0x658f18`) is the same leaf.
