@@ -4540,7 +4540,8 @@ static void np_fill(int scrub) {
     if (!st.np_slider) return;
     np_bar_t bar = np_bar_fill(0, 0, scrub, 0, 0);
     slider_fill(st.np_slider, bar.fill);
-    if (!ipod_classic()) widget_set_prop_int(st.np_slider, "bar_size", bar.h);
+    const theme_t *T = theme();
+    if (T->np_scrub != T->np_bar) widget_set_prop_int(st.np_slider, "bar_size", bar.h);
     widget_invalidate_force(st.np_slider, (void *)0);
 }
 #else
@@ -4733,9 +4734,6 @@ int ringnav_smart_awake(void) {
  * its slide_view down to the page dots, and the lines wrap at the new width (lyrics_fit), back on
  * the playing line; off, stock's place again, before the progress bar. A page without a slide_view
  * has none of this: nothing changes. */
-#define NP_COLUMN_X 80 /* stock's column: its x and width, and its slide_view's height */
-#define NP_COLUMN_W 225
-#define NP_COLUMN_SLIDE_H 198
 static void np_full(int on) {
     if (!st.np_slide) return; /* a page without stock's slide_view: no column to move */
     void *col = P(st.np_slide, W_PARENT), *dots = widget_lookup(col, VIEW_DOTS, 1);
@@ -5367,7 +5365,7 @@ static void vol_paint(void *top, void *canvas) {
 #if M1PLUS /* Centred's V2.1 page: the times are above the bar, in the column under the gesture view */
         void *win = spot ? under : st.np_win, *slider = spot ? spot_bar : st.np_slider, *times = spot ? spot_times : st.np_elapsed;
         int dy = I(win, W_Y) - I(top, W_Y), y = dy, ty = dy,
-            bh = spot ? np_bar_h() : widget_get_prop_int(slider, "bar_size", 8);
+            bh = spot ? theme()->np_bar : widget_get_prop_int(slider, "bar_size", 8);
         for (void *p = slider; p && p != win; p = P(p, W_PARENT)) y += I(p, W_Y);
         for (void *p = times; p && p != win; p = P(p, W_PARENT)) ty += I(p, W_Y);
         int from = y < ty ? y : ty, to = y + I(slider, W_H) > ty + I(times, W_H) ? y + I(slider, W_H) : ty + I(times, W_H);

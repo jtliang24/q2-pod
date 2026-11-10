@@ -96,7 +96,7 @@ static int chevron_input(void *e) {
     if (type != EVT_INPUT_POINTER_DOWN && type != EVT_INPUT_POINTER_MOVE && type != EVT_POINTER_UP) return 0;
     int x = I(e, EVENT_X), y = I(e, EVENT_Y);
     int corner = chevron_np_corner();
-    int in = x < BAR_BACK_HIT_W && y < STATUS_H + (corner ? NP_TOP_H : ipod_classic() ? 0 : SET_TOP);
+    int in = x < BAR_BACK_HIT_W && y < STATUS_H + (corner ? NP_TOP_H : theme()->set_top);
     if (type == EVT_INPUT_POINTER_DOWN) {
         stop_timer(&st.chev_timer);
         st.chev_held = 0;

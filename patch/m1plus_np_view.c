@@ -33,7 +33,7 @@ void np_write(np_view_t *v, const np_src_t *s) {
         st.np_off = 0;
         stop_timer(&st.np_marquee); /* the next paint restarts it if the album overflows */
     }
-    v->bold = bold_label(v->title, v->bold); /* the title, as it changes */
+    v->bold = theme_font(v->title, ROLE_NP, v->bold); /* the title, as it changes */
     unsigned sec = s->pos_ms / 1000, total = s->dur_ms / 1000;
     if (v->elapsed) np_clock(v->elapsed, 0, sec);
     if (v->remain) np_clock(v->remain, 1, sec < total ? total - sec : 0);
@@ -47,18 +47,20 @@ void np_write(np_view_t *v, const np_src_t *s) {
  * Minimal is paint_caps' capitals over its transparent label. */
 void np_view_theme(const np_view_t *v) {
     void *glyph = v->win ? widget_lookup(v->win, "img_playstate", 1) : (void *)0;
-    if (glyph) widget_set_opacity(glyph, ipod_classic() ? 255 : 0);
-    if (v->album) widget_set_opacity(v->album, ipod_classic() ? 255 : 0);
+    const theme_t *T = theme();
+    if (glyph) widget_set_opacity(glyph, T->np_state_op);
+    if (v->album) widget_set_opacity(v->album, T->np_album_op);
 }
 
 /* The accent's light tone (Minimal's own accent: MINIMAL_FILL) fills the progress bar; a white fill (Minimal: a thicker line,
  * its fill near white already) marks the scrub. The line stays centred in its widget. 32-bit to 57 h. */
 np_bar_t np_bar_fill(unsigned pos_ms, unsigned dur_ms, int scrubbing, int w, int h) {
-    int line = scrubbing ? NP_BAR_CLASSIC : np_bar_h(), x = (int)((pos_ms >> 4) * (unsigned)w / ((dur_ms >> 4) | 1));
+    const theme_t *T = theme();
+    int line = scrubbing ? T->np_scrub : T->np_bar, x = (int)((pos_ms >> 4) * (unsigned)w / ((dur_ms >> 4) | 1));
     return (np_bar_t){ .x = x && x < line ? line : x,
                        .y = (h - line) / 2,
                        .h = line,
-                       .radius = np_bar_h() / 2,
+                       .radius = T->np_bar / 2,
                        .fill = scrubbing ? 0xffffffffu : RGBA(accent_tone(TONE_LIGHT)),
                        .track = RGBA(TRACK_COLOR) };
 }
