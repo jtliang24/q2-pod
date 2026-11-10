@@ -202,6 +202,13 @@ CALL_SITES = {
         # mclWaitAccept's jalr accept: the saved MQA mode reaches each new player connection (1.6.3; build()
         # patches it by its address, with no site constant).
         'MQA_ACCEPT': ((0x5a7da0, 0x0320f809, 'mqa_accept'),),
+        # mclStartPlayer's mute and its 100 ms sleep, a natural change's (1.6.7: start_mute, start_sleep); the tag
+        # reader's genre copy (ringnav_genre_copy, 1.6.7). build() patches each by its constant.
+        'START_MUTE_CALL': ((0x5ad1bc, 0x0411ff00, 'start_mute'),),
+        'START_SLEEP_CALL': ((0x5ad1d4, 0x0320f809, 'start_sleep'),),
+        'GENRE_COPY': ((0x5c62dc, 0x0320f809, 'ringnav_genre_copy'),),
+        # Songs' bind's jalr getFormatString when the record has no artist (ringnav_song_unknown, 1.6.7)
+        'SONG_UNKNOWN_CALL': ((0x4a9320, 0x0320f809, 'ringnav_song_unknown'),),
     },
     # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
     'm1plus': {
@@ -422,7 +429,15 @@ M1PLUS_PORTS = {
     'playlist_rebuild': ('unported', "the playlist rebuild's iPod rows (ipod-ui 4.7)"),
     'mclIsUtf8WithoutBOM': ('unported', "an .lrc's UTF-8 test that reads 4-byte characters (1.5.9); V2.1's "
                             'mclIsUtf8WithoutBOM is 0x5d1824, not yet checked'),
+    # 1.6.7's audio timing and Previous's resume ask, V1.32's player routines (docs/m1plus-unported.md)
+    'player_seek_time': ('unported', "a user's seek stamps a press (1.6.7, playback.c press_stamp); V2.1's seek_time not pinned"),
+    'player_seek_start': ('unported', "Previous's restart past 10 s asks too (1.6.7 restart_refused); V2.1's not pinned"),
+    'player_start': ('unported', 'a press waits for the DAC, a natural change keeps stock timing (1.6.7); V2.1 start_player not pinned'),
     # Call sites
+    'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's mclStartPlayer not pinned"),
+    'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's mclStartPlayer not pinned"),
+    'GENRE_COPY': ('unported', "long multi-value genres kept out of titles (1.6.7); V2.1's tag reader's copy not pinned"),
+    'SONG_UNKNOWN_CALL': ('q2only', "a song row's empty artist line under a set without text-row artwork: Classic's only (1.6.7)"),
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
     'CLASS_ICON': ('native', 'V2.1 draws its own artist icon (roadmap 4)'),
@@ -561,6 +576,10 @@ M1PLUS_PRIVATE_FUNCTIONS = {
 # reaches one (not for navigation.c: M1PLUS_SHIMS). Each goes with its hook's U4 row.
 M1PLUS_UNRESOLVED = {
     'fwupdate_tf': 'Network Update (netupdate.c): stock\'s TF card update, systemset_fwupdate_page_init unported',
+    # Home's Library list in Split (coverflow.c home_library, 1.6.7): bound only where Home's asset has
+    # list_view_homelib, a geometry set's home_lib, which only Classic's has (unported on M1)
+    'on_home_music_onclick': "Classic's Home Library list (coverflow.c home_library): Classic is unported",
+    'player_playtime': "Previous's restart ask (playback.c ringnav_seek_start, 1.6.7): player_seek_start unported",
 }
 # V1.32 routines V2.1 has no twin of that navigation.c names, which is one section (the tests call its unhooked
 # routines, so --gc-sections cannot drop any): a stand-in in patch/m1plus_nav.h under the same name, as (status, why).
@@ -782,7 +801,9 @@ PLAYER_PROFILE = {
     'desc_bytes': 'bc3789002c5e88004c358900b8c388000100000014fd4400',
     'open_slot': 0x89381c,
     'vbr_scan': 0x48f5fc,
-    'eq_rate_gates': ((0x42ce34, 0x10400098, 0),
+    # mpctx's three loads fed only the gate and fault with no sh_audio (Q2 0x42cec0, docs/internals.md#music-info-between-songs)
+    'eq_rate_gates': ((0x42ce24, 0x8c429e30, 0), (0x42ce28, 0x8c42002c, 0), (0x42ce2c, 0x8c42003c, 0),
+                      (0x42ce34, 0x10400098, 0),
                       (0x42fa78, 0x14400052, 0x10000052)),  # bnez $v0 to the insert -> b
     # MPlayer pause loop: usec_sleep(20000) in its command/event loop, 50 ms as upstream.
     'pause_sleep': (0x42ff2c, 0x24044e20, 0x3404c350),
@@ -792,6 +813,10 @@ PLAYER_PROFILE = {
     'stock_id3': 0x48b760,
     'written_audio_pts': 0x44600c,
     'length_addr': 0xb10e5c,
+    # the skip and stop flags, Q2 0xb10e6c and 0xb10e70: the idle loop clears both at 0x42d864 (Q2 0x42da10),
+    # set-nexturl sets the first at 0x42d304 (Q2 0x42d3a0)
+    'next_flag': 0xb10e50,
+    'stop_flag': 0xb10e54,
     'av_dict_set': 0x6ea1a4,
     'av_dict_free': 0x6ea65c,
     'rg_export': 0x5381c4,
@@ -864,7 +889,8 @@ def compile_common(out, binary, player=False):
         header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}u' for macro, key in (
             ('WRITTEN_AUDIO_PTS', 'written_audio_pts'), ('LENGTH_ADDR', 'length_addr'), ('STOCK_ID3_ADDR', 'stock_id3'),
             ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
-            ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'))]
+            ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'),
+            ('NEXT_FLAG_ADDR', 'next_flag'), ('STOP_FLAG_ADDR', 'stop_flag'))]
     if not player:
         # V1.32's private routines are V1.32 code: never merged into V2.1's table
         syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
@@ -942,6 +968,52 @@ def patch_player(raw, out):
     (out/'hciplayer').write_bytes(data)
     return dict(stock_sha256=raw_sha, sha256=sha(data), payload_sha256=sha(payload))
 
+def m1_themes():
+    """The built-in themes the M1 offers, and tools/theme.py loaded over the M1's screen (m1plus_ipod's copy of
+    tools/ipod.py, so its SET0 is the M1's rows and bar, and its macros patch/m1plus_offsets.inc's). Only the themes on SET0 alone: Classic boots its own
+    geometry set, whose row immediates are V1.32's (ipod.json), so it is unported (docs/m1plus-unported.md)."""
+    import importlib.util, sys, m1plus_ipod
+    saved = sys.modules.get('ipod')
+    sys.modules['ipod'] = m1plus_ipod.ipod
+    try:
+        spec = importlib.util.spec_from_file_location('m1plus_theme', ROOT/'tools/theme.py')
+        theme = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(theme)
+        # Role macros (Coverflow's CF_*, Home's HOME_*, the accents' fills) are the M1's: theme.py evaluates
+        # them against its O, the Q2's offsets.inc but for the screen
+        m1 = dict(m1plus_ipod.M1)
+        for name, expr in re.findall(r'^#define\s+(\w+)\s+\(([\w\s+*/-]+)\)', (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M):
+            try: m1[name] = eval(expr, {'__builtins__': {}}, m1)  # (CHEVRON_W - 10) and the like
+            except NameError: pass
+        theme.O = {**theme.O, **m1}
+    finally:
+        if saved is None: sys.modules.pop('ipod', None)
+        else: sys.modules['ipod'] = saved
+    themes = [t for t in theme.builtins() if theme.geometry(t) == theme.SET0 and not any(o.get('sets') for o in t['opts'])]
+    check([t['name'] for t in themes] == ['Minimal', 'Modern'], f'M1 themes: {[t["name"] for t in themes]}')
+    return themes, theme
+
+
+def m1_emit_themes(themes, theme, out):
+    """out/'themes.inc' for the M1: tools/theme.py's, with no boot sites. theme_boot rewrites ipod.json's immediates,
+    V1.32 code addresses, where a set differs from SET0; the M1 has one set, so nothing may differ, and with no sites
+    nothing is touched even if it did."""
+    theme.emit(themes, out)
+    inc = (out/'themes.inc').read_text()
+    check(len(theme.geometry_sets(themes)) == 1, 'M1 themes: one geometry set')
+    sites = re.search(r'^#define BOOT_SITES (\d+)$', inc, re.M)
+    table = re.search(r'^const boot_site_t boot_sites\[BOOT_SITES\] = \{.*\};$', inc, re.M)
+    check(sites and table, 'themes.inc: no boot sites table')
+    inc = inc[:table.start()] + 'const boot_site_t boot_sites[1] = {{0, 0}}; /* M1 Plus: none (BOOT_SITES 0) */' + inc[table.end():]
+    inc = inc.replace(sites.group(0), '#define BOOT_SITES 0 /* M1 Plus: theme_boot writes no V1.32 site */')
+    # The own options of the themes the M1 leaves out (Classic's OWN_HOMELIB, OWN_ROWPREVIEW): past theme_keys, so
+    # theme_own finds no option for them and reads 0
+    m1_keys = list(theme.theme_keys(themes))
+    for k in theme.theme_keys(theme.builtins()):
+        if k not in m1_keys: inc += f'#define OWN_{k} (THEME_KEYS + {len(m1_keys)}) /* M1 Plus: its theme is unported */\n'
+    (out/'themes.inc').write_text(inc)
+
+
 def compile_payload(out):
     """Compile and link the payload."""
     extra = compile_common(out, out/'stock-demo')  # also writes the libc/libcstl imports navigation.c uses
@@ -955,11 +1027,21 @@ def compile_payload(out):
     for x, address in resume.items():
         asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', f'lui $gp, {gp >> 16}',
                 f'ori $gp, $gp, {gp & 65535}', f'j 0x{address + 12:x}', 'nop']
-    # A Q2 hook V2.1 lacks has no stock code to resume, so its trampoline returns 0. Every Q2 hook's
-    # gets one, so a new upstream hook's payload links on M1 before it is ported (M1PLUS_PORTS).
+    # A Q2 hook the M1 doesn't take: V2.1's routine unpatched, so its trampoline calls the whole routine (its PIC
+    # prologue takes $gp from $t9), as payload code that goes past the hook expects (1.6.7's Resume seeks through
+    # stock_seek_time_trampoline). With no V2.1 routine of the name (peq_platform.h), it returns 0. Every Q2
+    # hook's gets one, so a new upstream hook's payload links on M1 before it is ported (M1PLUS_PORTS).
     from build import HOOKS
-    for x in dict.fromkeys(x for _, _, x in HOOKS.values() if x):
-        if x not in resume:
+    stock = {m[1]: int(m[2], 16) for m in re.finditer(r'^#define (\w+) \(\([^()]*\(\*\)\([^()]*\)\)0x([0-9a-f]+)u\)$',
+                                                       (out/'peq_platform.h').read_text(), re.M)}
+    done = set(resume)
+    for name, (_, _, x) in HOOKS.items():
+        if not x or x in done: continue
+        done.add(x)
+        if name in stock:
+            asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', f'lui $t9, {stock[name] >> 16}',
+                    f'ori $t9, $t9, {stock[name] & 65535}', 'jr $t9', 'nop']
+        else:
             asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', 'jr $ra', 'move $v0, $zero']
     (out/'trampoline.S').write_text('\n'.join(asm)+'\n')
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
@@ -1084,6 +1166,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     header = [f'#define RING_STEP {RING_STEP}']
     # Classic's bold font (4.1) comes with the iPod assets: no range, so bold_label never picks it
     header.append('#define BOLD_RANGES {0, 0}')
+    header.append('#define CLASSIC_LIGHT_RANGES {0, 0}')  # Classic's face (1.6.7): Classic is unported
     # navigation.c's ringnav_timezone and ringnav_timezone_row name them; their hooks, select_timezone and
     # timezone_row, are unported (M1PLUS_PORTS)
     header.append('#define TIMEZONE_NAMES {' + ','.join(json.dumps(zone) for _, zone in TIMEZONES) + '}')
@@ -1109,7 +1192,11 @@ def build(target_path, out, logo, dev=False, m1_release=None):
                f'#define Q2POD_DEV {1 if dev else 0}',  # navigation.c stale_note (Q2 only: stale_heal is unported)
                '#define Q2POD_REPO "jtliang24/q2-pod"',  # netupdate.c (unported on M1): the repo of its releases
                f'#define Q2POD_UA "Q2Pod/{release} (https://github.com/jtliang24/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
+    themes, theme = m1_themes()
+    header.append(f'#define THEME_N {len(themes)}')  # navigation.c setting_counts[]
+    header.append(f'#define THEME_KEYS {len(theme.theme_keys(themes))}')  # navigation.c st.own[], themes.inc theme_keys[]
     (out/'stock.h').write_text('\n'.join(header)+'\n')
+    m1_emit_themes(themes, theme, out)
     ps = compile_payload(out)
     payload = (out/'patch.bin').read_bytes()
     check(len(payload) < SCRATCH-BASE, 'Payload overlaps its scratch page')

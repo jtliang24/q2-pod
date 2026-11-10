@@ -120,6 +120,9 @@
 #define STYLE_LABEL_WHITE18C "label_centerwhite20_style"
 #define STYLE_LABEL_WHITE20C "label_centerwhite20_style"
 #define STYLE_LABEL_WHITE20L "navbar_leftlabel_white"
+/* Now Playing's genre scroller (genre_fill, 1.6.7) stands in for V2.1's label_genre, inline white 18 px centred: V2.1's theme
+ * has no such named style, and its white centred scroll label is 20 px */
+#define STYLE_SCRLABEL_WHITE16C "srlabel_msgwhite_style"
 #define STYLE_SCRLABEL_WHITE20C "srlabel_msgwhite_style"
 #define STYLE_SCRLABEL_WHITE20L "srlabel_leftwhite20_style"
 #define STYLE_SCRLABEL_WHITE20R "srlabel_item_right_gray16_styl"
@@ -299,11 +302,11 @@ static inline int arc_out(int r, int y) {
 #define HOME_DOT 6
 #define HOME_DOT_GAP 8
 #define HOME_SPLIT_W 160
-#define HOME_CLASSIC_ROW 314
-#define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
+#define HOME_MODERN_ROW 314 /* Modern's Full rows (1.6.7 renamed Classic, as 1.6.4 had it, Modern) */
+#define HOME_TOP 8 /* Minimal's decorative inset; Modern starts below the status bar. */
 #define HOME_CHEVRON_SHIFT 6
-#define HOME_CLASSIC_TEXT_X 20
-#define HOME_CLASSIC_LABEL_END (CHEVRON_W - 10)
+#define HOME_MODERN_TEXT_X 20
+#define HOME_MODERN_LABEL_END (CHEVRON_W - 10)
 #define NP_BAR_CLASSIC 8
 #define NP_BAR_MINIMAL 4
 #define MINIMAL_FILL 0xeeeeec
@@ -875,6 +878,17 @@ static inline int arc_out(int r, int y) {
  * it reads gets a value that can't fault; the Phase 4 item that ports the feature replaces it. */
 /* Timing is behaviour, not device: Q2's values. */
 #define MARQUEE_HOLD_MS 1500
+#define MARQUEE_PASSES 3 /* the selected row's title: navigation.c marq_poll (1.6.7) */
+#define HSCROLL_ONLY_FOCUS 0x78 /* hscroll_label_t, a char: V2.1's hscroll_label_set_only_focus (0x60929c) */
+#define HSCROLL_TEXT_W 0x90 /* its measured text width: V2.1's get_range (0x6093cc) reads it at 0x609454; V1.32's 0x94 */
+#define WHEEL_FRESH_MS 1000 /* tick_gate's: the touch wheel's, which runs on the Q2 only */
+/* Classic's Home Library list (navigation.c library_rows, 1.6.7): Classic is unported */
+#define LOCALMUSIC_BG M1_UNPORTED
+/* The return addresses two live playback.c hooks compare (1.6.7): View Queue's pick of the playing file keeps it
+ * playing (ringnav_start_queue), and the skip past an unplayable file is no press (ringnav_change). V2.1's callers
+ * aren't pinned, so on M1 neither matches and both act as in 1.6.4 (docs/m1plus-unported.md). */
+#define VIEW_QUEUE_RET M1_UNPORTED
+#define UNPLAYABLE_NEXT_RET M1_UNPORTED
 #define LYRIC_PUSH_DETENTS 2
 #define LYRIC_PUSH_MS 1000
 #define DRIFT_ZOOM_PCT 110

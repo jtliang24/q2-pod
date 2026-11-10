@@ -1,4 +1,4 @@
-/* M1 Plus: decoded() and LENGTH at V2.1's hciplayer addresses (tools/m1plus.py PLAYER_PROFILE passes them).
+/* M1 Plus: decoded(), LENGTH and the skip and stop flags at V2.1's hciplayer addresses (tools/m1plus.py PLAYER_PROFILE passes them).
  * patch/peq_player.c includes this where upstream's stand (docs/m1plus-roadmap.md U1c). */
 #if M1PLUS
 /* written_audio_pts: seconds decoded so far, NOPTS (-2^63) without a stream;
@@ -8,4 +8,6 @@ static double decoded(void) {
     return sh && ds ? ((double (*)(void *, void *))WRITTEN_AUDIO_PTS)(sh, ds) : -1;
 }
 #define LENGTH (*(volatile int *)LENGTH_ADDR)
+#define NEXT_FLAG (*(volatile int *)NEXT_FLAG_ADDR)
+#define STOP_FLAG (*(volatile int *)STOP_FLAG_ADDR)
 #endif

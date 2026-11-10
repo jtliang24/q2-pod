@@ -44,7 +44,7 @@ int lockscreen_page(void *win, void *ctx) {
         widget_on(img, EVT_DESTROY, forget, img);
     }
     int y = (int)(n + 2) / 3 * SAVER_ROW + (I(time, W_Y) - 2 * SAVER_ROW);
-    pod_rows(win, "saver_list", 7 /* POD_LOCKCLOCK */, 1, icons);
+    pod_rows(win, "saver_list", 6 /* POD_LOCKCLOCK: navigation.c asserts it, as for lockscreen.c */, 1, icons);
     void *clock = widget_get_child(view, widget_count_children(view) - 1);
     widget_move_resize(time, 0, y, I(time, W_W), I(time, W_H));
     widget_move_resize(clock, 0, y + SAVER_ITEM, I(time, W_W), I(time, W_H));

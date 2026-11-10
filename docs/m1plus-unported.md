@@ -62,6 +62,11 @@ to its [progress](m1plus-progress.md) section.
 | [A USB DAC across a gapless change](#a-usb-dac-across-a-gapless-change) | 1.6.1 | `ao_init` (`peq_player.c`), `AO_INIT_SLOT`, `USB_BUFFER` (`tools/peq.py`) | Planned |
 | [The settings restack](#the-settings-restack) | 1.6.4 | `library_open`, `playset_sub`, `library_order`, `keylock_open`, `boot_row` on Power, `POD_KEYTONE`, `POD_CARMODE` (`navigation.c`) | Planned |
 | [The stale press backstop](#the-stale-press-backstop) | 1.6.4 | `stale_heal`, `stale_note`, `LOOP_PRESSED`, `QUEUE_LEAF` (`ringnav_queue_event`), `WHEEL_LOG_HOOK` | Planned (`stale_heal`); the rest Q2 only |
+| [Classic](#classic) | 1.6.5, 1.6.7 | `assets/themes/classic-light`, its geometry sets and `theme_boot`'s `boot_sites`, `home_pane_read`, `home_library` (`HOMELIB`, `ROWPREVIEW`, `ROWART`), `CLASSIC_LIGHT_RANGES`, `SONG_UNKNOWN_CALL`, `tools/art.py` | Planned |
+| [The press and natural-change timing](#the-press-and-natural-change-timing) | 1.6.5 to 1.6.7 | `player_seek_time`, `player_seek_start` (`player_playtime`), `player_start`, `START_MUTE_CALL`, `START_SLEEP_CALL`, `VIEW_QUEUE_RET`, `UNPLAYABLE_NEXT_RET` | Planned |
+| [The player's 1.6.5 to 1.6.7 fixes](#the-players-165-to-167-fixes) | 1.6.5 to 1.6.7 | `tools/peq.py`'s `DAC_RELEASE`, `PROBE_STOP`, `STOP_SITES`, `STOP_FILL`, `PRELOAD_*`, `COLD_CLEAR`, `FORCED_EOF`, `EXIT_HOLD`, `AO_UNINIT_SLOT`, `FLAC_GATE`, `SEEK_NOSYNC`, `SEEK_WORDS`, `FLAC_META_EOF`, `MEDIA_INFO_NULL`, `MP3_FILL`, `LAVF_PRIV`, `MOV_EDITS` (`lavf_gapless.c`) | Planned |
+| [Long multi-value genres](#long-multi-value-genres) | 1.6.7 | `GENRE_COPY` (`ringnav_genre_copy`) | Planned |
+| [Playlists, Podcasts and Audiobooks as Shortcuts](#playlists-podcasts-and-audiobooks-as-shortcuts) | 1.6.5, 1.6.7 | `ipod_home_shortcut`'s values 7 to 9, `home_shortcut_open` | Planned |
 
 Era, Western tag/CUE text, hidden-folder exclusions, Streaming Configuration, user-space idle
 changes and lyrics passed the combined device checks in [progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28).
@@ -411,3 +416,48 @@ button for Wheel QS. The M1 has no wheel, so the leaf and the log are the Q2's. 
 help the M1's touch, but it reads the last pointer event that `ringnav_input` notes, and the M1's
 `ringnav_input` returns before that (`m1plus_nav_input.inc`): it runs on the Q2 only until the M1 notes its
 fingers. V2.1's `main_loop_queue_event` (`0x658f18`) is the same leaf.
+
+### Classic
+
+1.6.7 has three built-in themes: Minimal, Classic (index 1: 1.6.5's Classic Light, `assets/themes/classic-light`)
+and Modern (index 2: 1.6.4's Classic). Classic boots its own geometry sets: `theme_boot` rewrites V1.32's row immediates (`boot_sites`, from
+`ipod.json`) where a set differs from SET0, and its asset pages load as the set's own copies. With it come its
+bar and battery art (`tools/art.py`), its face (`CLASSIC_LIGHT_RANGES`), Split's pane (`home_pane_read`), Library
+on Home (`home_library`, stock's `on_home_music_onclick`), Row Preview, Row Art and a song row's empty artist line
+(`SONG_UNKNOWN_CALL`). The M1 builds Minimal and Modern only (`tools/m1plus.py` `m1_themes`, the themes on SET0
+alone) with no boot sites, and a stored `THEME` 1 is Modern there, as 1.6.4's Classic was. Porting it needs V2.1's
+row immediates for each set, its pages' copies at the M1's sizes, and the pane and Library on Home in portrait.
+
+### The press and natural-change timing
+
+1.6.5 to 1.6.7 time each start by what began it: a press (a scrub or chapter seek, Previous's restart, a pick of
+the playing file) waits for the DAC, and a natural change plays out before demo's mute and skips its 100 ms sleep
+(`START_MUTE_CALL`, `START_SLEEP_CALL`). Previous past 10 s asks before it restarts a held place
+(`player_seek_start`, `player_playtime`); a pick of the playing file keeps it playing (`player_start`, and
+`VIEW_QUEUE_RET`'s View Queue row); the skip past an unplayable file is no press (`UNPLAYABLE_NEXT_RET`). The M1
+runs the two hooks it already had (`start_playqueue`, `change_music`) with both return addresses at
+`M1_UNPORTED`, so they act as in 1.6.4. Resume's own seek reaches V2.1's `player_seek_time` through its trampoline.
+Port with V2.1's `mclStartPlayer` and the callers' return addresses pinned.
+
+### The player's 1.6.5 to 1.6.7 fixes
+
+`tools/peq.py` patches V1.32's hciplayer at new sites: the DAC release wait (`DAC_RELEASE`, `ao_uninit`), the DSD
+and ISO probes' stop stores, the stop and preload paths, a forced end of file, FLAC seeks (no sync scan, the gate
+exit, a cut inside metadata no longer hangs) and a status request mid-change that killed the player
+(`MEDIA_INFO_NULL`), with gapless lossy audio (`lavf_gapless.c`, `LAVF_PRIV`, `MOV_EDITS`, `MP3_FILL`). The M1's
+hciplayer takes `m1plus.PLAYER_PROFILE`'s words only. Of 1.6.7's player changes it takes the EQ gate's three loads
+(`eq_rate_gates`, V2.1's same words at `0x42ce24`) and the crossfade's skip and stop flags (`next_flag`,
+`stop_flag`). Each site needs its V2.1 word found; the crash fixes (`MEDIA_INFO_NULL`, `FLAC_META_EOF`) first.
+
+### Long multi-value genres
+
+1.6.7 copies TagLib's " / " joined genres into the 128-byte style field whole entries at a time
+(`GENRE_COPY`, `ringnav_genre_copy`), where stock's `strcpy` ran into the title. V2.1's tag reader's copy isn't
+pinned yet.
+
+### Playlists, Podcasts and Audiobooks as Shortcuts
+
+1.6.5 and 1.6.7 add three Shortcuts (stored values 7 to 9): Playlists opens the Library's list, Podcasts and
+Audiobooks the card's folders. The M1's Shortcut keeps Favorites, Shuffle, Rated Albums, Artists and Albums
+(`shortcut()`); a stored 7 to 9 reads as Favorites. Port with V2.1's playlist page and the folder view's entry.
+
