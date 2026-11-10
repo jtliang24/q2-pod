@@ -95,7 +95,7 @@ def boot_check(s90play=None):
     """S90play's dual boot under the host sh, with stand-in programs: build.py's BOOT_HOOK, or a
     built rootfs's whole S90play (its dbus start stubbed), run as init runs it."""
     import subprocess, tempfile, pathlib
-    from build import BOOT_HOOK, ROCKBOX_FLAG
+    from build import BOOT_HOOK, ROCKBOX_FLAG, WIFI_OFF
     with tempfile.TemporaryDirectory(prefix='q2-boot-') as tmp:
         r = pathlib.Path(tmp)
         script = (s90play or BOOT_HOOK[1]).decode().replace(' &\n', '\n')
@@ -106,12 +106,21 @@ def boot_check(s90play=None):
             script = script.replace('/bin/mkdir', 'mkdir').replace('/var/run/', f'{r}/var/run/')
         for old in ('/mnt/', '/tmp/mmc_add', ROCKBOX_FLAG, '/usr/bin/q2boot', '/release/bin/demo', '/proc/mounts', '/tmp/q2-demo.log'):
             script = script.replace(old, f'{r}{old}')
-        script = script.replace('usleep 200000', ':').replace('usleep 500000', ':')
+        script = script.replace('usleep 200000\n', ':\n').replace('usleep 500000', ':')
+        # This script runs under the PC's own sh: the real killall -9 and ifconfig would take down the PC's network,
+        # not a Q2's. So they never run here: a log line stands in, and the text must be gone before anything starts.
+        assert script.count(WIFI_OFF) == 2  # before Rockbox, and the hand-over's late pass
+        script = script.replace(WIFI_OFF, f'echo wifi >> {r}/order')
+        assert 'usleep 300000' in script  # Home's hand-over pauses before Rockbox: logged, its place is the point
+        script = script.replace('usleep 300000', f'echo settle >> {r}/order')
+        assert 'usleep 2000000' in script and '\n            rockbox\n            kill $! 2>/dev/null\n' in script  # called off once Rockbox is gone
+        script = script.replace('usleep 2000000', f'echo late >> {r}/order')  # runs in line here: & is stripped above
+        for real in ('killall -9', 'ifconfig', 'wlan0', 'wpa_supplicant', 'udhcpc', 'wifi_connect'): assert real not in script, real
         for d in ('proc', 'mnt/data', 'mnt/mmc/.rockbox', 'tmp', 'usr/bin', 'release/bin'): (r/d).mkdir(parents=True)
         def exe(path, body): (r/path).write_text('#!/bin/sh\n' + body + '\n'); (r/path).chmod(0o755)
         # demo takes Home's Rockbox row (leaves the flag) as many times as the shortcuts file says
         flag, shortcuts = f'{r}{ROCKBOX_FLAG}', r/'shortcuts'
-        exe('release/bin/demo', f'echo demo >> {r}/ran; n=$(cat {shortcuts}); '
+        exe('release/bin/demo', f'echo demo >> {r}/ran; echo demo >> {r}/order; n=$(cat {shortcuts}); '
             f'[ "$n" -gt 0 ] && echo $((n - 1)) > {shortcuts} && : > {flag}; '
             f's=$(head -n1 {r}/code); [ $(wc -l < {r}/code) -gt 1 ] && sed -i 1d {r}/code; exit $s')  # one status per run, the last repeats
         rb, target = r/'mnt/mmc/.rockbox/rockbox', r/'mnt/data/boot-target'
@@ -119,9 +128,9 @@ def boot_check(s90play=None):
             shortcuts.write_text(f'{shortcut}\n')
             (r/'code').write_text(''.join(f'{c}\n' for c in (status if isinstance(status, (list, tuple)) else [status])))
             exe('usr/bin/q2boot', 'exit ' + ('0' if held else '1'))
-            if card: exe('mnt/mmc/.rockbox/rockbox', f'pwd >> {r}/ran; exit {code}')
+            if card: exe('mnt/mmc/.rockbox/rockbox', f'pwd >> {r}/ran; echo rockbox >> {r}/order; exit {code}')
             else: rb.unlink(missing_ok=True)
-            (r/'ran').write_text('')
+            (r/'ran').write_text(''); (r/'order').write_text('')
             subprocess.run(['sh', '-c', script, 'S90play', 'start'], check=True)
             return (r/'ran').read_text().split(), target.exists() and target.read_text().strip()
         (r/'proc/mounts').write_text('')
@@ -148,6 +157,17 @@ def boot_check(s90play=None):
         assert boot(True, True, 81, 1) == (['demo', *rockbox], False)
         assert boot(False, True, 81, 2) == (rockbox * 3, False) and not pathlib.Path(flag).exists()
         assert boot(True, False, 81, 1) == (['demo', 'demo'], False)  # no Rockbox on the card: Q2 Pod again
+        # Wi-Fi goes off before every start of Rockbox and at no other time; demo follows Rockbox whatever its status
+        def order(*args): boot(*args); return (r/'order').read_text().split()
+        session = ['wifi', 'rockbox', 'demo']
+        for code in (0, 1, 81, 137, 255): assert order(False, True, code) == session
+        handover = ['settle', 'late', 'wifi']
+        assert order(True, True, 81, 1) == ['demo', *handover, *session]  # Home's Rockbox row waits for what demo launched
+        assert order(False, True, 81, 2) == session + [*handover, *session] * 2  # power-on doesn't wait, the row twice does
+        assert order(False, False) == ['demo']                  # no Rockbox on the card
+        assert order(True, False, 81, 1) == ['demo', *handover, 'demo']  # nor when the row is taken
+        assert order(True, True) == ['demo']                    # Play/Pause held
+        target.write_text('q2pod'); assert order(False, True) == ['demo']; target.unlink()
         # an abnormal end of demo leaves its status on /mnt/data, which the next boot copies to a mounted card;
         # 0, 143 and the Rockbox hand-over leave nothing
         crash, copy, mounts = r/'mnt/data/q2-crash.log', r/'mnt/mmc/q2-crash.log', r/'proc/mounts'
@@ -176,7 +196,7 @@ def boot_check(s90play=None):
         crash.write_text('== demo exit 137\n'); state.write_text(line); boot(True, False, status=0)
         assert crash.read_text().startswith('== demo exit 137\n== last state\n') and line in crash.read_text() and not state.exists()
         for f in (crash, copy): f.unlink(missing_ok=True)
-    print(f'Dual boot ({"built S90play" if s90play else "BOOT_HOOK"}): Rockbox by default, one-session Q2 Pod, stale choice ignored, card fallback and Home Rockbox row passed.')
+    print(f'Dual boot ({"built S90play" if s90play else "BOOT_HOOK"}): Rockbox by default, one-session Q2 Pod, stale choice ignored, card fallback, Home Rockbox row and Wi-Fi off before Rockbox passed.')
 boot_check()
 
 def logo_check(s11logo=None):
@@ -1164,7 +1184,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
 
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
-    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, GRADIENT_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, LOGO_LIGHT, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLL_CALLS, DARK_POLLS, WHEEL_TS_READ, PDR
+    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, GRADIENT_LEAF, WM_PAINT_LEAF, QUEUE_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, WHEEL_LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, LOGO_LIGHT, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLL_CALLS, DARK_POLLS, WHEEL_TS_READ, PDR
     from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, BIGCOVER, BC_ART, BC_TITLE_PAD, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_TOUCH, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
@@ -1192,8 +1212,8 @@ def validate_assets(directory):
         want = struct.pack('<III', 0x8f99a8f8, 0x0320f809, 0x8fa40000 | slot)
         assert demo[off:off+12] == want
     # Every hook and leaf jumps to its payload function (build.py pins the leaves' words): the
-    # leaves are window_manager_paint (Videos) and style_get_gradient.
-    for address, name in [*(h[:2] for h in HOOKS.values()), WM_PAINT_LEAF[1:3], GRADIENT_LEAF[1:3]]:
+    # leaves are window_manager_paint (Videos), style_get_gradient and main_loop_queue_event.
+    for address, name in [*(h[:2] for h in HOOKS.values()), WM_PAINT_LEAF[1:3], GRADIENT_LEAF[1:3], QUEUE_LEAF[1:3]]:
         off = fileoff(stock, address)
         assert demo[off:off+8] == j(symbols(directory/'patch.elf')[name]).to_bytes(4, 'little') + bytes(4)
     changed = manifest['changed_assets']

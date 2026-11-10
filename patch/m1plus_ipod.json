@@ -78,7 +78,7 @@
     "localmusic_page.bin": {
       "v21": null,
       "opener": null,
-      "why": "V2.1 has no localmusic_page and no localmusic_page_init: the Library root is not a page of its own. Phase 4.4 (Library) decided it: the root is the payload's library_open page (m1plus_nav_library.c), on the Q2's page rows."
+      "why": "V2.1 has no localmusic_page and no localmusic_page_init: the Library root is not a page of its own. Phase 4.4 (Library) decided it: the root is the payload's library_page_open page (m1plus_nav_library.c), on the Q2's page rows."
     },
     "playing_page.bin": {
       "v21": "playing_page.bin",

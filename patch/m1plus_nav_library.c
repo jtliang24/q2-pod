@@ -59,7 +59,7 @@ int streaming_open(void *ctx, void *event) {
     return 0;
 }
 
-int library_open(void *ctx, void *event) {
+int library_page_open(void *ctx, void *event) {
     (void)ctx;
     (void)event;
     if (st.lib_page || !(st.lib_page = page_open("library_page", page_closed, page_keyup))) return 0;

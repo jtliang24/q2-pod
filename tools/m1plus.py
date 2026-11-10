@@ -683,6 +683,9 @@ M1PLUS_HOOKS = {
     # A FLAC's ALBUM ARTIST when libtag finds no ALBUMARTIST; V2.1's (a, info, path), V1.32's
     # instruction for instruction, keeps the album artist at +0x580
     'toolsGetMusicInfo': (0x5ec6a8, 'ringnav_music_info', 'music_info'),
+    # A song's added date: the card's creation stamp, not the access time (coverflow.c, 1.6.4). V2.1's is V1.32's
+    # (access check, then stat), its three callers in the library scan's song records.
+    'toolsGetFileCreateTime': (0x5e4ac8, 'ringnav_file_created', 'file_created'),
     # USB mode's page, as a cable to a computer opens it, before stock unmounts the card for USB
     # storage: the card apps end first (addon_card_away). V2.1's init binds its window as V1.32's.
     'dialog_playmore_dialog_init': (0x479cc4, 'ringnav_playermore', 'playermore'),
@@ -1103,6 +1106,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     release = m1_release[0] if m1_release else VERSION
     header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{release}{f" dev {dev_count}" if dev else ""}"',
                f'#define Q2POD_TAG "{"" if dev else release}"',  # netupdate.c (unported on M1): the release tag, none when --dev
+               f'#define Q2POD_DEV {1 if dev else 0}',  # navigation.c stale_note (Q2 only: stale_heal is unported)
                '#define Q2POD_REPO "jtliang24/q2-pod"',  # netupdate.c (unported on M1): the repo of its releases
                f'#define Q2POD_UA "Q2Pod/{release} (https://github.com/jtliang24/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
     (out/'stock.h').write_text('\n'.join(header)+'\n')

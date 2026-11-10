@@ -241,7 +241,7 @@ Each feature follows the same steps:
    Implementation: the V2.1 lists use 64 px pitch and 60 px bodies, with 40 px stock art. Payload lists use
    the shared page-row helpers at 64 px. Pull to search opens V2.1's `search_page`; playlist holds open
    the queue menu with More… opening the editor. Photos, Books and media folders enter through
-   `library_open`. Verification and device-pass status are recorded in progress §68.
+   `library_page_open`. Verification and device-pass status are recorded in progress §68.
 5. **Home:**
    - the `home_page.bin` rewrite with Split (art on top, menu below), Classic and Carousel (an `unported`
      row since the 1.5.9 sync);
@@ -249,7 +249,7 @@ Each feature follows the same steps:
    - retire `m1plus_coverflow_home.c` and `m1plus_nav_home.c`.
 
    Implemented and gated on Nov 7 (progress §69; plan `.plan/phase4-5.md`):
-   - **Entry pages:** `library_open` is the complete Library (upstream's order, V2.1's categories bound to its
+   - **Entry pages:** `library_page_open` is the complete Library (upstream's order, V2.1's categories bound to its
      Home card click `0x533b80` by its Home ids, then CD Ripper and Update Local Music); `streaming_open` is
      Streaming (native Tidal and HiFi Music, then the payload's services and Configuration).
    - **The asset:** `home_page.bin` drops V2.1's grid, dots and playing strip, keeping the serial-error label;
