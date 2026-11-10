@@ -4322,6 +4322,61 @@ and USB each keep their EQ), an empty Albums, Artists, Composers or Genres list 
 rest), Recently Added after Update Local Music, Wi-Fi off under Rockbox and back after it (Bluetooth kept), and
 the settings pages unchanged (Display, Controls, Playback, Power, System with Boot to).
 
+## 78. Merge step: sync to 1.6.7 on `feature/m1-ipod` (Nov 10)
+
+The catch-up's third step and its first flash: 1.6.7's `link.ld` moves the scratch page to `0xb90000`.
+`sync/1.6.7` from `feature/m1-ipod` (backup `refs/backup/pre-sync-1.6.7`). 148 commits: the theme engine
+(`assets/themes`, `tools/theme.py`, `tools/art.py`) with three built-ins, Minimal, Classic (1.6.5's Classic Light)
+and Modern (1.6.4's Classic); Theme as its own page; Playlists, Podcasts and Audiobooks as Shortcuts; Low Power
+removed; the press and natural-change timing; the player's DAC, stop, preload and FLAC fixes; lossy gapless; long
+genres; the genre scroller on Now Playing's info page; Cover Flow's new names.
+
+**Conflicts** (`488197c`): `navigation.c` (27 hunks), `coverflow.c`, `tools/ipod.py` (upstream's `Geometry` sets,
+the M1's screen re-applied as a `PROFILE` over `SET0`), `tools/build.py`, `test/coverflow.py` and three docs.
+unifdef: each merged file's Q2 side is 1.6.7's but for the seams' equivalents.
+
+**Follow-ups** (`895f290` to `334c26f`):
+- Themes: the M1 builds Minimal and Modern, the themes on `SET0` alone, from `theme.py` loaded over
+  `m1plus_ipod`'s screen and evaluated against `m1plus_offsets.inc` (Coverflow's shelf and caption and Home's rows
+  were the Q2's); no boot sites. Classic is unported: a stored `THEME` 1 is Modern, as 1.6.4's Classic was.
+  Classic's Home pane and Library on Home stay unbound (`m1plus_coverflow_unported.c` names their statics).
+- The M1's Display gets Theme's page (`DISPLAY_THEMES`); a pick relabelled options the M1 shows elsewhere or not at
+  all and faulted in `list_toggle`, so each Display page now keeps only its own labels.
+- Merge misses found by the suites: Modern's Now Playing album painted in capitals (`paint_caps`' M1 branch lost
+  1.6.4's theme check); the lock window's percentage in the old battery key (half the level); the lock screen
+  page's Clock row at 1.6.4's index (Artist Album Order); Rated Albums' Shortcut skipping Artists; `client_h()`
+  from the Q2's 320 (Coverflow cut to 290 of 450).
+- `tick_gate` runs on the Q2 only: it dropped every knob tick, which has no ring frame.
+- Unhooked Q2 routines' trampolines call V2.1's routine where it has one: 1.6.7's Resume seeks through
+  `stock_seek_time_trampoline`, which returned 0, so a saved place was never sought.
+- V2.1 values: the crossfade's skip and stop flags (`0xb10e50`, `0xb10e54`; the idle loop clears both at
+  `0x42d864`), the EQ gate's three `mpctx` loads (`0x42ce24`), `HSCROLL_TEXT_W` `0x90` (V1.32's `0x94`),
+  `MARQUEE_PASSES`, `WHEEL_FRESH_MS`; the genre scroller's style `STYLE_SCRLABEL_WHITE16C`.
+- The scratch move fits: 552 KB of text under 576 KB, 108 KB of scratch of 128 KB; V2.1's data ends at `0xa10fc8`.
+- Unported rows: Classic, the press and natural-change timing, the player's 1.6.5 to 1.6.7 fixes, long genres, and
+  the three new Shortcuts. The port report finds a site patched by a bare address (`SONG_UNKNOWN_CALL`).
+
+**Suites.**
+- `patch.py`: upstream's cases by suitemerge and 28 hunks by hand; `MODERN` is the M1's index; an immediates table
+  had reused `SITES` and sent every later site-guarded case to NOT PORTED. The harness now stops the emulation on
+  a hook's exception and refuses an odd call address: both had left unicorn to segfault at the machine's next
+  call. 652 expected failures in 11 gaps, a new one for Classic (204).
+- `playback.py`: the restart ask, picks and press stamps are Q2 only; `PLAY_STATUS` throughout.
+- `build.py`: the second EQ gate by its patched word.
+- `q2compare.py` runs `hci_ao`, `hci_natural` and `player_seam`; the gate puts ffmpeg, lame and flac on `PATH`.
+
+**Gates** (from `work/gatetree`): q2compare against 1.6.7, `update.tar` byte-identical (`e092a7c90372`), its 37
+suites passing. On the M1, `--dev` `V055m` in `work/sync/1.6.7/` (update sha256 `e13caa53…`) passes
+`build.py --build`, `patch.py`, `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`, `--soloify`,
+`--bar-keys`), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and `pytest test/unit` (802).
+The function diff against `V057m` (`work/sync/1.6.7-gates/fndiff.txt`): 371 changed, 141 added, 11 removed.
+
+**For the device pass** (1.6.3's and 1.6.4's lists too): Theme's page (Minimal and Modern, a pick applied at once,
+Appearance relabelled), Modern's Now Playing album as a plain label, the Coverflow page's height and caption, Home's
+rows under both themes, Knob: Navigation turning lists (`tick_gate`), Resume's saved place on a book, the lock
+screen's percentage and its settings' Clock row, the Shortcut cycle, Now Playing's info page genre (scrolls when
+long), Cover Flow's renamed rows, Power without Low Power, crossfade at a natural end and on a skip.
+
 ## How to check a build now
 
 ```sh

@@ -276,3 +276,4 @@ stay flat or fall.
 | Phases 2 to 4.6 and Soloify on `feature/m1-ipod` (Nov 9) | 1.5.9 (`43a611f`) | +2,599/−499 over 33 files |
 | Merge step: sync to 1.6.3 on `feature/m1-ipod` (Nov 9) | 1.6.3 (`cea52bb`) | +2,608/−490 over 34 files: `nightshift.c`'s and the watchdog's `M1PLUS` returns, the btvol `volume_dialog` seam, `ADDON_CAPS` without `game` |
 | Merge step: sync to 1.6.4 on `feature/m1-ipod` (Nov 10) | 1.6.4 (`fb1890d`) | +2,579/−480 over 35 files: the M1's Display, System and Playback builders moved to `m1plus_nav_display.c`, `m1plus_nav_sysset.c` and `m1plus_nav_audioset.c`; `stale_heal`'s `!M1PLUS` |
+| Merge step: sync to 1.6.7 on `feature/m1-ipod` (Nov 10) | 1.6.7 (`bf471b5`) | +2,598/−479 over 36 files: the theme engine's tables built for the M1 in `m1plus.py` (Minimal and Modern), Classic's Home bindings and `tick_gate` behind `!M1PLUS`, `client_h()`'s `UI_H`, `HSCROLL_*` and the player's flags as names |
