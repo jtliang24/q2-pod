@@ -38,6 +38,10 @@ int ringnav_display(void *win, void *ctx) {
         theme_view = view;
         return result;
     }
+    /* Only this page's rows keep a label (the Theme page keeps Appearance's, open under it): a theme pick
+     * (theme_select) relabels the theme's options, which the M1 spreads over Appearance and Controls, and a closed
+     * page's label is a freed widget */
+    for (unsigned i = 0; i < sizeof st.setting_label / sizeof *st.setting_label; ++i) st.setting_label[i] = (void *)0;
     if (sub == DISPLAY_COVERFLOW) {
         pod_rows(win, VIEW_DISPLAY, POD_ARTIST_CF, 1, cf_icons);
         pod_rows(win, VIEW_DISPLAY, POD_CF_SORT, 2, cf_icons + 1);

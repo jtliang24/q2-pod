@@ -22,6 +22,7 @@ static void *list_row_core(void *view, const char *icon, int (*click)(void *, vo
  * list_row_core row is 0x0 until its list lays it out at the list's 64 px; a page_list row has its
  * own height. */
 void list_toggle(void *label, const char *title, int on) {
+    if (!label) return; /* a theme option whose row this page doesn't show (m1plus_nav_display.c) */
     void *item = P(label, W_PARENT);
     void *image = widget_lookup(item, "_setting_switch", 0);
     if (!image) {
