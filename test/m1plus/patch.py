@@ -4860,11 +4860,12 @@ class SongsMachine(ClassMachine):
         if address==syms['music_nagvation_title']:
             self.calls.append(('title',u.reg_read(REGS[0]),self.names(self.get(syms['p_deque_showlist'])))); self.returns(0); return
         super().hook(u,address,size,unused)
-m=SongsMachine(page='localclass_page',cls=0xf001,rows=3); m.found=[m.song('T1'),m.song('T2')]; m.word(syms['g_sort_flag'],2)
+m=SongsMachine(page='localclass_page',cls=0xf001,rows=3); m.found=[m.song('T1'),m.song('T2')]
+if not is_m1plus: m.word(syms['g_sort_flag'],2)  # M1 Plus: V2.1's getAllMusic reads its own sort; g_sort_flag is a zero stub
 staging=m.get(syms['tools_pdeq_directory']); m.deqs[staging][1]=[m.song('stale')]; m.calls=[]
 assert m.call(address=HOOKS['load_localclass_list'][0],args=(0xf001,0,0,0),gap=0)==2
 assert m.names(m.get(syms['p_deque_showlist']))==['T1','T2'] and m.get(syms['tools_pdeq_directory'])==staging and not m.items(staging)
-assert ('getAllMusic',2,1) in m.calls and ('title',0xf001,['T1','T2']) in m.calls
+assert ('getAllMusic',0 if is_m1plus else 2,1) in m.calls and ('title',0xf001,['T1','T2']) in m.calls
 assert not [c for c in m.calls if c[0] in ('stock_localclass','deque_assign','deque_init_copy')]; passed()
 # Every Library class and detail load scopes SQL, including empty results and failures, and
 # restores an already-scoped caller. The trampoline supplies stock's displayed copies.
@@ -6652,26 +6653,28 @@ for presses in (1,2):
 # Single Press Scrub (IPOD SCRUBSINGLE=1) swaps them: a single press starts the scrub DOUBLE_CLICK_MS
 # later, a double press turns the screen off as on the lists. One press still ends a scrub, and a press
 # after an overdue first ends the scrub that first one started instead of reaching stock.
-CONFIG['SCRUBSINGLE']='1'
-m=scrub_page()
-assert m.call(O['KEY_CENTER'])==11; m.advance(DC-1,clear=False); assert not did(m,'playing_timer_clear')
-m.advance(1,clear=False); assert did(m,'playing_timer_clear')==[m.win] and m.nodes[m.slider][FG]==-1 and not m.screens
-keep(m); assert step(m)==11 and m.nodes[m.slider]['value']==105
-assert step(m,O['KEY_CENTER'])==11 and m.seeks==[105]
-step(m,DC+O['SCRUB_MS'],wait=True); assert not m.screens; ended(m,[105]); passed()
-m=scrub_page()
-assert m.call(O['KEY_CENTER'])==11 and m.call(O['KEY_CENTER'],gap=100,clear=False)==11 and m.screens==[0]
-m.advance(DC,clear=False); assert m.screens==[0] and not did(m,'playing_timer_clear') and not m.timers; passed()
-m=scrub_page(); assert m.call(O['KEY_CENTER'])==11; m.now+=DC+1
-assert m.call(O['KEY_CENTER'],gap=0,clear=False)==11 and did(m,'playing_timer_clear')==[m.win] and not m.screens
-keep(m); ended(m,[]); passed()
-del CONFIG['SCRUBSINGLE']
+if not is_m1plus:  # M1 Plus: the knob has no Single Press Scrub (m1plus_nav_np.c)
+    CONFIG['SCRUBSINGLE']='1'
+    m=scrub_page()
+    assert m.call(O['KEY_CENTER'])==11; m.advance(DC-1,clear=False); assert not did(m,'playing_timer_clear')
+    m.advance(1,clear=False); assert did(m,'playing_timer_clear')==[m.win] and m.nodes[m.slider][FG]==-1 and not m.screens
+    keep(m); assert step(m)==11 and m.nodes[m.slider]['value']==105
+    assert step(m,O['KEY_CENTER'])==11 and m.seeks==[105]
+    step(m,DC+O['SCRUB_MS'],wait=True); assert not m.screens; ended(m,[105]); passed()
+    m=scrub_page()
+    assert m.call(O['KEY_CENTER'])==11 and m.call(O['KEY_CENTER'],gap=100,clear=False)==11 and m.screens==[0]
+    m.advance(DC,clear=False); assert m.screens==[0] and not did(m,'playing_timer_clear') and not m.timers; passed()
+    m=scrub_page(); assert m.call(O['KEY_CENTER'])==11; m.now+=DC+1
+    assert m.call(O['KEY_CENTER'],gap=0,clear=False)==11 and did(m,'playing_timer_clear')==[m.win] and not m.screens
+    keep(m); ended(m,[]); passed()
+    del CONFIG['SCRUBSINGLE']
+else: not_ported("Single Press Scrub (1.6.0) and Centre over Now Playing's volume dialog: the Q2's Centre (np_key); the M1's knob press already starts the scrub on a single press (m1plus_nav_np.c)")
 # Centre over the volume's band on Now Playing is Now Playing's either way: starting the scrub closes
 # the dialog, so the wheel scrubs; without Single Press Scrub a single press still turns the screen off.
 def vol_up(m):
     m.dlg=m.node('dialog','volume_dialog'); m.word(m.dlg+O['W_PARENT'],m.wm)
     m.nodes[m.wm]={'children':[m.win,m.dlg]}; m.stack=[m.win,m.dlg]; m.top=m.dlg
-for one in (1,0):
+for one in (() if is_m1plus else (1,0)):  # M1 Plus: the knob over the volume dialog isn't Now Playing's (not ported above)
     if one: CONFIG['SCRUBSINGLE']='1'
     m=scrub_page(); vol_up(m)
     if one: assert m.call(O['KEY_CENTER'])==11 and not m.screens; m.advance(DC,clear=False)
@@ -6680,23 +6683,24 @@ for one in (1,0):
     keep(m); assert step(m)==11 and m.nodes[m.slider]['value']==105 and step(m,O['KEY_CENTER'])==11
     step(m,DC+O['SCRUB_MS'],wait=True); assert not m.screens; ended(m,[105],one); passed()
     CONFIG.pop('SCRUBSINGLE',None)
-m=scrub_page(); vol_up(m); assert m.call(O['KEY_CENTER'])==11 and not m.screens
-m.advance(DC,clear=False); assert m.screens==[0] and not did(m,'window_close'); passed()
-# A tick between the press and its DOUBLE_CLICK_MS stays the volume's and keeps the press, as on the
-# bare page: the scrub still starts (closing the dialog) or the screen still turns off.
-for one in (1,0):
-    if one: CONFIG['SCRUBSINGLE']='1'
-    m=scrub_page(); vol_up(m); assert m.call(O['KEY_CENTER'])==11 and m.call(gap=100,clear=False)==0
-    m.advance(DC,clear=False)
-    if one: assert did(m,'window_close')==[m.dlg] and did(m,'playing_timer_clear')==[m.win] and not m.screens
-    else: assert m.screens==[0] and not did(m,'window_close')
-    passed(); CONFIG.pop('SCRUBSINGLE',None)
-# With Single Press Scrub a double press over the band turns the screen off and leaves the dialog.
-CONFIG['SCRUBSINGLE']='1'
-m=scrub_page(); vol_up(m)
-assert m.call(O['KEY_CENTER'])==11 and m.call(O['KEY_CENTER'],gap=100,clear=False)==11 and m.screens==[0]
-m.advance(DC,clear=False); assert m.screens==[0] and not did(m,'window_close') and not did(m,'playing_timer_clear'); passed()
-del CONFIG['SCRUBSINGLE']
+if not is_m1plus:
+    m=scrub_page(); vol_up(m); assert m.call(O['KEY_CENTER'])==11 and not m.screens
+    m.advance(DC,clear=False); assert m.screens==[0] and not did(m,'window_close'); passed()
+    # A tick between the press and its DOUBLE_CLICK_MS stays the volume's and keeps the press, as on the
+    # bare page: the scrub still starts (closing the dialog) or the screen still turns off.
+    for one in (1,0):
+        if one: CONFIG['SCRUBSINGLE']='1'
+        m=scrub_page(); vol_up(m); assert m.call(O['KEY_CENTER'])==11 and m.call(gap=100,clear=False)==0
+        m.advance(DC,clear=False)
+        if one: assert did(m,'window_close')==[m.dlg] and did(m,'playing_timer_clear')==[m.win] and not m.screens
+        else: assert m.screens==[0] and not did(m,'window_close')
+        passed(); CONFIG.pop('SCRUBSINGLE',None)
+    # With Single Press Scrub a double press over the band turns the screen off and leaves the dialog.
+    CONFIG['SCRUBSINGLE']='1'
+    m=scrub_page(); vol_up(m)
+    assert m.call(O['KEY_CENTER'])==11 and m.call(O['KEY_CENTER'],gap=100,clear=False)==11 and m.screens==[0]
+    m.advance(DC,clear=False); assert m.screens==[0] and not did(m,'window_close') and not did(m,'playing_timer_clear'); passed()
+    del CONFIG['SCRUBSINGLE']
 # Not directly over Now Playing (the panel), Centre is stock's at once and nothing closes.
 m=scrub_page(); vol_up(m); other=m.node('window','home_page'); m.word(other+O['W_PARENT'],m.wm)
 m.nodes[m.wm]['children']=[m.win,other,m.dlg]; assert m.call(O['KEY_CENTER'])==0
@@ -13986,12 +13990,12 @@ if 'usbmode_page_init' in HOOKS:
         m=M1ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                           '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
-        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Soloify','Install'] and not m.threads; passed()  # Soloify: M1 Plus's own, after the list's
+        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Soloify','Install'] and not m.threads; passed()  # Soloify: M1 Plus's own, after the list's
         m.close(); m.wifi=3; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
-        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Soloify','Install']  # Erase is Configuration's (1.5.9)
+        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Soloify','Install']  # Erase is Configuration's (1.5.9)
         m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
         assert m.urls==['https://raw.githubusercontent.com/DiamondBond/q2-pod/main/sources.list']+[f'https://api.github.com/repos/{r}/releases/latest' for r in
-                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser','andsuor/q2-subsonic','jtliang24/q2-soloify')],m.urls
+                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser','andsuor/q2-subsonic','m-d-e-v/q2-podcasts','harpmudd/q2-lma','DiamondBond/q2-fidget','jtliang24/q2-soloify')],m.urls
         assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.labels()[2]=='Update'; passed()  # q2-v1.8 against the latest q2-v1.9
         m.row(0); assert m.labels()[2]=='Checking…' and KILL in m.systems[-1]; m.row(0); assert m.labels()[2]=='Cancelling…'
         shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[2]=='Update'; passed()
@@ -14006,7 +14010,7 @@ if 'usbmode_page_init' in HOOKS:
                           '/mnt/mmc/.soloify/.delay':bytearray(b'4000'),'/mnt/mmc/.soloify/.quality':bytearray(b'96')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
         assert m.labels()[-2:]==['Soloify','Installed'],m.labels()
-        m.row(5); m.row(5); assert m.labels()[-1]=='Removing…'; shelf_job(m)
+        m.row(8); m.row(8); assert m.labels()[-1]=='Removing…'; shelf_job(m)
         assert m.toasts[-1][3]=='Soloify removed' and KILL in m.systems[-3] and KILL in m.systems[-1],m.systems
         assert not {SOLO_TAG,SOLO_FILES,'/mnt/mmc/.soloify/run','/mnt/mmc/.soloify/q2-soloify'}&set(m.files) and m.labels()[-1]=='Install'
         assert {'/mnt/mmc/.soloify/remote','/mnt/mmc/.soloify/.delay','/mnt/mmc/.soloify/.quality'}<=set(m.files); m.close(); passed()
@@ -15378,55 +15382,57 @@ if 'toolsIntoStandby' in HOOKS:
     for usb,play in ((1,3),(0,2)):  # a cable in, or playing: it stays on, and no later pass powers off
         m=StandbyMachine({'STANDBYLIMIT':'1'}); m.standby(); m.byte(syms['g_usbdet_value'],usb); m.word(PLAY_STATUS,play)
         assert not m.off() and not m.off(); passed()
-    # Hardware watchdog and the state record (docs/internals.md#watchdog). The first pass opens
-    # /dev/jz_watchdog and starts it at WDT_MS, every pass feeds it, Standby stops it around the suspend
-    # and starts it again, and a clean end stops it and removes the record; nothing is fed or written
-    # after. No device, or a refused start: tried once, and the record is kept all the same. The record
-    # is rewritten only when it changes, and as suspending just before Standby's suspend.
-    WDT_START,WDT_STOP,WDT_FEED=0x8004570d,0x2000570e,0x2000570f
-    class WatchdogMachine(StandbyMachine):
-        def __init__(self,config={},fd=3,refuse_start=False,**k):
-            super().__init__(config,**k); self.fd,self.refuse_start,self.ioctls,self.wdt_opens=fd,refuse_start,[],0
-            self.handlers[syms['ioctl@GLIBC_2.0']]='d:ioctl'
-            self.byte(syms['g_backlight_status'],1); self.byte(syms['g_usbdet_value'],0)
-        def hook(self,u,address,size,unused):
-            name=self.handlers.get(address,''); a,b,c=[u.reg_read(r) for r in REGS[:3]]
-            if name=='p:open@GLIBC_2.0':
-                assert self.text(a)=='/dev/jz_watchdog' and b==0x80002; self.wdt_opens+=1; self.returns(self.fd&0xffffffff); return
-            if name=='d:ioctl':
-                self.ioctls.append((a,b,self.get(c)) if b==WDT_START else (a,b))
-                if b!=WDT_FEED: self.events.append(('wdt',b))
-                self.returns(0xffffffff if b==WDT_START and self.refuse_start else 0); return
-            return super().hook(u,address,size,unused)
-        def record(self): return self.files.get(RECORD)
-    m=WatchdogMachine(key=600); m.pass_(1)
-    assert m.wdt_opens==1 and m.ioctls==[(3,WDT_START,O['WDT_MS'])],(m.ioctls)
-    assert m.record()==b'screen:on power:running cable:out battery:0 play:paused out:jack\n',m.record()
-    m.pass_(1); m.pass_(1); assert m.ioctls[1:]==[(3,WDT_FEED)]*2 and m.wdt_opens==1 and len(m.records)==1; passed()
-    level(m,57,0); m.pass_(1); assert m.records[-1]==(RECORD,b'screen:on power:running cable:out battery:57 play:paused out:jack\n')
-    n=len(m.records); m.pass_(1); assert len(m.records)==n  # unchanged: not rewritten
-    m.byte(syms['g_backlight_status'],0); m.byte(syms['g_usbdet_value'],1); m.pass_(1)
-    assert m.records[-1][1]==b'screen:off power:running cable:in battery:57 play:paused out:jack\n'; passed()
-    m.ioctls=[]; assert m.standby()==[('wdt',WDT_STOP),'suspend',('wdt',WDT_START)],m.events
-    assert m.records[-1][1]==b'screen:off power:suspending cable:in battery:57 play:paused out:jack\n'
-    m.pass_(1); assert m.records[-1][1].startswith(b'screen:off power:running') and m.ioctls[-1]==(3,WDT_FEED); passed()
-    m=WatchdogMachine({'STANDBYLIMIT':'1'}); m.pass_(1)
-    assert m.standby()==[('alarm',0),('alarm',start+3600),('wdt',WDT_STOP),'suspend',('wdt',WDT_START),('alarm',0)],m.events; passed()
-    # a known long pass (an import, a folder add) counts WDT_LONG_MS; the next pass, after it, WDT_MS again
-    m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
-    for _ in range(2): m.call(address=payload_syms['ringnav_wdt_long'],args=(0,0,0,0),gap=0)  # once while it runs
-    assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])],m.ioctls; m.ioctls=[]
-    m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; m.ioctls=[]
-    m.pass_(1); assert m.ioctls==[(3,WDT_FEED)] and O['WDT_LONG_MS']>O['WDT_MS']==60000; passed()
-    # a clean end: the watchdog stops, the record goes, and nothing is fed or written after it
-    m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
-    m.call(address=payload_syms['ringnav_clean_end'],args=(0,0,0,0),gap=0)
-    assert m.ioctls==[(3,WDT_STOP)] and RECORD not in m.files; n=len(m.records); m.ioctls=[]
-    level(m,5,0); m.pass_(1); assert not m.ioctls and len(m.records)==n and RECORD not in m.files; passed()
-    m=WatchdogMachine(key=600,fd=-1); m.pass_(1); m.pass_(1)
-    assert m.wdt_opens==1 and not m.ioctls and m.record() and m.standby()==['suspend']; passed()
-    m=WatchdogMachine(key=600,refuse_start=True); m.pass_(1); m.pass_(1)
-    assert m.ioctls==[(3,WDT_START,O['WDT_MS'])] and m.record() and m.standby()==['suspend']; passed()
+    if not is_m1plus:  # M1 Plus: no watchdog or state record (navigation.c, m1plus_offsets.inc WDT_MS)
+        # Hardware watchdog and the state record (docs/internals.md#watchdog). The first pass opens
+        # /dev/jz_watchdog and starts it at WDT_MS, every pass feeds it, Standby stops it around the suspend
+        # and starts it again, and a clean end stops it and removes the record; nothing is fed or written
+        # after. No device, or a refused start: tried once, and the record is kept all the same. The record
+        # is rewritten only when it changes, and as suspending just before Standby's suspend.
+        WDT_START,WDT_STOP,WDT_FEED=0x8004570d,0x2000570e,0x2000570f
+        class WatchdogMachine(StandbyMachine):
+            def __init__(self,config={},fd=3,refuse_start=False,**k):
+                super().__init__(config,**k); self.fd,self.refuse_start,self.ioctls,self.wdt_opens=fd,refuse_start,[],0
+                self.handlers[syms['ioctl@GLIBC_2.0']]='d:ioctl'
+                self.byte(syms['g_backlight_status'],1); self.byte(syms['g_usbdet_value'],0)
+            def hook(self,u,address,size,unused):
+                name=self.handlers.get(address,''); a,b,c=[u.reg_read(r) for r in REGS[:3]]
+                if name=='p:open@GLIBC_2.0':
+                    assert self.text(a)=='/dev/jz_watchdog' and b==0x80002; self.wdt_opens+=1; self.returns(self.fd&0xffffffff); return
+                if name=='d:ioctl':
+                    self.ioctls.append((a,b,self.get(c)) if b==WDT_START else (a,b))
+                    if b!=WDT_FEED: self.events.append(('wdt',b))
+                    self.returns(0xffffffff if b==WDT_START and self.refuse_start else 0); return
+                return super().hook(u,address,size,unused)
+            def record(self): return self.files.get(RECORD)
+        m=WatchdogMachine(key=600); m.pass_(1)
+        assert m.wdt_opens==1 and m.ioctls==[(3,WDT_START,O['WDT_MS'])],(m.ioctls)
+        assert m.record()==b'screen:on power:running cable:out battery:0 play:paused out:jack\n',m.record()
+        m.pass_(1); m.pass_(1); assert m.ioctls[1:]==[(3,WDT_FEED)]*2 and m.wdt_opens==1 and len(m.records)==1; passed()
+        level(m,57,0); m.pass_(1); assert m.records[-1]==(RECORD,b'screen:on power:running cable:out battery:57 play:paused out:jack\n')
+        n=len(m.records); m.pass_(1); assert len(m.records)==n  # unchanged: not rewritten
+        m.byte(syms['g_backlight_status'],0); m.byte(syms['g_usbdet_value'],1); m.pass_(1)
+        assert m.records[-1][1]==b'screen:off power:running cable:in battery:57 play:paused out:jack\n'; passed()
+        m.ioctls=[]; assert m.standby()==[('wdt',WDT_STOP),'suspend',('wdt',WDT_START)],m.events
+        assert m.records[-1][1]==b'screen:off power:suspending cable:in battery:57 play:paused out:jack\n'
+        m.pass_(1); assert m.records[-1][1].startswith(b'screen:off power:running') and m.ioctls[-1]==(3,WDT_FEED); passed()
+        m=WatchdogMachine({'STANDBYLIMIT':'1'}); m.pass_(1)
+        assert m.standby()==[('alarm',0),('alarm',start+3600),('wdt',WDT_STOP),'suspend',('wdt',WDT_START),('alarm',0)],m.events; passed()
+        # a known long pass (an import, a folder add) counts WDT_LONG_MS; the next pass, after it, WDT_MS again
+        m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
+        for _ in range(2): m.call(address=payload_syms['ringnav_wdt_long'],args=(0,0,0,0),gap=0)  # once while it runs
+        assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])],m.ioctls; m.ioctls=[]
+        m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; m.ioctls=[]
+        m.pass_(1); assert m.ioctls==[(3,WDT_FEED)] and O['WDT_LONG_MS']>O['WDT_MS']==60000; passed()
+        # a clean end: the watchdog stops, the record goes, and nothing is fed or written after it
+        m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
+        m.call(address=payload_syms['ringnav_clean_end'],args=(0,0,0,0),gap=0)
+        assert m.ioctls==[(3,WDT_STOP)] and RECORD not in m.files; n=len(m.records); m.ioctls=[]
+        level(m,5,0); m.pass_(1); assert not m.ioctls and len(m.records)==n and RECORD not in m.files; passed()
+        m=WatchdogMachine(key=600,fd=-1); m.pass_(1); m.pass_(1)
+        assert m.wdt_opens==1 and not m.ioctls and m.record() and m.standby()==['suspend']; passed()
+        m=WatchdogMachine(key=600,refuse_start=True); m.pass_(1); m.pass_(1)
+        assert m.ioctls==[(3,WDT_START,O['WDT_MS'])] and m.record() and m.standby()==['suspend']; passed()
+    else: not_ported('The hardware watchdog and the state record (1.6.2)')
 
 else:
     not_ported("Standby Limit (toolsIntoStandby not hooked on M1 Plus)")
