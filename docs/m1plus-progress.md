@@ -4188,6 +4188,14 @@ What the pass found, not fixed: **a paused session's page can say "Soloify isn't
 
 Not run: Wi-Fi off (it would cut q2remote), Bluetooth showing, and a digit-count change of the percent (the bar read 100%, on USB), so the repaint fix is still unproved. Local music's position isn't kept across a Soloify takeover (Now Playing showed 00:00, and it played from the start), which the plan's boundaries leave out. Settings and boot-target restored; the config differs from the backup only in `VOLUME`, 23 since before the pass began. A Wi-Fi drop of about a minute during the restore needed no reboot.
 
+## 75. Soloify: an open Now Playing page keeps the session (Nov 9)
+
+The `V057m` pass's finding (section 74). `spot_poll` held librespot past `SPOT_IDLE_MS` only for an open browser on a lit screen, so with just the Now Playing page open the session stopped under it, and `spot_refresh`, which takes `installed` from `sp.launched`, made the page say "Soloify isn't on the card". On the M1 the page (`ui.page`) now holds the idle timer while the screen is lit, as the browser does. Left open dark, it is closed unseen (`window_manager_close_window_force`, as `np_browse` does) when the timer runs out, before librespot stops. `spot_refresh` is unchanged: its note stays right for a card without the binary. The Q2 has the same logic (upstream 1.7.0 too); the change is `#if M1PLUS` for now and can be offered upstream.
+
+The new `patch.py` scenario, for Spotify and Soloify with no browser open: lit, paused 60 s, librespot runs on; dark, nothing at 29.5 s, then at 30 s the page closes and librespot stops. It fails on the previous build at the lit check.
+
+`V058m` (`work/before-4-7/a1`, `--dev`, update sha256 `cd0f38c3…`) passes all 16 gates (`work/before-4-7/a1-gates`, `a1-gates2`; `patch.py` without `GAPS_DUMP`: 418 gaps, none unlisted); the Q2's `update.tar` is byte-identical. Not flashed on its own: the next device pass checks it (paused 30 s or more on Soloify's page, lit, the track stays and Play resumes; with Screen Off at 1 min, the page closes after the dark idle).
+
 ## How to check a build now
 
 ```sh
