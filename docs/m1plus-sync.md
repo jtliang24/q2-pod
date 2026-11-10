@@ -153,6 +153,12 @@ release, or at once after a structural step.
      Frequent and Recent (`0xf008`, `0xf007`) are V2.1's too (`guide_page_init`). An address goes in
      `offsets.inc` before its code runs on M1; until then the hook or site that reaches it stays
      unported (1.3.9's `ringnav_lyric_rows`).
+   - **The Q2 side of each merged file.** A hunk the merge kept on both sides compiles on the M1 and
+     breaks only the Q2 build, which q2compare reaches last: 1.6.3's merge kept the Q2's old
+     `scrub_start` beside upstream's moved one (a redefinition). Before the gates, put each
+     `patch/*` file the merge touched through `unifdef -DM1PLUS=0` and diff it with the tag's own;
+     what's left should be the seams' equivalent Q2 lines. Strip comments after `#if`/`#else`/`#endif`
+     first: unifdef refuses one that runs onto the next line ("Obfuscated preprocessor control line").
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
      `test/m1plus/`. `test/m1plus/boot.py`'s walks tap screen positions: an upstream row added above
      one they tap moves it (1.4.5's Coverflow Sort and Refresh pushed Knob: Navigation off Display's
@@ -267,3 +273,5 @@ stay flat or fall.
 | Merge step: sync to 1.5.8 (Oct 30) | 1.5.8 (`d7c8594`) | +1,554/−310 over 32 files: deferred Coverflow gestures, Simple EQ shortcut and wheel QS seams; native animator easing field |
 | 1.5.8 device-pass fixes (Nov 1) | 1.5.8 (`d7c8594`) | +1,573/−313 over 32 files: `FORCE_REFRESH` after a queue start, the subset resume's three `M1PLUS` lines, `TOO_LONG_PLAY` and `TOO_LONG_CHAPTERS`, and q2remote's Phys parsing |
 | Merge step: sync to 1.5.9 on `feature/m1-ipod` (Nov 3) | 1.5.9 (`43a611f`) | +1,712/−345 over 32 files: Stock's outline moved to `m1plus_nav_outline.c`, Soloify's `special[]` row, the card apps' caps and `library_poll` seams |
+| Phases 2 to 4.6 and Soloify on `feature/m1-ipod` (Nov 9) | 1.5.9 (`43a611f`) | +2,599/−499 over 33 files |
+| Merge step: sync to 1.6.3 on `feature/m1-ipod` (Nov 9) | 1.6.3 (`cea52bb`) | +2,608/−490 over 34 files: `nightshift.c`'s and the watchdog's `M1PLUS` returns, the btvol `volume_dialog` seam, `ADDON_CAPS` without `game` |

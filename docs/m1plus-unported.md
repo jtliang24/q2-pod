@@ -21,7 +21,7 @@ to its [progress](m1plus-progress.md) section.
 
 | Feature | Since | Q2 Pod's pieces | Status |
 |---|---|---|---|
-| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8); Carousel, Click With Headphones, the art following the player's cover (1.5.9) | In progress |
+| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8); Carousel, Click With Headphones, the art following the player's cover (1.5.9); Single Press Scrub (1.6.0) | In progress |
 | [Games](#games) | 1.3.9 | `games.c`, the iPod UI's Games row | Unplanned |
 | [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone`; `timezone_row`, `TIMEZONES` (1.5.0) | Planned |
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
@@ -57,6 +57,9 @@ to its [progress](m1plus-progress.md) section.
 | [Card apps' library update](#card-apps-library-update) | 1.5.9 | `addon_library.c` (`library_poll`), `M3U_DIR_CALL`, the caps' `library` | Planned |
 | [An .lrc's UTF-8 test](#an-lrcs-utf-8-test) | 1.5.9 | `mclIsUtf8WithoutBOM` (`ringnav_lrc_utf8`) | Planned |
 | [A playlist row's hold menu](#a-playlist-rows-hold-menu) | 1.5.9 | `qm_hold`'s `QM_PLAYLIST` | Ported; dev 57 device pass |
+| [Night Shift](#night-shift) | 1.6.0 | `nightshift.c`, `night_row`, `LCD_*` (`offsets.inc`) | Planned |
+| [The watchdog and the crash log](#the-watchdog-and-the-crash-log) | 1.6.1, 1.6.2 | `wdt_poll`, `state_poll`, `WDT_MS`, `WDT_LONG_MS` (`navigation.c`) | Planned |
+| [A USB DAC across a gapless change](#a-usb-dac-across-a-gapless-change) | 1.6.1 | `ao_init` (`peq_player.c`), `AO_INIT_SLOT`, `USB_BUFFER` (`tools/peq.py`) | Planned |
 
 Era, Western tag/CUE text, hidden-folder exclusions, Streaming Configuration, user-space idle
 changes and lyrics passed the combined device checks in [progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28).
@@ -121,6 +124,8 @@ Games are the iPod UI's. `games.c` has compiled on the M1 since the iPod path di
 (`m1plus_nav_library.c`), which has no Games row, so they can't be opened. They stay unplanned
 within the iPod UI port ([m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.8), and they changed again in
 1.4.2 and 1.4.5 (Snake). They use the Return key, which the M1 lacks, so they need a touch design first.
+Card-app games (`addon_game_*`, 1.6.x) have no row either, and the M1's addon caps leave out `game`; the App
+Store still lists 1.6.3's Buddy (`q2-fidget`), which installs but can't be opened.
 
 ### The extra time zones
 
@@ -162,7 +167,8 @@ row's click.
 - **The kernel modules' idle clocks** (1.5.0). The Q2 build patches V1.32's `soc_aic.ko` (the stopped
   PCM notifier sleeps), `soc_rotator.ko` (its clock taken at first use) and the PWM driver and MCU
   image (idle clocks gated; MCU sleep, dev only). Each pins the stock module's SHA-256. V2.1's
-  modules are to be compared with V1.32's first: the M1's pipeline swaps none.
+  modules are to be compared with V1.32's first: the M1's pipeline swaps none. Since 1.6.x (`0405c29`)
+  all four are experiments, off by default and `--dev` only, on the Q2 too.
 
 - **Paced player scheduling and command waits** (1.5.5). `MAINSCHEDULING_CALL` needs V2.1's UI
   scheduler call site; `PAUSE_WAIT`, `IDLE_WAIT` and `CMD_DONE` need its command state and player
@@ -350,6 +356,30 @@ More…). Ported in the Library item (m1plus-ipod-ui.md 4.4): Play/Pause hold an
 `QM_PLAYLIST` on V2.1's numeric playlist rows. More… opens the payload's playlist editor
 (`m1plus_nav_playlist_hold.inc`), since V2.1 has no `playlistsmore_page`. New, Import and the Add to Playlist
 picker keep their own actions. The dev 57 device pass confirmed the menu and editor.
+
+### Night Shift
+
+1.6.0's Display row warms the screen (`nightshift.c`): while it is on, the screen's lcd `end_frame` is
+replaced by `night_end`, which warms the frame's dirty rect in V1.32's `lcd_mem` (`LCD_OFFLINE_FB`,
+`LCD_DIRTY`, `LCD_LINE_LENGTH`; `offsets.inc`). The M1's `LCD_*` are `M1_UNPORTED`, `night_paint` returns
+at once on M1, and Display's row is the Q2's only: V2.1's `lcd_mem` layout is to be read first (its
+`lcd_mem` create and `lcd_end_frame`), and its 320x480 panel is portrait where the Q2's buffer is 375 x 320.
+
+### The watchdog and the crash log
+
+1.6.2 starts `/dev/jz_watchdog` on the UI loop's first pass and feeds it each pass (`wdt_poll`,
+`WDT_MS` 60 s, `WDT_LONG_MS` for an import), so a frozen UI restarts the Q2; 1.6.1 keeps
+`/mnt/data/q2-state` (`state_poll`) and turns it into `q2-crash.log` on the card after an unchosen
+restart. Both return at once on M1 (`if (M1PLUS || ...)`): a watchdog that misfires on V2.1 would
+reboot in a loop. To check first: V2.1's kernel has the device and the same ioctls, and that nothing of
+V2.1's own (`libhardware2`) already feeds it.
+
+### A USB DAC across a gapless change
+
+1.6.1 replaces ao_alsa's init slot in V1.32's `hciplayer` (`AO_INIT_SLOT`, `ao_init` in
+`peq_player.c`) so a USB DAC's PCM stays open across a gapless change, and keeps its 500 ms buffer
+(`USB_BUFFER`). The M1 player's profile patches neither; the M1 payload's `--gc-sections` drops
+`ao_init`. V2.1's `hciplayer` ao_alsa init and its USB output way are to be found first.
 
 ### Enlarged art's reset default
 
