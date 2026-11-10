@@ -96,6 +96,30 @@ B: ABS=2008000 1000003
 assert q.bits(m1["md-gpio-keys"]["KEY"]) == set(q.M1_KEYS.values()) == {116, 163, 164, 165}
 assert q.bits(m1[q.M1_KNOB]["KEY"]) == {q.KEY_VOLUMEUP, q.KEY_VOLUMEDOWN}
 assert {q.ABS_X, q.ABS_Y, q.ABS_PRESSURE} <= q.bits(m1["Goodix-CTP"]["ABS"]) and 330 not in q.bits(m1["Goodix-CTP"]["KEY"])
+# The device answers once whether it is an M1 Plus (its knob); input then goes to the M1's own nodes:
+# Goodix-CTP for tap and swipe, the knob for knob, and tap X Y MS holds. A Q2 keeps upstream's paths.
+M1_DEVICES = """N: Name="md-gpio-keys"\nH: Handlers=kbd event1\n\nN: Name="md-rotary-knob"\nH: Handlers=kbd event2\n
+N: Name="Goodix-CTP"\nH: Handlers=kbd event3\n"""
+real_shell, sent = q.shell, []
+def fake_shell(cmd, data=b"", *a, **k):
+    sent.append((cmd, data)); return M1_DEVICES.encode() if "input/devices" in cmd else b""
+q.shell, q._M1 = fake_shell, None
+try:
+    assert q.is_m1() and q.is_m1() and len(sent) == 1  # asked once
+    for argv, node in ((["tap", "10", "20", "500"], 3), (["swipe", "1", "2", "3", "400"], 3), (["knob", "-2"], 2),
+                       (["key", "play"], 1)):
+        del sent[:]; assert q.main(argv) == 0
+        assert f"/dev/input/event{node}".encode() in sent[-1][1] and sent[-1][0] == "sh", argv
+    for argv, why in ((["wheel", "1"], "use knob N"), (["key", "return"], "key must be one of")):
+        try: q.main(argv)
+        except ValueError as e: assert why in str(e), e
+        else: raise AssertionError(argv)
+    q._M1 = False
+    try: q.main(["tap", "1", "2", "3"])
+    except ValueError as e: assert str(e) == "invalid arguments for tap"
+    else: raise AssertionError("a Q2 tap took a hold")
+finally:
+    q.shell, q._M1 = real_shell, None
 # Goodix-CTP's Phys can hold junk, blank lines too (the 1.5.8 pass): the block stays whole.
 junk = q.parse_devices('N: Name="Goodix-CTP"\nP: Phys=\x01\x7f\n\n\x02junk\n\nS: Sysfs=/devices/virtual/input/input3\n'
                        'H: Handlers=kbd event3\nB: ABS=2008000 1000003\n\nN: Name="md-rotary-knob"\nP: Phys=\nH: Handlers=kbd event2\n')

@@ -51,3 +51,10 @@ def contained(monkeypatch):
     monkeypatch.setattr(time, 'sleep', lambda seconds: None)
     for name in ('Q2_HOST', 'Q2_KEY', 'Q2_KEY_FILE', 'Q2_BUILD', 'Q2_PROF_BIN'):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def q2_device(monkeypatch):
+    """M1 Plus port: q2remote asks the device once whether it is an M1 Plus (is_m1). These tests are
+    the Q2's, so it answers Q2 without a shell call; test/remote.py covers the M1's input paths."""
+    monkeypatch.setattr(sys.modules['q2remote'], '_M1', False)

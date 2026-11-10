@@ -269,8 +269,20 @@ def devices():
     return parse_devices(shell("cat /proc/bus/input/devices").decode("utf-8", "replace"))
 
 
+def is_m1():
+    """An M1 Plus (its md-rotary-knob) rather than a Q2: read once per run."""
+    global _M1
+    if _M1 is None:
+        _M1 = any(d["name"] == M1_KNOB for d in devices())
+    return _M1
+
+
+_M1 = None
+
+
 def input_path(kind):
-    need = {"key": "md-gpio-keys", "tap": "hyn_ts", "wheel": "hyn_sliderbar"}[kind]
+    need = {"key": "md-gpio-keys", "tap": "hyn_ts", "wheel": "hyn_sliderbar",
+            "m1tap": "Goodix-CTP", "knob": M1_KNOB}[kind]
     for d in devices():
         if d["name"] == need:
             return f"/dev/input/event{d['event']}"
@@ -291,12 +303,10 @@ def parse_state(text):
 
 def state():
     """demo's pid, the uptime and GLOBALS, read from demo's memory: M1_GLOBALS' on an M1 Plus."""
-    def reads(addresses):
-        return "".join(f'v=$(dd if=/proc/$p/mem bs=1 skip={addr} count=1 2>/dev/null | xxd -p); echo "${{v:--}}"; '
-                       for addr in addresses)
-    return parse_state(shell(f'p=$(pidof -s demo) && echo $p && cut -d" " -f1 /proc/uptime && '
-                             f'if grep -q {M1_KNOB} /proc/bus/input/devices; then {reads(M1_GLOBALS.values())}'
-                             f'else {reads(addr for _, addr in GLOBALS.values())}fi').decode())
+    addresses = M1_GLOBALS.values() if is_m1() else (addr for _, addr in GLOBALS.values())
+    reads = "".join(f'v=$(dd if=/proc/$p/mem bs=1 skip={addr} count=1 2>/dev/null | xxd -p); echo "${{v:--}}"; '
+                    for addr in addresses)
+    return parse_state(shell(f'p=$(pidof -s demo) && echo $p && cut -d" " -f1 /proc/uptime && {{ {reads}}}').decode())
 
 
 def wake():
@@ -521,14 +531,9 @@ def profile(seconds, all_threads, build):
 
 
 def input_action(kind, args):
-    devs = {d["name"]: f"/dev/input/event{d['event']}" for d in devices()}
-    m1 = M1_KNOB in devs
+    m1 = is_m1()
     if kind == "wheel" and m1: raise ValueError("the M1 Plus has a knob: use knob N")
     if kind == "knob" and not m1: raise ValueError("the Q2 has a wheel: use wheel N")
-    need = {"key": "md-gpio-keys", "tap": "Goodix-CTP" if m1 else "hyn_ts", "swipe": "Goodix-CTP" if m1 else "hyn_ts",
-            "wheel": "hyn_sliderbar", "knob": M1_KNOB}[kind]
-    if need not in devs: raise ValueError(f"no {need} input device; inspect `devices`")
-    path = devs[need]
     if kind == "key":
         keys = M1_KEYS if m1 else KEYS
         code = keys.get(args[0].lower())
@@ -536,13 +541,13 @@ def input_action(kind, args):
         try: ms = int(args[1]) if len(args) > 1 else 80
         except ValueError: raise ValueError("key duration must be an integer number of milliseconds")
         if not 1 <= ms <= 60000: raise ValueError("key duration must be 1..60000 ms")
-        shell("sh", event_writer(path, key_events(code), ms * 1000).encode())
+        shell("sh", event_writer(input_path(kind), key_events(code), ms * 1000).encode())
     elif kind == "tap" and m1:
         try: x, y = map(int, args[:2]); hold = int(args[2]) if len(args) > 2 else TAP_HOLD_MS
         except ValueError: raise ValueError("tap coordinates and hold must be integers")
         if not 0 <= x < M1_W or not 0 <= y < M1_H: raise ValueError(f"coordinates must be x=0..{M1_W-1}, y=0..{M1_H-1}")
         if not 1 <= hold <= 10000: raise ValueError("tap hold must be 1..10000 ms")
-        shell("sh", event_writer(path, m1_tap(x, y), [M1_FRAME_US - USLEEP_US, max(0, hold * 1000 - USLEEP_US)], once=True).encode())
+        shell("sh", event_writer(input_path("m1tap"), m1_tap(x, y), [M1_FRAME_US - USLEEP_US, max(0, hold * 1000 - USLEEP_US)], once=True).encode())
     elif kind == "swipe" and m1:
         try: x0, y0, x1, y1 = map(int, args[:4]); ms = int(args[4]) if len(args) > 4 else SWIPE_MS
         except ValueError: raise ValueError("swipe coordinates and duration must be integers")
@@ -551,24 +556,23 @@ def input_action(kind, args):
         if not 50 <= ms <= 5000: raise ValueError("swipe duration must be 50..5000 ms")
         batches = m1_swipe(x0, y0, x1, y1, ms)
         # stdin: a slow swipe's frames outgrow the 4 KB command line
-        shell("sh", event_writer(path, batches, [M1_FRAME_US - USLEEP_US] * (len(batches) - 1), once=True).encode())
+        shell("sh", event_writer(input_path("m1tap"), batches, [M1_FRAME_US - USLEEP_US] * (len(batches) - 1), once=True).encode())
     elif kind == "knob":
         if args[1:2] not in ([], ["--step-ms"]): raise ValueError("usage: knob N [--step-ms MS]")
         try: ticks, step_ms = int(args[0]), int(args[2]) if len(args) == 3 else KNOB_STEP_MS
         except ValueError: raise ValueError("knob turn and --step-ms must be integers")
         if not 0 <= step_ms <= 1000: raise ValueError("--step-ms must be 0..1000")
         if not -100 <= ticks <= 100 or not ticks: raise ValueError("knob turn must be -100..100 detents, not 0")
-        shell("sh", event_writer(path, knob_events(ticks), knob_delays(ticks, step_ms), once=True).encode())
+        shell("sh", event_writer(input_path(kind), knob_events(ticks), knob_delays(ticks, step_ms), once=True).encode())
     elif kind == "tap":
-        try: x, y = map(int, args[:2]); hold = int(args[2]) if len(args) > 2 else SAMPLE_US // 1000
-        except ValueError: raise ValueError("tap coordinates and hold must be integers")
-        if not 1 <= hold <= 10000: raise ValueError("tap hold must be 1..10000 ms")
-        shell("sh", event_writer(path, touch_batches([(x, y)]), hold * 1000).encode())
+        try: x, y = map(int, args)
+        except ValueError: raise ValueError("tap coordinates must be integers")
+        shell("sh", event_writer(input_path(kind), touch_batches([(x, y)])).encode())
     elif kind == "swipe":
         try: x1, y1, x2, y2, ms = map(int, args + ["300"] * (len(args) == 4))
         except ValueError: raise ValueError("swipe coordinates and duration must be integers")
         if not 20 <= ms <= 10000: raise ValueError("swipe duration must be 20..10000 ms")
-        shell("sh", event_writer(path, touch_batches(swipe_points(x1, y1, x2, y2, ms))).encode())
+        shell("sh", event_writer(input_path("tap"), touch_batches(swipe_points(x1, y1, x2, y2, ms))).encode())
     elif kind == "wheel":
         if args[1:2] not in ([], ["--step-ms"]): raise ValueError("usage: wheel N [--step-ms MS]")
         try: ticks, step_ms = int(args[0]), int(args[2]) if len(args) == 3 else SAMPLE_US // 1000
@@ -927,7 +931,8 @@ def main(argv):
             print(f"event{d['event']} {d['name']} handlers={d['handlers']} keys={sorted(bits(d['KEY']))} abs={sorted(bits(d['ABS']))}")
         return 0
     if cmd in ("key", "tap", "swipe", "wheel", "knob"):
-        if len(a) not in {"key": (1, 2), "wheel": (1, 3), "knob": (1, 3), "tap": (2, 3), "swipe": (4, 5)}[cmd]:
+        if len(a) not in {"key": (1, 2), "wheel": (1, 3), "knob": (1, 3), "tap": (2,), "swipe": (4, 5)}[cmd] and \
+                not (cmd == "tap" and len(a) == 3 and is_m1()):  # the M1 Plus's tap X Y MS holds MS
             raise ValueError(f"invalid arguments for {cmd}")
         input_action(cmd, a); return 0
     if cmd == "peek" and a:
