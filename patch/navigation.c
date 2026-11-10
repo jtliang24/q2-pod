@@ -6258,7 +6258,7 @@ static int setting_click(void *ctx, void *event) {
     /* Rockbox, Favorites, Shuffle, Rated Albums, Playlists, Artists, Albums, Games, Podcasts,
      * Audiobooks */
 #if M1PLUS /* Favorites, Shuffle, Rated Albums, Artists, Albums: the rest aren't the M1's (shortcut()) */
-    static const int shortcut_next[] = { 3, 2, 3, 5, 3, 4, 3, 1, 3, 3 };
+    static const int shortcut_next[] = { 3, 2, 3, 5, 1, 4, 3, 3, 3, 3 }; /* as 1.6.4: Rated Albums wraps to Artists */
 #else
     static const int shortcut_next[] = { 3, 2, 6, 5, 7, 4, 8, 1, 9, 0 };
 #endif
