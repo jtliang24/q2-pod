@@ -6351,7 +6351,7 @@ static void genre_fill(void *win, void *label, const char *text) {
                                  I(label, W_H));
         if (!s) return;
         widget_set_name(s, GENRE_SCROLL);
-        widget_use_style(s, "s_scrlabel_white16c");
+        widget_use_style(s, STYLE_SCRLABEL_WHITE16C);
         hscroll_label_set_only_focus(s, 1); /* no stock timer: genre_step moves it */
         widget_set_visible(label, 0, 0);
     }

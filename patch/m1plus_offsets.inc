@@ -120,6 +120,9 @@
 #define STYLE_LABEL_WHITE18C "label_centerwhite20_style"
 #define STYLE_LABEL_WHITE20C "label_centerwhite20_style"
 #define STYLE_LABEL_WHITE20L "navbar_leftlabel_white"
+/* Now Playing's genre scroller (genre_fill, 1.6.7) stands in for V2.1's label_genre, inline white 18 px centred: V2.1's theme
+ * has no such named style, and its white centred scroll label is 20 px */
+#define STYLE_SCRLABEL_WHITE16C "srlabel_msgwhite_style"
 #define STYLE_SCRLABEL_WHITE20C "srlabel_msgwhite_style"
 #define STYLE_SCRLABEL_WHITE20L "srlabel_leftwhite20_style"
 #define STYLE_SCRLABEL_WHITE20R "srlabel_item_right_gray16_styl"

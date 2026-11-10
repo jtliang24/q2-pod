@@ -49,6 +49,7 @@
 #define STYLE_LABEL_WHITE18C "s_label_white18c"
 #define STYLE_LABEL_WHITE20C "s_label_white20c"
 #define STYLE_LABEL_WHITE20L "s_label_white20l"
+#define STYLE_SCRLABEL_WHITE16C "s_scrlabel_white16c" /* Now Playing's genre scroller (navigation.c genre_fill, 1.6.7) */
 #define STYLE_SCRLABEL_WHITE20C "s_scrlabel_white20c"
 #define STYLE_SCRLABEL_WHITE20L "s_scrlabel_white20l"
 #define STYLE_SCRLABEL_WHITE20R "s_scrlabel_white20r"
