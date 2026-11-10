@@ -75,6 +75,7 @@
 #define EVENT_TIME 0x08 /* low word of the uint64 time_now_ms stamp: V2.1's event_init (0x6f4c40) stores it at 8 */
 #define EVENT_X 0x18           /* pointer_event_init @0x640298 */
 #define EVENT_Y 0x1c
+#define EVT_POINTER_FIRST 0xff /* the pointer events the wm dispatches: tslib_run's down 0xff (V2.1 0x637634, as EVT_INPUT_POINTER_DOWN) */
 #define EVT_POINTER_DOWN 0x100 /* wm registers on_wm_tsdown_before_fun for this type @0x523ef0 */
 #define EVT_POINTER_MOVE_BEFORE 0x102 /* wm move-before forwards this type to the down hook @0x523ed4 */
 #define EVT_POINTER_UP_BEFORE 0x104
@@ -599,6 +600,17 @@ static inline int arc_out(int r, int y) {
 #define WHEEL_TICK_UNITS 28
 #define WHEEL_INFO_EVENT 0x20 /* event type: 0x110 key down, 0x114 key up */
 #define WHEEL_INFO_KEY 0x38   /* the event's key (EVENT_KEY) */
+/* main_loop_queue_event (0x658f18) is V2.1's leaf too, its queue_event slot at +0x18; the M1 doesn't take
+ * upstream's QUEUE_LEAF (1.6.4: Wheel QS's lift flooded the queue with the touch thread's empty events). */
+#define LOOP_POST 0x18
+/* The stale press backstop (navigation.c stale_heal, 1.6.4) runs only on the Q2 (unported: the M1's
+ * ringnav_input returns before it notes a finger), so its --dev note's main_loop_simple byte is unread. */
+#define LOOP_PRESSED M1_UNPORTED
+#define STALE_TOUCH_MS 5000
+/* An empty Library list's page (navigation.c empty_toast): V2.1's window_base_on_event (0x676b5c) sets the
+ * window's stage 3 on EVT_WINDOW_OPEN (0x12b, 0x676c24), as V1.32's. */
+#define WINDOW_STAGE_OPENED 3
+#define EMPTY_POLL_MS 50
 /* V2.1 has no wheel lockout and no Return key latch. on_wm_keyup_fun (0x4cd9ac) drops a power
  * (knob) release while this byte or g_power_longkey (tools/build.py M1PLUS_RAW_GLOBALS) is set and
  * clears both; to_poweroptions sets this one after into_standby returns (0x4ce6d4). */

@@ -10511,7 +10511,7 @@ int ringnav_mainscheduling(void) {
 }
 
 int ringnav_sleep(void *loop) {
-    stale_heal();
+    if (!M1PLUS) stale_heal(); /* the M1 notes no finger (ringnav_input), so it is unported */
     quick_poll();
     headset_poll();
     headset_eq_poll();
