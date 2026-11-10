@@ -4314,7 +4314,7 @@ static void paint_lock_level(void *w, void *canvas) {
     int level = I(g_power_capacity, 0), mode = st.batt_mode;
     unsigned key = st.batt_key;
     st.batt_mode = 1; /* paint_battery reads the bar's; the lock's for this paint */
-    st.batt_key = (unsigned)(level > 100 ? 100 : level) << 2 |
+    st.batt_key = (unsigned)(level > 100 ? 100 : level) << 3 | /* paint_battery's key: bit 2, Classic's full, is 0 */
                   (unsigned)(icon && !tk_strcmp(icon, "screens_charge")) << 1 |
                   (unsigned)(icon && !tk_strcmp(icon, "screens_lowbattery"));
     paint_battery(w, canvas);
