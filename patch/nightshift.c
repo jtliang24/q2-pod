@@ -94,7 +94,7 @@ static int night_end(void *lcd) {
 /* ringnav_paint, each widget: once on, the screen's lcd takes night_end; a normal frame's canvas
  * is the screen's, an offline one draws into a bitmap. Off (or not yet read), a flag test. */
 void night_paint(void *canvas) {
-    if (ns.lcd || !lit()) return;
+    if (M1PLUS || ns.lcd || !lit()) return; /* M1 Plus: unported (m1plus_offsets.inc LCD_*) */
     void *lcd = canvas ? P(canvas, CANVAS_LCD) : 0;
     if (!lcd || I(lcd, LCD_DRAW_MODE) != LCD_DRAW_NORMAL || I(lcd, LCD_FORMAT) != LCD_BGRA8888 ||
         !P(lcd, LCD_END_FRAME))

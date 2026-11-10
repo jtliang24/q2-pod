@@ -889,6 +889,11 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
     assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
     assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
+    # Library -> Songs (songs_load, 1.6.3): loadLocalClassList's default branch calls getAllMusic, then
+    # musicNagvationTitle (music_nagvation_title) with 0xf001 (ori $a0); V2.1's getAllMusic reads sort_flag
+    # (g_sort_flag) itself, so the payload's argument is ignored.
+    assert bal(0x4ee5c0, 'getAllMusic') and bal(0x4ee5d4, 'musicNagvationTitle') and words(0x4ee5c8, 1) == (0x3404f001,)
+    assert stock_syms['loadLocalClassList'] < 0x4ee5c0 and got(0x4ea374) == stock_syms['sort_flag']
     # online_lyricthd: the hooked search (kugou_obtainlyric), NetEase's com163_obtainlyric on a miss and
     # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
     assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')

@@ -5292,7 +5292,9 @@ int ringnav_display(void *win, void *ctx) {
         for (int i = DISPLAY_APPEARANCE; i <= DISPLAY_CONTROLS; ++i)
             widget_set_text_utf8(list_row_into(view, sub_icons[i], display_open, (void *)(long)i),
                                  titles[i]);
+#if !M1PLUS /* Night Shift is unported (m1plus_offsets.inc LCD_*) */
         night_row(list_row_into(view, "display_backlight", xfade_open, (void *)3));
+#endif
         return result;
     }
     widget_destroy_children(view);
@@ -5314,7 +5316,7 @@ int ringnav_display(void *win, void *ctx) {
     static const char *const icons[] = {
         ICON_DISPLAY,   ICON_COVERMODE, ICON_POWER,       ICON_DISPLAY,
         ICON_COVERMODE, ICON_DISPLAY,   ICON_DISPLAY,     ICON_DISPLAY,
-        ICON_COVERMODE, "system_keytone", ICON_COVERMODE
+        ICON_COVERMODE, ICON_KEYTONE,   ICON_COVERMODE
     };
     const unsigned char *rows = sub == DISPLAY_APPEARANCE ? appearance : controls;
     for (int k = 0, n = sub == DISPLAY_APPEARANCE ? sizeof appearance : sizeof controls; k < n;
@@ -9761,7 +9763,7 @@ void ringnav_wdt_long(void) {
     wdt_span(WDT_LONG_MS);
 }
 static void wdt_poll(void) {
-    if (st.ended || st.wdt < 0) return;
+    if (M1PLUS || st.ended || st.wdt < 0) return; /* M1 Plus: unported (m1plus_offsets.inc WDT_MS) */
     if (st.wdt && st.wdt_long) {
         st.wdt_long = 0;
         wdt_span(WDT_MS);
@@ -9784,7 +9786,7 @@ static char *put(char *p, const char *s) {
 static void state_poll(void) {
     static const char *const play[] = { "?", "stopped", "playing", "paused" };
     static const char *const out[] = { "jack", "bluetooth", "usb" };
-    if (st.ended) return;
+    if (M1PLUS || st.ended) return; /* M1 Plus: unported, with the watchdog */
     unsigned ps = (unsigned)mclGetPlayStatus(), ow = (unsigned)mclGetOutputWay();
     unsigned pct = (unsigned)I(g_power_capacity, 0), n = 0;
     char s[sizeof st.state], d[4], *p = s;
@@ -10364,11 +10366,13 @@ static void bt_volume_poll(void) {
 #endif
     device_set_volume(v, 1);
     write_int_config(v, "PLAYSET", BT_VOLUME_KEY);
-    void *top = vol_top();
-    if (top) {
-#if M1PLUS
+#if M1PLUS /* vol_top is Now Playing's (m1plus_np_view.c stands in) */
+    void *top = window_manager_get_top_window(window_manager());
+    if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog")) {
         volume_refresh(top);
 #else
+    void *top = vol_top();
+    if (top) {
         void *slider = widget_lookup(top, "slider_vol", 1);
         if (slider) widget_set_prop_int(slider, "value", v);
 #endif

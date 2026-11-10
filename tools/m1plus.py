@@ -484,6 +484,8 @@ M1PLUS_GLOBAL_ALIASES = {
     'g_btvolume': 'btsource_volume',
     'g_rotate_mode': 'rotate_mode',
     'g_time_zone': 'time_zone',
+    # Songs' sort (navigation.c songs_sorted, 1.6.3): V2.1's getAllMusic takes no argument and reads it itself
+    'g_sort_flag': 'sort_flag',
 }
 # V2.1 globals V1.32 lacks, read as GLOBALS are. Bluetooth keeps its own level, [PLAYSET] BTVOLUME:
 # the volume dialog (on_volume_tsup_fun), status bar and set_devicevolume use it while headset_output
@@ -590,6 +592,9 @@ M1PLUS_FUNCTION_ALIASES = {
     # folder_back calls it where V1.32's calls folder_reset_variable (0x4dbf0c): a fresh Folder visit.
     # V2.1's clears one enter-history deque where V1.32's clears two, and its flags are words.
     'folder_reset_variable': 'clear_foldervariate',
+    # Library -> Songs' load (navigation.c songs_load, 1.6.3): loadLocalClassList's default calls it with
+    # 0xf001 after getAllMusic, where V1.32's load_localclass_list calls music_nagvation_title
+    'music_nagvation_title': 'musicNagvationTitle',
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
@@ -876,7 +881,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
