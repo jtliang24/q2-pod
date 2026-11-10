@@ -6411,7 +6411,7 @@ static int theme_pick(void *ctx, void *event) {
     }
     theme_select(t);
     void *win = window_manager_get_top_window(window_manager());
-    void *view = win ? widget_lookup(win, "scroll_view_display", 1) : (void *)0;
+    void *view = win ? widget_lookup(win, VIEW_DISPLAY, 1) : (void *)0;
     for (unsigned i = 0; view && view == theme_view && i < widget_count_children(view); ++i)
         image_base_set_image(widget_get_child(widget_get_child(widget_get_child(view, i), 0), 0),
                              (int)i == t ? "select" : "unselect");
