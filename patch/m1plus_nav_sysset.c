@@ -60,4 +60,22 @@ static void sysset_ipod_order(void *view, void *apps, void *boot) {
         for (unsigned i = 0; i < n; ++i)
             if (role[i] == k) widget_restack(rows[i], at++);
 }
+/* System settings: App Store, then Boot to with Rockbox on the card, then the iPod's order. Upstream 1.6.4 moved
+ * In-Vehicle Mode and Boot to onto Power, and Key Tone and Buttons lock onto a Controls row here; on the M1 these
+ * stay V2.1's own rows (sset_carmode, sset_keylock) until that is ported (docs/m1plus-unported.md). */
+int ringnav_systemset(void *win, void *ctx) {
+    int result = stock_systemset_trampoline(win, ctx);
+    void *view = win ? widget_lookup(win, VIEW_SYSSET, 1) : (void *)0, *apps = (void *)0, *boot = (void *)0;
+    if (!view) return result;
+    widget_set_text_utf8(list_row_into(view, "system_update", shelf_open, 0), "App Store");
+    apps = last_row(view);
+    if (rockbox_available()) {
+        boot_row(view);
+        boot = last_row(view);
+    }
+    sysset_ipod_order(view, apps, boot);
+    return result;
+}
+/* Named as m1plus_nav_library.c's tidal_downloads is: the Q2's System order. */
+static const void *const m1_unported_sysset_order __attribute__((unused)) = sysset_order;
 #endif
