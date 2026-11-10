@@ -63,7 +63,8 @@
 #define CAPS_FILE "/tmp/q2-addon.caps"
 /* This firmware's card-app features, space-separated; a feature adds its word. */
 #if M1PLUS
-#define ADDON_CAPS "playlist progress pages goto sleep game" /* no library: its update is unported (addon_poll) */
+/* no library: its update is unported (addon_poll); no game: Library has no Games row on M1 (games.c) */
+#define ADDON_CAPS "playlist progress pages goto sleep"
 #else
 #define ADDON_CAPS "playlist progress pages library goto sleep game"
 #endif

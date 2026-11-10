@@ -12498,12 +12498,12 @@ if 'usbmode_page_init' in HOOKS:
     passed()
     # Capabilities (addon.c addon_scan, docs/internals.md): every Streaming scan writes /tmp/q2-addon.caps, the
     # card-app features this firmware has as words on one line, a set; a stale file is written over. M1 Plus: no
-    # library, as its update is unported (addon_poll).
+    # library, as its update is unported (addon_poll), and no game, as Library has no Games row.
     CAPS='/tmp/q2-addon.caps'
     scan=streaming if is_m1plus else stream_rows
     m=AppMachine(); scan(m); caps=bytes(m.files[CAPS])
     assert caps.endswith(b'\n') and caps.count(b'\n')==1,caps
-    assert set(caps.split())=={b'playlist',b'progress',b'pages'}|(set() if is_m1plus else {b'library'}),caps
+    assert set(caps.split())=={b'playlist',b'progress',b'pages',b'goto',b'sleep'}|(set() if is_m1plus else {b'library',b'game'}),caps
     m=AppMachine(); m.files[CAPS]=bytearray(b'stale\n'); scan(m); assert m.files[CAPS]==caps; passed()  # a fresh scan: M1 Plus's page keeps its rows
     if not is_m1plus:  # Streaming's page: V2.1 has none (the Q2 Pod page lists its rows), and no Configuration
         # Stock's Baidu Netdisk row (a Chinese cloud drive; list_baidu's icon) is gone from Streaming, destroyed; its
