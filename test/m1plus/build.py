@@ -894,6 +894,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # (g_sort_flag) itself, so the payload's argument is ignored.
     assert bal(0x4ee5c0, 'getAllMusic') and bal(0x4ee5d4, 'musicNagvationTitle') and words(0x4ee5c8, 1) == (0x3404f001,)
     assert stock_syms['loadLocalClassList'] < 0x4ee5c0 and got(0x4ea374) == stock_syms['sort_flag']
+    # MQA_ACCEPT (1.6.3): mclWaitAccept's jalr is accept's, and a positive descriptor goes to MCL_FD's
+    # word (sw $v0, -0x5414($s4)) after it, as V1.32's does.
+    assert got(0x5d0020) == stock_syms['accept@GLIBC_2.0'] and stock_syms['mclWaitAccept'] < 0x5d0030
+    assert words(0x5d0038, 3) == (0x18400002, 0x8fbc0010, 0xae82abec)
     # online_lyricthd: the hooked search (kugou_obtainlyric), NetEase's com163_obtainlyric on a miss and
     # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
     assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')
