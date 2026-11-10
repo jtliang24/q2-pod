@@ -397,9 +397,16 @@ void spot_poll(void) {
     } else if (mclGetPlayStatus() == 2)
         sp.local = 1; /* local music plays: the keys are its again */
     sp.active = (playing || sp.paused) && !sp.local;
+#if M1PLUS /* the Now Playing page holds it as the browser does: stopped under it, it said the binary is missing */
+    if (playing || downloading || ((browsing() || ui.page) && g_backlight_status))
+#else
     if (playing || downloading || (browsing() && g_backlight_status))
+#endif
         sp.played |= playing, sp.idle_at = now;
     else if (now - sp.idle_at >= (sp.played ? SPOT_IDLE_MS : SPOT_CAST_MS)) {
+#if M1PLUS /* left open dark too: shut first, unseen, as np_browse does */
+        if (ui.page) window_manager_close_window_force(window_manager(), ui.page);
+#endif
         if (browsing()) window_close(browsing()); /* left open dark: shut, as Back would */
         spot_stop();
     }
