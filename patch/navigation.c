@@ -3865,20 +3865,6 @@ static int scrub_expire(const void *info) {
     scrub_end();
     return 0;
 }
-
-/* Starts a scrub on the page's slider: the target is where the slider is, the page's timer stops so
- * it cannot pull the fill back, and the fill goes to the scrub colour. */
-static void scrub_start(void) {
-    if (!st.np_slider) return;
-    st.scrub = 1;
-    st.scrub_moved = 0;
-    st.scrub_to = widget_get_prop_int(st.np_slider, "value", 0);
-    st.scrub_track = np_track();
-    stop_timer(&st.settle_timer);
-    playing_timer_clear(st.np_win);
-    np_fill(1);
-    rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
-}
 #endif
 
 /* The lyrics: stock's 250 ms timer scrolls scroll_lrc to the current line whenever it is elsewhere.
