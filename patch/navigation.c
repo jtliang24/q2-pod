@@ -2385,6 +2385,7 @@ static void paint_caps(void *w, void *canvas) {
               : spot_album() && w == P(spot_album(), W_PARENT) ? spot_album()
                                                                 : (void *)0;
     if (a) {
+        if (!T->caps_np) return; /* Modern's album keeps its label */
 #else
     if (st.np_album && w == P(st.np_album, W_PARENT)) {
         if (!T->caps_np) return;
