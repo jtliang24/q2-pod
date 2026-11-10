@@ -1758,7 +1758,7 @@ _Static_assert(__builtin_offsetof(theme_t, geom) == THEME_GEOM_OFF, "test/patch.
 _Static_assert(__builtin_offsetof(scheme_t, mode) == SCHEME_MODE_OFF, "test/patch.py patches it");
 /* A value of the set theme_boot wrote (st.geom), never the live theme's: V_BAR, ... */
 static int geom_val(int v) { return geom_vals[st.geom][v]; }
-int client_h(void) { return 320 - geom_val(V_BAR); }
+int client_h(void) { return UI_H - geom_val(V_BAR); }
 /* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home (0 Split, 1 Full,
  * 2 Carousel), 2 Battery, 3 Theme, 4 Shortcut, 5 Corners, 6 Light Mode, 7 Smart Awake, 8 Centred
  * Now Playing, 9 Click With Headphones (Controls, under Key Tone), 10 Single Press Scrub, 11 Time
