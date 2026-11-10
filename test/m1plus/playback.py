@@ -723,9 +723,9 @@ if is_m1plus:
             if mode==3: r.config['MQA']='1'
             r.call(address=0x4d869c,args=(0,0,0,0),gap=0) # config_mplayer
             assert '/mnt/data/ringnav-queue' in r.files and r.sequence()==want and r.eq_boots==1
-            # The connected hciplayer gets MQA's mode: off (2) skips its start-of-track probe.
+            # MQA is already sent at accept (MQA_ACCEPT, 1.6.3); config_mplayer does not send it again.
             mqa=lambda: [x[1] for x in r.sent if x[1].startswith(b'{mcl-mqa')]
-            assert mqa()==[b'{mcl-mqadecodemode\\0}' if mode==3 else b'{mcl-mqadecodemode\\2}']
+            assert not mqa()
             # A real mode choice still clears the snapshot after startup, and sends no MQA mode.
             r.sent=[]
             r.fn('ringnav_mode',mode)
@@ -767,52 +767,52 @@ else:
             assert ('/mnt/data/ringnav-queue' in r.files) == (mode == 2)
             checks+=1
 
-    # The first connection never sets stock's reconfiguration flag, so player_initconfig does not run
-    # then. Apply the saved MQA mode inside the real accept loop, before the descriptor becomes visible
-    # to playback.
-    class MqaConnectMachine(PlaybackMachine):
-        def __init__(self):
-            super().__init__()
-            self.handlers[syms['accept@GLIBC_2.0']]='mqa:accept'
-            self.handlers[syms['usleep@GLIBC_2.0']]='mqa:sleep'
-            self.handlers[ps['list_toggle']]='mqa:label' # the row's switch: no settings page here
-            self.word(O['MCL_FD']+4,7) # stock's listening socket
-        def hook(self,u,address,size,unused):
-            name=self.handlers.get(address,'')
-            if name=='mqa:accept':
-                assert u.reg_read(UC_MIPS_REG_A0)==7
-                assert self.get(u.reg_read(UC_MIPS_REG_A2))==110
-                self.returns(self.accepted,clobber=True)
-            elif name=='mqa:sleep': u.emu_stop()
-            elif name=='mqa:label': self.returns(0,clobber=True)
-            else:
-                if name=='q:send@GLIBC_2.0': assert self.get(O['MCL_FD'])==0xffffffff; self.unpublished+=1
-                super().hook(u,address,size,unused)
-        def connect(self,fd):
-            self.accepted=fd; self.sent=[]; self.unpublished=0
-            self.word(O['MCL_FD'],-1)
-            self.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
-            self.u.reg_write(UC_MIPS_REG_T9,syms['mclWaitAccept'])
-            self.u.emu_start(syms['mclWaitAccept'],0x1000000,count=self.budget)
-            assert self.u.reg_read(UC_MIPS_REG_PC)==syms['usleep@GLIBC_2.0']
-            assert self.get(O['MCL_FD'])==(fd if fd>0 else 0xffffffff)
-            assert self.unpublished==len(self.sent) # every send saw the socket still unpublished
+# The first connection never sets stock's reconfiguration flag, so player_initconfig does not run
+# then. Apply the saved MQA mode inside the real accept loop, before the descriptor becomes visible
+# to playback.
+class MqaConnectMachine(PlaybackMachine):
+    def __init__(self):
+        super().__init__()
+        self.handlers[syms['accept@GLIBC_2.0']]='mqa:accept'
+        self.handlers[syms['usleep@GLIBC_2.0']]='mqa:sleep'
+        self.handlers[ps['list_toggle']]='mqa:label' # the row's switch: no settings page here
+        self.word(O['MCL_FD']+4,7) # stock's listening socket
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if name=='mqa:accept':
+            assert u.reg_read(UC_MIPS_REG_A0)==7
+            assert self.get(u.reg_read(UC_MIPS_REG_A2))==110
+            self.returns(self.accepted,clobber=True)
+        elif name=='mqa:sleep': u.emu_stop()
+        elif name=='mqa:label': self.returns(0,clobber=True)
+        else:
+            if name=='q:send@GLIBC_2.0': assert self.get(O['MCL_FD'])==0xffffffff; self.unpublished+=1
+            super().hook(u,address,size,unused)
+    def connect(self,fd):
+        self.accepted=fd; self.sent=[]; self.unpublished=0
+        self.word(O['MCL_FD'],-1)
+        self.u.reg_write(UC_MIPS_REG_SP,0x7000f000)
+        self.u.reg_write(UC_MIPS_REG_T9,syms['mclWaitAccept'])
+        self.u.emu_start(syms['mclWaitAccept'],0x1000000,count=self.budget)
+        assert self.u.reg_read(UC_MIPS_REG_PC)==syms['usleep@GLIBC_2.0']
+        assert self.get(O['MCL_FD'])==(fd if fd>0 else 0xffffffff)
+        assert self.unpublished==len(self.sent) # every send saw the socket still unpublished
 
-    on,off=b'{mcl-mqadecodemode\\0}',b'{mcl-mqadecodemode\\2}'
-    for saved in (None,'0','1'):
-        m=MqaConnectMachine()
-        if saved is not None: m.config['MQA']=saved
-        want=on if saved=='1' else off
-        for fd in (-1,0,9,9,11): # failure, stock-rejected zero, boot, reused fd, new fd
-            m.connect(fd)
-            assert m.sent==([(fd,want,len(want),0)] if fd>0 else [])
-            checks+=1
-        # A toggle while no player is connected sends nothing; the next connection gets the new mode.
-        m.word(O['MCL_FD'],-1); m.sent=[]
-        assert m.fn('mqa_click')==0 and not m.sent
-        assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(0 if saved=='1' else 1,'Q2POD','MQA')]
-        m.connect(9); assert m.sent==[(9,off if saved=='1' else on,21,0)]
+on,off=b'{mcl-mqadecodemode\\0}',b'{mcl-mqadecodemode\\2}'
+for saved in (None,'0','1'):
+    m=MqaConnectMachine()
+    if saved is not None: m.config['MQA']=saved
+    want=on if saved=='1' else off
+    for fd in (-1,0,9,9,11): # failure, stock-rejected zero, boot, reused fd, new fd
+        m.connect(fd)
+        assert m.sent==([(fd,want,len(want),0)] if fd>0 else [])
         checks+=1
+    # A toggle while no player is connected sends nothing; the next connection gets the new mode.
+    m.word(O['MCL_FD'],-1); m.sent=[]
+    assert m.fn('mqa_click')==0 and not m.sent
+    assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(0 if saved=='1' else 1,'Q2POD','MQA')]
+    m.connect(9); assert m.sent==[(9,off if saved=='1' else on,21,0)]
+    checks+=1
 
 # Previous then Next returns to the track Previous left instead of skipping it.
 m=PlaybackMachine(); m.options(2,5,0); m.advance_song(0); m.advance_song(0)
@@ -1046,7 +1046,7 @@ def single(k=1,mode=0,cls=1,skip=0,pos=0,held=1):
     m.word(O['MCL_POOL'],m.deque([]))  # a one-track queue's shuffle pool, under stock's two
     return m
 def change(m,nxt):
-    del m.seen[:]; r=signed(m.call(address=syms['player_change_music'],args=(nxt,0,0,0),gap=0))
+    del m.seen[:]; r=signed(m.call(address=change_fn,args=(nxt,0,0,0),gap=0))
     return r,m.seen==['resume_held'],m.get(ps['restart_ask'])  # result, stopped before stock, toast waiting
 ask=(0,True,1)
 for nxt,mode,cls in ((0,0,1),(1,0,1),(0,1,1),(1,1,1),(0,2,1),(1,2,1),(0,3,1),(1,3,1),(0,0,0xf001),(1,3,0xf001)):
@@ -1062,7 +1062,8 @@ m=single(k=3); m.options(0,2,0); assert change(m,0)[2]==0  # advanced play with 
 m=single(); m.fn('ringnav_change',0); assert m.get(ps['restart_ask'])==1; m.fn('playback_poll'); assert m.get(ps['restart_ask'])==0  # toasted once
 checks+=6
 # It asks exactly when stock, run bare, would start the file again: not when it leaves for a sibling folder or stops.
-M3U_FLAG=0xa3be51  # mclGetPlayM3uFlag's byte
+# mclGetPlayM3uFlag's byte: V2.1 reads it at 0xa0ab86 (its GOT page 0xa10000 - 0x547a), V1.32 at 0xa3be51
+M3U_FLAG = 0xa0ab86 if is_m1plus else 0xa3be51
 for nxt in (0,1):
     for mode in (0,1,2,3):
         for cls in (1,0xff10,0xf001):
@@ -1096,7 +1097,7 @@ class HeldMachine(ChangeMachine):
 # A refused press keeps the place and toasts; the second within RESTART_ASK_MS restarts, which the poll forgets it for.
 m=HeldMachine(); m.install([('book','/a/book.m4b','B',0,0,0,0)],0); m.word(O['MCL_TYPE'],1)
 m.poll(0,2); m.poll(100,3); place=m.places(); assert [s for _,s in place]==[100]
-def press(): del m.seen[:]; return signed(m.call(address=syms['player_change_music'],args=(0,0,0,0),gap=0))
+def press(): del m.seen[:]; return signed(m.call(address=change_fn,args=(0,0,0,0),gap=0))
 assert press()==0 and not m.seen and m.get(ps['restart_ask'])==1
 m.poll(100); assert m.places()==place and m.toasts[-1]=='Press again to restart'
 assert press()==1 and m.seen; m.poll(0,3); assert m.places()==[] and not m.seeks
