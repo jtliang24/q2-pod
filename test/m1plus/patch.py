@@ -78,7 +78,7 @@ else:
     THEME_STYLES = None
     FREE_GOT = 0xa2638c
 # The Library's rows: Q2's Local Music hook. V2.1 has no Local Music menu, so M1 Plus binds nothing
-# there and its rows are on the Q2 Pod page (library_open, checked on its own); the tests that click
+# there and its rows are on the Q2 Pod page (library_page_open, checked on its own); the tests that click
 # the rows reach their handlers, the ones that page uses, through Q2's builder, entered directly.
 LIBRARY_INIT = payload_syms['ringnav_localmusic'] if is_m1plus else HOOKS['localmusic_page_init'][0]
 # The built demo enters the payload at every hook the tests call through.
@@ -9957,8 +9957,8 @@ def m1_entry_pages():
         m=ShuffleMachine(); m.top=m.node('window','home_page'); m.stack=[m.top]; m.config.update(config)
         return m
     m=library(); m.card=[('Podcasts',4),('Photos',4),('Videos',4)]
-    assert m.call(address=payload_syms['library_open'],args=(0,m.event,0,0),gap=0)==0; page=m.top
-    assert m.nodes[page]['name']=='library_page' and m.call(address=payload_syms['library_open'],args=(0,m.event,0,0),gap=0)==0 and m.top==page
+    assert m.call(address=payload_syms['library_page_open'],args=(0,m.event,0,0),gap=0)==0; page=m.top
+    assert m.nodes[page]['name']=='library_page' and m.call(address=payload_syms['library_page_open'],args=(0,m.event,0,0),gap=0)==0 and m.top==page
     m.page=page; view=m.find('scroll_view'); rows=m.nodes[view]['children']
     lv=m.get(view+O['W_PARENT']); assert m.nodes[lv]['item_height']==64
     assert 'Library' in m.texts()
@@ -9988,7 +9988,7 @@ def m1_entry_pages():
     assert [m.text(m.get(0x97c940+4*i)) for i in (1,0)]==['tidal','hifimusic']
     assert m.call(address=payload_syms['streaming_open'],args=(0,m.event,0,0),gap=0)==0 and m.top==stream
     m=library(TOKEN='tok'); m.card=[('Audiobooks',4),('Books',4)]
-    m.call(address=payload_syms['library_open'],args=(0,m.event,0,0),gap=0)
+    m.call(address=payload_syms['library_page_open'],args=(0,m.event,0,0),gap=0)
     m.page=m.top; rows=m.nodes[m.find('scroll_view')]['children']
     assert [m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]==base+['Audiobooks','Books','Composers','Upload Scrobbles','CD Ripper','Update Local Music']; passed()
 if is_m1plus: m1_entry_pages()
@@ -10020,7 +10020,7 @@ def m1_home_init():
     for i,name in enumerate(('img_playset','img_sysset','img_left','img_right')):
         assert m.handler(named(m,sets if i<2 else win,name),O['EVT_CLICK'])==(payload_syms['home_click'],7+i),name
     table=payload_syms['home_clicks']
-    want=[('home_playing',None),('library_open',None),('coverflow_open',None),('home_page','folder_page'),('home_shortcut_open',None),
+    want=[('home_playing',None),('library_page_open',None),('coverflow_open',None),('home_page','folder_page'),('home_shortcut_open',None),
           ('streaming_open',None),('home_settings',None),('home_page','playset/playset_page'),('home_page','systemset/sysset_page'),
           ('home_arrow',0),('home_arrow',1)]
     for i,(f,ctx) in enumerate(want):
@@ -10539,9 +10539,9 @@ assert m.texts()==['Long Songs','A','Artist · 21:40','A','Artist · 11:40']; pa
 
 def library_entry(m,image,caption,geometry=False):
     """The Library's row that opens a medium's page, its tap target. The Q2's is Local Music's last (LIBRARY_INIT, 17
-    rows with the medium's); the M1 Plus's is the Q2 Pod page's (library_open, ipod-ui 4.4): V2.1 has no localmusic_page."""
+    rows with the medium's); the M1 Plus's is the Q2 Pod page's (library_page_open, ipod-ui 4.4): V2.1 has no localmusic_page."""
     if is_m1plus:
-        assert m.call(address=payload_syms['library_open'],args=(0,0,0,0),gap=0,count=5_000_000)==0
+        assert m.call(address=payload_syms['library_page_open'],args=(0,0,0,0),gap=0,count=5_000_000)==0
         m.page=m.top; assert m.nodes[m.top]['name']=='library_page'
         rows=m.nodes[m.find('scroll_view')]['children']
         row,=[r for r in rows if m.nodes[m.nodes[r]['children'][0]].get('image')==image]
@@ -10559,7 +10559,7 @@ def library_entry(m,image,caption,geometry=False):
 # starts, a second press finds it running, and a timer reports the result once the thread ends.
 m=ShuffleMachine(); m.config.update(USER='u',PASSWORD='p',API_KEY='k')  # no API_SECRET: no row
 if is_m1plus:
-    m.call(address=payload_syms['library_open'],args=(0,0,0,0),gap=0); m.page=m.top
+    m.call(address=payload_syms['library_page_open'],args=(0,0,0,0),gap=0); m.page=m.top
     assert 'Upload Scrobbles' not in m.texts()
     m=ShuffleMachine(); m.config['TOKEN']='tok'
     button=library_entry(m,'local_scrobble','Upload Scrobbles')
@@ -11501,8 +11501,8 @@ else:
 def streaming(m):
     """Streaming's rows, label to tap target: stock Streaming's one Tidal row, then the hook's
     Spotify, Internet Radio and AirPlay rows. V2.1 has no Streaming page (its Tidal is a Home card):
-    on M1 Plus the three follow Coverflow on the Q2 Pod page (library_open)."""
-    if is_m1plus and getattr(m,'streams',None):  # the page stays open (library_open opens one)
+    on M1 Plus the three follow Coverflow on the Q2 Pod page (library_page_open)."""
+    if is_m1plus and getattr(m,'streams',None):  # the page stays open (library_page_open opens one)
         m.top=m.lib_page; return m.streams
     if is_m1plus:
         m.top=m.node('window','home_page'); m.stack=[m.top]

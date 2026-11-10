@@ -2911,7 +2911,7 @@ int coverflow_home_back(void *top) {
 #if M1PLUS
 /* Whether Home shows its Settings list, which the status bar's chevron and Previous close (m1plus_nav_back.c). */
 int coverflow_home_sets(void *top) { return home.sets && top == home.win && widget_get_visible(home.sets); }
-extern int library_open(void *, void *), streaming_open(void *, void *), compact_now_playing(void);
+extern int library_page_open(void *, void *), streaming_open(void *, void *), compact_now_playing(void);
 extern void slide_step(void *s, int k, int bounded);
 /* Home's destinations V2.1 has no binding for (its init binds no row: the payload binds each, coverflow_home): Now
  * Playing as V2.1's playing strip opened it (on_backtoplayer_onclick's context), and the pages its Home cards open
@@ -2937,7 +2937,7 @@ enum { HOME_PLAYSET = 7, HOME_SYSSET, HOME_LEFT, HOME_RIGHT, HOME_CLICKS };
 static const struct {
     int (*click)(void *, void *);
     const void *ctx;
-} home_clicks[HOME_CLICKS] = { { home_playing, 0 },       { library_open, 0 },         { coverflow_open, 0 },
+} home_clicks[HOME_CLICKS] = { { home_playing, 0 },       { library_page_open, 0 },       { coverflow_open, 0 },
                                { home_page, "folder_page" }, { home_shortcut_open, 0 }, { streaming_open, 0 },
                                { home_settings, 0 },      { home_page, "playset/playset_page" },
                                { home_page, "systemset/sysset_page" }, { home_arrow, 0 }, { home_arrow, (void *)1 } };

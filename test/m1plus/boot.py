@@ -1102,7 +1102,7 @@ if __name__ == '__main__':
         # crossfade's tap opened crossfade.c's page: its row was there again after EQ, when V2.1
         # rebuilt the list (a tap on a stock row there would change the screens as well).
         assert args.home_menu or args.media or hits['xfade_open'], 'crossfade: the Crossfade row was not there to open its page'
-        assert hits['library_open'], "library: Home's row did not open the Library"
+        assert hits['library_page_open'], "library: Home's row did not open the Library"
         assert args.home_menu or hits['streaming_open'], "streaming: Home's row did not open the Streaming page"
         assert args.home_menu or hits['coverflow_home_back'], "settings: Home's Settings list never went back"
         if args.media:

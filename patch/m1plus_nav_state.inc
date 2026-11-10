@@ -11,5 +11,5 @@
     unsigned sw_at;
     int sw_px, sw_x, sw_live, sw_drag;
     int qm_opening; /* qm_open's navigator_to is running: its sortselect_dialog is the menu */
-    void *lib_page, *stream_page; /* Home's Library and Streaming pages (library_open, streaming_open) */
+    void *lib_page, *stream_page; /* Home's Library and Streaming pages (library_page_open, streaming_open) */
 #endif
