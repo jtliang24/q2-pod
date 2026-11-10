@@ -91,6 +91,13 @@ static int spoken(const char *path);
 
 /* Failed exec in a forked child must not flush demo's copied stdio or run its exit handlers. */
 __asm__(".globl child_exit\nchild_exit:\nli $v0, 4001\nsyscall\n");
+/* Out of memory, the kernel kills the fattest process, which was demo (#169): every child demo
+ * forks, whose one job can need tens of MB, makes itself the first to go, between fork and exec. */
+int open(const char *, int, ...);
+void child_oom_first(void) {
+    int fd = open("/proc/self/oom_score_adj", 1); /* O_WRONLY */
+    if (fd >= 0) write(fd, "1000", 4), close(fd);
+}
 
 /* Stock's album-artist queries (Artists, an artist's albums and songs, search) take a song without
  * an album artist by its artist, so an untagged album stays under its artist, not Unknown.
@@ -200,7 +207,7 @@ extern void up_next(int (*closed)(void *, void *), int (*keyup)(void *, void *))
 extern int un_hold(void *top);
 extern void radio_poll(void);
 extern void xfade_row(void *label), wheel_row(void *label), resume_row(void *label),
-    mono_row(void *label), swap_row(void *label), mqa_row(void *label);
+    mono_row(void *label), swap_row(void *label), mqa_row(void *label), night_row(void *label);
 extern int mono_click(void *ctx, void *event), swap_click(void *ctx, void *event),
     mqa_click(void *ctx, void *event);
 extern int xfade_open(void *ctx, void *event), xfade_key(void *top, unsigned key), resume_min(void);
@@ -213,9 +220,10 @@ extern void *queue_now(unsigned *pos, unsigned *n);
 extern const char *now_tag(void *r, int field);
 extern unsigned char now_cover(void *r, const char **file);
 extern int scrobble_ready(void), scrobble_start(void), scrobble_poll(int *sent),
-    scrobble_flag(const char *key);
+    scrobble_flag(const char *key), scrobble_value(const char *key);
 extern void scrobble_append(const char *line, unsigned n);
 extern void *staged(int (*query)(void *), void *arg, int *count);
+extern int staged_into(void *into, int (*query)(void *), void *arg);
 /* Scope music detail loads too: spoken tracks can share all their tags with music. */
 void *staged_music(int (*query)(void *), void *arg, int *count) {
     int saved = library_music;
@@ -334,12 +342,13 @@ typedef struct {
     int rs_long, rs_settle, rs_sec, rs_saved, rs_still, rs_pending, rs_cue, rs_end, rs_total, rs_go;
     int rs_spoken; /* under Podcasts or Audiobooks: resumed at any length, never counted */
     /* Play counts by path hash (plays_read once loaded); the playing track's last second, the
-     * seconds of it heard and whether this play has counted. */
+     * seconds of it heard, whether this play has counted and been scrobbled, and .scrobble.ini's
+     * PERCENT (1-100, else 0) as it read when the play began. */
     struct {
         unsigned key, n;
     } plays[PLAYS_SLOTS];
     unsigned plays_read, ls_key;
-    int ls_sec, ls_heard, ls_done;
+    int ls_sec, ls_heard, ls_done, ls_sent, ls_pct;
     /* Most Played's page and its tracks: the last ranking plus the songs counted since, kept across
      * opens while the library is at mp_gen (~library_gen once stale). */
     void *mp_page, *mp_list, *td_page, *td_list;
@@ -410,6 +419,11 @@ typedef struct {
     void *dc_top;    /* the page of the last centre press no list click took, and its time */
     unsigned dc_at;
     unsigned charge_at, last_input, cpu_retry;
+    int wdt;      /* the hardware watchdog's fd: 0 untried, -1 none or refused (wdt_poll) */
+    int wdt_long; /* counting WDT_LONG_MS for a long pass (ringnav_wdt_long) */
+    int ended;    /* a clean end began: no feed and no state record from here (ringnav_clean_end) */
+    int suspended;  /* inside Standby's suspend (ringnav_standby), for the state record */
+    char state[96]; /* the state record last written (state_poll) */
     /* the boot logo's poll: last check, card seen mounted, its sync thread, its failure to toast */
     unsigned logo_at;
     int logo_mounted;
@@ -487,11 +501,13 @@ typedef struct {
         rounded, light, light_day, /* light_day: Auto's answer for now (LIGHT=2) */
         keep_lit,                  /* Smart Awake (#57, keep_lit_poll) */
         np_centred,                /* Centred Now Playing (ringnav_ui_load) */
-        keytone_hp;                /* Click With Headphones (ringnav_buzzer) */
+        keytone_hp,                /* Click With Headphones (ringnav_buzzer) */
+        scrub_single;              /* Single Press Scrub (np_key) */
     unsigned keep_lit_at;
-    void *sel_accent; /* the row on a coloured selection, for Light Mode's ink */
-    int style_depth;  /* nested style hooks (a mutable style's fallback) map nothing */
-    void *setting_label[10];
+    unsigned keytone_timer; /* Key Tone's click, for Click With Headphones' row (keytone_follow) */
+    void *sel_accent;       /* the row on a coloured selection, for Light Mode's ink */
+    int style_depth;        /* nested style hooks (a mutable style's fallback) map nothing */
+    void *setting_label[11];
     unsigned tone_key; /* the wheel key whose press ringnav_keydown silenced, 0 when none */
     int greeted;       /* the first reachable list got its boot repaint */
 #include "m1plus_nav_state.inc"
@@ -563,7 +579,7 @@ static int context_id(const char *name) {
 }
 
 /* The audited local row lists built from the compact assets: the file and music views. Grids
- * (album_page, but its Albums list below), dynamic pages and the home carousel
+ * (album_page, but its Albums list below), other dynamic pages and the home carousel
  * keep hard ends; iPod Home's lists wrap at once (home_menu). */
 /* By the top window's name, not m->ctx: a dynamic page (the hold menu) has no memory context.
  * album_page also holds an album's songs (0xff10), which keep hard ends. */
@@ -1668,15 +1684,15 @@ static const char *const accent_names[] = {
 _Static_assert(sizeof accent_names / sizeof *accent_names == ACCENT_N, "one name per ACCENTS row");
 /* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home (0 Split, 1 Full,
  * 2 Carousel), 2 Battery, 3 Theme, 4 Shortcut, 5 Corners, 6 Light Mode, 7 Smart Awake, 8 Centred
- * Now Playing, 9 Click With Headphones. */
-static const char *const setting_keys[] = {
-    "ACCENT",  "HOME",  "BATTERY", "THEME",     "SHORTCUT",
-    "ROUNDED", "LIGHT", "KEEPLIT", "NPCENTRED", "KEYTONEHP"
-};
-static const int setting_counts[] = { ACCENT_N, 3, 4, 2, 7, 2, 3, 2, 2, 2 };
-static int *const setting_values[] = { &st.accent,     &st.home,      &st.battery, &st.classic,
-                                       &st.shortcut,   &st.rounded,   &st.light,   &st.keep_lit,
-                                       &st.np_centred, &st.keytone_hp };
+ * Now Playing, 9 Click With Headphones (System settings, under Key Tone), 10 Single Press Scrub. */
+static const char *const setting_keys[] = { "ACCENT",    "HOME",      "BATTERY",    "THEME",
+                                            "SHORTCUT",  "ROUNDED",   "LIGHT",      "KEEPLIT",
+                                            "NPCENTRED", "KEYTONEHP", "SCRUBSINGLE" };
+static const int setting_counts[] = { ACCENT_N, 3, 4, 2, 7, 2, 3, 2, 2, 2, 2 };
+static int *const setting_values[] = { &st.accent,     &st.home,        &st.battery,
+                                       &st.classic,    &st.shortcut,    &st.rounded,
+                                       &st.light,      &st.keep_lit,    &st.np_centred,
+                                       &st.keytone_hp, &st.scrub_single };
 /* The local time now into buf (struct tm: tm_sec @0, tm_min @4, tm_hour @8), or 0 when the clock
  * cannot be read. */
 static const int *clock_now(int *buf) {
@@ -1690,6 +1706,13 @@ static const int *clock_now(int *buf) {
 #define LIGHT_FROM 7
 #define LIGHT_UNTIL 19
 static int light_day(const int *tm) { return tm && tm[2] >= LIGHT_FROM && tm[2] < LIGHT_UNTIL; }
+/* Night Shift's Auto (nightshift.c) is on while Light Mode's would be dark, 19:00 to 7:00, and
+ * off while the clock cannot be read. */
+int clock_night(void) {
+    int buf[11];
+    const int *tm = clock_now(buf);
+    return tm && !light_day(tm);
+}
 static void np_fill(int scrub);
 static void light_apply(const int *tm) {
     if (st.light != 2 || light_day(tm) == st.light_day) return;
@@ -1711,6 +1734,7 @@ static int accent(void) {
         st.keep_lit = config_value("IPOD", "KEEPLIT", 2, 0);
         st.np_centred = config_value("IPOD", "NPCENTRED", 2, 0);
         st.keytone_hp = config_value("IPOD", "KEYTONEHP", 2, 0);
+        st.scrub_single = config_value("IPOD", "SCRUBSINGLE", 2, 0);
         int buf[11];
         st.light_day = light_day(clock_now(buf));
         st.settings_read = 1;
@@ -2331,6 +2355,7 @@ static void paint_into(void *w, void *canvas) {
 int ringnav_paint(void *w, void *canvas) {
     if (st.pull_page && !pull_live()) pull_cancel();
     int result = stock_paint_trampoline(w, canvas);
+    night_paint(canvas);
     coverflow_paint(w, canvas);
     lockscreen_paint(w, canvas);
     if (w == st.cf_letter_surface && st.cf_letter &&
@@ -2721,6 +2746,37 @@ int ringnav_music_info(int a, char *info, const char *path) {
         flac_album_artist(path, info + MUSIC_INFO_ALBUM_ARTIST);
     return r;
 }
+/* A card app's song (its folder's listing, or an .m3u, reads no tags) in a library queue: stock
+ * parses only a folder play's file (player_get_id3info, MCL_TYPE 1) and copies any other queue's
+ * record, so its title was its file's name and its artist Unknown. As it starts, the playing
+ * record and the parsed tags take its file's, read as the library scan reads them
+ * (toolsGetMusicInfo): title, artist, album, album artist, track and disc. A record with an album
+ * is left, so a card app's song is read once a queue (a card song without an album tag, played from
+ * a list, at each start, as stock reads every folder play's); one without tags keeps its record's,
+ * and a CUE track its sheet's (ringnav_id3_path). ponytail: Up Next and an app's lists show the
+ * songs not yet played by their file names, and an app's list has no Go to rows (Now Playing's
+ * has). */
+static void card_tags(char *id3, const char *path) {
+    static const unsigned from[] = { 0x280, 0x100, 0, MUSIC_INFO_ALBUM_ARTIST };
+    static const unsigned to[] = { REC_TITLE, REC_ARTIST, REC_ALBUM, REC_ALBUM_ARTIST };
+    unsigned pos, n;
+    void *r = queue_now(&pos, &n);
+    const char *album = r ? P(r, REC_ALBUM) : 0;
+    char info[0x698] = { 0 };
+    if (I(MCL_TYPE, 0) == 1 || mclGetCueFlag() || !r || !P(r, REC_PATH) ||
+        strcmp(P(r, REC_PATH), path) || (album && *album) ||
+        !tk_str_start_with(path, "/mnt/mmc/") || toolsGetMusicInfo(0, info, path) != 1)
+        return;
+    for (unsigned k = 0; k < sizeof to / sizeof *to; k++) {
+        char *t, **field = (char **)((char *)r + to[k]);
+        info[from[k] + 0xff] = 0;
+        if (!info[from[k]] || !(t = strdup(info + from[k]))) continue;
+        free(*field), *field = t;
+        tk_snprintf(id3 + ID3_ALBUM + from[k], 0x100, "%s", t);
+    }
+    if (I(info, 0x684) > 0) I(r, REC_TRACK) = I(info, 0x684);
+    if (I(info, 0x688) > 0) I(r, REC_DISC) = I(info, 0x688);
+}
 /* player_get_id3info's copy of the parsed path (ID3_PATH in tools/build.py), after the tags and
  * before Now Playing's lines. A CUE track's tags are its record's, the stock parser's TITLE and
  * PERFORMER (the track's, else the sheet's); a sheet without them takes the file's (issue #59).
@@ -2737,6 +2793,7 @@ char *ringnav_id3_path(char *id3, const char *path) {
                 toolsTrimLeft(f); /* as stock did to its fields before this copy */
             }
     }
+    card_tags(id3, path);
     /* last: now_tag and marked_empty read a matching path as the tags being complete */
     tk_snprintf(id3, 0x400, "%s", path); /* +0x400: the CUE start */
     return id3;
@@ -3076,10 +3133,21 @@ static const unsigned char playset_order[] = {
 };
 /* Connections, personalisation and daily controls, then device maintenance; About stays last. */
 static const unsigned char sysset_order[] = {
-    1 /* Wireless */,     2 /* Network */,  3 /* Display */,       4 /* Power */,
-    8 /* Buttons lock */, 7 /* Key tone */, 5 /* Date and time */, 0 /* Language */,
-    6 /* In-Vehicle */,   13 /* Boot to */, 12 /* Apps */,         9 /* Update */,
-    10 /* Reset */,       11 /* About */,
+    1 /* Wireless */,
+    2 /* Network */,
+    3 /* Display */,
+    4 /* Power */,
+    8 /* Buttons lock */,
+    7 /* Key tone */,
+    13 /* Click With Headphones */,
+    5 /* Date and time */,
+    0 /* Language */,
+    6 /* In-Vehicle */,
+    14 /* Boot to */,
+    12 /* Apps */,
+    9 /* Update */,
+    10 /* Reset */,
+    11 /* About */,
 };
 
 /* Folder Root (Q2POD FOLDERROOT): the card's top-level folder Home's Folder opens in, "" the card
@@ -3313,10 +3381,10 @@ static int seek_position(int to) {
 /* The status bar's centred label follows stock's 24-hour setting (18:14 or 6:14 PM), without
  * seconds, or --:-- when the time cannot be read. clock_show reads the time once a minute, from a
  * timer due at the next minute, writes the label when the minute shown changes and applies Auto
- * Light Mode's hour; nothing reads the time in between. It runs at once for a new zone
- * (ringnav_timezone), a time set by hand (time_click) and a wake (ringnav_sleep), and on the pass
- * after the bar first paints or paints with a new 24-hour setting (ringnav_paint_bg). ponytail: a
- * network time sync while lit shows at the next minute. */
+ * Light Mode's and Night Shift's hour; nothing reads the time in between. It runs at once for a new
+ * zone (ringnav_timezone), a time set by hand (time_click) and a wake (ringnav_sleep), and on the
+ * pass after the bar first paints or paints with a new 24-hour setting (ringnav_paint_bg).
+ * ponytail: a network time sync while lit shows at the next minute. */
 static void clock_show(void);
 static int clock_due(const void *info) {
     (void)info;
@@ -3332,6 +3400,7 @@ static void clock_show(void) {
     int full = st.clock_full = g_time24h_flag != 0;
     accent(); /* reads Light Mode */
     light_apply(ok ? tm : (void *)0);
+    night_clock(ok && !light_day(tm));
     st.clock_timer = timer_add(clock_due, (void *)0, ok ? (60u - (unsigned)tm[0]) * 1000u : 60000u);
     unsigned key = ok ? ((unsigned)(tm[2] * 60 + tm[1]) + 1) | (unsigned)full << 11
                       : ~0u; /* 0 before the first */
@@ -3892,15 +3961,25 @@ static void lyric_follow(void *lrc, int ms, int front, int shown) {
 }
 
 /* Smart Awake (#57): Now Playing lit in front, a song playing, on its lyrics, info or
- * visualizer page holds the screen on as the lyrics wheel does; paused, it times out as usual. */
+ * visualizer page, or its full-screen art in front, holds the screen on as the lyrics wheel does;
+ * paused, it times out as usual. */
 static void keep_lit_poll(void) {
     unsigned now = (unsigned)time_now_ms();
     if (!st.np_slide || now - st.keep_lit_at < 1000) return;
     st.keep_lit_at = now;
     accent(); /* reads the settings */
-    if (st.keep_lit && g_backlight_status && widget_get_prop_int(st.np_slide, "value", 0) &&
-        window_manager_get_top_window(window_manager()) == st.np_win && mclGetPlayStatus() == 2)
+    void *top = window_manager_get_top_window(window_manager());
+    if (st.keep_lit && g_backlight_status && mclGetPlayStatus() == 2 &&
+        ((top == st.np_win && widget_get_prop_int(st.np_slide, "value", 0)) ||
+         (top && top == st.bc[2])))
         reset_poweroptions_timer(1, 1, 1);
+}
+
+/* Smart Awake's setting (accent's, kept current by its switch): addon.c holds a card game open
+ * and lit under it */
+int ringnav_smart_awake(void) {
+    accent();
+    return st.keep_lit;
 }
 
 /* Centred Now Playing's full-screen lyrics (np_lyric_touch): the column (stock's slide_view_view,
@@ -4043,8 +4122,9 @@ static void np_cancel(void) {
     if (st.np_win) playing_timer_start(st.np_win);
 }
 
-/* A single centre press, DOUBLE_CLICK_MS on, never while scrubbing: it replays the release to stock
- * on_wm_keyup_fun, which turns the screen off (it reads only the event's key). */
+/* A single centre press, DOUBLE_CLICK_MS on, never while scrubbing (with Single Press Scrub, a
+ * double press): it replays the release to stock on_wm_keyup_fun, which turns the screen off (it
+ * reads only the event's key). */
 static int np_single(const void *info) {
     static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
     st.np_press = 0;
@@ -4052,18 +4132,66 @@ static int np_single(const void *info) {
     return 0;
 }
 
+/* The top window if it is stock's volume dialog (vol_paint), else 0. */
+static void *vol_top(void) {
+    void *top = window_manager_get_top_window(window_manager());
+    if (!top || tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog")) return (void *)0;
+    return top;
+}
+
+/* The volume dialog on top with Now Playing directly under it (where vol_paint draws its band,
+ * given the slider and times), else 0. */
+static void *vol_band(void *wm) {
+    void *vol = st.np_win ? vol_top() : (void *)0;
+    unsigned n = vol ? widget_count_children(wm) : 0;
+    return n > 1 && widget_get_child(wm, n - 2) == st.np_win ? vol : (void *)0;
+}
+
+/* Scrub starts from the bar's second; the wheel moves the target until scrub_end. A volume
+ * band over the page closes first, as a tap beside its bar does, so the wheel reaches the scrub
+ * and the bar shows. The close runs the page's foreground handler, which sets the bar to the
+ * player's second and restarts stock's timer: the target is read, and the timer cleared, after
+ * it. */
+static void scrub_start(void) {
+    if (st.scrub || !st.np_slider) return;
+    void *vol = vol_band(window_manager());
+    if (vol) window_close(vol);
+    st.scrub = 1;
+    st.scrub_moved = 0;
+    st.scrub_to = widget_get_prop_int(st.np_slider, "value", 0);
+    st.scrub_track = np_track();
+    stop_timer(&st.settle_timer);
+    playing_timer_clear(st.np_win);
+    np_fill(1);
+    rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
+}
+
+/* Single Press Scrub (IPOD SCRUBSINGLE)'s single press, DOUBLE_CLICK_MS on: scrub starts. */
+static int np_scrub(const void *info) {
+    st.np_press = 0;
+    if (g_backlight_status) scrub_start();
+    return 0;
+}
+
 /* Centre and, while scrubbing, the wheel on the top Now Playing page. A centre press waits
- * DOUBLE_CLICK_MS: a second one starts scrub, else it turns the screen off as anywhere else; while
+ * DOUBLE_CLICK_MS: a second one starts scrub, else it turns the screen off as anywhere else; with
+ * Single Press Scrub the two swap, so a double press turns the screen off as on the lists. While
  * scrubbing one press ends it at once (center_press). The wheel moves the target SCRUB_STEP
  * seconds times the WHEEL_RAMP_MS ramp, within the track, and only previews it: the seek waits
  * for the scrub to end. Neither the volume nor its dialog sees the wheel. */
 static int np_key(void *top, unsigned key) {
     unsigned now = (unsigned)time_now_ms();
     if (key == KEY_CENTER) {
-        int press = center_press(&st.np_press, &st.np_press_at, np_single, st.scrub);
+        int one = (accent(), st.scrub_single);
+        int press =
+            center_press(&st.np_press, &st.np_press_at, one ? np_scrub : np_single, st.scrub);
+        if (one && !press) /* an overdue single press just started a scrub: this one ends it */
+            press = 2, st.np_press_at = now;
         if (press != 2) return press ? STOP : 0;
-        if (st.scrub) /* one press ends a scrub, a double press starts one */
+        if (st.scrub) /* one press ends a scrub */
             scrub_end();
+        else if (one)
+            np_single((void *)0);
         else
             scrub_start();
         return STOP;
@@ -4502,15 +4630,20 @@ static void quick_fill(void *w) {
     slider_fill(w, (unsigned)color);
 }
 /* The confirm pop-up's prompt (stock's own child, "Shut Down?"): CONFIRM_PROMPT_PX, centred in the
- * space above its rows. ponytail: by position, any non-button child above CONFIRM_TOP. */
+ * space above its rows, or above Delete File's "Also delete source file" (stock's check_button
+ * msg_delcheckbutton at y 124, centred 20px), which keeps its stock place and style.
+ * ponytail: by position, any other non-button child above CONFIRM_TOP. */
 static void confirm_prompt(void *w) {
     if (tk_strcmp(widget_get_prop_str(w, "name", ""), "confirminfo_dialog")) return;
+    void *check = widget_lookup(w, "msg_delcheckbutton", 0);
+    int bottom = check ? I(check, W_Y) : CONFIRM_TOP;
     for (unsigned i = 0, n = widget_count_children(w); i < n; ++i) {
         void *c = widget_get_child(w, i);
-        if (!tk_strcmp(widget_get_type(c), "button") || I(c, W_Y) + I(c, W_H) > CONFIRM_TOP ||
+        if (c == check || !tk_strcmp(widget_get_type(c), "button") ||
+            I(c, W_Y) + I(c, W_H) > CONFIRM_TOP ||
             (!I(c, W_X) && !I(c, W_Y) && I(c, W_W) == I(w, W_W)))
             continue;
-        widget_move_resize(c, 0, 0, I(w, W_W), CONFIRM_TOP);
+        widget_move_resize(c, 0, 0, I(w, W_W), bottom);
         widget_set_prop_int(c, "style:normal:font_size", CONFIRM_PROMPT_PX);
         widget_set_prop_str(c, "style:normal:text_align_h", "center");
         widget_set_prop_str(c, "style:normal:text_align_v", "middle");
@@ -4528,6 +4661,9 @@ static void *touch_target(void *row) {
     void *b = widget_count_children(row) ? widget_get_child(row, 0) : (void *)0;
     return b && !tk_strcmp(widget_get_type(b), "button") && !I(b, W_Y) ? b : row;
 }
+/* A button under half its row's width is a tile (the album grid's, the playlist page's pair), as
+ * paint_selection tells a tile from a row. */
+static int tile_in(void *b, void *row) { return 2 * I(b, W_W) < I(row, W_W); }
 static int press_repaint(const void *info) {
     st.press_timer = 0;
     void *top = window_manager_get_top_window(window_manager());
@@ -4539,17 +4675,23 @@ static int press_repaint(const void *info) {
  * Library's button leaves x 0-20, 355-375 and the pitch's last 4 px), or under Rounded Corners the
  * inset pill. Drawn as the row's background; the button's own box is skipped (1). The press
  * invalidates the whole surface (ringnav_touch), its release only the button, so the row's edges
- * repaint once after it (press_repaint). */
+ * repaint once after it (press_repaint). A tile's grey is its selection card, inside the tile. */
 static int pressed_pill(void *w, void *canvas) {
     if (!w) return 0;
-    if (!is_row(w)) { /* the row drew it: skip its button's box */
+    if (!is_row(w)) {
         void *row = P(w, W_PARENT);
-        return is_row(row) && touch_target(row) == w && pressed_row(w) &&
-               I(row, W_W) > 2 * SEL_INSET + I(row, W_H);
+        if (!is_row(row) || !pressed_row(w)) return 0;
+        if (!tile_in(w, row)) /* the row drew it: skip its button's box */
+            return touch_target(row) == w && I(row, W_W) > 2 * SEL_INSET + I(row, W_H);
+        rect_t card = { TILE_INSET, TILE_INSET, I(w, W_W) - 2 * TILE_INSET,
+                        I(w, W_H) - 2 * TILE_INSET };
+        fill_box(canvas, &card, PH_GREY, (accent(), st.rounded) ? SEL_RADIUS : 0);
+        return 1;
     }
     void *b = touch_target(w);
-    /* childless: not a row but a page, such as Now Playing's visualizer */
-    if (!pressed_row(b) || !widget_count_children(w) || I(w, W_W) <= 2 * SEL_INSET + I(w, W_H)) {
+    /* childless: not a row but a page, such as Now Playing's visualizer; a tile draws its own */
+    if (!pressed_row(b) || tile_in(b, w) || !widget_count_children(w) ||
+        I(w, W_W) <= 2 * SEL_INSET + I(w, W_H)) {
         if (w == st.press_row) {
             st.press_row = (void *)0;
             rearm(&st.press_timer, press_repaint, 0);
@@ -4766,6 +4908,11 @@ int ringnav_image_add(void *manager, const char *name, void *bitmap) {
                        GLYPH_LIGHT_MAX)
         glyph = CONFIRM_SURFACE;
     while (s && *s && *s != '/' && *s != ':') ++s;
+    /* Home: Carousel's cards keep stock's colours in every Theme, accent and Light Mode; its white
+     * arrows (menu_left, menu_right) still flip in Light Mode, or they vanish on the paper */
+    if (s && !*s && tk_str_start_with(name, "menu_") && tk_strcmp(name, "menu_left") &&
+        tk_strcmp(name, "menu_right"))
+        s = (void *)0;
     /* Minimal: the codec badges (img_flac, img_mp3, ...: red with the name cut out) take the
      * secondary text's grey, legible on the black list and on the selected row's off-white card. */
     if (s && !*s && tk_str_start_with(name, "img_") && tk_strcmp(name, "img_delete") &&
@@ -4958,8 +5105,9 @@ static void setting_text(int i) {
         widget_set_text_utf8(st.setting_label[i], shortcut);
         return;
     }
-    static const char *const toggles[] = { "Rounded Corners", 0, "Smart Awake",
-                                           "Centred Now Playing", "Click With Headphones" };
+    static const char *const toggles[] = { "Rounded Corners",       0,
+                                           "Smart Awake",           "Centred Now Playing",
+                                           "Click With Headphones", "Single Press Scrub" };
     if (i == 5 || i >= 7) {
         list_toggle(st.setting_label[i], toggles[i - 5], *setting_values[i]);
         return;
@@ -5038,8 +5186,8 @@ static int setting_click(void *ctx, void *event) {
         coverflow_home_layout();
     else if (i == 5)
         widget_invalidate_force(window_manager(), (void *)0);
-    else if (i < 7) { /* Smart Awake and Click With Headphones only need their toggle drawn,
-                       * Centred Now Playing the next open (ringnav_ui_load) */
+    else if (i < 7) { /* the switches from Smart Awake on only need their toggle drawn, Centred
+                       * Now Playing the next open (ringnav_ui_load) */
         if (i == 3) {
             theme_preset();
             coverflow_home_layout();
@@ -5121,7 +5269,8 @@ static int display_open(void *ctx, void *event) {
  * stock's page again (display_open) with its stock rows dropped and its own instead: Theme,
  * Accent, Corners, Home and Battery; Artist Albums, Coverflow Sort and Refresh Coverflow; Shortcut
  * (iPod), Hold Return and Wheel Sensitivity, the last opening its slider page (crossfade.c). The
- * value rows show it in the label and have no chevron, since they change in place.
+ * value rows show it in the label and have no chevron, since they change in place. Night Shift
+ * (the brightness icon) ends the main page, opening its slider page (crossfade.c).
  * M1 Plus (ipod-ui 4.3): V2.1's four rows (Brightness, Screen Off, Lock screen, Atmosphere Lamp), then the
  * same three, with V2.1's icons. Appearance holds Theme, Light Mode, Accent, Home and Battery (4.5); Controls
  * Shortcut (4.5), Smart Awake and the volume knob's two rows. The rest wait for their item or stay Q2 only
@@ -5143,6 +5292,7 @@ int ringnav_display(void *win, void *ctx) {
         for (int i = DISPLAY_APPEARANCE; i <= DISPLAY_CONTROLS; ++i)
             widget_set_text_utf8(list_row_into(view, sub_icons[i], display_open, (void *)(long)i),
                                  titles[i]);
+        night_row(list_row_into(view, "display_backlight", xfade_open, (void *)3));
         return result;
     }
     widget_destroy_children(view);
@@ -5157,13 +5307,15 @@ int ringnav_display(void *win, void *ctx) {
     static const unsigned char appearance[] = { 3, 6, 0, 1, 2, 8 }, controls[] = { 4, 7 };
 #else
     /* Theme, Light Mode, Accent, Corners, Home, Battery, Centred Now Playing; Shortcut, Smart
-     * Awake, Click With Headphones. */
-    static const unsigned char appearance[] = { 3, 6, 0, 5, 1, 2, 8 }, controls[] = { 4, 7, 9 };
+     * Awake, Single Press Scrub. Click With Headphones (9) is System settings' (ringnav_systemset).
+     */
+    static const unsigned char appearance[] = { 3, 6, 0, 5, 1, 2, 8 }, controls[] = { 4, 7, 10 };
 #endif
-    static const char *const icons[] = { ICON_DISPLAY,     ICON_COVERMODE, ICON_POWER,
-                                         ICON_DISPLAY,     ICON_COVERMODE, ICON_DISPLAY,
-                                         ICON_DISPLAY,     ICON_DISPLAY,   ICON_COVERMODE,
-                                         ICON_DISPLAY };
+    static const char *const icons[] = {
+        ICON_DISPLAY,   ICON_COVERMODE, ICON_POWER,       ICON_DISPLAY,
+        ICON_COVERMODE, ICON_DISPLAY,   ICON_DISPLAY,     ICON_DISPLAY,
+        ICON_COVERMODE, "system_keytone", ICON_COVERMODE
+    };
     const unsigned char *rows = sub == DISPLAY_APPEARANCE ? appearance : controls;
     for (int k = 0, n = sub == DISPLAY_APPEARANCE ? sizeof appearance : sizeof controls; k < n;
          ++k) {
@@ -5205,15 +5357,41 @@ static int boot_click(void *label, void *event) {
     boot_text(label);
     return 0;
 }
+/* Click With Headphones (Display's setting 9) sits under Key Tone and shows while it is on. Stock's
+ * Key Tone click handler sets g_keytone_flag; the row follows from the next loop pass. */
+#define KEYTONE_ROW "_keytone_hp"
+static int keytone_follow(const void *info) {
+    st.keytone_timer = 0;
+    void *view = widget_lookup(window_manager(), "scroll_view_sysset", 1);
+    void *row = view ? widget_lookup(view, KEYTONE_ROW, 1) : (void *)0;
+    if (row) widget_set_visible(row, g_keytone_flag != 0, 0), widget_layout(view);
+    return 0;
+}
+static int keytone_click(void *ctx, void *event) {
+    rearm(&st.keytone_timer, keytone_follow, 0);
+    return 0;
+}
 #include "m1plus_nav_sysset.c"
 int ringnav_systemset(void *win, void *ctx) {
     int result = stock_systemset_trampoline(win, ctx);
     void *view = win ? widget_lookup(win, VIEW_SYSSET, 1) : (void *)0;
-    if (view)
+#if M1PLUS
+    void *apps = (void *)0, *boot = (void *)0;
+#endif
+    if (view) {
         widget_set_text_utf8(list_row_into(view, "system_update", shelf_open, 0), "App Store");
 #if M1PLUS
-    void *apps = last_row(view), *boot = (void *)0;
+        apps = last_row(view);
+#else
+        st.setting_label[9] = list_row(view, "system_keytone", setting_click, (void *)9);
+        setting_text(9);
+        void *item = P(P(st.setting_label[9], W_PARENT), W_PARENT),
+             *tone = widget_lookup(view, "7", 1);
+        widget_set_name(item, KEYTONE_ROW);
+        widget_set_visible(item, g_keytone_flag != 0, 0);
+        if (tone) widget_on(tone, EVT_CLICK, keytone_click, 0);
 #endif
+    }
     if (view && rockbox_available()) {
         char value[16];
         void *f = fopen(BOOT_TARGET, "rb");
@@ -5239,7 +5417,7 @@ int ringnav_systemset(void *win, void *ctx) {
 #if M1PLUS /* the iPod's order by role (reorder takes the Q2's row ids) */
     sysset_ipod_order(view, apps, boot);
 #endif
-    /* Without Rockbox there is no Boot to (13): the order less it. */
+    /* Without Rockbox there is no Boot to (14): the order less it. */
     unsigned char order[sizeof sysset_order];
     unsigned n = 0, rows = view ? widget_count_children(view) : 0;
     for (unsigned i = 0; i < sizeof sysset_order; i++)
@@ -5697,11 +5875,15 @@ static int hold_released(void) {
     return held;
 }
 
-static unsigned rec_hash(void *r) {
+/* A record's fields from REC_NAME to last, and its CUE range: to REC_PATH its identity, to
+ * REC_ARTIST its tags too. */
+static unsigned rec_hash_to(void *r, int last) {
     unsigned h = FNV_SEED;
-    for (int o = REC_NAME; o <= REC_ARTIST; o += 4) h = fnv(h, P(r, o));
+    for (int o = REC_NAME; o <= last; o += 4) h = fnv(h, P(r, o));
     return hash_bytes(h, (const unsigned char *)r + REC_CUE_START, 8);
 }
+/* The row a hold menu is on: an album row (a cover's) or a playlist's is told apart by its tags. */
+static unsigned rec_hash(void *r) { return rec_hash_to(r, REC_ARTIST); }
 
 /* Everything a row's tracks are resolved from; a change while the menu is open cancels it. */
 static unsigned browse_hash(void) { return local_hash(hash_bytes(FNV_SEED, g_folder_path, 1024)); }
@@ -5714,10 +5896,12 @@ static void *page_tracks(void *page) {
                                 : coverflow_tracks(page);
 }
 
+/* A queue's identity: its records' names, paths and CUE ranges, not their tags, which card_tags
+ * fills as a song starts (the queue is not changed by that). */
 unsigned queue_hash(void *q) {
     unsigned h = FNV_SEED;
     for (unsigned i = 0, n = deque_size(q); i < n; ++i) {
-        unsigned r = rec_hash(deque_at(q, i));
+        unsigned r = rec_hash_to(deque_at(q, i), REC_PATH);
         h = hash_bytes(h, (const unsigned char *)&r, sizeof r);
     }
     return h;
@@ -6219,11 +6403,23 @@ static int music_records(void *list, int discovery) {
     deque_destroy(music);
     return (int)deque_size(list);
 }
+/* Library -> Songs (load_localclass_list's default): stock reads into the staging deque and copies
+ * that to the showlist, the library held twice; this reads straight into the showlist. */
+static int songs_sorted(void *unused) { return getAllMusic(I(g_sort_flag, 0)); }
+static int songs_load(void) {
+    void *list = P(p_deque_showlist, 0);
+    deque_clear(list);
+    staged_into(list, songs_sorted, 0);
+    deque_clear(P(tools_pdeq_directory, 0)); /* as stock leaves it */
+    music_nagvation_title(0xf001);
+    return (int)deque_size(list);
+}
+
 int ringnav_localclass(int cls) {
     I(g_artist_type, 0) = I(artist_type, 0) == 1;
     int saved = library_music;
     library_music = 1;
-    int n = stock_localclass_trampoline(cls);
+    int n = cls == 0xf001 ? songs_load() : stock_localclass_trampoline(cls);
     void *list = P(p_deque_showlist, 0), *dir = P(tools_pdeq_directory, 0), *a = album_opened();
     if (n > 0 && cls == 0xff20) n = music_records(list, 0);
     /* These stored lists bypass songtable too. Keep Discovery out of their displayed copies,
@@ -6294,6 +6490,7 @@ static void qm_tracks(void *r, void *add) {
         char path[1024];
         tk_snprintf(path, sizeof(path), "%s/%s", (const char *)g_folder_path,
                     (const char *)P(r, REC_NAME));
+        ringnav_wdt_long();
         folder_tracks(path, add, 0);
         return;
     }
@@ -6569,7 +6766,7 @@ static int most_played(void *ctx, void *event) {
     unsigned score[PLAYS_TOP], gen = library_gen;
     void *from = st.mp_list;
     if (!from || st.mp_gen != gen) {
-        from = staged(all_songs, (void *)1, &n);
+        from = staged(songs_unsorted, (void *)1, &n);
         st.mp_gen = gen;
     }
     int top = mp_rank(from, idx, score);
@@ -6972,6 +7169,7 @@ static int stream_config(void *ctx, void *event) {
  * favourite, there being no stock one. */
 #define ALBUM_RATINGS_FILE "/mnt/data/ringnav-album-ratings"
 #define FAV_CLICK ((int (*)(void *, void *))FAV_CLICK_ADDR) /* Now Playing's heart (offsets.inc) */
+void ratings_copy_due(void);
 
 /* The songs' table, or with album the albums'. */
 static int rate_io(int album, int write) {
@@ -7009,7 +7207,10 @@ static int rate_keep(int album, unsigned key, int n) {
     if (i < 0) return !some;
     unsigned *t = rates(album), old = t[i];
     t[i] = some ? (key & ~7u) | (unsigned)n : 0;
-    if (rate_io(album, 1)) return 1;
+    if (rate_io(album, 1)) {
+        ratings_copy_due();
+        return 1;
+    }
     t[i] = old;
     return -1;
 }
@@ -7125,9 +7326,9 @@ static void rate_close(int save) {
 #if M1PLUS /* V2.1's click takes the heart from the event */
     void *click[8] = { (void *)EVT_CLICK };
     click[EVENT_TARGET / 4] = st.rate_fav;
-    if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, click);
+    if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, click), ratings_copy_due();
 #else
-    if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, (void *)0);
+    if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, (void *)0), ratings_copy_due();
 #endif
     rate_badge();
 }
@@ -7197,6 +7398,7 @@ static int rate_fav_click(void *ctx, void *event) {
         return 0;
     }
     FAV_CLICK(ctx, event);
+    ratings_copy_due();
     void *r = rate_track();
     if (r) rate_keep(0, listen_key(r), 0);
     rate_badge();
@@ -7334,7 +7536,7 @@ static int ratings_menu(void *ctx, void *event) {
 #define ERA_DECADES 32
 #define ERA_ALBUMS                                                                                 \
     "select album,ifnull(nullif(albumsonger,''),songer)," ALBUM_YEAR                               \
-    " as release_year,fileurl from songtable "                                                     \
+    " as release_year," ALBUM_TRACK " from songtable "                                             \
     "where " MUSIC_WHERE " and ifnull(album,'')<>''" ALBUM_GROUP
 typedef struct {
     char *album, *artist, *path;
@@ -8633,10 +8835,13 @@ static int qm_restore(void *page, void *event) {
 /* Now Playing's More rows, for this record: Album info (0x5283b0) fills the album query and opens
  * playerjumpinfo_page; Artist info opens artistinfo_page with {class, record}. A song played in
  * Coverflow, or with Artist albums: Coverflow, goes to the album's tracks in Coverflow instead, as
- * Go to Artist reaches its covers. */
+ * Go to Artist reaches its covers. A card app's song goes to the app's page when it offers one
+ * (addon.c addon_goto). */
 static void qm_goto(void *r, int album) {
     unsigned char *info = (unsigned char *)g_local_classinfo_save;
     void *wm = window_manager(), *page = window_manager_get_top_window(wm);
+    /* a card app's song (Qobuz's): the app's own page for its album or artist, when it says so */
+    if (addon_goto(P(r, REC_PATH), P(r, album ? REC_ALBUM : REC_ARTIST), album)) return;
     if (album && (navigator_window_is_exist("coverflow_page") || ringnav_artist_view()) &&
         coverflow_goto_album(r))
         return;
@@ -8759,8 +8964,10 @@ static int qm_run(const void *unused) {
     } else if (r && a == QA_FAV) { /* tags a folder file as batch-select's Add to My Fav does */
         qm_select();
         batch_add_file(cls, 0xf00a, qm_list(), P(p_vector_select_record, 0), 0);
+        ratings_copy_due();
     } else if (r && a == QA_UNFAV) {
         deleteMusicFromFav(r);
+        ratings_copy_due();
         if (cls == 0xf00a)
             g_delete_flag = 1;          /* My Fav reloads, as Now Playing's heart (0x52b2e8) */
     } else if (r && a == QA_PLAYLIST) { /* the playlist page's add mode adds the selected row */
@@ -8942,11 +9149,13 @@ static int qm_open(const void *unused) {
     int album_hearts = aid ? rate_kept(1, aid) : 0;
     if (aid) acts[n++] = album_hearts == 5 ? QA_UNFAV : QA_FAV, acts[n++] = QA_RATE;
     if (st.qm_kind < QM_COVERFLOW || st.qm_kind == QM_PLAYING) acts[n++] = QA_PLAYLIST;
-    if ((st.qm_kind == QM_SONG || st.qm_kind == QM_PLAYING) && album && *album &&
+    /* a card app's song isn't in the Library: Go to only to the app's own page */
+    int hidden = song && !addon_goes(P(r, REC_PATH));
+    if ((st.qm_kind == QM_SONG || st.qm_kind == QM_PLAYING) && album && *album && !hidden &&
         (cls & 0xfff0) != 0xff10 && !navigator_window_is_exist(GOTO_ALBUM_PAGE) &&
         !coverflow_shows_album(r))
         acts[n++] = QA_ALBUM;
-    if ((song || cls == CLASS_ALBUMS) && artist && *artist && !GOTO_ARTIST_SHOWN)
+    if ((song || cls == CLASS_ALBUMS) && artist && *artist && !hidden && !GOTO_ARTIST_SHOWN)
         acts[n++] = QA_ARTIST;
     /* ponytail: hidden while a folder_page is open (as Go to's single-instance pages), so a folder
      * play's Now Playing has none; Back reaches that folder_page instead. */
@@ -9317,6 +9526,13 @@ static void spot_save(int sec) {
         spot_keep(st.rs_file, st.rs_cue + sec, st.rs_end ? 0x7fffffff : st.rs_cue + st.rs_total);
 }
 
+/* Would starting the polled track again lose a place worth keeping? spot_keep keeps none near
+ * either end, and spot_save leaves a CUE book's place alone at a chapter's start. */
+int resume_held(void) {
+    return st.rs_long && !st.rs_cue && !st.rs_end && st.rs_sec >= RESUME_EDGE_S &&
+           st.rs_sec < st.rs_total - RESUME_EDGE_S;
+}
+
 /* Once a second from the UI loop: a long track saves its place and, when it starts playing near
  * its beginning, jumps to the saved one. A spoken CUE track saves its file's place but jumps only
  * when a Resume row (book_place) started it. A track change waits a poll, so the previous track's
@@ -9357,21 +9573,28 @@ static void resume_poll(void) {
     else
         st.ch_key = 0;
     /* A listen: half the track or LISTEN_MAX_S heard, seeks and pauses aside; a repeat starts over.
-     */
+     * It scrobbles then too, or with [SCROBBLE] PERCENT once that share of it is heard (of all but
+     * its last 2 s, which a poll a second apart may not see). */
     if (!st.rs_pending && !st.rs_spoken) {
         unsigned lk = listen_key(r);
         if (lk != st.ls_key || (sec < 2 && st.ls_sec > LISTEN_MIN_S)) {
             st.ls_key = lk;
             st.ls_sec = sec;
-            st.ls_heard = st.ls_done = 0;
+            st.ls_heard = st.ls_done = st.ls_sent = 0;
+            int pct = scrobble_value("PERCENT");
+            st.ls_pct = pct >= 1 && pct <= 100 ? pct : 0;
         }
         int d = sec - st.ls_sec;
         if (d > 0 && d <= 2) st.ls_heard += d;
         st.ls_sec = sec;
-        if (!st.ls_done && total > LISTEN_MIN_S &&
-            st.ls_heard >= (total / 2 < LISTEN_MAX_S ? total / 2 : LISTEN_MAX_S)) {
+        int listen = total / 2 < LISTEN_MAX_S ? total / 2 : LISTEN_MAX_S;
+        if (!st.ls_done && total > LISTEN_MIN_S && st.ls_heard >= listen) {
             st.ls_done = 1;
             play_count(r, lk);
+        }
+        if (!st.ls_sent && total > LISTEN_MIN_S &&
+            st.ls_heard >= (st.ls_pct ? (total - 2) * st.ls_pct / 100 : listen)) {
+            st.ls_sent = 1;
             scrobble(r, total, st.ls_heard);
         }
     }
@@ -9510,6 +9733,92 @@ static void cpu_poll(void) {
     }
     if (!st.cpu_off) st.cpu_bad = 3;
 }
+/* Hardware watchdog (docs/internals.md#watchdog). Stock loads soc_watchdog.ko and never starts it,
+ * so a Q2 whose UI loop or kernel stalls stays dark, every button dead, until a 15 s Centre hold
+ * cuts the power. The first UI loop pass starts it counting WDT_MS and every pass feeds it, so a
+ * stall that long reboots instead. It counts on the RTC clock, through a suspend, so Standby stops
+ * it before and starts it again after (ringnav_standby). Its close is a no-op, so a clean end
+ * (ringnav_clean_end: power-off, Restart, a firmware update, Rockbox) stops it. libhardware2's
+ * watchdog_start/stop/feed ioctls; no device, or a refused start, leaves stock's behaviour.
+ * ponytail: the UI loop is the only feeder, so a stalled worker thread is not caught. */
+#define WDT_DEV "/dev/jz_watchdog"
+#define WDT_START 0x8004570d /* an int of milliseconds, by pointer */
+#define WDT_STOP 0x2000570e
+#define WDT_FEED 0x2000570f
+static void wdt_set(int on) { /* Standby's suspend and the resume after it; a clean end */
+    int ms = WDT_MS;
+    if (st.wdt > 0) ioctl(st.wdt, on ? WDT_START : WDT_STOP, &ms);
+}
+static void wdt_span(int ms) {
+    ioctl(st.wdt, WDT_STOP, 0);
+    ioctl(st.wdt, WDT_START, &ms);
+}
+/* A known long pass is starting (an import's tag reads, a folder add's loads): WDT_LONG_MS for it,
+ * and the next pass, once it has returned, WDT_MS again */
+void ringnav_wdt_long(void) {
+    if (st.ended || st.wdt <= 0 || st.wdt_long) return;
+    st.wdt_long = 1;
+    wdt_span(WDT_LONG_MS);
+}
+static void wdt_poll(void) {
+    if (st.ended || st.wdt < 0) return;
+    if (st.wdt && st.wdt_long) {
+        st.wdt_long = 0;
+        wdt_span(WDT_MS);
+    } else if (st.wdt)
+        ioctl(st.wdt, WDT_FEED, 0);
+    if (st.wdt) return;
+    int fd = open(WDT_DEV, 0x80002), ms = WDT_MS; /* O_RDWR, as libhardware2, | O_CLOEXEC (MIPS) */
+    st.wdt = fd > 0 && !ioctl(fd, WDT_START, &ms) ? fd : -1;
+    if (fd > 0 && st.wdt < 0) close(fd);
+}
+/* The state record (docs/internals.md#watchdog): /mnt/data/q2-state says what the Q2 is doing, one
+ * line rewritten and synced whenever it changes: the screen, Standby's suspend, the cable, the
+ * battery, playback and its output, CPU1. A clean end removes it; one still there at boot means a
+ * forced restart (or the battery), and S90play puts it in q2-crash.log (docs/boot.md). */
+#define STATE_FILE "/mnt/data/q2-state"
+static char *put(char *p, const char *s) {
+    while (*s) *p++ = *s++;
+    return p;
+}
+static void state_poll(void) {
+    static const char *const play[] = { "?", "stopped", "playing", "paused" };
+    static const char *const out[] = { "jack", "bluetooth", "usb" };
+    if (st.ended) return;
+    unsigned ps = (unsigned)mclGetPlayStatus(), ow = (unsigned)mclGetOutputWay();
+    unsigned pct = (unsigned)I(g_power_capacity, 0), n = 0;
+    char s[sizeof st.state], d[4], *p = s;
+    p = put(p, g_backlight_status ? "screen:on" : "screen:off");
+    p = put(p, st.suspended ? " power:suspending" : " power:running");
+    p = put(p, g_usbdet_value ? " cable:in" : " cable:out");
+    p = put(p, " battery:");
+    if (pct > 100) pct = 100;
+    do d[n++] = '0' + pct % 10;
+    while (pct /= 10);
+    while (n) *p++ = d[--n];
+    p = put(p, " play:");
+    p = put(p, play[ps < 4 ? ps : 0]);
+    p = put(p, " out:");
+    p = put(p, out[ow < 3 ? ow : 0]);
+    p = put(p, st.cpu_off ? " cpu1:off\n" : "\n");
+    *p = 0;
+    if (!tk_strcmp(s, st.state)) return;
+    void *f = fopen(STATE_FILE, "w");
+    if (!f) return;
+    fwrite(s, 1, p - s, f);
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+    memcpy(st.state, s, p - s + 1);
+}
+/* A clean end: power-off, Restart, a firmware update, Rockbox. Nothing to report at the next boot.
+ */
+void ringnav_clean_end(void) {
+    if (st.ended) return;
+    st.ended = 1;
+    wdt_set(0);
+    unlink(STATE_FILE);
+}
 /* Standby limit (docs/internals.md#standby-limit): device_standby puts the radios, the card and the
  * DAC down, then toolsIntoStandby suspends to RAM ("mem" to /sys/power/state) and returns once
  * something resumes it. With a limit, the RTC's wake alarm is set that far ahead first and cleared
@@ -9542,7 +9851,12 @@ int ringnav_standby(void) {
     unsigned start = st.standby_limit ? rtc_now() : 0;
     unsigned alarm = start + hours[st.standby_limit] * 3600;
     int armed = start && rtc_alarm(0) && rtc_alarm(alarm);
+    st.suspended = 1;
+    state_poll(); /* the record a resume that never comes leaves behind */
+    wdt_set(0);   /* it would count through the suspend */
     int result = stock_standby_trampoline();
+    wdt_set(1);
+    st.suspended = 0; /* the next pass records the resume */
     if (armed) {
         unsigned now = rtc_now();
         rtc_alarm(0);
@@ -9601,6 +9915,7 @@ static void *logo_sync(void *unused) {
             b = 0; /* landscape: ffmpeg turns it a quarter clockwise (coverflow.c's ff_thumb) */
         int status, pid = fork();
         if (!pid) {
+            child_oom_first();
             execl("/usr/bin/ffmpeg", "/usr/bin/ffmpeg", "-nostdin", "-v", "quiet", "-i", LOGO_SRC,
                   "-vf", "transpose=1", "-pix_fmt", "yuvj444p", "-q:v", "2", "-f", "mjpeg", "-y",
                   LOGO_ROT, (char *)0);
@@ -9624,6 +9939,15 @@ static void *logo_sync(void *unused) {
     st.logo_busy = 0;
     return 0;
 }
+static int card_mounted(void) {
+    char m[4096]; /* ponytail: the Q2's few mounts fit (remote.c's card_mounted) */
+    void *f = fopen("/proc/mounts", "rb");
+    if (!f) return 0;
+    unsigned n = fread(m, 1, sizeof m - 1, f);
+    fclose(f);
+    m[n] = 0;
+    return strstr(m, " /mnt/mmc ") != 0;
+}
 static void logo_poll(void) {
     unsigned now = time_now_ms();
     if (st.logo_err) toast(st.logo_err), st.logo_err = 0;
@@ -9632,17 +9956,10 @@ static void logo_poll(void) {
     if (!g_backlight_status || st.logo_busy || (st.logo_at && now - st.logo_at < CHARGE_POLL_MS))
         return;
     st.logo_at = now | !now;
-    char m[4096]; /* ponytail: the Q2's few mounts fit (remote.c's card_mounted) */
-    int mounted = 0;
-    void *f = fopen("/proc/mounts", "rb");
-    if (f) {
-        unsigned n = fread(m, 1, sizeof m - 1, f);
-        fclose(f);
-        m[n] = 0;
-        mounted = strstr(m, " /mnt/mmc ") != 0;
-    }
+    int mounted = card_mounted();
     unsigned long tid;
     if (mounted && !st.logo_mounted) {
+        ratings_copy_due(); /* another card, or the copy gone over USB storage */
         st.logo_busy = 1;
         if (pthread_create(&tid, 0, logo_sync, 0)) {
             st.logo_busy = 0; /* the edge is tried again next poll */
@@ -9652,12 +9969,230 @@ static void logo_poll(void) {
     }
     st.logo_mounted = mounted;
 }
+/* The card's copy of the ratings (docs/internals.md#ratings): the tables hold only hashes, so a
+ * pass reads the paths and tags back from the library, a page of rows each quiet poll on this
+ * thread (demo has no busy timeout, so a worker's read lock could make stock's own My Fav writes
+ * fail), and writes the card once at the end, only if the file would change; the longest copy so
+ * far is kept as .1, the one way back from a lost table. ponytail: every row against every rated
+ * one, as the Ratings lists do; a rating whose song or album has left the library has no name to
+ * write, and stays out until it is back. */
+#define RC_FILE "/mnt/mmc/.ratings.tsv"
+#define RC_HEADER "#song\thearts\tpath\tcue_start\n#album\thearts\tname\talbum_artist\tfolder\n"
+#define RC_PAGE 64
+#define RC_WAIT_MS 5000 /* after a change, so a run of them writes once; between checks */
+#define RC_LINE 3200    /* the fields' limits below, and room */
+#define RC_GROW 0x10000
+#define RC_QUIET_MS 1000 /* no pages this soon after input: a long walk stays off the wheel */
+static struct {
+    void *db;
+    unsigned *song, *album; /* the rated still to find, their hearts in the low bits */
+    unsigned songs, albums, len, cap, at;
+    char *out;
+    int table, last, rows, oom;
+    unsigned gen;
+} rc __attribute__((section(".scratch")));
+static int rc_due __attribute__((section(".scratch")));
+
+void ratings_copy_due(void) {
+    rc_due = 1;
+    rc.at = time_now_ms();
+}
+
+/* key's hearts in the first n of t, its entry gone, or 0. */
+static int rc_take(unsigned *t, unsigned *n, unsigned key) {
+    for (unsigned i = 0; i < *n; i++)
+        if ((t[i] ^ key) < 8) {
+            int hearts = (int)(t[i] & 7);
+            t[i] = t[--*n];
+            return hearts;
+        }
+    return 0;
+}
+
+/* A line's start, its kind and hearts written, with room for RC_LINE more; 0 when there's no
+ * memory. */
+static char *rc_line(const char *kind, int hearts) {
+    if (rc.cap - rc.len < RC_LINE) {
+        char *out = realloc(rc.out, rc.cap + RC_GROW);
+        if (!out) {
+            rc.oom = 1; /* ends the pass: a copy with rows missing must not replace the last */
+            return (char *)0;
+        }
+        rc.out = out, rc.cap += RC_GROW;
+    }
+    char *o = rc.out + rc.len;
+    return o + tk_snprintf(o, 16, "%s\t%d\t", kind, hearts);
+}
+static void rc_song(const char *path, int hearts, int cue) {
+    char *o = rc_line("song", hearts);
+    if (!o) return;
+    o = scrobble_tag(o, o + 1100, path);
+    if (cue) o += tk_snprintf(o, 16, "%d", cue);
+    *o++ = '\n';
+    rc.len = (unsigned)(o - rc.out);
+}
+static void rc_album(const char *name, const char *artist, const char *path, int hearts) {
+    char *o = rc_line("album", hearts);
+    if (!o) return;
+    o = scrobble_tag(o, o + 600, name);
+    o = scrobble_tag(o, o + 300, artist);
+    unsigned dir = name && *name && artist && *artist ? 0 : path ? album_dir(path, 1) : 0;
+    o = scrobble_tag(o, o + (dir < 1100 ? dir : 1100) + 1, path);
+    o[-1] = '\n';
+    rc.len = (unsigned)(o - rc.out);
+}
+
+/* A row as a record, for the keys its song and album are rated under. */
+static int rc_row(void *ctx, int n, char **v, char **c) {
+    int rec[REC_CUE_END / 4 + 1] = { 0 };
+    rc.last = atoi(v[0]), rc.rows++;
+    if (!v[1]) return 0;
+    P(rec, REC_PATH) = v[1], P(rec, REC_ALBUM) = v[3], P(rec, REC_ALBUM_ARTIST) = v[4];
+    int cue = I(rec, REC_CUE_START) = v[2] ? atoi(v[2]) : 0, hearts;
+    if (!rc.table) { /* My Fav's: 5, whatever is kept for it */
+        rc_take(rc.song, &rc.songs, listen_key(rec));
+        rc_song(v[1], 5, cue);
+        return rc.oom;
+    }
+    if (rc.songs && (hearts = rc_take(rc.song, &rc.songs, listen_key(rec))))
+        rc_song(v[1], hearts, cue);
+    if (rc.albums && (hearts = rc_take(rc.album, &rc.albums, album_id(rec))))
+        rc_album(v[3], v[4], v[1], hearts);
+    return rc.oom;
+}
+
+static void rc_end(void) {
+    if (rc.db) sqlite3_close(rc.db);
+    free(rc.song), free(rc.album), free(rc.out);
+    rc.db = 0, rc.song = rc.album = 0, rc.out = 0;
+    rc.len = rc.cap = rc.oom = 0;
+}
+
+/* path's lines, 0 with no file; same, if asked, whether it is this copy. */
+static unsigned rc_read(const char *path, int *same) {
+    void *f = fopen(path, "rb");
+    char b[1024];
+    unsigned n, at = 0, lines = 0;
+    int eq = f != 0;
+    while (f && (n = fread(b, 1, sizeof b, f)) > 0) {
+        eq = eq && at + n <= rc.len && !memcmp(b, rc.out + at, n);
+        at += n;
+        for (unsigned i = 0; i < n; i++) lines += b[i] == '\n';
+    }
+    if (f) fclose(f);
+    if (same) *same = eq && at == rc.len;
+    return lines;
+}
+
+/* The card's copy replaced, unless it is this one already. Once the new one is safely written, a
+ * copy with more lines goes to .1, unless .1 has more still: a rating given and cleared after a
+ * lost table must not take the way back. */
+static void rc_write(void) {
+    int same;
+    unsigned lines = rc_read(RC_FILE, &same), now = 0;
+    if (same) return;
+    if (!blob_io(RC_FILE ".tmp", RC_FILE ".tmp", rc.out, rc.len, 1)) {
+        unlink(RC_FILE ".tmp");
+        return;
+    }
+    for (unsigned i = 0; i < rc.len; i++) now += rc.out[i] == '\n';
+    if (lines > now && lines >= rc_read(RC_FILE ".1", 0)) rename(RC_FILE, RC_FILE ".1");
+    if (rename(RC_FILE ".tmp", RC_FILE)) unlink(RC_FILE ".tmp");
+}
+
+/* The rated of table album, valid hearts only, for rc_take. */
+static unsigned *rc_rated(int album, unsigned *n) {
+    unsigned *t = rates(album), *c = t ? calloc(RATE_SLOTS, sizeof *c) : (unsigned *)0;
+    for (unsigned i = 0; c && i < RATE_SLOTS; i++)
+        if ((t[i] & 7) && (t[i] & 7) <= 4u + (unsigned)album) c[(*n)++] = t[i];
+    return c;
+}
+
+static void rc_start(void) {
+    int unknown[REC_CUE_END / 4 + 1] = { 0 }, hearts;
+    rc.songs = rc.albums = 0, rc.table = rc.last = 0;
+    rc.song = rc_rated(0, &rc.songs), rc.album = rc_rated(1, &rc.albums);
+    rc.out = calloc(rc.cap = RC_GROW, 1);
+    if (!rc.song || !rc.album || !rc.out || sqlite3_open("/mnt/data/database.db", &rc.db) ||
+        sqlite3_exec(rc.db, "PRAGMA cache_size=64", 0, 0, 0)) {
+        rc_end();
+        return;
+    }
+    rc.len = (unsigned)tk_snprintf(rc.out, RC_LINE, RC_HEADER);
+    I(unknown, REC_ID) = -1; /* the Unknown Album card, which no row is */
+    if ((hearts = rc_take(rc.album, &rc.albums, album_id(unknown))))
+        rc_album("Unknown Album", "", (const char *)0, hearts);
+}
+
+static int rc_exists(void *ctx, int n, char **v, char **c) {
+    rc.rows = 1;
+    return 0;
+}
+
+/* A page of the pass, then its end. A failed read or write stays as it was, for the next change or
+ * boot; a scan rewriting the library ends the pass, and library_gen starts another after it. */
+static void rc_page(void) {
+    char sql[128];
+    if (library_scanning()) {
+        rc_end();
+        return;
+    }
+    if (time_now_ms() - st.last_input < RC_QUIET_MS) return;
+    tk_snprintf(sql, sizeof sql,
+                "select id,fileurl,time,album,albumsonger from %s where id>%d order by id limit %d",
+                rc.table ? "songtable" : "myfav", rc.last, RC_PAGE);
+    rc.rows = 0;
+    if (sqlite3_exec(rc.db, sql, rc_row, 0, 0)) {
+        rc_end();
+        return;
+    }
+    if (rc.rows == RC_PAGE && (!rc.table || rc.songs || rc.albums)) return;
+    if (!rc.table++) {
+        rc.last = rc.rows = 0;
+        /* no songtable before the first scan: My Fav's alone, still worth a copy */
+        if (sqlite3_exec(rc.db, "select 1 from sqlite_master where name='songtable'", rc_exists, 0,
+                         0)) {
+            rc_end();
+            return;
+        }
+        if (rc.rows) return;
+    }
+    if (!card_mounted())
+        rc_due = 1; /* shared over USB meanwhile */
+    else
+        rc_write();
+    rc_end();
+}
+
+/* Every RC_WAIT_MS: a change, the boot (stock's own My Fav rows change it unseen) or the library
+ * rewritten, once the card is there and no scan is running. */
+void ratings_copy_poll(void) {
+    if (rc.db) {
+        rc_page();
+        return;
+    }
+    unsigned now = time_now_ms();
+    if (!rc.at) {
+        rc_due = 1, rc.at = now | !now;
+        return;
+    }
+    if (now - rc.at < RC_WAIT_MS) return;
+    rc.at = now;
+    if (rc.gen != library_gen) rc.gen = library_gen, rc_due = 1;
+    if (!rc_due || library_scanning() || !card_mounted()) return;
+    rc_due = 0;
+    rc_start();
+}
+
 static void power_poll(void) {
     pod_settings();
     charge_poll();
     cpu_poll();
     standby_poll();
     logo_poll();
+    ratings_copy_poll();
+    wdt_poll();
+    state_poll();
 }
 
 /* Home's Rockbox row (docs/boot.md#rockbox-from-home), bound by coverflow_home: a click leaves
@@ -9688,6 +10223,7 @@ int rockbox_open(void *ctx, void *event) {
     if (bt_link() && g_bluetoothflag && bt_linkstatus &&
         (unsigned)btctl_transport_get_volume() <= 127)
         btctl_transport_set_volume(((g_maxvolume < 100 ? g_maxvolume : 100) * 127 + 50) / 100);
+    ringnav_clean_end(); /* the watchdog would outlive demo's kill; nothing to report */
     system("killall checkappprocess.sh; killall -9 hciplayer; " SPOT_KILL "; sync; kill -9 $PPID");
     return 0;
 }
@@ -9701,9 +10237,9 @@ static int now_playing(void) {
 /* Now Playing's visualizer repainting, its album marquee moving or its lyrics gliding: their 40 and
  * 50 ms timers and the glide's steps would run late on an idle pass. Its progress and the lyrics'
  * follow tick every 250 ms and keep up. A game's 33 ms frame timer too: Vortex's raw wheel posts no
- * input to stamp. */
+ * input to stamp, nor does a card game's, whose travel goes once a pass. */
 static int np_animating(void) {
-    return games_live() ||
+    return games_live() || addon_game_on() ||
            (now_playing() && (visualizer_live() || st.lyric_glide ||
                               (st.np_marquee && st.np_off > 0 && st.np_off < st.np_over)));
 }
@@ -9828,8 +10364,8 @@ static void bt_volume_poll(void) {
 #endif
     device_set_volume(v, 1);
     write_int_config(v, "PLAYSET", BT_VOLUME_KEY);
-    void *top = window_manager_get_top_window(window_manager());
-    if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog")) {
+    void *top = vol_top();
+    if (top) {
 #if M1PLUS
         volume_refresh(top);
 #else
@@ -10008,7 +10544,7 @@ static int chord_gate(void *e) {
              (!(st.edge_held & edge) || (type == EVT_KEY_DOWN && now - st.edge_seen > 300))) {
         st.edge_held |= edge;
         st.edge_at = now;
-        if (st.centre_at && now - st.centre_at < CHORD_MS && st.centre_hold) {
+        if (st.centre_at && (int)(now - st.centre_at) < CHORD_MS && st.centre_hold) {
             timer_remove(st.centre_hold); /* the rim's Centre: no hold */
             st.centre_hold = 0;
         }
@@ -10018,7 +10554,7 @@ static int chord_gate(void *e) {
         /* a repeat follows its press within 258 ms; a later down is a new press */
         if (type == EVT_KEY_DOWN && !st.return_at &&
             (!st.return_eat || now - st.return_eat_at > 300))
-            st.return_eat = st.return_up && now - st.return_up < RETURN_GHOST_MS;
+            st.return_eat = st.return_up && (int)(now - st.return_up) < RETURN_GHOST_MS;
         if (st.return_eat) {
             st.return_eat_at = now;
             if (type == EVT_KEY_UP) st.return_eat = st.return_up = 0;
@@ -10071,7 +10607,8 @@ static int remote_key(void *e) {
 }
 
 /* window_manager_dispatch_input_event: while q2video plays (books.c) no key or touch reaches the
- * UI; a key's release goes to the player instead. Every event times ringnav_sleep's idle. */
+ * UI; a key's release goes to the player instead. A card game (addon.c) takes every event but the
+ * music's keys. Every event times ringnav_sleep's idle. */
 int ringnav(void *ctx, void *event);
 int ringnav_input(void *wm, void *e) {
     if (e && (chord_gate(e) || wake_gate(e))) return 0;
@@ -10081,6 +10618,7 @@ int ringnav_input(void *wm, void *e) {
         if (e && I(e, EVENT_TYPE) == EVT_KEY_UP) video_key((unsigned)I(e, EVENT_KEY));
         return 0;
     }
+    if (addon_game_input(e)) return 0;
     unsigned type = e ? (unsigned)I(e, EVENT_TYPE) : 0;
     unsigned key = e ? (unsigned)I(e, EVENT_KEY) : 0;
     if ((type == EVT_KEY_DOWN || type == EVT_KEY_UP || type == EVT_KEY_LONG) &&
@@ -10118,14 +10656,15 @@ int ringnav_input(void *wm, void *e) {
 }
 
 /* window_manager_paint, a leaf (tools/build.py WM_PAINT_LEAF): the window manager's own paint
- * (vtable +0xc), except while q2video has the framebuffer (video_poll repaints after) and while the
- * screen is off, unless a window animates (AWTK steps it from the paint); the first lit pass
- * repaints the whole screen (ringnav_sleep; docs/internals.md Battery). */
+ * (vtable +0xc), except while q2video or a card game has the framebuffer (each poll repaints after
+ * it) and while the screen is off, unless a window animates (AWTK steps it from the paint); the
+ * first lit pass repaints the whole screen (ringnav_sleep; docs/internals.md Battery). */
 int ringnav_wm_paint(void *wm) {
     if (wm && !g_backlight_status && !window_manager_is_animating(wm)) return 0; /* RET_OK */
-    void *vt = wm && !video_on() ? P(wm, M1PLUS ? 0x88 : 0x94) : (void *)0;
+    int away = video_on() || addon_game_on();
+    void *vt = wm && !away ? P(wm, M1PLUS ? 0x88 : 0x94) : (void *)0;
     int (*paint)(void *) = vt ? (int (*)(void *))P(vt, 0xc) : (int (*)(void *))0;
-    return paint ? paint(wm) : video_on() ? 0 : 0x10; /* RET_BAD_PARAMS, as stock */
+    return paint ? paint(wm) : away ? 0 : 0x10; /* RET_BAD_PARAMS, as stock */
 }
 
 /* buzzeer_switch (0x4f3cc8), every Key Tone click, stock's and ringnav()'s: the MCU's buzzer
@@ -10536,13 +11075,15 @@ int ringnav(void *ctx, void *event) {
     else if (key == KEY_CENTER || (st.scrub && (np == &np_local || key == KEY_NEXT || key == KEY_PREV)))
         return np_key(top, key);
 #else
-    if (top != st.np_win || window_manager_is_animating(wm) ||
-        window_manager_get_pointer_pressed(wm))
+    /* Outside a scrub the volume's band over Now Playing leaves the keys the page's: Centre's
+     * presses as on it, the wheel the volume's, and a pending press survives the ticks */
+    int np = top == st.np_win || (!st.scrub && vol_band(wm));
+    if (!np || window_manager_is_animating(wm) || window_manager_get_pointer_pressed(wm))
         np_cancel();
     else if (key != KEY_CENTER && np_lyrics(key))
         return STOP;
     else if (key == KEY_CENTER || st.scrub)
-        return np_key(top, key);
+        return np_key(st.np_win, key);
 #endif
     if (!allowed_top(top) && !usb_prompt()) {
         drop_input();
