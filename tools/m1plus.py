@@ -970,7 +970,7 @@ def patch_player(raw, out):
 
 def m1_themes():
     """The built-in themes the M1 offers, and tools/theme.py loaded over the M1's screen (m1plus_ipod's copy of
-    tools/ipod.py, so its SET0 is the M1's rows and bar). Only the themes on SET0 alone: Classic boots its own
+    tools/ipod.py, so its SET0 is the M1's rows and bar, and its macros patch/m1plus_offsets.inc's). Only the themes on SET0 alone: Classic boots its own
     geometry set, whose row immediates are V1.32's (ipod.json), so it is unported (docs/m1plus-unported.md)."""
     import importlib.util, sys, m1plus_ipod
     saved = sys.modules.get('ipod')
@@ -979,6 +979,13 @@ def m1_themes():
         spec = importlib.util.spec_from_file_location('m1plus_theme', ROOT/'tools/theme.py')
         theme = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(theme)
+        # Role macros (Coverflow's CF_*, Home's HOME_*, the accents' fills) are the M1's: theme.py evaluates
+        # them against its O, the Q2's offsets.inc but for the screen
+        m1 = dict(m1plus_ipod.M1)
+        for name, expr in re.findall(r'^#define\s+(\w+)\s+\(([\w\s+*/-]+)\)', (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M):
+            try: m1[name] = eval(expr, {'__builtins__': {}}, m1)  # (CHEVRON_W - 10) and the like
+            except NameError: pass
+        theme.O = {**theme.O, **m1}
     finally:
         if saved is None: sys.modules.pop('ipod', None)
         else: sys.modules['ipod'] = saved

@@ -846,8 +846,8 @@ def validate(t, name):
         err(f'coverflow.shelf: bright2 {t["cf.bright2"]} exceeds bright1 {t["cf.bright1"]}')
     h = O['CF_NAME_H'] + O['CF_ARTIST_H']
     bar = geometry(t).bar
-    if t['cf.text_y'] + h > 320 - bar:
-        err(f'coverflow.caption: text_y + {h} = {t["cf.text_y"] + h} exceeds the client height {320 - bar}')
+    if t['cf.text_y'] + h > O['UI_H'] - bar:
+        err(f'coverflow.caption: text_y + {h} = {t["cf.text_y"] + h} exceeds the client height {O['UI_H'] - bar}')
     chooser = [o for o in t['opts'] if o.get('sets')]
     if len(chooser) > 1:
         err('one option per theme selects the geometry set')

@@ -302,11 +302,11 @@ static inline int arc_out(int r, int y) {
 #define HOME_DOT 6
 #define HOME_DOT_GAP 8
 #define HOME_SPLIT_W 160
-#define HOME_CLASSIC_ROW 314
-#define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
+#define HOME_MODERN_ROW 314 /* Modern's Full rows (1.6.7 renamed Classic, as 1.6.4 had it, Modern) */
+#define HOME_TOP 8 /* Minimal's decorative inset; Modern starts below the status bar. */
 #define HOME_CHEVRON_SHIFT 6
-#define HOME_CLASSIC_TEXT_X 20
-#define HOME_CLASSIC_LABEL_END (CHEVRON_W - 10)
+#define HOME_MODERN_TEXT_X 20
+#define HOME_MODERN_LABEL_END (CHEVRON_W - 10)
 #define NP_BAR_CLASSIC 8
 #define NP_BAR_MINIMAL 4
 #define MINIMAL_FILL 0xeeeeec
