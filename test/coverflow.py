@@ -1696,7 +1696,7 @@ def main():
                 'max(time_create) desc': ['old', 'Undated', 'Mid', 'New', 'Also 2020'],  # Recently Added
                 'album COLLATE NOCASE': ['Also 2020', 'Mid', 'New', 'old', 'Undated']}  # Artist Album Order: A-Z
         for o in orders:
-            got = [r[1] for r in db.execute(macro('ALBUM_SQL') + macro('ALBUM_GROUP') + ' order by ' + o)]
+            got = [r[1] for r in db.execute(macro('ALBUM_SQL').replace(',,', ',' + macro('ALBUM_TRACK') + ',') + macro('ALBUM_GROUP') + ' order by ' + o)]
             assert got == want.pop(o.removeprefix(album_year + '=0,')), (o, got)
         assert not want, want
 
