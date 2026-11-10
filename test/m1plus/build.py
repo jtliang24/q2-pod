@@ -104,24 +104,27 @@ def boot_check(s90play=None):
             assert script.count(stubs[0]) == 1, 'S90play: no dbus start'
             for stub in stubs: script = script.replace(stub, ':')
             script = script.replace('/bin/mkdir', 'mkdir').replace('/var/run/', f'{r}/var/run/')
-        for old in ('/mnt/', '/tmp/mmc_add', ROCKBOX_FLAG, '/usr/bin/q2boot', '/release/bin/demo'):
+        for old in ('/mnt/', '/tmp/mmc_add', ROCKBOX_FLAG, '/usr/bin/q2boot', '/release/bin/demo', '/proc/mounts', '/tmp/q2-demo.log'):
             script = script.replace(old, f'{r}{old}')
-        script = script.replace('usleep 200000', ':')
-        for d in ('mnt/data', 'mnt/mmc/.rockbox', 'tmp', 'usr/bin', 'release/bin'): (r/d).mkdir(parents=True)
+        script = script.replace('usleep 200000', ':').replace('usleep 500000', ':')
+        for d in ('proc', 'mnt/data', 'mnt/mmc/.rockbox', 'tmp', 'usr/bin', 'release/bin'): (r/d).mkdir(parents=True)
         def exe(path, body): (r/path).write_text('#!/bin/sh\n' + body + '\n'); (r/path).chmod(0o755)
         # demo takes Home's Rockbox row (leaves the flag) as many times as the shortcuts file says
         flag, shortcuts = f'{r}{ROCKBOX_FLAG}', r/'shortcuts'
         exe('release/bin/demo', f'echo demo >> {r}/ran; n=$(cat {shortcuts}); '
-            f'[ "$n" -gt 0 ] && echo $((n - 1)) > {shortcuts} && : > {flag}; exit 137')
+            f'[ "$n" -gt 0 ] && echo $((n - 1)) > {shortcuts} && : > {flag}; '
+            f's=$(head -n1 {r}/code); [ $(wc -l < {r}/code) -gt 1 ] && sed -i 1d {r}/code; exit $s')  # one status per run, the last repeats
         rb, target = r/'mnt/mmc/.rockbox/rockbox', r/'mnt/data/boot-target'
-        def boot(held, card, code=81, shortcut=0):
+        def boot(held, card, code=81, shortcut=0, status=137):
             shortcuts.write_text(f'{shortcut}\n')
+            (r/'code').write_text(''.join(f'{c}\n' for c in (status if isinstance(status, (list, tuple)) else [status])))
             exe('usr/bin/q2boot', 'exit ' + ('0' if held else '1'))
             if card: exe('mnt/mmc/.rockbox/rockbox', f'pwd >> {r}/ran; exit {code}')
             else: rb.unlink(missing_ok=True)
             (r/'ran').write_text('')
             subprocess.run(['sh', '-c', script, 'S90play', 'start'], check=True)
             return (r/'ran').read_text().split(), target.exists() and target.read_text().strip()
+        (r/'proc/mounts').write_text('')
         rockbox = [str(rb.parent), 'demo']
         assert boot(False, False) == (['demo'], False)          # no Rockbox on the card: Q2 Pod
         assert boot(False, True, 1) == (rockbox, False)         # Rockbox by default; a crash starts Q2 Pod
@@ -145,6 +148,34 @@ def boot_check(s90play=None):
         assert boot(True, True, 81, 1) == (['demo', *rockbox], False)
         assert boot(False, True, 81, 2) == (rockbox * 3, False) and not pathlib.Path(flag).exists()
         assert boot(True, False, 81, 1) == (['demo', 'demo'], False)  # no Rockbox on the card: Q2 Pod again
+        # an abnormal end of demo leaves its status on /mnt/data, which the next boot copies to a mounted card;
+        # 0, 143 and the Rockbox hand-over leave nothing
+        crash, copy, mounts = r/'mnt/data/q2-crash.log', r/'mnt/mmc/q2-crash.log', r/'proc/mounts'
+        def logged(status, card, shortcut=0):
+            for f in (crash, copy): f.unlink(missing_ok=True)
+            mounts.write_text(f'tmpfs /tmp tmpfs rw 0 0\n/dev/mmcblk0p1 {r}/mnt/mmc vfat rw 0 0\n' if card else '')
+            boot(True, False, shortcut=shortcut, status=status)
+            return crash.exists() and crash.read_text(), copy.exists() and copy.read_text()
+        out, cp = logged(137, True)
+        assert 'demo exit 137' in out and '== dmesg' in out and '== meminfo' in out and '== ps' in out and cp is False  # no card write while dying
+        assert not crash.with_name('q2-crash.log.tmp').exists()  # written whole, then renamed
+        mounts.write_text(''); boot(True, False, status=0); assert not copy.exists() and crash.exists()  # no card: kept for a later boot
+        mounts.write_text(f'/dev/mmcblk0p1 {r}/mnt/mmc vfat rw 0 0\n'); boot(True, False, status=0)
+        assert copy.read_text() == out and not crash.exists()  # the next boot with a card moves it there
+        copy.write_text('kept'); boot(True, False, status=0); assert copy.read_text() == 'kept'  # and never brings it back
+        out, cp = logged(139, False)
+        assert 'demo exit 139' in out and cp is False
+        assert logged(0, True) == (False, False) and logged(143, True) == (False, False)
+        assert logged([137, 0], True, 1) == (False, False)  # the Rockbox hand-over's kill, then a clean demo
+        # /mnt/data/q2-state (navigation.c state_poll) still there at boot: the last session ended in a forced
+        # restart, or the battery. It goes into q2-crash.log, a new one that says so or the crash's, and goes.
+        state, line = r/'mnt/data/q2-state', 'screen:off power:suspending cable:out battery:57 play:paused out:jack\n'
+        state.write_text(line); out, cp = logged(0, False)
+        assert 'did not end' in out and '== last state' in out and line in out and not state.exists() and cp is False
+        for f in (crash, copy): f.unlink(missing_ok=True)
+        crash.write_text('== demo exit 137\n'); state.write_text(line); boot(True, False, status=0)
+        assert crash.read_text().startswith('== demo exit 137\n== last state\n') and line in crash.read_text() and not state.exists()
+        for f in (crash, copy): f.unlink(missing_ok=True)
     print(f'Dual boot ({"built S90play" if s90play else "BOOT_HOOK"}): Rockbox by default, one-session Q2 Pod, stale choice ignored, card fallback and Home Rockbox row passed.')
 boot_check()
 
@@ -152,7 +183,7 @@ def logo_check(s11logo=None):
     """S11logo_display_shell's splash choice under the host sh: build.py's LOGO_HOOK, or a built
     rootfs's whole script (its /dev/fb0 wait and ROTATEMODE choice included)."""
     import subprocess, tempfile, pathlib
-    from build import LOGO_HOOK, LOGO, LOGO_LIGHT
+    from build import LOGO_HOOK, LOGO, LOGO_LIGHT, TIMEZONES
     with tempfile.TemporaryDirectory(prefix='q2-logo-') as tmp:
         tmp = pathlib.Path(tmp)
         user, config, dark, light = tmp/'boot-logo.jpg', tmp/'config.ini', tmp/'logo.jpg', tmp/'logo-light.jpg'
@@ -175,8 +206,19 @@ def logo_check(s11logo=None):
         assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(user)  # the card's logo wins in either mode
         user.unlink()
         config.write_text('[IPOD]\nLIGHT=2\n')
-        def at(hour): return subprocess.run(['sh', '-c', script.replace('$(date +%H)', hour), 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip()
+        def at(hour): return subprocess.run(['sh', '-c', script.replace('$(TZ=$z date +%H)', hour), 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip()
         assert at('06') == str(dark) and at('07') == str(light) and at('18') == str(light) and at('19') == str(dark)
+        # Auto reads the hour in the saved zone: only the zone's own TZ gets a light hour. V2.1's 27 stock zones
+        # are the Q2's first 27, in order (its select_timezone table at 0x97c810).
+        for i, (_, zone) in enumerate(TIMEZONES):
+            config.write_text(f'[SYSSET]\nTIMEZONE={i}\n[IPOD]\nLIGHT=2\n')
+            fake = f'''date() {{ [ "$TZ" = '{zone}' ] && echo 12 || echo 22; }}; '''
+            assert subprocess.run(['sh', '-c', fake + script, 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip() == str(light), zone
+        # No saved zone, or one past the list: stock's default, as the player reads it (config_init)
+        for text in ('[IPOD]\nLIGHT=2\n', f'[SYSSET]\nTIMEZONE={len(TIMEZONES)}\n[IPOD]\nLIGHT=2\n'):
+            config.write_text(text)
+            fake = f'''date() {{ [ "$TZ" = '{TIMEZONES[22][1]}' ] && echo 12 || echo 22; }}; '''
+            assert subprocess.run(['sh', '-c', fake + script, 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip() == str(light)
         user.write_bytes(b'')
         if 'logo180.jpg' in script:  # M1 Plus: a flipped screen keeps the stock flipped splash
             assert shown(1) == '/release/assets/default/raw/images/xx/logo180.jpg'
@@ -889,6 +931,15 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
     assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
     assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
+    # Library -> Songs (songs_load, 1.6.3): loadLocalClassList's default branch calls getAllMusic, then
+    # musicNagvationTitle (music_nagvation_title) with 0xf001 (ori $a0); V2.1's getAllMusic reads sort_flag
+    # (g_sort_flag) itself, so the payload's argument is ignored.
+    assert bal(0x4ee5c0, 'getAllMusic') and bal(0x4ee5d4, 'musicNagvationTitle') and words(0x4ee5c8, 1) == (0x3404f001,)
+    assert stock_syms['loadLocalClassList'] < 0x4ee5c0 and got(0x4ea374) == stock_syms['sort_flag']
+    # MQA_ACCEPT (1.6.3): mclWaitAccept's jalr is accept's, and a positive descriptor goes to MCL_FD's
+    # word (sw $v0, -0x5414($s4)) after it, as V1.32's does.
+    assert got(0x5d0020) == stock_syms['accept@GLIBC_2.0'] and stock_syms['mclWaitAccept'] < 0x5d0030
+    assert words(0x5d0038, 3) == (0x18400002, 0x8fbc0010, 0xae82abec)
     # online_lyricthd: the hooked search (kugou_obtainlyric), NetEase's com163_obtainlyric on a miss and
     # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
     assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')
@@ -1118,7 +1169,7 @@ def validate_assets(directory):
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_TOUCH, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
                       STATUS_ICONS, status_icon, QUIET_ICONS, quiet_icon, SET_ICON, SET_STOCK_ICON, SETTINGS_ICONS, SETTINGS_SLIDERS, decode, slider_plain, imagemagick, inc, png_header, settings_icon, walk,
-                      patch_asset, patch_code, patch_style, style_props, SLIDE, HOME_CARDS, card_art)
+                      patch_asset, patch_code, patch_style, style_props, SLIDE)
     from build import source_sha256
     manifest = json.loads((directory/'manifest.json').read_text())
     assert manifest['source_sha256'] == source_sha256(), f'{directory} was built from other sources; rebuild into a fresh directory'
@@ -1157,7 +1208,7 @@ def validate_assets(directory):
     patched_ui = set(UI_ASSETS)
     assert set(changed) == {ui+p for p in patched_ui | chinese} | {
         'release/assets/default/raw/styles/'+p for p in AUDIT['styles']} | {
-        xx+n for n in [*SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS | ART_PLACEHOLDERS, *HOME_CARDS]} | {'release/assets/default/raw/strings/en_US.bin', FONT, TAG_C}
+        xx+n for n in SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS | ART_PLACEHOLDERS} | {'release/assets/default/raw/strings/en_US.bin', FONT, TAG_C}
     master = (ROOT/'assets/icons/default_album_home.png').read_bytes()
     for name, size in ART_PLACEHOLDERS.items():
         old, new = read('stock.squashfs', xx+name), read('rootfs.squashfs', xx+name)
@@ -1173,9 +1224,9 @@ def validate_assets(directory):
     flow = read('rootfs.squashfs', xx+'default_album_flow.png')
     assert flow == sized_art(master, 160) and png_header(flow) == (160, 160, 8, 6)
     assert read('rootfs.squashfs', xx+'default_album_home.png') == master
-    # Home: Carousel's cards in the accent's tones, stock's in place, Coverflow's and the Shortcut's added.
+    # Home: Carousel's cards in their own colours, stock's untouched, Coverflow's and the Shortcut's added.
     for name in ICONS:
-        assert read('rootfs.squashfs', xx+name) == card_art((ROOT/'assets/icons'/name).read_bytes()), name
+        assert read('rootfs.squashfs', xx+name) == (ROOT/'assets/icons'/name).read_bytes(), name
     import tempfile
     with tempfile.NamedTemporaryFile(suffix='.ttf') as font:
         font.write(read('stock.squashfs','release/assets/default/raw/fonts/default.ttf')); font.flush()
@@ -1246,7 +1297,7 @@ def validate_assets(directory):
     default = manifest['logo_sha256'] == sha((ROOT/'assets/boot-logo.jpg').read_bytes())
     assert ('squashfs-root/'+LOGO_LIGHT in names) == default and (not default or read('rootfs.squashfs', LOGO_LIGHT) == light)
     # The carousel's images stay (and its arrows); the Coverflow and Shortcut cards' are added.
-    assert {'squashfs-root/release/assets/default/raw/images/xx/'+n for n in ICONS + HOME_CARDS + ['menu_left.png', 'menu_right.png']} <= names
+    assert {'squashfs-root/release/assets/default/raw/images/xx/'+n for n in ICONS + ['menu_music.png', 'menu_left.png', 'menu_right.png']} <= names
     # Colours the firmware will paint (inline style props, else the theme entry for the widget's style):
     # no screen may gain a light background or border, or dark text, that stock did not already paint.
     def palette(path):
@@ -1344,7 +1395,6 @@ def validate_assets(directory):
             elif name in QUIET_ICONS:
                 assert sha(original)==QUIET_ICONS[name] and new==quiet_icon(name,original)
                 assert png_header(new)==(28,28,8,6)
-            elif name in HOME_CARDS: assert new==card_art(original) and png_header(new)==(190,190,8,6)
             else: assert name in SETTINGS_ICONS and new==settings_icon(name,original)
             continue
         short = rel.split('/raw/ui/')[1]

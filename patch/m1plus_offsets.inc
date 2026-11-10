@@ -105,6 +105,7 @@
 #define ICON_KEYLOCK "sset_keylock"
 #define ICON_DISPLAY "sset_display"
 #define ICON_COVERMODE "pset_covermode"
+#define ICON_KEYTONE ICON_DISPLAY /* Click With Headphones is Q2 only (no buzzer): no row on M1 */
 #define ICON_FOLDERJUMP "pset_jumpfolder"
 #define ICON_MEMPLAY "pset_memplay" /* Resume Songs' row */
 #define ICON_BALANCE "pset_balance" /* Mono Audio's row */
@@ -681,6 +682,10 @@ static inline int arc_out(int r, int y) {
 /* One row per album, as album_cmp tells them apart (coverflow.c; navigation.c's Era). */
 #define ALBUM_GROUP " group by album COLLATE NOCASE," \
     "ifnull(albumsonger,'') COLLATE NOCASE,case ifnull(albumsonger,'') when '' then rtrim(fileurl,replace(fileurl,'/','')) end"
+/* An album group's art track, as offsets.inc's (1.6.3): V2.1's songtable has the same cd_num, track and fileurl. */
+#define ALBUM_TRACK \
+    "substr(min(substr(10000+min(max(ifnull(cd_num,0),0),9999),2)||" \
+    "substr(10000+min(max(ifnull(track,0),0),9999),2)||fileurl),9)"
 /* An artist's albums. V2.1 loads them with this class too: loadAlbumList stores 0xff01 in classinfo_save,
  * then branches to loadLocalClassList (0x4ee930, 0x4ee9a8), where V1.32 loads 0xff11 (ringnav_localclass's
  * artist_tab). */
@@ -899,3 +904,19 @@ extern unsigned char m1_return_latch;
 /* Tidal's saved login, a string in theTidal (0xa44 bytes) that tidal_tidal_main_init (0x4b9e44) tests before it builds
  * its page under its login page (m1_tidal_login, CALL_SITES TIDAL_LOGIN). */
 #define TIDAL_SAVED_LOGIN 0x929
+/* Night Shift (1.6.3) is unported: night_paint returns at once on M1, and Display has no row for it. V2.1's
+ * lcd_mem layout is not yet checked against V1.32's. */
+#define LCD_END_FRAME M1_UNPORTED
+#define LCD_W M1_UNPORTED
+#define LCD_H M1_UNPORTED
+#define LCD_DRAW_MODE M1_UNPORTED
+#define LCD_DRAW_NORMAL M1_UNPORTED
+#define LCD_DIRTY M1_UNPORTED
+#define LCD_OFFLINE_FB M1_UNPORTED
+#define LCD_LINE_LENGTH M1_UNPORTED
+#define LCD_FORMAT M1_UNPORTED
+#define LCD_BGRA8888 M1_UNPORTED
+/* The hardware watchdog and its state record (1.6.3) are unported: wdt_poll and state_poll return at once on
+ * M1. V2.1 ships the same soc_watchdog.ko, but its ioctls and S90play's crash log are not yet checked. */
+#define WDT_MS 60000
+#define WDT_LONG_MS 900000

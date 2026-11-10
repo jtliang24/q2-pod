@@ -4196,6 +4196,73 @@ The new `patch.py` scenario, for Spotify and Soloify with no browser open: lit, 
 
 `V058m` (`work/before-4-7/a1`, `--dev`, update sha256 `cd0f38c3…`) passes all 16 gates (`work/before-4-7/a1-gates`, `a1-gates2`; `patch.py` without `GAPS_DUMP`: 418 gaps, none unlisted); the Q2's `update.tar` is byte-identical. Not flashed on its own: the next device pass checks it (paused 30 s or more on Soloify's page, lit, the track stays and Play resumes; with Screen Off at 1 min, the page closes after the dark idle).
 
+## 76. Merge step: sync to 1.6.3 on `feature/m1-ipod` (Nov 9-10)
+
+The catch-up before Phase 4.7, first step: `drift.py --fetch` planned 1.5.9 → 1.6.3 →
+1.6.4 → 1.6.7 (`link.ld`, flash) → 1.7.1 (`link.ld`, flash) → 1.7.3. `sync/1.6.3` from `feature/m1-ipod`
+(backup `refs/backup/pre-sync-1.6.3`). 78 commits, 63 files, +6,904/−642: Night Shift, Single Press Scrub, the
+watchdog and the state record, card-app games (Buddy), sleep timers and tags, the ratings' card copy, the
+restart ask, MQA sent at accept, and `test/unit` (pytest of `tools/`, mutmut weekly).
+
+**Conflicts** (`00bf79e`), 9 files:
+- `navigation.c`, 12 hunks. Display's comment and icons. The M1's controls stay `{4,7}`, because Single Press
+  Scrub (10) is the knob's own behaviour already. Key Tone's code goes in `m1plus_nav_sysset.c`, and sysset's
+  Key Tone rows are `#if !M1PLUS`. `ratings_copy_due` is in both `FAV_CLICK` branches. `hidden` takes
+  `GOTO_ALBUM_PAGE`/`GOTO_ARTIST_SHOWN`, `away` keeps the M1's `0x88`, and the np key keeps the M1 branch.
+- `addon.c`: the caps are `get goto sleep game`, without `library`. `sleep_check()` runs, then
+  `if (!M1PLUS) library_poll()`.
+- `crossfade.c`: Night Shift's title, with the M1's name. `xf.ctx = mode` and the `SW_ROW` refresh.
+- `playback.c`: `INITCONFIG_SPEED_RET`. `ringnav_mode` keeps the M1's `BOOT_MODE_RET` `peq_boot` and takes
+  upstream's `peq_chained` block. `mqa_sync` is gone. On V2.1, `set_equalizer_value` runs before
+  `mclSetPlayMode`, the same order as on V1.32.
+- `tools/build.py`, `internals.md`, `README.md`, `test/coverflow.py`.
+
+**Follow-ups.**
+- `80b31fe`, names and sources: `ALBUM_TRACK`, `musicNagvationTitle`, and `sort_flag` as a zero stub (V2.1 has
+  no sort-flag global). `nightshift.c` joins the payload, but Night Shift, the watchdog and the state record
+  return at once on M1 (unported rows). `ICON_KEYTONE`. btvol keeps its `volume_dialog` lookup.
+- `08a1ffa`:
+  - `MQA_ACCEPT` is V2.1's `mclWaitAccept` jalr at `0x5d0030`, so the saved mode reaches each connection, boot's
+    included.
+  - `GRID_COVER`'s folder row takes `coverflow_folder_cover`.
+- `cb9a2d7`: the M1's caps drop `game` (the M1 has no Games row; goto and sleep run).
+- `01ba89c`: the merge kept the Q2's old `scrub_start` beside upstream's moved one. That only breaks the Q2's
+  build, so q2compare found it last. The runbook now puts each merged `patch/*` file through
+  `unifdef -DM1PLUS=0` against the tag's own.
+- Checked and fine:
+  - `LOGO_HOOK`: V2.1's 27 zones are in the Q2's order.
+  - The `q2only` lines (105) are all Q2-only or stand-ins.
+  - The hex literals: USB DAC's `ao_init` is gc'd out of the M1 player.
+
+**Suites.**
+- `b84370b`, `64deacd`, `e2e18ae`, `338ac31`: upstream's cases merged, the card apps' goto and sleep
+  re-indented into `usbmode_page_init`'s block.
+- `b36acda`: gaprun keys `patch.py`'s statements in one pass (it took ~10 min before).
+- `patch.py`:
+  - The App Store list adds Podcasts, Live Music Archive and Buddy.
+  - `getAllMusic`'s sort argument is 0 (the stub).
+  - Single Press Scrub, Centre over Now Playing's volume dialog, and the watchdog are guarded and NOT PORTED.
+  - 24 gap entries rekeyed where upstream rewrote the statements; 9 stale ones dropped.
+  - 433 expected failures in 8 gaps, 62 checks not ported.
+- `playback.py`:
+  - The M1 expects no MQA send at `config_mplayer`.
+  - The accept-loop scenario now runs on the M1 too.
+  - The restart ask calls `change_music` and reads V2.1's M3U byte (`0xa0ab86`, `mclGetPlayM3uFlag`).
+- `test/unit` (the new gate): q2remote's Q2 path is upstream's again. One cached `is_m1()` picks the M1's
+  nodes, `state` sends upstream's script, and a Q2 tap takes two arguments. The conftest answers Q2, and
+  `test/remote.py` checks the M1's routing.
+
+**The host.** The first run was on a throttled host: every core at ~544 MHz, and one acpitz zone read 180 °C.
+`patch.py` took 70 min, q2compare 3,734 s, and the boot walk missed `knob` and `crossfade_back` on timing. Rerun
+Nov 10 at speed: `patch` 460 s, and all six boot walks pass.
+
+**Gates** (from `work/gatetree`): q2compare against 1.6.3 with `update.tar` byte-identical (`9eeb361df580`) and
+its suites passing. On the M1, `--dev` `V053m` in `work/sync/1.6.3/` (update sha256 `ec4d50ea…`) passes
+`build.py --build`, `patch.py` (no `GAPS_DUMP`), `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`,
+`--soloify`, `--bar-keys`), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and
+`pytest test/unit` (527). The function diff against `V057m` (`work/sync/1.6.3-gates/fndiff.txt`): 276 changed,
+51 added. Not flashed: 1.6.7 is the first flash. Footprint +2,608/−490 over 34 files.
+
 ## How to check a build now
 
 ```sh

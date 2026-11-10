@@ -48,7 +48,7 @@ extern void *shim_choicemenu; /* M1 Plus: the Home menu's cards (coverflow.c hom
 #define g_lockscreen_pageflag 0
 int shim_lock(void *), shim_unlock(void *), shim_statfs(const char *, void *);
 """ + ''.join(f'{r} {n}({a});\n' for n in """
-getAllAlbum getMusicByAlbum toolsQueryDbTable album_row toolsThumbSpecCover toolsGetAlbumCover toolsGetExternCover _create_deque deque_init_copy deque_clear
+getAllAlbum getMusicByAlbum toolsQueryDbTable toolsUpdateDbTable album_row toolsThumbSpecCover toolsGetAlbumCover toolsGetExternCover _create_deque deque_init_copy deque_clear
 deque_init _deque_push_back deque_pop_back
 deque_assign deque_destroy deque_size deque_at window_create widget_factory
 widget_factory_create_widget image_create hscroll_label_create set_hscroll_label_attribute
@@ -61,7 +61,7 @@ canvas_get_clip_rect canvas_set_clip_rect widget_set_sensitive widget_get_type t
 timer_add timer_remove navigator_back_to_home navigator_back window_manager_close_window_force navigator_to_with_context bitmap_create_ex bitmap_destroy bitmap_unlock_buffer
 bitmap_lock_buffer_for_read bitmap_lock_buffer_for_write bitmap_get_line_length
 canvas_draw_image slide_menu_set_spacer window_manager window_manager_get_top_window window_manager_is_animating time_now_ms
-widget_to_local widget_animator_pause window_manager_get_pointer_pressed image_manager image_manager_unload_bitmap_by_name
+widget_to_local widget_animator_pause window_manager_get_pointer_pressed image_manager image_manager_unload_bitmap_by_name image_manager_unload_all
 label_create label_set_line_wrap navigator_to pointer_event_init
 """.split() for r, a in [PROTOTYPES[n]]) + r"""
 void *shim_calloc(size_t, size_t);
@@ -152,6 +152,8 @@ int widget_unload_image(void *x, void *b) { ++unloads; return 0; }
 static char dropped[600]; /* the last cached bitmap dropped by name */
 void *image_manager(void) { return (void *)8; }
 int image_manager_unload_bitmap_by_name(void *m, const char *name) { snprintf(dropped, sizeof dropped, "%s", name); return 0; }
+static int drops; /* image_manager_unload_all calls */
+int image_manager_unload_all(void *m) { ++drops; return 0; }
 void set_hscroll_label_attribute(void *x) { assert(!strcmp(W(x)->type, "hscroll_label")); }
 int slide_menu_set_value(void *x, int value) { *(int *)(W(x)->raw + SLIDE_INDEX) = value; return 0; }
 int widget_set_name(void *x, const char *s) { snprintf(W(x)->type, 32, "%s", s); return 0; }
@@ -367,6 +369,7 @@ static int artist_view;
 int ringnav_artist_view(void) { return artist_view; }
 int ringnav_artist_az(void) { return 0; }
 int album_row(void *a, int n, char **v, char **c) { return 0; }
+int toolsUpdateDbTable(const char *db, const char *sql) { return 1; } /* only a drop-flag scan writes */
 int toolsQueryDbTable(const char *db, const char *sql, void *row, int sort) {
     assert(!strcmp(db, "/mnt/data/database.db") && !sort && strstr(sql, "group by album COLLATE NOCASE,ifnull(albumsonger"));
     deque *d = shim_dir;
@@ -1242,6 +1245,15 @@ static void ffmpeg_art(void) {
     open_page();
     assert(calls == before && size("Webp") == 6 && size("Ffok") == 6 && !tmp_files());
     close_page();
+    /* An ffmpeg that never reached its own exit (killed: out of memory, #169) leaves no marker, so
+       the album is tried again at the next open, not shown artless until Refresh Coverflow. */
+    album("Fkill", 0);
+    rescan();
+    for (int i = 0; i < 2; ++i) {
+        open_page();
+        assert(size("Fkill") == -1 && !tmp_files());
+        close_page();
+    }
 }
 
 static void player_cover(void) {
@@ -1399,11 +1411,15 @@ int main(void) {
     assert(size("C") == 9 && !strcmp(made[calls - 1], "cover.jpg"));
 
     /* Display settings' Refresh Coverflow (coverflow_refresh_art) clears the cache and, at the next
-       open, queries the albums again and rebuilds every one. */
-    int before = calls, q = queries;
+       open, queries the albums again and rebuilds every one. Stock's Library covers go too, with
+       AWTK's cached bitmaps, as the same names are written again. */
+    int before = calls, q = queries, d = drops;
     close_page();
+    mkdir(PEQ_ROOT "/mnt/mmc/.sldp", 0755);
+    fclose(fopen(PEQ_ROOT "/mnt/mmc/.sldp/x0.jpg", "w"));
     coverflow_refresh_art();
     assert(size("Cover") == -1 && size("None") == -1);
+    assert(access(PEQ_ROOT "/mnt/mmc/.sldp/x0.jpg", F_OK) && drops == d + 1);
     open_page();
     run();
     assert(calls == before + albums - 2 && size("None") == 0 && size("Embedded") == 0 && size("Cover") == 9);
@@ -1599,7 +1615,7 @@ int main(void) {
 # track under Ffok/, else a failure.
 FFMPEG_STUB = r"""#!/bin/sh
 for a; do [ "$prev" = -i ] && src=$a; prev=$a; done
-case $src in *.webp|*/Ffok/*) printf ffmpeg > "$a";; *) exit 1;; esac
+case $src in *.webp|*/Ffok/*) printf ffmpeg > "$a";; */Fkill/*) kill -9 $$;; *) exit 1;; esac
 """
 
 
@@ -1616,21 +1632,21 @@ def main():
     # Marker expansion is executed against real SQLite by test/library_scope.py and the MIPS
     # wrapper tests. These base predicates also apply when no directories have markers.
     music_where = macro('MUSIC_WHERE') + '1'
-    sql = macro('MUSIC_ALBUM_SQL') + music_where + macro('ALBUM_GROUP')
+    sql = macro('MUSIC_ALBUM_SQL').replace(',,', ',' + macro('ALBUM_TRACK') + ',') + music_where + macro('ALBUM_GROUP')
     with sqlite3.connect(':memory:') as db:
-        db.execute('create table songtable(id,album,songer,fileurl,albumsonger)')
+        db.execute('create table songtable(id,album,songer,fileurl,albumsonger,track,cd_num)')
         paths = ['/mnt/mmc/Audiobooks/Book/01.mp3', '/mnt/mmc/aUdIoBoOkS/02.flac',
                  '/mnt/mmc/Music/book.M4B', '/mnt/mmc/Music/song.flac',
                  '/mnt/mmc/Audiobooks Extra/song.mp3', '/mnt/mmc/Music/book.m4b.mp3',
                  '/mnt/mmc/Podcasts/Show/episode.mp3', '/mnt/mmc/pOdCaStS/untagged.mp3',
                  '/mnt/mmc/Podcasts Extra/song.mp3', '/mnt/mmc/Music/Podcasts/song.mp3']
-        db.executemany('insert into songtable values (?,"Shared","Artist",?,"Artist")', enumerate(paths))
+        db.executemany('insert into songtable values (?,"Shared","Artist",?,"Artist",1,1)', enumerate(paths))
         assert {r[0] for r in db.execute('select id from songtable where '+music_where)} == {3,4,5,8,9}
         rows = db.execute(sql).fetchall()
         assert len(rows) == 1 and rows[0][3] in paths[3:]
         db.execute('delete from songtable where id >= 3')
         assert not db.execute(sql).fetchall()
-        db.execute("insert into songtable values (10,NULL,'Artist','/mnt/mmc/Music/untagged.mp3',NULL)")
+        db.execute("insert into songtable(id,album,songer,fileurl,albumsonger) values (10,NULL,'Artist','/mnt/mmc/Music/untagged.mp3',NULL)")
         assert db.execute(sql).fetchone()[:2] == (-1, 'Unknown Album')
         db.execute("update songtable set fileurl='/mnt/mmc/Audiobooks/untagged.mp3' where id=10")
         assert not db.execute(sql).fetchall()
@@ -1642,6 +1658,25 @@ def main():
         for path in ('/mnt/mmc/Discovery Extra/01.flac', '/mnt/mmc/Music/Discovery/01.flac'):
             db.execute('update songtable set fileurl=? where id=10', (path,))
             assert db.execute(sql).fetchone()[:2] == (-1, 'Unknown Album')
+        # An album's art track (ALBUM_TRACK): its lowest disc, then track, then path, whatever order its
+        # rows went in (the order the files were copied); no track number counts as 0.
+        db.execute('delete from songtable')
+        album = '/mnt/mmc/Music/Album/'
+        for i, (name, track, disc) in enumerate((('d2t1.flac', 1, 2), ('d1t3.flac', 3, 1), ('z.flac', 2, 1), ('a.flac', 2, 1))):
+            db.execute('insert into songtable(id,album,songer,fileurl,albumsonger,track,cd_num) values (?,"Album","Artist",?,"Artist",?,?)', (20 + i, album + name, track, disc))
+        art = lambda: db.execute(sql).fetchone()[3]
+        assert art() == album + 'a.flac'
+        db.execute("update songtable set track=1 where id=22")
+        assert art() == album + 'z.flac'
+        db.execute("update songtable set track=NULL where id=21")
+        assert art() == album + 'd1t3.flac'
+        # A number outside 0-9999 (a date as the track, or -1) takes its bound: the path stays whole.
+        db.execute("update songtable set track=-1 where id=21")
+        assert art() == album + 'd1t3.flac'
+        db.execute("update songtable set track=20231015 where id=21")
+        assert art() == album + 'z.flac'
+        db.execute("update songtable set cd_num=-1 where id=20")
+        assert art() == album + 'd2t1.flac'
 
     # The rankings (Sort, and an artist's albums) as SQLite runs them on stock's songtable: each
     # year order with ties by name and undated last, the newest song first, and by name.
@@ -1661,7 +1696,7 @@ def main():
                 'max(time_create) desc': ['old', 'Undated', 'Mid', 'New', 'Also 2020'],  # Recently Added
                 'album COLLATE NOCASE': ['Also 2020', 'Mid', 'New', 'old', 'Undated']}  # Artist Album Order: A-Z
         for o in orders:
-            got = [r[1] for r in db.execute(macro('ALBUM_SQL') + macro('ALBUM_GROUP') + ' order by ' + o)]
+            got = [r[1] for r in db.execute(macro('ALBUM_SQL').replace(',,', ',' + macro('ALBUM_TRACK') + ',') + macro('ALBUM_GROUP') + ' order by ' + o)]
             assert got == want.pop(o.removeprefix(album_year + '=0,')), (o, got)
         assert not want, want
 

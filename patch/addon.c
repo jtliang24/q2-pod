@@ -22,6 +22,16 @@
  * has a cursor is followed by its next pages, appended to the same list (page_next), up to
  * ADDON_PAGES.
  *
+ * Go to Album and Go to Artist on a song in an app's folder open the app's own page for them when
+ * its q2app says goto=1 (addon_goto), and every song an app queues plays with its file's tags
+ * (navigation.c card_tags).
+ *
+ * An app's /tmp/q2-<id>.sleep asks for a sleep timer: playback pauses at a time, or as the track
+ * playing ends (sleep_read, sleep_check).
+ *
+ * A card game (q2app game=1, then no run or Streaming row) is a row in Library's Games instead:
+ * it runs over the whole screen, as Videos' player does, until it exits (addon_game_start).
+ *
  * The card-app features this firmware has are words in /tmp/q2-addon.caps (ADDON_CAPS), written at
  * every Streaming scan. */
 #include "offsets.inc"
@@ -43,19 +53,20 @@
 #define ADDON_PAGES 10
 #define REPLY_MAX (64 << 10) /* Q2SPOT/1's limits */
 #define REQ_MAX (8 << 10)
-#define AWAY_MS 3000 /* USB storage waits at most this long for an app to let the card go */
-#define SLOW_MS 3000 /* a page loading or starting this long offers to stop the app */
+#define AWAY_MS 3000     /* USB storage waits at most this long for an app to let the card go */
+#define SLOW_MS 3000     /* a page loading or starting this long offers to stop the app */
 #define RESTART_MS 20000 /* Retry's restart starts the app by then, its old loop gone or not */
-#define APP_ID 16  /* an id's bytes, its NUL included */
-#define QR_PX 186  /* the code's white plate: 5 px modules up to a 33-module code */
-#define QR_COL 214 /* the text beside it */
+#define APP_ID 16        /* an id's bytes, its NUL included */
+#define QR_PX 186        /* the code's white plate: 5 px modules up to a 33-module code */
+#define QR_COL 214       /* the text beside it */
 #define CARD "/mnt/mmc"
 #define CAPS_FILE "/tmp/q2-addon.caps"
 /* This firmware's card-app features, space-separated; a feature adds its word. */
 #if M1PLUS
-#define ADDON_CAPS "playlist progress pages" /* no library: its update is unported (addon_poll) */
+/* no library: its update is unported (addon_poll); no game: Library has no Games row on M1 (games.c) */
+#define ADDON_CAPS "playlist progress pages goto sleep"
 #else
-#define ADDON_CAPS "playlist progress pages library"
+#define ADDON_CAPS "playlist progress pages library goto sleep game"
 #endif
 
 /* An app found on the card, kept for the life of demo in its slot. present: on the card at the
@@ -63,13 +74,14 @@
  * socket gone), to start again once its loop is gone. */
 typedef struct {
     char id[APP_ID], name[32], tips[32], bin[48], run[48], pid[32], state[40], browse[48], icon[56];
-    int qr, present, launched, hold, relaunch, restart;
+    int qr, game, present, launched, hold, relaunch, restart;
     unsigned polled, launch_at, restart_at, play; /* play: its .play as read last, hashed */
 } app_t;
 
 static struct {
     app_t a[APPS_MAX];
     int n, shown, order[APPS_MAX]; /* order: the slots on the card, by name */
+    int games, game[APPS_MAX];     /* the card games among them, by name too */
 } ap __attribute__((section(".scratch")));
 
 /* An id goes into shell commands: lowercase letters, digits and '-' only. */
@@ -112,8 +124,10 @@ int addon_scan(void) {
         field(raw, "search", a->tips, sizeof a->tips);
         if (!a->tips[0]) tk_snprintf(a->tips, sizeof a->tips, "Search");
         a->qr = number(raw, "qr") == 1;
+        a->game = number(raw, "game") == 1;
         a->present = !access(a->bin, 0);
-        /* the row's size first, the other scaled to fit (navigation.c set_child), else stream_app */
+        /* the row's size first, the other scaled to fit (navigation.c set_child), else stream_app
+         */
         static const char *const icons[2] = { "icon-40.png", "icon.png" };
         tk_snprintf(a->icon, sizeof a->icon, "stream_app");
         for (int i = 1; i >= 0; --i) {
@@ -122,13 +136,13 @@ int addon_scan(void) {
         }
     }
     if (d) closedir(d);
-    ap.shown = 0;
+    ap.shown = ap.games = 0;
     for (int i = 0; i < ap.n; ++i) { /* by name: an insertion, eight at most */
         if (!ap.a[i].present) continue;
-        int k = ap.shown++;
-        for (; k && strcasecmp(ap.a[ap.order[k - 1]].name, ap.a[i].name) > 0; --k)
-            ap.order[k] = ap.order[k - 1];
-        ap.order[k] = i;
+        int *order = ap.a[i].game ? ap.game : ap.order, k = ap.a[i].game ? ap.games++ : ap.shown++;
+        for (; k && strcasecmp(ap.a[order[k - 1]].name, ap.a[i].name) > 0; --k)
+            order[k] = order[k - 1];
+        order[k] = i;
     }
     blob_io(CAPS_FILE, CAPS_FILE ".tmp", ADDON_CAPS "\n", sizeof(ADDON_CAPS "\n") - 1, 1);
     return ap.shown;
@@ -182,15 +196,15 @@ static struct {
     char dir[160];     /* its folder */
     char last[192];    /* the name of the last of its songs queued */
     char playing[512]; /* the .playing path written last */
-    int state;         /* S_WAIT for its first song, S_PLAY its queue playing, S_DONE another queue */
-    unsigned timer;    /* the first song's start, on a timer (a window opens) */
-    long seen;         /* the folder's mtime at the last scan that came well after it */
-    int m3u;           /* sm.dir is a playlist file */
-    int next;          /* its entries passed so far */
-    int more;          /* a batch filled, so the next poll goes on */
-    char first[512];   /* the session's first song */
-    char want[512];    /* the entry waited for */
-    unsigned loads;    /* playback_loads at its start, then once its queue was loaded */
+    int state;       /* S_WAIT for its first song, S_PLAY its queue playing, S_DONE another queue */
+    unsigned timer;  /* the first song's start, on a timer (a window opens) */
+    long seen;       /* the folder's mtime at the last scan that came well after it */
+    int m3u;         /* sm.dir is a playlist file */
+    int next;        /* its entries passed so far */
+    int more;        /* a batch filled, so the next poll goes on */
+    char first[512]; /* the session's first song */
+    char want[512];  /* the entry waited for */
+    unsigned loads;  /* playback_loads at its start, then once its queue was loaded */
 } sm __attribute__((section(".scratch")));
 enum { S_WAIT, S_PLAY, S_DONE };
 
@@ -419,6 +433,127 @@ static void stream_poll(app_t *a) {
     }
 }
 
+/* Sleep timers (q2-podcasts' Sleep Timer): an app's /tmp/q2-<id>.sleep holds "until <time>"
+ * (seconds since the epoch, at most SLEEP_MAX_S away) or "end" (the track playing now ends). Q2 Pod
+ * keeps the timer itself, so it pauses whatever plays (media_set_playing) once the app has stopped
+ * too. A time is kept as the time left on the boot clock (boot_s), which counts Standby and doesn't
+ * move when Wi-Fi sets the clock; one the Q2 slept through by more than SLEEP_LATE_S is let go.
+ * "end" pauses when the track ends by itself (playback.c auto_nexts) or leaves its last SLEEP_END_S
+ * seconds for the next one, which then waits at its start, or starts over (repeat one); another
+ * track picked, or a seek back, waits for that one's end instead (stock refills the same queue, so
+ * a new queue looks the same), and playback stopped for SLEEP_STOP_MS (not between tracks) or
+ * another player lets it go. Done or let go, the file is removed: the app's sign that no timer
+ * runs. The app removes it to cancel. One timer: the latest asked, any app's. */
+#define SLEEP_MAX_S (7 * 24 * 3600)
+#define SLEEP_LATE_S 60
+#define SLEEP_END_S 2
+#define SLEEP_STOP_MS 3000
+static struct {
+    unsigned seen[APPS_MAX]; /* each app's .sleep as read last, hashed; 0 none */
+    long at;                 /* boot_s() to pause at; 0 none */
+    int end, owner;          /* end: pause when the local track ends; owner: the app's slot + 1 */
+    unsigned pos, nexts;     /* the track "end" waits on, by its place in the queue; auto_nexts */
+    int sec, total;          /* its elapsed and length as last seen, seconds; total 0 unknown */
+    unsigned stopped;        /* time_now_ms() playback was seen stopped since; 0 not stopped */
+} sl __attribute__((section(".scratch")));
+
+static void sleep_path(char *out, unsigned size, int slot) {
+    tk_snprintf(out, size, "/tmp/q2-%s.sleep", ap.a[slot].id);
+}
+
+static void sleep_done(void) {
+    char path[48];
+    if (sl.owner)
+        sleep_path(path, sizeof path, sl.owner - 1), unlink(path), sl.seen[sl.owner - 1] = 0;
+    sl.at = 0, sl.end = 0, sl.owner = 0;
+}
+
+/* Seconds since boot, Standby included. */
+static long boot_s(void) {
+    struct {
+        long s, ns;
+    } t = { 0 };                  /* struct timespec */
+    clock_gettime(7, (void *)&t); /* CLOCK_BOOTTIME */
+    return t.s;
+}
+
+/* An app's .sleep, read while it runs: a new request replaces the timer, its removal cancels it. */
+static void sleep_read(app_t *a) {
+    char path[48], raw[48];
+    int slot = (int)(a - ap.a);
+    sleep_path(path, sizeof path, slot);
+    int have = state_read(path, raw, sizeof raw);
+    unsigned h = have ? hash_bytes(FNV_SEED, (const unsigned char *)raw, strlen(raw)) | 1 : 0;
+    if (h == sl.seen[slot]) return;
+    sl.seen[slot] = h;
+    if (!have) { /* the app cancelled its own */
+        if (sl.owner == slot + 1) sl.at = 0, sl.end = 0, sl.owner = 0;
+        return;
+    }
+    if (sl.owner != slot + 1) sleep_done(); /* another app's timer gives way, its file removed */
+    sl.owner = slot + 1, sl.at = 0, sl.end = 0; /* and this app's earlier one */
+    const char *req = raw + 1;                  /* state_read puts a newline first, for field() */
+    if (tk_str_start_with(req, "end")) {
+        sl.end =
+            media_owner() == 1 && mclGetPlayStatus() != 1; /* the local player, playing or paused */
+        sl.pos = (unsigned)I(MCL_POS, 0), sl.nexts = auto_nexts, sl.sec = -1, sl.total = 0;
+        sl.stopped = 0;
+        if (!sl.end) sleep_done();
+    } else if (tk_str_start_with(req, "until ")) {
+        long long at = 0, now = time((void *)0);
+        const char *c = req + 6;
+        for (; *c >= '0' && *c <= '9' && c < req + 6 + 11; ++c) at = at * 10 + (*c - '0');
+        if (c == req + 6 || (*c && *c != '\n') || at - now > SLEEP_MAX_S) {
+            sleep_done(); /* no time, or none this app could mean: dropped, nothing paused */
+            return;
+        }
+        if (at <= now) { /* due; past by SLEEP_LATE_S (a stale file): let go, as sleep_check does */
+            if (now - at < SLEEP_LATE_S) media_set_playing(0);
+            sleep_done();
+            return;
+        }
+        sl.at = boot_s() + (long)(at - now);
+    } else
+        sleep_done();
+}
+
+/* Every UI pass: a timer due, or the track "end" waited for over, pauses. */
+static void sleep_check(void) {
+    if (sl.at) {
+        long late = boot_s() - sl.at;
+        if (late >= SLEEP_LATE_S)
+            sleep_done(); /* the Q2 slept through it */
+        else if (late >= 0)
+            media_set_playing(0), sleep_done();
+    } else if (sl.end) {
+        unsigned now = time_now_ms(), pos = (unsigned)I(MCL_POS, 0);
+        if (mclGetPlayStatus() == 1) { /* stopped, or between tracks for a moment */
+            if (!sl.stopped) sl.stopped = now | 1;
+            if ((int)(now - sl.stopped) >= SLEEP_STOP_MS) sleep_done(); /* | 1: maybe now + 1 */
+            return;
+        }
+        sl.stopped = 0;
+        if (media_owner() != 1) {
+            sleep_done(); /* another player: nothing to wait for */
+            return;
+        }
+        int sec = -1, total = 0;
+        player_playtime_and_length(&sec, &total);
+        if (sec < 0) return; /* between tracks: a later pass decides */
+        /* ended by itself, or at its end when last seen; a length unknown, any move on counts */
+        int ended = auto_nexts != sl.nexts ||
+                    (sl.sec >= 0 && (sl.total <= 0 || sl.sec >= sl.total - SLEEP_END_S));
+        if (pos != sl.pos || sec + SLEEP_END_S < sl.sec) { /* moved on, or back */
+            if (ended) {
+                media_set_playing(0), sleep_done();
+                return;
+            }
+            sl.pos = pos, sl.nexts = auto_nexts; /* another track picked, or a seek back */
+        }
+        sl.sec = sec, sl.total = total;
+    }
+}
+
 /* ringnav_sleep, every UI loop pass, paced to ADDON_POLL_MS once its row started it: standby and
  * auto power-off held while the app asks (hold=1), as Spotify's poll does while it plays; the
  * screen still turns off. An app that stopped by itself (idle, or from the phone) is let go, and
@@ -441,11 +576,151 @@ static void poll_one(app_t *a) {
     a->hold = number(raw, "hold") == 1;
     if (a->hold) reset_poweroptions_timer(1, 1, 0); /* standby, auto power-off; not the screen's */
     stream_poll(a);
+    sleep_read(a);
     if (access(a->pid, 0) && now - a->launch_at > ADDON_START_MS) a->launched = a->hold = 0;
 }
 
+/* Card games: Library's Games lists them after its own (games.c); a row runs the game's binary
+ * from its folder, with no launcher, over the whole screen while demo goes on without painting
+ * (navigation.c ringnav_wm_paint) or input (ringnav_input), as Videos' q2video does. Each input
+ * event reaches the game instead as a text datagram on /tmp/q2-<id>.input.sock:
+ *   "t d X Y", "t m X Y", "t u X Y"   touch down, move, up (an abort too), in the landscape
+ *                                     view's pixels (375 x 320), turned from the panel's
+ *   "k d CODE", "k u CODE"            a key down, up (AWTK's codes: Return 170, Centre 218)
+ *   "w N"                             the wheel's raw travel since the last (wheel_raw: 200 a turn,
+ *                                     rising anticlockwise), sent once a UI loop pass
+ * Play/Pause and the side buttons stay the music's, as stock has them under the Games page. The
+ * game ends itself (from its Return menu); Return held GAME_HOLD_MS ends it (TERM, and its release
+ * is dropped so stock's Games stays), as does GAME_IDLE_MS without input unless Smart Awake is on;
+ * one still there GAME_KILL_MS after a TERM is KILLed. demo repaints when it has gone. Stock makes
+ * a held key's long press after this hook, so the hold is timed here, from the game's key-down.
+ * ponytail: the screen stays on while it runs, as for a video, and the idle quit is what lets it
+ * sleep without Smart Awake; a game that wants to sleep on screen needs the wake path to reach
+ * stock under it. */
+#define GAME_IDLE_MS 120000
+#define GAME_HOLD_MS 700 /* navigation.c's KEY_HOLD_MS, Return's hold elsewhere */
+#define GAME_KILL_MS 3000
+static struct {
+    int pid, sock, eat;  /* eat: the held Return's release, after the game it ended */
+    unsigned seen;       /* time_now_ms of the last input */
+    unsigned held, term; /* when Return went down, when TERM went (0: neither) */
+    char path[48];       /* the game's socket */
+} gm __attribute__((section(".scratch")));
+
+int addon_games(void) { return addon_scan(), ap.games; }
+const char *addon_game_name(int k) { return k >= 0 && k < ap.games ? ap.a[ap.game[k]].name : 0; }
+int addon_game_on(void) { return gm.pid; }
+
+static void game_kill(const char *how) {
+    char cmd[24];
+    tk_snprintf(cmd, sizeof cmd, "kill %s%d", how, gm.pid); /* demo imports no kill() */
+    system(cmd);
+}
+static void game_end(void) {
+    if (gm.term) return; /* game_poll KILLs it GAME_KILL_MS on */
+    gm.term = (unsigned)time_now_ms() | 1;
+    game_kill("");
+}
+
+/* netupdate.c's toast once app id is installed: a game is in Games, not Streaming */
+int addon_is_game(const char *id) {
+    addon_scan();
+    for (int k = 0; k < ap.games; ++k)
+        if (!strcmp(ap.a[ap.game[k]].id, id)) return 1;
+    return 0;
+}
+
+/* Card game k started over the screen: 1 when it runs. */
+int addon_game_start(int k) {
+    app_t *a = k >= 0 && k < ap.games ? &ap.a[ap.game[k]] : 0;
+    if (gm.pid || !a) return 0;
+    const char *busy = shelf_busy();
+    if (busy && !strcmp(busy + 1, a->id)) return toast("Wait until the App Store finishes"), 0;
+    if (access(a->bin, 0)) return toast("It isn't on the card"), 0;
+    int pid = fork();
+    if (!pid) {
+        child_oom_first();
+        for (int fd = 3; fd < 1024; ++fd) close(fd); /* demo's: the watchdog, the screen, sockets */
+        execl(a->bin, a->bin, (char *)0);
+        child_exit(127);
+    }
+    if (pid < 0) return 0;
+    gm.pid = pid;
+    gm.sock = socket(1, 1, 0); /* AF_UNIX, SOCK_DGRAM (MIPS numbering) */
+    gm.seen = time_now_ms();
+    gm.held = gm.term = gm.eat = 0;
+    tk_snprintf(gm.path, sizeof gm.path, "/tmp/q2-%s.input.sock", a->id);
+    __sync_lock_test_and_set(&wheel_travel, 0);
+    wheel_raw = 1;
+    return 1;
+}
+
+/* ringnav_input, every event: 1 when it is the game's (sent as its datagram) or the release of the
+ * Return held to end it; 0 for stock's, a music key among them */
+int addon_game_input(void *e) {
+    if (!e) return gm.pid != 0;
+    unsigned type = (unsigned)I(e, EVENT_TYPE), key = (unsigned)I(e, EVENT_KEY);
+    int keyish = type == EVT_KEY_DOWN || type == EVT_KEY_UP || type == EVT_KEY_LONG;
+    if (keyish && key == KEY_RETURN && gm.eat) /* the held Return's repeats and release */
+        return gm.eat = type != EVT_KEY_UP, 1;
+    if (!gm.pid) return 0;
+    if (keyish && (key == KEY_PLAY || key == KEY_BACK_BTN || key == KEY_FWD_BTN)) return 0;
+    if (keyish && key == KEY_RETURN)
+        gm.held = type == EVT_KEY_UP ? 0
+                  : type == EVT_KEY_DOWN && !gm.held
+                      ? (unsigned)time_now_ms() | 1 /* not a repeat's */
+                      : gm.held;
+    char m[32];
+    m[0] = 0;
+    if (type == EVT_KEY_DOWN || type == EVT_KEY_UP)
+        tk_snprintf(m, sizeof m, "k %s %u", type == EVT_KEY_UP ? "u" : "d", key);
+    else if ((type >= EVT_POINTER_DOWN - 1 && type <= EVT_POINTER_UP_BEFORE) ||
+             type == EVT_POINTER_ABORT) {
+        const char *what = type == EVT_POINTER_ABORT || type >= EVT_POINTER_UP_BEFORE - 1 ? "u"
+                           : type >= EVT_POINTER_MOVE_BEFORE - 1                          ? "m"
+                                                                                          : "d";
+        /* here, before the window manager turns it, a touch is the portrait panel's: the view
+         * (375 x 320) is the panel turned anticlockwise, so its x is the panel's y */
+        tk_snprintf(m, sizeof m, "t %s %d %d", what, I(e, EVENT_Y), 319 - I(e, EVENT_X));
+    }
+    gm.seen = time_now_ms();
+    if (m[0]) dgram_send(&gm.sock, gm.path, m, strlen(m));
+    return 1;
+}
+
+/* every UI loop pass: the wheel's travel, the screen and standby held, the idle quit, its end */
+static void game_poll(void) {
+    int status = 0;
+    if (!gm.pid) return;
+    if (waitpid(gm.pid, &status, 1)) { /* WNOHANG: it has ended */
+        close(gm.sock);
+        gm.pid = 0;
+        wheel_raw = 0;
+        widget_invalidate_force(window_manager(), 0);
+        if (status == 127 << 8) toast("It couldn't start"); /* the child's execl failed */
+        return;
+    }
+    unsigned now = (unsigned)time_now_ms();
+    /* signed: a stamp can be just after now (| 1 rounds up, game_end reads the clock again) */
+    if (gm.held && (int)(now - gm.held) >= GAME_HOLD_MS) gm.held = 0, gm.eat = 1, game_end();
+    if (gm.term && (int)(now - gm.term) >= GAME_KILL_MS) gm.term = now | 1, game_kill("-9 ");
+    int travel = __sync_lock_test_and_set(&wheel_travel, 0);
+    if (travel) {
+        char m[16];
+        tk_snprintf(m, sizeof m, "w %d", travel);
+        dgram_send(&gm.sock, gm.path, m, strlen(m));
+        gm.seen = time_now_ms();
+    }
+    reset_poweroptions_timer(1, 1, 1);
+    if (time_now_ms() - gm.seen < GAME_IDLE_MS) return;
+    if (!ringnav_smart_awake()) game_end();
+    gm.seen = time_now_ms(); /* Smart Awake: asked again GAME_IDLE_MS on */
+}
+
 void addon_poll(void) {
+    game_poll();
     for (int i = 0; i < ap.n; ++i) poll_one(&ap.a[i]);
+    sleep_check();
     if (!M1PLUS) library_poll(); /* M1 Plus: the card apps' library update is unported (1.5.9) */
 }
 
@@ -615,8 +890,8 @@ enum { G_ROW, G_SHOW, G_SEARCH };
  * Stop row whenever the app may be running, so a frozen one can always be ended. */
 typedef struct {
     int state, n, sel, live, retry;
-    int nosock, slow; /* nosock: the error is no socket; slow: the wait's Stop row shown */
-    unsigned since;   /* when it began loading or waiting, 0 once done */
+    int nosock, slow;  /* nosock: the error is no socket; slow: the wait's Stop row shown */
+    unsigned since;    /* when it began loading or waiting, 0 once done */
     unsigned base;     /* args' bytes before a More…'s cursor: the list's own */
     unsigned id, hash; /* id: the fetch whose reply this level takes; hash: its rows' bytes */
     char title[128], note[128], op[16], args[400]; /* args: "\t" and escaped each */
@@ -665,8 +940,8 @@ static void action(const char *op, const char *ctx) {
 
 static int clicked(void *ctx, void *event);
 
-/* Whether row i opens a page (go()): a list, the phone remote's QR page or a folder on the card. Its
- * row has a chevron. */
+/* Whether row i opens a page (go()): a list, the phone remote's QR page or a folder on the card.
+ * Its row has a chevron. */
 static int opens(int i) {
     const char *kind = cell(i, 0), *uri = cell(i, 1);
     return !strcmp(kind, "list") || !strcmp(kind, "remote") ||
@@ -674,9 +949,7 @@ static int opens(int i) {
 }
 
 /* Whether the app may be running, so a Stop row can end it. */
-static int stoppable(void) {
-    return app()->launched || app()->restart || !access(app()->pid, 0);
-}
+static int stoppable(void) { return app()->launched || app()->restart || !access(app()->pid, 0); }
 
 static void stop_row(int i) {
     char t[48];
@@ -789,8 +1062,8 @@ static void keep_sel(void) {
         top()->sel = widget_get_prop_int(pg.view, "_ringnav_index", 0);
 }
 
-/* A level over the top one, which lets its reply go (Back asks for it again); base: args' bytes that
- * name its list, before a More…'s cursor. */
+/* A level over the top one, which lets its reply go (Back asks for it again); base: args' bytes
+ * that name its list, before a More…'s cursor. */
 static void push(const char *op, const char *args, unsigned base, const char *title) {
     lv_t next = { 0 };
     tk_snprintf(next.op, sizeof next.op, "%s", op);
@@ -1017,7 +1290,8 @@ static int keyup(void *ctx, void *event) {
 }
 
 static int closed(void *ctx, void *event) {
-    (void)ctx, (void)event;
+    (void)event;
+    if (ctx != pg.page) return 0; /* a page addon_goto replaced, its state gone already */
     req_cancel();
     stop_timer(&pg.timer);
     stop_timer(&pg.go);
@@ -1029,31 +1303,80 @@ static int closed(void *ctx, void *event) {
     return 0;
 }
 
-/* An app's Streaming row (navigation.c ringnav_stream; ctx: its place by name at the last scan):
- * the app started if it isn't, and its page; gone from the card since, the page says so. */
-int addon_open(void *ctx, void *event) {
-    (void)event;
-    int k = (int)(long)ctx;
-    if (k < 0 || k >= ap.shown || pg.page || !(pg.lv = calloc(ADDON_DEPTH, sizeof *pg.lv)))
-        return 0;
+/* Slot k's page, its first level op (args: "\t" and escaped each) titled title: the app started if
+ * it isn't (its QR code shown at the first answer when qr); gone from the card, the page says so.
+ * 1 when it opened. */
+static int page_at(int k, const char *op, const char *args, const char *title, int qr) {
+    if (pg.page || !(pg.lv = calloc(ADDON_DEPTH, sizeof *pg.lv))) return 0;
     if (!(pg.f = calloc(4 + 6 * ADDON_ROWS * ADDON_PAGES, sizeof *pg.f)) ||
         !(pg.page = page_open("addon_page", closed, keyup)))
         return free(pg.lv), free(pg.f), pg.lv = 0, pg.f = 0, 0;
-    pg.a = ap.order[k];
+    pg.a = k;
     app_t *a = app();
     int missing = access(a->bin, 0);
-    if (!missing && (!a->launched || access(a->pid, 0))) launch(a), pg.code = a->qr;
+    if (!missing && (!a->launched || access(a->pid, 0))) launch(a), pg.code = qr && a->qr;
     pg.depth = 1;
     lv_t *l = top();
-    tk_snprintf(l->op, sizeof l->op, "menu");
-    tk_snprintf(l->title, sizeof l->title, "%s", a->name);
+    tk_snprintf(l->op, sizeof l->op, "%s", op);
+    tk_snprintf(l->args, sizeof l->args, "%s", args);
+    l->base = strlen(l->args);
+    tk_snprintf(l->title, sizeof l->title, "%s", title);
     if (missing) {
         l->state = K_ERROR;
         tk_snprintf(l->note, sizeof l->note, "%s isn't on the card", a->name);
     }
     pg.timer = timer_add(tick, 0, 250);
     show();
+    return 1;
+}
+
+/* An app's Streaming row (navigation.c ringnav_stream; ctx: its place by name at the last scan). */
+int addon_open(void *ctx, void *event) {
+    (void)event;
+    int k = (int)(long)ctx;
+    if (k >= 0 && k < ap.shown) page_at(ap.order[k], "menu", "", ap.a[ap.order[k]].name, 1);
     return 0;
+}
+
+/* Whether path is in an app's folder, CARD/.<id>/, and id the app's. */
+static int card_id(const char *path, char *id) {
+    const char *p = path && tk_str_start_with(path, CARD "/.") ? path + sizeof CARD "/." - 1 : 0;
+    unsigned k = 0;
+    while (p && p[k] && p[k] != '/' && k < APP_ID - 1) ++k; /* an id fits id with its NUL */
+    if (!p || p[k] != '/') return 0;
+    tk_snprintf(id, k + 1, "%s", p);
+    return valid_id(id);
+}
+/* The app whose folder holds path, when its q2app says goto=1; 0 for any other. */
+static app_t *goto_app(const char *path) {
+    char id[APP_ID], raw[512], file[64];
+    if (!card_id(path, id)) return 0;
+    tk_snprintf(file, sizeof file, CARD "/.%s/q2app", id);
+    if (!state_read(file, raw, sizeof raw) || number(raw, "goto") != 1) return 0;
+    app_t *a = slot(id);
+    if (a && !a->name[0]) addon_scan(); /* not listed by Streaming since boot: its name read */
+    return a && a->present ? a : 0;
+}
+/* The hold menu's: whether Go to on path opens a page, its app's (goto=1) or, outside an app's
+ * folder, stock's. An app's folder is hidden, so the Library never holds its songs. */
+int addon_goes(const char *path) {
+    char id[APP_ID];
+    return !card_id(path, id) || goto_app(path);
+}
+
+/* Go to Album (album) or Go to Artist on a song in a card app's folder, /mnt/mmc/.<id>/…
+ * (navigation.c qm_goto): when its manifest says goto=1, its page opens at op "goto" ("album" or
+ * "artist", then the song's path), the level the app answers with, titled title; Back leaves it
+ * for the page under it. Its page already open (the song played from it) is closed first, as
+ * Coverflow's scoped page is: one page's state. 1 when it opened. */
+int addon_goto(const char *path, const char *title, int album) {
+    char args[sizeof pg.lv->args] = "";
+    app_t *a = goto_app(path);
+    if (!a || !put(args, sizeof args, album ? "album" : "artist") || !put(args, sizeof args, path))
+        return 0;
+    void *old = pg.page;
+    if (old) closed(old, 0), window_manager_close_window_force(window_manager(), old);
+    return page_at((int)(a - ap.a), "goto", args, title && *title ? title : a->name, 0);
 }
 
 /* ringnav_keylong: Play/Pause held on a row with a hold op (a list: all of it downloaded) sends it;

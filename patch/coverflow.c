@@ -71,9 +71,39 @@ static int library_write(int (*stock)(void *, void *), void *a, void *b) {
     ++library_gen;
     return result;
 }
+/* Update Local Music (b: the drop flag it passes to toolsInitDatabase) drops songtable and dates
+ * every song again from toolsGetFileCreateTime (0x5bddc4): on exFAT and NTFS cards the file's
+ * access time, which the update's own tag reads move, so each full update dated the whole library
+ * to its last update or play and Recently Added lost the albums added a few days before (#170).
+ * Songs already in the library keep their time_create across the rebuild, matched by path and
+ * CUE start; new songs take stock's. The copy is a table in the database, typed as songtable's
+ * columns are so the key matches by value and is one lookup per song, without rowid (it is its own
+ * index) and dropped once written back; its pages stay in the file's free list for the next
+ * update. An update that never got there (power lost, a reboot mid-scan) leaves it, and the next
+ * update's copy keeps its rows, so those dates still return. Both scripts run inside the
+ * generation window, so no list is kept between stock's end and the write-back.
+ * ponytail: a song replaced at the same path keeps its old date; an update stopped
+ * with Back loses the dates of the songs it never re-added; a failed save (toolsUpdateDbTable
+ * returns 1 on success and closes the handle on an error, which the next call reopens) skips
+ * the write-back, so stock's dates stand. */
+#define DB "/mnt/data/database.db"
+static const char ADDED_SAVE[] =
+    "create table if not exists ringnav_added(fileurl VARCHAR(1024),time INTEGER,time_create INTEGER,"
+    "primary key(fileurl,time)) without rowid;"
+    "insert or ignore into ringnav_added select fileurl,time,time_create from songtable;";
+static const char ADDED_RESTORE[] =
+    "update songtable set time_create=ifnull((select a.time_create from ringnav_added a"
+    " where a.fileurl=songtable.fileurl and a.time=songtable.time),time_create);"
+    "drop table if exists ringnav_added;";
+static int scan_all_kept(void *a, void *b) {
+    int saved = b && toolsUpdateDbTable(DB, ADDED_SAVE) == 1;
+    int result = stock_scan_all_trampoline(a, b);
+    if (saved) toolsUpdateDbTable(DB, ADDED_RESTORE);
+    return result;
+}
 int coverflow_scan_all(void *a, void *b) {
     library_scope_scan();
-    return library_write(stock_scan_all_trampoline, a, b);
+    return library_write(scan_all_kept, a, b);
 }
 int coverflow_scan_folder(void *a, void *b) {
     library_scope_scan();
@@ -152,19 +182,25 @@ long file_size(const char *path) {
  * -xerror stops at a picture's first decode error rather than demuxing the rest of the file.
  * *exited: ffmpeg ran to its own exit (no refused fork, no kill), so a failure is the picture's.
  * ponytail: a process per cover; a resident decoder if first builds drag. */
+/* Runs that never reached ffmpeg's own exit, from any thread (counted atomically, so none is
+ * lost); build_art compares before and after. */
+static volatile unsigned ff_kills __attribute__((section(".scratch")));
 static int ff_run(const char *src, const char *dst, int w, int h, int *exited) {
     char vf[80], tmp[1040];
     tk_snprintf(vf, sizeof(vf), "scale=%d:%d:force_original_aspect_ratio=decrease", w, h);
     tk_snprintf(tmp, sizeof(tmp), "%s.ff", dst);
     int status = -1, pid = fork();
     if (!pid) {
+        child_oom_first(); /* its one picture can need tens of MB (#169) */
         execl(ART_FFMPEG, ART_FFMPEG, "-nostdin", "-v", "quiet", "-xerror", "-i", src, "-frames:v", "1",
               "-vf", vf, "-pix_fmt", "yuvj420p", "-q:v", "3", "-f", "mjpeg", "-y", tmp, (char *)0);
         child_exit(127);
     }
     while (pid > 0 && waitpid(pid, &status, 0) < 0 && *__errno_location() == 4) { /* EINTR: reap it */
     }
-    *exited = !(status & 0x7f); /* WIFEXITED; not for -1 */
+    /* WIFEXITED, less execl's own failure (127: out of memory, as ffmpeg is stock's); never for -1 */
+    *exited = !(status & 0x7f) && ((status >> 8) & 0xff) != 127;
+    if (!*exited) __atomic_fetch_add(&ff_kills, 1, __ATOMIC_RELAXED);
     if (!status && file_size(tmp) > 0 && !rename(tmp, dst)) return 1;
     unlink(tmp);
     return 0;
@@ -269,9 +305,48 @@ int coverflow_album_cover(const char *track, const char *dst, int w, int h) {
     return grid_cover(track, dst, w, h, 1);
 }
 
+/* Folder view's folder row: stock tries the folder's songs in directory order, the order they
+ * were copied to the card, and keeps the first one's embedded art, so an album copied out of
+ * order showed a later song's cover. The folder's first song by name, as Folder view lists it,
+ * is tried first (not a dot file: a Mac's ._ copies sort first). Stock calls once a song until
+ * one has art, so the folder's first song, and whether it had none, are kept for the walk's
+ * next call; a hit ends the walk, and the next one lists the folder again. ponytail: only songs
+ * with the extension of stock's are compared, by strcasecmp rather than the list's own
+ * comparator; a folder with no art at all keeps its listing until another folder is shown. */
+int coverflow_folder_cover(const char *track, const char *dst, int w, int h) {
+    static struct {
+        char dir[512], first[512];
+        int bare; /* first has no art */
+    } *f __attribute__((section(".scratch")));
+    const char *slash = strrchr(track, '/'), *ext = strrchr(track, '.');
+    unsigned n = slash ? (unsigned)(slash - track) : 0;
+    if (!f) f = calloc(1, sizeof *f); /* heap, as the scratch page is nearly full */
+    if (!f || !n || n >= sizeof f->dir || !ext || ext < slash) return grid_cover(track, dst, w, h, 0);
+    if (memcmp(f->dir, track, n) || f->dir[n]) {
+        char low[256] = "";
+        memcpy(f->dir, track, n), f->dir[n] = 0, f->first[0] = 0, f->bare = 0;
+        void *d = opendir(f->dir);
+        for (struct dirent *e; d && (e = readdir(d));) {
+            const char *x = strrchr(e->d_name, '.');
+            if ((e->d_type == 8 || !e->d_type) && e->d_name[0] != '.' && x && !strcasecmp(x, ext) &&
+                (!low[0] || strcasecmp(e->d_name, low) < 0))
+                tk_snprintf(low, sizeof low, "%s", e->d_name);
+        }
+        if (d) closedir(d);
+        if (low[0] && tk_snprintf(f->first, sizeof f->first, "%s/%s", f->dir, low) >= (int)sizeof f->first)
+            f->first[0] = 0; /* too long: stock's song alone */
+    }
+    if (f->first[0] && !f->bare && grid_cover(f->first, dst, w, h, 0)) return f->dir[0] = 0, 1;
+    f->bare = 1;
+    if (!strcmp(f->first, track) || !grid_cover(track, dst, w, h, 0)) return 0;
+    return f->dir[0] = 0, 1;
+}
+
 /* One album: embedded art, then beside_art, then ffmpeg's read of the embedded art, last as it
  * costs a process for every album without art; written to .tmp and renamed. An empty file marks
- * "no art", so the placeholder shows and the album is not retried until Refresh Coverflow. */
+ * "no art", so the placeholder shows and the album is not retried until Refresh Coverflow; a run
+ * ffmpeg did not finish leaves none. ponytail: an album whose ffmpeg is killed every time costs
+ * one kill per open. */
 static void build_art(const job_t *j) {
     char dst[512], tmp[512];
     if (access(j->track, 0)) return; /* storage gone: no marker, the next open retries */
@@ -289,11 +364,15 @@ static void build_art(const job_t *j) {
     pthread_mutex_unlock((void *)g_playcover_mutex);
 #endif
     pthread_mutex_unlock((void *)parse_cover_mutex);
+    unsigned kills = ff_kills;
     ok = ok || beside_art(j->track, tmp, ART_SIZE, ART_SIZE, j->shared, thumb) ||
          ff_thumb(j->track, tmp, ART_SIZE, ART_SIZE);
     if (ok && !rename(tmp, dst)) return;
     unlink(tmp);
-    if (access(j->track, 0)) return;
+    /* No marker when an ffmpeg run meanwhile never reached its own exit (a refused fork, or killed:
+     * the kernel takes it first when memory runs out, #169; another thread's run counts too, a
+     * retry at worst) or storage is gone: the next open retries. */
+    if (kills != ff_kills || access(j->track, 0)) return;
     void *f = fopen(dst, "w");
     if (f) fclose(f);
 }
@@ -350,17 +429,23 @@ static void drop_albums(void) {
     cf.albums = cf.stock = 0;
 }
 
-/* A stock library query's rows (*count its result) copied out of the staging deque, which is
- * restored so the query leaves no trace; shared with navigation.c's queue menu. */
+/* A stock library query run into the caller's deque, the staging pointer on it so it leaves no trace.
+ * No copies: two of a 47,000-song library's rows got demo OOM-killed, with 128 MB and no swap. Stock
+ * writes the pointer only at init and reads it afresh at each use; every caller is on the UI thread,
+ * as an overlap could leave the pointer on a deque its owner destroyed. */
+int staged_into(void *into, int (*query)(void *), void *arg) {
+    void *dir = P(tools_pdeq_directory, 0);
+    P(tools_pdeq_directory, 0) = into;
+    int n = query(arg);
+    P(tools_pdeq_directory, 0) = dir;
+    return n;
+}
+
+/* Its rows (*count its result) in a deque of their own; shared with navigation.c's queue menu. */
 void *staged(int (*query)(void *), void *arg, int *count) {
-    void *dir = P(tools_pdeq_directory, 0), *save = _create_deque("stSongInfo"),
-         *out = _create_deque("stSongInfo");
-    deque_init_copy(save, dir);
-    *count = query(arg);
-    deque_init_copy(out, dir);
-    deque_clear(dir);
-    deque_assign(dir, save);
-    deque_destroy(save);
+    void *out = _create_deque("stSongInfo");
+    deque_init(out);
+    *count = staged_into(out, query, arg);
     return out;
 }
 
@@ -453,10 +538,10 @@ static const unsigned char rated_sorts[] = { SORT_RATING, SORT_ALBUM, SORT_ARTIS
 /* The library's Sort: Year after Artist; saved values are the enum's. */
 static const unsigned char all_sorts[] = { SORT_ALBUM, SORT_ARTIST, SORT_YEAR,
                                            SORT_ADDED, SORT_PLAYED, SORT_RANDOM };
-#define ALBUM_SQL "select id,album,songer,fileurl,albumsonger from songtable" ALBUM_GROUP
+#define ALBUM_SQL "select id,album,songer," ALBUM_TRACK ",albumsonger from songtable" ALBUM_GROUP
 #define MUSIC_ALBUM_SQL "select case when ifnull(album,'')='' then -1 else id end," \
     "case when ifnull(album,'')='' then 'Unknown Album' else album end," \
-    "songer,fileurl,albumsonger from songtable where " \
+    "songer," ALBUM_TRACK ",albumsonger from songtable where " \
     MUSIC_WHERE ALBUM_GROUP
 #define SORT_SQL ALBUM_SQL " order by "
 extern int ringnav_year_old(void);
@@ -2126,16 +2211,23 @@ static int play_all(const void *unused) {
 }
 
 /* Display settings' Refresh Coverflow (navigation.c): the art cache emptied and the albums queried
- * again, both at Coverflow's next open (a page open under Settings keeps what it shows). The
- * library generation's step is a songtable write's, which Most Played reads again too. */
+ * again, both at Coverflow's next open (a page open under Settings keeps what it shows). Stock's
+ * Library covers (.sldp, made once per album name, which only a settings reset clears) go too,
+ * and AWTK's cached bitmaps with them, as the cover thread writes them again at the same names as
+ * rows show. The library generation's step is a songtable write's, which Most Played reads
+ * again too. */
 void coverflow_refresh_art(void) {
-    void *dir = opendir(ART_DIR);
-    for (struct dirent *e; dir && (e = readdir(dir));) {
-        char path[600];
-        snprintf(path, sizeof(path), ART_DIR "/%s", e->d_name);
-        unlink(path); /* "." and ".." fail harmlessly */
+    static const char *const dirs[] = { ART_DIR, PEQ_ROOT "/mnt/mmc/.sldp" };
+    for (unsigned i = 0; i < 2; ++i) {
+        void *dir = opendir(dirs[i]);
+        for (struct dirent *e; dir && (e = readdir(dir));) {
+            char path[600];
+            snprintf(path, sizeof(path), "%s/%s", dirs[i], e->d_name);
+            unlink(path); /* "." and ".." fail harmlessly */
+        }
+        if (dir) closedir(dir);
     }
-    if (dir) closedir(dir);
+    image_manager_unload_all(image_manager());
     ++library_gen;
 }
 

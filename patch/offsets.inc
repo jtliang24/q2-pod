@@ -73,6 +73,17 @@
 #define LCD_FILL_COLOR 0xbc
 #define LCD_STROKE_COLOR 0xc0
 #define LCD_TEXT_COLOR 0xb8     /* lcd_set_text_color @0x6474c4 */
+/* Night Shift (nightshift.c): the screen's lcd_mem, BGRA8888 (lcd_mem create @0x6922c0) */
+#define LCD_END_FRAME 0x7c   /* lcd_end_frame @0x647958 calls it */
+#define LCD_W 0xb0
+#define LCD_H 0xb4
+#define LCD_DRAW_MODE 0xcc   /* lcd_begin_frame @0x6472a8 */
+#define LCD_DRAW_NORMAL 0    /* 1 a window animation's */
+#define LCD_DIRTY 0xf8       /* the frame's rect, x y w h; lcd_begin_frame sets it */
+#define LCD_OFFLINE_FB 0x110 /* the buffer drawn into */
+#define LCD_LINE_LENGTH 0x124
+#define LCD_FORMAT 0x128
+#define LCD_BGRA8888 3
 #define CANVAS_ALIGN_V 0x30     /* canvas_set_text_align @0x63419c; middle = 1 */
 #define CANVAS_ALIGN_H 0x34     /* center = 1 */
 #define FILL_RGB 0x2b2b2b /* the stock dark surface, under the letter and volume overlays */
@@ -370,6 +381,13 @@ static inline int arc_out(int r, int y) {
 #define CHARGE_STOP 80
 #define CHARGE_RESUME 75
 #define CHARGE_POLL_MS 5000
+/* Hardware watchdog (docs/internals.md#watchdog): the UI loop feeds it every pass, so a loop or a
+ * kernel stalled WDT_MS reboots. Well above any ordinary pass (a 65k-song list, a cover decode:
+ * seconds). The known long ones on the UI thread, an import's tag reads and a folder add's directory
+ * loads (a minute or more on a big card), get WDT_LONG_MS (ringnav_wdt_long), well under the
+ * driver's limit of about 23 minutes. */
+#define WDT_MS 60000
+#define WDT_LONG_MS 900000
 /* Standby limit (docs/internals.md#standby-limit): its three choices after Off, in hours of one
  * Standby, after which the Q2 powers off. */
 #define STANDBY_LIMIT_1 1
@@ -505,6 +523,13 @@ static inline int arc_out(int r, int y) {
 /* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */
 #define ALBUM_YEAR "max(case when cast(year as text) glob '[1-9][0-9][0-9][0-9]*' then cast(substr(year,1,4) as integer) else 0 end)"
 /* One row per album, as album_cmp tells them apart (coverflow.c; navigation.c's Era). */
+/* An album group's art track: its lowest disc then track then path, as Coverflow lists it. A bare
+ * fileurl would be whichever row SQLite saw last, so an album whose tracks carry different covers
+ * showed a random one. Each number is clamped to 0-9999 so its prefix stays four digits (a date as
+ * the track, or -1, would cut the path). */
+#define ALBUM_TRACK \
+    "substr(min(substr(10000+min(max(ifnull(cd_num,0),0),9999),2)||" \
+    "substr(10000+min(max(ifnull(track,0),0),9999),2)||fileurl),9)"
 #define ALBUM_GROUP " group by album COLLATE NOCASE," \
     "ifnull(albumsonger,'') COLLATE NOCASE,case ifnull(albumsonger,'') when '' then rtrim(fileurl,replace(fileurl,'/','')) end"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */

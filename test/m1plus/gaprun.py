@@ -13,8 +13,16 @@ import ast, hashlib, json, os, sys, traceback
 def keys(source):
     """Each top-level statement of source with its key: a hash of its text, and of its number among identical ones."""
     seen, out = {}, []
+    lines = ast._splitlines_no_ff(source)  # once: get_source_segment splits the whole file on every call
+
+    def segment(node):  # ast.get_source_segment's text: col offsets are UTF-8 byte offsets
+        first, last = node.lineno - 1, node.end_lineno - 1
+        if first == last:
+            return lines[first].encode()[node.col_offset:node.end_col_offset].decode()
+        return ''.join([lines[first].encode()[node.col_offset:].decode(), *lines[first + 1:last],
+                        lines[last].encode()[:node.end_col_offset].decode()])
     for node in ast.parse(source).body:
-        text = ast.get_source_segment(source, node)
+        text = segment(node)
         seen[text] = seen.get(text, 0) + 1
         out.append((node, text, hashlib.sha1(text.encode()).hexdigest()[:10] + (f'.{seen[text]}' if seen[text] > 1 else '')))
     return out

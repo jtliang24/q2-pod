@@ -54,6 +54,8 @@ GAPS = {
     'a81c9fd1c3': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1945 assert tuple(m.get(prompt+O[k]) for k in (W_X,W_Y,W_W,W_H))==(0,0,375,O[CONFIRM_
     '646f1a6906': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1946 assert m.nodes[prompt][style:normal:font_size]==O[CONFIRM_PROMPT_PX]
     '1e6a4e4689': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1947 assert m.nodes[prompt][style:normal:text_align_h]==center and m.nodes[prompt][st
+    '7943387180': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:2022 assert tuple(m.get(prompt+O[k]) for k in (W_X,W_Y,W_W,W_H))==(0,0,375,1
+    '646f1a6906.2': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:2023 assert m.nodes[prompt][style:normal:font_size]==O[CONFIRM_PROMPT_PX]
     # Home's Centre after the Q2 wheel's timed turns (100 ms gaps): the M1's knob and Centre on Home are m1_home_modes
     '99f82b57ad': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9246 assert m.confirm()==11 and m.dispatched()[0][1]==imgs[4]; passed()
     # Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)
@@ -307,15 +309,33 @@ GAPS = {
     '7e86233542.17': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10809 m.close(); assert m.get(payload_syms[g])==0 and not frames() and m.get(payload_s
     '59bdeea4c9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10743 assert word(G_SCREEN)==0 and not frames() and m.get(payload_syms[wheel_raw])==0
     '7b597aa195.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:10744 assert m.key()==11; passed()  # Return in the chooser after Vortex goes back to
+    'eb4ebda625': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11154 w=m.find(scroll_view,chooser); m.paint(w,gap=0)
+    'b5883083a6.20': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11154 w=m.find(scroll_view,chooser); m.paint(w,gap=0)
+    'fce0c3c949': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11155 for _ in range(5):
+    'f57ff05657.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11157 assert m.selected(w)==3
+    '432a1afb1d': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11158 assert m.call(gap=100)==11 and m.selected(w)==3; m.paint(w,gap=0)
+    'b5883083a6.21': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11158 assert m.call(gap=100)==11 and m.selected(w)==3; m.paint(w,gap=0)
+    '89ccf3788a.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11159 assert m.call(gap=O[EDGE_PAUSE_MS])==11 and m.selected(w)==0; m.paint(w,gap=0)
+    'b5883083a6.22': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11159 assert m.call(gap=O[EDGE_PAUSE_MS])==11 and m.selected(w)==0; m.paint(w,gap=0)
+    '5ee9fdb957.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11160 assert m.call(PREV,gap=100)==11 and m.selected(w)==0; m.paint(w,gap=0)
+    'b5883083a6.23': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11160 assert m.call(PREV,gap=100)==11 and m.selected(w)==0; m.paint(w,gap=0)
+    'a2857f87e2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11161 assert m.call(PREV,gap=O[EDGE_PAUSE_MS])==11 and m.selected(w)==3; m.paint(w,gap=0
+    'b5883083a6.24': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11161 assert m.call(PREV,gap=O[EDGE_PAUSE_MS])==11 and m.selected(w)==3; m.paint(w,ga
     # Display and settings scenarios on V2.1's rows (Phase 5)
     'a85f9167be': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:2165 for row,image,fills in ((2,select,3),(0,unselect,0),(2,more,4),(0,more,0)):
-    '487c8eb5c1': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8759 assert len(kids)==6 and [row_text(r) for r in kids[3:]]==[Appearance,Coverflow,C
-    '2dff49cb69': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8760 assert m.icons_set==[system_display,list_into,playset_covermode,list_into,playse
+    'c1d5971430': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9153 assert len(kids)==7 and [row_text(r) for r in kids[3:]]=
+    '8ff22e052f': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9154 assert m.icons_set==[system_display,list_into,playset_co
+    'a059cf581f': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9161 ctl=display_page(m,3); shortcut,keep_lit,scrub_one,hold,
+    '2fad647191': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9162 assert m.icons_set==[playset_covermode,system_display,sw
+    '4c768d5151': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9182 one_label=m.nodes[m.nodes[scrub_one][children][0]][child
+    '2402551706': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9182 one_label=m.nodes[m.nodes[scrub_one][children][0]][child
+    'cf1bf26734': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9183 f,ctx=m.handler(m.nodes[scrub_one][children][0],O[EVT_CL
+    '066151a889': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9185 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.call
+    '377ee02e26': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9213 assert [m.text(c[1]) for c in m.calls if c[0]==opendir@G
+    '859ce41177': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9214 assert did(m,image_manager_unload_all) and m.nodes[refre
     'c99a4ebc97': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8761 f,ctx=m.handler(m.nodes[kids[4]][children][0],O[EVT_CLICK]); m.calls=[]
     'e8cb08926c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8762 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.opened[-1]==(syst
     'f6375d0298': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8766 assert m.icons_set==[playset_covermode,playset_covermode,system_update]
-    'b6f44251eb': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8767 ctl=display_page(m,3); shortcut,keep_lit,click_hp,hold,qs,wheel=m.nodes[ctl][chi
-    'ccb736163c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8768 assert m.icons_set==[playset_covermode,system_display,switch_off,system_display,
     '15567d5dec': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8769 assert [row_text(r) for r in (shortcut,hold,qs)]==[Shortcut: Rockbox,Hold Return
     'dcddcb57a6': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8770 view=display_page(m,1); rows=setting_rows(m,view)
     '944032aee2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8772 assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and m.nodes
@@ -330,11 +350,7 @@ GAPS = {
     '86b4e73d17': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8784 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
     '1bbb79bed9': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8785 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
     '8271bfe8ff.10': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8786 m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    '0f4a736089': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8788 hp_label=m.nodes[m.nodes[click_hp][children][0]][children][1]; assert m.nodes[hp
-    'cda4c9d091': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8788 hp_label=m.nodes[m.nodes[click_hp][children][0]][children][1]; assert m.nodes[hp
-    '4de8cb5d25': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8789 f,ctx=m.handler(m.nodes[click_hp][children][0],O[EVT_CLICK]); m.calls=[]
     '86b4e73d17.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8790 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
-    '49995443e1': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8791 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
     '8271bfe8ff.11': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8792 m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     '341ae680b0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8795 centred_label=m.nodes[m.nodes[centred][children][0]][children][1]; assert m.node
     'cb11270062': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8795 centred_label=m.nodes[m.nodes[centred][children][0]][children][1]; assert m.node
@@ -356,7 +372,6 @@ GAPS = {
     '1f952a4891': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8815 assert m.nodes[sort_label][text]==Coverflow Sort: Album and m.nodes[refresh_labe
     'acc55bb4b8': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8816 f,ctx=m.handler(m.nodes[cf_refresh][children][0],O[EVT_CLICK]); m.mock(opendir@G
     'd9ba565d32': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8817 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]==Co
-    '26bda3c14e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8818 assert [m.text(c[1]) for c in m.calls if c[0]==opendir@GLIBC_2.0]==[/mnt/mmc/.co
     '1cdc7d997d': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8827 assert texts()==[Accent: Ivory,Home: Split,Battery: Icon,Theme: Minimal]; passed
     '84fb5c2e21': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8861 shortcut_button=m.nodes[shortcut][children][0]
     '5622a7e908': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8862 sf,sc=m.handler(shortcut_button,O[EVT_CLICK])

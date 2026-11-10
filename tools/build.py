@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 ZIP_SHA = '154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00'
 DEMO_SHA = '2c5f06142850b4fc168f82b44a81550cce0a5b4b9fe1c179dced4a08a3049138'
 Q2_TAR_SHA = '0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1'  # the update.tar in the ZIP, alone
-VERSION = '1.5.9'  # major.minor.patch, single digits, shown as is (About and release tag)
+VERSION = '1.6.3'  # major.minor.patch, single digits, shown as is (About and release tag)
 REPO = 'DiamondBond/q2-pod'  # whose releases Network Update fetches (--update-repo) and release.py publishes
 # The updater's identity (firmware_v20.info and demo's version literal) must be 5 characters and
 # differ from the installed one, so it packs the digits: 1.0.1 is V101I. About shows the stock
@@ -185,6 +185,21 @@ REMOTE = 'usr/bin/q2remote'
 S90PLAY = 'etc/init.d/S90play'
 ROCKBOX_FLAG = '/tmp/q2pod-rockbox'
 BOOT_HOOK = (b'    /release/bin/demo &\n', f'''    (
+        c=/mnt/data/q2-crash.log
+        m=/mnt/data/q2-state
+        [ -f $m ] && {{
+            [ -f $c ] || {{
+                echo "== date"; date
+                echo "== demo did not end: a forced restart, or the battery ran out"
+            }} > $c
+            {{ echo "== last state"; ls -l $m; cat $m; }} >> $c
+            rm -f $m
+        }}
+        [ -f $c ] && (
+            i=0
+            while [ $i -lt 60 ] && ! grep -q ' /mnt/mmc ' /proc/mounts; do usleep 500000; i=$((i+1)); done
+            grep -q ' /mnt/mmc ' /proc/mounts && cp $c /mnt/mmc/q2-crash.log && sync && rm -f $c
+        ) &
         rb=/mnt/mmc/.rockbox
         rockbox() {{
             [ -f $rb/rockbox ] || return
@@ -200,11 +215,23 @@ BOOT_HOOK = (b'    /release/bin/demo &\n', f'''    (
         fi
         while :; do
             /release/bin/demo
+            s=$?
             [ -e {ROCKBOX_FLAG} ] || break
             rm -f {ROCKBOX_FLAG}
             killall checkappprocess.sh 2>/dev/null
             rockbox
         done
+        case $s in 0|143) rm -f $m ;; *)
+            {{
+                echo "== date"; date
+                echo "== demo exit $s"
+                echo "== dmesg"; dmesg | tail -n 200
+                echo "== meminfo"; cat /proc/meminfo
+                echo "== ps"; ps
+                [ -f /tmp/q2-demo.log ] && {{ echo "== q2-demo.log"; tail -n 200 /tmp/q2-demo.log; }}
+            }} > $c.tmp 2>&1; mv $c.tmp $c
+            sync ;;
+        esac
     ) &
 '''.encode())
 # User boot logo (docs/boot.md#custom-boot-logo): demo copies the card's to /mnt/data, which
@@ -212,9 +239,6 @@ BOOT_HOOK = (b'    /release/bin/demo &\n', f'''    (
 # (LIGHT=1 in config.ini, also on /mnt/data) its light twin, which iPod builds of the default logo ship.
 S11LOGO = 'etc/init.d/S11logo_display_shell'
 LOGO, LOGO_LIGHT = 'release/assets/default/raw/images/xx/logo.jpg', 'release/assets/default/raw/images/xx/logo-light.jpg'
-LOGO_HOOK = (b'   \tdisplay_logo /release/assets/default/raw/images/xx/logo.jpg\n',
-             b'   \tl=/mnt/data/boot-logo.jpg; [ -f $l ] || { l=/%s; light=0; grep -qx LIGHT=1 /mnt/data/config.ini 2>/dev/null && light=1; grep -qx LIGHT=2 /mnt/data/config.ini 2>/dev/null && case $(date +%%H) in 0[7-9]|1[0-8]) light=1;; esac; [ $light = 1 ] && [ -f /%s ] && l=/%s; }; display_logo $l\n'
-             % (LOGO.encode(), LOGO_LIGHT.encode(), LOGO_LIGHT.encode()))
 REMOTE_HOOK = (b'/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf\n',
                b'/usr/bin/dbus-daemon --config-file=/etc/dbus-1/system.conf\n/usr/bin/q2remote &\n')
 # --dev only (docs/remote.md#log): demo's console output, and hciplayer's, which inherits it, in RAM, so
@@ -318,8 +342,9 @@ LYRIC_ROWS = (0x52b8f8, 0x0411f984)
 LYRIC_OPEN = (0x5a9c5c, 0x0320f809)
 # parse_albumcovertask_thd's jalr toolsGetAlbumCover (Albums grids; Folder view's folder and track rows),
 # each with its lw $t9, become jal coverflow_grid_cover, which gives ffmpeg the Ogg pictures stock skips;
-# the Albums grid's (first, before stock's toolsGetExternCover) jal coverflow_album_cover.
-GRID_COVER = ((0x4edf1c, 0x4edf18, 'coverflow_album_cover'), (0x4ef018, 0x4ef008, 'coverflow_grid_cover'),
+# the Albums grid's (first, before stock's toolsGetExternCover) jal coverflow_album_cover, and the folder
+# row's jal coverflow_folder_cover, which tries the folder's first song by name first.
+GRID_COVER = ((0x4edf1c, 0x4edf18, 'coverflow_album_cover'), (0x4ef018, 0x4ef008, 'coverflow_folder_cover'),
               (0x4ef0d4, 0x4ef0d0, 'coverflow_grid_cover'))
 # The bal toolsTrimLeft on each name copy in the two library name comparators (0x5b9d40, 0x5ba658, the
 # Chinese and other-language sorts); they become jal ringnav_sort_key, which also drops a leading article.
@@ -804,6 +829,12 @@ TIMEZONES = (
     ('GMT+5:30 Kolkata', 'Asia/Kolkata'), ('GMT+10 Brisbane', 'Australia/Brisbane'),
     ('GMT+12 Auckland', 'Pacific/Auckland'),
 )
+# LIGHT=2 goes by the wall clock, as demo's Auto: the boot shell has no TZ, so the saved index picks it.
+# One missing or out of range is config_init's: index 22.
+LOGO_ZONES = ' '.join(f"{i}) z='{zone}';;" for i, (_, zone) in enumerate(TIMEZONES)) + f" *) z='{TIMEZONES[22][1]}';;"
+LOGO_HOOK = (b'   \tdisplay_logo /release/assets/default/raw/images/xx/logo.jpg\n',
+             b'   \tl=/mnt/data/boot-logo.jpg; [ -f $l ] || { l=/%s; light=0; grep -qx LIGHT=1 /mnt/data/config.ini 2>/dev/null && light=1; grep -qx LIGHT=2 /mnt/data/config.ini 2>/dev/null && { case $(sed -n s/^TIMEZONE=//p /mnt/data/config.ini) in %s esac; case $(TZ=$z date +%%H) in 0[7-9]|1[0-8]) light=1;; esac; }; [ $light = 1 ] && [ -f /%s ] && l=/%s; }; display_logo $l\n'
+             % (LOGO.encode(), LOGO_ZONES.encode(), LOGO_LIGHT.encode(), LOGO_LIGHT.encode()))
 def timezone_offset(label):
     sign, h, m = re.match(r'GMT([+-])(\d+)(?::(\d+))?', label).groups()
     return (1 if sign == '+' else -1) * (int(h) * 60 + int(m or 0))
@@ -995,6 +1026,8 @@ FUNCTIONS = {
  'getAllAlbum': ('int', 'void'),
  # Shuffle Songs (navigation.c): every song, shuffle saved as the play-mode setting does, a random start
  'getAllMusic': ('int', 'int'),
+ 'music_nagvation_title': ('int', 'int'),  # Library -> Songs' load (navigation.c songs_load)
+ 'mclGetPlayM3uFlag': ('int', 'void'),  # stock ignores Folder Skip on an M3U (playback.c change_restarts)
  'config_playmode': ('int', 'int, int'),
  'toolsRandnum': ('int', 'int'),
  'widget_restack': ('int', 'void *, unsigned'),
@@ -1143,7 +1176,7 @@ GLOBALS = ['tidal_albuminfo_thread_run', 'tidal_collection_thread_run',  # 2: a 
 # (system_bar_init stores it), the playing cover's track path and the playing track's tags as
 # player_get_id3info parsed them; sizes are checked against the ELF.
 CONTEXT_DATA = {'bt_showcoding': 4, 'g_memory_info': 3476, 'g_folder_path': 1024, 'g_class_type': 4,
-                'g_local_classinfo_save': 912, 'g_artist_type': 4, 'album_modetype': 4,
+                'g_local_classinfo_save': 912, 'g_artist_type': 4, 'album_modetype': 4, 'g_sort_flag': 4,
                 'p_deque_playlist': 4, 'p_deque_showlist': 4, 'tools_pdeq_directory': 4, 'mcl_pdeqplaylist': 4,
                 'parse_cover_mutex': 24, 'g_playcover_mutex': 24, 'system_bar': 4, 'g_lastcover_url': 1024,
                 'g_dacoff_time': 4, 'p_vector_select_record': 4,
@@ -1198,8 +1231,8 @@ def compile_payload(out):
         *[f'--undefined={name}' for _, name, _ in HOOKS.values()], f'--undefined={GRADIENT_LEAF[2]}', '--undefined=ringnav_lrc_open',
         f'--undefined={WM_PAINT_LEAF[2]}', '--undefined=ringnav_audio_extension', '--undefined=ringnav_lyric_save', '--undefined=ringnav_bootmode', '--undefined=lockscreen_access','--undefined=ringnav_ts_read',
         '--undefined=ringnav_baidu_poll', '--undefined=ringnav_tidal_poll', '--undefined=addon_m3u_dir',
-        '--undefined=coverflow_player_cover', '--undefined=coverflow_grid_cover', '--undefined=coverflow_album_cover', '--undefined=headset_bt_init',
-        '--undefined=headset_status_register', '--undefined=headset_bt_autolink',
+        '--undefined=coverflow_player_cover', '--undefined=coverflow_grid_cover', '--undefined=coverflow_album_cover', '--undefined=coverflow_folder_cover', '--undefined=headset_bt_init',
+        '--undefined=headset_status_register', '--undefined=headset_bt_autolink', '--undefined=mqa_accept',
         out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
     return symbols(out/'patch.elf')
@@ -1309,11 +1342,16 @@ def patch_bluealsa(raw):
         struct.pack_into('<I', image, fileoff(raw, address), new)
     return bytes(image)
 
-def build(zip_path, out, logo, dev=False, repo=REPO, aic_idle_wait=True, rotator_lazy_clock=True, pwm_idle_clock=True, mcu_idle_sleep=False, flac_experiments='sync,lpc,output'):
+def build(zip_path, out, logo, dev=False, repo=REPO, aic_idle_wait=False, rotator_lazy_clock=False, pwm_idle_clock=False, mcu_idle_sleep=False, flac_experiments='sync,lpc,output'):  # pragma: no mutate block
     import m1plus  # the M1 Plus's own pipeline, beside this one (docs/m1plus-roadmap.md U1)
     if m1plus.takes(zip_path): return m1plus.build(zip_path, out, logo, dev=dev)
     from flac import selection
     flac_experiments = selection(flac_experiments)
+    # Kernel-module experiments: no measured saving (docs/clock-gating.md, pwm-clock-gating.md,
+    # audio-notifier.md), none handles suspend/resume, and stock Standby suspends by default; dev only.
+    check(not aic_idle_wait or dev, '--aic-idle-wait requires --dev')
+    check(not rotator_lazy_clock or dev, '--rotator-lazy-clock requires --dev')
+    check(not pwm_idle_clock or dev, '--pwm-idle-clock requires --dev')
     check(not mcu_idle_sleep or (dev and pwm_idle_clock), '--mcu-idle-sleep requires --dev --pwm-idle-clock')
     version = TAG
     check(re.fullmatch(r'[A-Za-z0-9-]+/[A-Za-z0-9._-]+', repo), f'{repo}: not a GitHub owner/name')  # a C string
@@ -1354,8 +1392,7 @@ def build(zip_path, out, logo, dev=False, repo=REPO, aic_idle_wait=True, rotator
     # a prefix-trimmed typo cannot silently disable a screen this way.
     from ipod import (AUDIT, ARTIST_ALBUMS, SETTINGS_ICONS, inc, UI_ASSETS, patch_asset,
                       QUIET_ICONS, quiet_icon, imagemagick, patch_code, patch_style, patch_word, branch, settings_icon,
-                      STATUS_ICONS, status_icon, row_icon, ART_PLACEHOLDERS, sized_art, PLAYING_STOCK, PLAYING_PAGE, playing_stock,
-                      HOME_CARDS, card_art)
+                      STATUS_ICONS, status_icon, row_icon, ART_PLACEHOLDERS, sized_art, PLAYING_STOCK, PLAYING_PAGE, playing_stock)
     contexts = re.findall(r'"([^"]+)"', (ROOT/'patch/contexts.inc').read_text())
     check(contexts, 'No navigation contexts audited')
     windows, chinese = set(), set()  # chinese: the UI assets english_ui rewrites
@@ -1438,6 +1475,8 @@ def build(zip_path, out, logo, dev=False, repo=REPO, aic_idle_wait=True, rotator
           'player_initconfig: unexpected mclSetPlayMode call')
     patch_word(patched, 0x4f999c, 0x0411e992, jal(ps['ringnav_bootmode']),
                'config_init preserves the saved queue when applying the boot play mode')
+    patch_word(patched, 0x5a7da0, 0x0320f809, jal(ps['mqa_accept']),
+               'saved MQA mode on every player connection, including boot')
     patch_word(patched, 0x4fa41c, 0x0320f809, jal(ps['lockscreen_access']),
                'startup accepts built-in wallpapers')
     patch_word(patched, 0x4fad60, 0x0320f809, jal(ps['lockscreen_access']),
@@ -1635,11 +1674,11 @@ def build(zip_path, out, logo, dev=False, repo=REPO, aic_idle_wait=True, rotator
             src.write_bytes(data)
             p = swap_inode(p, path.encode(), src)
     # New inodes, each with its stock image's metadata: Home's Coverflow and Shortcut card icons (menu_music's,
-    # in the accent like stock's cards), the Local Music and Spotify rows' icons, drawn in assets/icons/ (stock's
+    # in their own colours like stock's cards), the Local Music and Spotify rows' icons, drawn in assets/icons/ (stock's
     # 52px style) or else a copy of the stock image named (not the copies iPod pre-sizes for Settings), and q2video.
     xx = 'release/assets/default/raw/images/xx/'
     icons = {n: ('menu_musicdown.png' if n.endswith('down.png') else 'menu_music.png',
-                 card_art((ROOT/'assets/icons'/n).read_bytes())) for n in ICONS}
+                 (ROOT/'assets/icons'/n).read_bytes()) for n in ICONS}
     drawn = ('podcasts', 'audiobooks', 'books', 'videos')
     icons.update({f'local_{n}.png': (like, (ROOT/'assets/icons'/f'local_{n}.png').read_bytes() if n in drawn
                                      else cat(xx+like)) for n, like in dict(
@@ -1697,15 +1736,15 @@ def build(zip_path, out, logo, dev=False, repo=REPO, aic_idle_wait=True, rotator
     assets = ['ui/'+rel for rel in patched_ui + sorted(chinese - set(patched_ui))] + ['strings/en_US.bin']
     assets += ['styles/'+rel for rel in AUDIT['styles']]
     # images changed in place, so each keeps its inode metadata: settings icons pre-sized to the rows'
-    # SET_ICON, the art placeholders and Home: Carousel's cards
-    assets += ['images/'+name for name in [*SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS | ART_PLACEHOLDERS, *HOME_CARDS]]
+    # SET_ICON and the art placeholders
+    assets += ['images/'+name for name in SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS | ART_PLACEHOLDERS]
     for rel in assets:
         kind, name = rel.split('/', 1)
         path = 'release/assets/default/raw/' + ('images/xx/'+name if kind == 'images' else rel)
         original = cat(path)
         data = (relabel(original) if kind == 'strings' else
                 patch_style(original, AUDIT['styles'][name]) if kind == 'styles' else
-                (sized_art(art, ART_PLACEHOLDERS[name]) if name in ART_PLACEHOLDERS else card_art(original) if name in HOME_CARDS else
+                (sized_art(art, ART_PLACEHOLDERS[name]) if name in ART_PLACEHOLDERS else
                  status_icon(name, original) if name in STATUS_ICONS else quiet_icon(name, original) if name in QUIET_ICONS else settings_icon(name, original)) if kind == 'images' else
                 patch_asset(name, original) if name in patched_ui else original)
         if kind == 'ui' and name in chinese:
@@ -1767,12 +1806,12 @@ if __name__ == '__main__':
                     help='FLAC fast paths (comma-separated subset; empty for stock FLAC)')
     ap.add_argument('--update-repo', default=REPO, metavar='OWNER/NAME',
                     help="GitHub repo whose latest release Network Update fetches (default: %(default)s), for a fork's test builds")
-    ap.add_argument('--aic-idle-wait', action=argparse.BooleanOptionalAction, default=True,
-                    help='sleep the stopped PCM notifier until start or teardown (default on; --no-aic-idle-wait for stock)')
-    ap.add_argument('--rotator-lazy-clock', action=argparse.BooleanOptionalAction, default=True,
-                    help='defer the rotator clock until its first conversion (default on)')
-    ap.add_argument('--pwm-idle-clock', action=argparse.BooleanOptionalAction, default=True,
-                    help='cooperative Linux/MCU PWM clock gating (default on)')
+    ap.add_argument('--aic-idle-wait', action='store_true',
+                    help='experimental: sleep the stopped PCM notifier until start or teardown (requires --dev)')
+    ap.add_argument('--rotator-lazy-clock', action='store_true',
+                    help='experimental: defer the rotator clock until its first conversion (requires --dev)')
+    ap.add_argument('--pwm-idle-clock', action='store_true',
+                    help='experimental: cooperative Linux/MCU PWM clock gating (requires --dev)')
     a=ap.parse_args()
     try:
         build(a.zip,a.out.resolve(),a.logo,a.dev,a.update_repo,a.aic_idle_wait,a.rotator_lazy_clock,a.pwm_idle_clock,a.mcu_idle_sleep,a.flac_experiments)

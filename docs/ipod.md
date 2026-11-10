@@ -77,7 +77,9 @@ hook resolves the selected row; the color hook maps its title to `#171717` and m
 remain on recycled rows or stale scrolling labels. Selected backgrounds stay transparent over
 the selection. Touch hides wheel selection until wheel/centre input; the native pressed state
 remains visible. Under **Rounded Corners** on a pressed list row (`s_btn_listitem`) is that grey as the
-selection's inset pill instead (`pressed_pill`); other pressed widgets keep stock's box. The same hooks cover settings, streaming, dialogs, PEQ rows and media browser
+selection's inset pill instead (`pressed_pill`), and a pressed tile under half its row's width (the album
+grid's, the playlist page's pair) is the tile's selection card, `TILE_INSET` inside it with `SEL_RADIUS`
+corners (square under Square); other pressed widgets keep stock's box. The same hooks cover settings, streaming, dialogs, PEQ rows and media browser
 chrome. Photos, video, book content, EQ plots and visualizers keep their own drawing.
 
 ## Home
@@ -123,7 +125,7 @@ drops what a paint invalidates when the frame ends, so a 0 ms timer then repaint
 otherwise the new art and its fit would reach only the regions repainted later. `g_playcover_finishflag` remains
 stock-owned. Now Playing and Spotify's page keep their black background behind the art.
 
-**Carousel** replaces the lists and the art with stock's home carousel. It has eight cards: Now Playing, Library, Coverflow, Folder, the Rockbox shortcut, Streaming, Playback Settings and System Settings. The Rockbox shortcut card is the Shortcut row: it opens what the Shortcut setting chooses, and stays when that row is hidden (no Rockbox on the card), where tapping it shows a message. The cards take the theme (Minimal or Classic) and the accent, and Light Mode applies. The wheel moves through the carousel ([internals.md](internals.md#home-carousel)), Centre opens the card and touch drags and taps as in stock; Return keeps stock's behaviour there. Leaving Carousel for Split or Full shows the main list.
+**Carousel** replaces the lists and the art with stock's home carousel. It has eight cards: Now Playing, Library, Coverflow, Folder, the Rockbox shortcut, Streaming, Playback Settings and System Settings. The Rockbox shortcut card is the Shortcut row: it opens what the Shortcut setting chooses, and stays when that row is hidden (no Rockbox on the card), where tapping it shows a message. The cards keep their own colours, as on the stock Home, whatever the Theme, accent or Light Mode. The wheel moves through the carousel ([internals.md](internals.md#home-carousel)), Centre opens the card and touch drags and taps as in stock; Return keeps stock's behaviour there. Leaving Carousel for Split or Full shows the main list.
 
 The player writes every track's cover to the same `/tmp` file, so before Split loads it `coverflow_home_art` drops AWTK's cached bitmap of that name, as the full-screen art does; otherwise the image manager hands back the last track's cover.
 
@@ -525,7 +527,9 @@ and leaves the screen on (a double press does too), as do Return, a touch and
 3 seconds without a tick, and each gives the wheel back to the volume; Return then stays on the
 page. Ending without having moved the target does not seek. Paused, the track stays paused and
 plays from the target at Play. Outside a scrub a single press turns
-the screen off, as on every other page. The jump is stock's key seek, which can pause the player briefly, but only once, when the
+the screen off, as on every other page. With **Single Press Scrub** (below) the two swap: a single
+press starts scrubbing, `DOUBLE_CLICK_MS` later as a row opens, and a double press turns the screen
+off, as on the lists. The presses work the same while the volume shows over the page; starting a scrub closes it. The jump is stock's key seek, which can pause the player briefly, but only once, when the
 scrub ends, instead of after each pause between ticks. Values are `SCRUB_*` in
 `patch/offsets.inc`; see [internals.md](internals.md#scrub-ipod).
 
@@ -654,13 +658,17 @@ NPCENTRED`, off; `playset_covermode`): `ringnav_ui_load`, hooked on every window
   full screen
   ([Word-timed lyrics](internals.md#word-timed-lyrics)). Choosing a Theme loads its preset (`theme_preset`): Classic sets Light Mode on, Cobalt (`ACCENT` 4), square corners and Split, Minimal Light Mode off, Graphite (`MINIMAL_ACCENT` 0), rounded corners and Split; Light Mode's Auto, Battery and Centred Now Playing are kept, and only changed values are saved.
 - Controls, after Shortcut: a "Smart Awake" switch (`IPOD KEEPLIT`, off;
-  `keep_lit_poll`): with Now Playing lit in front on its lyrics, info or visualizer page and a song
-  playing, it calls `reset_poweroptions_timer(1, 1, 1)` once a second, so the screen stays on there;
-  paused, it times out as usual. Enlarged Album Art never opens off the art page (#57): while Now Playing's slide view is on
+  `keep_lit_poll`): with Now Playing lit in front on its lyrics, info or visualizer page, or its
+  full-screen art (`bigcover_page`) in front, and a song playing, it calls
+  `reset_poweroptions_timer(1, 1, 1)` once a second, so the screen stays on there (with Enlarged Album
+  Art on, the art page too, once its countdown opens the full-screen art);
+  paused, it times out as usual. A card game in Games is held open and lit while it is on, playing
+  or not, with no idle quit ([Card games](internals.md#card-apps)). Enlarged Album Art never opens off the art page (#57): while Now Playing's slide view is on
   another page, each `ringnav_sleep` pass holds stock's countdown (`BC_IDLE`) at its full 10 s.
   Before, the window opened and closed a pass later, flashing over the lyrics every 10 s (#153).
-  Then a "Click With Headphones" switch (`IPOD KEYTONEHP`, off): with Key Tone on, the speaker's
-  click keeps sounding while headphones, Bluetooth or a USB DAC are connected ([Key Tone](internals.md#key-tone)).
+  Then a "Single Press Scrub" switch (`IPOD SCRUBSINGLE`, off; `np_key`): on Now Playing a single
+  centre press starts the scrub and a double press turns the screen off (Scrub, above).
+  "Click With Headphones" (`IPOD KEYTONEHP`) is System settings', under Key Tone ([Key Tone](internals.md#key-tone)).
 - Coverflow: "Artist Albums: Coverflow" (`Q2POD ARTISTCF`, the default; Grid and List, same icon;
   Coverflow ends with an All albums card, see
   [internals.md](internals.md#artist-albums-in-coverflow)), "Coverflow Sort: Album" and "Refresh
@@ -747,7 +755,7 @@ status bar asset's own background (`#000000`, not `#161616`), which the payload'
 
 ### Light Mode
 
-**Light Mode: Auto** (`LIGHT=2`) is light from 07:00 to 18:59 by the device clock and dark the rest of the day. The row cycles Off, On, Auto on each click. It switches at 07:00 and 19:00 while the device is on, and the cached images are dropped and an open screen repaints then (`clock_show`, at each minute with the status bar's clock). The boot logo picks its mode by the UTC hour ([boot](boot.md#light-mode)).
+**Light Mode: Auto** (`LIGHT=2`) is light from 07:00 to 18:59 by the device clock and dark the rest of the day. The row cycles Off, On, Auto on each click. It switches at 07:00 and 19:00 while the device is on, and the cached images are dropped and an open screen repaints then (`clock_show`, at each minute with the status bar's clock). The boot logo picks its mode by the same hours, in the saved time zone ([boot](boot.md#light-mode)).
 
 **Light Mode: On** (`LIGHT=1`) turns both themes light at runtime, over the same assets. Every
 neutral colour (channels within `LIGHT_SPREAD`) flips per channel, black to `LIGHT_PAPER` (`#F4F4F4`)

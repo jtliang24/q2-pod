@@ -118,7 +118,7 @@ CALL_SITES = {
         # Stock's .lrc loader's jalr fopen: a copy that ringnav_lyric reads again, as a tag's.
         'LYRIC_OPEN': ((0x5a9c5c, 0x0320f809, 'ringnav_lrc_open'),),
         # parse_albumcovertask_thd's jalr toolsGetAlbumCover calls: Ogg pictures through ffmpeg.
-        'GRID_COVER': ((0x4edf1c, 0x0320f809, 'coverflow_album_cover'), (0x4ef018, 0x0320f809, 'coverflow_grid_cover'),
+        'GRID_COVER': ((0x4edf1c, 0x0320f809, 'coverflow_album_cover'), (0x4ef018, 0x0320f809, 'coverflow_folder_cover'),
                        (0x4ef0d4, 0x0320f809, 'coverflow_grid_cover')),
         # Now Playing's info page: its one fill (bal 0x52a508) goes through ringnav_np_info, which tidies
         # the lines.
@@ -199,9 +199,15 @@ CALL_SITES = {
         'TIDAL_PAGE_DONE': ((0x48b57c, 0xa0430000, 0), (0x48b70c, 0xa0430000, 0), (0x488434, 0xa0430000, 0)),
         # importPlayList's jalr toolsGetDirectoryM3u8, its lw $t9 pinned: a card app's own playlists only.
         'M3U_DIR_CALL': ((0x50dab8, 0x0320f809, 'addon_m3u_dir'), (0x50dab4, 0x8f99bad4, None)),
+        # mclWaitAccept's jalr accept: the saved MQA mode reaches each new player connection (1.6.3; build()
+        # patches it by its address, with no site constant).
+        'MQA_ACCEPT': ((0x5a7da0, 0x0320f809, 'mqa_accept'),),
     },
     # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
     'm1plus': {
+        # V2.1's mclWaitAccept's jalr accept (its lw $t9 accept@GLIBC at 0x5d0020); the delay slot's store of the
+        # address length stays, and a positive descriptor is published at MCL_FD after it, as V1.32's.
+        'MQA_ACCEPT': ((0x5d0030, 0x0320f809, 'mqa_accept'),),
         # V2.1 toolsFixId3ErrorCode's round-trip strcmp, with the Latin-1 source in a1.
         'TAG_TEXT': ((0x5ec5e4, 0x0320f809, 'ringnav_gbk_tag'),),
         # V2.1's CUE parser has seven bal conversions plus a shared jalr for track titles.
@@ -297,8 +303,9 @@ CALL_SITES = {
         # get_id3info's strcpy(playsong_id3info, record->path), its lw $t9 pinned.
         'ID3_PATH': ((0x4dff40, 0x8f99f324, None), (0x4dff4c, 0x0320f809, 'ringnav_id3_path')),
         # parse_albumcovertask_thd's toolsGetAlbumCover calls, under parse_cover_mutex: the Albums grid's,
-        # before its toolsGetExternCover, then Folder view's two (40 px).
-        'GRID_COVER': ((0x4dd6a8, 0x0320f809, 'coverflow_album_cover'), (0x4de8a4, 0x0320f809, 'coverflow_grid_cover'),
+        # before its toolsGetExternCover, then Folder view's two (40 px): the folder row's (1.6.3: its folder's first
+        # song by name first), then the track row's.
+        'GRID_COVER': ((0x4dd6a8, 0x0320f809, 'coverflow_album_cover'), (0x4de8a4, 0x0320f809, 'coverflow_folder_cover'),
                        (0x4de960, 0x0320f809, 'coverflow_grid_cover')),
         # parseplaycover_thd's toolsGetExternCover after a local track's embedded art failed (0x4df1e8),
         # under parse_cover_mutex: m1plus_player_cover drops it for ffmpeg (patch/m1plus_player_cover.c).
@@ -362,6 +369,7 @@ CALL_SITE_PURPOSES = {
     'M3U_DIR_CALL': 'card apps import only their own playlists',
     'TIDAL_LOGIN': "Tidal's login replaces its unbuilt main page",
     'LOGIN_BACK': 'Back from the Tidal and HiFi Music logins goes back, not Home',
+    'MQA_ACCEPT': 'saved MQA mode on every player connection, including boot',
 }
 def call_sites(m1plus): return CALL_SITES['m1plus' if m1plus else 'q2']
 def call_site_words(m1plus, ps):
@@ -484,6 +492,8 @@ M1PLUS_GLOBAL_ALIASES = {
     'g_btvolume': 'btsource_volume',
     'g_rotate_mode': 'rotate_mode',
     'g_time_zone': 'time_zone',
+    # Songs' sort (navigation.c songs_sorted, 1.6.3): V2.1's getAllMusic takes no argument and reads it itself
+    'g_sort_flag': 'sort_flag',
 }
 # V2.1 globals V1.32 lacks, read as GLOBALS are. Bluetooth keeps its own level, [PLAYSET] BTVOLUME:
 # the volume dialog (on_volume_tsup_fun), status bar and set_devicevolume use it while headset_output
@@ -590,6 +600,9 @@ M1PLUS_FUNCTION_ALIASES = {
     # folder_back calls it where V1.32's calls folder_reset_variable (0x4dbf0c): a fresh Folder visit.
     # V2.1's clears one enter-history deque where V1.32's clears two, and its flags are words.
     'folder_reset_variable': 'clear_foldervariate',
+    # Library -> Songs' load (navigation.c songs_load, 1.6.3): loadLocalClassList's default calls it with
+    # 0xf001 after getAllMusic, where V1.32's load_localclass_list calls music_nagvation_title
+    'music_nagvation_title': 'musicNagvationTitle',
 }
 M1PLUS_HOOKS = {
     'widget_on_paint_border': (0x668810, 'ringnav_paint', 'paint'),
@@ -876,7 +889,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)

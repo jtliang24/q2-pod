@@ -35,6 +35,7 @@
 #define ICON_KEYLOCK "system_keylock"
 #define ICON_DISPLAY "system_display"
 #define ICON_COVERMODE "playset_covermode"
+#define ICON_KEYTONE "system_keytone" /* Click With Headphones' row (System settings, 1.6.3) */
 #define ICON_FOLDERJUMP "playset_folderjump"
 #define ICON_MEMPLAY "playset_memplay" /* Resume Songs' row */
 #define ICON_BALANCE "playset_balance" /* Mono Audio's row */
