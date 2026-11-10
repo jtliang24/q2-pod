@@ -23,6 +23,8 @@ SUITES = {
     'bt_resample': 'each', 'library_scope': 'host',
     'hci_wait': 'each', 'mp3_gapless_player': 'each', 'mp3_gapless': 'host',
     'xfade_player': 'each',  # 1.6.x: crossfade in the built player
+    'hci_ao': 'each', 'hci_natural': 'each', 'player_seam': 'each',  # 1.6.7: natural changes in the real player
+    'hci_emu': None,  # 1.6.7: the emulator hci_natural and player_seam run on, no suite of its own
     'peq': 'host', 'mp3': 'host', 'remote': 'host', 'coverflow': 'host', 'release': 'host',
     'chapters': 'host',  # 1.3.8; --stock-root and --qemu add its bundled-FFmpeg checks
     'alsa': None,  # takes a qemu-mipsel binary as well as a build
