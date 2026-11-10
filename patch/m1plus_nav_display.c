@@ -12,7 +12,7 @@
  * Wheel Sensitivity (no wheel).
  * ponytail: stock's page opened over itself; its own rows' state is never touched on a sub-page. */
 int ringnav_display(void *win, void *ctx) {
-    static const char *const titles[] = { 0, "Appearance", "Coverflow", "Controls", "Theme" },
+    static const char *const titles[] = { 0, "Appearance", "Cover Flow", "Controls", "Theme" },
                              *const sub_icons[] = { 0, ICON_DISPLAY, ICON_COVERMODE, ICON_FOLDERJUMP };
     static const char *const cf_icons[] = { ICON_COVERMODE, ICON_COVERMODE, "system_update" };
     static const char *const hold_icon[] = { ICON_FOLDERJUMP }, *const knob_icons[] = { ICON_FOLDERJUMP, ICON_FOLDERJUMP };
