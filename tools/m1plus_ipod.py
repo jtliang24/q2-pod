@@ -230,7 +230,7 @@ HOME_CARD_ART = {'playing': 'mymusic', 'localmusic': 'playlist', 'coverflow': 'a
 
 def home_list(name, rows, extra=None):
     """ipod.home_list with V2.1's label style and every label's text."""
-    node = ipod.home_list(name, rows, extra)
+    node = ipod.home_list(name, rows, ipod.SET0, extra)
     for view, row in zip(node[3][0][3], rows):
         label = view[3][0]
         check(label[0] == 'hscroll_label', f'{name}: unexpected Home row')

@@ -942,6 +942,45 @@ def patch_player(raw, out):
     (out/'hciplayer').write_bytes(data)
     return dict(stock_sha256=raw_sha, sha256=sha(data), payload_sha256=sha(payload))
 
+def m1_themes():
+    """The built-in themes the M1 offers, and tools/theme.py loaded over the M1's screen (m1plus_ipod's copy of
+    tools/ipod.py, so its SET0 is the M1's rows and bar). Only the themes on SET0 alone: Classic boots its own
+    geometry set, whose row immediates are V1.32's (ipod.json), so it is unported (docs/m1plus-unported.md)."""
+    import importlib.util, sys, m1plus_ipod
+    saved = sys.modules.get('ipod')
+    sys.modules['ipod'] = m1plus_ipod.ipod
+    try:
+        spec = importlib.util.spec_from_file_location('m1plus_theme', ROOT/'tools/theme.py')
+        theme = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(theme)
+    finally:
+        if saved is None: sys.modules.pop('ipod', None)
+        else: sys.modules['ipod'] = saved
+    themes = [t for t in theme.builtins() if theme.geometry(t) == theme.SET0 and not any(o.get('sets') for o in t['opts'])]
+    check([t['name'] for t in themes] == ['Minimal', 'Modern'], f'M1 themes: {[t["name"] for t in themes]}')
+    return themes, theme
+
+
+def m1_emit_themes(themes, theme, out):
+    """out/'themes.inc' for the M1: tools/theme.py's, with no boot sites. theme_boot rewrites ipod.json's immediates,
+    V1.32 code addresses, where a set differs from SET0; the M1 has one set, so nothing may differ, and with no sites
+    nothing is touched even if it did."""
+    theme.emit(themes, out)
+    inc = (out/'themes.inc').read_text()
+    check(len(theme.geometry_sets(themes)) == 1, 'M1 themes: one geometry set')
+    sites = re.search(r'^#define BOOT_SITES (\d+)$', inc, re.M)
+    table = re.search(r'^const boot_site_t boot_sites\[BOOT_SITES\] = \{.*\};$', inc, re.M)
+    check(sites and table, 'themes.inc: no boot sites table')
+    inc = inc[:table.start()] + 'const boot_site_t boot_sites[1] = {{0, 0}}; /* M1 Plus: none (BOOT_SITES 0) */' + inc[table.end():]
+    inc = inc.replace(sites.group(0), '#define BOOT_SITES 0 /* M1 Plus: theme_boot writes no V1.32 site */')
+    # The own options of the themes the M1 leaves out (Classic's OWN_HOMELIB, OWN_ROWPREVIEW): past theme_keys, so
+    # theme_own finds no option for them and reads 0
+    m1_keys = list(theme.theme_keys(themes))
+    for k in theme.theme_keys(theme.builtins()):
+        if k not in m1_keys: inc += f'#define OWN_{k} (THEME_KEYS + {len(m1_keys)}) /* M1 Plus: its theme is unported */\n'
+    (out/'themes.inc').write_text(inc)
+
+
 def compile_payload(out):
     """Compile and link the payload."""
     extra = compile_common(out, out/'stock-demo')  # also writes the libc/libcstl imports navigation.c uses
@@ -1084,6 +1123,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     header = [f'#define RING_STEP {RING_STEP}']
     # Classic's bold font (4.1) comes with the iPod assets: no range, so bold_label never picks it
     header.append('#define BOLD_RANGES {0, 0}')
+    header.append('#define CLASSIC_LIGHT_RANGES {0, 0}')  # Classic's face (1.6.7): Classic is unported
     # navigation.c's ringnav_timezone and ringnav_timezone_row name them; their hooks, select_timezone and
     # timezone_row, are unported (M1PLUS_PORTS)
     header.append('#define TIMEZONE_NAMES {' + ','.join(json.dumps(zone) for _, zone in TIMEZONES) + '}')
@@ -1109,7 +1149,11 @@ def build(target_path, out, logo, dev=False, m1_release=None):
                f'#define Q2POD_DEV {1 if dev else 0}',  # navigation.c stale_note (Q2 only: stale_heal is unported)
                '#define Q2POD_REPO "jtliang24/q2-pod"',  # netupdate.c (unported on M1): the repo of its releases
                f'#define Q2POD_UA "Q2Pod/{release} (https://github.com/jtliang24/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
+    themes, theme = m1_themes()
+    header.append(f'#define THEME_N {len(themes)}')  # navigation.c setting_counts[]
+    header.append(f'#define THEME_KEYS {len(theme.theme_keys(themes))}')  # navigation.c st.own[], themes.inc theme_keys[]
     (out/'stock.h').write_text('\n'.join(header)+'\n')
+    m1_emit_themes(themes, theme, out)
     ps = compile_payload(out)
     payload = (out/'patch.bin').read_bytes()
     check(len(payload) < SCRATCH-BASE, 'Payload overlaps its scratch page')
