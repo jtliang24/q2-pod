@@ -12412,6 +12412,17 @@ for backend in (BrowseMachine,SoloifyMachine):
     # Paused still owns it: F13's case.
     m=backend(); m.open(); m.answer(*ME); m.close(); m.state('paused',position=10000); m.poll()
     owner_page(m,'spotify_page'); passed()
+# The Now Playing page holds librespot as the browser does (V057m: paused 30 s, the page left open said the binary
+# isn't on the card): lit, paused past SPOT_IDLE_MS, it runs on; dark, SPOT_IDLE_MS on, the page shuts, then it stops.
+for backend in (BrowseMachine,SoloifyMachine):
+    m=backend(); m.open(); m.answer(*ME); m.close(); m.state('playing',position=10000); m.poll()
+    page=owner_page(m,'spotify_page'); m.mock('window_manager_close_window_force')
+    m.state('paused',position=10000); m.poll(); kills=len(m.systems)
+    m.poll(60000); assert len(m.systems)==kills,m.systems
+    m.byte(syms['g_backlight_status'],0); m.poll(29500); assert len(m.systems)==kills,m.systems
+    m.calls=[]; m.poll(500); closes=[c[2] for c in m.calls if c[0]=='window_manager_close_window_force']
+    assert closes==[page] and KILLALL in m.systems[-1],(closes,m.systems)
+    m.byte(syms['g_backlight_status'],1); m.destroy(page); passed()
 # Nothing else owns it: V2.1's page, with the context its playing strip gives.
 m=BrowseMachine(); m.mock('navigator_back'); m.calls=[]; m.top=m.node('window','sysset_page'); hold_return(m)
 got=[c for c in m.calls if c[0]=='navigator_switch_to_with_context']
