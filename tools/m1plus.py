@@ -794,6 +794,10 @@ PLAYER_PROFILE = {
     'stock_id3': 0x48b760,
     'written_audio_pts': 0x44600c,
     'length_addr': 0xb10e5c,
+    # the skip and stop flags, Q2 0xb10e6c and 0xb10e70: the idle loop clears both at 0x42d864 (Q2 0x42da10),
+    # set-nexturl sets the first at 0x42d304 (Q2 0x42d3a0)
+    'next_flag': 0xb10e50,
+    'stop_flag': 0xb10e54,
     'av_dict_set': 0x6ea1a4,
     'av_dict_free': 0x6ea65c,
     'rg_export': 0x5381c4,
@@ -866,7 +870,8 @@ def compile_common(out, binary, player=False):
         header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}u' for macro, key in (
             ('WRITTEN_AUDIO_PTS', 'written_audio_pts'), ('LENGTH_ADDR', 'length_addr'), ('STOCK_ID3_ADDR', 'stock_id3'),
             ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
-            ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'))]
+            ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'),
+            ('NEXT_FLAG_ADDR', 'next_flag'), ('STOP_FLAG_ADDR', 'stop_flag'))]
     if not player:
         # V1.32's private routines are V1.32 code: never merged into V2.1's table
         syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))

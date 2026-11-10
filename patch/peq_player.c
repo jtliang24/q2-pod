@@ -481,8 +481,10 @@ static int ao_playing(void) {
  * mcl-orderstop's close on the command thread during the drain races it as it races stock's own
  * drain. ponytail: a USB stream hung during this drain runs to the kernel's 10 s, past the heartbeat's 6 ticks
  * (0x42d95c), and hciplayer exits; stock's 0x438768 has the same exposure. A close always stays under stock's mute, and the PCM only stops unmuted once drained. */
+#if !M1PLUS /* the M1's: m1plus_peq_player_pts.c */
 #define NEXT_FLAG (*(volatile int *)0xb10e6cu)
 #define STOP_FLAG (*(volatile int *)0xb10e70u)
+#endif
 #define DSD_FILE (*(volatile int *)0xb10e5cu)
 #define KEEP_GAPLESS (*(volatile int *)0xb10e58u)
 #define PREV_FORMAT (*(volatile int *)0xafa164u) /* stock's triple, compared at 0x438cc0, 0x439598, 0x43972c */

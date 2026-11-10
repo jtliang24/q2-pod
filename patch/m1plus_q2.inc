@@ -171,3 +171,7 @@
 
 /* The CUE parser's in-place charset converter, native to this firmware. */
 #define CUE_CONVERT_ADDR 0x5bccac
+/* playback.c's return addresses (1.6.7): View Queue's row, past its bounds checks (ringnav_start_queue), and
+ * on_wm_timer_dialog's skip past a file it can't play (ringnav_change) */
+#define VIEW_QUEUE_RET 0x529944
+#define UNPLAYABLE_NEXT_RET 0x4ea848

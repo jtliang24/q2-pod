@@ -875,6 +875,17 @@ static inline int arc_out(int r, int y) {
  * it reads gets a value that can't fault; the Phase 4 item that ports the feature replaces it. */
 /* Timing is behaviour, not device: Q2's values. */
 #define MARQUEE_HOLD_MS 1500
+#define MARQUEE_PASSES 3 /* the selected row's title: navigation.c marq_poll (1.6.7) */
+#define HSCROLL_ONLY_FOCUS 0x78 /* hscroll_label_t, a char: V2.1's hscroll_label_set_only_focus (0x60929c) */
+#define HSCROLL_TEXT_W 0x90 /* its measured text width: V2.1's get_range (0x6093cc) reads it at 0x609454; V1.32's 0x94 */
+#define WHEEL_FRESH_MS 1000 /* tick_gate's: the touch wheel's, which runs on the Q2 only */
+/* Classic's Home Library list (navigation.c library_rows, 1.6.7): Classic is unported */
+#define LOCALMUSIC_BG M1_UNPORTED
+/* The return addresses two live playback.c hooks compare (1.6.7): View Queue's pick of the playing file keeps it
+ * playing (ringnav_start_queue), and the skip past an unplayable file is no press (ringnav_change). V2.1's callers
+ * aren't pinned, so on M1 neither matches and both act as in 1.6.4 (docs/m1plus-unported.md). */
+#define VIEW_QUEUE_RET M1_UNPORTED
+#define UNPLAYABLE_NEXT_RET M1_UNPORTED
 #define LYRIC_PUSH_DETENTS 2
 #define LYRIC_PUSH_MS 1000
 #define DRIFT_ZOOM_PCT 110

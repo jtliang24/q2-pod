@@ -786,7 +786,7 @@ static void commit(unsigned next) {
  * the order carries on after it and it neither plays again later in the pass nor drops the tracks
  * it jumped; an ordered queue's in place, so the tracks after it follow. A pick inside a pending
  * Play Next takes only its entry off the list, the rest stay pending. */
-#define VIEW_QUEUE_RET 0x529944 /* View Queue's row, past its bounds checks */
+/* VIEW_QUEUE_RET: View Queue's row, past its bounds checks (m1plus_q2.inc, m1plus_offsets.inc) */
 int ringnav_start_queue(int at) {
     unsigned x = (unsigned)at;
     if (__builtin_return_address(0) == (void *)VIEW_QUEUE_RET && x == (unsigned)M(MCL_POS) &&
@@ -1031,7 +1031,7 @@ static int change_music(int next) {
 }
 /* on_wm_timer_dialog's skip past a file it can't play (jalr player_next_music, 0x4ea840, which tail-branches
  * here with ra restored) is the only Next nobody pressed; its Folder Skip load stamps nothing either. */
-#define UNPLAYABLE_NEXT_RET 0x4ea848
+/* UNPLAYABLE_NEXT_RET: m1plus_q2.inc, m1plus_offsets.inc */
 int ringnav_change(int next) {
     press_natural = __builtin_return_address(0) == (void *)UNPLAYABLE_NEXT_RET;
     int result = change_music(next);
