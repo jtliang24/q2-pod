@@ -1020,11 +1020,21 @@ def compile_payload(out):
     for x, address in resume.items():
         asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', f'lui $gp, {gp >> 16}',
                 f'ori $gp, $gp, {gp & 65535}', f'j 0x{address + 12:x}', 'nop']
-    # A Q2 hook V2.1 lacks has no stock code to resume, so its trampoline returns 0. Every Q2 hook's
-    # gets one, so a new upstream hook's payload links on M1 before it is ported (M1PLUS_PORTS).
+    # A Q2 hook the M1 doesn't take: V2.1's routine unpatched, so its trampoline calls the whole routine (its PIC
+    # prologue takes $gp from $t9), as payload code that goes past the hook expects (1.6.7's Resume seeks through
+    # stock_seek_time_trampoline). With no V2.1 routine of the name (peq_platform.h), it returns 0. Every Q2
+    # hook's gets one, so a new upstream hook's payload links on M1 before it is ported (M1PLUS_PORTS).
     from build import HOOKS
-    for x in dict.fromkeys(x for _, _, x in HOOKS.values() if x):
-        if x not in resume:
+    stock = {m[1]: int(m[2], 16) for m in re.finditer(r'^#define (\w+) \(\([^()]*\(\*\)\([^()]*\)\)0x([0-9a-f]+)u\)$',
+                                                       (out/'peq_platform.h').read_text(), re.M)}
+    done = set(resume)
+    for name, (_, _, x) in HOOKS.items():
+        if not x or x in done: continue
+        done.add(x)
+        if name in stock:
+            asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', f'lui $t9, {stock[name] >> 16}',
+                    f'ori $t9, $t9, {stock[name] & 65535}', 'jr $t9', 'nop']
+        else:
             asm += [f'.globl stock_{x}_trampoline', f'stock_{x}_trampoline:', 'jr $ra', 'move $v0, $zero']
     (out/'trampoline.S').write_text('\n'.join(asm)+'\n')
     run('clang',*flags,'-c',out/'trampoline.S','-o',out/'trampoline.o')
