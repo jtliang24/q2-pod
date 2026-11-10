@@ -202,6 +202,13 @@ CALL_SITES = {
         # mclWaitAccept's jalr accept: the saved MQA mode reaches each new player connection (1.6.3; build()
         # patches it by its address, with no site constant).
         'MQA_ACCEPT': ((0x5a7da0, 0x0320f809, 'mqa_accept'),),
+        # mclStartPlayer's mute and its 100 ms sleep, a natural change's (1.6.7: start_mute, start_sleep); the tag
+        # reader's genre copy (ringnav_genre_copy, 1.6.7). build() patches each by its constant.
+        'START_MUTE_CALL': ((0x5ad1bc, 0x0411ff00, 'start_mute'),),
+        'START_SLEEP_CALL': ((0x5ad1d4, 0x0320f809, 'start_sleep'),),
+        'GENRE_COPY': ((0x5c62dc, 0x0320f809, 'ringnav_genre_copy'),),
+        # Songs' bind's jalr getFormatString when the record has no artist (ringnav_song_unknown, 1.6.7)
+        'SONG_UNKNOWN_CALL': ((0x4a9320, 0x0320f809, 'ringnav_song_unknown'),),
     },
     # V2.1's routines are V1.32's, moved: each site is its Q2 counterpart's word in V2.1's copy.
     'm1plus': {
@@ -422,7 +429,15 @@ M1PLUS_PORTS = {
     'playlist_rebuild': ('unported', "the playlist rebuild's iPod rows (ipod-ui 4.7)"),
     'mclIsUtf8WithoutBOM': ('unported', "an .lrc's UTF-8 test that reads 4-byte characters (1.5.9); V2.1's "
                             'mclIsUtf8WithoutBOM is 0x5d1824, not yet checked'),
+    # 1.6.7's audio timing and Previous's resume ask, V1.32's player routines (docs/m1plus-unported.md)
+    'player_seek_time': ('unported', "a user's seek stamps a press (1.6.7, playback.c press_stamp); V2.1's seek_time not pinned"),
+    'player_seek_start': ('unported', "Previous's restart past 10 s asks too (1.6.7 restart_refused); V2.1's not pinned"),
+    'player_start': ('unported', 'a press waits for the DAC, a natural change keeps stock timing (1.6.7); V2.1 start_player not pinned'),
     # Call sites
+    'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's mclStartPlayer not pinned"),
+    'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's mclStartPlayer not pinned"),
+    'GENRE_COPY': ('unported', "long multi-value genres kept out of titles (1.6.7); V2.1's tag reader's copy not pinned"),
+    'SONG_UNKNOWN_CALL': ('q2only', "a song row's empty artist line under a set without text-row artwork: Classic's only (1.6.7)"),
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
     'CLASS_ICON': ('native', 'V2.1 draws its own artist icon (roadmap 4)'),
@@ -561,6 +576,10 @@ M1PLUS_PRIVATE_FUNCTIONS = {
 # reaches one (not for navigation.c: M1PLUS_SHIMS). Each goes with its hook's U4 row.
 M1PLUS_UNRESOLVED = {
     'fwupdate_tf': 'Network Update (netupdate.c): stock\'s TF card update, systemset_fwupdate_page_init unported',
+    # Home's Library list in Split (coverflow.c home_library, 1.6.7): bound only where Home's asset has
+    # list_view_homelib, a geometry set's home_lib, which only Classic's has (unported on M1)
+    'on_home_music_onclick': "Classic's Home Library list (coverflow.c home_library): Classic is unported",
+    'player_playtime': "Previous's restart ask (playback.c ringnav_seek_start, 1.6.7): player_seek_start unported",
 }
 # V1.32 routines V2.1 has no twin of that navigation.c names, which is one section (the tests call its unhooked
 # routines, so --gc-sections cannot drop any): a stand-in in patch/m1plus_nav.h under the same name, as (status, why).

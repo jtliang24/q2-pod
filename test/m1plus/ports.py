@@ -70,9 +70,9 @@ SITE_PARTS = {'ALBUM_ART_ROW': 'ALBUM_ART'}
 
 def build_sites():
     """The module constants tools/build.py's build() hands to patch_word, by name: `patch_word(patched,
-    *NAME` and `for ... in NAME:` before a patch_word."""
+    *NAME` (or a bare address's NAME) and `for ... in NAME:` before a patch_word."""
     text = (ROOT/'tools/build.py').read_text()
-    consts = set(re.findall(r'^([A-Z][A-Z0-9_]+) = \(', text, re.M))
+    consts = set(re.findall(r'^([A-Z][A-Z0-9_]+) = (?:\(|0x)', text, re.M))  # a tuple, or a bare address (1.6.7's SONG_UNKNOWN_CALL)
     used = set(re.findall(r'patch_word\(patched, \*?([A-Z][A-Z0-9_]+)\b', text))
     used |= set(re.findall(r'^\s+for [\w, ]+ in ([A-Z][A-Z0-9_]+):\n(?:\s+check\(.*\n.*\n)?\s+patch_word\(', text, re.M))
     return sorted(used & consts)
