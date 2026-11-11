@@ -185,7 +185,6 @@ int widget_set_visible(void *x, int v, int r) { W(x)->visible = v; return 0; }
 int widget_get_prop_int(void *x, const char *k, int d) { return d; }
 int widget_set_prop_int(void *x, const char *k, int v) { if (!strcmp(k, "style:normal:bg_color")) W(x)->bg = v; return 0; }
 const char *widget_get_prop_str(void *x, const char *k, const char *d) { return strcmp(k, "image") ? d : W(x)->image; }
-int widget_set_prop_str(void *x, const char *k, const char *v) { (void)x; (void)k; (void)v; return 0; }
 static handler touch_fn, changed_fn; /* the covers' touch and the slide_menu's change */
 unsigned widget_on(void *x, unsigned type, handler f, void *ctx) {
     if (!x) return 0;
