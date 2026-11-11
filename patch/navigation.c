@@ -2741,6 +2741,8 @@ static void *row_scroller(void *w, int depth) {
     }
     return (void *)0;
 }
+#include "m1plus_nav_marquee.inc"
+#if !M1PLUS
 /* The marquee's row while it is the selected one on a usable screen; else 0. */
 static void *marq_row(void) {
     void *w = usable() ? surface((void *)0, (void *)0) : (void *)0;
@@ -2815,6 +2817,8 @@ unsigned ringnav_hscroll_lull(void *w, int (*lulled)(const void *), unsigned ms)
     return widget_add_timer(w, hscroll_lull_end,
                             B(w, HSCROLL_YOYO) && B(w, HSCROLL_LOOP) ? 0 : MARQUEE_HOLD_MS);
 }
+
+#endif
 
 /* Classic's dialogs (CONFIRM_CLASSIC_LIGHT), in screen pixels and final colours. A dialog
  * is full-screen (0, 0, 375, 320) and its background clear, so the bar and the page show through.
@@ -8882,7 +8886,11 @@ void restart_confirm(int setting, int value) {
     ringnav_reboot();
 }
 /* The Theme picker's rows, by stored THEME: Minimal, Modern, Classic. */
+#if M1PLUS
+static const unsigned char theme_rows[] = { 0, 1 }; /* Minimal, Modern: Classic is unported */
+#else
 static const unsigned char theme_rows[] = { 0, 2, 1 };
+#endif
 _Static_assert(sizeof theme_rows == THEME_N, "a row per theme");
 static int theme_pick(void *ctx, void *event) {
     int t = (int)(long)ctx;

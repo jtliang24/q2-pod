@@ -999,3 +999,4 @@ extern unsigned char m1_return_latch;
 #define CF_ANGLE 60   /* a side cover's turn, degrees */
 #define CF_HORIZON 50 /* % down the cover its centre sits on the shared horizon */
 #define CF_THIRD 1    /* 1: the third out stays, gone half a step past it */
+

@@ -1256,7 +1256,7 @@ static void *rows_view(void *parent, int y, int w, int h, int n, int item_h) {
  * Shared with photos.c. */
 void *page_list(void *page, void *body, void **title, const char *caption, int n, int item_h) {
     int h = widget_get_prop_int(page, "h", client_h());
-    item_h = M1PLUS ? LIB_PITCH : page_h(item_h);
+    item_h = page_h(item_h);
     widget_destroy_children(body);
     widget_set_visible(body, 1, 0);
     void *t = page_title(body, caption, title ? TITLE_ON_SHOW : n);
@@ -1278,7 +1278,12 @@ void *page_list_or(void *page, void *body, const char *name, const char *none, i
 /* The stock page_list heights, 48 a row and 64 a row with a detail, as the theme's. */
 int page_h(int h) {
     const theme_t *T = theme();
-    return M1PLUS ? LIB_PITCH : h == 64 ? T->page_detail : h == 48 ? T->page_row : h;
+#if M1PLUS
+    (void)T;
+    return LIB_PITCH;
+#else
+    return h == 64 ? T->page_detail : h == 48 ? T->page_row : h;
+#endif
 }
 
 /* The theme's page rows' text column. */
