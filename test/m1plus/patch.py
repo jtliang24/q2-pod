@@ -7449,12 +7449,12 @@ for theme,bh,fill in (('0',4,O['MINIMAL_FILL']),*((('1',O['NP_BAR_IPOD'],ACCENTS
       on=327*40//100; rows=fills[1:]
       assert not m.rounded and {(b[0],b[2]) for b in rows}=={(24,on),(24+on,327-on)},rows
       assert sorted({b[1] for b in rows})==list(range(top,top+bh+O['SCRUB_REFLECT_ROWS'])),rows
-  if theme=='1': assert fills[0]==(*band,color_t(0)),fills; ipod_rows(bar[1])
+  if theme=='1' and not is_m1plus: assert fills[0]==(*band,color_t(0)),fills; ipod_rows(bar[1])
   else:
       assert fills==[(*band,color_t(0))],fills  # then the capsule, as the progress bar
       assert [(r['rect'],r['radius'],r['color']) for r in m.rounded]==[(bar,bh//2,color_t(O['TRACK_COLOR'])),((24,bar[1],327*40//100,bh),bh//2,color_t(fill))],m.rounded
   assert [(t['text'],t['rect'],t['font'][1]) for t in m.letters]==[('Volume 40',(0,295,375,16),O['NP_TIMES_PX'])]; passed()
-  if theme=='1':  # Classic's times beside the bar, an iPod classic's: paper over the times alone, the bar the volume,
+  if theme=='1' and not is_m1plus:  # Classic's times beside the bar, an iPod classic's: paper over the times alone, the bar the volume,
       # the speakers (tools/art.py) where the times' text sat, no number; the slider over those rows
       put(elapsed,16,247,50,21); put(remain,309,248,50,20); m.image_size=(8,13); m.calls=[]
       m.bands.clear(); m.rounded.clear(); m.letters.clear(); m.image_draws.clear(); paint(dlg); fills=[b[:5] for b in m.bands]
@@ -7482,7 +7482,7 @@ for theme,ty,want in (('1',247,1),('0',265,0)):  # Minimal's last: its panel ove
   m.word(syms['system_bar'],m.node('window','system_bar'))
   assert m.call(address=playing,args=(win,7,0,0),gap=0)==0
   m.nodes[m.wm]={'children':[win]}; m.nodes[slider]['value']=101; paint(win)  # a second on: the paint writes it
-  assert m.nodes[remain]['text']=='-2:04' and len([t for t in m.timers.values() if t[1]==payload_syms['remain_due']])==want,theme; passed()
+  assert m.nodes[remain]['text']==('-02:04' if is_m1plus else '-2:04') and len([t for t in m.timers.values() if t[1]==payload_syms['remain_due']])==want,theme; passed()
 CONFIG.clear()
 
 m.nodes[m.wm]['children']=[win]; m.top=win; m.advance(O['VOL_POLL_MS']); assert not m.timers; passed()  # closed: it stops
@@ -9380,6 +9380,7 @@ class TagTextMachine(Machine):
         self.handlers[syms['strcpy@GLIBC_2.0']]='t:strcpy'; self.handlers[syms['toolsIconvConvert']]='t:iconv'
         self.handlers[syms['strcmp@GLIBC_2.0']]='t:strcmp'  # on bytes: GBK isn't UTF-8
         self.mock('snprintf@GLIBC_2.0'); self.iconv=0
+        self.handlers.pop(syms['toolsFixId3ErrorCode'],None)  # run the converter itself: 1.7.0 lists it in FUNCTIONS (ogg_music_info), which mocks it
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')
         if not name.startswith('t:'): return super().hook(u,address,size,unused)
@@ -16075,7 +16076,7 @@ if is_m1plus:  # portrait: the text under the art, none of it in the top left th
     art=(O['SPOT_ART_X'],O['SPOT_ART_Y'],O['SPOT_ART_PX'],O['SPOT_ART_PX'])
     meet=lambda a,b: a[0]<b[0]+b[2] and b[0]<a[0]+a[2] and a[1]<b[1]+b[3] and b[1]<a[1]+a[3]
     boxes=[cf_geometry(m,w) for w in m.nodes if m.nodes[w]['type'] in ('hscroll_label','view') and under(w,info) and w!=info]
-    assert boxes and not [b for b in boxes if meet(b,art) or meet(b,(0,0,O['BACK_W'],48))],boxes
+    assert boxes and not [b for b in boxes if meet(b,art) or meet(b,(0,0,O['M1_BACK_W'],48))],boxes
 # The bar: a TRACK_COLOR capsule and the elapsed share in the accent (iPod) or stock red (Stock).
 bar_height=4  # Minimal's line, centred in the 8px view
 bar=[w for w in m.nodes if m.nodes[w]['type']=='view' and cf_geometry(m,w)==(O['SPOT_BAR_X'],O['SPOT_BAR_Y'],O['SPOT_BAR_W'],O['SPOT_BAR_H'])][0]
@@ -19261,7 +19262,7 @@ assert wake(DOWN,RET,gap=1000); m.now+=hold; m.now+=m.now&1
 assert wake(UP,RET,gap=0) and not wake(DOWN,RET,gap=0) and not wake(UP,RET,gap=30); passed()
 # A hold whose release stock never saw (the windows closing under it) leaves its release latch armed, which would swallow
 # the next short Return: a new press clears it, a held press's repeats and a ghost (dropped whole) do not.
-LATCH=O['RETURN_RELEASE_LATCH']
+LATCH=payload_syms['m1_return_latch'] if is_m1plus else O['RETURN_RELEASE_LATCH']  # the M1's is a payload byte, not a stock address
 assert wake(DOWN,RET,gap=1000); m.byte(LATCH,1); assert wake(DOWN,RET,gap=100) and m.u.mem_read(LATCH,1)==b'\1'
 assert wake(UP,RET,gap=hold) and not wake(DOWN,RET,gap=60) and m.u.mem_read(LATCH,1)==b'\1' and not wake(UP,RET,gap=30)
 assert wake(DOWN,RET,gap=200) and m.u.mem_read(LATCH,1)==b'\0' and wake(UP,RET,gap=30); passed()
@@ -19272,7 +19273,8 @@ def home_after_hold(press):
     assert h.selected(view)==3; h.byte(LATCH,1); h.handlers[inp+12]='stock_input'
     if press: h.call(RET,address=inp,args=(h.wm,h.event,0,0),event_type=DOWN,gap=1000,clear=False)
     h.call(RET); return h.selected(view)
-assert home_after_hold(False)==3 and home_after_hold(True)==0; passed()
+if is_m1plus: assert home_after_hold(False)==0 and home_after_hold(True)==0; passed()  # the M1's latch is Previous's, spent at dispatch (m1plus_nav_input.inc): Return's release reaches Home either way
+else: assert home_after_hold(False)==3 and home_after_hold(True)==0; passed()
 # Every edge button guards Centre as Return does: a thumb on the rim closes Centre with Play/Pause,
 # Previous or Next too. Centre pressed first passes, but an edge press within CHORD_MS of it ends
 # Centre's hold timer, so stock's Centre hold (Shut Down) never comes; a later one leaves it.
@@ -21520,7 +21522,7 @@ if is_m1plus:
     m=input_machine(); body=m.node('view'); title=m.call(address=payload_syms['page_title'],args=(body,m.string('Photos'),0,0),gap=0)
     assert not [c for c in m.nodes[body]['children'] if m.nodes[c]['type']=='button']
     assert not m.nodes[title].get('handlers') and 'clickable' not in m.nodes[title]
-    assert m.get(title+O['W_X'])==O['BACK_W'] and m.get(title+O['W_W'])==O['UI_W']-2*O['BACK_W']; passed()
+    assert m.get(title+O['W_X'])==O['M1_BACK_W'] and m.get(title+O['W_W'])==O['UI_W']-2*O['M1_BACK_W']; passed()
     # Previous is a media key, as on stock, never Return: the chevron is the way back. Idle, on
     # Now Playing, and with the screen off and the keys locked (stock's key lock, not a hidden page's Back). Knob:
     # Volume here; the M1's default, Navigation, is the previous() checks below.
