@@ -7541,6 +7541,7 @@ if 'AB_X_CALLS' in SITES:
     CL_BAR_LINE={'1':0x5a595a,'0':0x333333}
 else: not_ported('1.7.0 Classic fitted times and A-B markers')
 
+if is_m1plus: not_ported('1.7.0 Classic pages, forms, dialogs and USB presentation')
 # Classic's volume, slider pages and rating: windows as stock's loader hands them over.
 class UiLoad:  # the stock loader answers root
     def hook(self,u,address,size,unused):
@@ -7603,14 +7604,15 @@ def vol_closed(q):
     q.nodes[q.wm]['children']=[q.win]; q.top=q.win; q.calls=[]; q.advance(O['VOL_POLL_MS'])
     assert not q.timers and [q.nodes[w]['visible'] for w in (q.elapsed,q.remain)]==[1,1]
 # Classic, the volume panel over Quick Settings: gloss, 17 rows, speakers, no number; the same over search_dialog.
-for over,light in (('statusbar_dialog','1'),('search_dialog','1'),('statusbar_dialog','0')):
-    vp=vol_np(light); vol_closed(vp); other=vp.node('dialog',over); vp.word(other+O['W_PARENT'],vp.wm)
-    vp.nodes[vp.wm]['children']=[vp.win,other,vp.dlg]; vp.top=vp.dlg; bare(vp); bg(vp,vp.dlg)
-    ring,rest=round_box(vp.bands,27,255,321,50,13); assert set(ring)=={color_t(CL_BAR_LINE[light])}  # the 1 px ring round it, corners antialiased
-    _,barrows=round_box(rest,28,256,319,48,12)
-    assert [b[:4] for b in barrows if b[2]==243]==[(68,271+i,243,1) for i in range(17)] and [b[:4] for b in barrows if b[2]==97]==[(68,271+i,97,1) for i in range(17)] and not vp.letters and not vp.rounded
-    assert [vp.nodes[w]['visible'] for w in (vp.elapsed,vp.remain)]==[1,1] and wbox(vp,vp.sv)==(28,256,319,48)
-    assert [d[1][:2] for d in vp.image_draws]==[(20,250),(52,273),(317,273)] and art_at(vp)[0][0]=='classic_light_panel_shadow'; passed()  # the panel's soft shadow first, under its ring
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for over,light in (('statusbar_dialog','1'),('search_dialog','1'),('statusbar_dialog','0')):
+        vp=vol_np(light); vol_closed(vp); other=vp.node('dialog',over); vp.word(other+O['W_PARENT'],vp.wm)
+        vp.nodes[vp.wm]['children']=[vp.win,other,vp.dlg]; vp.top=vp.dlg; bare(vp); bg(vp,vp.dlg)
+        ring,rest=round_box(vp.bands,27,255,321,50,13); assert set(ring)=={color_t(CL_BAR_LINE[light])}  # the 1 px ring round it, corners antialiased
+        _,barrows=round_box(rest,28,256,319,48,12)
+        assert [b[:4] for b in barrows if b[2]==243]==[(68,271+i,243,1) for i in range(17)] and [b[:4] for b in barrows if b[2]==97]==[(68,271+i,97,1) for i in range(17)] and not vp.letters and not vp.rounded
+        assert [vp.nodes[w]['visible'] for w in (vp.elapsed,vp.remain)]==[1,1] and wbox(vp,vp.sv)==(28,256,319,48)
+        assert [d[1][:2] for d in vp.image_draws]==[(20,250),(52,273),(317,273)] and art_at(vp)[0][0]=='classic_light_panel_shadow'; passed()  # the panel's soft shadow first, under its ring
 # Quick Settings under Classic, the dialog as its asset leaves it and stock's init left it.
 QS_ICONS=('img_wifiswitch','img_btswitch','img_lock','img_gain','img_usbmode','img_po','img_playset','img_sysset')
 QS_IMAGES=('drop_wifi','drop_bt','drop_keylock','drop_lowgain','drop_usbdac','drop_po','drop_playset','drop_sysset')
@@ -7619,7 +7621,8 @@ QS_X=(31,115,199,283)
 QS_GROUND={'1':0x63717b,'0':0x1c1c1c}  # Home's pane
 QS_TILE={(0,'1'):(0xe9ebee,0xd3d6dc,0x9ba2aa),(0,'0'):(0x333333,0x333333,0x333333),(1,'1'):(0x207cde,0x207cde,0x125cb0),(1,'0'):(0x207cde,0x207cde,0x207cde)}  # (on, half): fill's top, its foot, the border
 def qs_ink(on,light): return '' if on else '_l' if light=='1' else '_d'
-QS_AT=[(QS_X[i%4],(20,138)[i//4]) for i in range(8)]
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    QS_AT=[(QS_X[i%4],(20,138)[i//4]) for i in range(8)]
 def qs_new(light='1',theme='1',**config):
     SETUP[:]=[lambda k:(k.config.update(THEME=theme,LIGHT=light,**config),k)]
     try: q=LoadQueue()
@@ -7660,106 +7663,121 @@ def qs_tiles(q,rows,i=None):  # each tile's (top, foot, border), from the bands 
         out.append((face[0],face[-1],line[0]))
     return out
 def qs_want(c): return tuple(map(color_t,c))
-for light in '01':
-    q=qs_new(light); arts=qs_paint(q); rows=q.bands[:320]
-    assert [r[:4] for r in rows]==[(0,y,375,1) for y in range(320)] and {r[4] for r in rows}=={color_t(QS_GROUND[light])}
-    assert qs_tiles(q,q.bands[320:])==[qs_want(QS_TILE[i==4,light]) for i in range(8)]
-    assert arts==[('classic_light_'+n+qs_ink(i==4,light),QS_AT[i]) for i,n in enumerate(QS_IMAGES)]
-    assert wbox(q,q.menu)==(0,0,375,244) and [wbox(q,w) for w in q.btns]==[(*a,60,60) for a in QS_AT]
-    assert all(q.u.mem_read(w+0x34,1)[0]==0 and q.nodes[w].get('visible',1) for w in q.btns)
-    assert qs_event(q,q.btns[0],O['EVT_CLICK'])==0 and any(c[0]=='stock_dispatch' for c in q.calls)
-    assert q.lcd_colors()==LCD_COLORS; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light in '01':
+        q=qs_new(light); arts=qs_paint(q); rows=q.bands[:320]
+        assert [r[:4] for r in rows]==[(0,y,375,1) for y in range(320)] and {r[4] for r in rows}=={color_t(QS_GROUND[light])}
+        assert qs_tiles(q,q.bands[320:])==[qs_want(QS_TILE[i==4,light]) for i in range(8)]
+        assert arts==[('classic_light_'+n+qs_ink(i==4,light),QS_AT[i]) for i,n in enumerate(QS_IMAGES)]
+        assert wbox(q,q.menu)==(0,0,375,244) and [wbox(q,w) for w in q.btns]==[(*a,60,60) for a in QS_AT]
+        assert all(q.u.mem_read(w+0x34,1)[0]==0 and q.nodes[w].get('visible',1) for w in q.btns)
+        assert qs_event(q,q.btns[0],O['EVT_CLICK'])==0 and any(c[0]=='stock_dispatch' for c in q.calls)
+        assert q.lcd_colors()==LCD_COLORS; passed()
 # Each state: the name is read from stock's image on each paint, for all 18, and the on ones are Classic Blue's blue.
-q=qs_new()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q=qs_new()
 LIT={'wifiopen','btopen','keylockopen','highgain','lo','usbaudio','usbdac'}
-for n in ('wifi','wifiopen','bt','btopen','keylock','keylockopen','lowgain','lowgaindisable','highgain','highgaindisable','lo','po','sa','usbstorage','usbaudio','usbdac','playset','sysset'):
-    q.nodes[q.btns[0]]['image']='drop_'+n; assert qs_paint(q)[0]==('classic_light_drop_'+n+qs_ink(n in LIT,'1'),(31,20))
-    assert qs_tiles(q,q.bands[320:])[0]==qs_want(QS_TILE[n in LIT,'1']),n; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for n in ('wifi','wifiopen','bt','btopen','keylock','keylockopen','lowgain','lowgaindisable','highgain','highgaindisable','lo','po','sa','usbstorage','usbaudio','usbdac','playset','sysset'):
+        q.nodes[q.btns[0]]['image']='drop_'+n; assert qs_paint(q)[0]==('classic_light_drop_'+n+qs_ink(n in LIT,'1'),(31,20))
+        assert qs_tiles(q,q.bands[320:])[0]==qs_want(QS_TILE[n in LIT,'1']),n; passed()
 # Another accent: on is its red tone, flat, as Minimal's lit discs; the light half's border a quarter darker. Graphite's silver
 # takes the dark glyph (_l) in the dark half and flips dark, under white, in the light one; a hue keeps white.
 def qs_quarter(c): return sum(((c>>k&255)*3//4)<<k for k in (0,8,16))
-for preset,light,want,glyph in (('0','0',0xd8d8d8,'_l'),('0','1',0x272727,''),('3','0',ACCENTS[3][3],''),('3','1',ACCENTS[3][3],'')):
-    q=qs_new(light,CLASSIC_LIGHT_ACCENT=preset); q.nodes[q.btns[0]]['image']='drop_wifiopen'  # 0: Graphite's row
-    arts=qs_paint(q); assert arts[0]==('classic_light_drop_wifiopen'+glyph,(31,20))
-    assert qs_tiles(q,q.bands[320:])[0]==qs_want((want,want,qs_quarter(want) if light=='1' else want)),(preset,light); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for preset,light,want,glyph in (('0','0',0xd8d8d8,'_l'),('0','1',0x272727,''),('3','0',ACCENTS[3][3],''),('3','1',ACCENTS[3][3],'')):
+        q=qs_new(light,CLASSIC_LIGHT_ACCENT=preset); q.nodes[q.btns[0]]['image']='drop_wifiopen'  # 0: Graphite's row
+        arts=qs_paint(q); assert arts[0]==('classic_light_drop_wifiopen'+glyph,(31,20))
+        assert qs_tiles(q,q.bands[320:])[0]==qs_want((want,want,qs_quarter(want) if light=='1' else want)),(preset,light); passed()
 # Pressed: every button's fill and border darken a sixth under the finger, until the release; its hold is as today.
 def qs_dark(c): return sum(((c>>k&255)*5//6)<<k for k in (0,8,16))
-for i,w in enumerate(q.btns):
-    q=qs_new(); w=q.btns[i]; q.calls=[]; qs_down(q,w)
-    assert ('widget_invalidate_force',w) in [c[:2] for c in q.calls]
-    arts=qs_paint(q); tiles=qs_tiles(q,q.bands[320:]); want=[QS_TILE[j==4,'1'] for j in range(8)]
-    assert tiles==[qs_want(map(qs_dark,c) if j==i else c) for j,c in enumerate(want)] and arts==[('classic_light_'+n+qs_ink(j==4,'1'),QS_AT[j]) for j,n in enumerate(QS_IMAGES)]
-    q.calls=[]; qs_event(q,w,O['EVT_POINTER_UP_BEFORE']); assert ('widget_invalidate_force',w) in [c[:2] for c in q.calls]
-    assert qs_tiles(q,(qs_paint(q),q.bands)[1][320:])==[qs_want(c) for c in want] and bool(q.timers)==False; passed()
-q=qs_new(); qs_down(q,q.btns[0]); qs_event(q,q.btns[0],O['EVT_POINTER_ABORT']); qs_paint(q); assert qs_tiles(q,q.bands[320:])[0]==qs_want(QS_TILE[0,'1']); passed()
-q=qs_new(); qs_down(q,q.btns[2]); assert not q.timers; q.advance(O['RATE_HOLD_MS']); assert not q.opened; passed()  # Lock has no hold
-q=qs_new(); qs_down(q,q.btns[0]); q.advance(O['RATE_HOLD_MS'])
-assert q.opened==[('systemset/wifi_page',None)] and [c[1:3] for c in q.calls if c[0]=='dialog_quit']==[(q.win,0)]
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for i,w in enumerate(q.btns):
+        q=qs_new(); w=q.btns[i]; q.calls=[]; qs_down(q,w)
+        assert ('widget_invalidate_force',w) in [c[:2] for c in q.calls]
+        arts=qs_paint(q); tiles=qs_tiles(q,q.bands[320:]); want=[QS_TILE[j==4,'1'] for j in range(8)]
+        assert tiles==[qs_want(map(qs_dark,c) if j==i else c) for j,c in enumerate(want)] and arts==[('classic_light_'+n+qs_ink(j==4,'1'),QS_AT[j]) for j,n in enumerate(QS_IMAGES)]
+        q.calls=[]; qs_event(q,w,O['EVT_POINTER_UP_BEFORE']); assert ('widget_invalidate_force',w) in [c[:2] for c in q.calls]
+        assert qs_tiles(q,(qs_paint(q),q.bands)[1][320:])==[qs_want(c) for c in want] and bool(q.timers)==False; passed()
+    q=qs_new(); qs_down(q,q.btns[0]); qs_event(q,q.btns[0],O['EVT_POINTER_ABORT']); qs_paint(q); assert qs_tiles(q,q.bands[320:])[0]==qs_want(QS_TILE[0,'1']); passed()
+    q=qs_new(); qs_down(q,q.btns[2]); assert not q.timers; q.advance(O['RATE_HOLD_MS']); assert not q.opened; passed()  # Lock has no hold
+    q=qs_new(); qs_down(q,q.btns[0]); q.advance(O['RATE_HOLD_MS'])
+    assert q.opened==[('systemset/wifi_page',None)] and [c[1:3] for c in q.calls if c[0]=='dialog_quit']==[(q.win,0)]
 # ... the window gone, a late release touches nothing of it.
-f,ctx=q.handler(q.win,O['EVT_WINDOW_CLOSE']); q.call(address=f,args=(ctx,q.event,0,0),event_type=O['EVT_WINDOW_CLOSE'],gap=0)
-q.calls=[]; qs_event(q,q.btns[0],O['EVT_POINTER_UP_BEFORE']); assert not [c for c in q.calls if c[0]=='widget_invalidate_force']; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    f,ctx=q.handler(q.win,O['EVT_WINDOW_CLOSE']); q.call(address=f,args=(ctx,q.event,0,0),event_type=O['EVT_WINDOW_CLOSE'],gap=0)
+    q.calls=[]; qs_event(q,q.btns[0],O['EVT_POINTER_UP_BEFORE']); assert not [c for c in q.calls if c[0]=='widget_invalidate_force']; passed()
 # A label's box holds its font and its lines: 18 for 17, Output Options' in 32. Its own ink is clear: the page draws each line 14 rows apart, white in either half, no shadow.
 def qs_lines(a,t,lines=None): return [(l,(a[0]-10,a[1]+64+14*i,80,18),0xffffffff) for i,l in enumerate(lines or (t,))]
-for light in '10':
-    q=qs_new(light); qs_paint(q)
-    assert [wbox(q,w) for w in q.labels]==[(a[0]-10,a[1]+64,80,32 if n=='label_outputway' else 18) for a,(n,t) in zip(QS_AT,QS_LABELS)]
-    assert all(q.nodes[w]['style:normal:font_size']==17 and q.nodes[w]['style:normal:font_name']=='classic-light' and q.nodes[w]['style:normal:text_color']==0 and q.nodes[w]['style:normal:text_align_h']=='center' for w in q.labels)
-    want=[d for a,(n,t) in zip(QS_AT,QS_LABELS) for d in qs_lines(a,t,('Output','Options') if n=='label_outputway' else None)]
-    assert [(l['text'],l['rect'],l['color']) for l in q.letters]==want and {l['font'] for l in q.letters}=={('classic-light',17)} and all(l['rect'][3]>l['font'][1] for l in q.letters)
-    assert canvas_state(q)[:1]==(LCD_COLORS,); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light in '10':
+        q=qs_new(light); qs_paint(q)
+        assert [wbox(q,w) for w in q.labels]==[(a[0]-10,a[1]+64,80,32 if n=='label_outputway' else 18) for a,(n,t) in zip(QS_AT,QS_LABELS)]
+        assert all(q.nodes[w]['style:normal:font_size']==17 and q.nodes[w]['style:normal:font_name']=='classic-light' and q.nodes[w]['style:normal:text_color']==0 and q.nodes[w]['style:normal:text_align_h']=='center' for w in q.labels)
+        want=[d for a,(n,t) in zip(QS_AT,QS_LABELS) for d in qs_lines(a,t,('Output','Options') if n=='label_outputway' else None)]
+        assert [(l['text'],l['rect'],l['color']) for l in q.letters]==want and {l['font'] for l in q.letters}=={('classic-light',17)} and all(l['rect'][3]>l['font'][1] for l in q.letters)
+        assert canvas_state(q)[:1]==(LCD_COLORS,); passed()
 # ... a repaint doesn't restyle the labels; a text that stops wrapping gets the one-line box; one the face hasn't takes the fallback's, and back.
-q=qs_new(); qs_paint(q); q.calls=[]; bg(q,q.win); assert not [c for c in q.calls if c[0] in ('widget_move_resize','widget_set_prop_str')]
-q.nodes[q.labels[5]]['text']='LO'; qs_paint(q); assert wbox(q,q.labels[5])==(105,202,80,18) and [l['text'] for l in q.letters][5]=='LO'; passed()
-q.nodes[q.labels[5]]['text']='Выход'; qs_paint(q); assert q.nodes[q.labels[5]]['style:normal:font_name']=='bold' and q.letters[5]['font'][0]=='bold' and q.letters[5]['rect'][3]>q.letters[5]['font'][1]
-q.nodes[q.labels[5]]['text']='LO'; qs_paint(q); assert q.nodes[q.labels[5]]['style:normal:font_name']=='classic-light' and q.nodes[q.labels[5]]['style:normal:font_size']==17; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q=qs_new(); qs_paint(q); q.calls=[]; bg(q,q.win); assert not [c for c in q.calls if c[0] in ('widget_move_resize','widget_set_prop_str')]
+    q.nodes[q.labels[5]]['text']='LO'; qs_paint(q); assert wbox(q,q.labels[5])==(105,202,80,18) and [l['text'] for l in q.letters][5]=='LO'; passed()
+    q.nodes[q.labels[5]]['text']='Выход'; qs_paint(q); assert q.nodes[q.labels[5]]['style:normal:font_name']=='bold' and q.letters[5]['font'][0]=='bold' and q.letters[5]['rect'][3]>q.letters[5]['font'][1]
+    q.nodes[q.labels[5]]['text']='LO'; qs_paint(q); assert q.nodes[q.labels[5]]['style:normal:font_name']=='classic-light' and q.nodes[q.labels[5]]['style:normal:font_size']==17; passed()
 # ... a word too long for the box breaks where it stops fitting.
-q.nodes[q.labels[5]]['text']='Outputoptions'; qs_paint(q); assert [l['text'] for l in q.letters][5:7]==['Outputop','tions']; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q.nodes[q.labels[5]]['text']='Outputoptions'; qs_paint(q); assert [l['text'] for l in q.letters][5:7]==['Outputop','tions']; passed()
 # Brightness: stock's bar clear, its suns hidden; the track at 275, 11 rows; 4 of 1..10 filled to 79; the knob centred on the fill's end; the wheel moves it, and repaints all the knob reaches.
-q=qs_new(); arts,bands=qs_scrub(q)
-assert all(q.nodes[q.slider][f'style:{s}:{c}_color']==0 for s in ('normal','pressed','over','focused') for c in ('fg','bg')) and [q.nodes[w]['visible'] for w in q.suns]==[0,0]
-assert arts==[('classic_light_sun_small',(35,272)),('classic_light_sun_big',(321,269)),('classic_light_drop_track',(68,275)),('classic_light_drop_knob',(68+79-11-3,269-3))]
-track,rest=round_box(bands,68,275,239,11,6); assert (track[0],track[10])==(color_t(0x0a0a0a),color_t(0x3a3c40))
-fill,_=round_box(rest,68,275,79,11,6); assert (fill[0],fill[10])==(color_t(0x8cc4f8),color_t(0x165fc0)) and q.lcd_colors()==LCD_COLORS; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q=qs_new(); arts,bands=qs_scrub(q)
+    assert all(q.nodes[q.slider][f'style:{s}:{c}_color']==0 for s in ('normal','pressed','over','focused') for c in ('fg','bg')) and [q.nodes[w]['visible'] for w in q.suns]==[0,0]
+    assert arts==[('classic_light_sun_small',(35,272)),('classic_light_sun_big',(321,269)),('classic_light_drop_track',(68,275)),('classic_light_drop_knob',(68+79-11-3,269-3))]
+    track,rest=round_box(bands,68,275,239,11,6); assert (track[0],track[10])==(color_t(0x0a0a0a),color_t(0x3a3c40))
+    fill,_=round_box(rest,68,275,79,11,6); assert (fill[0],fill[10])==(color_t(0x8cc4f8),color_t(0x165fc0)) and q.lcd_colors()==LCD_COLORS; passed()
 # ... another accent fills flat in its light tone, as Minimal's fill; Classic Blue keeps the stops above.
-for preset,light in (('3','0'),('3','1'),('0','0')):
-    q=qs_new(light,CLASSIC_LIGHT_ACCENT=preset); arts,bands=qs_scrub(q); fill,_=round_box(round_box(bands,68,275,239,11,6)[1],68,275,79,11,6)
-    assert set(fill)=={color_t(ACCENTS[int(preset)][2])},(preset,light); passed()
-assert q.call()==11 and q.nodes[q.slider]['value']==5; arts,bands=qs_scrub(q); assert arts[-1][1]==(68+106-14,266); round_box(round_box(bands,68,275,239,11,6)[1],68,275,106,11,6); passed()
-for kind in (O['EVT_VALUE_CHANGING'],O['EVT_VALUE_CHANGED']):
-    f,ctx=q.handler(q.slider,kind); q.calls=[]; q.call(address=f,args=(ctx,q.event,0,0),event_type=kind,gap=0); assert ('widget_invalidate_force',q.view) in [c[:2] for c in q.calls]; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for preset,light in (('3','0'),('3','1'),('0','0')):
+        q=qs_new(light,CLASSIC_LIGHT_ACCENT=preset); arts,bands=qs_scrub(q); fill,_=round_box(round_box(bands,68,275,239,11,6)[1],68,275,79,11,6)
+        assert set(fill)=={color_t(ACCENTS[int(preset)][2])},(preset,light); passed()
+    assert q.call()==11 and q.nodes[q.slider]['value']==5; arts,bands=qs_scrub(q); assert arts[-1][1]==(68+106-14,266); round_box(round_box(bands,68,275,239,11,6)[1],68,275,106,11,6); passed()
+    for kind in (O['EVT_VALUE_CHANGING'],O['EVT_VALUE_CHANGED']):
+        f,ctx=q.handler(q.slider,kind); q.calls=[]; q.call(address=f,args=(ctx,q.event,0,0),event_type=kind,gap=0); assert ('widget_invalidate_force',q.view) in [c[:2] for c in q.calls]; passed()
 # Nothing crosses the glass: buttons, labels, suns, knob at both ends.
 def clear_glass(x,y,w,h):
     R=O['GLASS_R']; return all(not (cx<R or cx>375-R) or not (cy<R or cy>320-R) or (cx-(R if cx<R else 375-R))**2+(cy-(R if cy<R else 320-R))**2<=R*R for cx in (x,x+w) for cy in (y,y+h))
-q=qs_new(); qs_paint(q); assert all(clear_glass(*wbox(q,w)) for w in q.btns+q.labels)
-assert clear_glass(35,272,16,16) and clear_glass(321,269,22,22); passed()
-for value,end,part in ((1,54,0),(10,293,239)):
-    q=qs_new(); q.nodes[q.slider]['value']=value; arts,bands=qs_scrub(q)
-    _,rest=round_box(bands,68,275,239,11,6); assert arts[-1][1]==(end,266) and clear_glass(end+3,269,23,23) and (round_box(rest,68,275,part,11,6)[1]==[] if part else not rest); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q=qs_new(); qs_paint(q); assert all(clear_glass(*wbox(q,w)) for w in q.btns+q.labels)
+    assert clear_glass(35,272,16,16) and clear_glass(321,269,22,22); passed()
+    for value,end,part in ((1,54,0),(10,293,239)):
+        q=qs_new(); q.nodes[q.slider]['value']=value; arts,bands=qs_scrub(q)
+        _,rest=round_box(bands,68,275,239,11,6); assert arts[-1][1]==(end,266) and clear_glass(end+3,269,23,23) and (round_box(rest,68,275,part,11,6)[1]==[] if part else not rest); passed()
 # The letter under Classic: final colours in both halves, the theme's font, 60 px; canvas state restored.
-for light in '01':
-    for virtual in (False,True):
-        m,w,rs,es=letter_machine(virtual,THEME='1',LIGHT=light); before=canvas_state(m)
-        for _ in range(4): assert m.call(gap=100)==11; bare(m); m.paint(w,gap=0)
-        assert [(l['text'],l['color'],l['font']) for l in m.letters]==[('R',0xffffffff,('classic-light',60))]
-        assert [r['color'] for r in m.rounded if r['kind']=='fill' and r['radius']==O['LETTER_RADIUS']]==[0xd9000000|O['FILL_RGB']] and m.letters[0]['rect'][2:]==(80,80)
-        assert canvas_state(m)==before and (m.call(address=payload_syms['ui_ink'],args=(0xff2b2b2b,0,0,0),gap=0)&0xffffffff==0xff2b2b2b)==(light=='0'); passed()  # later draws flip again
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light in '01':
+        for virtual in (False,True):
+            m,w,rs,es=letter_machine(virtual,THEME='1',LIGHT=light); before=canvas_state(m)
+            for _ in range(4): assert m.call(gap=100)==11; bare(m); m.paint(w,gap=0)
+            assert [(l['text'],l['color'],l['font']) for l in m.letters]==[('R',0xffffffff,('classic-light',60))]
+            assert [r['color'] for r in m.rounded if r['kind']=='fill' and r['radius']==O['LETTER_RADIUS']]==[0xd9000000|O['FILL_RGB']] and m.letters[0]['rect'][2:]==(80,80)
+            assert canvas_state(m)==before and (m.call(address=payload_syms['ui_ink'],args=(0xff2b2b2b,0,0,0),gap=0)&0xffffffff==0xff2b2b2b)==(light=='0'); passed()  # later draws flip again
 # ... Cover Flow's too.
-for light in '01':
-    SETUP[:]=[lambda k:(k.config.update(THEME='1',LIGHT=light),k)]
-    try: m=CoverflowMachine(albums=19)
-    finally: SETUP.clear()
-    for r,name in zip(m.albums,['A1','A2','A3','D1','D2','D3']+[f'G{i}' for i in range(1,12)]+['Z1','Z2']): m.word(r+O['REC_ALBUM'],m.string(name))
-    m.mock('strstr@GLIBC_2.0'); m.open()
-    for _ in range(15): assert m.call(gap=50)==11
-    bare(m); m.paint(m.slide,gap=0)
-    assert [(l['text'],l['color'],l['font']) for l in m.letters if l['text']=='Z']==[('Z',0xffffffff,('classic-light',60))]
-    assert [r['color'] for r in m.rounded if r['kind']=='fill' and r['radius']==O['LETTER_RADIUS']]==[0xd9000000|O['FILL_RGB']]; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light in '01':
+        SETUP[:]=[lambda k:(k.config.update(THEME='1',LIGHT=light),k)]
+        try: m=CoverflowMachine(albums=19)
+        finally: SETUP.clear()
+        for r,name in zip(m.albums,['A1','A2','A3','D1','D2','D3']+[f'G{i}' for i in range(1,12)]+['Z1','Z2']): m.word(r+O['REC_ALBUM'],m.string(name))
+        m.mock('strstr@GLIBC_2.0'); m.open()
+        for _ in range(15): assert m.call(gap=50)==11
+        bare(m); m.paint(m.slide,gap=0)
+        assert [(l['text'],l['color'],l['font']) for l in m.letters if l['text']=='Z']==[('Z',0xffffffff,('classic-light',60))]
+        assert [r['color'] for r in m.rounded if r['kind']=='fill' and r['radius']==O['LETTER_RADIUS']]==[0xd9000000|O['FILL_RGB']]; passed()
 # Minimal: stock's images, stock's bar, the letter as today.
-for theme in '0':
-    q=qs_new('1',theme); arts=qs_paint(q); arts2,bands=qs_scrub(q)
-    assert not arts and not arts2 and all(q.u.mem_read(w+0x34,1)[0]==255 for w in q.btns) and wbox(q,q.menu)==(0,20,375,224) and wbox(q,q.labels[0])==(20,66,80,40)
-    assert q.nodes[q.suns[0]].get('visible',1) and q.nodes[q.slider]['style:normal:fg_color']!=0 and not q.letters; passed()
-    qs_down(q,q.btns[0]); assert not qs_paint(q); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for theme in '0':
+        q=qs_new('1',theme); arts=qs_paint(q); arts2,bands=qs_scrub(q)
+        assert not arts and not arts2 and all(q.u.mem_read(w+0x34,1)[0]==255 for w in q.btns) and wbox(q,q.menu)==(0,20,375,224) and wbox(q,q.labels[0])==(20,66,80,40)
+        assert q.nodes[q.suns[0]].get('visible',1) and q.nodes[q.slider]['style:normal:fg_color']!=0 and not q.letters; passed()
+        qs_down(q,q.btns[0]); assert not qs_paint(q); passed()
 def slider_win(m,name,slider,view,label,ends,y=0,**kw):
     s=m.node('slider',slider,**kw); lab=m.node('label',label,text='5'); l,r=(m.node('image',n) for n in ends)
     dec,add=m.node('image','img_dec'),m.node('image','img_add')
@@ -7770,43 +7788,48 @@ def slider_win(m,name,slider,view,label,ends,y=0,**kw):
 def slider_new(*a,light='1',**kw):
     m=LoadPlain(); m.config.update(THEME='1',LIGHT=light); return (m,*slider_win(m,*a,**kw))
 # A slider page under Classic (Brightness): dark bar, flat page, band, suns; the track and fill on their 8 rows; 4 of 1..10.
-bk,bwin,bsl,bsl_view,blab,bnav,bl,br,bdec,badd=slider_new('backlight_page','slider_backlight','view_backlight','label_backlight',('img_left','img_right'),min=1,max=10,value=4)
-bare(bk); bg(bk,bwin); bandrows,rest=round_box(bk.bands[1:],28,129,322,46,8)
-assert page_fill(bk)
-assert art_at(bk)==[('classic_light_band_shadow',(21,124)),('classic_light_band_top',(28,129)),('classic_light_band_foot',(28,167)),('classic_light_sun_small',(48,144)),('classic_light_sun_big',(311,141))]
-assert not triangle(bk) and shadows(bk)==[CAPTION]  # no triangle here; the caption's shadow, behind its label
-assert bandrows[0]==color_t(0x6a707a) and bandrows[45]==color_t(0x181b21) and not rest  # its rim is the two images
-assert bk.lcd_colors()==LCD_COLORS
-assert wbox(bk,bsl)==(81,117,204,70) and wbox(bk,bsl_view)==(0,0,375,294)
-assert not any(bk.nodes[w]['visible'] for w in (bl,br,bdec,badd,blab)) and bk.nodes[bwin]['children'] and named(bk,bwin,'img_add')==badd  # kept by name
-cap=named(bk,bwin,'caption'); assert wbox(bk,cap)==(0,228,375,32) and bk.nodes[cap]['text']=='Press Centre When Finished' and bk.nodes[cap]['style:normal:font_size']==31 and bk.nodes[cap]['style:normal:font_name']=='classic-light'
-assert bk.nodes[cap]['style:normal:text_color']&0xffffffff==color_t(0)  # the light half's style hook flips it back to white
-assert all(bk.nodes[bsl][f'style:{s}:border_color']==0 and bk.nodes[bsl][f'style:{s}:icon']==0 for s in ('normal','pressed','over','disable','focused'))  # stock's slider draws its knob in this colour and the theme's icon over it, none with neither
-bk.bands=[]; bk.call(address=HOOKS['widget_on_paint_border'][0],args=(bsl,bk.canvas,0,0),gap=0); slider=bk.bands
-assert [b[:4] for b in slider[:8]]==[(1,31,202,1),*[(0,31+i,204,1) for i in range(1,7)],(1,38,202,1)]
-assert slider[0][4]==color_t(0x2f4052) and slider[7][4]==color_t(0x26333f) and slider[8][:4]==(1,31,66,1) and slider[8][4]==color_t(0xf7ffff) and slider[15][4]==color_t(0xc6cbcf)
-assert slider[9][2]==68 and bk.nodes[bsl_view]['visible']==1; passed()
-bd,bdwin,*_=slider_new('backlight_page','slider_backlight','view_backlight','label_backlight',('img_left','img_right'),light='0',min=1,max=10,value=4); bare(bd); bg(bd,bdwin); assert shadows(bd)==[CAPTION] and page_fill(bd,0,0x1c1c1c); passed()  # black in the dark half too
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    bk,bwin,bsl,bsl_view,blab,bnav,bl,br,bdec,badd=slider_new('backlight_page','slider_backlight','view_backlight','label_backlight',('img_left','img_right'),min=1,max=10,value=4)
+    bare(bk); bg(bk,bwin); bandrows,rest=round_box(bk.bands[1:],28,129,322,46,8)
+    assert page_fill(bk)
+    assert art_at(bk)==[('classic_light_band_shadow',(21,124)),('classic_light_band_top',(28,129)),('classic_light_band_foot',(28,167)),('classic_light_sun_small',(48,144)),('classic_light_sun_big',(311,141))]
+    assert not triangle(bk) and shadows(bk)==[CAPTION]  # no triangle here; the caption's shadow, behind its label
+    assert bandrows[0]==color_t(0x6a707a) and bandrows[45]==color_t(0x181b21) and not rest  # its rim is the two images
+    assert bk.lcd_colors()==LCD_COLORS
+    assert wbox(bk,bsl)==(81,117,204,70) and wbox(bk,bsl_view)==(0,0,375,294)
+    assert not any(bk.nodes[w]['visible'] for w in (bl,br,bdec,badd,blab)) and bk.nodes[bwin]['children'] and named(bk,bwin,'img_add')==badd  # kept by name
+    cap=named(bk,bwin,'caption'); assert wbox(bk,cap)==(0,228,375,32) and bk.nodes[cap]['text']=='Press Centre When Finished' and bk.nodes[cap]['style:normal:font_size']==31 and bk.nodes[cap]['style:normal:font_name']=='classic-light'
+    assert bk.nodes[cap]['style:normal:text_color']&0xffffffff==color_t(0)  # the light half's style hook flips it back to white
+    assert all(bk.nodes[bsl][f'style:{s}:border_color']==0 and bk.nodes[bsl][f'style:{s}:icon']==0 for s in ('normal','pressed','over','disable','focused'))  # stock's slider draws its knob in this colour and the theme's icon over it, none with neither
+    bk.bands=[]; bk.call(address=HOOKS['widget_on_paint_border'][0],args=(bsl,bk.canvas,0,0),gap=0); slider=bk.bands
+    assert [b[:4] for b in slider[:8]]==[(1,31,202,1),*[(0,31+i,204,1) for i in range(1,7)],(1,38,202,1)]
+    assert slider[0][4]==color_t(0x2f4052) and slider[7][4]==color_t(0x26333f) and slider[8][:4]==(1,31,66,1) and slider[8][4]==color_t(0xf7ffff) and slider[15][4]==color_t(0xc6cbcf)
+    assert slider[9][2]==68 and bk.nodes[bsl_view]['visible']==1; passed()
+    bd,bdwin,*_=slider_new('backlight_page','slider_backlight','view_backlight','label_backlight',('img_left','img_right'),light='0',min=1,max=10,value=4); bare(bd); bg(bd,bdwin); assert shadows(bd)==[CAPTION] and page_fill(bd,0,0x1c1c1c); passed()  # black in the dark half too
 # ... paints from what it recorded: no string compare or widget look-up on its way.
-bare(bk); bg(bk,bwin); assert not {'widget_lookup','tk_strcmp'}&slider_paint_calls(bk); passed()
-bk.nodes[bsl]['min']=bk.nodes[bsl]['max']=5; bk.bands=[]; bk.call(address=HOOKS['widget_on_paint_border'][0],args=(bsl,bk.canvas,0,0),gap=0); assert len(bk.bands)==8; passed()  # max<=min: no fill
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    bare(bk); bg(bk,bwin); assert not {'widget_lookup','tk_strcmp'}&slider_paint_calls(bk); passed()
+    bk.nodes[bsl]['min']=bk.nodes[bsl]['max']=5; bk.bands=[]; bk.call(address=HOOKS['widget_on_paint_border'][0],args=(bsl,bk.canvas,0,0),gap=0); assert len(bk.bands)==8; passed()  # max<=min: no fill
 # ... the page and its slider go with the window: nothing paints for them after it.
-f,ctx=next((f,c) for t,f,c in bk.nodes[bwin]['handlers'] if t==O['EVT_DESTROY']); bk.call(address=f,args=(ctx,bk.event,0,0),gap=0)
-bare(bk); bk.call(address=HOOKS['widget_on_paint_border'][0],args=(bsl,bk.canvas,0,0),gap=0); bg(bk,bwin); assert not bk.bands and not bk.image_draws; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    f,ctx=next((f,c) for t,f,c in bk.nodes[bwin]['handlers'] if t==O['EVT_DESTROY']); bk.call(address=f,args=(ctx,bk.event,0,0),gap=0)
+    bare(bk); bk.call(address=HOOKS['widget_on_paint_border'][0],args=(bsl,bk.canvas,0,0),gap=0); bg(bk,bwin); assert not bk.bands and not bk.image_draws; passed()
 # Max Volume at 50%: the bar high in the band, the triangle at the fill's end (window-local y); no other page draws one.
-mv,mwin,mv_slider,mv_view,mlab,_,_,_,_,_=slider_new('maxvol_page','slider_maxvol','view_maxvol','label_vol',('img_volleft','img_volright'),max=100,value=50)
-bare(mv); bg(mv,mwin); tri=[b for b in mv.bands if 155<=b[1]<=160 and b[2]<=10]
-assert wbox(mv,mv_slider)[1]==111 and [t[:2] for t in tri]==[(81+102-1,155),(81+102-1,156),(81+102-2,157),(81+102-3,158),(81+102-4,159),(81+102-5,160)]
-assert [t[2] for t in tri]==[2,2,4,6,8,10] and {t[4] for t in tri}=={color_t(0xffffff)} and [d[1][:2] for d in mv.image_draws]==[(21,124),(28,129),(28,167),(50,139),(311,139)] and mv.nodes[mlab]['visible']==0; passed()
-mv.nodes[mv_slider]['value']=0; bare(mv); bg(mv,mwin); assert [b[0] for b in mv.bands if 155<=b[1]<=160 and b[2]<=10][-1]==76; passed()  # it follows the value
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    mv,mwin,mv_slider,mv_view,mlab,_,_,_,_,_=slider_new('maxvol_page','slider_maxvol','view_maxvol','label_vol',('img_volleft','img_volright'),max=100,value=50)
+    bare(mv); bg(mv,mwin); tri=[b for b in mv.bands if 155<=b[1]<=160 and b[2]<=10]
+    assert wbox(mv,mv_slider)[1]==111 and [t[:2] for t in tri]==[(81+102-1,155),(81+102-1,156),(81+102-2,157),(81+102-3,158),(81+102-4,159),(81+102-5,160)]
+    assert [t[2] for t in tri]==[2,2,4,6,8,10] and {t[4] for t in tri}=={color_t(0xffffff)} and [d[1][:2] for d in mv.image_draws]==[(21,124),(28,129),(28,167),(50,139),(311,139)] and mv.nodes[mlab]['visible']==0; passed()
+    mv.nodes[mv_slider]['value']=0; bare(mv); bg(mv,mwin); assert [b[0] for b in mv.bands if 155<=b[1]<=160 and b[2]<=10][-1]==76; passed()  # it follows the value
 # ... past the slider's rect at its ends, so a step repaints the band, on a drag too: the triangle's whole reach is inside it.
-for kind in ('EVT_VALUE_CHANGING','EVT_VALUE_CHANGED'):
-    f,ctx=next((f,c) for t,f,c in mv.nodes[mv_slider]['handlers'] if t==O[kind]); mv.calls=[]; mv.call(address=f,args=(ctx,mv.event,0,0),gap=0)
-    assert dirty(mv,mwin)==[(28,129,322,46)]
-bx,by,bw,bh=dirty(mv,mwin)[0]
-for v in (0,100):
-    mv.nodes[mv_slider]['value']=v; bare(mv); bg(mv,mwin); assert len(triangle(mv))==6 and all(bx<=b[0] and b[0]+b[2]<=bx+bw and by<=b[1]<by+bh for b in triangle(mv))
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for kind in ('EVT_VALUE_CHANGING','EVT_VALUE_CHANGED'):
+        f,ctx=next((f,c) for t,f,c in mv.nodes[mv_slider]['handlers'] if t==O[kind]); mv.calls=[]; mv.call(address=f,args=(ctx,mv.event,0,0),gap=0)
+        assert dirty(mv,mwin)==[(28,129,322,46)]
+    bx,by,bw,bh=dirty(mv,mwin)[0]
+    for v in (0,100):
+        mv.nodes[mv_slider]['value']=v; bare(mv); bg(mv,mwin); assert len(triangle(mv))==6 and all(bx<=b[0] and b[0]+b[2]<=bx+bw and by<=b[1]<by+bh for b in triangle(mv))
+    passed()
 def boot_page(light='1',on=1,ctx=None):
     SETUP[:]=[lambda k:(k.config.update(THEME='1',LIGHT=light),k)]
     try: q=LoadQueue(queue=1)
@@ -7821,45 +7844,49 @@ def boot_page(light='1',on=1,ctx=None):
     assert q.call(address=payload_syms['xfade_open'],args=(ctx,q.event,0,0),gap=0)==0 and q.top==win
     return q
 # Default Volume: toolbar hidden, the title in the bar, the tray's hit dispatches stock's switch; off, no band.
-dv=boot_page(); win=dv.win
-assert dv.nodes[dv.nav]['visible']==0 and dv.nodes[dv.nav]['enable']==0 and named(dv,win,'img_bootswitch')==dv.switch and dv.nodes[dv.vol]['visible']==0
-hit=named(dv,win,'switch_hit'); assert wbox(dv,hit)==(125,28,125,44)
-f,ctx=next((f,c) for t,f,c in dv.nodes[hit]['handlers'] if t==O['EVT_CLICK']); dv.clicks=[]; dv.calls=[]
-assert dv.call(address=f,args=(ctx,dv.event,0,0),gap=0)==0 and dv.clicks==[dv.switch] and [c[1] for c in dv.calls if c[0]=='widget_invalidate_force']==[win]
-bare(dv); bg(dv,win); rows=dv.bands
-assert art_at(dv)==[('classic_light_tray_shadow',(117,22)),('classic_light_track_inset',(138,37)),('classic_light_lit_edge',(187,36)),('classic_light_band_shadow',(21,124)),('classic_light_band_top',(28,129)),('classic_light_band_foot',(28,167)),('classic_light_spk_quiet_w',(50,145)),('classic_light_spk_loud_w',(311,145))]
-assert wbox(dv,dv.slider)==(81,117,204,70) and dv.nodes[dv.bar_title]['text']=='Default Volume' and not triangle(dv)
-tray,rest=round_box(rows[1:],125,28,125,44,9); assert tray[0]==color_t(0x6a707a) and tray[-1]==color_t(0x1b1f26)  # the tray
-track,rest=round_box(rest,138,37,100,26,6); assert track[0]==color_t(0x07090d)  # the track
-_,rest=round_box(rest,188,37,50,26,6); round_box(rest,28,129,322,46,8)  # On lit, in the scheme's band; the band
-assert [(t['text'],t['rect'],t['font']) for t in dv.letters[:2]]==[('Off',(138,37,50,26),('classic-light',21)),('On',(188,37,50,26),('classic-light',21))] and shadows(dv)[2:]==[CAPTION]; passed()
-dv.nodes[dv.switch]['image']='switch_off'; bare(dv); bg(dv,win); _,rest=round_box(dv.bands[1:],125,28,125,44,9); _,rest=round_box(rest,138,37,100,26,6); round_box(rest,138,37,50,26,6); assert ('classic_light_lit_edge',(137,36)) in art_at(dv); passed()  # Off lit
-bare(dv); bg(dv,win); assert not {'widget_lookup','tk_strcmp'}&slider_paint_calls(dv) and not [c for c in dv.calls if c[0]=='widget_lookup' and dv.text(c[2])=='img_bootswitch']; passed()  # the switch as found at the first paint: no look-up after it
-dv.nodes[dv.view]['visible']=0; bare(dv); bg(dv,win)
-assert not any(b[1]>=129 for b in dv.bands) and len(dv.image_draws)==3 and dv.nodes[named(dv,win,'caption')]['visible']==1 and shadows(dv)[2:]==[CAPTION]; passed()  # stock hid the view: the tray and caption
-dv.nodes[dv.switch]['visible']=0; bare(dv); dv.clicks=[]; bg(dv,win); assert shadows(dv)==[CAPTION] and dv.call(address=f,args=(ctx,dv.event,0,0),gap=0)==0 and not dv.clicks; passed()  # no switch, no tray, no hit
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    dv=boot_page(); win=dv.win
+    assert dv.nodes[dv.nav]['visible']==0 and dv.nodes[dv.nav]['enable']==0 and named(dv,win,'img_bootswitch')==dv.switch and dv.nodes[dv.vol]['visible']==0
+    hit=named(dv,win,'switch_hit'); assert wbox(dv,hit)==(125,28,125,44)
+    f,ctx=next((f,c) for t,f,c in dv.nodes[hit]['handlers'] if t==O['EVT_CLICK']); dv.clicks=[]; dv.calls=[]
+    assert dv.call(address=f,args=(ctx,dv.event,0,0),gap=0)==0 and dv.clicks==[dv.switch] and [c[1] for c in dv.calls if c[0]=='widget_invalidate_force']==[win]
+    bare(dv); bg(dv,win); rows=dv.bands
+    assert art_at(dv)==[('classic_light_tray_shadow',(117,22)),('classic_light_track_inset',(138,37)),('classic_light_lit_edge',(187,36)),('classic_light_band_shadow',(21,124)),('classic_light_band_top',(28,129)),('classic_light_band_foot',(28,167)),('classic_light_spk_quiet_w',(50,145)),('classic_light_spk_loud_w',(311,145))]
+    assert wbox(dv,dv.slider)==(81,117,204,70) and dv.nodes[dv.bar_title]['text']=='Default Volume' and not triangle(dv)
+    tray,rest=round_box(rows[1:],125,28,125,44,9); assert tray[0]==color_t(0x6a707a) and tray[-1]==color_t(0x1b1f26)  # the tray
+    track,rest=round_box(rest,138,37,100,26,6); assert track[0]==color_t(0x07090d)  # the track
+    _,rest=round_box(rest,188,37,50,26,6); round_box(rest,28,129,322,46,8)  # On lit, in the scheme's band; the band
+    assert [(t['text'],t['rect'],t['font']) for t in dv.letters[:2]]==[('Off',(138,37,50,26),('classic-light',21)),('On',(188,37,50,26),('classic-light',21))] and shadows(dv)[2:]==[CAPTION]; passed()
+    dv.nodes[dv.switch]['image']='switch_off'; bare(dv); bg(dv,win); _,rest=round_box(dv.bands[1:],125,28,125,44,9); _,rest=round_box(rest,138,37,100,26,6); round_box(rest,138,37,50,26,6); assert ('classic_light_lit_edge',(137,36)) in art_at(dv); passed()  # Off lit
+    bare(dv); bg(dv,win); assert not {'widget_lookup','tk_strcmp'}&slider_paint_calls(dv) and not [c for c in dv.calls if c[0]=='widget_lookup' and dv.text(c[2])=='img_bootswitch']; passed()  # the switch as found at the first paint: no look-up after it
+    dv.nodes[dv.view]['visible']=0; bare(dv); bg(dv,win)
+    assert not any(b[1]>=129 for b in dv.bands) and len(dv.image_draws)==3 and dv.nodes[named(dv,win,'caption')]['visible']==1 and shadows(dv)[2:]==[CAPTION]; passed()  # stock hid the view: the tray and caption
+    dv.nodes[dv.switch]['visible']=0; bare(dv); dv.clicks=[]; bg(dv,win); assert shadows(dv)==[CAPTION] and dv.call(address=f,args=(ctx,dv.event,0,0),gap=0)==0 and not dv.clicks; passed()  # no switch, no tray, no hit
 # Balance and Crossfade: the number's box, L and R; Crossfade's switch; Wheel Sensitivity has none, its keys as today.
-ba,bawin,bas,_,label_balance,_,_,_,_,_=slider_new('balance_page','slider_balance','view_balance','label_balance',('img_left','img_right'),min=-10,max=10,value=0)
-L,R=[next(c for c in ba.nodes[bawin]['children'] if ba.nodes[c].get('text')==t) for t in 'LR']
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    ba,bawin,bas,_,label_balance,_,_,_,_,_=slider_new('balance_page','slider_balance','view_balance','label_balance',('img_left','img_right'),min=-10,max=10,value=0)
+    L,R=[next(c for c in ba.nodes[bawin]['children'] if ba.nodes[c].get('text')==t) for t in 'LR']
 BAND_ART=[('classic_light_band_shadow',(21,124)),('classic_light_band_top',(28,129)),('classic_light_band_foot',(28,167))]
-assert wbox(ba,label_balance)==(0,85,375,34) and ba.nodes[label_balance]['visible']==1 and ba.nodes[label_balance]['style:normal:font_size']==32 and ba.nodes[label_balance]['style:normal:font_name']=='classic-light'
-assert wbox(ba,L)==(50,139,20,26) and wbox(ba,R)==(306,139,20,26) and ba.nodes[L]['style:normal:font_size']==24==ba.nodes[R]['style:normal:font_size'] and wbox(ba,bas)==(81,117,204,70)
-bare(ba); bg(ba,bawin); assert art_at(ba)==BAND_ART and not triangle(ba); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    assert wbox(ba,label_balance)==(0,85,375,34) and ba.nodes[label_balance]['visible']==1 and ba.nodes[label_balance]['style:normal:font_size']==32 and ba.nodes[label_balance]['style:normal:font_name']=='classic-light'
+    assert wbox(ba,L)==(50,139,20,26) and wbox(ba,R)==(306,139,20,26) and ba.nodes[L]['style:normal:font_size']==24==ba.nodes[R]['style:normal:font_size'] and wbox(ba,bas)==(81,117,204,70)
+    bare(ba); bg(ba,bawin); assert art_at(ba)==BAND_ART and not triangle(ba); passed()
 # ... the text stock writes after the load picks the number's face at the next paint, and a paint that changes nothing writes nothing.
-for bn_text,bn_face,bn_px in (('Баланс','bold',27),('平衡','default',32),('L 3','classic-light',32)):
-    ba.nodes[label_balance]['text']=bn_text; bare(ba); bg(ba,bawin); assert (ba.nodes[label_balance]['style:normal:font_name'],ba.nodes[label_balance]['style:normal:font_size'])==(bn_face,bn_px),bn_text
-    bare(ba); bg(ba,bawin); assert not [c for c in ba.calls if c[0]=='widget_set_prop_str' and c[1]==label_balance]
-passed()
-xf0=boot_page(ctx=0); assert xf0.nodes[xf0.switch]['visible']==1 and xf0.nodes[xf0.vol]['visible']==1 and wbox(xf0,xf0.vol)==(0,85,375,34) and xf0.nodes[xf0.view]['visible']==1
-cap0=named(xf0,xf0.win,'caption'); assert xf0.nodes[cap0]['text']=='Press Centre to Turn On or Off'; bare(xf0); bg(xf0,xf0.win); assert shadows(xf0)[-1][0]=='Press Centre to Turn On or Off' and shadows(xf0)[-1][1:]==CAPTION[1:]
-bare(xf0); bg(xf0,xf0.win); assert xf0.nodes[xf0.bar_title]['text']=='Crossfade' and len(xf0.image_draws)==6 and [t['text'] for t in xf0.letters[:2]]==['Off','On'] and any(b[1]==129 for b in xf0.bands) and not triangle(xf0)  # no ends
-hit=named(xf0,xf0.win,'switch_hit'); f,ctx=next((f,c) for t,f,c in xf0.nodes[hit]['handlers'] if t==O['EVT_CLICK']); xf0.clicks=[]
-assert xf0.call(address=f,args=(ctx,xf0.event,0,0),gap=0)==0 and xf0.clicks==[xf0.switch]; passed()
-xf0.calls=[]; assert xf0.call(O['KEY_NEXT'])==11 and dirty(xf0,xf0.win)==[(125,28,125,44)]; passed()  # the wheel can turn it on: the tray repaints, and only it
-ns=boot_page(ctx=3); assert ns.nodes[named(ns,ns.win,'caption')]['text']=='Press Centre to Change Mode'; bare(ns); bg(ns,ns.win); assert shadows(ns)[-1][0]=='Press Centre to Change Mode'; passed()  # Centre cycles here
-wheel=boot_page(ctx=1); wsw=wheel.switch; assert wheel.nodes[wheel.title]['text']=='Wheel Sensitivity' and not wheel.nodes[wsw]['visible'] and wheel.nodes[wheel.vol]['visible']==1 and wheel.nodes[wheel.vol]['text']=='50%'
-bare(wheel); bg(wheel,wheel.win); assert art_at(wheel)==BAND_ART and shadows(wheel)==[CAPTION] and not triangle(wheel)
-wheel.calls=[]; assert wheel.call(O['KEY_NEXT'])==11 and [c for c in wheel.calls if c[0]=='write_int_config'] and not dirty(wheel,wheel.win); passed()  # no tray
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for bn_text,bn_face,bn_px in (('Баланс','bold',27),('平衡','default',32),('L 3','classic-light',32)):
+        ba.nodes[label_balance]['text']=bn_text; bare(ba); bg(ba,bawin); assert (ba.nodes[label_balance]['style:normal:font_name'],ba.nodes[label_balance]['style:normal:font_size'])==(bn_face,bn_px),bn_text
+        bare(ba); bg(ba,bawin); assert not [c for c in ba.calls if c[0]=='widget_set_prop_str' and c[1]==label_balance]
+    passed()
+    xf0=boot_page(ctx=0); assert xf0.nodes[xf0.switch]['visible']==1 and xf0.nodes[xf0.vol]['visible']==1 and wbox(xf0,xf0.vol)==(0,85,375,34) and xf0.nodes[xf0.view]['visible']==1
+    cap0=named(xf0,xf0.win,'caption'); assert xf0.nodes[cap0]['text']=='Press Centre to Turn On or Off'; bare(xf0); bg(xf0,xf0.win); assert shadows(xf0)[-1][0]=='Press Centre to Turn On or Off' and shadows(xf0)[-1][1:]==CAPTION[1:]
+    bare(xf0); bg(xf0,xf0.win); assert xf0.nodes[xf0.bar_title]['text']=='Crossfade' and len(xf0.image_draws)==6 and [t['text'] for t in xf0.letters[:2]]==['Off','On'] and any(b[1]==129 for b in xf0.bands) and not triangle(xf0)  # no ends
+    hit=named(xf0,xf0.win,'switch_hit'); f,ctx=next((f,c) for t,f,c in xf0.nodes[hit]['handlers'] if t==O['EVT_CLICK']); xf0.clicks=[]
+    assert xf0.call(address=f,args=(ctx,xf0.event,0,0),gap=0)==0 and xf0.clicks==[xf0.switch]; passed()
+    xf0.calls=[]; assert xf0.call(O['KEY_NEXT'])==11 and dirty(xf0,xf0.win)==[(125,28,125,44)]; passed()  # the wheel can turn it on: the tray repaints, and only it
+    ns=boot_page(ctx=3); assert ns.nodes[named(ns,ns.win,'caption')]['text']=='Press Centre to Change Mode'; bare(ns); bg(ns,ns.win); assert shadows(ns)[-1][0]=='Press Centre to Change Mode'; passed()  # Centre cycles here
+    wheel=boot_page(ctx=1); wsw=wheel.switch; assert wheel.nodes[wheel.title]['text']=='Wheel Sensitivity' and not wheel.nodes[wsw]['visible'] and wheel.nodes[wheel.vol]['visible']==1 and wheel.nodes[wheel.vol]['text']=='50%'
+    bare(wheel); bg(wheel,wheel.win); assert art_at(wheel)==BAND_ART and shadows(wheel)==[CAPTION] and not triangle(wheel)
+    wheel.calls=[]; assert wheel.call(O['KEY_NEXT'])==11 and [c for c in wheel.calls if c[0]=='write_int_config'] and not dirty(wheel,wheel.win); passed()  # no tray
 # The dark bar: the dark half's flat bar and hairline in either half while a slider page is on top, title across on the bar title's rows, clock and marks hidden; back on leaving.
 def dark_setup(light='1',state=0,name='Balance'):
     db=LoadPlain(); db.config.update(THEME='1',LIGHT=light); classic_light_boot(db)
@@ -7874,48 +7901,55 @@ def dark_setup(light='1',state=0,name='Balance'):
     home=db.node('window','settings_page'); db.word(home+O['W_PARENT'],db.wm)
     return db,bar,right,title,clock,bt,wifi,pct,slot,st_,win,home
 # Stock's title reads as the page's own name in English; another language's stays, and a paint writes nothing new.
-for tb_name,tb_want in (('Channel Balance','Balance'),('Баланс','Баланс')):
-    tb,tbbar,_,tbtitle,*_,tbwin,_=dark_setup(name=tb_name); bg(tb,tbwin); bg(tb,tbbar); assert tb.nodes[tbtitle]['text']==tb_want,tb.nodes[tbtitle]['text']
-    tb.calls=[]; bg(tb,tbbar); assert not [c for c in tb.calls if c[0]=='widget_set_text_utf8' and c[1]==tbtitle]
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for tb_name,tb_want in (('Channel Balance','Balance'),('Баланс','Баланс')):
+        tb,tbbar,_,tbtitle,*_,tbwin,_=dark_setup(name=tb_name); bg(tb,tbwin); bg(tb,tbbar); assert tb.nodes[tbtitle]['text']==tb_want,tb.nodes[tbtitle]['text']
+        tb.calls=[]; bg(tb,tbbar); assert not [c for c in tb.calls if c[0]=='widget_set_text_utf8' and c[1]==tbtitle]
+    passed()
 # Beside a bar's title, a 12-hour clock has the form and width of a 24-hour one: AM or PM would reach the title.
-cb,cbbar,_,_,cbclock,*_,cbhome=dark_setup(); cb.clock_minutes=True; cb.top=cbhome; cb.u.mem_write(syms['g_time24h_flag'],b'\0'); bg(cb,cbbar); cb.advance(1); assert cb.nodes[cbclock]['text']=='6:14',cb.nodes[cbclock]['text']; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    cb,cbbar,_,_,cbclock,*_,cbhome=dark_setup(); cb.clock_minutes=True; cb.top=cbhome; cb.u.mem_write(syms['g_time24h_flag'],b'\0'); bg(cb,cbbar); cb.advance(1); assert cb.nodes[cbclock]['text']=='6:14',cb.nodes[cbclock]['text']; passed()
 # ... a clock written before the bar's title is found is written again, in the same minute.
-ck,ckbar,_,_,ckclock,*_,ckhome=dark_setup(); ck.clock_minutes=True; ck.top=ckhome; ck.u.mem_write(syms['g_time24h_flag'],b'\0'); ck_show=lambda: ck.call(address=payload_syms['clock_due'],args=(0,0,0,0),gap=0)
-ck_show(); assert ck.nodes[ckclock]['text']=='6:14 PM',ck.nodes[ckclock]['text']; bg(ck,ckbar); ck_show(); assert ck.nodes[ckclock]['text']=='6:14',ck.nodes[ckclock]['text']; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    ck,ckbar,_,_,ckclock,*_,ckhome=dark_setup(); ck.clock_minutes=True; ck.top=ckhome; ck.u.mem_write(syms['g_time24h_flag'],b'\0'); ck_show=lambda: ck.call(address=payload_syms['clock_due'],args=(0,0,0,0),gap=0)
+    ck_show(); assert ck.nodes[ckclock]['text']=='6:14 PM',ck.nodes[ckclock]['text']; bg(ck,ckbar); ck_show(); assert ck.nodes[ckclock]['text']=='6:14',ck.nodes[ckclock]['text']; passed()
 # Set Time and Set Date are under it too.
-tdb,tbar,_,ttitle,tclock,*_,thome=dark_setup(); tdb.top=thome; bg(tdb,tbar); assert tdb.nodes[tclock]['visible']==1 and wbox(tdb,ttitle)[0]==20
-tdb.top=tdb.node('window','manualtime_page'); tdb.word(tdb.top+O['W_PARENT'],tdb.wm); bg(tdb,tbar); assert wbox(tdb,ttitle)==(0,-1,375,25) and tdb.nodes[tclock]['visible']==0; passed()
-db,dbar,dright,dtitle,dclock,dbt,dwifi,dpct,dslot,dst,dwin,dhome=dark_setup(state=2)
-assert db.nodes[dpct]['visible']==1
-db.style_ints.update({(db.style,'text_align_h'):3,(db.style,'text_color'):signed(0xff112233)})  # what the title's style says, neither left nor white
-for _ in range(2): bg(db,dwin); bg(db,dbar)
-db.bands=[]; cost=[0]; chook=db.u.hook_add(UC_HOOK_CODE,lambda *a: cost.__setitem__(0,cost[0]+1),begin=BASE,end=SCRATCH-1); bg(db,dbar); db.u.hook_del(chook); darkrows=[b for b in db.bands if b[2]==375]; assert cost[0]<100000,cost
-assert [b[:4] for b in darkrows]==[(0,j,375,1) for j in range(26)] and darkrows[0][4]==color_t(0x1c1c1c) and darkrows[24][4]==color_t(0x1c1c1c) and darkrows[25][4]==color_t(0x333333) and wbox(db,dtitle)==(0,-1,375,25)
-assert db.nodes[dtitle]['style:normal:font_size']==21 and db.nodes[dtitle]['style:normal:font_name']=='classic-light' and db.nodes[dtitle]['style:normal:text_align_h']=='center' and db.nodes[dtitle]['style:normal:text_color']&0xffffffff==color_t(0)
-assert db.nodes[dclock]['visible']==0 and wbox(db,dbt)[0]==-400 and wbox(db,dwifi)[0]==-400 and db.nodes[dpct]['visible']==0
-sx,sy,sw_,sh=wbox(db,dst); assert (200+sx+(sw_-10)//2,2+sy+(sh-11)//2)==(278,7) and (sw_,sh)==(18,22)  # its box keeps its size: centred, the 10 x 11 glyph lands here
-assert db.nodes[dst]['image']=='classic_light_play_w' and wbox(db,dslot)==(285-200,1-2,37,21); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tdb,tbar,_,ttitle,tclock,*_,thome=dark_setup(); tdb.top=thome; bg(tdb,tbar); assert tdb.nodes[tclock]['visible']==1 and wbox(tdb,ttitle)[0]==20
+    tdb.top=tdb.node('window','manualtime_page'); tdb.word(tdb.top+O['W_PARENT'],tdb.wm); bg(tdb,tbar); assert wbox(tdb,ttitle)==(0,-1,375,25) and tdb.nodes[tclock]['visible']==0; passed()
+    db,dbar,dright,dtitle,dclock,dbt,dwifi,dpct,dslot,dst,dwin,dhome=dark_setup(state=2)
+    assert db.nodes[dpct]['visible']==1
+    db.style_ints.update({(db.style,'text_align_h'):3,(db.style,'text_color'):signed(0xff112233)})  # what the title's style says, neither left nor white
+    for _ in range(2): bg(db,dwin); bg(db,dbar)
+    db.bands=[]; cost=[0]; chook=db.u.hook_add(UC_HOOK_CODE,lambda *a: cost.__setitem__(0,cost[0]+1),begin=BASE,end=SCRATCH-1); bg(db,dbar); db.u.hook_del(chook); darkrows=[b for b in db.bands if b[2]==375]; assert cost[0]<100000,cost
+    assert [b[:4] for b in darkrows]==[(0,j,375,1) for j in range(26)] and darkrows[0][4]==color_t(0x1c1c1c) and darkrows[24][4]==color_t(0x1c1c1c) and darkrows[25][4]==color_t(0x333333) and wbox(db,dtitle)==(0,-1,375,25)
+    assert db.nodes[dtitle]['style:normal:font_size']==21 and db.nodes[dtitle]['style:normal:font_name']=='classic-light' and db.nodes[dtitle]['style:normal:text_align_h']=='center' and db.nodes[dtitle]['style:normal:text_color']&0xffffffff==color_t(0)
+    assert db.nodes[dclock]['visible']==0 and wbox(db,dbt)[0]==-400 and wbox(db,dwifi)[0]==-400 and db.nodes[dpct]['visible']==0
+    sx,sy,sw_,sh=wbox(db,dst); assert (200+sx+(sw_-10)//2,2+sy+(sh-11)//2)==(278,7) and (sw_,sh)==(18,22)  # its box keeps its size: centred, the 10 x 11 glyph lands here
+    assert db.nodes[dst]['image']=='classic_light_play_w' and wbox(db,dslot)==(285-200,1-2,37,21); passed()
 # ... the title has no shadow, as the flat bar's has none; in the dark half too.
-db.letters=[]; bg(db,dbar); assert not shadows(db); passed()
-dd,ddbar,*_,ddwin,_=dark_setup(light='0'); bg(dd,ddwin); bg(dd,ddbar); bg(dd,ddbar); dd.letters=[]; bg(dd,ddbar); assert not shadows(dd); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    db.letters=[]; bg(db,dbar); assert not shadows(db); passed()
+    dd,ddbar,*_,ddwin,_=dark_setup(light='0'); bg(dd,ddwin); bg(dd,ddbar); bg(dd,ddbar); dd.letters=[]; bg(dd,ddbar); assert not shadows(dd); passed()
 # ... a title the theme's face hasn't: the fallback faces at the flat bar's sizes; a font smaller than its box either way.
-for name,face,px in (('Баланс','bold',17),('平衡','default',21)):
-    df,dfbar,_,dftitle,*_,dfwin,_=dark_setup(name=name); bg(df,dfwin); bg(df,dfbar); bg(df,dfbar); df.letters=[]; bg(df,dfbar)
-    assert df.nodes[dftitle]['style:normal:font_name']==face and df.nodes[dftitle]['style:normal:font_size']==px and df.nodes[dftitle]['text']==name
-    assert not shadows(df) and wbox(df,dftitle)[3]>=px; passed()
-db.word(0xa3beac,3); bg(db,dbar); assert db.nodes[dst]['image']=='classic_light_pause_w'; passed()  # paused
-db.bands=[]; bg(db,dslot); LV=(0xe2e2e2,0xd7d7d7,0xd3d3d3,0xd4d4d4,0xd7d7d7,0xdedede)
-assert [b[:5] for b in db.bands[:3]]==[(9,6,26,13,color_t(0xf5f5f5)),(10,7,24,11,color_t(0x050505)),(35,10,2,5,color_t(0xf5f5f5))] and [b[:4] for b in db.bands[3:]]==[(11,8+j,11,1) for j in range(9)]
-assert db.bands[3][4]==color_t(0xe2e2e2) and db.bands[-1][4]==color_t(0xdedede) and not db.letters; passed()  # half of 22; no percent
-db.nodes[next(c for c in db.nodes[dright]['children'] if db.nodes[c]['name']=='img_battery')]['image']='bar_charge'; bg(db,dbar); db.bands=[]; bg(db,dslot); assert db.bands[-1][2]==22; passed()  # charging fills it
-db.top=dhome; db.nodes[db.wm]={'children':[dhome]}; bg(db,dhome); assert 'widget_layout_children' in [c[0] for c in db.calls]; bg(db,dbar)
-assert wbox(db,dtitle)==(20,-1,104,25) and db.nodes[dclock]['visible']==1 and db.nodes[dtitle]['style:normal:text_align_h']==3 and db.nodes[dtitle]['style:normal:font_size']==21 and db.nodes[dtitle]['style:normal:font_name']=='classic-light'
-assert db.nodes[dtitle]['style:normal:text_color']&0xffffffff==0xff112233 and wbox(db,dst)[2:]==(18,22)  # as its style said on the way in
-db.bands=[]; db.letters=[]; bg(db,dbar); assert [b for b in db.bands if b[2]==375][0][4]==color_t(0xffffff) and not db.letters; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for name,face,px in (('Баланс','bold',17),('平衡','default',21)):
+        df,dfbar,_,dftitle,*_,dfwin,_=dark_setup(name=name); bg(df,dfwin); bg(df,dfbar); bg(df,dfbar); df.letters=[]; bg(df,dfbar)
+        assert df.nodes[dftitle]['style:normal:font_name']==face and df.nodes[dftitle]['style:normal:font_size']==px and df.nodes[dftitle]['text']==name
+        assert not shadows(df) and wbox(df,dftitle)[3]>=px; passed()
+    db.word(0xa3beac,3); bg(db,dbar); assert db.nodes[dst]['image']=='classic_light_pause_w'; passed()  # paused
+    db.bands=[]; bg(db,dslot); LV=(0xe2e2e2,0xd7d7d7,0xd3d3d3,0xd4d4d4,0xd7d7d7,0xdedede)
+    assert [b[:5] for b in db.bands[:3]]==[(9,6,26,13,color_t(0xf5f5f5)),(10,7,24,11,color_t(0x050505)),(35,10,2,5,color_t(0xf5f5f5))] and [b[:4] for b in db.bands[3:]]==[(11,8+j,11,1) for j in range(9)]
+    assert db.bands[3][4]==color_t(0xe2e2e2) and db.bands[-1][4]==color_t(0xdedede) and not db.letters; passed()  # half of 22; no percent
+    db.nodes[next(c for c in db.nodes[dright]['children'] if db.nodes[c]['name']=='img_battery')]['image']='bar_charge'; bg(db,dbar); db.bands=[]; bg(db,dslot); assert db.bands[-1][2]==22; passed()  # charging fills it
+    db.top=dhome; db.nodes[db.wm]={'children':[dhome]}; bg(db,dhome); assert 'widget_layout_children' in [c[0] for c in db.calls]; bg(db,dbar)
+    assert wbox(db,dtitle)==(20,-1,104,25) and db.nodes[dclock]['visible']==1 and db.nodes[dtitle]['style:normal:text_align_h']==3 and db.nodes[dtitle]['style:normal:font_size']==21 and db.nodes[dtitle]['style:normal:font_name']=='classic-light'
+    assert db.nodes[dtitle]['style:normal:text_color']&0xffffffff==0xff112233 and wbox(db,dst)[2:]==(18,22)  # as its style said on the way in
+    db.bands=[]; db.letters=[]; bg(db,dbar); assert [b for b in db.bands if b[2]==375][0][4]==color_t(0xffffff) and not db.letters; passed()
 # ... a style that says neither: the bar's own left and white.
-dn,dnbar,_,dntitle,*_,dnwin,dnhome=dark_setup(); bg(dn,dnwin); bg(dn,dnbar); bg(dn,dnbar); dn.top=dnhome; dn.nodes[dn.wm]={'children':[dnhome]}; bg(dn,dnhome); bg(dn,dnbar)
-assert dn.nodes[dntitle]['style:normal:text_align_h']==2 and dn.nodes[dntitle]['style:normal:text_color']&0xffffffff==color_t(0xffffff); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    dn,dnbar,_,dntitle,*_,dnwin,dnhome=dark_setup(); bg(dn,dnwin); bg(dn,dnbar); bg(dn,dnbar); dn.top=dnhome; dn.nodes[dn.wm]={'children':[dnhome]}; bg(dn,dnhome); bg(dn,dnbar)
+    assert dn.nodes[dntitle]['style:normal:text_align_h']==2 and dn.nodes[dntitle]['style:normal:text_color']&0xffffffff==color_t(0xffffff); passed()
 # Set Time and Set Date under Classic: stock's page, its selectors over the painted cells. time_form: its tree, loaded and
 # through stock's init; year, month, day, hour and minute as selector indexes; flag: g_time24h_flag.
 def time_form(flag=1,vals=(4,10,4,16,42),theme_='1',light='1'):
@@ -7938,148 +7972,166 @@ def time_form(flag=1,vals=(4,10,4,16,42),theme_='1',light='1'):
 def time_shown(m):  # one window paint: its letters by box; the images' places
     bare(m); bg(m,m.win); return {l['rect']:l for l in m.letters}
 def tm_on_time(m): m.nodes[m.slide]['value']=1; return time_shown(m)
-tm_idx=lambda m,f: m.get(m.sels[f]+O['SELECTOR_INDEX'])
-tm_field=lambda m: m.nodes[m.win].get('_edit_field',0)
-tm_fire=lambda m,w: [m.call(address=f,args=(c,m.event,0,0),gap=0) for t,f,c in m.nodes[w]['handlers'] if t==O['EVT_VALUE_CHANGED']]
-TM_WHITE=color_t(0xffffff)
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm_idx=lambda m,f: m.get(m.sels[f]+O['SELECTOR_INDEX'])
+    tm_field=lambda m: m.nodes[m.win].get('_edit_field',0)
+    tm_fire=lambda m,w: [m.call(address=f,args=(c,m.event,0,0),gap=0) for t,f,c in m.nodes[w]['handlers'] if t==O['EVT_VALUE_CHANGED']]
+    TM_WHITE=color_t(0xffffff)
 # Set Time, 24-hour: the flat page, the clock's shadow and tm_art, the tray, two cells, the hour lit; Save in tm_place of OK. Window-local: the window is at y 26.
-tm=time_form(); tm_shown=tm_on_time(tm); tm_art=[tm.text(c[2]) for c in tm.calls if c[0]=='widget_load_image']
-assert page_fill(tm) and [d[1][:2] for d in tm.image_draws[0:2]]==[(58,166),(46,73)]
-assert tm_art[:4]==[f'classic_light_{n}' for n in ('clock_shadow','clock_chrome','tray_108','cell_lit_45')] and [d[1][:2] for d in tm.image_draws[2:5]]==[(204,97),(210,103),(267,103)]
-assert wbox(tm,tm.sels[3])==(214,107,45,42) and wbox(tm,tm.sels[4])==(271,107,45,42) and wbox(tm,tm.ok)==(0,244,375,26) and tm.nodes[tm.ok]['text']=='Save'
-assert tm_shown[(214,107,45,42)]['text']=='16' and tm_shown[(271,107,45,42)]['text']=='42' and tm_shown[(259,107,12,42)]['text']==':' and tm_shown[(0,244,375,26)]['text']=='Save'
-assert tm_shown[(0,245,375,26)]['color']==0x59000000 and tm_shown[(0,244,375,26)]['color']==(0xb8000000|TM_WHITE&0xffffff)
-assert tm_shown[(214,107,45,42)]['color']==TM_WHITE and all(tm.get(w+0x34)&255==0 for w in (*tm.sels,tm.ok))
-assert not tm.nodes[named(tm,tm.win,'img_dot')]['visible'] and not tm.nodes[named(tm,tm.win,'slide_indicator')]['visible'] and [n['visible'] for n in tm.nodes.values() if n.get('name')=='view_back']==[0,0]
-assert wbox(tm,named(tm,tm.win,'slide_view_view'))==(0,0,375,294) and tm.lcd_colors()==LCD_COLORS; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm=time_form(); tm_shown=tm_on_time(tm); tm_art=[tm.text(c[2]) for c in tm.calls if c[0]=='widget_load_image']
+    assert page_fill(tm) and [d[1][:2] for d in tm.image_draws[0:2]]==[(58,166),(46,73)]
+    assert tm_art[:4]==[f'classic_light_{n}' for n in ('clock_shadow','clock_chrome','tray_108','cell_lit_45')] and [d[1][:2] for d in tm.image_draws[2:5]]==[(204,97),(210,103),(267,103)]
+    assert wbox(tm,tm.sels[3])==(214,107,45,42) and wbox(tm,tm.sels[4])==(271,107,45,42) and wbox(tm,tm.ok)==(0,244,375,26) and tm.nodes[tm.ok]['text']=='Save'
+    assert tm_shown[(214,107,45,42)]['text']=='16' and tm_shown[(271,107,45,42)]['text']=='42' and tm_shown[(259,107,12,42)]['text']==':' and tm_shown[(0,244,375,26)]['text']=='Save'
+    assert tm_shown[(0,245,375,26)]['color']==0x59000000 and tm_shown[(0,244,375,26)]['color']==(0xb8000000|TM_WHITE&0xffffff)
+    assert tm_shown[(214,107,45,42)]['color']==TM_WHITE and all(tm.get(w+0x34)&255==0 for w in (*tm.sels,tm.ok))
+    assert not tm.nodes[named(tm,tm.win,'img_dot')]['visible'] and not tm.nodes[named(tm,tm.win,'slide_indicator')]['visible'] and [n['visible'] for n in tm.nodes.values() if n.get('name')=='view_back']==[0,0]
+    assert wbox(tm,named(tm,tm.win,'slide_view_view'))==(0,0,375,294) and tm.lcd_colors()==LCD_COLORS; passed()
 # The hands: at 16:42, hour 141 degrees, minute 252; nothing past the centre; the pivot over them; the fill's colour restored. Repainted only on a change.
-tm_ink=[b for b in tm.bands if b[4]&0xffffff==color_t(0x161b22)&0xffffff]; tm_runs=[[]]
-for b in tm_ink:
-    if tm_runs[-1] and b[1]<tm_runs[-1][-1][1]: tm_runs.append([])
-    tm_runs[-1].append(b)
-assert len(tm_runs)==3,len(tm_runs)  # hour, minute, the pivot's ring
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm_ink=[b for b in tm.bands if b[4]&0xffffff==color_t(0x161b22)&0xffffff]; tm_runs=[[]]
+    for b in tm_ink:
+        if tm_runs[-1] and b[1]<tm_runs[-1][-1][1]: tm_runs.append([])
+        tm_runs[-1].append(b)
+    assert len(tm_runs)==3,len(tm_runs)  # hour, minute, the pivot's ring
 def tm_hand(tm_run,deg):
     a=math.radians(deg); ux,uy=math.sin(a),-math.cos(a); cx,cy=101,128; along=[]; side=[]
     for x,y,w,h,*_ in tm_run:
         for px in range(x,x+w):
             along.append((px+.5-cx)*ux+(y+.5-cy)*uy); side.append(abs((px+.5-cx)*uy-(y+.5-cy)*ux))
     return min(along),max(along),max(side)
-for tm_run,deg,tip in ((tm_runs[0],141,19*1.1),(tm_runs[1],252,28*1.1)):
-    back,far,wide=tm_hand(tm_run,deg); assert back>=-2 and abs(far-tip)<=1.2 and wide<=3.2,(deg,back,far,wide)
-assert all(b[3]==1 for b in tm_ink) and any(b[2]>1 for b in tm_runs[1]) and any(b[4]>>24 not in (0,255) for b in tm_runs[1])  # rows of end spans and a tm_run
-tm_white=[b for b in tm.bands if b[4]==TM_WHITE and b[0]>=96 and b[0]<=106 and 123<=b[1]<=133]; assert tm_white and tm.bands.index(tm_white[0])>tm.bands.index(tm_runs[2][0])
-bare(tm); tm.word(tm.sels[4]+O['SELECTOR_INDEX'],59); tm.nodes[tm.win]['_edit_field']=4; tm.calls=[]; assert tm.call()==11 and not [c for c in tm.calls if c[0] in ('widget_invalidate_force','timer_add')]  # at the end of its options
-tm.word(tm.sels[4]+O['SELECTOR_INDEX'],42); assert tm.call(O['KEY_PREV'])==11 and [c[1] for c in tm.calls if c[0]=='widget_invalidate_force']==[tm.win] and tm_idx(tm,4)==41; passed()
-tm.calls=[]; tm_on_time(tm); assert not [c for c in tm.calls if c[0] in ('timer_add','widget_invalidate_force','widget_set_text_utf8')]; passed()  # a paint writes nothing and asks for no other
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for tm_run,deg,tip in ((tm_runs[0],141,19*1.1),(tm_runs[1],252,28*1.1)):
+        back,far,wide=tm_hand(tm_run,deg); assert back>=-2 and abs(far-tip)<=1.2 and wide<=3.2,(deg,back,far,wide)
+    assert all(b[3]==1 for b in tm_ink) and any(b[2]>1 for b in tm_runs[1]) and any(b[4]>>24 not in (0,255) for b in tm_runs[1])  # rows of end spans and a tm_run
+    tm_white=[b for b in tm.bands if b[4]==TM_WHITE and b[0]>=96 and b[0]<=106 and 123<=b[1]<=133]; assert tm_white and tm.bands.index(tm_white[0])>tm.bands.index(tm_runs[2][0])
+    bare(tm); tm.word(tm.sels[4]+O['SELECTOR_INDEX'],59); tm.nodes[tm.win]['_edit_field']=4; tm.calls=[]; assert tm.call()==11 and not [c for c in tm.calls if c[0] in ('widget_invalidate_force','timer_add')]  # at the end of its options
+    tm.word(tm.sels[4]+O['SELECTOR_INDEX'],42); assert tm.call(O['KEY_PREV'])==11 and [c[1] for c in tm.calls if c[0]=='widget_invalidate_force']==[tm.win] and tm_idx(tm,4)==41; passed()
+    tm.calls=[]; tm_on_time(tm); assert not [c for c in tm.calls if c[0] in ('timer_add','widget_invalidate_force','widget_set_text_utf8')]; passed()  # a paint writes nothing and asks for no other
 # Centre steps hour then minute; on minute it presses btn_enter once, saves through stock, and goes back; no OK stop.
-tm=time_form(); tm.nodes[tm.slide]['value']=1; tm.mock('navigator_back')
-assert tm.confirm()==11 and tm_field(tm)==4 and not tm.clicks
-assert tm.confirm()==11 and tm.clicks==[tm.ok] and [c[0] for c in tm.calls].count('navigator_back')==1 and tm_field(tm)==4
-tm=time_form(); tm.nodes[tm.slide]['value']=1; tm.nodes[tm.win]['_edit_field']=3; [tm.call(O['KEY_FWD_BTN']) for _ in range(3)]; assert tm_field(tm)==4 and not tm.clicks; assert tm.call(O['KEY_BACK_BTN'])==11 and tm_field(tm)==3; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm=time_form(); tm.nodes[tm.slide]['value']=1; tm.mock('navigator_back')
+    assert tm.confirm()==11 and tm_field(tm)==4 and not tm.clicks
+    assert tm.confirm()==11 and tm.clicks==[tm.ok] and [c[0] for c in tm.calls].count('navigator_back')==1 and tm_field(tm)==4
+    tm=time_form(); tm.nodes[tm.slide]['value']=1; tm.nodes[tm.win]['_edit_field']=3; [tm.call(O['KEY_FWD_BTN']) for _ in range(3)]; assert tm_field(tm)==4 and not tm.clicks; assert tm.call(O['KEY_BACK_BTN'])==11 and tm_field(tm)==3; passed()
 # Twelve-hour: six fields; hour 16 shows 4 and PM; the wheel on the hour keeps the half; AM/PM toggles 16 to 4 either way; the selector stays 0..23; Centre on AM/PM saves.
-tm=time_form(0); tm_shown=tm_on_time(tm); tm_art=[tm.text(c[2]) for c in tm.calls if c[0]=='widget_load_image']
-assert 'classic_light_tray_165' in tm_art and wbox(tm,tm.sels[3])==(186,107,45,42) and wbox(tm,tm.sels[4])==(243,107,45,42)
-assert tm_shown[(186,107,45,42)]['text']=='4' and tm_shown[(243,107,45,42)]['text']=='42' and tm_shown[(300,107,45,42)]['text']=='PM' and tm_shown[(231,107,12,42)]['text']==':'
-tm_hit=[c for c in tm.nodes[tm.pt]['children'] if tm.nodes[c]['type']=='image' and tm.nodes[c]['name']!='img_dot'][0]; assert wbox(tm,tm_hit)==(300,107,45,42)
-assert tm.call()==11 and tm_idx(tm,3)==17
-tm.nodes[tm.win]['_edit_field']=5; assert tm.call()==11 and tm_idx(tm,3)==5 and tm_field(tm)==5
-tm_shown=time_shown(tm); assert tm_shown[(186,107,45,42)]['text']=='5' and tm_shown[(300,107,45,42)]['text']=='AM'
-assert tm.call(O['KEY_PREV'])==11 and tm_idx(tm,3)==17; assert tm.call(O['KEY_FWD_BTN'])==11 and tm_field(tm)==5
-f,ctx=next((f,c) for t,f,c in tm.nodes[tm_hit]['handlers'] if t==O['EVT_CLICK']); assert tm.call(address=f,args=(ctx,tm.event,0,0),gap=0)==0 and tm_idx(tm,3)==5
-tm.mock('navigator_back'); assert tm.confirm()==11 and tm.clicks==[tm.ok] and [c[0] for c in tm.calls].count('navigator_back')==1
-tm=time_form(0); tm.nodes[tm.slide]['value']=1; tm.nodes[tm.win]['_edit_field']=5; tm.nodes[tm.slide]['value']=0; assert tm.call()==11 and tm_idx(tm,0)==5 and tm_field(tm)==0; passed()  # a swipe off the time page takes the field with it
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm=time_form(0); tm_shown=tm_on_time(tm); tm_art=[tm.text(c[2]) for c in tm.calls if c[0]=='widget_load_image']
+    assert 'classic_light_tray_165' in tm_art and wbox(tm,tm.sels[3])==(186,107,45,42) and wbox(tm,tm.sels[4])==(243,107,45,42)
+    assert tm_shown[(186,107,45,42)]['text']=='4' and tm_shown[(243,107,45,42)]['text']=='42' and tm_shown[(300,107,45,42)]['text']=='PM' and tm_shown[(231,107,12,42)]['text']==':'
+    tm_hit=[c for c in tm.nodes[tm.pt]['children'] if tm.nodes[c]['type']=='image' and tm.nodes[c]['name']!='img_dot'][0]; assert wbox(tm,tm_hit)==(300,107,45,42)
+    assert tm.call()==11 and tm_idx(tm,3)==17
+    tm.nodes[tm.win]['_edit_field']=5; assert tm.call()==11 and tm_idx(tm,3)==5 and tm_field(tm)==5
+    tm_shown=time_shown(tm); assert tm_shown[(186,107,45,42)]['text']=='5' and tm_shown[(300,107,45,42)]['text']=='AM'
+    assert tm.call(O['KEY_PREV'])==11 and tm_idx(tm,3)==17; assert tm.call(O['KEY_FWD_BTN'])==11 and tm_field(tm)==5
+    f,ctx=next((f,c) for t,f,c in tm.nodes[tm_hit]['handlers'] if t==O['EVT_CLICK']); assert tm.call(address=f,args=(ctx,tm.event,0,0),gap=0)==0 and tm_idx(tm,3)==5
+    tm.mock('navigator_back'); assert tm.confirm()==11 and tm.clicks==[tm.ok] and [c[0] for c in tm.calls].count('navigator_back')==1
+    tm=time_form(0); tm.nodes[tm.slide]['value']=1; tm.nodes[tm.win]['_edit_field']=5; tm.nodes[tm.slide]['value']=0; assert tm.call()==11 and tm_idx(tm,0)==5 and tm_field(tm)==0; passed()  # a swipe off the time page takes the field with it
 # ... midnight and noon: 0 shows 12 AM, 12 shows 12 PM; 11 PM + 1 on the hour wraps to 12 PM, in its half; 12 AM - 1 to 11 AM.
-for h,txt,half in ((0,'12','AM'),(12,'12','PM'),(23,'11','PM'),(11,'11','AM')):
-    tm=time_form(0,vals=(4,10,4,h,0)); tm_shown=tm_on_time(tm); assert tm_shown[(186,107,45,42)]['text']==txt and tm_shown[(300,107,45,42)]['text']==half
-tm=time_form(0,vals=(4,10,4,23,0)); tm.nodes[tm.slide]['value']=1; assert tm.call()==11 and tm_idx(tm,3)==12
-tm=time_form(0,vals=(4,10,4,0,0)); tm.nodes[tm.slide]['value']=1; assert tm.call(O['KEY_PREV'])==11 and tm_idx(tm,3)==11; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for h,txt,half in ((0,'12','AM'),(12,'12','PM'),(23,'11','PM'),(11,'11','AM')):
+        tm=time_form(0,vals=(4,10,4,h,0)); tm_shown=tm_on_time(tm); assert tm_shown[(186,107,45,42)]['text']==txt and tm_shown[(300,107,45,42)]['text']==half
+    tm=time_form(0,vals=(4,10,4,23,0)); tm.nodes[tm.slide]['value']=1; assert tm.call()==11 and tm_idx(tm,3)==12
+    tm=time_form(0,vals=(4,10,4,0,0)); tm.nodes[tm.slide]['value']=1; assert tm.call(O['KEY_PREV'])==11 and tm_idx(tm,3)==11; passed()
 # A drag: a step is a selector's row, 14 px, the finger's speed adding none; the cell takes the selection; a 12-hour hour stays in its half, as the wheel's.
-tm=time_form(0,vals=(4,10,4,23,0)); tm.nodes[tm.slide]['value']=1; tm.nodes[tm.win]['_edit_field']=5
-assert all(tm.nodes[c]['yspeed_scale']==0 and wbox(tm,c)[3]==42 for c in tm.sels)
-tm.word(tm.sels[3]+O['SELECTOR_INDEX'],4); tm_fire(tm,tm.sels[3]); assert tm_idx(tm,3)==16 and tm_field(tm)==3  # 11 PM + 5 over midnight: 4 PM
-tm.word(tm.sels[4]+O['SELECTOR_INDEX'],7); tm_fire(tm,tm.sels[4]); assert tm_field(tm)==4 and tm_idx(tm,3)==16
-tm.nodes[tm.win]['_edit_field']=5; assert tm.call()==11 and tm_idx(tm,3)==4 and tm_field(tm)==5; tm_fire(tm,tm.sels[3]); assert tm_idx(tm,3)==4 and tm_field(tm)==5  # AM/PM crosses, and keeps the selection
-tm.nodes[tm.win]['_edit_field']=3; assert tm.call()==11 and tm_idx(tm,3)==5; tm_fire(tm,tm.sels[3]); assert tm_idx(tm,3)==5 and tm_field(tm)==3  # the wheel's own change moves nothing
-tm.word(tm.sels[1]+O['SELECTOR_INDEX'],1); tm.word(tm.sels[2]+O['SELECTOR_INDEX'],27); tm_fire(tm,tm.sels[2]); assert tm_field(tm)==1; tm_fire(tm,tm.sels[1]); assert tm_field(tm)==1  # stock clamps the day under a dragged month: the month keeps it
-tm_fire(tm,tm.slide); assert tm_field(tm)==1; passed()  # a swipe between the pages is no drag
-tm=time_form(1,vals=(4,10,4,23,0)); tm.nodes[tm.slide]['value']=1; tm.word(tm.sels[3]+O['SELECTOR_INDEX'],4); tm_fire(tm,tm.sels[3]); assert tm_idx(tm,3)==4 and tm_field(tm)==3; passed()  # 24-hour has no half
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm=time_form(0,vals=(4,10,4,23,0)); tm.nodes[tm.slide]['value']=1; tm.nodes[tm.win]['_edit_field']=5
+    assert all(tm.nodes[c]['yspeed_scale']==0 and wbox(tm,c)[3]==42 for c in tm.sels)
+    tm.word(tm.sels[3]+O['SELECTOR_INDEX'],4); tm_fire(tm,tm.sels[3]); assert tm_idx(tm,3)==16 and tm_field(tm)==3  # 11 PM + 5 over midnight: 4 PM
+    tm.word(tm.sels[4]+O['SELECTOR_INDEX'],7); tm_fire(tm,tm.sels[4]); assert tm_field(tm)==4 and tm_idx(tm,3)==16
+    tm.nodes[tm.win]['_edit_field']=5; assert tm.call()==11 and tm_idx(tm,3)==4 and tm_field(tm)==5; tm_fire(tm,tm.sels[3]); assert tm_idx(tm,3)==4 and tm_field(tm)==5  # AM/PM crosses, and keeps the selection
+    tm.nodes[tm.win]['_edit_field']=3; assert tm.call()==11 and tm_idx(tm,3)==5; tm_fire(tm,tm.sels[3]); assert tm_idx(tm,3)==5 and tm_field(tm)==3  # the wheel's own change moves nothing
+    tm.word(tm.sels[1]+O['SELECTOR_INDEX'],1); tm.word(tm.sels[2]+O['SELECTOR_INDEX'],27); tm_fire(tm,tm.sels[2]); assert tm_field(tm)==1; tm_fire(tm,tm.sels[1]); assert tm_field(tm)==1  # stock clamps the day under a dragged month: the month keeps it
+    tm_fire(tm,tm.slide); assert tm_field(tm)==1; passed()  # a swipe between the pages is no drag
+    tm=time_form(1,vals=(4,10,4,23,0)); tm.nodes[tm.slide]['value']=1; tm.word(tm.sels[3]+O['SELECTOR_INDEX'],4); tm_fire(tm,tm.sels[3]); assert tm_idx(tm,3)==4 and tm_field(tm)==3; passed()  # 24-hour has no half
 # Set Date: the tile, the tray, year 60 wide; Centre on day turns to the time page; the bar's title follows the selectors, written on a change and not in a paint.
-tm=time_form(); tm_shown=time_shown(tm); tm_art=[tm.text(c[2]) for c in tm.calls if c[0]=='widget_load_image']
-assert page_fill(tm) and tm_art[:4]==[f'classic_light_{n}' for n in ('tile','tray_164','cell_lit_60','cell_45')] and [d[1][:2] for d in tm.image_draws[0:5]]==[(34,72),(176,97),(182,103),(246,103),(295,103)]
-assert wbox(tm,tm.sels[0])==(186,107,60,42) and wbox(tm,tm.sels[1])==(250,107,45,42) and wbox(tm,tm.sels[2])==(299,107,45,42)
-assert tm_shown[(186,107,60,42)]['text']=='2026' and tm_shown[(250,107,45,42)]['text']=='11' and tm_shown[(299,107,45,42)]['text']=='05'
-assert tm_shown[(40,76,118,30)]['text']=='Nov' and tm_shown[(40,98,118,82)]['text']=='05' and tm_shown[(40,98,118,82)]['color']==color_t(0x1b2030) and tm_shown[(40,76,118,30)]['font'][1]==28 and tm_shown[(40,98,118,82)]['font'][1]==79
-assert tm.nodes[tm.lab]['text']=='Nov 5, 2026'
-for f in (1,2): assert tm.confirm()==11 and tm_field(tm)==f
-assert tm.nodes[tm.slide]['value']==0 and tm.confirm()==11 and tm_field(tm)==3 and tm.nodes[tm.slide]['value']==1
-tm.nodes[tm.slide]['value']=0; assert tm.call()==11 and tm_field(tm)==0 and tm_idx(tm,0)==5 and tm.nodes[tm.lab]['text']=='Nov 5, 2027'; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm=time_form(); tm_shown=time_shown(tm); tm_art=[tm.text(c[2]) for c in tm.calls if c[0]=='widget_load_image']
+    assert page_fill(tm) and tm_art[:4]==[f'classic_light_{n}' for n in ('tile','tray_164','cell_lit_60','cell_45')] and [d[1][:2] for d in tm.image_draws[0:5]]==[(34,72),(176,97),(182,103),(246,103),(295,103)]
+    assert wbox(tm,tm.sels[0])==(186,107,60,42) and wbox(tm,tm.sels[1])==(250,107,45,42) and wbox(tm,tm.sels[2])==(299,107,45,42)
+    assert tm_shown[(186,107,60,42)]['text']=='2026' and tm_shown[(250,107,45,42)]['text']=='11' and tm_shown[(299,107,45,42)]['text']=='05'
+    assert tm_shown[(40,76,118,30)]['text']=='Nov' and tm_shown[(40,98,118,82)]['text']=='05' and tm_shown[(40,98,118,82)]['color']==color_t(0x1b2030) and tm_shown[(40,76,118,30)]['font'][1]==28 and tm_shown[(40,98,118,82)]['font'][1]==79
+    assert tm.nodes[tm.lab]['text']=='Nov 5, 2026'
+    for f in (1,2): assert tm.confirm()==11 and tm_field(tm)==f
+    assert tm.nodes[tm.slide]['value']==0 and tm.confirm()==11 and tm_field(tm)==3 and tm.nodes[tm.slide]['value']==1
+    tm.nodes[tm.slide]['value']=0; assert tm.call()==11 and tm_field(tm)==0 and tm_idx(tm,0)==5 and tm.nodes[tm.lab]['text']=='Nov 5, 2027'; passed()
 # ... a drag on a selector: month 2 with day 31, stock's own option change has clamped it; the title and tile take the clamped day.
-tm=time_form(vals=(4,1,27,16,42)); tm.nodes[tm.lab]['text']='old'; tm.calls=[]; tm_fire(tm,tm.sels[1])
-assert tm.nodes[tm.lab]['text']=='Feb 28, 2026' and [c[1] for c in tm.calls if c[0]=='widget_invalidate_force']==[tm.win]
-assert time_shown(tm)[(40,98,118,82)]['text']=='28'; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm=time_form(vals=(4,1,27,16,42)); tm.nodes[tm.lab]['text']='old'; tm.calls=[]; tm_fire(tm,tm.sels[1])
+    assert tm.nodes[tm.lab]['text']=='Feb 28, 2026' and [c[1] for c in tm.calls if c[0]=='widget_invalidate_force']==[tm.win]
+    assert time_shown(tm)[(40,98,118,82)]['text']=='28'; passed()
 # ... stock's init comes first: the label it rebuilt is the one written, and the handlers follow stock's own.
-tm=time_form(); order=[c[0] for c in tm.calls]; assert order.index('stock_manualtime')<order.index('widget_set_text_utf8',order.index('stock_manualtime'))
-for w in (*tm.sels,tm.slide): assert any(t==O['EVT_VALUE_CHANGED'] for t,_,_ in tm.nodes[w]['handlers'])
-f,ctx=next((f,c) for t,f,c in tm.nodes[tm.win]['handlers'] if t==O['EVT_DESTROY']); tm.call(address=f,args=(ctx,tm.event,0,0),gap=0); bare(tm); bg(tm,tm.win); assert not tm.image_draws; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm=time_form(); order=[c[0] for c in tm.calls]; assert order.index('stock_manualtime')<order.index('widget_set_text_utf8',order.index('stock_manualtime'))
+    for w in (*tm.sels,tm.slide): assert any(t==O['EVT_VALUE_CHANGED'] for t,_,_ in tm.nodes[w]['handlers'])
+    f,ctx=next((f,c) for t,f,c in tm.nodes[tm.win]['handlers'] if t==O['EVT_DESTROY']); tm.call(address=f,args=(ctx,tm.event,0,0),gap=0); bare(tm); bg(tm,tm.win); assert not tm.image_draws; passed()
 # A paint fits one call's budget at the dearest minutes, its hands included, and finds nothing by name: no lookup, and no compare the hook wouldn't make for any window.
-for tm_flag,tm_h,tm_m in ((1,6,33),(0,0,33)): tm=time_form(tm_flag,vals=(4,10,4,tm_h,tm_m)); tm_on_time(tm); assert tm.bands and tm.budget==100000
-tm_named=lambda m: [c[0] for c in m.calls if c[0] in ('widget_lookup','tk_strcmp')]
-for tm_flag,tm_page in ((1,1),(0,1),(1,0)):
-    tm=time_form(tm_flag); tm.nodes[tm.slide]['value']=tm_page; bare(tm); bg(tm,tm.win); tm_seen=tm_named(tm); assert tm.image_draws and 'widget_lookup' not in tm_seen
-    f,ctx=next((f,c) for t,f,c in tm.nodes[tm.win]['handlers'] if t==O['EVT_DESTROY']); tm.call(address=f,args=(ctx,tm.event,0,0),gap=0); bare(tm); bg(tm,tm.win); assert not tm.image_draws and tm_named(tm)==tm_seen
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for tm_flag,tm_h,tm_m in ((1,6,33),(0,0,33)): tm=time_form(tm_flag,vals=(4,10,4,tm_h,tm_m)); tm_on_time(tm); assert tm.bands and tm.budget==100000
+    tm_named=lambda m: [c[0] for c in m.calls if c[0] in ('widget_lookup','tk_strcmp')]
+    for tm_flag,tm_page in ((1,1),(0,1),(1,0)):
+        tm=time_form(tm_flag); tm.nodes[tm.slide]['value']=tm_page; bare(tm); bg(tm,tm.win); tm_seen=tm_named(tm); assert tm.image_draws and 'widget_lookup' not in tm_seen
+        f,ctx=next((f,c) for t,f,c in tm.nodes[tm.win]['handlers'] if t==O['EVT_DESTROY']); tm.call(address=f,args=(ctx,tm.event,0,0),gap=0); bare(tm); bg(tm,tm.win); assert not tm.image_draws and tm_named(tm)==tm_seen
+    passed()
 # Light and dark: the same page, final colours.
-for light in '01':
-    tm=time_form(light=light); tm_shown=tm_on_time(tm); assert tm_shown[(214,107,45,42)]['color']==TM_WHITE and tm_shown[(0,245,375,26)]['color']==0x59000000 and tm_shown[(0,244,375,26)]['color']==(0xb8000000|TM_WHITE&0xffffff)
-    assert tm.lcd_colors()==LCD_COLORS
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light in '01':
+        tm=time_form(light=light); tm_shown=tm_on_time(tm); assert tm_shown[(214,107,45,42)]['color']==TM_WHITE and tm_shown[(0,245,375,26)]['color']==0x59000000 and tm_shown[(0,244,375,26)]['color']==(0xb8000000|TM_WHITE&0xffffff)
+        assert tm.lcd_colors()==LCD_COLORS
+    passed()
 # Boxes hold their fonts and nothing crosses the glass: on screen, y + 26. Save's box spans the screen: its tm_ink, centred, is what clears it.
 from ipod import corner_inset
-for x,y,w,h in ((211,130,108,48),(183,130,165,48),(183,130,164,48),(186,133,60,42),(300,133,45,42),(46,99,110,110),(58,192,86,26),(40,104,118,100),(162,270,50,26)):
-    assert corner_inset(y)<=x and corner_inset(y+h-1)<=x and x+w<=375-max(corner_inset(y),corner_inset(y+h-1)),(x,y,w,h)
-for tm_flag,tm_page in ((1,1),(0,1),(1,0)):
-    tm=time_form(tm_flag); tm.nodes[tm.slide]['value']=tm_page; tm_shown=time_shown(tm); assert all(r[3]>t['font'][1] for r,t in tm_shown.items())
-    assert {t['font'] for r,t in tm_shown.items() if r[3]==42}<={('classic-light',35),('classic-light',32),('classic-light',30)} and tm_shown[(0,244,375,26)]['font']==('classic-light',24)
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for x,y,w,h in ((211,130,108,48),(183,130,165,48),(183,130,164,48),(186,133,60,42),(300,133,45,42),(46,99,110,110),(58,192,86,26),(40,104,118,100),(162,270,50,26)):
+        assert corner_inset(y)<=x and corner_inset(y+h-1)<=x and x+w<=375-max(corner_inset(y),corner_inset(y+h-1)),(x,y,w,h)
+    for tm_flag,tm_page in ((1,1),(0,1),(1,0)):
+        tm=time_form(tm_flag); tm.nodes[tm.slide]['value']=tm_page; tm_shown=time_shown(tm); assert all(r[3]>t['font'][1] for r,t in tm_shown.items())
+        assert {t['font'] for r,t in tm_shown.items() if r[3]==42}<={('classic-light',35),('classic-light',32),('classic-light',30)} and tm_shown[(0,244,375,26)]['font']==('classic-light',24)
+    passed()
 # Minimal: five fields, the outline, the OK stop, stock's selectors and btn_enter where they were; nothing painted, no title written.
-for theme_ in '0':
-    tm=time_form(theme_=theme_); bare(tm); bg(tm,tm.win)
-    assert not tm.image_draws and tm.get(tm.sels[0]+0x34)&255==255 and tm.get(tm.ok+0x34)&255==255 and tm.nodes[tm.ok]['text']=='OK' and wbox(tm,tm.ok)==(44,181,287,40) and wbox(tm,tm.sels[0])==(44,0,80,170) and tm.nodes[tm.lab]['text']=='Manual'
-    tm.paint(tm.sels[0]); assert tm.rounded and not tm.image_draws
-    for f in range(1,6): assert tm.confirm()==11 and tm_field(tm)==f
-    assert not tm.clicks and tm.confirm()==11 and tm.clicks==[tm.ok]
-    tm=time_form(0,theme_=theme_); assert tm.confirm()==11 and tm_field(tm)==1 and [tm.call(O['KEY_FWD_BTN']) for _ in range(9)] and tm_field(tm)==5
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for theme_ in '0':
+        tm=time_form(theme_=theme_); bare(tm); bg(tm,tm.win)
+        assert not tm.image_draws and tm.get(tm.sels[0]+0x34)&255==255 and tm.get(tm.ok+0x34)&255==255 and tm.nodes[tm.ok]['text']=='OK' and wbox(tm,tm.ok)==(44,181,287,40) and wbox(tm,tm.sels[0])==(44,0,80,170) and tm.nodes[tm.lab]['text']=='Manual'
+        tm.paint(tm.sels[0]); assert tm.rounded and not tm.image_draws
+        for f in range(1,6): assert tm.confirm()==11 and tm_field(tm)==f
+        assert not tm.clicks and tm.confirm()==11 and tm.clicks==[tm.ok]
+        tm=time_form(0,theme_=theme_); assert tm.confirm()==11 and tm_field(tm)==1 and [tm.call(O['KEY_FWD_BTN']) for _ in range(9)] and tm_field(tm)==5
+    passed()
 # A label's box holds its font, and nothing crosses the glass: every rect above.
 from ipod import corner_inset
 RECTS=[(44,247,12,14),(318,247,22,14),(63,245,248,31),(68,271,243,17),(52,273,12,14),(317,273,22,14),(28,155,322,46),(36,201,306,1),(81,168,204,8),(81,174,204,8),(50,165,12,14),(311,165,22,14),(50,171,12,14),(311,171,22,14),(48,170,16,16),(311,167,22,22),(50,166,20,26),(306,166,20,26),
        (125,54,125,44),(138,63,100,26),(278,7,10,11),(294,7,26,13),(320,11,2,5),(76,181,10,6),(280,181,10,6)]
-for x,y,w,h in RECTS: assert corner_inset(y)<=x and corner_inset(y+h-1)<=x and x+w<=375-max(corner_inset(y),corner_inset(y+h-1)),(x,y,w,h)
-for m_,w_ in ((bk,cap),(ba,label_balance),(ba,L),(ba,R),(xf0,xf0.vol)): assert wbox(m_,w_)[3]>=m_.nodes[w_]['style:normal:font_size']  # a label draws nothing in a shorter box
-assert all(t['rect'][3]>=t['font'][1] for m_ in (bk,dv,wheel) for t in m_.letters)
-bare(dv); dv.nodes[dv.switch]['image']='switch_on'; bg(dv,dv.win)
-for m_,dy in ((dv,26),(vp,0)):  # the images on the screen; the soft shadows' faint corners may pass under the glass, unseen
-    for name,(x,y) in art_at(m_):
-        w,h=art_size(name); assert name=='classic_light_slider_page' or (x>=0 and y+dy>=0 and x+w<=375 and y+dy+h<=320),name
-assert math.hypot(80-(28-1+13),256-1+50-13-240)+13<=80 and math.hypot(80-(35-1+13),118-1+112-13-240)<=80  # the panel's corners, its ring and R 12 in them
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for x,y,w,h in RECTS: assert corner_inset(y)<=x and corner_inset(y+h-1)<=x and x+w<=375-max(corner_inset(y),corner_inset(y+h-1)),(x,y,w,h)
+    for m_,w_ in ((bk,cap),(ba,label_balance),(ba,L),(ba,R),(xf0,xf0.vol)): assert wbox(m_,w_)[3]>=m_.nodes[w_]['style:normal:font_size']  # a label draws nothing in a shorter box
+    assert all(t['rect'][3]>=t['font'][1] for m_ in (bk,dv,wheel) for t in m_.letters)
+    bare(dv); dv.nodes[dv.switch]['image']='switch_on'; bg(dv,dv.win)
+    for m_,dy in ((dv,26),(vp,0)):  # the images on the screen; the soft shadows' faint corners may pass under the glass, unseen
+        for name,(x,y) in art_at(m_):
+            w,h=art_size(name); assert name=='classic_light_slider_page' or (x>=0 and y+dy>=0 and x+w<=375 and y+dy+h<=320),name
+    assert math.hypot(80-(28-1+13),256-1+50-13-240)+13<=80 and math.hypot(80-(35-1+13),118-1+112-13-240)<=80  # the panel's corners, its ring and R 12 in them
 from fontTools.ttLib import TTFont
 from ipod import CLASSIC_LIGHT_FONT_SRC
-cf=TTFont(CLASSIC_LIGHT_FONT_SRC,lazy=True); cs=31/(cf['hhea'].ascent-cf['hhea'].descent)
-for hint in ('Press Centre When Finished','Press Centre to Turn On or Off','Press Centre to Change Mode'): assert sum(cf['hmtx'][cf.getBestCmap()[ord(c)]][0] for c in hint)*cs<=375-2*corner_inset(256+22),hint  # the caption's ink, centred
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    cf=TTFont(CLASSIC_LIGHT_FONT_SRC,lazy=True); cs=31/(cf['hhea'].ascent-cf['hhea'].descent)
+    for hint in ('Press Centre When Finished','Press Centre to Turn On or Off','Press Centre to Change Mode'): assert sum(cf['hmtx'][cf.getBestCmap()[ord(c)]][0] for c in hint)*cs<=375-2*corner_inset(256+22),hint  # the caption's ink, centred
+    passed()
 # Minimal: every slider page and the volume exactly as today: no images, no band, no moved widget, the toolbar kept.
-for theme_ in '0':
-    for a in (('backlight_page','slider_backlight','view_backlight','label_backlight',('img_left','img_right')),('maxvol_page','slider_maxvol','view_maxvol','label_vol',('img_volleft','img_volright')),('balance_page','slider_balance','view_balance','label_balance',('img_left','img_right'))):
-        mn=LoadPlain(); mn.config.update(THEME=theme_); wn,sl,vw,lb,nv,*imgs=slider_win(mn,*a,max=100,value=50); kids=len(mn.nodes[wn]['children'])
-        bare(mn); mn.paint(wn); mn.call(address=HOOKS['widget_on_paint_border'][0],args=(sl,mn.canvas,0,0),gap=0)
-        assert not mn.image_draws and not [b for b in mn.bands if b[3]==1] and wbox(mn,sl)==(31,60,313,70) and wbox(mn,vw)==(0,0,375,240) and wbox(mn,lb)==(100,15,175,32)
-        assert kids==2 and all(mn.nodes[w]['visible']==1 for w in (lb,*imgs)) and 'handlers' not in mn.nodes[sl]
-    SETUP[:]=[lambda k:(k.config.update(THEME=theme_),k)]
-    try: q=LoadQueue(queue=1)
-    finally: SETUP.clear()
-    wn=q.ready=QueueMachine.bootvol(q); parents(q,wn); q.word(wn+O['W_PARENT'],q.wm); ui_loaded(q,'playset/bootvol_page',wn)
-    assert q.nodes[named(q,wn,'view_navbar')]['visible']==1 and named(q,wn,'switch_hit')==0 and named(q,wn,'caption')==0 and wbox(q,q.slider)[:2]==(0,0) and q.nodes[q.vol]['visible']==1
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for theme_ in '0':
+        for a in (('backlight_page','slider_backlight','view_backlight','label_backlight',('img_left','img_right')),('maxvol_page','slider_maxvol','view_maxvol','label_vol',('img_volleft','img_volright')),('balance_page','slider_balance','view_balance','label_balance',('img_left','img_right'))):
+            mn=LoadPlain(); mn.config.update(THEME=theme_); wn,sl,vw,lb,nv,*imgs=slider_win(mn,*a,max=100,value=50); kids=len(mn.nodes[wn]['children'])
+            bare(mn); mn.paint(wn); mn.call(address=HOOKS['widget_on_paint_border'][0],args=(sl,mn.canvas,0,0),gap=0)
+            assert not mn.image_draws and not [b for b in mn.bands if b[3]==1] and wbox(mn,sl)==(31,60,313,70) and wbox(mn,vw)==(0,0,375,240) and wbox(mn,lb)==(100,15,175,32)
+            assert kids==2 and all(mn.nodes[w]['visible']==1 for w in (lb,*imgs)) and 'handlers' not in mn.nodes[sl]
+        SETUP[:]=[lambda k:(k.config.update(THEME=theme_),k)]
+        try: q=LoadQueue(queue=1)
+        finally: SETUP.clear()
+        wn=q.ready=QueueMachine.bootvol(q); parents(q,wn); q.word(wn+O['W_PARENT'],q.wm); ui_loaded(q,'playset/bootvol_page',wn)
+        assert q.nodes[named(q,wn,'view_navbar')]['visible']==1 and named(q,wn,'switch_hit')==0 and named(q,wn,'caption')==0 and wbox(q,q.slider)[:2]==(0,0) and q.nodes[q.vol]['visible']==1
+    passed()
 
 # Classic's confirm control, in final colours. Form A, the page: its paper under the bar, the prompt, a track at 258.
 CL_FONT='classic-light'
@@ -8099,55 +8151,63 @@ def cl_confirm(light='1',check=False):
     parents(m,d); return (m,d,*cells,*kids)
 def opaque(m,y,h=30): return [b for b in m.bands if b[4]>>24==0xff and y<=b[1]<y+h and b[3]==1]
 def texts(m): return [(l['text'],l['rect'],l['color']) for l in m.letters]
-cm,d,cancel,enter,prompt=cl_confirm(); cm.paint(d)
-assert wbox(cm,prompt)==(24,61,327,30) and (cm.nodes[prompt]['style:normal:font_name'],cm.nodes[prompt]['style:normal:font_size'])==(CL_FONT,28)
-assert cm.nodes[d]['style:normal:bg_color']==0 and (0,26,375,1,color_t(0xffffff)) not in [b[:5] for b in cm.bands] and (0,26,375,294,color_t(0xffffff)) in [b[:5] for b in cm.bands]
-rows=opaque(cm,258); trackrows,litrows=rows[:30],rows[30:60]; litw=max(b[2] for b in litrows)
-assert [b[4] for b in trackrows]==[color_t(c) for c in CONFIRM_LIGHT] and trackrows[0][1]==258 and trackrows[0][4]==color_t(0x7389a5) and trackrows[15][:4]==(105,273,165,1)
-assert litrows[0][:2]==(105+corner_in(6),258) and litw==89 and litrows[0][4]==color_t(0x08a6e7) and wbox(cm,cancel)==(105,258,89,30) and wbox(cm,enter)==(194,258,76,30)
-assert (0xb0ffffff in [b[4] for b in cm.bands if b[1]==288]) and all(c in [b[4] for b in cm.bands] for c in (0x1a000000,0x73ffffff,0x59000000,0x4dffffff)) and 0x44000000 not in [b[4] for b in cm.bands]
-white=color_t(0xffffff); assert texts(cm)==[('Cancel',(105,257,89,30),0x4d000000),('Cancel',(105,258,89,30),white),('OK',(194,257,76,30),0x4d000000),('OK',(194,258,76,30),white)] and {l['font'] for l in cm.letters}=={(CL_FONT,23)}
-assert cm.nodes[cancel]['style:normal:text_color']==0 and cm.nodes[cancel]['text']=='Cancel' and not cm.image_draws and cm.lcd_colors()==LCD_COLORS
-cm.calls=[]; cm.paint(d); assert not [c for c in cm.calls if c[0].startswith('widget_set_prop') and c[1] in (prompt,cancel,enter,d)] and not [c for c in cm.calls if c[0]=='widget_move_resize']; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    cm,d,cancel,enter,prompt=cl_confirm(); cm.paint(d)
+    assert wbox(cm,prompt)==(24,61,327,30) and (cm.nodes[prompt]['style:normal:font_name'],cm.nodes[prompt]['style:normal:font_size'])==(CL_FONT,28)
+    assert cm.nodes[d]['style:normal:bg_color']==0 and (0,26,375,1,color_t(0xffffff)) not in [b[:5] for b in cm.bands] and (0,26,375,294,color_t(0xffffff)) in [b[:5] for b in cm.bands]
+    rows=opaque(cm,258); trackrows,litrows=rows[:30],rows[30:60]; litw=max(b[2] for b in litrows)
+    assert [b[4] for b in trackrows]==[color_t(c) for c in CONFIRM_LIGHT] and trackrows[0][1]==258 and trackrows[0][4]==color_t(0x7389a5) and trackrows[15][:4]==(105,273,165,1)
+    assert litrows[0][:2]==(105+corner_in(6),258) and litw==89 and litrows[0][4]==color_t(0x08a6e7) and wbox(cm,cancel)==(105,258,89,30) and wbox(cm,enter)==(194,258,76,30)
+    assert (0xb0ffffff in [b[4] for b in cm.bands if b[1]==288]) and all(c in [b[4] for b in cm.bands] for c in (0x1a000000,0x73ffffff,0x59000000,0x4dffffff)) and 0x44000000 not in [b[4] for b in cm.bands]
+    white=color_t(0xffffff); assert texts(cm)==[('Cancel',(105,257,89,30),0x4d000000),('Cancel',(105,258,89,30),white),('OK',(194,257,76,30),0x4d000000),('OK',(194,258,76,30),white)] and {l['font'] for l in cm.letters}=={(CL_FONT,23)}
+    assert cm.nodes[cancel]['style:normal:text_color']==0 and cm.nodes[cancel]['text']=='Cancel' and not cm.image_draws and cm.lcd_colors()==LCD_COLORS
+    cm.calls=[]; cm.paint(d); assert not [c for c in cm.calls if c[0].startswith('widget_set_prop') and c[1] in (prompt,cancel,enter,d)] and not [c for c in cm.calls if c[0]=='widget_move_resize']; passed()
 # ... the lit cell's right edge, inset; its 4 px shade beyond it, strongest at the top, gone by the foot. Under both, the track's corner pixels at their coverage, and the overlays' too.
 def fill_at(m,x,y): return [b[4] for b in m.bands if b[:4]==(x,y,1,1)]
-assert [fill_at(cm,193,273)[-1]]==[0x4dffffff] and [fill_at(cm,194+c,258+2)[-1]>>24 for c in range(4)]==[47,33,20,6] and not fill_at(cm,194,258+29) and all(fill_at(cm,194,258+i)[-1]>>24>fill_at(cm,194,258+20)[-1]>>24 for i in (0,16))
-cover6=corner_cover(6); first=max(n for n in range(6) if 0<cover6[n]<255)
-assert cover6[first]<<24|color_t(0x7389a5)&0xffffff in fill_at(cm,105+first,258) and cover6[first]<<24|color_t(0x7389a5)&0xffffff in fill_at(cm,269-first,258)
-assert cover6[first]*0x1a//255<<24 in fill_at(cm,105+first,258) and cover6[first]*0x73//255<<24|0xffffff in fill_at(cm,105+first,258) and cover6[first]*0x59//255<<24 in fill_at(cm,105+first,287)
-assert cover6[first]*0xb0//255<<24|0xffffff in fill_at(cm,105+first,288); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    assert [fill_at(cm,193,273)[-1]]==[0x4dffffff] and [fill_at(cm,194+c,258+2)[-1]>>24 for c in range(4)]==[47,33,20,6] and not fill_at(cm,194,258+29) and all(fill_at(cm,194,258+i)[-1]>>24>fill_at(cm,194,258+20)[-1]>>24 for i in (0,16))
+    cover6=corner_cover(6); first=max(n for n in range(6) if 0<cover6[n]<255)
+    assert cover6[first]<<24|color_t(0x7389a5)&0xffffff in fill_at(cm,105+first,258) and cover6[first]<<24|color_t(0x7389a5)&0xffffff in fill_at(cm,269-first,258)
+    assert cover6[first]*0x1a//255<<24 in fill_at(cm,105+first,258) and cover6[first]*0x73//255<<24|0xffffff in fill_at(cm,105+first,258) and cover6[first]*0x59//255<<24 in fill_at(cm,105+first,287)
+    assert cover6[first]*0xb0//255<<24|0xffffff in fill_at(cm,105+first,288); passed()
 # ... the wheel moves the lit cell to OK; Centre reaches stock's img_enter.
-assert cm.call()==11 and cm.selected(d)==1 and not cm.moved(); cm.paint(d)
-assert opaque(cm,258)[30+15][:3]==(194,273,76) and opaque(cm,258)[30][:2]==(194+corner_in(6),258) and [t[2] for t in texts(cm)][1::2]==[white,white]
-assert not [b for b in cm.bands if b[0]>=270 and b[3]==1 and 258<=b[1]<288 and b[4]>>24<0x40]  # nothing to its right to shade
-assert cm.confirm()==11 and cm.clicks==[enter]; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    assert cm.call()==11 and cm.selected(d)==1 and not cm.moved(); cm.paint(d)
+    assert opaque(cm,258)[30+15][:3]==(194,273,76) and opaque(cm,258)[30][:2]==(194+corner_in(6),258) and [t[2] for t in texts(cm)][1::2]==[white,white]
+    assert not [b for b in cm.bands if b[0]>=270 and b[3]==1 and 258<=b[1]<288 and b[4]>>24<0x40]  # nothing to its right to shade
+    assert cm.confirm()==11 and cm.clicks==[enter]; passed()
 # ... dark half: the track's own stops, Cancel lit in the same blue; its text white, the other cell's #cfd6dc.
-dm,d0,_,_,_=cl_confirm('0'); dm.paint(d0); rows=opaque(dm,258)
-assert [rows[i][4] for i in (0,29)]==[color_t(0x14171c),color_t(0x191c21)] and rows[30][4]==color_t(0x08a6e7) and rows[30+15][2]==89
-assert (0,26,375,294,color_t(0)) in [b[:5] for b in dm.bands] and 0x29ffffff in [b[4] for b in dm.bands if b[1]==288] and 0x88000000 in [b[4] for b in dm.bands]
-assert [t[2] for t in texts(dm)][1::2]==[white,color_t(0xcfd6dc)] and [fill_at(dm,193,273)[-1]]==[0x4dffffff] and fill_at(dm,194,260)[-1]>>24==47 and 0x44000000 not in [b[4] for b in dm.bands]; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    dm,d0,_,_,_=cl_confirm('0'); dm.paint(d0); rows=opaque(dm,258)
+    assert [rows[i][4] for i in (0,29)]==[color_t(0x14171c),color_t(0x191c21)] and rows[30][4]==color_t(0x08a6e7) and rows[30+15][2]==89
+    assert (0,26,375,294,color_t(0)) in [b[:5] for b in dm.bands] and 0x29ffffff in [b[4] for b in dm.bands if b[1]==288] and 0x88000000 in [b[4] for b in dm.bands]
+    assert [t[2] for t in texts(dm)][1::2]==[white,color_t(0xcfd6dc)] and [fill_at(dm,193,273)[-1]]==[0x4dffffff] and fill_at(dm,194,260)[-1]>>24==47 and 0x44000000 not in [b[4] for b in dm.bands]; passed()
 # ... with msg_delcheckbutton: Form A, and the checkbox's rect unchanged.
-km,dk,_,kenter,kp,kc=cl_confirm(check=True); km.paint(dk); assert wbox(km,kc)==(10,124,355,24) and wbox(km,kp)==(24,61,327,30) and opaque(km,258)[0][4]==color_t(0x7389a5) and km.nodes[kenter]['text']=='OK' and km.nodes[kc]['visible']==1; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    km,dk,_,kenter,kp,kc=cl_confirm(check=True); km.paint(dk); assert wbox(km,kc)==(10,124,355,24) and wbox(km,kp)==(24,61,327,30) and opaque(km,258)[0][4]==color_t(0x7389a5) and km.nodes[kenter]['text']=='OK' and km.nodes[kc]['visible']==1; passed()
 # ... the checkbox itself: stock's rings are emptied, so its box goes where the ring's 26 px slot does, centred with the 10 px spacer and text; a tick when checked. No theme but Classic.
-for half,ink in (('1',0),('0',0xffffff)):
-    km,dk,_,_,_,kc=cl_confirm(half,check=True); km.nodes[kc]['text']='Also delete source file'; km.paint(dk); x=10+(355-36-203)//2+3; y=124+12-10  # 203: the emulator's measure of the text
-    tick=lambda: [b for b in km.bands if b[:4]==(x+4+11,y+6,2,1) and b[4]==color_t(ink)]
-    box_rows=[b for b in km.bands if b[4]&0xffffff==color_t(ink)&0xffffff and x<=b[0]<x+20 and y<=b[1]<y+20]; assert {b[1] for b in box_rows}==set(range(y,y+20)) and not tick()
-    km.nodes[kc]['value']=1; km.paint(dk); assert tick()
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for half,ink in (('1',0),('0',0xffffff)):
+        km,dk,_,_,_,kc=cl_confirm(half,check=True); km.nodes[kc]['text']='Also delete source file'; km.paint(dk); x=10+(355-36-203)//2+3; y=124+12-10  # 203: the emulator's measure of the text
+        tick=lambda: [b for b in km.bands if b[:4]==(x+4+11,y+6,2,1) and b[4]==color_t(ink)]
+        box_rows=[b for b in km.bands if b[4]&0xffffff==color_t(ink)&0xffffff and x<=b[0]<x+20 and y<=b[1]<y+20]; assert {b[1] for b in box_rows}==set(range(y,y+20)) and not tick()
+        km.nodes[kc]['value']=1; km.paint(dk); assert tick()
+    passed()
 # ... a theme only runs on its own set, so a failed boot reads as Minimal: no paper on this dialog, at the set's bar or inside it.
 def cl_confirm_failed():
     m=Machine(); classic_light_boot(m,fail=lambda page:True); d=m.node('dialog','confirminfo_dialog'); m.word(d+O['W_PARENT'],m.wm); place(m,d,0,0,375,320); m.top=d; m.clip=(0,0,375,320)
     cells=cl_cells(m,d); m.nodes[d]['children']=cells; parents(m,d); return m,d
-fm,fd=cl_confirm_failed(); fm.paint(fd); assert not [b for b in fm.bands if b[:2] in ((0,26),(0,30))]; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    fm,fd=cl_confirm_failed(); fm.paint(fd); assert not [b for b in fm.bands if b[:2] in ((0,26),(0,30))]; passed()
 # Form A over Quick Settings: stock's bar goes over the paper, as nothing else draws it there. A prompt too wide for its box breaks at a space or comma, the rest on a label of its own a row
 # down, both drawing in their face; one that fits stays whole.
-fa,fd,*_,fp=cl_confirm(); fa.mock('widget_paint'); bar=fa.node('window','system_bar'); fa.word(syms['system_bar'],bar); fa.nodes[fp]['text']='Line Out sets max volume,continue?'; fa.char_px=12; fa.paint(fd)
-assert [c[1:3] for c in fa.calls if c[0]=='widget_paint']==[(bar,fa.canvas)]
-rest=[c for c in fa.nodes[fd]['children'] if fa.nodes[c].get('type')=='hscroll_label' and c!=fp]
-assert fa.nodes[fp]['text']=='Line Out sets max volume,' and len(rest)==1 and fa.nodes[rest[0]]['text']=='continue?',(fa.nodes[fp]['text'],rest)
-assert wbox(fa,fp)==(24,61,327,30) and wbox(fa,rest[0])==(24,91,327,30) and fa.nodes[rest[0]]['style:normal:font_name']=='classic-light' and fa.nodes[rest[0]]['style:normal:font_size']==28; passed()
-fb,fbd,*_,fbp=cl_confirm(); fb.paint(fbd); assert fb.nodes[fbp]['text']=='Shut Down?' and len(fb.nodes[fbd]['children'])==3; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    fa,fd,*_,fp=cl_confirm(); fa.mock('widget_paint'); bar=fa.node('window','system_bar'); fa.word(syms['system_bar'],bar); fa.nodes[fp]['text']='Line Out sets max volume,continue?'; fa.char_px=12; fa.paint(fd)
+    assert [c[1:3] for c in fa.calls if c[0]=='widget_paint']==[(bar,fa.canvas)]
+    rest=[c for c in fa.nodes[fd]['children'] if fa.nodes[c].get('type')=='hscroll_label' and c!=fp]
+    assert fa.nodes[fp]['text']=='Line Out sets max volume,' and len(rest)==1 and fa.nodes[rest[0]]['text']=='continue?',(fa.nodes[fp]['text'],rest)
+    assert wbox(fa,fp)==(24,61,327,30) and wbox(fa,rest[0])==(24,91,327,30) and fa.nodes[rest[0]]['style:normal:font_name']=='classic-light' and fa.nodes[rest[0]]['style:normal:font_size']==28; passed()
+    fb,fbd,*_,fbp=cl_confirm(); fb.paint(fbd); assert fb.nodes[fbp]['text']=='Shut Down?' and len(fb.nodes[fbd]['children'])==3; passed()
 # Form B: a row action's confirm, the flag set at its call: the tray at 254, its shadow image, the track in it; the second cell says Delete, Centre on it is stock's OK.
 class TrayMachine(PlaylistLifecycleMachine):
     def hook(self,u,address,size,unused):
@@ -8163,22 +8223,24 @@ class TrayMachine(PlaylistLifecycleMachine):
             self.returns(self.answer); return
         super().hook(u,address,size,unused)
 # Form B in the dark half: both cells white, lit or not, as the light half and the look; Form A's unlit cell above stays #cfd6dc.
-CONFIG['LIGHT']='0'; tb=classic_light_new(TrayMachine); del CONFIG['LIGHT']; classic_light_boot(tb); tb.config['LIGHT']='0'; tb.answer=0; assert tb.delete()==0
-assert [l['color'] for l in tb.tray_seen[2]][1::2]==[color_t(0xffffff)]*2,[hex(l['color']) for l in tb.tray_seen[2]]; passed()
-tm=classic_light_new(TrayMachine); classic_light_boot(tm); tm.mock('widget_paint'); tm.word(syms['system_bar'],tm.node('window','system_bar')); tm.answer=0; assert tm.delete()==0
-assert tm.tray_bar==[]  # the tray sits over the page and its bar
-bands,draws,letters=tm.tray_seen; trayrows=[b for b in bands if b[4] in (color_t(0x6a707a),color_t(0x565c66)) or 254<=b[1]<306 and b[2]>=287 and b[4]>>24==0xff]
-assert draws[0][1]==(30,248,315,68) and trayrows[0][1]==254 and min(b[0] for b in trayrows)==38 and max(b[2] for b in trayrows)==299 and trayrows[0][4]==color_t(0x6a707a)
-assert tm.nodes[tm.tray]['style:normal:bg_color']==0 and tm.nodes[tm.tray_prompt]['visible']==0 and 0x66000000 in [b[4] for b in bands]
-[tcancel,tenter]=tm.nodes[tm.tray]['children'][:2]
-assert tm.nodes[tenter]['text']=='Delete' and wbox(tm,tcancel)[1]==wbox(tm,tenter)[1]==265 and wbox(tm,tcancel)[:1]==((375-wbox(tm,tcancel)[2]-wbox(tm,tenter)[2])//2,)
-well=[b for b in bands if b[4]>>24==0xff and 265<=b[1]<295 and b[2]<299 and b[0]>38]
-assert tm.second==(258,'OK')
-cover9=corner_cover(9); first=next(n for n in range(9) if 0<cover9[n]<255); assert (38+first,254,1,1,cover9[first]<<24|color_t(0x6a707a)&0xffffff) in [b[:5] for b in bands]  # the tray's corner, and over the track its inset's
-assert any(b[1]==265 and b[3]==1 and b[2]==1 and b[4]&0xffffff==0 and 0<b[4]>>24<0xce for b in bands)
-assert well[0][1]==265 and well[0][4]==color_t(0x07090d) and [l['text'] for l in letters][1::2]==['Cancel','Delete'] and letters[1]['color']==color_t(0xffffff)
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    CONFIG['LIGHT']='0'; tb=classic_light_new(TrayMachine); del CONFIG['LIGHT']; classic_light_boot(tb); tb.config['LIGHT']='0'; tb.answer=0; assert tb.delete()==0
+    assert [l['color'] for l in tb.tray_seen[2]][1::2]==[color_t(0xffffff)]*2,[hex(l['color']) for l in tb.tray_seen[2]]; passed()
+    tm=classic_light_new(TrayMachine); classic_light_boot(tm); tm.mock('widget_paint'); tm.word(syms['system_bar'],tm.node('window','system_bar')); tm.answer=0; assert tm.delete()==0
+    assert tm.tray_bar==[]  # the tray sits over the page and its bar
+    bands,draws,letters=tm.tray_seen; trayrows=[b for b in bands if b[4] in (color_t(0x6a707a),color_t(0x565c66)) or 254<=b[1]<306 and b[2]>=287 and b[4]>>24==0xff]
+    assert draws[0][1]==(30,248,315,68) and trayrows[0][1]==254 and min(b[0] for b in trayrows)==38 and max(b[2] for b in trayrows)==299 and trayrows[0][4]==color_t(0x6a707a)
+    assert tm.nodes[tm.tray]['style:normal:bg_color']==0 and tm.nodes[tm.tray_prompt]['visible']==0 and 0x66000000 in [b[4] for b in bands]
+    [tcancel,tenter]=tm.nodes[tm.tray]['children'][:2]
+    assert tm.nodes[tenter]['text']=='Delete' and wbox(tm,tcancel)[1]==wbox(tm,tenter)[1]==265 and wbox(tm,tcancel)[:1]==((375-wbox(tm,tcancel)[2]-wbox(tm,tenter)[2])//2,)
+    well=[b for b in bands if b[4]>>24==0xff and 265<=b[1]<295 and b[2]<299 and b[0]>38]
+    assert tm.second==(258,'OK')
+    cover9=corner_cover(9); first=next(n for n in range(9) if 0<cover9[n]<255); assert (38+first,254,1,1,cover9[first]<<24|color_t(0x6a707a)&0xffffff) in [b[:5] for b in bands]  # the tray's corner, and over the track its inset's
+    assert any(b[1]==265 and b[3]==1 and b[2]==1 and b[4]&0xffffff==0 and 0<b[4]>>24<0xce for b in bands)
+    assert well[0][1]==265 and well[0][4]==color_t(0x07090d) and [l['text'] for l in letters][1::2]==['Cancel','Delete'] and letters[1]['color']==color_t(0xffffff)
 # ... and the flag ends with the call: the next prompt, a question, is the page.
-tm.top=dq=tm.node('dialog','confirminfo_dialog'); tm.word(dq+O['W_PARENT'],tm.wm); place(tm,dq,0,0,375,320); ce=cl_cells(tm,dq); tm.nodes[dq]['children']=ce; parents(tm,dq); tm.paint(dq); assert wbox(tm,ce[0])[1]==258 and tm.nodes[ce[1]]['text']=='OK'; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    tm.top=dq=tm.node('dialog','confirminfo_dialog'); tm.word(dq+O['W_PARENT'],tm.wm); place(tm,dq,0,0,375,320); ce=cl_cells(tm,dq); tm.nodes[dq]['children']=ce; parents(tm,dq); tm.paint(dq); assert wbox(tm,ce[0])[1]==258 and tm.nodes[ce[1]]['text']=='OK'; passed()
 # Hold menu under Classic: Cover Flow's flip panel, centred under the bar and clear of the glass: a 44-row header holding the title, then
 # the theme's 32 px rows, six at most; opaque, with no dim. Its title loops as Now Playing's, with every label's holds.
 from ipod import corner_x
@@ -8195,75 +8257,85 @@ def hold_panel(m,d,paper,light='1'):
     assert rows[0][:4]==(40,y,294,H) and rows[0][4]>>24==0xff and (paper is None or rows[0][4]==paper) and [b[:4] for b in rows[1:45]]==[(40,y+j,294,1) for j in range(44)] and rows[1][4]>>24==0xf0
     assert [b[:4] for b in rows[45:53]]==[(40,y+42+j,294,1) for j in range(8)] and rows[46][4]==28<<24; panel_frame(rows[:57],40,y,294,H,light)
     assert corner_x(y-1,H+1)<=39; return y
-hm,hd,hl=hold_cl(); items=hm.nodes[hm.view]['children'][:]; nav=named(hm,hd,'view_navbar'); title=named(hm,nav,'scrlabel_title')
-assert wbox(hm,hl)==(40,99,294,192) and wbox(hm,nav)==(40,55,294,44) and len(items)==6
-assert [wbox(hm,i) for i in items]==[(0,32*k,294,32) for k in range(len(items))] and hm.nodes[nav].get('visible',1) and hm.nodes[named(hm,nav,'img_return')]['visible']==0
-assert hm.nodes[hd]['style:normal:bg_color']==0 and hm.nodes[hd]['highlight']=='' and hm.nodes[hl]['style:normal:bg_color']==0 and hm.nodes[nav]['style:normal:bg_color']==0
-assert wbox(hm,title)==(12,5,270,33) and (hm.nodes[title]['style:normal:font_name'],hm.nodes[title]['style:normal:font_size'])==(CL_FONT,31) and hm.nodes[title]['_final']&0xffffffff==0xffffffff
-assert hm.nodes[title]['loop']==1 and 'delay' not in hm.nodes[title] and 'lull' not in hm.nodes[title]  # every label's holds, not its own
-assert hold_panel(hm,hd,None)==55
-lab=[c for c in hm.nodes[items[0]]['children'] if hm.nodes[c]['type']=='hscroll_label'][0]
-assert wbox(hm,lab)==(12,0,270,32) and (hm.nodes[lab]['style:normal:font_name'],hm.nodes[lab]['style:normal:font_size'])==(CL_FONT,25) and 'style:normal:text_align_h' not in hm.nodes[lab] and '_final' not in hm.nodes[lab]
-hm.paint(hm.view); assert [b[1] for b in hm.bands if b[2]==294 and b[4]>>24==0xff][:1]==[0] and hm.lcd_colors()==LCD_COLORS
-assert not [b for b in hm.bands if b[4] in (0x24000000,0x33000000,0x21ffffff)]
-hd0,hd1,hl0=hold_cl(light='0'); assert hold_panel(hd0,hd1,0xff000000,'0')==55; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    hm,hd,hl=hold_cl(); items=hm.nodes[hm.view]['children'][:]; nav=named(hm,hd,'view_navbar'); title=named(hm,nav,'scrlabel_title')
+    assert wbox(hm,hl)==(40,99,294,192) and wbox(hm,nav)==(40,55,294,44) and len(items)==6
+    assert [wbox(hm,i) for i in items]==[(0,32*k,294,32) for k in range(len(items))] and hm.nodes[nav].get('visible',1) and hm.nodes[named(hm,nav,'img_return')]['visible']==0
+    assert hm.nodes[hd]['style:normal:bg_color']==0 and hm.nodes[hd]['highlight']=='' and hm.nodes[hl]['style:normal:bg_color']==0 and hm.nodes[nav]['style:normal:bg_color']==0
+    assert wbox(hm,title)==(12,5,270,33) and (hm.nodes[title]['style:normal:font_name'],hm.nodes[title]['style:normal:font_size'])==(CL_FONT,31) and hm.nodes[title]['_final']&0xffffffff==0xffffffff
+    assert hm.nodes[title]['loop']==1 and 'delay' not in hm.nodes[title] and 'lull' not in hm.nodes[title]  # every label's holds, not its own
+    assert hold_panel(hm,hd,None)==55
+    lab=[c for c in hm.nodes[items[0]]['children'] if hm.nodes[c]['type']=='hscroll_label'][0]
+    assert wbox(hm,lab)==(12,0,270,32) and (hm.nodes[lab]['style:normal:font_name'],hm.nodes[lab]['style:normal:font_size'])==(CL_FONT,25) and 'style:normal:text_align_h' not in hm.nodes[lab] and '_final' not in hm.nodes[lab]
+    hm.paint(hm.view); assert [b[1] for b in hm.bands if b[2]==294 and b[4]>>24==0xff][:1]==[0] and hm.lcd_colors()==LCD_COLORS
+    assert not [b for b in hm.bands if b[4] in (0x24000000,0x33000000,0x21ffffff)]
+    hd0,hd1,hl0=hold_cl(light='0'); assert hold_panel(hd0,hd1,0xff000000,'0')==55; passed()
 # ... a failed boot reads as Minimal: the menu keeps stock's own box, with none of the panel.
-CONFIG['LIGHT']='1'; fm=classic_light_new(QueueMachine); del CONFIG['LIGHT']; classic_light_boot(fm,fail=lambda page:True); fm.press(6000); assert fm.hold()==11; fd=fm.top; fm.word(fd+O['W_PARENT'],fm.wm); place(fm,fd,0,0,375,320); parents(fm,fd); fm.clip=(0,0,375,320); fl=named(fm,fd,'list_view')
-assert wbox(fm,fl)[:2]!=(40,99); fm.paint(fd); assert not [b for b in fm.bands if b[4]>>24==0xf0]
-ft=named(fm,fd,'scrlabel_title'); assert fm.nodes[ft]['loop']==1 and 'delay' not in fm.nodes[ft] and 'lull' not in fm.nodes[ft]; passed()  # its title as Now Playing's too
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    CONFIG['LIGHT']='1'; fm=classic_light_new(QueueMachine); del CONFIG['LIGHT']; classic_light_boot(fm,fail=lambda page:True); fm.press(6000); assert fm.hold()==11; fd=fm.top; fm.word(fd+O['W_PARENT'],fm.wm); place(fm,fd,0,0,375,320); parents(fm,fd); fm.clip=(0,0,375,320); fl=named(fm,fd,'list_view')
+    assert wbox(fm,fl)[:2]!=(40,99); fm.paint(fd); assert not [b for b in fm.bands if b[4]>>24==0xf0]
+    ft=named(fm,fd,'scrlabel_title'); assert fm.nodes[ft]['loop']==1 and 'delay' not in fm.nodes[ft] and 'lull' not in fm.nodes[ft]; passed()  # its title as Now Playing's too
 # ... more than six rows: the list stops at 192 and scrolls; the sort list keeps its tick at the row's right.
-em=classic_light_new(QueueMachine,page='playing_page',pos=1); classic_light_boot(em); em.press(6000); assert em.hold()==11; ed=em.top; eitems=em.nodes[em.view]['children']
-assert len(eitems)>6 and wbox(em,named(em,ed,'list_view'))==(40,99,294,192) and [wbox(em,i)[1] for i in eitems]==[32*k for k in range(len(eitems))] and em.nodes[em.view]['virtual_h']==32*len(eitems)
-em.word(ed+O['W_PARENT'],em.wm); parents(em,ed); em.top=ed; place(em,em.view,0,0,294,192); em.word(em.view+O['VIEW_CONTENT_H'],32*len(eitems)); em.paint(em.view)
-for _ in range(7): assert em.call()==11
-top=em.get(em.view+O['SCROLL_Y']); assert em.selected(em.view)==7 and top>0; em.paint(em.view); assert [b[1] for b in em.bands if b[2]==294 and b[4]>>24==0xff][:1]==[224-top]
-em.release(); em.pick(8); em.advance(0); cd=em.top; citems=em.nodes[em.view]['children']; assert em.labels()[0]=='Play One Song' and [wbox(em,i)[1::2] for i in citems]==[(32*k,32) for k in range(6)] and wbox(em,named(em,cd,'list_view'))==(40,99,294,192)
-tick=[c for i in citems for c in em.nodes[i]['children'] if em.nodes[c]['type']=='image']; assert [em.nodes[c]['image'] for c in tick]==['select'] and wbox(em,tick[0])==(259,0,24,32); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    em=classic_light_new(QueueMachine,page='playing_page',pos=1); classic_light_boot(em); em.press(6000); assert em.hold()==11; ed=em.top; eitems=em.nodes[em.view]['children']
+    assert len(eitems)>6 and wbox(em,named(em,ed,'list_view'))==(40,99,294,192) and [wbox(em,i)[1] for i in eitems]==[32*k for k in range(len(eitems))] and em.nodes[em.view]['virtual_h']==32*len(eitems)
+    em.word(ed+O['W_PARENT'],em.wm); parents(em,ed); em.top=ed; place(em,em.view,0,0,294,192); em.word(em.view+O['VIEW_CONTENT_H'],32*len(eitems)); em.paint(em.view)
+    for _ in range(7): assert em.call()==11
+    top=em.get(em.view+O['SCROLL_Y']); assert em.selected(em.view)==7 and top>0; em.paint(em.view); assert [b[1] for b in em.bands if b[2]==294 and b[4]>>24==0xff][:1]==[224-top]
+    em.release(); em.pick(8); em.advance(0); cd=em.top; citems=em.nodes[em.view]['children']; assert em.labels()[0]=='Play One Song' and [wbox(em,i)[1::2] for i in citems]==[(32*k,32) for k in range(6)] and wbox(em,named(em,cd,'list_view'))==(40,99,294,192)
+    tick=[c for i in citems for c in em.nodes[i]['children'] if em.nodes[c]['type']=='image']; assert [em.nodes[c]['image'] for c in tick]==['select'] and wbox(em,tick[0])==(259,0,24,32); passed()
 # A toast: #2b2b2bee in both halves, 22 px, its box holding its font; 24 rows a further line.
 def toast_cl(light,name='msginfo_dialog',text='Update Local Music first'):
     m=Machine(); m.config['LIGHT']=light; classic_light_boot(m); d=m.node('dialog',name); m.word(d+O['W_PARENT'],m.wm); place(m,d,0,0,375,320); m.top=d
     label=m.node('hscroll_label','',text=text); place(m,label,10,140,355,24); m.nodes[d]['children']=[label]; parents(m,d); return m,d,label
-for light in '01':
-    t,td,label=toast_cl(light); bg(t,td); box_=[r for r in t.rounded if r['kind']=='fill']
-    assert [(r['rect'],r['radius'],r['color']) for r in box_]==[((45,138,284,39),12,0xee2b2b2b)] and t.nodes[td]['style:normal:bg_color']==0 and t.lcd_colors()==LCD_COLORS
-    assert wbox(t,label)==(22,145,331,24) and (t.nodes[label]['style:normal:font_name'],t.nodes[label]['style:normal:font_size'])==(CL_FONT,22) and wbox(t,label)[3]>22 and t.nodes[label]['style:normal:text_color']&0xffffffff==color_t(0xffffff if light=='0' else 0)
-    t.calls=[]; bg(t,td); assert not [c for c in t.calls if c[0]=='widget_move_resize' or c[0].startswith('widget_set_prop')]
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light in '01':
+        t,td,label=toast_cl(light); bg(t,td); box_=[r for r in t.rounded if r['kind']=='fill']
+        assert [(r['rect'],r['radius'],r['color']) for r in box_]==[((45,138,284,39),12,0xee2b2b2b)] and t.nodes[td]['style:normal:bg_color']==0 and t.lcd_colors()==LCD_COLORS
+        assert wbox(t,label)==(22,145,331,24) and (t.nodes[label]['style:normal:font_name'],t.nodes[label]['style:normal:font_size'])==(CL_FONT,22) and wbox(t,label)[3]>22 and t.nodes[label]['style:normal:text_color']&0xffffffff==color_t(0xffffff if light=='0' else 0)
+        t.calls=[]; bg(t,td); assert not [c for c in t.calls if c[0]=='widget_move_resize' or c[0].startswith('widget_set_prop')]
+    passed()
 # ... two lines; and a line too long for its label: the box stops at the label's width, its text scrolling inside.
-t,td,label=toast_cl('1'); line2=t.node('hscroll_label','',text='Short'); place(t,line2,10,170,355,24); t.nodes[td]['children'].append(line2); parents(t,td); bg(t,td); assert wbox(t,line2)==(22,169,331,24) and [r['rect'] for r in t.rounded if r['kind']=='fill']==[((45,138,284,63))]
-t,td,label=toast_cl('1',text='x'*40); bg(t,td); assert [r['rect'] for r in t.rounded if r['kind']=='fill']==[(22,138,331,39)] and wbox(t,label)[0::2]==(22,331); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    t,td,label=toast_cl('1'); line2=t.node('hscroll_label','',text='Short'); place(t,line2,10,170,355,24); t.nodes[td]['children'].append(line2); parents(t,td); bg(t,td); assert wbox(t,line2)==(22,169,331,24) and [r['rect'] for r in t.rounded if r['kind']=='fill']==[((45,138,284,63))]
+    t,td,label=toast_cl('1',text='x'*40); bg(t,td); assert [r['rect'] for r in t.rounded if r['kind']=='fill']==[(22,138,331,39)] and wbox(t,label)[0::2]==(22,331); passed()
 # ... the paint of any other widget compares no names on the dialogs' account, past the one every theme's confirm_prompt makes.
-k=Machine(); classic_light_boot(k); win=k.node('window','some_page'); k.word(win+O['W_PARENT'],k.wm); v=k.node('view','some_view'); k.nodes[win]['children']=[v]; parents(k,win); k.top=win; bare(k); bg(k,v)
-seen=[k.text(c[2]) for c in k.calls if c[0]=='tk_strcmp']; assert seen.count('confirminfo_dialog')==1 and not {'msginfo_dialog','checkfw_dialog','showsn_dialog'}&set(seen); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    k=Machine(); classic_light_boot(k); win=k.node('window','some_page'); k.word(win+O['W_PARENT'],k.wm); v=k.node('view','some_view'); k.nodes[win]['children']=[v]; parents(k,win); k.top=win; bare(k); bg(k,v)
+    seen=[k.text(c[2]) for c in k.calls if c[0]=='tk_strcmp']; assert seen.count('confirminfo_dialog')==1 and not {'msginfo_dialog','checkfw_dialog','showsn_dialog'}&set(seen); passed()
 # ... the update's dialog the same box; the serial's QR its box in the toast's colour, undimmed; neither page dims under them.
-for light in '01':
-    u,ud,ul=toast_cl(light,'checkfw_dialog','Updating'); bg(u,ud); assert [r['color'] for r in u.rounded if r['kind']=='fill']==[0xee2b2b2b] and wbox(u,ul)==(22,145,331,24)
-    class LoadDialog(UiLoad,Machine): pass
-    q_=LoadDialog(); q_.config['LIGHT']=light; classic_light_boot(q_); qd=q_.node('dialog','showsn_dialog',[q_.node('image','image_qrcode')]); parents(q_,qd); ui_loaded(q_,'dialog/showsn_dialog',qd); assert q_.nodes[qd]['highlight']==''
-    q_.word(qd+O['W_PARENT'],q_.wm); place(q_,qd,88,60,200,200); bg(q_,qd); assert q_.nodes[qd]['style:normal:round_radius']==12 and q_.nodes[qd]['style:normal:border_color']==0 and q_.nodes[qd]['style:normal:bg_color']&0xffffffff==(0xee000000|color_t(0xd4d4d4 if light=='1' else 0x2b2b2b)&0xffffff)
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light in '01':
+        u,ud,ul=toast_cl(light,'checkfw_dialog','Updating'); bg(u,ud); assert [r['color'] for r in u.rounded if r['kind']=='fill']==[0xee2b2b2b] and wbox(u,ul)==(22,145,331,24)
+        class LoadDialog(UiLoad,Machine): pass
+        q_=LoadDialog(); q_.config['LIGHT']=light; classic_light_boot(q_); qd=q_.node('dialog','showsn_dialog',[q_.node('image','image_qrcode')]); parents(q_,qd); ui_loaded(q_,'dialog/showsn_dialog',qd); assert q_.nodes[qd]['highlight']==''
+        q_.word(qd+O['W_PARENT'],q_.wm); place(q_,qd,88,60,200,200); bg(q_,qd); assert q_.nodes[qd]['style:normal:round_radius']==12 and q_.nodes[qd]['style:normal:border_color']==0 and q_.nodes[qd]['style:normal:bg_color']&0xffffffff==(0xee000000|color_t(0xd4d4d4 if light=='1' else 0x2b2b2b)&0xffffff)
+    passed()
 # Pressed rows: #cccccc and #333333, the whole row.
-for light,grey in (('1',0xffcccccc),('0',0xff333333)):
-    pm=Machine(); pm.config['LIGHT']=light; classic_light_boot(pm); row=pm.node('list_item'); pm.word(row+O['W_W'],375); pm.word(row+O['W_H'],28); b=pm.node('button','',style='s_btn_listitem',state_for_style='pressed'); pm.nodes[row]['children']=[b]; pm.word(b+O['W_PARENT'],row); pm.word(b+O['W_W'],375); pm.word(b+O['W_H'],28)
-    bg(pm,row); assert [(r['rect'],r['radius'],r['color']) for r in pm.rounded if r['kind']=='fill']==[((0,0,375,28),0,grey)]
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light,grey in (('1',0xffcccccc),('0',0xff333333)):
+        pm=Machine(); pm.config['LIGHT']=light; classic_light_boot(pm); row=pm.node('list_item'); pm.word(row+O['W_W'],375); pm.word(row+O['W_H'],28); b=pm.node('button','',style='s_btn_listitem',state_for_style='pressed'); pm.nodes[row]['children']=[b]; pm.word(b+O['W_PARENT'],row); pm.word(b+O['W_W'],375); pm.word(b+O['W_H'],28)
+        bg(pm,row); assert [(r['rect'],r['radius'],r['color']) for r in pm.rounded if r['kind']=='fill']==[((0,0,375,28),0,grey)]
+    passed()
 # Nothing crosses the glass, read from what was painted: tray, its track, Form A's track, the toast, the hold menu's panel and its ring at its tallest.
 def span(rows): x,y=min(b[0] for b in rows),min(b[1] for b in rows); return x,y,max(b[0]+b[2] for b in rows)-x,max(b[1]+b[3] for b in rows)-y
-t,td,_=toast_cl('1'); bg(t,td)
-for x,y,w,h in (span(trayrows),span(well),span(trackrows),[r['rect'] for r in t.rounded if r['kind']=='fill'][0],(39,54,296,238)):
-    assert corner_inset(y)<=x and corner_inset(y+h-1)<=x and x+w<=375-max(corner_inset(y),corner_inset(y+h-1)),(x,y,w,h)
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    t,td,_=toast_cl('1'); bg(t,td)
+    for x,y,w,h in (span(trayrows),span(well),span(trackrows),[r['rect'] for r in t.rounded if r['kind']=='fill'][0],(39,54,296,238)):
+        assert corner_inset(y)<=x and corner_inset(y+h-1)<=x and x+w<=375-max(corner_inset(y),corner_inset(y+h-1)),(x,y,w,h)
+    passed()
 # Minimal: confirm rows, QM_ROW 66, the toast and the press as today, no images.
-for theme_ in '0':
-    def on(k): k.config.update(THEME=theme_)
-    SETUP[:]=[on]
-    try: qm=QueueMachine()
-    finally: SETUP.clear()
-    qm.press(6000); assert qm.hold()==11; its=qm.nodes[qm.view]['children']; assert [wbox(qm,i)[3] for i in its]==[66]*len(its) and qm.nodes[named(qm,qm.top,'view_navbar')]['visible']==1 and 'highlight' not in qm.nodes[qm.top]
-    fm=Machine(); fm.config['THEME']=theme_; fd=fm.node('dialog','confirminfo_dialog'); fm.word(fd+O['W_PARENT'],fm.wm); place(fm,fd,0,0,375,320); fm.top=fd; fm.clip=(0,0,375,320); fc=cl_cells(fm,fd); fm.nodes[fd]['children']=fc; parents(fm,fd); fm.paint(fd)
-    assert not fm.image_draws and wbox(fm,fc[1])[1]==O['CONFIRM_TOP']+48 and 'style:normal:bg_color' not in fm.nodes[fd] and not fm.letters
-    tt=Machine(); tt.config['THEME']=theme_; td=tt.node('dialog','msginfo_dialog',[tt.node('hscroll_label','',text='x')]); tt.word(td+O['W_PARENT'],tt.wm); place(tt,td,0,0,375,320); tt.top=td; bg(tt,td); assert not tt.rounded and 'style:normal:bg_color' not in tt.nodes[td]
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for theme_ in '0':
+        def on(k): k.config.update(THEME=theme_)
+        SETUP[:]=[on]
+        try: qm=QueueMachine()
+        finally: SETUP.clear()
+        qm.press(6000); assert qm.hold()==11; its=qm.nodes[qm.view]['children']; assert [wbox(qm,i)[3] for i in its]==[66]*len(its) and qm.nodes[named(qm,qm.top,'view_navbar')]['visible']==1 and 'highlight' not in qm.nodes[qm.top]
+        fm=Machine(); fm.config['THEME']=theme_; fd=fm.node('dialog','confirminfo_dialog'); fm.word(fd+O['W_PARENT'],fm.wm); place(fm,fd,0,0,375,320); fm.top=fd; fm.clip=(0,0,375,320); fc=cl_cells(fm,fd); fm.nodes[fd]['children']=fc; parents(fm,fd); fm.paint(fd)
+        assert not fm.image_draws and wbox(fm,fc[1])[1]==O['CONFIRM_TOP']+48 and 'style:normal:bg_color' not in fm.nodes[fd] and not fm.letters
+        tt=Machine(); tt.config['THEME']=theme_; td=tt.node('dialog','msginfo_dialog',[tt.node('hscroll_label','',text='x')]); tt.word(td+O['W_PARENT'],tt.wm); place(tt,td,0,0,375,320); tt.top=td; bg(tt,td); assert not tt.rounded and 'style:normal:bg_color' not in tt.nodes[td]
+    passed()
 
 # Classic's message screens: stock's Update Local Music dialog and USB mode, as the loader hands them over.
 class MsgMachine(LoadPlain):
@@ -8311,119 +8383,137 @@ def usb_page(mode,theme_='1',light='1',y=26,machine=None):
 def msg_track(m): return [b for b in m.bands if 72<=b[0] and b[0]+b[2]<=301 and 218<=b[1]<232 and b[3]==1 and b[4]>>24!=0xff]
 def msg_fill(m): return [b for b in m.bands if 72<=b[0] and 218<=b[1]<232 and b[3]==1 and b[4]>>24==0xff]
 # Update Library's dialog under Classic: the page, the dark bar, the icon; stock's picture and labels hidden, btn_no moved.
-for light in '10':
-    um,uwin,uanim,umsg,uscan,ubtn=msg_dialog(light=light); bare(um); bg(um,uwin); uhead,uline=named(um,uwin,'msg_heading'),named(um,uwin,'msg_line')
-    darkrows=[b for b in um.bands if b[2]==375 and b[1]<26]
-    assert page_fill(um,26,0x63717b if light=='1' else 0x1c1c1c) and [b[:4] for b in darkrows]==[(0,j,375,1) for j in range(26)] and darkrows[0][4]==color_t(0x1c1c1c) and darkrows[24][4]==color_t(0x1c1c1c) and darkrows[25][4]==color_t(0x333333)
-    assert [um.nodes[w]['visible'] for w in (uanim,umsg,uscan)]==[0,0,0] and named(um,uwin,'btn_no')==ubtn and um.nodes[ubtn]['visible']==1
-    assert [um.text(c[2]) for c in um.calls if c[0]=='widget_load_image']==['classic_light_orb_note'] and um.image_draws[0][1][:2]==(129,38)
-    assert wbox(um,ubtn)==(127,248,121,34) and wbox(um,uhead)==(16,159,343,32) and um.nodes[uhead]['text']=='Updating Local Music' and wbox(um,uline)==(16,188,343,20)
-    assert um.nodes[uhead]['style:normal:font_size']==29 and um.nodes[uhead]['style:normal:font_name']=='classic-light' and um.nodes[uline]['style:normal:font_size']==18 and um.nodes[uline]['style:normal:font_name']=='default'
-    white=color_t(0 if light=='1' else 0xffffff)  # Light Mode's style hook flips it back
-    assert um.nodes[uhead]['style:normal:text_color']&0xffffffff==white and um.nodes[uline]['style:normal:text_color']&0xffffffff==white and um.nodes[uhead]['style:normal:text_align_h']=='center'
-    for state in ('normal','pressed','over','disable','focused'):
-        assert um.nodes[ubtn][f'style:{state}:bg_color']==0 and um.nodes[ubtn][f'style:{state}:font_size']==23 and um.nodes[ubtn][f'style:{state}:font_name']=='classic-light' and um.nodes[ubtn][f'style:{state}:text_color']&0xffffffff==white
-    assert [(t['text'],t['rect'],t['font'][1]) for t in um.letters]==[('Update Library',(0,0,375,25),21),('Updating Local Music',(16,160,343,32),29),('0 of 704 songs',(16,189,343,20),18)]
-    assert [b[:5] for b in um.bands if b[1]<=7 and b[0]>=294 and b[2]==26]==[(294,7,26,13,color_t(0xf5f5f5))]  # the battery, on the screen
-    cancel,rest=round_box([b for b in um.bands if 248<=b[1]<283],127,248,121,34,7)
-    assert cancel[0]==color_t(0x232c33) and cancel[33]==color_t(0x333c43)
-    assert [b[:5] for b in rest if b[1]==282 and b[2]>1]==[(127+corner_in(7),282,121-2*corner_in(7),1,0x26000000|0xffffff)] and um.lcd_colors()==LCD_COLORS; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for light in '10':
+        um,uwin,uanim,umsg,uscan,ubtn=msg_dialog(light=light); bare(um); bg(um,uwin); uhead,uline=named(um,uwin,'msg_heading'),named(um,uwin,'msg_line')
+        darkrows=[b for b in um.bands if b[2]==375 and b[1]<26]
+        assert page_fill(um,26,0x63717b if light=='1' else 0x1c1c1c) and [b[:4] for b in darkrows]==[(0,j,375,1) for j in range(26)] and darkrows[0][4]==color_t(0x1c1c1c) and darkrows[24][4]==color_t(0x1c1c1c) and darkrows[25][4]==color_t(0x333333)
+        assert [um.nodes[w]['visible'] for w in (uanim,umsg,uscan)]==[0,0,0] and named(um,uwin,'btn_no')==ubtn and um.nodes[ubtn]['visible']==1
+        assert [um.text(c[2]) for c in um.calls if c[0]=='widget_load_image']==['classic_light_orb_note'] and um.image_draws[0][1][:2]==(129,38)
+        assert wbox(um,ubtn)==(127,248,121,34) and wbox(um,uhead)==(16,159,343,32) and um.nodes[uhead]['text']=='Updating Local Music' and wbox(um,uline)==(16,188,343,20)
+        assert um.nodes[uhead]['style:normal:font_size']==29 and um.nodes[uhead]['style:normal:font_name']=='classic-light' and um.nodes[uline]['style:normal:font_size']==18 and um.nodes[uline]['style:normal:font_name']=='default'
+        white=color_t(0 if light=='1' else 0xffffff)  # Light Mode's style hook flips it back
+        assert um.nodes[uhead]['style:normal:text_color']&0xffffffff==white and um.nodes[uline]['style:normal:text_color']&0xffffffff==white and um.nodes[uhead]['style:normal:text_align_h']=='center'
+        for state in ('normal','pressed','over','disable','focused'):
+            assert um.nodes[ubtn][f'style:{state}:bg_color']==0 and um.nodes[ubtn][f'style:{state}:font_size']==23 and um.nodes[ubtn][f'style:{state}:font_name']=='classic-light' and um.nodes[ubtn][f'style:{state}:text_color']&0xffffffff==white
+        assert [(t['text'],t['rect'],t['font'][1]) for t in um.letters]==[('Update Library',(0,0,375,25),21),('Updating Local Music',(16,160,343,32),29),('0 of 704 songs',(16,189,343,20),18)]
+        assert [b[:5] for b in um.bands if b[1]<=7 and b[0]>=294 and b[2]==26]==[(294,7,26,13,color_t(0xf5f5f5))]  # the battery, on the screen
+        cancel,rest=round_box([b for b in um.bands if 248<=b[1]<283],127,248,121,34,7)
+        assert cancel[0]==color_t(0x232c33) and cancel[33]==color_t(0x333c43)
+        assert [b[:5] for b in rest if b[1]==282 and b[2]>1]==[(127+corner_in(7),282,121-2*corner_in(7),1,0x26000000|0xffffff)] and um.lcd_colors()==LCD_COLORS; passed()
 # ... its count: "312 of 704 songs", the bar 229*312//704 wide; past the total, stock's text and no bar; a tap on Cancel reaches stock's handler.
-assert um.sqls[-1]=='select count(*) from songtable' and sum('select count' in s for s in um.sqls)==1  # read once, on open, with no rows in memory
-um.nodes[umsg]['text']='Updating No.312'; bare(um); bg(um,uwin); track,fillrows=msg_track(um),msg_fill(um)
-assert um.nodes[uline]['text']=='312 of 704 songs' and [b[1] for b in track]==list(range(218,232)) and [b[4]>>24 for b in track]==[0x87,0x5c,0x4d,0x3d,0x3d]+[0x3b]*7+[0x54,0x54] and {b[4]&0xffffff for b in track}=={0}
-tinset=[b[0]-72 for b in track]; assert [b[2] for b in track]==[229-2*n for n in tinset] and tinset[0]>0==tinset[7] and tinset==tinset[::-1]
-assert [b[1] for b in fillrows]==list(range(218,232)) and fillrows[7][2]==101 and fillrows[0][:3]==(72+tinset[0],218,101-tinset[0]) and fillrows[0][4]==color_t(0xf7ffff) and fillrows[13][4]==color_t(0xbdc1c4)
-assert [b[:5] for b in um.bands if b[1]==232]==[(79,232,215,1,0x14000000|0xffffff)]; passed()
-um.calls=[]; um.advance(200); assert not [c for c in um.calls if c[0]=='widget_invalidate_force']; passed()  # no change, no repaint
-um.nodes[umsg]['text']='Updating No.313'; um.calls=[]; um.advance(200); assert um.nodes[uline]['text']=='313 of 704 songs' and [c[1] for c in um.calls if c[0]=='widget_invalidate_force']==[uwin]; passed()  # stock's hidden label repaints nothing: the poll does
-for text,want in (('Updating No.704',226),('Library Updated,703 Updated',226),('Updating No.1',0),('Updating No.10',3)):  # 99% until it closes; a sliver's rows stay inside the track
-    um.nodes[umsg]['text']=text; bare(um); bg(um,uwin); rows=msg_fill(um); assert max([b[0]+b[2]-72 for b in rows],default=0)==want and all(b[2]>0 for b in rows),text
-passed()
-um.nodes[umsg]['text']='Updating No.705'; bare(um); bg(um,uwin); assert um.nodes[uline]['text']=='Updating No.705' and not msg_track(um) and not msg_fill(um) and [b for b in um.bands if b[1]==232]==[] and (127+corner_in(7),248) in [b[:2] for b in um.bands]; passed()
-um.clicks=[]; assert um.click(ubtn)==0 and um.clicks==[ubtn]; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    assert um.sqls[-1]=='select count(*) from songtable' and sum('select count' in s for s in um.sqls)==1  # read once, on open, with no rows in memory
+    um.nodes[umsg]['text']='Updating No.312'; bare(um); bg(um,uwin); track,fillrows=msg_track(um),msg_fill(um)
+    assert um.nodes[uline]['text']=='312 of 704 songs' and [b[1] for b in track]==list(range(218,232)) and [b[4]>>24 for b in track]==[0x87,0x5c,0x4d,0x3d,0x3d]+[0x3b]*7+[0x54,0x54] and {b[4]&0xffffff for b in track}=={0}
+    tinset=[b[0]-72 for b in track]; assert [b[2] for b in track]==[229-2*n for n in tinset] and tinset[0]>0==tinset[7] and tinset==tinset[::-1]
+    assert [b[1] for b in fillrows]==list(range(218,232)) and fillrows[7][2]==101 and fillrows[0][:3]==(72+tinset[0],218,101-tinset[0]) and fillrows[0][4]==color_t(0xf7ffff) and fillrows[13][4]==color_t(0xbdc1c4)
+    assert [b[:5] for b in um.bands if b[1]==232]==[(79,232,215,1,0x14000000|0xffffff)]; passed()
+    um.calls=[]; um.advance(200); assert not [c for c in um.calls if c[0]=='widget_invalidate_force']; passed()  # no change, no repaint
+    um.nodes[umsg]['text']='Updating No.313'; um.calls=[]; um.advance(200); assert um.nodes[uline]['text']=='313 of 704 songs' and [c[1] for c in um.calls if c[0]=='widget_invalidate_force']==[uwin]; passed()  # stock's hidden label repaints nothing: the poll does
+    for text,want in (('Updating No.704',226),('Library Updated,703 Updated',226),('Updating No.1',0),('Updating No.10',3)):  # 99% until it closes; a sliver's rows stay inside the track
+        um.nodes[umsg]['text']=text; bare(um); bg(um,uwin); rows=msg_fill(um); assert max([b[0]+b[2]-72 for b in rows],default=0)==want and all(b[2]>0 for b in rows),text
+    passed()
+    um.nodes[umsg]['text']='Updating No.705'; bare(um); bg(um,uwin); assert um.nodes[uline]['text']=='Updating No.705' and not msg_track(um) and not msg_fill(um) and [b for b in um.bands if b[1]==232]==[] and (127+corner_in(7),248) in [b[:2] for b in um.bands]; passed()
+    um.clicks=[]; assert um.click(ubtn)==0 and um.clicks==[ubtn]; passed()
 # ... the text it's read from is any language's; a first scan or a folder's has no total: stock's text, no bar.
-um.nodes[umsg]['text']='正在更新第312首'; bare(um); bg(um,uwin); assert um.nodes[uline]['text']=='312 of 704 songs' and msg_fill(um); passed()
-for kw in (dict(songs=0),dict(whole=0)):
-    f,fwin,_,fmsg,_,_=msg_dialog(text='Updating No.12',**kw); bare(f); bg(f,fwin); assert f.nodes[named(f,fwin,'msg_line')]['text']=='Updating No.12' and not msg_track(f) and not msg_fill(f); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    um.nodes[umsg]['text']='正在更新第312首'; bare(um); bg(um,uwin); assert um.nodes[uline]['text']=='312 of 704 songs' and msg_fill(um); passed()
+    for kw in (dict(songs=0),dict(whole=0)):
+        f,fwin,_,fmsg,_,_=msg_dialog(text='Updating No.12',**kw); bare(f); bg(f,fwin); assert f.nodes[named(f,fwin,'msg_line')]['text']=='Updating No.12' and not msg_track(f) and not msg_fill(f); passed()
 # ... stock's button text is translated; the screen is English.
-b2,b2win,_,_,_,b2btn=msg_dialog(); b2.nodes[b2btn]['text']='取消'; bare(b2); bg(b2,b2win); assert b2.nodes[b2btn]['text']=='Cancel'; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    b2,b2win,_,_,_,b2btn=msg_dialog(); b2.nodes[b2btn]['text']='取消'; bare(b2); bg(b2,b2win); assert b2.nodes[b2btn]['text']=='Cancel'; passed()
 # ... with stock's label still empty, a later paint leaves the button alone: it writes only a text that differs.
-b3,b3win,_,_,_,b3btn=msg_dialog(text=''); b3.nodes[b3btn]['text']='取消'; bare(b3); bg(b3,b3win); assert b3.nodes[b3btn]['text']=='Cancel'
-bare(b3); bg(b3,b3win); assert not [c for c in b3.calls if c[0]=='widget_set_text_utf8' and c[1]==b3btn]; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    b3,b3win,_,_,_,b3btn=msg_dialog(text=''); b3.nodes[b3btn]['text']='取消'; bare(b3); bg(b3,b3win); assert b3.nodes[b3btn]['text']=='Cancel'
+    bare(b3); bg(b3,b3win); assert not [c for c in b3.calls if c[0]=='widget_set_text_utf8' and c[1]==b3btn]; passed()
 # ... the total is a worker's, as Home's counts are: the load opens no connection on the UI thread. Until the answer, stock's text and no bar; then the poll puts up the count.
-q,qwin,_,qmsg,_,_=msg_dialog(text='Updating No.312',counted=False)
-assert not q.sqls and not [c for c in q.calls if c[0] in ('sqlite3_open','pthread_join')] and len(q.threads)==1 and [c for c in q.calls if c[0]=='pthread_detach@GLIBC_2.0']
-bare(q); bg(q,qwin); qline=named(q,qwin,'msg_line'); assert q.nodes[qline]['text']=='Updating No.312' and not msg_track(q) and not msg_fill(q) and not q.sqls
-q.counted(); assert q.sqls[-1]=='select count(*) from songtable'; q.calls=[]; q.advance(200); assert q.nodes[qline]['text']=='312 of 704 songs' and [c[1] for c in q.calls if c[0]=='widget_invalidate_force']==[qwin]; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q,qwin,_,qmsg,_,_=msg_dialog(text='Updating No.312',counted=False)
+    assert not q.sqls and not [c for c in q.calls if c[0] in ('sqlite3_open','pthread_join')] and len(q.threads)==1 and [c for c in q.calls if c[0]=='pthread_detach@GLIBC_2.0']
+    bare(q); bg(q,qwin); qline=named(q,qwin,'msg_line'); assert q.nodes[qline]['text']=='Updating No.312' and not msg_track(q) and not msg_fill(q) and not q.sqls
+    q.counted(); assert q.sqls[-1]=='select count(*) from songtable'; q.calls=[]; q.advance(200); assert q.nodes[qline]['text']=='312 of 704 songs' and [c[1] for c in q.calls if c[0]=='widget_invalidate_force']==[qwin]; passed()
 # ... the dialog closed first: nothing waits on the worker. A new dialog with it still running shares its answer; with it done, drops the old answer and asks again.
-q,qwin,*_=msg_dialog(counted=False); msg_close(q,qwin); q2win,_,q2msg,_,_=msg_win(q,'Updating No.3'); assert len(q.threads)==1
-q.counted(); bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='3 of 704 songs'; msg_close(q,q2win)
-q,qwin,*_=msg_dialog(counted=False); q.songs=9; q.counted(); msg_close(q,qwin); q.songs=704; q2win,_,q2msg,_,_=msg_win(q,'Updating No.3'); assert len(q.threads)==1
-bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='Updating No.3' and not msg_fill(q); q.counted(); bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='3 of 704 songs'; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q,qwin,*_=msg_dialog(counted=False); msg_close(q,qwin); q2win,_,q2msg,_,_=msg_win(q,'Updating No.3'); assert len(q.threads)==1
+    q.counted(); bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='3 of 704 songs'; msg_close(q,q2win)
+    q,qwin,*_=msg_dialog(counted=False); q.songs=9; q.counted(); msg_close(q,qwin); q.songs=704; q2win,_,q2msg,_,_=msg_win(q,'Updating No.3'); assert len(q.threads)==1
+    bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='Updating No.3' and not msg_fill(q); q.counted(); bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='3 of 704 songs'; passed()
 # ... the worker done before pthread_create has returned: its answer stands, and the next dialog asks again.
-q=MsgMachine(); q.config.update(THEME='1',LIGHT='1'); q.byte(O['SCAN_WHOLE'],1); q.thread_first=True; qwin,*_=msg_win(q,'Updating No.312'); assert [c for c in q.calls if c[0]=='pthread_detach@GLIBC_2.0']
-bare(q); bg(q,qwin); assert q.nodes[named(q,qwin,'msg_line')]['text']=='312 of 704 songs' and msg_fill(q); msg_close(q,qwin)
-q.songs=9; q.calls=[]; q2win,*_=msg_win(q,'Updating No.3'); assert [c for c in q.calls if c[0]=='pthread_create']; bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='3 of 9 songs'; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q=MsgMachine(); q.config.update(THEME='1',LIGHT='1'); q.byte(O['SCAN_WHOLE'],1); q.thread_first=True; qwin,*_=msg_win(q,'Updating No.312'); assert [c for c in q.calls if c[0]=='pthread_detach@GLIBC_2.0']
+    bare(q); bg(q,qwin); assert q.nodes[named(q,qwin,'msg_line')]['text']=='312 of 704 songs' and msg_fill(q); msg_close(q,qwin)
+    q.songs=9; q.calls=[]; q2win,*_=msg_win(q,'Updating No.3'); assert [c for c in q.calls if c[0]=='pthread_create']; bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='3 of 9 songs'; passed()
 # ... no thread to be had, or the database busy: stock's text and no bar; the next dialog asks again.
-q=MsgMachine(); q.config.update(THEME='1',LIGHT='1'); q.byte(O['SCAN_WHOLE'],1); q.thread_fails=True; qwin,*_=msg_win(q,'Updating No.3'); bare(q); bg(q,qwin); assert q.nodes[named(q,qwin,'msg_line')]['text']=='Updating No.3' and not msg_fill(q) and not q.sqls
-msg_close(q,qwin); q.thread_fails=False; q2win,*_=msg_win(q,'Updating No.3'); q.counted(); bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='3 of 704 songs'
-q,qwin,_,qmsg,_,_=msg_dialog(text='Updating No.3',counted=False); q.busy=True; q.counted(); bare(q); bg(q,qwin); assert q.nodes[named(q,qwin,'msg_line')]['text']=='Updating No.3' and not msg_track(q) and not msg_fill(q); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    q=MsgMachine(); q.config.update(THEME='1',LIGHT='1'); q.byte(O['SCAN_WHOLE'],1); q.thread_fails=True; qwin,*_=msg_win(q,'Updating No.3'); bare(q); bg(q,qwin); assert q.nodes[named(q,qwin,'msg_line')]['text']=='Updating No.3' and not msg_fill(q) and not q.sqls
+    msg_close(q,qwin); q.thread_fails=False; q2win,*_=msg_win(q,'Updating No.3'); q.counted(); bare(q); bg(q,q2win); assert q.nodes[named(q,q2win,'msg_line')]['text']=='3 of 704 songs'
+    q,qwin,_,qmsg,_,_=msg_dialog(text='Updating No.3',counted=False); q.busy=True; q.counted(); bare(q); bg(q,qwin); assert q.nodes[named(q,qwin,'msg_line')]['text']=='Updating No.3' and not msg_track(q) and not msg_fill(q); passed()
 # ... it goes with the window: no poll, nothing painted.
-f,ctx=next((f,c) for t,f,c in um.nodes[uwin]['handlers'] if t==O['EVT_DESTROY']); um.call(address=f,args=(ctx,um.event,0,0),gap=0)
-assert not [t for t in um.timers.values() if t[1]==payload_syms['msg_poll']] and um.nodes[uwin]['visible']==1; bare(um); bg(um,uwin); assert not um.image_draws and not um.letters; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    f,ctx=next((f,c) for t,f,c in um.nodes[uwin]['handlers'] if t==O['EVT_DESTROY']); um.call(address=f,args=(ctx,um.event,0,0),gap=0)
+    assert not [t for t in um.timers.values() if t[1]==payload_syms['msg_poll']] and um.nodes[uwin]['visible']==1; bare(um); bg(um,uwin); assert not um.image_draws and not um.letters; passed()
 # USB Storage's page: Connected, and the line; USB Audio and DAC have no line; a box holds its font.
-for mode,line in ((0,'Eject before disconnecting'),(2,'Eject before disconnecting'),(1,'')):
-    ub,bwin,bret,bimg,binfo,bcharge,bdac=usb_page(mode); bare(ub); bg(ub,bwin); bhead,bline=named(ub,bwin,'msg_heading'),named(ub,bwin,'msg_line')
-    assert ub.nodes[bhead]['text']=='Connected' and ub.nodes[bline].get('text','')==line and wbox(ub,bhead)==(16,228-26,343,32) and wbox(ub,bline)==(16,255-26,343,20)
-    assert page_fill(ub) and ub.image_draws[0][1][:2]==(122,67-26) and [ub.text(c[2]) for c in ub.calls if c[0]=='widget_load_image']==['classic_light_orb_usb']
-    assert [ub.nodes[w]['visible'] for w in (bimg,binfo,bret,bcharge,bdac)]==[0,0,1,1,1] and wbox(ub,bret)==(20,0,80,60) and wbox(ub,bcharge)==(247,0,50,50) and wbox(ub,bdac)==(305,0,50,50)
-    assert not [b for b in ub.bands if b[2]==375 and b[4]==color_t(0x1c1c1c)] and not msg_track(ub) and not ub.timers  # the real bar's above it; no count
-    assert [(t['text'],t['rect']) for t in ub.letters]==[('Connected',(16,229-26,343,32))]+([(line,(16,256-26,343,20))] if line else []) and ub.lcd_colors()==LCD_COLORS; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for mode,line in ((0,'Eject before disconnecting'),(2,'Eject before disconnecting'),(1,'')):
+        ub,bwin,bret,bimg,binfo,bcharge,bdac=usb_page(mode); bare(ub); bg(ub,bwin); bhead,bline=named(ub,bwin,'msg_heading'),named(ub,bwin,'msg_line')
+        assert ub.nodes[bhead]['text']=='Connected' and ub.nodes[bline].get('text','')==line and wbox(ub,bhead)==(16,228-26,343,32) and wbox(ub,bline)==(16,255-26,343,20)
+        assert page_fill(ub) and ub.image_draws[0][1][:2]==(122,67-26) and [ub.text(c[2]) for c in ub.calls if c[0]=='widget_load_image']==['classic_light_orb_usb']
+        assert [ub.nodes[w]['visible'] for w in (bimg,binfo,bret,bcharge,bdac)]==[0,0,1,1,1] and wbox(ub,bret)==(20,0,80,60) and wbox(ub,bcharge)==(247,0,50,50) and wbox(ub,bdac)==(305,0,50,50)
+        assert not [b for b in ub.bands if b[2]==375 and b[4]==color_t(0x1c1c1c)] and not msg_track(ub) and not ub.timers  # the real bar's above it; no count
+        assert [(t['text'],t['rect']) for t in ub.letters]==[('Connected',(16,229-26,343,32))]+([(line,(16,256-26,343,20))] if line else []) and ub.lcd_colors()==LCD_COLORS; passed()
 # ... under the real bar it's a dark page, titled; a window that covers the bar paints its own.
-db,dbar,dright,dtitle,dclock,dbt,dwifi,dpct,dslot,dst,dwin,dhome=dark_setup()
-uw=db.node('window','usbmode_page'); db.word(uw+O['W_PARENT'],db.wm); place(db,uw,0,26,375,294); ui_loaded(db,'usbmode_page',uw); db.top=uw; db.nodes[db.wm]={'children':[uw]}
-for _ in range(2): bg(db,uw); bg(db,dbar)
-assert db.nodes[dtitle]['text']=='Q2 Pod' and wbox(db,dtitle)==(0,-1,375,25) and db.nodes[dclock]['visible']==0; db.bands=[]; bg(db,dbar); assert [b for b in db.bands if b[2]==375][0][4]==color_t(0x1c1c1c); passed()
-db.word(uw+O['W_Y'],0); db.letters=[]; bg(db,uw); assert db.letters[0]['text']=='Q2 Pod' and db.letters[0]['rect']==(0,-1,375,25); passed()  # a window over the bar paints the title on the bar title's rows
-uc,cwin,*_=usb_page(0,y=0); bare(uc); bg(uc,cwin)
-assert page_fill(uc,26) and uc.image_draws[0][1][:2]==(122,67) and [b for b in uc.bands if b[2]==375 and b[1]==0][0][4]==color_t(0x1c1c1c) and uc.letters[0]['text']=='Q2 Pod' and wbox(uc,named(uc,cwin,'msg_heading'))==(16,228,343,32); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    db,dbar,dright,dtitle,dclock,dbt,dwifi,dpct,dslot,dst,dwin,dhome=dark_setup()
+    uw=db.node('window','usbmode_page'); db.word(uw+O['W_PARENT'],db.wm); place(db,uw,0,26,375,294); ui_loaded(db,'usbmode_page',uw); db.top=uw; db.nodes[db.wm]={'children':[uw]}
+    for _ in range(2): bg(db,uw); bg(db,dbar)
+    assert db.nodes[dtitle]['text']=='Q2 Pod' and wbox(db,dtitle)==(0,-1,375,25) and db.nodes[dclock]['visible']==0; db.bands=[]; bg(db,dbar); assert [b for b in db.bands if b[2]==375][0][4]==color_t(0x1c1c1c); passed()
+    db.word(uw+O['W_Y'],0); db.letters=[]; bg(db,uw); assert db.letters[0]['text']=='Q2 Pod' and db.letters[0]['rect']==(0,-1,375,25); passed()  # a window over the bar paints the title on the bar title's rows
+    uc,cwin,*_=usb_page(0,y=0); bare(uc); bg(uc,cwin)
+    assert page_fill(uc,26) and uc.image_draws[0][1][:2]==(122,67) and [b for b in uc.bands if b[2]==375 and b[1]==0][0][4]==color_t(0x1c1c1c) and uc.letters[0]['text']=='Q2 Pod' and wbox(uc,named(uc,cwin,'msg_heading'))==(16,228,343,32); passed()
 # ... a cable opening it over the scan's dialog: each paints its own, and the dialog's end leaves the page.
-sd,swin,_,smsg,_,_=msg_dialog(); ub2=sd.node('window','usbmode_page'); sd.word(ub2+O['W_PARENT'],sd.wm); place(sd,ub2,0,26,375,294); ui_loaded(sd,'usbmode_page',ub2)
-bare(sd); bg(sd,ub2); assert page_fill(sd) and sd.image_draws[0][1][:2]==(122,41) and not msg_track(sd)
-bare(sd); bg(sd,swin); assert page_fill(sd,26) and sd.image_draws[0][1][:2]==(129,38)
-f,ctx=next((f,c) for t,f,c in sd.nodes[swin]['handlers'] if t==O['EVT_DESTROY']); sd.call(address=f,args=(ctx,sd.event,0,0),gap=0)
-assert not [t for t in sd.timers.values() if t[1]==payload_syms['msg_poll']]; bare(sd); bg(sd,ub2); assert sd.image_draws[0][1][:2]==(122,41); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    sd,swin,_,smsg,_,_=msg_dialog(); ub2=sd.node('window','usbmode_page'); sd.word(ub2+O['W_PARENT'],sd.wm); place(sd,ub2,0,26,375,294); ui_loaded(sd,'usbmode_page',ub2)
+    bare(sd); bg(sd,ub2); assert page_fill(sd) and sd.image_draws[0][1][:2]==(122,41) and not msg_track(sd)
+    bare(sd); bg(sd,swin); assert page_fill(sd,26) and sd.image_draws[0][1][:2]==(129,38)
+    f,ctx=next((f,c) for t,f,c in sd.nodes[swin]['handlers'] if t==O['EVT_DESTROY']); sd.call(address=f,args=(ctx,sd.event,0,0),gap=0)
+    assert not [t for t in sd.timers.values() if t[1]==payload_syms['msg_poll']]; bare(sd); bg(sd,ub2); assert sd.image_draws[0][1][:2]==(122,41); passed()
 # Auto Light Mode's turn with a page open: every label's stored ink follows the half, which the style hook hands back white.
 def half_turn(m,hour): m.clock=(hour,0); m.call(address=payload_syms['clock_due'],args=(0,0,0,0),gap=0)
-for ink_day,ink_night in ((color_t(0),color_t(0xffffff)),):
-    ub,bwin,*_=usb_page(0,light='2'); bare(ub); bg(ub,bwin); uinks=lambda: {ub.nodes[named(ub,bwin,n)]['style:normal:text_color']&0xffffffff for n in ('msg_heading','msg_line')}
-    assert uinks()=={ink_day}; half_turn(ub,19); assert uinks()=={ink_night}; half_turn(ub,7); assert uinks()=={ink_day}; half_turn(ub,8); assert uinks()=={ink_day}
-    um2,u2win,*_,u2btn=msg_dialog(light='2'); binks=lambda: {um2.nodes[u2btn][f'style:{s}:text_color']&0xffffffff for s in ('normal','pressed','over','disable','focused')}
-    bg(um2,u2win); assert binks()=={ink_day}; half_turn(um2,19); assert binks()=={ink_night}
-passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for ink_day,ink_night in ((color_t(0),color_t(0xffffff)),):
+        ub,bwin,*_=usb_page(0,light='2'); bare(ub); bg(ub,bwin); uinks=lambda: {ub.nodes[named(ub,bwin,n)]['style:normal:text_color']&0xffffffff for n in ('msg_heading','msg_line')}
+        assert uinks()=={ink_day}; half_turn(ub,19); assert uinks()=={ink_night}; half_turn(ub,7); assert uinks()=={ink_day}; half_turn(ub,8); assert uinks()=={ink_day}
+        um2,u2win,*_,u2btn=msg_dialog(light='2'); binks=lambda: {um2.nodes[u2btn][f'style:{s}:text_color']&0xffffffff for s in ('normal','pressed','over','disable','focused')}
+        bg(um2,u2win); assert binks()=={ink_day}; half_turn(um2,19); assert binks()=={ink_night}
+    passed()
 # ... the hold menu's title.
 def hold_inks(m,d):  # its title's white, final in either half
     m.nodes[m.wm]={'children':[d]}; return m.nodes[named(m,d,'scrlabel_title')]['style:normal:text_color']
-ha,had,_=hold_cl('2'); assert hold_inks(ha,had)==hold_inks(*hold_cl('1')[:2]); half_turn(ha,19); assert hold_inks(ha,had)==hold_inks(*hold_cl('0')[:2]); passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    ha,had,_=hold_cl('2'); assert hold_inks(ha,had)==hold_inks(*hold_cl('1')[:2]); half_turn(ha,19); assert hold_inks(ha,had)==hold_inks(*hold_cl('0')[:2]); passed()
 # ... the dark bar's title; back on a page with the bar's own title, it keeps that colour through the next turn.
-dh,dhbar,_,dhtitle,*_,dhwin,dhhome=dark_setup('2'); dh.nodes[dh.wm]={'children':[dhbar,dhwin]}; bg(dh,dhwin); bg(dh,dhbar); bg(dh,dhbar)
-assert dh.nodes[dhtitle]['style:normal:text_color']&0xffffffff==color_t(0); half_turn(dh,19); assert dh.nodes[dhtitle]['style:normal:text_color']&0xffffffff==color_t(0xffffff)
-dh.top=dhhome; dh.nodes[dh.wm]={'children':[dhbar,dhhome]}; bg(dh,dhhome); bg(dh,dhbar); back=dh.nodes[dhtitle]['style:normal:text_color']; half_turn(dh,7); assert dh.nodes[dhtitle]['style:normal:text_color']==back; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    dh,dhbar,_,dhtitle,*_,dhwin,dhhome=dark_setup('2'); dh.nodes[dh.wm]={'children':[dhbar,dhwin]}; bg(dh,dhwin); bg(dh,dhbar); bg(dh,dhbar)
+    assert dh.nodes[dhtitle]['style:normal:text_color']&0xffffffff==color_t(0); half_turn(dh,19); assert dh.nodes[dhtitle]['style:normal:text_color']&0xffffffff==color_t(0xffffff)
+    dh.top=dhhome; dh.nodes[dh.wm]={'children':[dhbar,dhhome]}; bg(dh,dhhome); bg(dh,dhbar); back=dh.nodes[dhtitle]['style:normal:text_color']; half_turn(dh,7); assert dh.nodes[dhtitle]['style:normal:text_color']==back; passed()
 # Nothing here crosses the glass, and Minimal keeps stock's dialogs: no images, no moved widgets, stock's labels shown.
 from ipod import corner_inset
-for x,y,w,h in ((127,248,121,35),(16,159,343,32),(16,188,343,20),(72,218,229,15),(129,38,116,116),(122,67,130,130),(16,228,343,32),(16,255,343,20),(278,7,10,11),(294,7,26,13),(320,11,2,5)):
-    assert corner_inset(y)<=x and corner_inset(y+h-1)<=x and x+w<=375-max(corner_inset(y),corner_inset(y+h-1)),(x,y,w,h)
-for h,px in ((32,29),(20,18),(34,23),(25,22)): assert h>px
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    for x,y,w,h in ((127,248,121,35),(16,159,343,32),(16,188,343,20),(72,218,229,15),(129,38,116,116),(122,67,130,130),(16,228,343,32),(16,255,343,20),(278,7,10,11),(294,7,26,13),(320,11,2,5)):
+        assert corner_inset(y)<=x and corner_inset(y+h-1)<=x and x+w<=375-max(corner_inset(y),corner_inset(y+h-1)),(x,y,w,h)
+    for h,px in ((32,29),(20,18),(34,23),(25,22)): assert h>px
 from fontTools.ttLib import TTFont
-df=TTFont(B/'default.ttf',lazy=True); ds=lambda px: px/(df['hhea'].ascent-df['hhea'].descent)
-ink=lambda t,px: sum(df['hmtx'][df.getBestCmap()[ord(c)]][0] for c in t)*ds(px)
-assert ink('Update Library',22)<=375-2*corner_inset(0) and ink('Eject before disconnecting',18)<=375-2*corner_inset(275) and ink('65000 of 65000 songs',18)<=343; passed()
-for theme_ in '0':
-    m,win,anim,msg,scan,btn=msg_dialog(theme_=theme_); bare(m); m.paint(win); kids=len(m.nodes[win]['children'])
-    assert not m.image_draws and wbox(m,btn)==(44,266,287,40) and m.nodes[anim]['visible'] and m.nodes[msg]['visible'] and kids==4 and not m.sqls and not m.timers and 'style:normal:bg_color' not in m.nodes[btn] and not m.letters
-    m,win,ret,img,info,charge,dac=usb_page(0,theme_=theme_); bare(m); m.paint(win)
-    assert not m.image_draws and m.nodes[img]['visible'] and m.nodes[info]['visible'] and len(m.nodes[win]['children'])==5 and not m.letters; passed()
+if not is_m1plus:  # Classic pages, forms, dialogs and USB presentation is unported
+    df=TTFont(B/'default.ttf',lazy=True); ds=lambda px: px/(df['hhea'].ascent-df['hhea'].descent)
+    ink=lambda t,px: sum(df['hmtx'][df.getBestCmap()[ord(c)]][0] for c in t)*ds(px)
+    assert ink('Update Library',22)<=375-2*corner_inset(0) and ink('Eject before disconnecting',18)<=375-2*corner_inset(275) and ink('65000 of 65000 songs',18)<=343; passed()
+    for theme_ in '0':
+        m,win,anim,msg,scan,btn=msg_dialog(theme_=theme_); bare(m); m.paint(win); kids=len(m.nodes[win]['children'])
+        assert not m.image_draws and wbox(m,btn)==(44,266,287,40) and m.nodes[anim]['visible'] and m.nodes[msg]['visible'] and kids==4 and not m.sqls and not m.timers and 'style:normal:bg_color' not in m.nodes[btn] and not m.letters
+        m,win,ret,img,info,charge,dac=usb_page(0,theme_=theme_); bare(m); m.paint(win)
+        assert not m.image_draws and m.nodes[img]['visible'] and m.nodes[info]['visible'] and len(m.nodes[win]['children'])==5 and not m.letters; passed()
 # The art's corners: after the image (the border hook), each of the NP_ART_RADIUS rows of a
 # corner is black outside the arc, then one edge pixel at the alpha it leaves uncovered.
 # Classic under Square keeps an iPod's square art.
@@ -8523,25 +8613,28 @@ for key,end in ((O['KEY_NEXT'],225),(O['KEY_PREV'],0)):
 assert step(m,gap=300)==11 and m.nodes[m.slider]['value']==5 and m.seeks==[]; passed()
 # Centre commits the target once; nothing seeks afterwards.
 centre(m,50); step(m,O['SCRUB_MS'],wait=True); ended(m,[5]); passed()
+if is_m1plus: not_ported('1.7.0 Classic scrub diamond')
 # Classic: the scrub's cue, an iPod's: a diamond in the ink (the dark half's white) NP_SCRUB_MARK each side of its
 # middle row and column, at the fill's end on the bar's gloss, inside its 1 px edge lines; kept inside the bar at
 # either end; gone once the scrub ends. The volume's bar over the page never has it.
-CONFIG.clear(); CONFIG.update(THEME='1',LIGHT='0')
+if not is_m1plus:  # Classic scrub diamond is unported
+    CONFIG.clear(); CONFIG.update(THEME='1',LIGHT='0')
 def cue(m):  # the slider's paint: the ink's rows
     m.bands.clear(); m.call(address=HOOKS['widget_on_paint_border'][0],args=(m.slider,m.canvas,0,0),gap=0)
     return [b[:4] for b in m.bands if b[4]==color_t(0xffffff)]
 def diamond(x):
     M,top=O['NP_SCRUB_MARK'],(44-O['NP_BAR_IPOD'])//2
     return [(x-(M-abs(j)),top+(O['NP_BAR_IPOD']-1)//2+j,2*(M-abs(j))+1,1) for j in range(-M,M+1)]
-m=scrub_page()
-for k,v in zip(('W_X','W_Y','W_W','W_H'),(66,233,243,44)): m.word(m.slider+O[k],v)  # fitted to the 3:45 track (ipod_times)
-assert cue(m)==[]; centre(m); assert cue(m)==diamond(243*100//225),cue(m)
-d=diamond(243*100//225); assert d[0][1]==(44-O['NP_BAR_IPOD'])//2+1 and d[-1][1]==(44-O['NP_BAR_IPOD'])//2+O['NP_BAR_IPOD']-3
-for key,x in ((O['KEY_PREV'],O['NP_SCRUB_MARK']),(O['KEY_NEXT'],242-O['NP_SCRUB_MARK'])):
-    for _ in range(40): step(m,key,gap=20)
-    assert cue(m)==diamond(x),(key,cue(m))
-centre(m,50); step(m,O['SCRUB_MS'],wait=True); assert cue(m)==[]; passed()
-CONFIG.clear()
+if not is_m1plus:  # Classic scrub diamond is unported
+    m=scrub_page()
+    for k,v in zip(('W_X','W_Y','W_W','W_H'),(66,233,243,44)): m.word(m.slider+O[k],v)  # fitted to the 3:45 track (ipod_times)
+    assert cue(m)==[]; centre(m); assert cue(m)==diamond(243*100//225),cue(m)
+    d=diamond(243*100//225); assert d[0][1]==(44-O['NP_BAR_IPOD'])//2+1 and d[-1][1]==(44-O['NP_BAR_IPOD'])//2+O['NP_BAR_IPOD']-3
+    for key,x in ((O['KEY_PREV'],O['NP_SCRUB_MARK']),(O['KEY_NEXT'],242-O['NP_SCRUB_MARK'])):
+        for _ in range(40): step(m,key,gap=20)
+        assert cue(m)==diamond(x),(key,cue(m))
+    centre(m,50); step(m,O['SCRUB_MS'],wait=True); assert cue(m)==[]; passed()
+    CONFIG.clear()
 # Paused (mclGetPlayStatus 3), the seek alone, in file seconds (a CUE track's start added), not
 # player_seek_time, which resumes the track: the player's second stands still until Play, the bar
 # keeps the target and stock's timer stays off until it plays; playing, SETTLE_PLAY_MS without
