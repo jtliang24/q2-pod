@@ -560,6 +560,7 @@ extern int stock_playermore_trampoline(void *win, void *ctx);
 #else
 int ringnav_playermore(void *win, void *ctx) {
     int result = stock_playermore_trampoline(win, ctx);
+    if (win) stock_more_speed(win), stock_more_into(win);
     void *view = win ? widget_lookup(win, "scroll_view_more", 1) : (void *)0;
     unsigned at = 0;
     if (!view || widget_count_children(view) != PLAYMORE_COUNT || !al_playing()) return result;

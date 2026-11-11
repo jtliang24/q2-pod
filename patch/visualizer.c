@@ -519,11 +519,15 @@ void visualizer_attach(void *win) {
     vz.slide = slide;
     vz.cover = widget_lookup(win, VIEW_COVER, 1);
     vz.w = I(slide, W_W) > 0 && I(slide, W_W) <= UI_W ? I(slide, W_W) : UI_W;
-    vz.page = list_item_create(slide, 0, 0, vz.w, VIS_H);
+    /* Classic's slide starts higher, its lyrics down it as far (tools/ipod.py NP_IPOD_LIFT): the
+     * page starts where they do, so it stays where the others have it on screen */
+    void *lrc = widget_lookup(slide, "view_lrc", 1);
+    int top = lrc ? I(lrc, W_Y) : 0;
+    vz.page = list_item_create(slide, 0, top, vz.w, VIS_H);
     widget_use_style(vz.page, STYLE_LISTITEM_BLACK);
     widget_on(vz.page, EVT_CLICK, next_style, 0);
     /* The art is the window's child, over the slide area's centre, for the same reason as the drawing. */
-    vz.ox = vz.oy = 0;
+    vz.ox = 0, vz.oy = top;
     for (void *p = slide; p && p != win; p = P(p, W_PARENT)) vz.ox += I(p, W_X), vz.oy += I(p, W_Y);
     vz.art = image_create(win, vz.ox + (vz.w - VIS_ART) / 2, vz.oy + (VIS_H - VIS_ART) / 2, VIS_ART, VIS_ART);
     widget_set_sensitive(vz.art, 0);
