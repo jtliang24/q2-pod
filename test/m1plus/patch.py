@@ -4,7 +4,7 @@ Requires unicorn==2.1.4. Does not emulate the entire device or flash hardware.
 """
 import hashlib, io, json, math, os, pathlib, re, sqlite3, struct, sys
 from functools import cmp_to_key
-from unicorn import Uc, UcError, UC_ARCH_MIPS, UC_MODE_MIPS32, UC_MODE_LITTLE_ENDIAN, UC_HOOK_CODE, UC_HOOK_BLOCK, UC_HOOK_INTR, UC_ERR_FETCH_UNALIGNED
+from unicorn import Uc, UcError, UC_ARCH_MIPS, UC_MODE_MIPS32, UC_MODE_LITTLE_ENDIAN, UC_HOOK_CODE, UC_HOOK_BLOCK, UC_HOOK_INTR, UC_ERR_FETCH_UNALIGNED, UC_ERR_FETCH_UNMAPPED
 from unicorn.mips_const import *
 sys.path[1:1] = [sys.path[0] + '/..']; sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first
 from build import TAG, jal, j, segments, load_elf, symbols, BASE, SCRATCH, HOOKS, WM_PAINT_LEAF, FUNCTIONS, GLOBALS, CONTEXT_DATA, ROOT, source_sha256, sha, PRIVATE_FUNCTIONS, VERSION, dev_tag
@@ -218,14 +218,27 @@ class Machine:
             return add(kind,safe,*a,**k)
         self.u.hook_add=hook_add
         start=self.u.emu_start
+        self.emu_failed=None
         def emu_start(*a,**k):
             # An odd address (a junk handler, as the M1's Display rows give the Q2's cases) would switch the CPU to
             # MIPS16 for good, and unicorn segfaults translating the machine's next call: refused here instead.
             if a[0]&1: raise UcError(UC_ERR_FETCH_UNALIGNED)
+            if a[0] < 0x400000: raise UcError(UC_ERR_FETCH_UNMAPPED)  # no stock or payload code here
+            # Unicorn cannot safely resume every CPU exception. Keep dependent checks as explicit failures;
+            # a new scenario's fresh Machine can proceed, rather than losing the whole report to a segfault.
+            if self.emu_failed is not None:
+                raise RuntimeError(f'Previous emulation failed on this fixture: {self.emu_failed}')
             self.hook_error=None
-            try: start(*a,**k)
-            finally: e,self.hook_error=self.hook_error,None
-            if e is not None: raise e
+            try:
+                start(*a,**k)
+            except BaseException as error:
+                self.emu_failed=error
+                raise
+            finally:
+                e,self.hook_error=self.hook_error,None
+            if e is not None:
+                self.emu_failed=e
+                raise e
         self.u.emu_start=emu_start
         st = self.u.reg_read(UC_MIPS_REG_CP0_STATUS)
         self.u.reg_write(UC_MIPS_REG_CP0_STATUS, st | (1 << 26) | (1 << 29))

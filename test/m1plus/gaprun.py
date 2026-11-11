@@ -67,6 +67,8 @@ def run(path, g, boot_line, gaps):
                 print('  last pcs:', [hex(a) for a in trail[-14:]])
                 print('  last calls:', [c[0] for c in g['m'].calls[-6:]])
                 print(f'UcError at patch.py:{node.lineno}: pc {pc:#x} in {near(pc)[1]}+{pc - near(pc)[0]:#x}, ra {ra:#x} in {near(ra)[1]}')
+            if os.environ.get('GAPS_PROGRESS'):
+                print(f'FAIL {node.lineno} {name}: {failed[-1]["error"]}', flush=True)
             if name in gaps: expected.setdefault(gaps[name], []).append(node.lineno)
             else: unexpected.append((node.lineno, name, failed[-1]['error']))
         else:
