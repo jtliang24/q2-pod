@@ -1256,7 +1256,7 @@ static void *rows_view(void *parent, int y, int w, int h, int n, int item_h) {
  * Shared with photos.c. */
 void *page_list(void *page, void *body, void **title, const char *caption, int n, int item_h) {
     int h = widget_get_prop_int(page, "h", client_h());
-    item_h = page_h(item_h);
+    item_h = page_row_height(item_h);
     widget_destroy_children(body);
     widget_set_visible(body, 1, 0);
     void *t = page_title(body, caption, title ? TITLE_ON_SHOW : n);
@@ -1280,7 +1280,7 @@ int page_h(int h) {
     const theme_t *T = theme();
 #if M1PLUS
     (void)T;
-    return LIB_PITCH;
+    return h; /* PEQ and other native-height callers retain their V2.1 row heights. */
 #else
     return h == 64 ? T->page_detail : h == 48 ? T->page_row : h;
 #endif
@@ -1307,7 +1307,7 @@ static void *list(const char *title, int n) {
 void *page_row_detail(void *view, int index, const char *caption, const char *detail,
                       int (*click)(void *, void *)) {
     const theme_t *T = theme();
-    int h = page_h(detail ? 64 : 48), x = T->page_x, w = UI_W - 2 * x,
+    int h = page_row_height(detail ? 64 : 48), x = T->page_x, w = UI_W - 2 * x,
         sep = detail && !*detail ? T->sep[0].n : 0;
     void *item = list_item_create(view, 0, index * h, UI_W, h);
     widget_use_style(item, STYLE_LISTITEM_BLACK);
@@ -1353,7 +1353,7 @@ void *page_row_detail_into(void *view, int index, const char *caption, const cha
                            int (*click)(void *, void *)) {
     void *item = page_row_detail(view, index, caption, detail, click);
     const theme_t *T = theme();
-    int h = page_h(detail ? 64 : 48);
+    int h = page_row_height(detail ? 64 : 48);
     if (detail && !*detail)
         widget_move_resize(widget_get_child(item, 0), T->page_x, 0, UI_W - 2 * T->page_x,
                            h - T->sep[0].n);
