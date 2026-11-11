@@ -5463,6 +5463,7 @@ static int remain_due(const void *info) {
 /* 1 when Now Playing's times sit on its bar's rows, beside it (Classic's iPod page; its Centred
  * page and the other themes' put them under the bar): outside the slider's repaint. */
 static int np_beside(void) {
+    if (M1PLUS) return 0; /* no Classic iPod page; its NP_IPOD_* geometry is the Q2's */
     if (!st.np_remain || !st.np_slider || !st.np_elapsed) return 0;
     int bh = widget_get_prop_int(st.np_slider, "bar_size", 8);
     return I(st.np_elapsed, W_Y) < I(st.np_slider, W_Y) + (I(st.np_slider, W_H) + bh) / 2;
