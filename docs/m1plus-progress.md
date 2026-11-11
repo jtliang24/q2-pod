@@ -4377,6 +4377,23 @@ rows under both themes, Knob: Navigation turning lists (`tick_gate`), Resume's s
 screen's percentage and its settings' Clock row, the Shortcut cycle, Now Playing's info page genre (scrolls when
 long), Cover Flow's renamed rows, Power without Low Power, crossfade at a natural end and on a skip.
 
+**The device pass** (`V055m`, Nov 10, over q2remote; shots in `work/sync/1.6.7-device/`, settings restored after):
+passed: Knob: Navigation, a theme pick applied at once with Appearance relabelled, the old `THEME=1` reading Modern,
+Modern's plain album label, Coverflow's height and caption (as the 1.6.4 gate's capture), Home's rows in both themes,
+Resume's place on a book (51:17), the Clock row and the Large clock's 100%, the Shortcut cycle (Rated Albums then
+Artists), Cover Flow's rows, Power (Idle's second page) without Low Power. Not judged on the device: crossfade by ear
+(the page changes track at 0:00, as the tail is mixed after the change), a long genre (no such track at hand).
+
+What the pass found, not fixed:
+- **A. Theme page's mark.** The empty circle sits on the theme not in use; it was filled only right after picking
+  Modern in Light Mode.
+- **B. A theme pick changes Appearance's rows.** Picking Modern turned Light Mode on, twice; picking Minimal once
+  reset `MINIMAL_ACCENT` from 7 (Ivory) to 0 (Graphite). Likely the pick's touch reaching Appearance under it
+  (Modern's row at y 145 over Light Mode's at 137); not yet read in the code.
+- **C. Minimal's focus pill** has a flat-cut bottom edge (Theme page, Appearance).
+- **D. Home's Split art** shows the placeholder disc while a LibriVox book plays, which Now Playing shows with its
+  cover; albums show theirs. Older builds not compared.
+
 ## How to check a build now
 
 ```sh
