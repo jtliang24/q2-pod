@@ -5,10 +5,11 @@ build.py keeps upstream's Q2 code; its build() hands an M1 Plus input to build()
 (docs/m1plus-roadmap.md U1). The pipeline reuses build.py's helpers and tables where V2.1 matches V1.32,
 and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
+from typing import Any, cast
 from build import (ROOT, TIMEZONES, TIMEZONE_ORDER, VERSION, TAG, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
                    REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, WIFI_LPS, ICONS,
-                   STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
+                   STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, need, dev_tag, fileoff, jpeg_size, patch_bluealsa,
                    run, segments, sha, source_sha256, symbols)
 
 MODEL = 'Shanling M1 Plus'
@@ -64,7 +65,7 @@ RTC_READ_M1PLUS = (b'hwclock -s\0\0', b'hwclock -su\0')
 # replacement is a jal to that payload symbol, None pins the word unchanged. A model without an entry
 # leaves that behaviour stock. build.py applies the Q2's with upstream's own code; build() here applies
 # the M1's; test/m1plus/build.py and test/m1plus/patch.py read both.
-CALL_SITES = {
+CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] = {
     'q2': {
         'AB_X_CALLS': tuple((a, 0x04110000 | ((0x52a268-a-4)//4 & 0xffff), 'ringnav_ab_x') for a in (0x52a408, 0x52a484, 0x52a494)),
         'TABLE_LOAD_CALL': ((0x5ca0fc, 0x0320f809, 'ringnav_table_load'),),
@@ -802,7 +803,7 @@ def m1plus_inc(name):
     """An integer #define of patch/offsets.inc as the M1 Plus payload compiles it."""
     found = re.search(rf'^#define {name} (0x[0-9a-f]+|\d+)$', run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c',
                                                               ROOT/'patch/offsets.inc'), re.M)
-    check(found, f'{name}: not defined for M1 Plus')
+    found = need(found, f'{name}: not defined for M1 Plus')
     return int(found.group(1), 0)
 
 def stub_asm(stubs):
@@ -815,7 +816,7 @@ def stub_asm(stubs):
 # hciplayer: the PEQ, ReplayGain and MP3 seek patch (tools/peq.py) at V2.1's addresses, each found in V2.1's
 # binary; peq.py's constants are V1.32's.
 M1PLUS_PLAYER_SHA = 'a64503746862af3e69b57f2e06167351b30cda28479348a845be5172e083a8c6'
-PLAYER_PROFILE = {
+PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups and identity bytes
     'desc': 0x893808,
     'desc_bytes': 'bc3789002c5e88004c358900b8c388000100000014fd4400',
     'open_slot': 0x89381c,
@@ -979,7 +980,8 @@ def patch_player(raw, out):
     patch_word(data, prof['vbr_scan'], 0x144008a8, 0, 'VBR scan')  # bnez $v0, ... -> nop
     for address, stock, patched in prof['eq_rate_gates']:
         patch_word(data, address, stock, patched, 'Equalizer rate gate')
-    patch_word(data, *prof['pause_sleep'], 'pause loop sleep')
+    pause_addr, pause_old, pause_new = prof['pause_sleep']
+    patch_word(data, pause_addr, pause_old, pause_new, 'pause loop sleep')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')
@@ -995,9 +997,9 @@ def m1_themes():
     saved = sys.modules.get('ipod')
     sys.modules['ipod'] = m1plus_ipod.ipod
     try:
-        spec = importlib.util.spec_from_file_location('m1plus_theme', ROOT/'tools/theme.py')
-        theme = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(theme)
+        spec = need(importlib.util.spec_from_file_location('m1plus_theme', ROOT/'tools/theme.py'), 'Missing M1 theme module')
+        theme = cast(Any, importlib.util.module_from_spec(spec))  # module attributes come from exec_module
+        need(spec.loader, 'Missing M1 theme loader').exec_module(theme)
         # Role macros (Coverflow's CF_*, Home's HOME_*, the accents' fills) are the M1's: theme.py evaluates
         # them against its O, the Q2's offsets.inc but for the screen
         m1 = dict(m1plus_ipod.M1)
@@ -1024,7 +1026,8 @@ def m1_emit_themes(themes, theme, out):
     check(len(theme.geometry_sets(themes)) == 1, 'M1 themes: one geometry set')
     sites = re.search(r'^#define BOOT_SITES (\d+)$', inc, re.M)
     table = re.search(r'^const boot_site_t boot_sites\[BOOT_SITES\] = \{.*\};$', inc, re.M)
-    check(sites and table, 'themes.inc: no boot sites table')
+    sites = need(sites, 'themes.inc: no boot sites table')
+    table = need(table, 'themes.inc: no boot sites table')
     inc = inc[:table.start()] + 'const boot_site_t boot_sites[1] = {{0, 0}}; /* M1 Plus: none (BOOT_SITES 0) */' + inc[table.end():]
     inc = inc.replace(sites.group(0), '#define BOOT_SITES 0 /* M1 Plus: theme_boot writes no V1.32 site */')
     # The own options of the themes the M1 leaves out (Classic's OWN_HOMELIB, OWN_ROWPREVIEW): past theme_keys, so
@@ -1154,7 +1157,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         meta = t.getmembers()
         check([m.name for m in meta] == ['firmware_v20.info','recovery-update',
               'recovery-update/xImage','recovery-update/rootfs.squashfs'], 'Unexpected package members')
-        blobs = {m.name:t.extractfile(m).read() for m in meta if m.isfile()}
+        blobs = {m.name:need(t.extractfile(m), f'Unreadable {m.name}').read() for m in meta if m.isfile()}
     info = blobs['firmware_v20.info'].decode().splitlines()
     check(info[0] == MODEL, f'Unsupported model: {info[0]}')
     model = MODEL
@@ -1300,14 +1303,14 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     p = pseudo.read_bytes()
     # mksquashfs takes "/" from the source dir, not the pseudo file; carry stock values over.
     root = re.search(rb'^/ D (\d+) (\d+) (\d+) (\d+)$',p,re.M)
-    check(root is not None, 'Missing root pseudo inode')
+    root = need(root, 'Missing root pseudo inode')
     t,mode,uid,gid = (x.decode() for x in root.groups())
     rootargs = ['-root-time',t,'-root-mode',mode,'-root-uid',uid,'-root-gid',gid]
     # Paths are passed through a shell by mksquashfs F entries; quote them explicitly.
     def inode(p, path): return re.search(rb'^'+re.escape(path)+rb' R (\d+) (\d+) (\d+) (\d+) .+$',p,re.M)
     def swap_inode(p, path, src):
         line = inode(p, path)
-        check(line is not None, f'Missing {path.decode()} pseudo inode')
+        line = need(line, f'Missing {path.decode()} pseudo inode')
         return p[:line.start()]+path+b' F '+b' '.join(line.groups())+b' cat '+shlex.quote(str(src)).encode()+p[line.end():]
     s90play = cat(S90PLAY)
     check(s90play.count(BOOT_HOOK[0]) == 1 and s90play.count(REMOTE_HOOK[0]) == 1, 'Unexpected S90play')
@@ -1397,7 +1400,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         line = re.search(rb'^'+re.escape(path.encode())+rb' R .+\n', p, re.M)
         if line is None and path in STOCK_EQ:
             continue
-        check(line is not None, f'Missing stock inode {path}')
+        line = need(line, f'Missing stock inode {path}')
         removed.append(line.group().split()[:6])
         p = p[:line.start()]+p[line.end():]
     changed_assets = {}

@@ -15,7 +15,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
-from build import ROOT, VERSION, check, run, sha, source_sha256
+from build import ROOT, VERSION, check, need, run, sha, source_sha256
 from m1plus import M1PLUS_ZIP_SHA, M1PLUS_BIN_SHA, M1PLUS_DEMO_SHA, build
 
 REPO = 'jtliang24/q2-pod'  # the fork: upstream's releases are the Q2's
@@ -28,7 +28,7 @@ def m1_tag(name):
     (1.2.2-m1.1 is V1221). The revision is one digit, so a release's tag never equals a Q2 one (V122S,
     V122I), a --dev one (lowercase last) or another release's."""
     found = re.fullmatch(r'(\d)\.(\d)\.(\d)-m1\.([1-9])', name)
-    check(found, f'{name}: not an M1 release name (x.y.z-m1.n, n 1-9)')
+    found = need(found, f'{name}: not an M1 release name (x.y.z-m1.n, n 1-9)')
     return 'V' + ''.join(found.groups())
 
 
@@ -36,7 +36,7 @@ def release_name():
     """docs/m1plus-changelog.md's top entry, - **<VERSION>-m1.<n>**: a release edits only that file
     (and VERSION, at a sync)."""
     entry = re.search(r'^- \*\*(\S+?)\*\*:', (ROOT/CHANGELOG).read_text(), re.M)
-    check(entry, f'{CHANGELOG} has no - **<version>-m1.<n>**: entry')
+    entry = need(entry, f'{CHANGELOG} has no - **<version>-m1.<n>**: entry')
     name = entry.group(1)
     m1_tag(name)
     check(name.startswith(VERSION + '-m1.'), f'{CHANGELOG}: the top entry {name} is not for VERSION {VERSION}')
@@ -92,11 +92,11 @@ def validate(directory, name):
     with tarfile.open(directory/'update.bin') as t:
         check(t.getnames() == ['firmware_v20.info', 'recovery-update', 'recovery-update/xImage',
                                'recovery-update/rootfs.squashfs'], 'Unexpected update members')
-        info = t.extractfile('firmware_v20.info').read().decode().splitlines()
+        info = need(t.extractfile('firmware_v20.info'), 'Missing firmware identity').read().decode().splitlines()
         check(info[:2] == [MODEL, tag] and len(info) == 4, 'Wrong update identity')
         for line, member, key in zip(info[2:], ['recovery-update/xImage', 'recovery-update/rootfs.squashfs'],
                                     ['kernel_sha256', 'rootfs_sha256']):
-            data = t.extractfile(member).read()
+            data = need(t.extractfile(member), f'Missing {member}').read()
             check(line.split() == [hashlib.md5(data).hexdigest(), member] and sha(data) == m[key],
                   'Update payload mismatch')
     # The M1 suites (test/m1plus/): build checks V2.1's names, patch the payload, boot demo under QEMU.
