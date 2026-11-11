@@ -17,6 +17,8 @@
 #define LAST_ALBUM ART_DIR "/album" /* the centre album's key, so a reboot opens on it */
 #define CF_X CF_EDGE /* the one text column, clear of the rounded glass */
 #define CF_W (UI_W - 2 * CF_EDGE)
+/* The theme's page rows' text column; the M1's narrower rows keep its own CF_EDGE. */
+#define PAGE_X(T) (M1PLUS ? CF_EDGE : (T)->page_x)
 #define MIN_FREE_MB 16 /* no new cache files below this much free space on the card */
 #define ART_NEAR 3 /* real art only this many covers either side, like PictureFlow's cache */
 /* Home's without a theme's pane (home_pane_paint), at 290px (stock's: 110) */
@@ -1287,7 +1289,7 @@ int page_h(int h) {
 }
 
 /* The theme's page rows' text column. */
-int page_x(void) { return theme()->page_x; }
+int page_x(void) { return PAGE_X(theme()); }
 
 /* A page_list caption written again, and the bar's when it holds it. */
 void page_retitle(void *page, void *title, const char *caption) {
@@ -1307,7 +1309,7 @@ static void *list(const char *title, int n) {
 void *page_row_detail(void *view, int index, const char *caption, const char *detail,
                       int (*click)(void *, void *)) {
     const theme_t *T = theme();
-    int h = page_row_height(detail ? 64 : 48), x = T->page_x, w = UI_W - 2 * x,
+    int h = page_row_height(detail ? 64 : 48), x = PAGE_X(T), w = UI_W - 2 * x,
         sep = detail && !*detail ? T->sep[0].n : 0;
     void *item = list_item_create(view, 0, index * h, UI_W, h);
     widget_use_style(item, STYLE_LISTITEM_BLACK);
@@ -1355,7 +1357,7 @@ void *page_row_detail_into(void *view, int index, const char *caption, const cha
     const theme_t *T = theme();
     int h = page_row_height(detail ? 64 : 48);
     if (detail && !*detail)
-        widget_move_resize(widget_get_child(item, 0), T->page_x, 0, UI_W - 2 * T->page_x,
+        widget_move_resize(widget_get_child(item, 0), PAGE_X(T), 0, UI_W - 2 * PAGE_X(T),
                            h - T->sep[0].n);
     row_into(item, h);
     return item;
