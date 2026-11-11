@@ -88,7 +88,7 @@ static const struct { double first, step; int rows; } picks[] = {{-12, 0.5, 49},
 #define E3_BUTTON ((UI_W - 33) / 2)
 #define E3_RIGHT (UI_W - 12 - E3_BUTTON) /* Reset's x */
 #if M1PLUS
-#define TAB_LEFT BACK_W /* Simple's x: the back button is left of the tabs */
+#define TAB_LEFT M1_BACK_W /* Simple's x: the back button is left of the tabs */
 #else
 #define TAB_LEFT 8
 #endif

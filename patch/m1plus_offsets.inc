@@ -132,7 +132,7 @@
 #define STYLE_NAVBAR_RETURN "navbar_btnreturn_style"
 #define ICON_RETURN "return"
 #define ICON_RETURN_DOWN "return_down"
-#define BACK_W 48 /* the width titles keep clear at a payload page's top left, where the button was: 4.4 and 4.5 relay them */
+#define M1_BACK_W 48 /* the width titles keep clear at a payload page's top left, where the button was: 4.4 and 4.5 relay them */
 /* The iPod Home in portrait (ipod-ui 4.5, tools/m1plus_ipod.py home_page): HOME_ROW rows, the library's pitch; Split's
  * art across the top, UI_W x HOME_ART_H, the menu under it; Carousel's cards HOME_CARD square (190 px art, caption). */
 #define HOME_ROW 64
@@ -391,7 +391,7 @@ static inline int arc_out(int r, int y) {
 #define RADIO_ALBUM_Y 338
 #define RADIO_TIMES_Y 392
 #define RADIO_TIME_X 12
-#define RADIO_TAG_X BACK_W
+#define RADIO_TAG_X M1_BACK_W
 #define RADIO_HEART_X (UI_W - 54)
 #define RADIO_HEART_Y 0
 /* Spotify's Now Playing (spotify.c spot_np, for both backends): Now Playing's layout (ipod-ui 4.6). The bar's view holds the

@@ -176,3 +176,5 @@
  * on_wm_timer_dialog's skip past a file it can't play (ringnav_change) */
 #define VIEW_QUEUE_RET 0x529944
 #define UNPLAYABLE_NEXT_RET 0x4ea848
+
+#define M1_BACK_W 48 /* M1-only page title clearance, unused on Q2 */

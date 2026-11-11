@@ -1220,7 +1220,7 @@ void *page_open(const char *name, int (*closed)(void *, void *), int (*keyup)(vo
  * photos.c. */
 void *page_title(void *body, const char *caption, int n) {
     const theme_t *T = theme();
-    int x = M1PLUS ? BACK_W : T->page_x, w = UI_W - 2 * x;
+    int x = M1PLUS ? M1_BACK_W : T->page_x, w = UI_W - 2 * x;
     void *title = text(body, x, 0, w, T->page_title_h);
     widget_set_text_utf8(title, caption);
     if (T->page_title_h) return title;

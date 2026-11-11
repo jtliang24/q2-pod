@@ -9,7 +9,7 @@ static int touched(void *ctx, void *e) {
     if (cf.screen != COVERS || !cf.slide || cf.timer) return 0;
     int xy[2] = { I(e, EVENT_X), I(e, EVENT_Y) }, depth = fx.frame != 0;
     widget_to_local(cf.covers, xy);
-    int px = xy[0] < BACK_W && xy[1] < 48 ? 0 : depth ? CF_STRIDE : slide_stride(cf.slide);
+    int px = xy[0] < M1_BACK_W && xy[1] < 48 ? 0 : depth ? CF_STRIDE : slide_stride(cf.slide);
     int bounded = coverflow_bounded(cf.slide);
     int top = I(cf.slide, W_Y), d = xy[0] - CF_CX, far = d < 0 ? -d : d;
     if (!slide_swipe(cf.slide, e, px, bounded) || xy[1] < top || xy[1] >= top + I(cf.slide, W_H))

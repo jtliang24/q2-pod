@@ -1267,8 +1267,8 @@ static int go(const void *unused) {
             l->sel = widget_get_prop_int(br.view, "_ringnav_index", 0);
             widget_destroy_children(br.page), br.view = 0; /* the box alone: the keyboard leaves no room for the rows */
             br.edit = edit_create(br.page, "text", 2, 26);
-            widget_set_prop_str(br.edit, "tips", SPOT_T_TIPS);
 #if M1PLUS
+            widget_set_prop_str(br.edit, "tips", SPOT_T_TIPS);
             widget_on(br.edit, EVT_VALUE_CHANGED, searched, br.edit);
             widget_on(br.edit, EVT_IM_ACTION, searched, br.edit);
             widget_on(br.edit, EVT_BLUR, search_left, br.edit);
