@@ -34,6 +34,8 @@ GAPS = {
     '0a9fe5785b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5508 for mode in (1,2,3,0,1,2,3,0):
     'cda4a65073': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:1248 t,label,show,page=title_machine(TIMETITLE=0,THEME=MODERN); assert show(page(A
     'b8f4f6235c': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:1249 assert show(page(None))==6:14 PM and t.nodes[label][style:normal:font_name]=
+    'ec806f3360.5': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:6409 m.advance(0) [dependent]
+    'e8b2f8b250': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:6427 assert m.call(address=HOOKS['systembar_showface'][0],args=(bar,0,0,0),gap=0)==0 [dependent]
     # The Q2 Display page's Home rows (its Corners and Q2 rows around them): the M1's Home layouts and rows are
     # m1_home_modes and the M1 Display test (ipod-ui 4.5); the fixture itself is Phase 5's
     '466012b4b4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8866 home_bounds(False); carousel(False)
@@ -141,9 +143,9 @@ GAPS = {
     'fd4b0317ce': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9413 debounced(m); assert tick(m)==1 and m.selected(w)==3
     'b5883083a6.25': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:12698 w=m.find(scroll_view,chooser); m.paint(w,gap=0)
     'b5883083a6.26': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:12702 assert m.call(gap=100)==11 and m.selected(w)==3; m.paint(w,gap=0)
-    'b5883083a6.27': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:12703 assert m.call(gap=O[EDGE_PAUSE_MS])==11 and m.selected(w)==0; m.paint(w,gap=0)
-    'b5883083a6.28': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:12704 assert m.call(PREV,gap=100)==11 and m.selected(w)==0; m.paint(w,gap=0)
-    'b5883083a6.29': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:12705 assert m.call(PREV,gap=O[EDGE_PAUSE_MS])==11 and m.selected(w)==3; m.paint(w,g
+    'b5883083a6.24': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:15601 m.paint(w,gap=0)
+    'b5883083a6.22': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:15596 m.paint(w,gap=0)
+    'b5883083a6.23': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:15600 m.paint(w,gap=0)
     '62d41f4b6b.2': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:16847 m.call(address=inp,args=(m.wm,m.event,0,0),event_type=O[EVT_KEY_DOWN],gap=0); 
     '2b29282a16': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:16848 m.word(payload_syms[wheel_frame_at],m.now); m.call(address=inp,args=(m.wm,m.ev
     # Games (ipod-ui 4.8, Q2 only)
@@ -329,6 +331,20 @@ GAPS = {
     '89ccf3788a.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11159 assert m.call(gap=O[EDGE_PAUSE_MS])==11 and m.selected(w)==0; m.paint(w,gap=0)
     '5ee9fdb957.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11160 assert m.call(PREV,gap=100)==11 and m.selected(w)==0; m.paint(w,gap=0)
     'a2857f87e2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:11161 assert m.call(PREV,gap=O[EDGE_PAUSE_MS])==11 and m.selected(w)==3; m.paint(w,gap=0
+    '60d2c2805f': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15612 paint() [dependent]
+    '60d2c2805f.2': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15624 paint() [dependent]
+    '60d2c2805f.3': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15627 paint() [dependent]
+    '60d2c2805f.4': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15639 paint() [dependent]
+    '60d2c2805f.5': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15642 paint() [dependent]
+    '60d2c2805f.6': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15646 paint() [dependent]
+    '60d2c2805f.7': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15655 paint() [dependent]
+    '60d2c2805f.8': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15660 paint() [dependent]
+    '60d2c2805f.9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15668 paint() [dependent]
+    '60d2c2805f.10': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15677 paint() [dependent]
+    '60d2c2805f.11': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15683 paint() [dependent]
+    '60d2c2805f.12': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15688 paint() [dependent]
+    '60d2c2805f.13': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15699 paint() [dependent]
+    'e8477b34a9': 'Games (ipod-ui 4.8, Q2 only)',  # patch.py:15709 for _ in range(10): m.call(O['KEY_CENTER'],gap=100,count=2_000_000) [dependent]
     # Display and settings scenarios on V2.1's rows (Phase 5)
     'a85f9167be': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:2165 for row,image,fills in ((2,select,3),(0,unselect,0),(2,more,4),(0,more,0)):
     '4c768d5151': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9182 one_label=m.nodes[m.nodes[scrub_one][children][0]][child
@@ -429,7 +445,7 @@ GAPS = {
     'd35d8969d4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10039 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]
     '783dcdd2d8.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10040 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]
     '292652f99c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10045 assert m.nodes[sort_label][text]==Cover Flow Sort: Album and m.nodes[refresh
-    '31cdb502e3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10047 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]==C
+    'fe25421f4e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12326 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]=='C
     'ed2956df57': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10049 assert did(m,image_manager_unload_all) and m.nodes[refresh_label][text]==Re
     'e13a30a3e2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10141 assert kids==[rows[3],light,rows[0],corners,rows[1],shortcut,rows[2],time_title,
     '9c302e240e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10142 assert texts()==[Accent: Cobalt,Home: Split,Battery: Icon,Theme: Modern]
@@ -448,6 +464,19 @@ GAPS = {
     '4a5cac4138': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10439 accent_row=m.nodes[view][children][2]; f,ctx=m.handler(m.nodes[accent_row][ch
     '8271bfe8ff.16': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10439 accent_row=m.nodes[view][children][2]; f,ctx=m.handler(m.nodes[accent_row][ch
     '16f1862d89': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10440 m.paint(view); assert CL_SEL(3) in [b[4] for b in m.bands] and CL_SEL(2) not in 
+    '36b49d8f56': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11948 cfv=display_page(m,2) [dependent]
+    '5db2661012': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11948 cf,cf_sort,cf_refresh=m.nodes[cfv]['children'] [fixture extension]
+    '66249771a8': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11950 ctl=display_page(m,3) [dependent]
+    'f92a41034a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11952 view=display_page(m,1) [dependent]
+    'c497c56eab': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11992 assert loaded('playing_page')==['playing_page'] [dependent]
+    'a7f54dea42': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12353 m.call(address=HOOKS['home_page_init'][0],args=(home,0,0,0),gap=0) [dependent]
+    '272249ba26': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12384 carousel(False) [fixture extension]
+    '272249ba26.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12386 carousel(False) [fixture extension]
+    '272249ba26.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12390 carousel(False) [fixture extension]
+    '272249ba26.4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12425 carousel(False) [fixture extension]
+    'd652ea7b25.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12439 assert m.selected(view)==0 [fixture extension]
+    '4aadbcc5de': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:14516 swap_values(m,120,0) [fixture extension]
+    'd7f4dc6863.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:14516 m=classic_light_home() [fixture extension]
     # Q2 Return key and window-manager ABI (Phase 5)
     'dfe4cdaacb': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3181 for existing in (False,True):
     '06388513e1': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3204 assert m.call(170,gap=0)==11
@@ -492,22 +521,22 @@ GAPS = {
     '5bcd40e0a9': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9848 assert ps_bar(pshome,2)==(Q2 Pod,0,0,classic_light_play_l) and ps_bar(pshome
     '91884605fc': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9849 assert ps_bar(pssongs,2)==(Songs,1,classic_light_play_l,0) and ps_bar(pssong
     '3bca7fc3d0.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9850 assert ps_bar(pshome,0)==(Q2 Pod,1,0,0); passed()
-    'c0bc882a3d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9865 for bt_text,bt_face in ((Навстречу Ветру,bold),(日本語,default),(Songs,c
-    '8a4ddc94bd': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9906 assert bm.get(bw_[view_battery]+O[W_W])==31 and bm.get(bw_[view_battery]+O
+    'aaa9e52573': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12140 for bt_text,bt_face in (('Навстречу Ветру','bold'),('日本語','default'),('Songs','c
+    'f0827065aa': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12183 assert bm.get(bw_['view_battery']+O['W_W'])==29 and bm.get(bw_['view_battery']+O
     'cd74de1736': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9907 assert bm.get(bw_[img_bt]+O[W_Y])==1 and bm.get(bw_[img_wifi]+O[W_Y])&0x
     'c587d0e468': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9908 assert bands[:LEVEL]==outline
-    '16cc34a287': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9910 assert bands[LEVEL:]==[(BX,y+1+j,13,1,color_t(c)) for j,c in enumerate(ROWS)]+SH
-    '2930655bdd': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9913 assert dark==body_bands(color_t(0x9c9e9c))+bands[LEVEL:-2]; passed()
+    '5e224e0d47': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12187 assert bands[LEVEL:]==[(BX,y+1+j,12,1,color_t(c)) for j,c in enumerate(ROWS)]+SH
+    'db88085c12': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12190 assert dark==body_bands(LINE)+bands[LEVEL:-2]
     '3a10c52250': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9915 assert bands[LEVEL:]==[(BX,y+1+j,BW,1,color_t(c)) for j,c in enumerate(ROWS)]+SH
-    'ef2ce793fb': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9917 assert [b[:4] for b in bands[LEVEL:LEVEL+13]]==[(BX,y+1+j,BW,1) for j in range(1
-    '7d641f526b': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9918 assert bm.image_draws==[((0,0,26,13),(BX,y+1,26,13))],bm.image_draws
-    '6bc071966c': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9922 assert bands[LEVEL:LEVEL+13]==[(BX,y+1+j,BW,1,color_t(c)) for j,c in enumerate(R
-    '7d641f526b.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9923 assert bm.image_draws==[((0,0,26,13),(BX,y+1,26,13))],bm.image_draws
+    'f491898ac7': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12194 assert [b[:4] for b in bands[LEVEL:LEVEL+11]]==[(BX,y+1+j,BW,1) for j in range(1
+    '8c187dcc88': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12195 assert bm.image_draws==[((0,0,BW,11),(BX,y+1,BW,11))],bm.image_draws
+    'e1f8cc9c29': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12199 assert bands[LEVEL:LEVEL+11]==[(BX,y+1+j,BW,1,color_t(c)) for j,c in enumerate(R
+    '8c187dcc88.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12200 assert bm.image_draws==[((0,0,BW,11),(BX,y+1,BW,11))],bm.image_draws
     'c26e1c0a08': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9927 bm,bw_,bands=classic_light_battery_bar(3,bar_battery,100%,state=2,cable=1); 
-    '0b9a2c76ea': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9931 assert bands[LEVEL:]==[(BX,y+1,3,13,color_t(0xd9402e))]+SHADE+EMBOSS; passed()
-    'e1cd41bd02': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9932 for mode in (1,2,3):  # Percent Inside (digits in the body), and the stored valu
-    'cfaa88768e': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9938 for lt,past in ((1,0xffffff),(0,0xffffff)):
-    'c5f14f197f': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9947 for status,eq,eq_on in ((0,0,0),(2,0,0),(0,1,1),(2,1,0)):
+    '06036b048f': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12208 assert bands[LEVEL:]==[(BX,y+1,3,11,color_t(0xd9402e))]+SHADE+EMBOSS
+    '11e2298ce9': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12209 for mode in (1,2,3):  # Percent Inside (digits in the body), and the stored valu
+    'f911c3fe3d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12215 for lt,past in (('1',0xffffff),('0',0xffffff)):
+    'b3506986e1': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12224 for status,eq,eq_on in ((0,0,0),(2,0,0),(0,1,1),(2,1,0)):
     '927c293b21': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9954 for lt,mark in ((1,l),(0,d)):
     '5e5ca7e295': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9958 assert image({},classic_light_play_l,prep=classic_light)==[same,same] and imag
     'd1c0c66090': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9964 assert image({LIGHT:1},classic_light_sort_bars,prep=classic_light,px=bars)
@@ -526,14 +555,14 @@ GAPS = {
     '78d0895ece': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10033 assert len(hm.icons)==1 and hm.icons[0][0]==168+25 and classic_light_chevron i
     '832e4ebbc0': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10137 writes=pick_theme(2); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]=
     'a98a01e63c': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10137 writes=pick_theme(2); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]=
-    'ec7d62026e': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10306 assert [m.nodes[i][image] for i in marks]==[unselect,select,unselect] an
+    '2cd52126b1': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12811 assert [m.nodes[i]['image'] for i in marks]==['unselect','select','unselect'] an
     '7b5178656d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10307 assert {geometry(m,i) for i in marks}=={(375-SET[EDGE]-50,0,50,32)},[geometry(
-    '9df6cb9869': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10308 assert m.paint(view)==0 and m.selected(view)==1,m.selected(view)
-    '9df6cb9869.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10312 assert m.paint(view)==0 and m.selected(view)==1,m.selected(view)
+    'fa9fefaafc': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12812 assert m.selected(view)==1,m.selected(view)
+    'fa9fefaafc.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12814 assert m.selected(view)==1,m.selected(view)
     '52a9a2d092': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10314 m.paint(w); assert m.selected(w)==2,m.selected(w)
-    '6399c8421a': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10325 assert [m.nodes[i][image] for i in marks]==[unselect,unselect,select] an
-    'a6f870c877': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10326 m.paint(view); assert m.selected(view)==2,m.selected(view)
-    'a6f870c877.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10328 m.paint(view); assert m.selected(view)==2,m.selected(view); passed()
+    '025f755abe': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12792 assert [m.nodes[i]['image'] for i in marks]==['unselect','unselect','select'] an
+    '0071a2ce54': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12794 assert m.paint(view)==0 and m.selected(view)==2,m.selected(view)
+    '0071a2ce54.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12798 assert m.paint(view)==0 and m.selected(view)==2,m.selected(view)
     '83ea910eb4': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10340 m,view=settings(0x4c0f6c,default=32,boot=classic_light_on); item,title,detail=st
     'fd58aa37a3': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10342 assert hs[1]==64 and set(hs[:1]+hs[2:])=={32},hs
     '3222280cdb': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10346 m,view=settings(0x4c0f6c); item,*_=stacked_row(m,view); assert lay(m,view)==0 an
@@ -599,11 +628,11 @@ GAPS = {
     '94f7a277a9': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10760 m,view,rows=display({THEME:1}); f,ctx=m.handler(m.nodes[rows[3]][children]
     'a477f3c544': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10760 m,view,rows=display({THEME:1}); f,ctx=m.handler(m.nodes[rows[3]][children]
     'db09a5833f': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10761 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.opened[-1]==(sys
-    '159a980684': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10764 assert [row_text(r) for r in m.nodes[view][children]]==[Minimal,Classic,M
+    'c6f97c6bab': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13256 assert [row_text(r) for r in m.nodes[view]['children']]==['Minimal','Modern','Cl
     '7857848972': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10766 m,view,rows=display({}); pview=display_page(m,4); m.calls=[]
     '832e4ebbc0.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10768 writes=pick_theme(2); assert [(w[0],m.text(w[2])) for w in writes][:1]==[(2,THE
     'b5632ce2c1': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10768 writes=pick_theme(2); assert [(w[0],m.text(w[2])) for w in writes][:1]==[(2,THE
-    'c5225ccbf8': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10769 assert [m.nodes[m.nodes[m.nodes[r][children][0]][children][0]][image] for 
+    'c7b928e81e': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13262 assert [m.nodes[m.nodes[m.nodes[r]['children'][0]]['children'][0]]['image'] for 
     '0d38a23f5d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10774 for answer,light,want in ((0,0,[]),(10,0,[(1,THEME),(1,LIGHT),(9,CLASSI
     'a990dd0434': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10791 assert m.prompts==[Restart to apply?] and not [c for c in m.calls if c[0]==wr
     '2620d504a8': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10792 for answer,want in ((0,[]),(10,[(0,ROWART)])):
@@ -622,11 +651,11 @@ GAPS = {
     'fd26aa9608': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10854 fk.calls=[]; native_row_layout(fk,fb); assert not [c for c in fk.calls if c[0]==
     'aa4cf517c8': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10854 fk.calls=[]; native_row_layout(fk,fb); assert not [c for c in fk.calls if c[0]==
     'd85722930f': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10855 fk,fb,ft=font_row(classic_light,Навстречу ветру); assert fk.nodes[ft][style:n
-    'dec731fbe0': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10855 fk,fb,ft=font_row(classic_light,Навстречу ветру); assert fk.nodes[ft][style:n
+    '892db71293': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13349 assert fk.nodes[ft]['style:normal:font_name']=='bold' and fk.nodes[ft]['style:no
     '8026238042': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10856 fk,fb,ft=font_row(classic_light,日本語 Title); assert fk.nodes[ft][style:normal:
     '49366170bb': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10856 fk,fb,ft=font_row(classic_light,日本語 Title); assert fk.nodes[ft][style:normal:
     '22458ab634': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10857 for setup in (None,lambda k: k.config.update(THEME=MODERN)):  # Minimal and Mode
-    '1f3ebc4627': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10859 for setup,face in ((lambda k: k.config.update(THEME=MODERN),bold),(classic_lig
+    'e339bdb653': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13395 for setup,face in ((lambda k: k.config.update(THEME=MODERN),'default'),(classic_
     'ac97b6086a': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10866 for setup,face in ((classic_light,classic-light),(lambda k: None,default),(l
     '0b91f21f03': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10887 for config,listw,roww,shown in (({HOME:1},375,O[HOME_FULL_ROW],0),({},O[H
     'd7f4dc6863': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11461 m=classic_light_home(); lib=named(m,m.top,list_view_homelib); lview=named(m,m.
@@ -646,7 +675,7 @@ GAPS = {
     '4520f6257d.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11483 m.call(O[KEY_RETURN]); assert ltitled()==Q2 Pod
     '79715657c2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11485 lbefore=list(m.nodes[lview][children]); m.calls=[]; f,ctx=m.handler(named(m,m.
     'c0c3caab46.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11485 lbefore=list(m.nodes[lview][children]); m.calls=[]; f,ctx=m.handler(named(m,m.
-    '84873bfcd0': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11486 assert m.nodes[lview][children]==lbefore and len(lbefore)==17 and any(c[0]==s
+    '00f3ee7e11': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:14061 assert m.nodes[lview]['children']==lbefore and len(lbefore)==18 and any(c[0]=='s
     '3a79e008f0': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11487 assert m.nodes[lib][visible] and ltitled()==Library
     '0855bac06c': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11488 for r in lbefore:
     '26fd422363': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11490 m.call(O[KEY_RETURN]); assert m.nodes[lst][visible] and ltitled()==Q2 Pod;
@@ -665,6 +694,18 @@ GAPS = {
     '34ac4855fc': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11775 for lra in (0,1):
     'aee48b21c0': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11785 for lra in (1,0):
     'bf774ca8a2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11792 assert lm.call(address=HOOKS[localmusic_page_init][0],args=(lm.top,5,0,0),gap=
+    '4544463931': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:11701 for config,name,square in (({'THEME':'1'},'play_defaultcover',1),({'THEME':'2'}, [fixture extension]
+    '3091791a7f': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12040 assert loaded('dialog/volume_dialog')==['dialog/ipod_volume_dialog'] [dependent]
+    '1dde9bbfa5': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12068 assert style_color(pm,0xff000000,'bg_color')[1]==0xffffffff [fixture extension]
+    'ecc63f3117': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12243 for v in ('lo','hi'): [fixture extension]
+    '7f5dffa791': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12837 assert lay(m,view)==0 and geometry(m,item)[3]==64 and not m.nodes[lead]['visible [fixture extension]
+    '63d018b330': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12838 assert geometry(m,title)[0]==SET['TEXT_X'] [fixture extension]
+    '83ea910eb4.3': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12841 m,view=settings(0x4c0f6c,default=32,boot=classic_light_on) [fixture extension]
+    'dd1a58efdc': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13257 assert m.icons_set==['unselect','select','unselect'] [fixture extension]
+    '1517353f27': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13348 assert [(fk.nodes[ft][f'style:{s}:font_name'],fk.nodes[ft][f'style:{s}:font_size [fixture extension]
+    '7bc1f1ab60': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13349 fk,fb,ft=font_row(classic_light,'Moscow Москва') [fixture extension]
+    '9585f2ca3d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13429 for light,paper in (('1',0xffffffff),('0',0xff000000)): [fixture extension]
+    '6b1afb0859': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:14390 for pt_ in ('0',): [fixture extension]
     # 1.6.7's new Shortcuts: the M1's are Favorites, Shuffle, Rated Albums, Artists and Albums (shortcut())
     'ddca64781d': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:10060 assert d.text(d.call(address=payload_syms[ipod_home_shortcut],args=(0,0,0,0),g
     '0804d29cca': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:10062 assert [(d.text(c[1]),c[2]) for c in d.calls if c[0]==navigator_to_with_context
@@ -676,4 +717,5 @@ GAPS = {
     'c2403b1456': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12162 assert m.text(m.call(address=payload_syms[ipod_home_shortcut],args=(0,0,0,0),g
     'eb604de254.2': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12163 m.calls=[]; assert m.call(address=payload_syms[home_shortcut_open],args=(0,m.e
     'dd982fb5ef': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12164 assert not [c for c in m.calls if c[0]==navigator_to] and m.toasts[-1][3]==No
+    '27d4e91422.3': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:15022 assert m.call(address=HOOKS['folder_page_init'][0],args=(win,0,0,0),gap=0)==0 [dependent]
 }

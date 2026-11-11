@@ -162,18 +162,18 @@ def suites(commit, src, builds, out):
     (out/'logs').mkdir(exist_ok=True)
     def run(job):
         n, v, args = job
-        def suite(tree, log):
+        def suite(tree, log, suite_args=args):
             with open(log, 'w') as f:
-                return subprocess.run([sys.executable, f'test/{n}.py', *map(str, args)], cwd=tree, stdout=f,
+                return subprocess.run([sys.executable, f'test/{n}.py', *map(str, suite_args)], cwd=tree, stdout=f,
                                       stderr=subprocess.STDOUT, env={**os.environ, **ENVS.get(n, {})}).returncode
         log = out/'logs'/f'{v or "host"}-{n}.log'
         rc = suite(src, log)
         last = (log.read_text().strip().splitlines() or [''])[-1][:100]
-        # A suite that runs once, failing here, runs again in the base's own tree: failing there too, it is
-        # the base's (1.5.0's chapters on host -Werror; aic_build, pwm_build, rotator_build and flac_build,
-        # whose release guards predate the options on by default, 69a9cbf), shown and not counted.
-        if rc and v is None and suite(CACHE/commit/'src', out/'logs'/f'base-{n}.log'):
-            return 0, f'BASE   host {n}: fails on the base\'s own tree too: {last}'
+        # Reproduce a failure with the tag's own source and, for a build suite, its own build.
+        # A byte-identical Q2 image can still expose an upstream fixture/toolchain failure.
+        baseline_args = args if v is None else ['--build', CACHE/commit/v] if n == 'build' else [CACHE/commit/v]
+        if rc and suite(CACHE/commit/'src', out/'logs'/f'base-{v or "host"}-{n}.log', baseline_args):
+            return 0, f'BASE   {v or "host"} {n}: fails on the base\'s own tree too: {last}'
         return rc, f'{"ok    " if rc == 0 else "FAILED"} {v or "host"} {n}: {last}'
     with concurrent.futures.ThreadPoolExecutor(max(1, (os.cpu_count() or 2) // 2)) as pool:
         results = list(pool.map(run, jobs))

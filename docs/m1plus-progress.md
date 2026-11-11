@@ -4445,6 +4445,133 @@ are retained. Delayed parsing, downloaded covers and book-to-album identity chan
 harness. Temporary device media was removed. After restoring settings and restarting, all saved IPOD values
 match the backup, and stored `THEME=1` opens with Modern marked (`device-saved-modern.png`).
 
+## 79. Catch-up to 1.7.0: paused before the M1 patch gate passes (Nov 10)
+
+**Checkpoint, not a completed sync.** The user selected one structural merge, 1.6.7 → 1.7.0,
+and requested a stopping point while its gates were still being reconciled. Work is committed
+on `sync/1.7.0`; `feature/m1-ipod` and `refs/backup/pre-sync-1.7.0` remain at `f7338bf9`.
+`UPSTREAM_BASE` stays 1.6.7. `staging` and `main` are unchanged. The fetch succeeded and sees
+tags through 1.8.0, but the user explicitly overrode the cadence recommendation with 1.7.0.
+No later merge, release or Phase 4.7 work belongs to this catch-up.
+
+**Implementation retained.** The conflict-only merge is `7f552cac`, followed by focused M1
+compatibility, suite and type-check commits. Scratch follows upstream to `0xbc0000`; M1 builds
+`xiph.c` and the new generated artwork constants. All 794 hook/site/alias report entries are
+classified, including the new unported hooks and call sites. V2.1's USB-mode alias and ID3
+converter dependencies are pinned by native-code checks. Classic-only stock functions remain
+unresolved and unreachable. M1 keeps its validated selected-row marquee, knob-step navigation,
+own Now Playing page, Soloify idle fix, theme marks/pills and Home artwork guards. New feature
+families are listed in [the unported register](m1plus-unported.md); suite guarding is unfinished.
+
+**Q2 verification.** The consolidated `q2compare.py 1.7.0 --suites` run completed all 37 jobs.
+Its image is byte-identical to upstream (`4aa066c0e9b2…`). Two suite failures were independently
+reproduced on upstream's own source and build and reported as `BASE`: `round_ring` invalid reads
+for radii 14 and 5, and the player-seam fixture packing an out-of-range unsigned duration.
+The root Q2 patch scenario text is unchanged. A narrowly scoped diagnostic continuation runs
+the later patch scenarios: adjusted accounting is 2,856 passing scenarios and the failed
+round-ring group; radius 0 completes. It does not turn that group into a pass.
+Evidence: `work/sync/1.7.0-review/q2compare-gated.log`, `upstream-patch-complete.log`,
+`upstream-round-ring-repro.log`, and the snapshot/builds in `work/sync/1.7.0-q2-gated/`.
+
+**M1 verification and current blocker.** Fresh dev **V05Ym** in `work/sync/1.7.0/` builds and
+passes the full build audit. Its update SHA-256 is
+`46f40c22fccbeb4fb801f7db69e85277e192adbf82f2612c12bc97b4be137d71`; payload text is 653,848 bytes.
+The final patch-gate attempt completes with exit 1: **337 unlisted failures, nine formerly
+expected checks passing and 27 stale expected-check keys**. It ran without `GAPS_DUMP`.
+Earlier attempts crashed in native emulation; the harness now refuses invalid code entries
+and prevents re-entry into a failed fixture, while continuing fresh fixtures and reporting
+dependent failures. No later M1 gates ran. Tools/unit type preflight passed 35 files, but that
+is not a substitute for the pending full gate sequence.
+
+Many failures are new Classic/Q2 layout fixtures or shifted duplicate check ordinals. They are
+not accepted as new expected failures. A diagnostic mapping matches 627 of the previous 652
+gap statements exactly, with 25 requiring review; the proposal has not been applied. Preserve
+existing M1 coverage while adding explicit guards for unported features. In particular, inspect
+the native tag-converter mock, paused-scrub touch input and Now Playing/folder information cases
+before deciding whether they reveal model errors or payload regressions. Detailed failure lists,
+the mapping proposal and gate logs are retained under `work/sync/1.7.0-review/` and
+`work/sync/1.7.0-gates/`.
+
+**Source changed after this build.** `c7f79313` separates compact payload-page row heights from
+native PEQ's 48 px rows. The M1 payload compiles, but the fix has not been exercised by a fresh
+firmware gate run. V05Ym therefore does not represent the checkpoint source and must not be
+staged. Preserve its evidence, seed the next build counter above 214 (next V05Zm), and rebuild
+before repeating every M1 gate. The main worktree's counter is still 213; do not overwrite the
+gate worktree's 214 with it. Repeat the final-source Q2 byte comparison too.
+
+**Resume and landing.** The retained runner is `work/sync/1.7.0-review/m1-gates.sh`; it stops on
+the first failure. Resolve the patch integration without dumping new gaps, then complete all six
+boot modes, playback, M4B, ID3, headset, LDAC, BlueALSA, ports, unit and `test/fw` tests, type
+checks and the real-renderer theme regressions. V05Ym's provisional function diff against the
+validated V05Xm reports 358 changed, 200 added and one removed function out of 1,662; regenerate
+it for the final build and retain the device checklist. Record final footprint, conflict audit
+and gate evidence, update `UPSTREAM_BASE`, then land with `--no-ff` into `feature/m1-ipod`, update
+graphify and report drift without another merge. The earlier validated image in
+`work/item78/verified/` remains untouched.
+
+**Device pass has not started.** The user reconnected the M1 at `192.168.1.210`; a read-only
+state request succeeded. No update was staged or flashed and no settings were changed. After
+all gates pass, save settings and boot target, stage the M1 `update.bin` through q2remote, and
+let the user flash. Verify installed identity, set Screen Off to Off for the structural checks,
+retain Soloify lit/dark idle, theme marks/presets/pills, Home artwork, Now Playing, navigation
+and status-bar regressions, then restore saved settings and boot target. Unavailable checks
+remain untested; device findings get a separate fix plan. Completion still requires that
+recorded device pass.
+
+## 80. Merge step: sync to 1.7.0 on `feature/m1-ipod` (Nov 11)
+
+Completes section 79. 1.7.0 (`85fe884`) is the endpoint the user chose; drift.py's later tags are not merged.
+`sync/1.7.0` from `feature/m1-ipod` at `f7338bf9` (backup `refs/backup/pre-sync-1.7.0`). 203 upstream commits:
+Classic's own pages (its iPod Now Playing, volume, bar times and scrub cue, Playlists, Search, QR and T9), the
+theme engine's configurable slide motion, Cover Flow's flip, thumb, cap and letters, USB Storage's OK to
+Disconnect, Chapters for any spoken file, `test/fw` (the firmware's C on the host), Ogg and FLAC tag reading in
+`xiph.c`, and the queue-delete and click-queue fixes.
+
+**Conflicts** (`7f552cac`, 16 files): resolved by the runbook's rules, upstream's side with the M1 lines back as
+seams. **Follow-ups** `89b1281a` to `c7f79313` are listed in section 79. Three more came from the patch gate,
+each a 1.7.0 path the M1 ran with the Q2's geometry:
+- `aecec6ba`: 1.7.0's theme default `page.rows.text_x` (36, the Q2's `CF_EDGE`) moved every M1 page row and
+  PEQ row's text from 16 to 36 px. `PAGE_X(T)` keeps `CF_EDGE` on the M1.
+- `9a20dc00`: the merge dropped `page_list`'s `view_show` seam. Its `widget_set_visible` left the tracks body
+  insensitive after Cover Flow's covers handed over, so the list took no touches.
+- `1117a662`: `np_beside` (1.7.0's fit of Classic's times beside the bar) ran on the M1's Now Playing open and set
+  the slider to x 0, w 375, the times to x −43 and 383. A touch at the bar's right end then landed on the slider,
+  and a paused seek's settle timer was cancelled. `np_beside` returns 0 on the M1.
+
+**Suites.** `patch.py` (`6e1276cc`, `e961fb03`): 1.7.0's slide motion and USB eject cases behind `not_ported`;
+Classic's level pushes, two-line progress rows, QR page, T9 box and Search behind `if not is_m1plus`; the volume
+dialog, glyph opacity and remain-text cases follow `MODERN` and the M1's `-02:04`; `home_after_hold` follows the
+M1's Previous latch, spent at dispatch. `patch_gaps.py` rekeyed last (`6017b02c`), with no `GAPS_DUMP`: **694
+expected failures in the same 11 gaps**, none new. The 42 added rows are shifted ordinals, Classic fixtures under
+the existing Classic gap, and dependents of a failed fixture (b5883083a6.22, the Q2 wheel keys). `gaprun.py`'s
+`GAPS_INSPECT` (`541732b7`) runs code after one statement in its globals, for debugging a check.
+
+**Gates** (from `work/gatetree` at `6017b02c`). The Q2 image on the final firmware sources (`1117a662`; later
+commits touch only M1 tests) is byte-identical to 1.7.0 (`4aa066c0e9b2`), as section 79's 37-job run found.
+On the M1, `--dev` **V061m** in `work/sync/1.7.0/` (update sha256 `5ddac9566849…`) passes the build audit,
+`patch.py`, `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`, `--soloify`, `--bar-keys`), `playback`,
+`m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`, `pytest test/unit` (1,184), `pytest test/fw` (3,638),
+mypy on `tools`/`test/unit` and `test/fw`, and `theme_page.py`'s renderer checks. 1.7.0's unit tests link host
+`.so` files with `clang`, and the dev shell's clang is unwrapped (no `crti.o`). The gate puts nixpkgs'
+`clang-wrapper` on `PATH` alone; its `cc` would shadow gcc's, which `test/fw` needs. Logs:
+`work/sync/1.7.0-gates/`. The function diff against `V05Xm` (`work/sync/1.7.0-review/fndiff-V05Xm-V061m.txt`):
+358 changed, 200 added, 1 removed, of 1,662.
+
+**Unported rows:** configurable slide motion (the M1 keeps V2.1's 200/120 ms) and USB Storage's OK to Disconnect,
+beside section 79's rows (the scrolling-label pace, oversized Ogg artwork, Classic's forms, pages and Streaming
+pane, Cover Flow's raw wheel).
+
+**For the device pass** (section 78's list too, on `V05Xm`'s ground):
+- page rows' text inset (16 px, as `V05Xm`) on Settings pages and PEQ;
+- Cover Flow → an album's tracks: the list takes taps and scrolls;
+- Now Playing: the slider's ends and the times where `V05Xm` had them; a paused scrub, then a tap at the bar's
+  right end, settles at the new place;
+- the selected-row marquee, knob-step navigation, Theme's marks and pills, Home's Split art, the Soloify idle,
+  the status bar's play icon;
+- Hold Return to Home, from a page and from Now Playing;
+- Ogg and FLAC tags in the Library (album artist, long values; `xiph.c` is new in the payload);
+- slide motion as `V05Xm`.
+
 ## How to check a build now
 
 ```sh

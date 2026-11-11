@@ -7,7 +7,7 @@ static int swiped(void *ctx, void *e) {
     if (ph.screen != VIEWER || !ph.slide) return 0;
     int xy[2] = { I(e, EVENT_X), I(e, EVENT_Y) };
     widget_to_local(ph.viewer, xy);
-    if (slide_swipe(ph.slide, e, xy[0] < BACK_W && xy[1] < 48 ? 0 : UI_W, 0)) toggle_info(0, 0);
+    if (slide_swipe(ph.slide, e, xy[0] < M1_BACK_W && xy[1] < 48 ? 0 : UI_W, 0)) toggle_info(0, 0);
     return 0;
 }
 #endif

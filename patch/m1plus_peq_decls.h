@@ -24,3 +24,10 @@ void slide_step(void *s, int k, int bounded);
 #else
 #define view_show(w, on) widget_set_visible(w, on, 0)
 #endif
+
+/* Payload page lists use the M1 library pitch; PEQ's own 48 px rows still use page_h. */
+#if M1PLUS
+#define page_row_height(h) LIB_PITCH
+#else
+#define page_row_height(h) page_h(h)
+#endif

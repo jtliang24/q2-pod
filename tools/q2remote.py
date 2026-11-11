@@ -2,6 +2,7 @@
 """Drive a --dev Q2 over Wi-Fi (Q2_HOST, and Q2_KEY or a key file; see docs/remote.md).
 
 usage: q2remote.py {sh [--timeout S] COMMAND|shot [--settle] OUT.png|state|wake|key NAME [MS]|wheel N [--step-ms MS]|knob N [--step-ms MS]|tap X Y [MS]|swipe X1 Y1 X2 Y2 [MS]|peek NAME...|push LOCAL REMOTE|pull REMOTE LOCAL|install UPDATE.TAR|log [LINES|-f|--clear]|events EVENT [S]|devices|find|reboot [--wait]|prof S [--all] [--build DIR]}"""
+from typing import Any
 import concurrent.futures
 import contextlib
 import hashlib
@@ -669,7 +670,7 @@ def peek_layouts(dump):
         m = re.fullmatch(r"\s*0 \| struct peek_v(\d+)", line)
         if not m:
             continue
-        root = {"children": []}
+        root: dict[str, Any] = {"children": []}
         stack = [(0, root)]
         for line in lines[at + 1:]:
             f = PEEK_LAYOUT.fullmatch(line)

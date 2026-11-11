@@ -16,7 +16,8 @@ import importlib.util
 import json
 import re
 import struct
-from build import ROOT, check, fileoff, sha
+from typing import Any, cast
+from build import ROOT, check, need, fileoff, sha
 
 M1 = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b',
                                                (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M)}
@@ -27,10 +28,10 @@ PROFILE = {name: M1[name] for name in ('UI_W', 'UI_H', 'STATUS_H', 'GLASS_R', 'B
 
 def load(profile=PROFILE):
     """A fresh tools/ipod.py, its constants computed for profile."""
-    spec = importlib.util.spec_from_file_location('m1plus_ipod_screen', ROOT/'tools/ipod.py')
-    module = importlib.util.module_from_spec(spec)
+    spec = need(importlib.util.spec_from_file_location('m1plus_ipod_screen', ROOT/'tools/ipod.py'), 'Missing M1 screen module')
+    module = cast(Any, importlib.util.module_from_spec(spec))  # PROFILE is injected before the module executes
     module.PROFILE = profile
-    spec.loader.exec_module(module)
+    need(spec.loader, 'Missing M1 screen loader').exec_module(module)
     return module
 
 

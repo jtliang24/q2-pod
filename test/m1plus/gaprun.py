@@ -49,6 +49,8 @@ def run(path, g, boot_line, gaps):
                     self.u.hook_add(UC_HOOK_CODE, lambda u, address, size, ud: (trail.append(address), trail[:-20] and trail.__delitem__(slice(0, len(trail) - 20))))
                 return call(self, *a, **k)
             g['Machine'].call = traced; patched.append(1)
+        if os.environ.get('GAPS_PROGRESS'):
+            print(f'CHECK {node.lineno} {name}: {text.splitlines()[0][:100]}', flush=True)
         try:
             exec(compile(ast.Module([node], []), path, 'exec'), g)
         except BaseException as e:
@@ -65,10 +67,18 @@ def run(path, g, boot_line, gaps):
                 print('  last pcs:', [hex(a) for a in trail[-14:]])
                 print('  last calls:', [c[0] for c in g['m'].calls[-6:]])
                 print(f'UcError at patch.py:{node.lineno}: pc {pc:#x} in {near(pc)[1]}+{pc - near(pc)[0]:#x}, ra {ra:#x} in {near(ra)[1]}')
+            if os.environ.get('GAPS_PROGRESS'):
+                print(f'FAIL {node.lineno} {name}: {failed[-1]["error"]}', flush=True)
             if name in gaps: expected.setdefault(gaps[name], []).append(node.lineno)
             else: unexpected.append((node.lineno, name, failed[-1]['error']))
         else:
             if name in gaps: fixed.append((node.lineno, name, gaps[name]))
+        if os.environ.get('GAPS_INSPECT'):  # debugging: after a statement, run the code its line maps to
+            table = json.load(open(os.environ['GAPS_INSPECT']))
+            if str(node.lineno) in table:
+                print(f'INSPECT {node.lineno}:', flush=True)
+                try: exec(table[str(node.lineno)], g)
+                except BaseException as e2: print('  inspect failed:', type(e2).__name__, e2, flush=True)
     if os.environ.get('GAPS_DUMP'): json.dump(failed, open(os.environ['GAPS_DUMP'], 'w'), indent=1)
     for feature, at in sorted(expected.items()): print(f'KNOWN GAP: {feature}: {len(at)} checks (patch.py line {at[0]}...)')
     problems = [f'patch.py:{n} {k}: fails and is not in patch_gaps.GAPS: {e}' for n, k, e in unexpected]

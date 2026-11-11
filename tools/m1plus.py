@@ -5,10 +5,11 @@ build.py keeps upstream's Q2 code; its build() hands an M1 Plus input to build()
 (docs/m1plus-roadmap.md U1). The pipeline reuses build.py's helpers and tables where V2.1 matches V1.32,
 and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
+from typing import Any, cast
 from build import (ROOT, TIMEZONES, TIMEZONE_ORDER, VERSION, TAG, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
                    REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, WIFI_LPS, ICONS,
-                   STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, dev_tag, fileoff, jpeg_size, patch_bluealsa,
+                   STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, need, dev_tag, fileoff, jpeg_size, patch_bluealsa,
                    run, segments, sha, source_sha256, symbols)
 
 MODEL = 'Shanling M1 Plus'
@@ -64,8 +65,12 @@ RTC_READ_M1PLUS = (b'hwclock -s\0\0', b'hwclock -su\0')
 # replacement is a jal to that payload symbol, None pins the word unchanged. A model without an entry
 # leaves that behaviour stock. build.py applies the Q2's with upstream's own code; build() here applies
 # the M1's; test/m1plus/build.py and test/m1plus/patch.py read both.
-CALL_SITES = {
+CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] = {
     'q2': {
+        'AB_X_CALLS': tuple((a, 0x04110000 | ((0x52a268-a-4)//4 & 0xffff), 'ringnav_ab_x') for a in (0x52a408, 0x52a484, 0x52a494)),
+        'TABLE_LOAD_CALL': ((0x5ca0fc, 0x0320f809, 'ringnav_table_load'),),
+        'HSCROLL_LULL': ((0x5e8ae8, 0x0320f809, 'ringnav_hscroll_lull'),),
+        'HSCROLL_ONCE': ((0x5e8a28, 0x14400025, 0x10000025),),
         # config_init's bal config_playmode becomes jal ringnav_bootmode, which keeps the saved queue
         # while it applies the boot play mode, and reads Artists.
         'BOOT_MODE_CALL': ((0x4f999c, 0x0411e992, 'ringnav_bootmode'),),
@@ -391,6 +396,16 @@ def call_site_words(m1plus, ps):
 # docs/m1plus-ipod-ui.md item that ports it. A sync adds a row for each
 # new upstream hook or site it doesn't port, and the report fails until it has one.
 M1PLUS_PORTS = {
+    'toolsGetAlbumCover': ('unported', '1.7.0: oversized Ogg embedded artwork; V2.1 cover hook not pinned'),
+    'dialog_search_dialog_init': ('unported', '1.7.0: Classic Search; Classic is unported'),
+    'systemset_sleepshutdown_page_init': ('unported', '1.7.0: Classic sleep timer; Classic is unported'),
+    'systemset_manualtime_page_init': ('unported', '1.7.0: Classic date and time; Classic is unported'),
+    'hscroll_label_start': ('unported', '1.7.0: global scrolling delay and lull; V2.1 uses a different timer implementation'),
+    'AB_X_CALLS': ('unported', '1.7.0: Classic A-B fitted bar; Classic is unported'),
+    'HSCROLL_LULL': ('unported', '1.7.0: global scrolling delay and lull; V2.1 timer not pinned'),
+    'HSCROLL_ONCE': ('unported', '1.7.0: single pass scrolling hold; V2.1 timer not pinned'),
+    'TABLE_LOAD_CALL': ('unported', '1.7.0: Classic pooled-row faces; Classic is unported'),
+
     # Hooks
     'createPlayListItem': ('unported', 'playlist ID allocation (1.5.5); V2.1 allocator not yet pinned'),
     'playlist_delete_click': ('unported', 'transactional playlist deletion (1.5.5); V2.1 delete callback not yet pinned'),
@@ -476,6 +491,8 @@ M1PLUS_PORTS = {
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
+    'g_usbmode': 'usb_mode',  # V2.1 usbmode_page_init's saved storage/DAC choice
+
     'g_playspeed_mode': 'playspeed_mode',
     'g_backlight_status': 'backlight_status',
     'g_lockscreen_pageflag': 'lockscreen_pageflag',
@@ -575,6 +592,9 @@ M1PLUS_PRIVATE_FUNCTIONS = {
 # with no address, so the page compiles and --gc-sections drops it. The link fails if live code
 # reaches one (not for navigation.c: M1PLUS_SHIMS). Each goes with its hook's U4 row.
 M1PLUS_UNRESOLVED = {
+    'on_home_stream_onclick': "Classic Home Streaming pane; Classic is unported",
+    'ab_x': "Classic A-B fitted bar; AB_X_CALLS is unported",
+    'batch_get_selectitem': "Classic playlist selection marks; Classic is unported",
     'fwupdate_tf': 'Network Update (netupdate.c): stock\'s TF card update, systemset_fwupdate_page_init unported',
     # Home's Library list in Split (coverflow.c home_library, 1.6.7): bound only where Home's asset has
     # list_view_homelib, a geometry set's home_lib, which only Classic's has (unported on M1)
@@ -783,7 +803,7 @@ def m1plus_inc(name):
     """An integer #define of patch/offsets.inc as the M1 Plus payload compiles it."""
     found = re.search(rf'^#define {name} (0x[0-9a-f]+|\d+)$', run('clang', '-E', '-dM', '-DM1PLUS=1', '-x', 'c',
                                                               ROOT/'patch/offsets.inc'), re.M)
-    check(found, f'{name}: not defined for M1 Plus')
+    found = need(found, f'{name}: not defined for M1 Plus')
     return int(found.group(1), 0)
 
 def stub_asm(stubs):
@@ -796,7 +816,7 @@ def stub_asm(stubs):
 # hciplayer: the PEQ, ReplayGain and MP3 seek patch (tools/peq.py) at V2.1's addresses, each found in V2.1's
 # binary; peq.py's constants are V1.32's.
 M1PLUS_PLAYER_SHA = 'a64503746862af3e69b57f2e06167351b30cda28479348a845be5172e083a8c6'
-PLAYER_PROFILE = {
+PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups and identity bytes
     'desc': 0x893808,
     'desc_bytes': 'bc3789002c5e88004c358900b8c388000100000014fd4400',
     'open_slot': 0x89381c,
@@ -918,7 +938,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -960,7 +980,8 @@ def patch_player(raw, out):
     patch_word(data, prof['vbr_scan'], 0x144008a8, 0, 'VBR scan')  # bnez $v0, ... -> nop
     for address, stock, patched in prof['eq_rate_gates']:
         patch_word(data, address, stock, patched, 'Equalizer rate gate')
-    patch_word(data, *prof['pause_sleep'], 'pause loop sleep')
+    pause_addr, pause_old, pause_new = prof['pause_sleep']
+    patch_word(data, pause_addr, pause_old, pause_new, 'pause loop sleep')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')
@@ -976,9 +997,9 @@ def m1_themes():
     saved = sys.modules.get('ipod')
     sys.modules['ipod'] = m1plus_ipod.ipod
     try:
-        spec = importlib.util.spec_from_file_location('m1plus_theme', ROOT/'tools/theme.py')
-        theme = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(theme)
+        spec = need(importlib.util.spec_from_file_location('m1plus_theme', ROOT/'tools/theme.py'), 'Missing M1 theme module')
+        theme = cast(Any, importlib.util.module_from_spec(spec))  # module attributes come from exec_module
+        need(spec.loader, 'Missing M1 theme loader').exec_module(theme)
         # Role macros (Coverflow's CF_*, Home's HOME_*, the accents' fills) are the M1's: theme.py evaluates
         # them against its O, the Q2's offsets.inc but for the screen
         m1 = dict(m1plus_ipod.M1)
@@ -991,6 +1012,8 @@ def m1_themes():
         else: sys.modules['ipod'] = saved
     themes = [t for t in theme.builtins() if theme.geometry(t) == theme.SET0 and not any(o.get('sets') for o in t['opts'])]
     check([t['name'] for t in themes] == ['Minimal', 'Modern'], f'M1 themes: {[t["name"] for t in themes]}')
+    for t in themes:
+        t['cf.thumb'] = 0  # raw-wheel Cover Flow is unported on the M1 volume knob
     return themes, theme
 
 
@@ -1003,7 +1026,8 @@ def m1_emit_themes(themes, theme, out):
     check(len(theme.geometry_sets(themes)) == 1, 'M1 themes: one geometry set')
     sites = re.search(r'^#define BOOT_SITES (\d+)$', inc, re.M)
     table = re.search(r'^const boot_site_t boot_sites\[BOOT_SITES\] = \{.*\};$', inc, re.M)
-    check(sites and table, 'themes.inc: no boot sites table')
+    sites = need(sites, 'themes.inc: no boot sites table')
+    table = need(table, 'themes.inc: no boot sites table')
     inc = inc[:table.start()] + 'const boot_site_t boot_sites[1] = {{0, 0}}; /* M1 Plus: none (BOOT_SITES 0) */' + inc[table.end():]
     inc = inc.replace(sites.group(0), '#define BOOT_SITES 0 /* M1 Plus: theme_boot writes no V1.32 site */')
     # The own options of the themes the M1 leaves out (Classic's OWN_HOMELIB, OWN_ROWPREVIEW): past theme_keys, so
@@ -1133,7 +1157,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         meta = t.getmembers()
         check([m.name for m in meta] == ['firmware_v20.info','recovery-update',
               'recovery-update/xImage','recovery-update/rootfs.squashfs'], 'Unexpected package members')
-        blobs = {m.name:t.extractfile(m).read() for m in meta if m.isfile()}
+        blobs = {m.name:need(t.extractfile(m), f'Unreadable {m.name}').read() for m in meta if m.isfile()}
     info = blobs['firmware_v20.info'].decode().splitlines()
     check(info[0] == MODEL, f'Unsupported model: {info[0]}')
     model = MODEL
@@ -1163,7 +1187,9 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     demo = out/'stock-demo'; demo.write_bytes(raw_demo)
     symbol_table = run('readelf', '-Ws', demo)
     syms = symbols(demo, symbol_table)
-    header = [f'#define RING_STEP {RING_STEP}']
+    from art import corner_table, qs_lit
+    header = [f'#define RING_STEP {RING_STEP}', f'#define ROUND_COVER {corner_table()}',
+              f'#define QS_LIT "{qs_lit()}"']
     # Classic's bold font (4.1) comes with the iPod assets: no range, so bold_label never picks it
     header.append('#define BOLD_RANGES {0, 0}')
     header.append('#define CLASSIC_LIGHT_RANGES {0, 0}')  # Classic's face (1.6.7): Classic is unported
@@ -1277,14 +1303,14 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     p = pseudo.read_bytes()
     # mksquashfs takes "/" from the source dir, not the pseudo file; carry stock values over.
     root = re.search(rb'^/ D (\d+) (\d+) (\d+) (\d+)$',p,re.M)
-    check(root is not None, 'Missing root pseudo inode')
+    root = need(root, 'Missing root pseudo inode')
     t,mode,uid,gid = (x.decode() for x in root.groups())
     rootargs = ['-root-time',t,'-root-mode',mode,'-root-uid',uid,'-root-gid',gid]
     # Paths are passed through a shell by mksquashfs F entries; quote them explicitly.
     def inode(p, path): return re.search(rb'^'+re.escape(path)+rb' R (\d+) (\d+) (\d+) (\d+) .+$',p,re.M)
     def swap_inode(p, path, src):
         line = inode(p, path)
-        check(line is not None, f'Missing {path.decode()} pseudo inode')
+        line = need(line, f'Missing {path.decode()} pseudo inode')
         return p[:line.start()]+path+b' F '+b' '.join(line.groups())+b' cat '+shlex.quote(str(src)).encode()+p[line.end():]
     s90play = cat(S90PLAY)
     check(s90play.count(BOOT_HOOK[0]) == 1 and s90play.count(REMOTE_HOOK[0]) == 1, 'Unexpected S90play')
@@ -1374,7 +1400,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         line = re.search(rb'^'+re.escape(path.encode())+rb' R .+\n', p, re.M)
         if line is None and path in STOCK_EQ:
             continue
-        check(line is not None, f'Missing stock inode {path}')
+        line = need(line, f'Missing stock inode {path}')
         removed.append(line.group().split()[:6])
         p = p[:line.start()]+p[line.end():]
     changed_assets = {}
