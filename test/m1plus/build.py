@@ -978,6 +978,14 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # twin: folder_back's bal clear_foldervariate (folder_reset_variable) and delete_playqueue_file's
     # bal start_playqueue (player_start_queue).
     def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
+    # 1.7.0's oversized-Ogg tag path uses V2.1's own converter. Its six native tag reads
+    # load the same GOT entry before passing the Latin-1 flag, both strings, output and field kind.
+    assert stock_syms['toolsFixId3ErrorCode'] == 0x5ec460
+    for site in (0x5ec8c0, 0x5ec958, 0x5ec9f0, 0x5eca88, 0x5ecb20, 0x5ecbb8):
+        assert words(site, 1) == (0x8f99c770,) and got(site) == stock_syms['toolsFixId3ErrorCode']
+    # usbmode_page_init branches to DAC handling on usb_mode == 1 (lb; li 1; bne).
+    assert got(0x545e64) == stock_syms['usb_mode'] == 0xa05aa8
+    assert words(0x545e68, 3) == (0x80430000, 0x24020001, 0x14620067)
     assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
     assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
     # Library -> Songs (songs_load, 1.6.3): loadLocalClassList's default branch calls getAllMusic, then
