@@ -1260,7 +1260,7 @@ void *page_list(void *page, void *body, void **title, const char *caption, int n
     int h = widget_get_prop_int(page, "h", client_h());
     item_h = page_row_height(item_h);
     widget_destroy_children(body);
-    widget_set_visible(body, 1, 0);
+    view_show(body, 1);
     void *t = page_title(body, caption, title ? TITLE_ON_SHOW : n);
     if (title) *title = t;
     void *view = rows_view(body, I(t, W_H), UI_W, h - I(t, W_H), n, item_h);
