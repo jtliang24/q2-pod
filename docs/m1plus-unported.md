@@ -73,6 +73,8 @@ to its [progress](m1plus-progress.md) section.
 | Classic Quick Settings, dialogs, Playlists and lock screen | 1.6.8–1.7.0 | Classic painters; `AB_X_CALLS`, `TABLE_LOAD_CALL`, `batch_get_selectitem`, `ab_x` | NOT PORTED; Phase 4.7 remains a separate plan |
 | Classic Home Streaming pane | 1.6.8–1.7.0 | `home_streaming`, `stream_rows`, `on_home_stream_onclick`, `STREAM_BG` | NOT PORTED; M1 Streaming keeps its existing page |
 | Cover Flow raw-wheel thumb and follower | 1.6.8–1.7.0 | `coverflow_wheel_*`, `cf.thumb`, `EASE_FOLLOW`; M1 has a volume knob | NOT PORTED; validated knob-step and touch behavior retained |
+| Configurable slide motion (a theme's step and fast-step ms and easing, ms 0 an immediate move) | 1.6.8–1.7.0 | the theme's motion rows (`THEME_MOTION_OFF`, `MOTION_WIDGET`); the M1's slide_menu keeps V2.1's 200/120 ms and easing | NOT PORTED |
+| USB Storage eject: OK to Disconnect | 1.6.8–1.7.0 | `usb_poll` (`navigation.c`), the Q2 gadget's `USB_LUN` configfs path; V2.1's gadget layout not checked | NOT PORTED |
 
 Era, Western tag/CUE text, hidden-folder exclusions, Streaming Configuration, user-space idle
 changes and lyrics passed the combined device checks in [progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28).

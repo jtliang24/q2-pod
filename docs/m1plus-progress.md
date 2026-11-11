@@ -4518,6 +4518,60 @@ and status-bar regressions, then restore saved settings and boot target. Unavail
 remain untested; device findings get a separate fix plan. Completion still requires that
 recorded device pass.
 
+## 80. Merge step: sync to 1.7.0 on `feature/m1-ipod` (Nov 11)
+
+Completes section 79. 1.7.0 (`85fe884`) is the endpoint the user chose; drift.py's later tags are not merged.
+`sync/1.7.0` from `feature/m1-ipod` at `f7338bf9` (backup `refs/backup/pre-sync-1.7.0`). 203 upstream commits:
+Classic's own pages (its iPod Now Playing, volume, bar times and scrub cue, Playlists, Search, QR and T9), the
+theme engine's configurable slide motion, Cover Flow's flip, thumb, cap and letters, USB Storage's OK to
+Disconnect, Chapters for any spoken file, `test/fw` (the firmware's C on the host), Ogg and FLAC tag reading in
+`xiph.c`, and the queue-delete and click-queue fixes.
+
+**Conflicts** (`7f552cac`, 16 files): resolved by the runbook's rules, upstream's side with the M1 lines back as
+seams. **Follow-ups** `89b1281a` to `c7f79313` are listed in section 79. Three more came from the patch gate,
+each a 1.7.0 path the M1 ran with the Q2's geometry:
+- `aecec6ba`: 1.7.0's theme default `page.rows.text_x` (36, the Q2's `CF_EDGE`) moved every M1 page row and
+  PEQ row's text from 16 to 36 px. `PAGE_X(T)` keeps `CF_EDGE` on the M1.
+- `9a20dc00`: the merge dropped `page_list`'s `view_show` seam. Its `widget_set_visible` left the tracks body
+  insensitive after Cover Flow's covers handed over, so the list took no touches.
+- `1117a662`: `np_beside` (1.7.0's fit of Classic's times beside the bar) ran on the M1's Now Playing open and set
+  the slider to x 0, w 375, the times to x −43 and 383. A touch at the bar's right end then landed on the slider,
+  and a paused seek's settle timer was cancelled. `np_beside` returns 0 on the M1.
+
+**Suites.** `patch.py` (`6e1276cc`, `e961fb03`): 1.7.0's slide motion and USB eject cases behind `not_ported`;
+Classic's level pushes, two-line progress rows, QR page, T9 box and Search behind `if not is_m1plus`; the volume
+dialog, glyph opacity and remain-text cases follow `MODERN` and the M1's `-02:04`; `home_after_hold` follows the
+M1's Previous latch, spent at dispatch. `patch_gaps.py` rekeyed last (`6017b02c`), with no `GAPS_DUMP`: **694
+expected failures in the same 11 gaps**, none new. The 42 added rows are shifted ordinals, Classic fixtures under
+the existing Classic gap, and dependents of a failed fixture (b5883083a6.22, the Q2 wheel keys). `gaprun.py`'s
+`GAPS_INSPECT` (`541732b7`) runs code after one statement in its globals, for debugging a check.
+
+**Gates** (from `work/gatetree` at `6017b02c`). The Q2 image on the final firmware sources (`1117a662`; later
+commits touch only M1 tests) is byte-identical to 1.7.0 (`4aa066c0e9b2`), as section 79's 37-job run found.
+On the M1, `--dev` **V061m** in `work/sync/1.7.0/` (update sha256 `5ddac9566849…`) passes the build audit,
+`patch.py`, `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`, `--soloify`, `--bar-keys`), `playback`,
+`m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`, `pytest test/unit` (1,184), `pytest test/fw` (3,638),
+mypy on `tools`/`test/unit` and `test/fw`, and `theme_page.py`'s renderer checks. 1.7.0's unit tests link host
+`.so` files with `clang`, and the dev shell's clang is unwrapped (no `crti.o`). The gate puts nixpkgs'
+`clang-wrapper` on `PATH` alone; its `cc` would shadow gcc's, which `test/fw` needs. Logs:
+`work/sync/1.7.0-gates/`. The function diff against `V05Xm` (`work/sync/1.7.0-review/fndiff-V05Xm-V061m.txt`):
+358 changed, 200 added, 1 removed, of 1,662.
+
+**Unported rows:** configurable slide motion (the M1 keeps V2.1's 200/120 ms) and USB Storage's OK to Disconnect,
+beside section 79's rows (the scrolling-label pace, oversized Ogg artwork, Classic's forms, pages and Streaming
+pane, Cover Flow's raw wheel).
+
+**For the device pass** (section 78's list too, on `V05Xm`'s ground):
+- page rows' text inset (16 px, as `V05Xm`) on Settings pages and PEQ;
+- Cover Flow → an album's tracks: the list takes taps and scrolls;
+- Now Playing: the slider's ends and the times where `V05Xm` had them; a paused scrub, then a tap at the bar's
+  right end, settles at the new place;
+- the selected-row marquee, knob-step navigation, Theme's marks and pills, Home's Split art, the Soloify idle,
+  the status bar's play icon;
+- Hold Return to Home, from a page and from Now Playing;
+- Ogg and FLAC tags in the Library (album artist, long values; `xiph.c` is new in the payload);
+- slide motion as `V05Xm`.
+
 ## How to check a build now
 
 ```sh
