@@ -73,6 +73,12 @@ def run(path, g, boot_line, gaps):
             else: unexpected.append((node.lineno, name, failed[-1]['error']))
         else:
             if name in gaps: fixed.append((node.lineno, name, gaps[name]))
+        if os.environ.get('GAPS_INSPECT'):  # debugging: after a statement, run the code its line maps to
+            table = json.load(open(os.environ['GAPS_INSPECT']))
+            if str(node.lineno) in table:
+                print(f'INSPECT {node.lineno}:', flush=True)
+                try: exec(table[str(node.lineno)], g)
+                except BaseException as e2: print('  inspect failed:', type(e2).__name__, e2, flush=True)
     if os.environ.get('GAPS_DUMP'): json.dump(failed, open(os.environ['GAPS_DUMP'], 'w'), indent=1)
     for feature, at in sorted(expected.items()): print(f'KNOWN GAP: {feature}: {len(at)} checks (patch.py line {at[0]}...)')
     problems = [f'patch.py:{n} {k}: fails and is not in patch_gaps.GAPS: {e}' for n, k, e in unexpected]
