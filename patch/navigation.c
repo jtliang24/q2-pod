@@ -2765,7 +2765,7 @@ static int marq_moved(const void *info) {
     /* stock's two margins (2 px each by default, 0x5e8428) count towards its ellipsis */
     int over = label ? I(label, HSCROLL_TEXT_W) + 4 - I(label, W_W) : 0;
     if (over <= 0 || !B(label, HSCROLL_ONLY_FOCUS)) return 0; /* until it moves */
-    B(label, HSCROLL_LOOP) = 1;
+    if (!M1PLUS) B(label, HSCROLL_LOOP) = 1;
     st.marq_label = label;
     widget_on(label, EVT_DESTROY, marq_gone, (void *)0);
     hscroll_label_set_only_focus(label, 0);
@@ -10213,7 +10213,7 @@ static int artist_list(int tab) {
     void *list = P(p_deque_showlist, 0), *all;
     /* An artist with no name: its title (the navbar's, the bar's) is the language's "Unknown
      * Artist", as Songs' rows say, not glibc's "(null)" */
-    if (!strcmp((const char *)ARTIST_TITLE, "(null)"))
+    if (!M1PLUS && !strcmp((const char *)ARTIST_TITLE, "(null)"))
         getFormatString("player_unknown", (char *)ARTIST_TITLE, 0x200);
     artist_bar();
     artist_keys_free();
@@ -13615,7 +13615,7 @@ static void hold_label(void *item, void *label) {
 /* The title loops, as Now Playing's; stock's sortselect title doesn't. Its holds at its start and
  * end are every label's (ringnav_hscroll_start, ringnav_hscroll_lull). */
 static void qm_title(void *dialog, const char *s) {
-    void *title = widget_lookup(dialog, "scrlabel_title", 1);
+    void *title = widget_lookup(dialog, VIEW_SORTSELECT_TITLE, 1);
     widget_set_prop_int(title, "loop", 1);
     widget_set_text_utf8(title, s);
 }

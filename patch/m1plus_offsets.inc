@@ -946,3 +946,56 @@ extern unsigned char m1_return_latch;
  * M1. V2.1 ships the same soc_watchdog.ko, but its ioctls and S90play's crash log are not yet checked. */
 #define WDT_MS 60000
 #define WDT_LONG_MS 900000
+
+#define W_ASTYLE M1_UNPORTED
+#define ALIGN_H_LEFT 2 /* stock's align_h_t, in a style's text_align_h */
+#define TABLE_LOAD_DATA M1_UNPORTED
+#define SLANT_FAR 224
+#define SLANT_REFLECT_A 84
+#define SLANT_REFLECT_PCT 22
+#define NP_BAR_IPOD M1_UNPORTED
+#define SCRUB_REFLECT_A 38
+#define SCRUB_REFLECT_ROWS 6
+#define NP_IPOD_TIME_PX 21
+#define NP_IPOD_TIME_H 21 /* the times' box over the bar's rows, as near centred as an odd box goes */
+#define NP_IPOD_TIME_W1 35
+#define NP_IPOD_TIME_W2 43
+#define NP_IPOD_TIME_W 56
+#define NP_IPOD_TIME_GAP 8
+#define NP_SCRUB_MARK 8 /* the scrub's diamond: 17 rows, one in from the bar's top line, two from its foot */
+#define NP_IPOD_ART M1_UNPORTED
+#define NP_IPOD_ART_Y M1_UNPORTED
+#define NP_IPOD_ART_DROP M1_UNPORTED
+#define NP_IPOD_TEXT_X M1_UNPORTED
+#define NP_IPOD_TEXT_Y M1_UNPORTED
+#define NP_IPOD_FAV_X M1_UNPORTED
+#define NP_IPOD_FAV_Y M1_UNPORTED
+#define NP_IPOD_BAR_X M1_UNPORTED
+#define NP_IPOD_BAR_Y M1_UNPORTED
+#define QS_SWIPE_STOCK M1_UNPORTED
+#define QS_SWIPE_Y M1_UNPORTED
+#define STREAM_BG M1_UNPORTED
+#define GLIDE_MS 300 /* a remembered row's recall glide */
+#define HOME_SLIDE_MS 200 /* Cover Flow's and the carousel's wheel step */
+#define HOME_FAST_SLIDE_MS 120 /* ... and within HOME_FAST_WINDOW_MS of the last */
+#define HSCROLL_LOOP M1_UNPORTED
+#define HSCROLL_YOYO M1_UNPORTED
+#define HSCROLL_DELAY M1_UNPORTED
+#define HSCROLL_SPEED M1_UNPORTED
+#define HSCROLL_TIMER M1_UNPORTED
+#define HSCROLL_PACE 0x3d4ccccd
+#define TIMER_CTX M1_UNPORTED
+#define IMAGE_DRAW_FILL M1_UNPORTED
+#define BAR_MAX M1_UNPORTED
+#define EASE_FOLLOW 24 /* past AWTK's 24: coverflow.c's follow, never handed to easing_get */
+#define PL_RENAME_ROW M1_UNPORTED_ADDR
+#define ARTIST_TITLE M1_UNPORTED_ADDR
+#define G_ALLSELECT_FLAG M1_UNPORTED_ADDR
+#define PLAYMORE_INTO_FIRST M1_UNPORTED
+#define PLAYMORE_INTO_LAST M1_UNPORTED
+#define SCAN_WHOLE M1_UNPORTED_ADDR
+#define CF_GREY_BOLD 0xff8a8a8a /* Classic Light's dark half */
+#define CF_BOUNCE 5 /* an artist's last album: a step past kicks it 1/5 of a stride, then back */
+#define CF_ANGLE 60   /* a side cover's turn, degrees */
+#define CF_HORIZON 50 /* % down the cover its centre sits on the shared horizon */
+#define CF_THIRD 1    /* 1: the third out stays, gone half a step past it */

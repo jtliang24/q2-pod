@@ -66,6 +66,10 @@ RTC_READ_M1PLUS = (b'hwclock -s\0\0', b'hwclock -su\0')
 # the M1's; test/m1plus/build.py and test/m1plus/patch.py read both.
 CALL_SITES = {
     'q2': {
+        'AB_X_CALLS': tuple((a, 0x04110000 | ((0x52a268-a-4)//4 & 0xffff), 'ringnav_ab_x') for a in (0x52a408, 0x52a484, 0x52a494)),
+        'TABLE_LOAD_CALL': ((0x5ca0fc, 0x0320f809, 'ringnav_table_load'),),
+        'HSCROLL_LULL': ((0x5e8ae8, 0x0320f809, 'ringnav_hscroll_lull'),),
+        'HSCROLL_ONCE': ((0x5e8a28, 0x14400025, 0x10000025),),
         # config_init's bal config_playmode becomes jal ringnav_bootmode, which keeps the saved queue
         # while it applies the boot play mode, and reads Artists.
         'BOOT_MODE_CALL': ((0x4f999c, 0x0411e992, 'ringnav_bootmode'),),
@@ -391,6 +395,16 @@ def call_site_words(m1plus, ps):
 # docs/m1plus-ipod-ui.md item that ports it. A sync adds a row for each
 # new upstream hook or site it doesn't port, and the report fails until it has one.
 M1PLUS_PORTS = {
+    'toolsGetAlbumCover': ('unported', '1.7.0: oversized Ogg embedded artwork; V2.1 cover hook not pinned'),
+    'dialog_search_dialog_init': ('unported', '1.7.0: Classic Search; Classic is unported'),
+    'systemset_sleepshutdown_page_init': ('unported', '1.7.0: Classic sleep timer; Classic is unported'),
+    'systemset_manualtime_page_init': ('unported', '1.7.0: Classic date and time; Classic is unported'),
+    'hscroll_label_start': ('unported', '1.7.0: global scrolling delay and lull; V2.1 uses a different timer implementation'),
+    'AB_X_CALLS': ('unported', '1.7.0: Classic A-B fitted bar; Classic is unported'),
+    'HSCROLL_LULL': ('unported', '1.7.0: global scrolling delay and lull; V2.1 timer not pinned'),
+    'HSCROLL_ONCE': ('unported', '1.7.0: single pass scrolling hold; V2.1 timer not pinned'),
+    'TABLE_LOAD_CALL': ('unported', '1.7.0: Classic pooled-row faces; Classic is unported'),
+
     # Hooks
     'createPlayListItem': ('unported', 'playlist ID allocation (1.5.5); V2.1 allocator not yet pinned'),
     'playlist_delete_click': ('unported', 'transactional playlist deletion (1.5.5); V2.1 delete callback not yet pinned'),
@@ -476,6 +490,8 @@ M1PLUS_PORTS = {
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
+    'g_usbmode': 'usb_mode',  # V2.1 usbmode_page_init's saved storage/DAC choice
+
     'g_playspeed_mode': 'playspeed_mode',
     'g_backlight_status': 'backlight_status',
     'g_lockscreen_pageflag': 'lockscreen_pageflag',
@@ -575,6 +591,9 @@ M1PLUS_PRIVATE_FUNCTIONS = {
 # with no address, so the page compiles and --gc-sections drops it. The link fails if live code
 # reaches one (not for navigation.c: M1PLUS_SHIMS). Each goes with its hook's U4 row.
 M1PLUS_UNRESOLVED = {
+    'on_home_stream_onclick': "Classic Home Streaming pane; Classic is unported",
+    'ab_x': "Classic A-B fitted bar; AB_X_CALLS is unported",
+    'batch_get_selectitem': "Classic playlist selection marks; Classic is unported",
     'fwupdate_tf': 'Network Update (netupdate.c): stock\'s TF card update, systemset_fwupdate_page_init unported',
     # Home's Library list in Split (coverflow.c home_library, 1.6.7): bound only where Home's asset has
     # list_view_homelib, a geometry set's home_lib, which only Classic's has (unported on M1)
@@ -918,7 +937,7 @@ def compile_common(out, binary, player=False):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1']
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c']:
+    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -1163,7 +1182,9 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     demo = out/'stock-demo'; demo.write_bytes(raw_demo)
     symbol_table = run('readelf', '-Ws', demo)
     syms = symbols(demo, symbol_table)
-    header = [f'#define RING_STEP {RING_STEP}']
+    from art import corner_table, qs_lit
+    header = [f'#define RING_STEP {RING_STEP}', f'#define ROUND_COVER {corner_table()}',
+              f'#define QS_LIT "{qs_lit()}"']
     # Classic's bold font (4.1) comes with the iPod assets: no range, so bold_label never picks it
     header.append('#define BOLD_RANGES {0, 0}')
     header.append('#define CLASSIC_LIGHT_RANGES {0, 0}')  # Classic's face (1.6.7): Classic is unported
