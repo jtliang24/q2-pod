@@ -6663,6 +6663,52 @@ for _ in range(3): m.call(address=HOOKS['widget_on_paint_background'][0],args=(m
 assert not [t for t in m.timers.values() if t[1]==payload_syms['home_drift']] and not m.nodes[m.art]['visible']
 assert [signed(m.get(m.art+O[k])) for k in ('W_X','W_Y','W_W','W_H')]==[ART_X,0,PW,PH]; passed()
 
+if is_m1plus:
+    # Item 78 D: a book follows exactly the same player cover identity and files as an album.
+    # Type 4 is V2.1's random built-in art, not a cover extracted from the book.
+    class HomeArtworkMachine(CoverflowMachine):
+        def __init__(self):
+            self.art_sources=set()
+            super().__init__()
+        def hook(self,u,address,size,unused):
+            if self.handlers.get(address)=='widget_load_image':
+                url=self.text(u.reg_read(UC_MIPS_REG_A1))
+                if url.startswith('file://') and url not in self.art_sources:
+                    self.calls.append(('widget_load_image',u.reg_read(UC_MIPS_REG_A0),u.reg_read(UC_MIPS_REG_A1)))
+                    self.returns(-1,clobber=True); return
+            return super().hook(u,address,size,unused)
+    m=HomeArtworkMachine(); m.open(); m.top=m.home
+    record=m.items(m.get(syms['mcl_pdeqplaylist']))[0]
+    book='/mnt/mmc/Audiobooks/covered.m4b'; album='/mnt/mmc/Music/album.flac'
+    m.word(record+O['REC_PATH'],m.string(book))
+    def home_cover(path,kind):
+        m.u.mem_write(syms['g_lastcover_url'],path.encode()+b'\0'); m.byte(syms['g_playcover_type'],kind)
+        m.call(address=payload_syms['coverflow_home_art'],args=(m.home,0,0,0),gap=0)
+        return m.nodes[m.art].get('image')
+    placeholder=home_cover(album,2)
+    assert placeholder=='default_album_home'
+    # The old track's available file must not pass the identity check while the book parses.
+    m.art_sources={'file:///tmp/coverpic.jpg'}
+    assert home_cover(album,2)==placeholder
+    assert home_cover(book,0)==placeholder
+    assert home_cover(book,2)=='file:///tmp/coverpic.jpg'
+    assert [c for c in m.calls if c[0]=='image_manager_unload_bitmap']
+    m.calls=[]; home_cover(book,2)
+    assert not [c for c in m.calls if c[0]=='widget_load_image']  # unchanged art is cached
+    # Folder and downloaded covers use externpic, on books as on albums.
+    m.art_sources={'file:///tmp/externpic.jpg'}
+    for kind in (3,5): assert home_cover(book,kind)=='file:///tmp/externpic.jpg'
+    # Book -> album: never display the book's file before the album's cover thread completes.
+    m.word(record+O['REC_PATH'],m.string(album))
+    assert home_cover(book,3)==placeholder
+    m.art_sources={'file:///tmp/coverpic.jpg'}
+    assert home_cover(album,2)=='file:///tmp/coverpic.jpg'
+    m.art_sources.clear()
+    assert home_cover(album,4)==placeholder
+    m.word(record+O['REC_PATH'],m.string(book))
+    assert home_cover(book,4)==placeholder
+    passed()
+
 # Now Playing: stock init runs first, then "n of m", the album and "-remaining" (slider max less
 # value, in seconds) fill in; later paints rewrite a label only when its source changed.
 playing=HOOKS['playing_page_init'][0]
@@ -16339,6 +16385,29 @@ else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow an
     m.nodes[m.wm]={'type':'window_manager','children':[m.top]}
     m.calls=[]; assert m.call(address=payload_syms['theme_pick'],args=(1,0,0,0),gap=0)==0  # Modern's preset: Split
     assert (0,'IPOD','HOME') in [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config'] and texts()[3]=='Home: Split'; passed()
+if is_m1plus:
+    # Item 78 A: V2.1's rows own their icon directly. A pick and a reopened page must have
+    # exactly one filled mark, including the saved THEME=1 (Modern, not unported Classic).
+    for saved in ('0','1'):
+        CONFIG.update(THEME=saved)
+        m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=4)
+        CONFIG.clear()
+        m.nodes[m.wm]={'type':'window_manager','children':[m.top]}
+        def marks():
+            return [m.nodes[next(c for c in m.nodes[r]['children'] if m.nodes[c]['type']=='image')]['image'] for r in rows]
+        assert texts()==['Minimal','Modern'] and marks()==(['selected','unselect'] if saved=='0' else ['unselect','selected'])
+        for chosen in (1-int(saved),int(saved)):
+            click(chosen)
+            assert marks()==['selected' if i==chosen else 'unselect' for i in range(2)],(saved,chosen,marks())
+            m.word(payload_syms['display_sub'],4)
+            m.call(address=HOOKS['systemset_display_page_init'][0],args=(m.top,0,0,0),gap=0)
+            rows=list(m.nodes[m.settings_view]['children'])
+            assert marks()==['selected' if i==chosen else 'unselect' for i in range(2)]
+            # Reopening installs new row handlers; click the actual current row.
+            def click(i):
+                f,ctx=m.handler(rows[i],O['EVT_CLICK'])
+                m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+        passed()
 # Its row opens stock's Boot volume page re-dressed (crossfade.c): titled, no switch, the percent
 # beside the slider, which runs 50-200 in tens. The wheel and +/- step 10%, live and saved, the
 # slider snaps to a ten, a drag is live but saved once at its release, and Centre goes back (edit_key, as on Brightness).

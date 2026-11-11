@@ -2669,7 +2669,7 @@ static void paint_radio(void *w, void *canvas) {
     if (!(S->flags & SCHEME_CARD) || !P(canvas, CANVAS_LCD)) return;
     const char *image = widget_get_prop_str(w, "image", "");
     int more = tk_str_start_with(widget_get_prop_str(w, "name", ""), "img_more");
-    int dot = !tk_strcmp(image, "select"), del = !tk_strcmp(image, "navbar_delete");
+    int dot = !tk_strcmp(image, CHOICE_CHECK), del = !tk_strcmp(image, "navbar_delete");
     if (!more && !dot && !del && tk_strcmp(image, "unselect")) return;
     void *row = P(w, W_PARENT);
     for (int depth = 0; row && row != st.sel_widget && depth < 8; ++depth) row = P(row, W_PARENT);
@@ -6414,8 +6414,12 @@ static int theme_pick(void *ctx, void *event) {
     void *win = window_manager_get_top_window(window_manager());
     void *view = win ? widget_lookup(win, VIEW_DISPLAY, 1) : (void *)0;
     for (unsigned i = 0; view && view == theme_view && i < widget_count_children(view); ++i)
+#if M1PLUS
+        theme_mark(widget_get_child(view, i), (int)i == t);
+#else
         image_base_set_image(widget_get_child(widget_get_child(widget_get_child(view, i), 0), 0),
                              (int)i == t ? "select" : "unselect");
+#endif
     return 0;
 }
 
@@ -7021,6 +7025,7 @@ static void set_row(void *item) {
         }
 #if M1PLUS
         widget_set_prop_int(b, SET_MAPPED, 1);
+        settings_row_border(b);
 #else
         widget_move_resize(b, 0, 0, row_w, row_h);
 #endif

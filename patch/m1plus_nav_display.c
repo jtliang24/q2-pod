@@ -33,7 +33,7 @@ int ringnav_display(void *win, void *ctx) {
         accent();
         for (int t = 0; t < THEME_N; ++t)
             widget_set_text_utf8(
-                list_row(view, t == st.theme ? "select" : "unselect", theme_pick, (void *)(long)t),
+                list_row(view, t == st.theme ? CHOICE_CHECK : "unselect", theme_pick, (void *)(long)t),
                 themes[t].name);
         theme_view = view;
         return result;

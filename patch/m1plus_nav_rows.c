@@ -1,5 +1,27 @@
 /* M1 Plus: V2.1's settings rows for the payload's list_row. patch/navigation.c includes this where it stood (docs/m1plus-roadmap.md U1c). */
 #if M1PLUS
+/* V2.1's row owns its icon directly; the Q2's button is not another level here. */
+static void theme_mark(void *row, int selected) {
+    for (unsigned i = 0; row && i < widget_count_children(row); ++i) {
+        void *icon = widget_get_child(row, i);
+        if (!tk_strcmp(widget_get_type(icon), "image")) {
+            image_base_set_image(icon, selected ? CHOICE_CHECK : "unselect");
+            return;
+        }
+    }
+}
+
+/* list_item_style paints an opaque four-pixel bottom border after the selection. Mapped iPod
+ * rows keep the full pitch, and their pill must stay visible through its last scanline. */
+static void settings_row_border(void *row) {
+    static const char *const widths[] = {
+        "style:normal:border_width", "style:disable:border_width", "style:focused:border_width",
+        "style:over:border_width", "style:pressed:border_width"
+    };
+    for (unsigned i = 0; i < sizeof widths / sizeof *widths; ++i)
+        widget_set_prop_int(row, widths[i], 0);
+}
+
 /* A stock settings row as V2.1 builds them (playset's, 0x4a0578): a list_item_style list_item (64
  * high, the list's item height), a 40 px icon at 12,10, a 21 px srlabel_leftwhite21_style label at
  * 60,20 (no icon: at 12), and, opening a page, right_arrow at 295. The click is the row's. Returns

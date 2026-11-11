@@ -4384,7 +4384,7 @@ Resume's place on a book (51:17), the Clock row and the Large clock's 100%, the 
 Artists), Cover Flow's rows, Power (Idle's second page) without Low Power. Not judged on the device: crossfade by ear
 (the page changes track at 0:00, as the tail is mixed after the change), a long genre (no such track at hand).
 
-What the pass found, not fixed:
+What the pass found (follow-up below):
 - **A. Theme page's mark.** The empty circle sits on the theme not in use; it was filled only right after picking
   Modern in Light Mode.
 - **B. A theme pick changes Appearance's rows.** Picking Modern turned Light Mode on, twice; picking Minimal once
@@ -4393,6 +4393,57 @@ What the pass found, not fixed:
 - **C. Minimal's focus pill** has a flat-cut bottom edge (Theme page, Appearance).
 - **D. Home's Split art** shows the placeholder disc while a LibriVox book plays, which Now Playing shows with its
   cover; albums show theirs. Older builds not compared.
+
+**Finding follow-up (Nov 10).**
+- **A fixed.** The Theme constructor used Q2's `select` asset; V2.1's filled mark is `selected`
+  (`CHOICE_CHECK`). The pick updater also descended through Q2's nested button, while V2.1's row owns its icon.
+  The M1 now finds that direct image and uses the correct mark on construction and selection. Minimal's radio
+  repaint recognizes the same name. The regression covers opening, switching both ways and reopening, including
+  stored `THEME=1` as Modern.
+- **B intentional.** `theme_select` explicitly applies `theme_preset`; the touch is not reaching Appearance.
+  Modern's preset enables Light Mode, selects Cobalt and Split, and disables Time in Title; Minimal disables
+  Light Mode, selects Graphite and Split, and enables Rounded Corners and Time in Title. Unchanged settings are
+  not written again. Presets are preserved. A real V2.1 touch pass records the exact config differences in
+  `work/item78/verified-renderer/config.json`; the roadmap records a follow-up if repeated resets become a
+  usability problem.
+- **C fixed.** V2.1's `list_item_style` has an opaque black four-pixel bottom border in every state. It painted
+  over the last four scanlines of the selection after the rounded fill. Changing the rounded drawing path
+  reproduced the same cutoff, ruling that path out. Mapped M1 settings rows now suppress that border, retaining
+  the 72 px pitch, selection inset, radius and native renderer. `test/m1plus/theme_page.py` captures and checks
+  both ends on Theme's rows and Appearance's first and last rows, using V2.1's renderer and input dispatch.
+- **D explained; cover resolution retained.** The card's `TheWonderfulWizardOfOZ.m4b` contains the LibriVox
+  collection, but no attached image (FFprobe evidence: `work/item78/device-book-artwork.json`). The running
+  player's parsed path and `savecover_path` both match this file; its cover type is 4, with no generated cover
+  file. Now Playing's blue/orange image is V2.1's random built-in fallback. Home intentionally keeps its disc
+  when artwork is absent. A temporary M4B with known embedded artwork displays that artwork in both places on
+  the original `V055m` too (`work/item78/covered-home-original.png`); this finding therefore does not justify a
+  cover-code change. Added harness cases cover embedded, folder and downloaded artwork, delayed parsing,
+  book-to-album changes, unchanged-cover caching and missing artwork, keeping the track identity guard.
+
+**Follow-up gates.** `--dev` **V05Xm**, `work/item78/verified/`, update SHA-256
+`659c6b1f787c254b4ef8d2cf1a0a9c3df8c48abf3cb8c80e2fc00faf68ae070f`. Passed: the M1 build audit,
+`patch.py` (2,099 scenarios; the existing 652 expected failures in 11 gaps), `boot.py --media` and
+`--now-playing`, playback, M4B extraction, the port report (729 classified entries), and 802 unit tests.
+The real-renderer `theme_page.py` pass checks marks, preset tap deltas, Theme and Appearance pills and an
+actually scrolled System list. Both the mark and pill regressions fail on the original `V055m`; cover tests
+pass because D did not require a code fix. Evidence and logs are in `work/item78/`.
+
+Q2's final-source build is byte-identical to 1.6.7 (`e092a7c90372…`). The 37-job comparison initially failed
+four player checks for missing `ffmpeg`/`lame`; all four pass when rerun with the installed audio tools on
+`PATH`. Its existing upstream host failures (`chapters`, `mp3_gapless`, `peq`, `flac_build`) are reported as
+`BASE` in `q2compare.log`, not hidden or counted as new port failures.
+
+**Device follow-up, same image.** Installed through the card updater, with the staged update hash and running
+payload hash checked. Theme's mark follows both picks and reopening; Minimal's Theme and Appearance pills
+have complete rounded bottoms, including the scrolled Display list. Actual preset writes are retained in
+`device-config-writes.json`: Modern changes only Theme, Light Mode, Rounded Corners and Time in Title in
+this customized config; Minimal also resets its customized accent to Graphite. The renderer pass separately
+checks the original Ivory (7) case. Embedded M4B artwork uses type 2 and `/tmp/coverpic.jpg`; folder artwork
+uses type 3 and `/tmp/externpic.jpg`. Both appear in Now Playing and Split Home. The original book remains
+type 4 with the disc on Home, its random fallback on Now Playing. Paired screenshots and identity/file traces
+are retained. Delayed parsing, downloaded covers and book-to-album identity changes are covered by the MIPS
+harness. Temporary device media was removed. After restoring settings and restarting, all saved IPOD values
+match the backup, and stored `THEME=1` opens with Modern marked (`device-saved-modern.png`).
 
 ## How to check a build now
 
