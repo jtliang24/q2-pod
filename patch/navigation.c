@@ -933,6 +933,7 @@ extern int coverflow_follow_aim(int d, int tau, int elapsed);
 /* w's one animator, the wheel's and Coverflow's touch's, from the live offset to goal in ms with
  * easing (AWTK's easing_type_t), made on first use; 0 if it cannot be, the move committed at once.
  */
+#if !M1PLUS /* Q2-only wheel and Classic helpers */
 int carousel_glide(void *w, int goal, unsigned ms, int easing) {
     void *a = P(w, SLIDE_ANIMATOR);
     if (a && !ms) { /* ms 0 is the immediate move, also over a glide still running */
@@ -972,6 +973,7 @@ int carousel_glide(void *w, int goal, unsigned ms, int easing) {
     widget_animator_start(a);
     return 1;
 }
+#endif
 
 /* Cover Flow's big letter over w for LETTER_MS, or none: the wheel's jumps and the thumb's. */
 void coverflow_letter(void *w, unsigned letter, unsigned now) {
@@ -984,6 +986,8 @@ void coverflow_letter(void *w, unsigned letter, unsigned now) {
         stop_timer(&st.cf_letter_timer);
 }
 
+#include "m1plus_nav_home_step.inc"
+#if !M1PLUS
 static void home_step(void *w, int dir, unsigned now, int jump) {
     int n = (int)widget_count_children(w);
     int stride = slide_stride(w);
@@ -1021,6 +1025,7 @@ static void home_step(void *w, int dir, unsigned now, int jump) {
     st.last_home = now;
     st.home_dir = dir;
 }
+#endif
 
 #include "m1plus_nav_slide.c"
 
@@ -6478,11 +6483,13 @@ static int geom(int group) { return boot_values[st.geom][group]; }
  * AB_X_CALLS in tools/build.py), on the boot set's bar (the np_bar_x and np_bar_w immediates):
  * Classic's bar fitted to the track (ipod_times) takes it along, at the same share of it. 0, no
  * point to mark, stays. */
+#if !M1PLUS /* Q2-only wheel and Classic helpers */
 int ringnav_ab_x(int t) {
     int x = ab_x(t), x0 = geom(G_NP_BAR_X), w0 = geom(G_NP_BAR_W);
     if (!st.np_slider || x < x0 || w0 <= 0) return x;
     return I(st.np_slider, W_X) + (x - x0) * I(st.np_slider, W_W) / w0;
 }
+#endif
 
 /* ui_loader_load_widget_with_parent, every window's asset (window_open's): the theme's layout
  * (np_layout(); Centred Now Playing forces NP_CENTRED) picks the page. Stock's own page
@@ -8160,7 +8167,11 @@ int ringnav_paint_bg(void *w, void *canvas) {
         bar_title_sync(top);
         bar_title(bar, top);
         if (st.action_view) action_row(st.action_view);
+#if M1PLUS
+        np_sync(top); /* the M1 owns its Now Playing repaint and times */
+#else
         if (np_sync(top) && np_beside()) rearm(&st.np_remain_timer, remain_due, 0); /* mid-paint */
+#endif
         if (w == top) vol_paint(top, canvas);
         /* Boot may paint Home before the screen is usable, so nothing chose or drew its first
          * row. Once, when the list is first reachable, repaint it. */
@@ -12509,12 +12520,14 @@ int ringnav_stream(void *win, void *ctx) {
  * library_rows: stock's constructor takes a window and finds the rows' view by name, so list, which
  * holds one of that name, stands in; it finds no view_navbar there. What it sets on a window goes
  * again: its play gif's timer and its handlers. */
+#if !M1PLUS /* Classic Home Streaming is unported */
 void stream_rows(void *list) {
     ringnav_stream(list, (void *)0);
     ((int (*)(void *, void *))STREAM_BG)(list, (void *)0);
     widget_off_by_ctx(list, list);
     library_look(widget_lookup(list, "scroll_view_streamsset", 1));
 }
+#endif
 
 /* usbmode_page_init, as a cable to a computer opens USB mode, before stock unmounts the card for
  * USB storage: the card apps, which write to it (downloads, uploads), end first, so nothing of
@@ -13299,6 +13312,7 @@ static void pl_action(void *view, const char *caption, int action, int into, int
  * Moving between normal and select mode the selection stays on its playlist; marks only add rows
  * after it, so the count that load() would reset it on follows. */
 static void pl_rows(void *win) {
+    if (M1PLUS) return; /* Classic Playlists is unported; V2.1 keeps its own rows */
     void *view = widget_lookup(win, "scroll_view", 1), *nav = widget_lookup(win, "view_navbar", 1);
     void *lists = P(p_deque_playlist, 0);
     if (!view) return;
@@ -13689,6 +13703,7 @@ static int qm_open(const void *unused) {
         widget_destroy_children(view);
         int painted = dialogs_painted(), row = painted ? theme()->page_row : QM_ROW,
             w = painted ? BACK_W : 375;
+        (void)w; /* M1 rows keep V2.1's own widths */
         for (int i = 0; i < count; ++i) {
 #if M1PLUS
             void *item = list_item_create(view, 0, i * QM_ROW, SORTSELECT_W, QM_ROW);
@@ -15072,6 +15087,7 @@ int ringnav_mainscheduling(void) {
  * lockout after Centre or Return, as ringnav keeps it; Return's stop; no frame in WHEEL_FRESH_MS.
  * No key event comes, so a turn times the loop's idle and the screen's timeout itself. */
 static void thumb_poll(void) {
+#if !M1PLUS
     if (!coverflow_wheel_live()) return;
     unsigned now = (unsigned)time_now_ms();
     int gated = *(volatile signed char *)KEY_LOCKOUT > 8 - LOCKOUT_KEEP || wheel_mute ||
@@ -15080,6 +15096,7 @@ static void thumb_poll(void) {
     if (r) st.last_input = now;
     if (r & THUMB_TURNED) reset_poweroptions_timer(1, 1, 1);
     if (r & THUMB_CLICK) buzzeer_switch(1);
+#endif
 }
 
 int ringnav_sleep(void *loop) {

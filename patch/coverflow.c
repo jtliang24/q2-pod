@@ -2561,6 +2561,7 @@ static void covers(int dir) {
     widget_invalidate_force(cf.page, 0);
 }
 
+#if !M1PLUS
 /* The thumb (docs/internals.md#coverflow-thumb), every UI pass while the covers are open
  * (navigation.c thumb_poll): the wheel's raw travel, 200 units a turn, moves a goal, and the
  * position follows it, critically damped and exact for any step, so its speed stays continuous
@@ -2823,6 +2824,14 @@ int coverflow_wheel_poll(int usable, int gated) {
         th_commit(cf_round(th.goal));
     return r;
 }
+
+#else
+/* M1 Plus has a volume knob; the raw-wheel thumb is unported. */
+void coverflow_wheel_land(void) {}
+int coverflow_wheel_live(void) { return 0; }
+int coverflow_wheel_on(void *w) { (void)w; return 0; }
+int coverflow_wheel_poll(int usable, int gated) { (void)usable; (void)gated; return 0; }
+#endif
 
 static int to_covers(const void *unused) {
     cf.timer = 0;

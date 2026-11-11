@@ -8,4 +8,6 @@ static void *const m1_unported_home_foreground __attribute__((unused)) = (void *
 /* Library on Home (home_library): Classic's HOMELIB option, unported with it; V2.1's Home binds its
  * Library row as every row (home_bind). */
 static void *const m1_unported_home_library __attribute__((unused)) = (void *)home_library;
+/* Classic's Home Streaming pane is unported along with its Library pane. */
+static void *const m1_unported_home_streaming __attribute__((unused)) = (void *)home_streaming;
 #endif

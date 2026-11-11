@@ -1010,6 +1010,8 @@ def m1_themes():
         else: sys.modules['ipod'] = saved
     themes = [t for t in theme.builtins() if theme.geometry(t) == theme.SET0 and not any(o.get('sets') for o in t['opts'])]
     check([t['name'] for t in themes] == ['Minimal', 'Modern'], f'M1 themes: {[t["name"] for t in themes]}')
+    for t in themes:
+        t['cf.thumb'] = 0  # raw-wheel Cover Flow is unported on the M1 volume knob
     return themes, theme
 
 
