@@ -67,6 +67,12 @@ to its [progress](m1plus-progress.md) section.
 | [The player's 1.6.5 to 1.6.7 fixes](#the-players-165-to-167-fixes) | 1.6.5 to 1.6.7 | `tools/peq.py`'s `DAC_RELEASE`, `PROBE_STOP`, `STOP_SITES`, `STOP_FILL`, `PRELOAD_*`, `COLD_CLEAR`, `FORCED_EOF`, `EXIT_HOLD`, `AO_UNINIT_SLOT`, `FLAC_GATE`, `SEEK_NOSYNC`, `SEEK_WORDS`, `FLAC_META_EOF`, `MEDIA_INFO_NULL`, `MP3_FILL`, `LAVF_PRIV`, `MOV_EDITS` (`lavf_gapless.c`) | Planned |
 | [Long multi-value genres](#long-multi-value-genres) | 1.6.7 | `GENRE_COPY` (`ringnav_genre_copy`) | Planned |
 | [Playlists, Podcasts and Audiobooks as Shortcuts](#playlists-podcasts-and-audiobooks-as-shortcuts) | 1.6.5, 1.6.7 | `ipod_home_shortcut`'s values 7 to 9, `home_shortcut_open` | Planned |
+| Global scrolling-label delay, pace and end holds | 1.6.8–1.7.0 | `hscroll_label_start`, `HSCROLL_LULL`, `HSCROLL_ONCE`; V2.1 has a different timer layout | NOT PORTED; existing M1 selected-row marquee retained |
+| Oversized Ogg embedded artwork | 1.6.8–1.7.0 | `toolsGetAlbumCover` (`ringnav_album_cover`); `xiph.c` builds, V2.1 hook not pinned | NOT PORTED |
+| Classic Search, sleep timer and date/time forms | 1.6.8–1.7.0 | `dialog_search_dialog_init`, `systemset_sleepshutdown_page_init`, `systemset_manualtime_page_init` | NOT PORTED; Classic remains unavailable |
+| Classic Quick Settings, dialogs, Playlists and lock screen | 1.6.8–1.7.0 | Classic painters; `AB_X_CALLS`, `TABLE_LOAD_CALL`, `batch_get_selectitem`, `ab_x` | NOT PORTED; Phase 4.7 remains a separate plan |
+| Classic Home Streaming pane | 1.6.8–1.7.0 | `home_streaming`, `stream_rows`, `on_home_stream_onclick`, `STREAM_BG` | NOT PORTED; M1 Streaming keeps its existing page |
+| Cover Flow raw-wheel thumb and follower | 1.6.8–1.7.0 | `coverflow_wheel_*`, `cf.thumb`, `EASE_FOLLOW`; M1 has a volume knob | NOT PORTED; validated knob-step and touch behavior retained |
 
 Era, Western tag/CUE text, hidden-folder exclusions, Streaming Configuration, user-space idle
 changes and lyrics passed the combined device checks in [progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28).

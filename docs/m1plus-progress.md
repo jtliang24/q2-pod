@@ -4445,6 +4445,79 @@ are retained. Delayed parsing, downloaded covers and book-to-album identity chan
 harness. Temporary device media was removed. After restoring settings and restarting, all saved IPOD values
 match the backup, and stored `THEME=1` opens with Modern marked (`device-saved-modern.png`).
 
+## 79. Catch-up to 1.7.0: paused before the M1 patch gate passes (Nov 10)
+
+**Checkpoint, not a completed sync.** The user selected one structural merge, 1.6.7 → 1.7.0,
+and requested a stopping point while its gates were still being reconciled. Work is committed
+on `sync/1.7.0`; `feature/m1-ipod` and `refs/backup/pre-sync-1.7.0` remain at `f7338bf9`.
+`UPSTREAM_BASE` stays 1.6.7. `staging` and `main` are unchanged. The fetch succeeded and sees
+tags through 1.8.0, but the user explicitly overrode the cadence recommendation with 1.7.0.
+No later merge, release or Phase 4.7 work belongs to this catch-up.
+
+**Implementation retained.** The conflict-only merge is `7f552cac`, followed by focused M1
+compatibility, suite and type-check commits. Scratch follows upstream to `0xbc0000`; M1 builds
+`xiph.c` and the new generated artwork constants. All 794 hook/site/alias report entries are
+classified, including the new unported hooks and call sites. V2.1's USB-mode alias and ID3
+converter dependencies are pinned by native-code checks. Classic-only stock functions remain
+unresolved and unreachable. M1 keeps its validated selected-row marquee, knob-step navigation,
+own Now Playing page, Soloify idle fix, theme marks/pills and Home artwork guards. New feature
+families are listed in [the unported register](m1plus-unported.md); suite guarding is unfinished.
+
+**Q2 verification.** The consolidated `q2compare.py 1.7.0 --suites` run completed all 37 jobs.
+Its image is byte-identical to upstream (`4aa066c0e9b2…`). Two suite failures were independently
+reproduced on upstream's own source and build and reported as `BASE`: `round_ring` invalid reads
+for radii 14 and 5, and the player-seam fixture packing an out-of-range unsigned duration.
+The root Q2 patch scenario text is unchanged. A narrowly scoped diagnostic continuation runs
+the later patch scenarios: adjusted accounting is 2,856 passing scenarios and the failed
+round-ring group; radius 0 completes. It does not turn that group into a pass.
+Evidence: `work/sync/1.7.0-review/q2compare-gated.log`, `upstream-patch-complete.log`,
+`upstream-round-ring-repro.log`, and the snapshot/builds in `work/sync/1.7.0-q2-gated/`.
+
+**M1 verification and current blocker.** Fresh dev **V05Ym** in `work/sync/1.7.0/` builds and
+passes the full build audit. Its update SHA-256 is
+`46f40c22fccbeb4fb801f7db69e85277e192adbf82f2612c12bc97b4be137d71`; payload text is 653,848 bytes.
+The final patch-gate attempt completes with exit 1: **337 unlisted failures, nine formerly
+expected checks passing and 27 stale expected-check keys**. It ran without `GAPS_DUMP`.
+Earlier attempts crashed in native emulation; the harness now refuses invalid code entries
+and prevents re-entry into a failed fixture, while continuing fresh fixtures and reporting
+dependent failures. No later M1 gates ran. Tools/unit type preflight passed 35 files, but that
+is not a substitute for the pending full gate sequence.
+
+Many failures are new Classic/Q2 layout fixtures or shifted duplicate check ordinals. They are
+not accepted as new expected failures. A diagnostic mapping matches 627 of the previous 652
+gap statements exactly, with 25 requiring review; the proposal has not been applied. Preserve
+existing M1 coverage while adding explicit guards for unported features. In particular, inspect
+the native tag-converter mock, paused-scrub touch input and Now Playing/folder information cases
+before deciding whether they reveal model errors or payload regressions. Detailed failure lists,
+the mapping proposal and gate logs are retained under `work/sync/1.7.0-review/` and
+`work/sync/1.7.0-gates/`.
+
+**Source changed after this build.** `c7f79313` separates compact payload-page row heights from
+native PEQ's 48 px rows. The M1 payload compiles, but the fix has not been exercised by a fresh
+firmware gate run. V05Ym therefore does not represent the checkpoint source and must not be
+staged. Preserve its evidence, seed the next build counter above 214 (next V05Zm), and rebuild
+before repeating every M1 gate. The main worktree's counter is still 213; do not overwrite the
+gate worktree's 214 with it. Repeat the final-source Q2 byte comparison too.
+
+**Resume and landing.** The retained runner is `work/sync/1.7.0-review/m1-gates.sh`; it stops on
+the first failure. Resolve the patch integration without dumping new gaps, then complete all six
+boot modes, playback, M4B, ID3, headset, LDAC, BlueALSA, ports, unit and `test/fw` tests, type
+checks and the real-renderer theme regressions. V05Ym's provisional function diff against the
+validated V05Xm reports 358 changed, 200 added and one removed function out of 1,662; regenerate
+it for the final build and retain the device checklist. Record final footprint, conflict audit
+and gate evidence, update `UPSTREAM_BASE`, then land with `--no-ff` into `feature/m1-ipod`, update
+graphify and report drift without another merge. The earlier validated image in
+`work/item78/verified/` remains untouched.
+
+**Device pass has not started.** The user reconnected the M1 at `192.168.1.210`; a read-only
+state request succeeded. No update was staged or flashed and no settings were changed. After
+all gates pass, save settings and boot target, stage the M1 `update.bin` through q2remote, and
+let the user flash. Verify installed identity, set Screen Off to Off for the structural checks,
+retain Soloify lit/dark idle, theme marks/presets/pills, Home artwork, Now Playing, navigation
+and status-bar regressions, then restore saved settings and boot target. Unavailable checks
+remain untested; device findings get a separate fix plan. Completion still requires that
+recorded device pass.
+
 ## How to check a build now
 
 ```sh
