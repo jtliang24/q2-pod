@@ -889,6 +889,11 @@ CONFIRM_TOP, CONFIRM_ROW = inc('CONFIRM_TOP'), 48  # Cancel and OK, under the pr
 def confirm_dialog(root):
     check([n[2].get('name') for n in root[3]] == ['img_cancel', 'img_enter'] and
             all(n[1][2:] == [CONFIRM_TILE, CONFIRM_TILE] for n in root[3]), 'Unexpected confirm dialog')
+    confirm_rows(root)
+
+
+def confirm_rows(root):
+    """root's two buttons, Cancel then OK, as full-width text rows from CONFIRM_TOP (tools/m1plus_ipod.py's too)."""
     # Clear, as the status bar's: the dialog's border is drawn over the bar's ends, paper in Light Mode.
     root[2].update({f'style:{s}:border_color': '#00000000' for s in ('normal', 'disable', 'focused')})
     # Two full-width text rows under the prompt instead of the disc tiles, so the wheel's selection
