@@ -6400,6 +6400,24 @@ m,w,w2=under_slide(''); m.paint(w,gap=0); assert not m.drawn(); passed()  # unde
 m,w,w2=under_slide(); m.paint(w2); m.touch(); m.paint(w,gap=0); assert not m.drawn()
 assert m.call(O['KEY_RETURN'])==0; m.paint(w,gap=0); assert m.drawn()
 m.paint(w2,gap=0); assert not m.drawn(); passed()
+# M1 Plus: V2.1's pull-down (Quick Settings) shows the page under it, which keeps drawing the row it holds (V063m
+# pass, finding B); not under another dialog, and a page holding no row draws none.
+if is_m1plus:
+    def under_quick(name=QS_NAME,step=True,home=False):
+        m=Machine()
+        if home: w,_=home_list(m)
+        else: w,es=m.page_list(3)
+        m.paint(w)
+        if step: assert m.call()==11 and m.selected(w)==1
+        page=m.top
+        m.word(w+O['W_PARENT'],page); m.word(page+O['W_PARENT'],m.wm)
+        m.top=m.node('dialog',name,[m.node()]); m.word(m.top+O['W_PARENT'],m.wm)
+        return m,w
+    m,w=under_quick(); m.paint(w,gap=0)
+    assert m.drawn() and m.sel()[1]==48-m.get(w+O['SCROLL_Y']) and m.selected(w)==1 and not m.moved(); passed()
+    m,w=under_quick(home=True); m.paint(w,gap=0); assert m.drawn() and m.selected(w)==1; passed()
+    m,w=under_quick('volume_dialog'); m.paint(w,gap=0); assert not m.drawn(); passed()
+    m,w=under_quick(step=False); m.touch(); m.paint(w,gap=0); assert not m.drawn(); passed()
 # A sliding page's first paint is its snapshot, so a recalled row is revealed at once, not by a glide.
 m,w,es=walk(10,5); w2,es2=m.page_list(10,extent=1000); m.nodes[m.top]['anim_hint']=HINT
 assert m.paint(w2)==0 and m.selected(w2)==5 and m.get(w2+O['SCROLL_Y'])==204

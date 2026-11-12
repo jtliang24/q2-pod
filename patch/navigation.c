@@ -3130,13 +3130,24 @@ static void toast_paint(void *w, void *canvas) {
 
 /* Load and settle the painted surface's selection, then draw it behind the rows: Minimal's card
  * (a dot on Home), Modern's full-width accent bar (SEL_BAR) or Classic's stops band (SEL_STOPS). */
+#if M1PLUS
+/* Quick Settings on top: V2.1's pull-down shows the page under it, whose held row stays drawn
+ * (paint_selection; the Q2's fills the screen). Its keys stay Quick Settings'. */
+static int quick_over(void *top) {
+    return top && !tk_strcmp(widget_get_prop_str(top, "name", ""), QUICK_NAME);
+}
+#endif
 static void paint_selection(void *w, void *canvas) {
     if (kind(w)) st.sel_w = st.sel_widget = st.sel_accent = (void *)0;
     if (!w || !canvas || !kind(w)) return;
     void *top = window_manager_get_top_window(window_manager());
     int i, shown = !st.touch_mode;
     void *own = window_of(w);
+#if M1PLUS /* also under V2.1's pull-down, which covers only the screen's top (quick_over) */
+    if (own && own != top && (slides(top) || quick_over(top))) {
+#else
     if (own && own != top && slides(top)) {
+#endif
         /* The page under a sliding one, painted into the animator's snapshot: draw the row it
          * holds. Loading, recall and settling read the top page's state, so none of it runs.
          * A pending untouch is a Return by button, which shows the row of the page behind. Home's
