@@ -13481,13 +13481,19 @@ static void pl_dress(void *win, int first) {
 /* After stock rebuilds its rows: the guarded Now Playing picker's rebind, Classic's rows. Stock's
  * add mode is one global, left by any picker that closes, which it reads as this page comes back:
  * each page keeps the one it opened with. */
+#if M1PLUS /* V2.1's rebuild takes any of the page's widgets: New Playlist's click passes its row */
+int ringnav_playlist(void *w) {
+    void *win = window_of(w);
+#else
 int ringnav_playlist(void *win) {
+    void *w = win;
+#endif
     int mode = widget_get_prop_int(win, PL_MODE, -1), first = mode < 0;
     if (first)
         widget_set_prop_int(win, PL_MODE, I(PLAYLIST_ADD_MODE, 0));
     else
         I(PLAYLIST_ADD_MODE, 0) = mode;
-    int result = stock_playlist_trampoline(win);
+    int result = stock_playlist_trampoline(w);
     if (win == st.qm_playlist) qm_playlist_bind(win, 0, qm_playlist_pick);
     if (!geom_val(V_TOOLBAR)) pl_dress(win, first);
     return result;

@@ -440,7 +440,6 @@ M1PLUS_PORTS = {
     # unhooked until its item ports it
     'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
                          "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
-    'playlist_rebuild': ('unported', "the playlist rebuild's iPod rows (ipod-ui 4.7)"),
     'mclIsUtf8WithoutBOM': ('unported', "an .lrc's UTF-8 test that reads 4-byte characters (1.5.9); V2.1's "
                             'mclIsUtf8WithoutBOM is 0x5d1824, not yet checked'),
     # 1.6.7's audio timing and Previous's resume ask, V1.32's player routines (docs/m1plus-unported.md)
@@ -590,6 +589,9 @@ M1PLUS_PRIVATE_FUNCTIONS = {
     # The library title bar's Search button (0x5230a8 binds it, in search_style): navigator_to("search_page"), V2.1's
     # library search, which pull to search opens (ipod-ui 4.4; m1plus_ipod.json private_prologues).
     'stock_search': 0x523304,
+    # playlist_page's rows (playlist_page_init's, its to-foreground's and New Playlist's bal): V1.32's 0x4b2dac but for
+    # its argument, any of the page's widgets (New Playlist passes its row), whose window it takes (widget_get_window)
+    'playlist_rebuild': 0x53e74c,
 }
 # V1.32 routines V2.1 has no twin of yet, called only from a Q2 hook the M1 leaves unported: declared
 # with no address, so the page compiles and --gc-sections drops it. The link fails if live code
@@ -735,6 +737,9 @@ M1PLUS_HOOKS = {
     # storage: the card apps end first (addon_card_away). V2.1's init binds its window as V1.32's.
     'dialog_playmore_dialog_init': (0x479cc4, 'ringnav_playermore', 'playermore'),
     'usbmode_page_init': (0x545dd8, 'ringnav_usbmode', 'usbmode'),
+    # Add to Playlist (ipod-ui 4.7): each playlist_page keeps the add mode it opened with, and Now Playing's picker
+    # keeps its guarded pick on the rows New Playlist rebuilds
+    'playlist_rebuild': (0x53e74c, 'ringnav_playlist', 'playlist'),
 }
 
 def m1plus_symbols(syms, symbol_table):

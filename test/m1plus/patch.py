@@ -4360,8 +4360,72 @@ for stale in (False,True):
     f,ctx=m.handler(m.top,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     m.top=m.stack[0]; m.press(200); assert m.hold()==11; passed()
 
-# V1.32's rows builder (0x4b2dac), which iPod's playlist_rebuild hook rebinds after; V2.1 builds its
-# rows itself (0x53e74c), unhooked, as Legacy's are.
+# M1 Plus (ipod-ui 4.7): V2.1's rows builder (0x53e74c), hooked as playlist_rebuild, run for real with its row
+# layouts mocked. It takes any of the page's widgets (New Playlist's click passes its row) and builds a New row,
+# then, browsing, a second fixed row, then a row per playlist whose click it binds to its pick with the row.
+if is_m1plus:
+    class M1PlaylistMachine(PlayingPlaylistMachine):
+        LAYOUTS=('playlist_firstitem_layout','playlist_seconditem_layout','playlist_listitem_layout')
+        def __init__(self,count=3,mode=0):
+            super().__init__()
+            self.mock('list_item_create','widget_get_window','widget_off_by_func','widget_get_prop_int','widget_set_prop_int',
+                      *self.LAYOUTS)
+            self.word(syms['p_deque_playlist'],self.deque([self.song(f'List {i}') for i in range(count)]))
+            self.word(O['PLAYLIST_ADD_MODE'],mode)
+            self.top=self.playlist_page()
+        def playlist_page(self):
+            view=self.node('scroll_view','playlist_scrollview'); page=self.node('window','playlist_page',[view])
+            self.word(view+O['W_PARENT'],page); self.word(page+O['W_PARENT'],self.wm); self.stack.append(page)
+            return page
+        def rows_view(self): return self.nodes[self.top]['children'][0]
+        def rebuild(self,w=None):
+            assert self.call(address=HOOKS['playlist_rebuild'][0],args=(w or self.top,0,0,0),gap=0)==0
+            return self.nodes[self.rows_view()]['children']
+        def row_picks(self):  # each row's live click: its emitter's fn and ctx, which the payload's rebind reads
+            return [(self.get(self.get(self.get(r+O['W_EMITTER']))+12),self.get(self.get(self.get(r+O['W_EMITTER']))))
+                    if self.get(r+O['W_EMITTER']) else None for r in self.nodes[self.rows_view()]['children']]
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,''); a,b,c,d=[u.reg_read(r) for r in REGS]
+            if name in self.LAYOUTS:
+                if name=='playlist_listitem_layout': self.nodes[a]['name']=str(b)  # V2.1 names a playlist's row its index
+                self.returns(0); return
+            super().hook(u,address,size,unused)
+            if name=='q:widget_on' and b==O['EVT_CLICK']:
+                it=self.get(self.get(a+O['W_EMITTER'])); self.word(it,d); self.word(it+12,c)
+
+    # Rows as V2.1 builds them, rebuilt in place; a playlist row's click is stock's pick with its row.
+    for count in (0,3):
+        for mode in (0,1,2):
+            m=M1PlaylistMachine(count,mode); kids=m.rebuild()
+            assert [m.nodes[k].get('name') for k in kids][1 if mode else 2:]==[str(i) for i in range(count)]
+            assert len(m.rebuild())==len(kids)==count+(1 if mode else 2)
+            assert m.row_picks()[1 if mode else 2:]==[(m.STOCK_PICK,k) for k in m.nodes[m.rows_view()]['children'][1 if mode else 2:]]
+            assert m.nodes[m.top]['_pl_mode']==mode; passed()
+    # Stock's add mode is one global, which a picker leaves however it closes: a page coming back rebuilds as what it
+    # opened as, and New Playlist's rebuild, from its row, keeps the add mode on the window.
+    m=M1PlaylistMachine(3,0); home=m.top; shown=len(m.rebuild())
+    m.word(O['PLAYLIST_ADD_MODE'],1); picker=m.top=m.playlist_page(); kids=m.rebuild(); assert len(kids)==4
+    m.word(syms['p_deque_playlist'],m.deque([m.song(f'List {i}') for i in range(4)]))
+    kids=m.rebuild(kids[0]); assert len(kids)==5 and m.get(O['PLAYLIST_ADD_MODE'])==1
+    assert m.nodes[picker]['_pl_mode']==1 and '_pl_mode' not in m.nodes[kids[0]]
+    m.top=home; assert len(m.rebuild(m.nodes[m.rows_view()]['children'][-1]))==shown+1 and m.get(O['PLAYLIST_ADD_MODE'])==0
+    passed()
+    # Now Playing's picker (add mode 2, context 0x20000|class): New Playlist's rebuild, from its row, gets the guarded
+    # pick on its fresh rows, which adds nothing once the queue has moved.
+    for stale in (False,True):
+        m=M1PlaylistMachine(3,2); m.top=m.stack[0]; m.run(4); picker=m.top
+        assert m.opened[-1][1]>>16==2
+        view=m.nodes[picker]['children'][0]; m.nodes[view]['name']='playlist_scrollview'; m.word(view+O['W_PARENT'],picker)
+        m.word(picker+O['W_PARENT'],m.wm)
+        for row in m.playlist_rows: m.word(row+O['W_PARENT'],view)
+        m.word(syms['p_deque_playlist'],m.deque([m.song('Created')])); m.word(O['PLAYLIST_ADD_MODE'],2)
+        kids=m.rebuild(m.playlist_rows[0]); (f,ctx),=m.row_picks()[1:]
+        assert f not in (0,m.STOCK_PICK) and ctx==kids[1]
+        if stale: m.word(O['MCL_POS'],2)
+        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+        assert m.added==([] if stale else ['B']); passed()
+
+# V1.32's rows builder (0x4b2dac), which iPod's playlist_rebuild hook rebinds after; V2.1's (0x53e74c) above.
 if not is_m1plus:
     # Execute stock's rebuild and naming callback; only UI/dialog and database services are mocked.
     class PlaylistMachine(PlayingPlaylistMachine):
