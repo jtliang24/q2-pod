@@ -4625,6 +4625,19 @@ in `work/paused-drag/V062m/` (update sha256 `62dd2c95e5dd…`) passes the build 
 - playing: a drag and a tap seek as before;
 - Soloify, paused: a drag, unchanged.
 
+**Device pass on `V062m` (Nov 11), over q2remote, all pass.** Shots: `work/paused-drag/device/` (s00–s37).
+- Paused drag from 00:00 lands on 01:51 and stays paused. The bar holds 01:51 for 16 s, past `SCRUB_MS`,
+  and Play starts from it (01:53 two seconds later) (s02–s06).
+- Paused tap at the bar's right end lands on 03:20, holds it for 9 s, and Play starts from it (s07–s10).
+- Paused knob scrub: a Centre press and six detents back take the white bar to 02:34. A tap during the scrub
+  cancels it and settles at 00:43, still paused, for 9 s. Play starts from it (s11–s15).
+- Playing: a drag lands on 02:21 and a tap on 01:07, and playback keeps going both times (s15–s19).
+- Soloify (Motivation, Liked Songs), paused: a drag lands on 01:56, stays paused and holds it (s27–s30).
+
+After a drag's release, the bar shows the played colour. No shot was taken during a drag, so the white
+fill a drag should show wasn't seen; the knob scrub's white fill was (s12).
+Screen Off was set back to 1min through the UI (`LIGHTTIME=3`).
+
 ## How to check a build now
 
 ```sh
