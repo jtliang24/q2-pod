@@ -3132,8 +3132,13 @@ static void toast_paint(void *w, void *canvas) {
  * (a dot on Home), Modern's full-width accent bar (SEL_BAR) or Classic's stops band (SEL_STOPS). */
 #if M1PLUS
 /* Quick Settings on top: V2.1's pull-down shows the page under it, whose held row stays drawn
- * (paint_selection; the Q2's fills the screen). Its keys stay Quick Settings'. */
+ * (paint_selection; the Q2's fills the screen). Its keys stay Quick Settings'. So does the
+ * volume a knob turn opens over it, judged by the window under it as chevron_sync does. */
 static int quick_over(void *top) {
+    void *wm = window_manager();
+    unsigned n = widget_count_children(wm);
+    if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog") && n > 1)
+        top = widget_get_child(wm, n - 2);
     return top && !tk_strcmp(widget_get_prop_str(top, "name", ""), QUICK_NAME);
 }
 #endif

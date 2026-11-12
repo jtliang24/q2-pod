@@ -6439,6 +6439,14 @@ if is_m1plus:
     assert m.drawn() and m.sel()[1]==48-m.get(w+O['SCROLL_Y']) and m.selected(w)==1 and not m.moved(); passed()
     m,w=under_quick(home=True); m.paint(w,gap=0); assert m.drawn() and m.selected(w)==1; passed()
     m,w=under_quick('volume_dialog'); m.paint(w,gap=0); assert not m.drawn(); passed()
+    # A knob turn's volume over Quick Settings: the window under the volume decides (V064m pass). Directly over the
+    # page, the volume still hides the row, as the Q2's does.
+    def vol_over(m,w):
+        vol=m.node('dialog','volume_dialog'); m.word(vol+O['W_PARENT'],m.wm)
+        m.nodes[m.wm]={'children':[m.get(w+O['W_PARENT']),*([m.top] if m.top!=m.get(w+O['W_PARENT']) else []),vol]}; m.top=vol
+    for home in (False,True):
+        m,w=under_quick(home=home); vol_over(m,w); m.paint(w,gap=0); assert m.drawn() and m.selected(w)==1; passed()
+    m,w=under_quick('volume_dialog'); m.top=m.get(w+O['W_PARENT']); vol_over(m,w); m.paint(w,gap=0); assert not m.drawn(); passed()
     m,w=under_quick(step=False); m.touch(); m.paint(w,gap=0); assert not m.drawn(); passed()
 # A sliding page's first paint is its snapshot, so a recalled row is revealed at once, not by a glide.
 m,w,es=walk(10,5); w2,es2=m.page_list(10,extent=1000); m.nodes[m.top]['anim_hint']=HINT
