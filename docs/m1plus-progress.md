@@ -4784,6 +4784,44 @@ Restored afterwards: Screen Off 1 min, boot target `rockbox`, Light Mode Off, Th
 Navigation, volume 11, DLNA (a stray tap switched it off; turned back on). `config.ini` matches the pre-pass
 backup byte for byte.
 
+## 84. V064m's device-pass fixes (Nov 12)
+
+The plan is `.plan/phase4-7-pass-fixes.md`, for §83's four findings and the View Queue gap; `docs/m1plus-ipod-ui.md`
+item 7 records the outcome. Each new test fails without its fix and passes with it.
+
+- **View Queue** (`d94b0331`). Off Shuffle, `qm_run`'s `QA_QUEUE` opened `playerqueue_page`, which V2.1 lacks. It now
+  does what Now Playing's More does (`0x53b14c`): `BC_IDLE = BC_IDLE_FULL`, so the big cover doesn't open over it,
+  then `navigator_to(STOCK_QUEUE_DIALOG)` (`dialog/playqueue_dialog`), whose init reads only the player's list. Gap
+  `07753a9258` is gone: `patch.py` expects 689 in 10 gaps.
+- **The album cover** (`68df709c`). `playlist_page_init` (`0x53eb24`) sets `cur_classtype` to `0xf00b`, so back on
+  the album, `albuminfo_page`'s foreground handler (`0x5266d4`) reloads and lays out its list again (`0x526564`),
+  recreating the header's `img_albumcover_m` with the placeholder. Its cover timer (`0x5261d8`) sets the art
+  (`0x525b00`) only when `albumcover_finishflag` is up, and the album's task raised it long before. When Add to
+  Playlist leaves an album page, `qm_cover_again` is bound once to its `EVT_WINDOW_FOREGROUND` and raises the flag
+  (`ALBUM_COVER_DONE`, `0xa05a5b`), so V2.1's own setter runs again and still checks the task and the file.
+  Restoring `cur_classtype` instead would leave the playlists in `pdeq_showlist`.
+- **The volume over Quick Settings** (`e1f228dd`). A knob turn stacks `volume_dialog` over the pull-down, so
+  `quick_over` saw the volume on top. With `volume_dialog` on top it now judges the window under it. The volume
+  directly over a page still hides its row, as on the Q2.
+- **Light Mode's unticked ring** (`6967c953`). V2.1's `unselect.png` is a white ring over a 50% black disc; the Q2's
+  is the ring alone. Light Mode keeps mostly-dark images as plates (`LIGHT_SURFACE`), so the ring vanished and the
+  disc read as ticked. The new audited `clear_icons` section of `m1plus_ipod.json` ships it un-composited
+  (`clear_icon`: alpha × luminance, colour white): mean alpha 0.2238 against the Q2's 0.2229. The build audit checks
+  the shipped file against `clear_icon(original)` pixel by pixel. The Theme picker's and the choice rows' rings use
+  the same file.
+- **Finding 4, by design.** Choosing a Theme applies its `theme.xml` preset (`theme_preset`), as on the Q2: Modern
+  sets `light="on"` and Cobalt, Minimal `light="off"` and Graphite (`MINIMAL_ACCENT` 0); Light Mode's Auto is kept.
+  The pass's `LIGHT` 0 to 1 and `MINIMAL_ACCENT` 7 to 0 are those presets. No change.
+
+**Gates** (`V068m`, `work/phase4/4.7c/gates/summary.txt`): all 19 pass. `patch.py` has **689 expected failures in 10
+gaps**, none unlisted; `pytest test/unit` 1,199; the Q2 `update.tar` is byte-identical to 1.7.0's and
+`q2compare --suites` passes all 37 runs. `fndiff.py` against `V064m` (`work/phase4/4.7c/fndiff-V064m-V068m.txt`):
+three functions changed (`qm_run`, `ringnav_about`, `ringnav_paint_bg`, the last two through the inlined
+`quick_over`) and one added (`qm_cover_again`).
+
+**For the device pass** (one `--dev` flash; Screen Off set to Off, restored after): the checklist in
+`.plan/phase4-7-pass-fixes.md`'s Device pass section.
+
 ## How to check a build now
 
 ```sh

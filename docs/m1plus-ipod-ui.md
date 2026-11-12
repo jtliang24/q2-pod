@@ -286,6 +286,12 @@ Each feature follows the same steps:
    read in Light Mode. The page under the pull-down keeps its highlighted row. The Playback and System Setting
    switches are dimmed while you are inside those settings by V2.1's design: its visitor disables them there and
    binds no click (`m1plus_ipod.json` `quick.into`).
+   After the V064m pass (progress §84): a hold menu's View Queue off Shuffle opens V2.1's queue
+   (`dialog/playqueue_dialog`), and an album's art comes back after Add to Playlist. The page under Quick Settings
+   keeps its row while a knob turn's volume shows over it. V2.1's unticked ring ships as the Q2's, a clear ring, so
+   Light Mode flips it. Choosing a Theme applies its `theme.xml` preset, as on the Q2: Modern turns Light Mode on
+   with Cobalt, and Minimal turns it off with Graphite (Light Mode's Auto is kept). So Minimal to Modern setting
+   `LIGHT` is by design.
 8. **Left Q2-only, as `NOT PORTED` rows:**
    - Games (they need a design without the Return key and the wheel); the 181 execution checks are
      grouped as `Games (ipod-ui 4.8, Q2 only)` in `patch_gaps.py`;
