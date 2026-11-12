@@ -49,7 +49,7 @@ to its [progress](m1plus-progress.md) section.
 | [An artist's albums tab's album-artist rewrite](#an-artists-albums-tab) | 1.2.9 | `toolsQueryContentDbTable` | Planned |
 | [Folder's roots without OTG](#folders-roots-without-otg) | 1.2.2 | `folder_load_top` | Planned |
 | [The Wi-Fi transfer page](#the-wi-fi-transfer-page) | 1.3.0 | `WEB` | Planned |
-| [Quick Settings' brightness through a swipe up](#quick-settings-brightness) | 1.3.8 | `g_dropdown_menu_state`; `quick_stuck` (1.4.5) | Planned |
+| [Quick Settings' brightness through a swipe up](#quick-settings-brightness) | 1.3.8 | `g_dropdown_menu_state`; `quick_stuck` (1.4.5) | Ported (ipod-ui 4.7, progress 82) |
 | [Knob: Navigation on Set Time Manually](#set-time-manually) | the M1's own | an `m1plus_contexts.inc` row | Planned |
 | [Tidal's cache and Tidal Downloads](#tidal) | 1.2.2 | `tidal_play`, `tidal_downloads`, `REC_TIDAL_ID` | Planned |
 | [Tidal's lists past 50](#tidal) | 1.5.0 | `tidalPlaylistDetailThd`, `tidalAlbumDetailThd`, `tidalColTracksThd`, `TIDAL_PAGE_DONE` | Planned |
@@ -70,7 +70,7 @@ to its [progress](m1plus-progress.md) section.
 | Global scrolling-label delay, pace and end holds | 1.6.8–1.7.0 | `hscroll_label_start`, `HSCROLL_LULL`, `HSCROLL_ONCE`; V2.1 has a different timer layout | NOT PORTED; existing M1 selected-row marquee retained |
 | Oversized Ogg embedded artwork | 1.6.8–1.7.0 | `toolsGetAlbumCover` (`ringnav_album_cover`); `xiph.c` builds, V2.1 hook not pinned | NOT PORTED |
 | Classic Search, sleep timer and date/time forms | 1.6.8–1.7.0 | `dialog_search_dialog_init`, `systemset_sleepshutdown_page_init`, `systemset_manualtime_page_init` | NOT PORTED; Classic remains unavailable |
-| Classic Quick Settings, dialogs, Playlists and lock screen | 1.6.8–1.7.0 | Classic painters; `AB_X_CALLS`, `TABLE_LOAD_CALL`, `batch_get_selectitem`, `ab_x` | NOT PORTED; Phase 4.7 remains a separate plan |
+| Classic's painters for Quick Settings, the dialogs, Playlists and the lock screen | 1.6.8–1.7.0 | Classic painters; `AB_X_CALLS`, `TABLE_LOAD_CALL`, `batch_get_selectitem`, `ab_x`, `PLAYLIST_KEYUP_ADDR` (`pl_dress`) | NOT PORTED; Classic remains unavailable (Phase 4.7 ported the Modern ones) |
 | Classic Home Streaming pane | 1.6.8–1.7.0 | `home_streaming`, `stream_rows`, `on_home_stream_onclick`, `STREAM_BG` | NOT PORTED; M1 Streaming keeps its existing page |
 | Cover Flow raw-wheel thumb and follower | 1.6.8–1.7.0 | `coverflow_wheel_*`, `cf.thumb`, `EASE_FOLLOW`; M1 has a volume knob | NOT PORTED; validated knob-step and touch behavior retained |
 | Configurable slide motion (a theme's step and fast-step ms and easing, ms 0 an immediate move) | 1.6.8–1.7.0 | the theme's motion rows (`THEME_MOTION_OFF`, `MOTION_WIDGET`); the M1's slide_menu keeps V2.1's 200/120 ms and easing | NOT PORTED |
@@ -121,7 +121,8 @@ styles and code layout. The M1 version reflows it for the 320x480 portrait touch
 rewrites V2.1's assets the same way. Phase 1 is done: the M1 compiles the iPod path, and the port report
 lists each iPod hook as `unported` with the Phase 4 item that ports it (`style_get_color`,
 `image_manager_add`, `widget_on_paint_background` and `ui_loader_load_widget_with_parent` 4.1;
-`systembar_showface` 4.2; `list_get_img_pic` 4.4; `playlist_rebuild` 4.7). `bigcover_page_init` is ported (4.6, progress 71).
+`systembar_showface` 4.2; `list_get_img_pic` 4.4; `playlist_rebuild` 4.7). `bigcover_page_init` is ported (4.6, progress 71),
+and `playlist_rebuild` (4.7, progress 82).
 
 ### Now Playing's owners and pages
 
@@ -272,10 +273,9 @@ checked against the patch's strings.
 
 ### Quick Settings' brightness
 
-`g_dropdown_menu_state` is a stub on the M1. V2.1 has `dropdown_menu_state` (`0xa05a2c`) and a
-`slider_backlight`. Check their states against V1.32's (1, 2 sliding, 3 open) before aliasing it.
-1.4.5's `quick_stuck`, which closes a pull-down whose release was lost, reads the same state, so it
-never fires on the M1 until then.
+Ported in Phase 4.7 (progress 82). V2.1's `dropdown_menu_state` (`0xa05a2c`) has V1.32's states (0 shut, 1 and 2
+sliding, 3 open), so `g_dropdown_menu_state` is aliased to it, and 1.4.5's `quick_stuck` fires on the M1. The
+brightness is V2.1's `slider_backlight`, laid out as the iPod's.
 
 ### Set Time Manually
 
@@ -412,7 +412,7 @@ Stock's System rows stay, hidden. The M1 keeps its pages as they were: `m1plus_n
 `m1plus_nav_sysset.c` (the iPod's order by role) and `m1plus_nav_audioset.c` (V2.1 rebuilds Playback on each
 return to the front). V2.1's System rows differ (Double Tap, the rotation, Format card), its Power page has
 no icons, and `reorder`'s row ids are V1.32's. Port it with the next settings pass, by role as
-`sysset_ipod_order` does, after Phase 4.7's Quick Settings.
+`sysset_ipod_order` does. Phase 4.7's Quick Settings, which it waited for, landed (progress 82).
 
 ### The stale press backstop
 

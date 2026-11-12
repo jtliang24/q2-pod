@@ -4638,6 +4638,49 @@ After a drag's release, the bar shows the played colour. No shot was taken durin
 fill a drag should show wasn't seen; the knob scrub's white fill was (s12).
 Screen Off was set back to 1min through the UI (`LIGHTTIME=3`).
 
+## 82. Phase 4.7: Quick Settings, the confirm dialog and Add to Playlist (Nov 12)
+
+The plan is `.plan/phase4-7.md`; `docs/m1plus-ipod-ui.md` item 7 records what shipped. Upstream removed the wheel's
+Quick Settings in 1.6.5, so the M1's pull-down is V2.1's own, and the knob stays the volume while it is open.
+
+**Audit** (`99d5ef82`). `patch/m1plus_ipod.json` and `test/m1plus/build.py` pin V2.1's pull-down
+(`dialog_dropdown_dialog_init`, `0x475f04`, which takes the window alone; its visitor never moves widgets; states 0
+shut, 1 and 2 sliding, 3 open; the pull edge is y < 81), the confirm pop-up (260x180, centred, its prompts ending by
+y 106, Cancel and OK 128x48 at y 131) and the playlist page (the row builder `0x53e74c` takes any widget and uses
+`widget_get_window`; the page binds no key-up of its own; `PLAYLIST_ADD_MODE` `0xa06f50`).
+
+**Quick Settings** (`4680b1f4`, `6822f494`, `8d55ea55`, `9dbd7068`). `QUICK_NAME` names the window
+(`dropdown_dialog` on the M1) at navigation.c's eight sites; `g_dropdown_menu_state` and `g_pressdown_y` alias
+V2.1's. `QUICK_EDGE_PX` is 81, and pull-to-search now starts below it, since V2.1 opens its pull-down on any page.
+The payload hooks the init (`ringnav_quick_settings`) for the holds on Wi-Fi, Bluetooth and Playback and for
+`quick_cancel`; `quick_lock_text` does nothing on the M1 (V2.1 has no `img_lock`). `tools/m1plus_ipod.py`
+lays out `dropdown_dialog.bin` as the iPod's Quick Settings.
+
+**The confirm dialog** (`6e0a6001`, `beebec47`). `confirm_dialog` turns V2.1's pop-up into a full-width black
+sheet from the top, 208 px tall: its prompts above `CONFIRM_TOP` (112) at `CONFIRM_PROMPT_PX` (22), Cancel and OK
+as two full-width rows below them, keeping V2.1's names (`btn_cancel`, `btn_enter`), which V2.1 finds them by.
+`test/unit/test_m1plus_ipod.py` is the first unit test of an M1 layout.
+
+**Add to Playlist.** `playlist_rebuild` hooks V2.1's row builder (`0x53e74c`, also a private function), so
+`ringnav_playlist` runs on the M1: each playlist page keeps the add mode it opened with (stock's is one global,
+which a picker leaves set), and Now Playing's picker keeps its guarded pick on the rows New Playlist rebuilds. V2.1's
+New Playlist passes its row, not the window, so on the M1 the hook takes the row's window (`window_of`) and hands
+the trampoline the widget it got. `PLAYLIST_KEYUP` (Classic's `pl_keyup`) is `PLAYLIST_KEYUP_ADDR`, unported on
+the M1. The New Playlist keyboard needs no rewrite: V2.1's `add_edit` has no `sensitive` prop. Tests: nine
+scenarios run V2.1's builder for real (rows per mode, rebuilt in place, the per-page mode, New Playlist's rebuild
+from its row, and Now Playing's picker with a fresh and a stale queue); against the build before the hook they fail
+at the first add-mode check.
+
+**Gates** (the last build, before the docs): the build audit, `ports.py` (`playlist_rebuild` and the pull-down's
+init hooked; `PLAYLIST_KEYUP_ADDR` NOT PORTED), `patch.py` (2,172 scenarios, **689 expected failures in 10 gaps**,
+down from 694 in 11: the dialogs' gap closed) and `pytest test/unit` (1,192). The Q2 `update.tar` is byte-identical
+to 1.7.0's at each item, and `q2compare --suites` passes all 37 runs.
+
+**For the device pass** (one `--dev` flash; Screen Off set to Off, restored after): the checklist in
+`.plan/phase4-7.md` item 7. Two layout notes to look at: the pull-down keeps V2.1's battery, not the bar's, and
+Delete File's checkbox keeps V2.1's x 0 and 260 px width, so it sits left of centre on the 320 px screen;
+`CONFIRM_PROMPT_PX` 22 was not checked on a preview sheet first.
+
 ## How to check a build now
 
 ```sh

@@ -270,8 +270,16 @@ Each feature follows the same steps:
    aliased to V2.1's.
    Both pages now share `patch/m1plus_np_view.c`: one source interface, painters, scrub and entry point (`compact_now_playing` opens the page that owns playback). Only the page trees, the slides and the cover
    pipelines stay separate.
-7. **Quick Settings and dialogs:** `statusbar_dialog.bin`, the confirm and add-to-playlist dialogs. The
-   wheel QS swipe becomes a touch swipe down from the status bar; `qs_*`'s fake-finger path stays Q2-only.
+7. **Quick Settings and dialogs (implemented Nov 12, progress §82):** upstream removed the wheel's Quick Settings in
+   1.6.5, and the M1's pull-down is V2.1's own: a drag of more than 10 px from above y 81 opens
+   `dialog/dropdown_dialog`, which stands in for V1.32's `statusbar_dialog` (`QUICK_NAME`). The payload hooks its
+   init (`ringnav_quick_settings`) for the holds on Wi-Fi, Bluetooth and Playback and for `quick_cancel`, and the
+   knob stays the volume while it is open. `tools/m1plus_ipod.py` lays out the pull-down as the iPod's Quick
+   Settings and V2.1's centred 260x180 confirm pop-up as a full-width sheet from the top: its prompts above
+   `CONFIRM_TOP` (112) at `CONFIRM_PROMPT_PX` (22) and Cancel and OK as two rows below them. Add to Playlist hooks
+   V2.1's row builder (`playlist_rebuild`, `0x53e74c`): each playlist page keeps the add mode it opened with, and
+   Now Playing's picker keeps its guarded pick on the rows New Playlist rebuilds. V2.1's New Playlist keyboard
+   needs no rewrite (its `add_edit` has no `sensitive` prop). Pull-to-search now starts below the pull-down's edge.
 8. **Left Q2-only, as `NOT PORTED` rows:**
    - Games (they need a design without the Return key and the wheel); the 181 execution checks are
      grouped as `Games (ipod-ui 4.8, Q2 only)` in `patch_gaps.py`;
