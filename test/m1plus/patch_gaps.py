@@ -58,12 +58,6 @@ GAPS = {
     '84cc193a06': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9197 assert m.icons_set==[system_display,switch_off,display_backlight,list_into,syste
     '8acf0e7dcb': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9198 f,ctx=m.handler(m.nodes[kids[5]][children][0],O[EVT_CLICK]); m.calls=[]
     # boot resume to Home (ipod-ui 4.5)
-    # Quick Settings and dialogs (ipod-ui 4.7)
-    'a81c9fd1c3': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1945 assert tuple(m.get(prompt+O[k]) for k in (W_X,W_Y,W_W,W_H))==(0,0,375,O[CONFIRM_
-    '646f1a6906': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1946 assert m.nodes[prompt][style:normal:font_size]==O[CONFIRM_PROMPT_PX]
-    '1e6a4e4689': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:1947 assert m.nodes[prompt][style:normal:text_align_h]==center and m.nodes[prompt][st
-    '7943387180': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:2022 assert tuple(m.get(prompt+O[k]) for k in (W_X,W_Y,W_W,W_H))==(0,0,375,1
-    '646f1a6906.2': 'Quick Settings and dialogs (ipod-ui 4.7)',  # patch.py:2023 assert m.nodes[prompt][style:normal:font_size]==O[CONFIRM_PROMPT_PX]
     # Home's Centre after the Q2 wheel's timed turns (100 ms gaps): the M1's knob and Centre on Home are m1_home_modes
     '99f82b57ad': 'Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)',  # patch.py:9246 assert m.confirm()==11 and m.dispatched()[0][1]==imgs[4]; passed()
     # Q2 wheel keys and Key Tone (ipod-ui 4.8, Q2 only)

@@ -23,7 +23,7 @@ M1 = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f
                                                (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M)}
 PROFILE = {name: M1[name] for name in ('UI_W', 'UI_H', 'STATUS_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_TOP', 'SET_ROWS',
                                        'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART', 'HOME_ROW', 'HOME_DOT_X',
-                                       'HOME_LABEL_END')}
+                                       'HOME_LABEL_END', 'CONFIRM_TOP')}
 
 
 def load(profile=PROFILE):
@@ -594,6 +594,34 @@ def quick_settings(root):
     return root
 
 
+# 4.7: the confirm pop-up. V2.1's is a 260x180 box, centred, its Cancel and OK half-width buttons along its foot (y 131);
+# dialog_confirminfo_dialog_init adds its prompts, Delete File's check and the countdown line at x 0, 260 wide, all
+# ending by y 106. The Q2's form (ipod.confirm_rows): a full-width sheet from the top, the prompt above full-width Cancel
+# and OK rows from CONFIRM_TOP, under which the page shows dimmed. Stock binds both buttons by name (btn_cancel,
+# btn_enter), so they keep theirs.
+CONFIRM = 'dialog/confirminfo_dialog.bin'
+CONFIRM_STOCK = ([0, 0, 260, 180], [[1, 131, 128, 48], [131, 131, 128, 48]])
+CONFIRM_H = M1['CONFIRM_TOP'] + 2 * ipod.CONFIRM_ROW
+CONFIRM_PROMPTS_END = 106  # m1plus_ipod.json confirm.prompt_rows: Delete File's check, y 66 and 40 tall
+
+
+def confirm_dialog(root):
+    """V2.1's confirm pop-up as the iPod's: the Q2's sheet, its rows from CONFIRM_TOP."""
+    check(root[2].get('name') == 'confirminfo_dialog' and (root[1], [n[1] for n in root[3]]) == CONFIRM_STOCK and
+          [(n[0], n[2].get('name')) for n in root[3]] == [('button', 'btn_cancel'), ('button', 'btn_enter')] and
+          CONFIRM_PROMPTS_END <= ipod.CONFIRM_TOP == M1['CONFIRM_TOP'], 'Unexpected confirm dialog')
+    root[1] = [0, 0, ipod.UI_W, CONFIRM_H]
+    root[2]['self_layout'] = f'default(x=0,y=0,w=100%,h={CONFIRM_H})'
+    for state in TEXT_STATES:  # the Q2's stock sheet: black, square, no art
+        for key in ('round_radius', 'bg_image'):
+            del root[2][f'style:{state}:{key}']
+        root[2][f'style:{state}:bg_color'] = '#000000'
+    ipod.confirm_rows(root)
+    check([n[1] for n in root[3]] == [[0, M1['CONFIRM_TOP'], ipod.UI_W, ipod.CONFIRM_ROW],
+                                      [0, M1['CONFIRM_TOP'] + ipod.CONFIRM_ROW, ipod.UI_W, ipod.CONFIRM_ROW]] and
+          CONFIRM_H == root[1][3], 'Unexpected confirm rows')
+
+
 def quiet_icon(name, data):
     """The audited V2.1 control image (`quiet_icons`) as the iPod's quiet glyph of the same name, greyer when pressed."""
     check(sha(data) == AUDIT['quiet_icons'].get(name), f'{name}: unaudited control icon')
@@ -605,7 +633,7 @@ def quiet_icon(name, data):
 
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
 REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page, BIGCOVER: bigcover_page, VOLUME: volume_dialog,
-            QUICK: quick_settings} | {
+            QUICK: quick_settings, CONFIRM: confirm_dialog} | {
     p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
     p: library_page(p) for p in LIBRARY_PAGES}
 

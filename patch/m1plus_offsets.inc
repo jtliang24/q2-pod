@@ -906,9 +906,10 @@ static inline int arc_out(int r, int y) {
 #define GLASS_SLACK 4
 #define BC_TITLE_PAD 12 /* the song name's inset from the art's sides */
 #define HOME_FULL_CHEVRON_SHIFT 10
-/* The confirm pop-up's prompt (4.7): 0 matches no child (y + h > 0), so confirm_prompt leaves it alone. */
-#define CONFIRM_TOP M1_UNPORTED
-#define CONFIRM_PROMPT_PX M1_UNPORTED
+/* The confirm pop-up (4.7, tools/m1plus_ipod.py confirm_dialog): Cancel and OK rows from CONFIRM_TOP, under V2.1's
+ * prompts and Delete File's check (all end by y 106); the prompt at CONFIRM_PROMPT_PX, the Q2's 24 at 375 px. */
+#define CONFIRM_TOP 112
+#define CONFIRM_PROMPT_PX 22
 /* The default children layouter's vtable ("default", 8 words: the layout at [2]), which compact_set_row_layout
  * copies for the library rows (ipod-ui 4.4). */
 #define DEFAULT_LAYOUT_VTABLE 0x904924

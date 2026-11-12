@@ -56,10 +56,10 @@ m1ipod = m1plus_ipod.ipod
 assert [getattr(m1ipod, n) for n in SCREEN] == [m1[n] for n in SCREEN] == [320, 480, 30, 450]
 assert m1ipod.CORNER_R == m1['GLASS_R'] == 0 and m1ipod.HOME_LIST_W == 320
 # ... and the layout names a Phase 4 item has given V2.1's (4.2: the bar's battery room, which the 320 px bar fits; 4.5:
-# Home's rows and their labels' insets).
+# Home's rows and their labels' insets; 4.7: the confirm pop-up's rows).
 assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O.get(k)} == {'UI_W', 'UI_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_ROWS',
                                                                 'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART', 'HOME_ROW',
-                                                                'HOME_DOT_X', 'HOME_LABEL_END'} == set(m1plus_ipod.PROFILE) - {'STATUS_H', 'SET_TOP'}
+                                                                'HOME_DOT_X', 'HOME_LABEL_END', 'CONFIRM_TOP'} == set(m1plus_ipod.PROFILE) - {'STATUS_H', 'SET_TOP'}
 assert (m1ipod.HOME_ROW, m1ipod.HOME_TEXT_X, ipod.HOME_ROW, ipod.HOME_TEXT_X) == (64, 26, 39, 39)  # the Q2's unchanged
 # 4.4: LIB_ROWS complete library rows from the top of the screen under the bar, on a body inside each row, the art inside
 # the body; ipod.py's names take the M1's (the Q2's stay 72, 68 and 52).
@@ -502,7 +502,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert [word_at(a) & 0xffff for a, _, _ in quick['edge']] == [m1plus_ipod.M1['QUICK_EDGE_PX']]
     assert [word_at(a) & 0xffff for a, _, _ in quick['events']] == [0x103, 0xff, 0x101, m1plus_ipod.M1['EVT_WINDOW_CLOSE']]
     rows = [(word_at(y) & 0xffff, word_at(h) & 0xffff) for y, _, h, _, _ in confirm['prompt_rows']]
-    assert max(y + h for y, h in rows) == 106, rows
+    assert max(y + h for y, h in rows) == m1plus_ipod.CONFIRM_PROMPTS_END < m1plus_ipod.M1['CONFIRM_TOP'], rows
     rebuild = int(playlist['rebuild'], 16)
     assert all(word_at(a) == 0x04110000 | ((rebuild - int(a, 16) - 4) >> 2) & 0xffff for a, _, _ in playlist['calls'])
     assert word_at(playlist['add_mode'][0]) & 0xffff == m1plus_ipod.M1['PLAYLIST_ADD_MODE'] & 0xffff
@@ -542,6 +542,14 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert light[1::2] == [m1plus_ipod.M1['VOL_PANEL_Y'], m1plus_ipod.M1['VOL_PANEL_H']] and light[1] + light[3] <= qs[1][3] and menu[1] + menu[3] < light[1]
     assert all(qs_named[k][2].get('opacity') == '0' and qs_named[k][1][0] >= 0 for k in ('img_volume', 'label_volume', 'img_digital', 'img_synclink'))
     assert qs_named['slider_backlight'][2]['style'] == 's_ipod_progress' and qs_named['label_wifi'][2]['style:normal:font_size'] == '16'
+    # 4.7: the confirm pop-up, the built sheet: full width from the top, Cancel and OK rows from CONFIRM_TOP to its foot,
+    # under every prompt V2.1 adds; stock's names, which its init binds.
+    cf = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.CONFIRM))
+    top, row = m1plus_ipod.M1['CONFIRM_TOP'], 48
+    assert cf[1] == [0, 0, m1plus_ipod.M1['UI_W'], top + 2 * row] and cf[2]['self_layout'] == f'default(x=0,y=0,w=100%,h={top + 2 * row})'
+    assert [(n[2]['name'], n[2]['text'], n[1]) for n in cf[3]] == [
+        ('btn_cancel', 'Cancel', [0, top, m1plus_ipod.M1['UI_W'], row]), ('btn_enter', 'OK', [0, top + row, m1plus_ipod.M1['UI_W'], row])]
+    assert not any(k.endswith(('bg_image', 'round_radius')) for k in cf[2])
     # ipod-ui 4.1, the styles: V2.1's default.bin is the file the audit hashed, each edit's old value is in exactly its
     # audited number of states, and the build's file differs from it in those states and nowhere else. Each edited style
     # is one a V2.1 page or its code names (a style nothing uses would edit nothing that paints).
