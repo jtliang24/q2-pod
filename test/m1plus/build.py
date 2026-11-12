@@ -525,7 +525,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     raw_styles = 'release/assets/default/raw/styles/'
     assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
         raw_styles + p for p in M1_AUDIT['styles']} | {
-        'release/assets/default/raw/images/xx/' + p for p in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons']}}
+        'release/assets/default/raw/images/xx/' + p for p in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons'], **M1_AUDIT['clear_icons']}}
     stock_syms = symbols(directory/'stock-demo')
     # Each V2.1 iPod page is the stock page the inventory hashed, decodes and re-encodes exactly, and its init
     # function is in V2.1's demo.
@@ -801,6 +801,21 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         shipped = read('rootfs.squashfs', path)
         assert sha(read('stock.squashfs', path)) == digest and sha(shipped) == manifest['changed_assets'][path]['sha256']
         assert png_header(shipped) == (28, 28, 8, 6), icon
+    # The unticked ring (V064m pass): V2.1's (hashed) without its black disc, as the Q2's, so Light Mode flips it.
+    assert set(M1_AUDIT['clear_icons']) == {'unselect.png'}
+    for icon, digest in M1_AUDIT['clear_icons'].items():
+        path = 'release/assets/default/raw/images/xx/' + icon
+        original, shipped = read('stock.squashfs', path), read('rootfs.squashfs', path)
+        assert sha(original) == digest and shipped == m1plus_ipod.clear_icon(icon, original) and sha(shipped) == manifest['changed_assets'][path]['sha256']
+        assert png_header(shipped) == png_header(original)[:2] + (8, 6), icon
+        def rgba(d):  # each pixel's (r, g, b, a)
+            return [tuple(map(int, l.split('(', 1)[1].split(')')[0].split(',')))
+                    for l in m1ipod.imagemagick('png:-', '-depth', '8', 'txt:-', data=d).decode().splitlines()[1:]]
+        before, after = rgba(original), rgba(shipped)
+        assert all(p[:3] == (255, 255, 255) for p in after)  # white alone: the ring's coverage, no disc
+        assert all(abs(b[3] * b[0] / 255 - a[3]) <= 1 for b, a in zip(before, after))
+        side = png_header(original)[0]
+        assert before[side * (side // 2) + side // 2][3] >= 120 and after[side * (side // 2) + side // 2][3] == 0  # the disc's middle
     # ... and its page: V2.1's tree with the top row, the art slide's text, the dots, the bar, the times and the transport
     # at the layout's places. view_buttons and view_dlna are V2.1's inside.
     np_stock, np_page = (decode(read(i, 'release/assets/default/raw/ui/playing_page.bin')) for i in ('stock.squashfs', 'rootfs.squashfs'))
@@ -1227,7 +1242,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added.add('release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK)  # Centred Now Playing (4.6)
     replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C} | {
         'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles']),
-                                                                      *('images/xx/' + q for q in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons']})]}
+                                                                      *('images/xx/' + q for q in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons'], **M1_AUDIT['clear_icons']})]}
     logo = xx+'logo.jpg'
     with tempfile.TemporaryDirectory(prefix='m1-rootfs-') as tmp:
         trees = {}

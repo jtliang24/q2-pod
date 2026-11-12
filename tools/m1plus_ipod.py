@@ -649,6 +649,20 @@ def msginfo_dialog(root):
                         f'style:{state}:border': 'all', f'style:{state}:border_width': '1'})
 
 
+# V2.1's unticked ring (unselect: check_button_style's, Delete Song?'s check, and the M1's choice rows and Theme picker) is a
+# white ring over a 50% black disc; the Q2's is the ring alone. Light Mode's image flip (navigation.c ringnav_image_add)
+# takes an image mostly dark as a plate and leaves it, so the ring went white on the paper and the disc showed as a grey
+# dot, read as ticked (V064m pass). Shipped as the Q2's: each pixel white, its alpha its alpha times its grey, so the
+# ring keeps its exact coverage and the disc goes. Over black it looks the same.
+def clear_icon(name, data):
+    """The audited V2.1 ring (`clear_icons`) without the black under it: white, alpha = alpha x grey."""
+    check(sha(data) == AUDIT['clear_icons'].get(name), f'{name}: unaudited ring icon')
+    return ipod.imagemagick('png:-', '(', '+clone', '-alpha', 'extract', ')',
+                            '(', '-clone', '0', '-alpha', 'off', '-channel', 'R', '-separate', '+channel', ')',
+                            '-delete', '0', '-compose', 'multiply', '-composite', '-background', 'white', '-alpha', 'shape',
+                            *ipod.PNG_OUT, data=data)
+
+
 def quiet_icon(name, data):
     """The audited V2.1 control image (`quiet_icons`) as the iPod's quiet glyph of the same name, greyer when pressed."""
     check(sha(data) == AUDIT['quiet_icons'].get(name), f'{name}: unaudited control icon')

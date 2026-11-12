@@ -501,6 +501,9 @@
     "p_unfav.png": "e9c9494962b570c4d5b571b48db472c9dbef7fd85074687a940134e021fdf9e8",
     "p_unfavdown.png": "e109f2a535faf16cc1bd3061c76c1303fa94d219ddfd89e8d9270e0f4f3e64f2"
   },
+  "clear_icons": {
+    "unselect.png": "16c5e78bfe82e4c06675e5d9e9a9e3594145dde512b82d4f7bda66bfa16f3462"
+  },
   "status_icons": {
     "bar_bt.png": "c14288c2d869c6f4d92e3a662b5a8ac3eed835c0c9a2f331c5c4da6aeb51fd9d",
     "bar_btcon.png": "a00eb3eab090ba96c3ccff5f60a1d0db422dd74bf90c9b164886772b8eeea7de",

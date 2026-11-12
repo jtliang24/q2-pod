@@ -1457,6 +1457,14 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         target = out/'quiet'/n; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
         p = swap_inode(p, path.encode(), target)
         changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
+    # ... and the unticked ring (V064m pass): V2.1's without the black disc under it, as the Q2's, so Light Mode flips it.
+    for n in m1plus_ipod.AUDIT['clear_icons']:
+        path = 'release/assets/default/raw/images/xx/' + n
+        original = cat(path)
+        data = m1plus_ipod.clear_icon(n, original)
+        target = out/'clear'/n; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+        p = swap_inode(p, path.encode(), target)
+        changed_assets[path] = dict(original_sha256=sha(original), sha256=sha(data))
     pseudo.write_bytes(p)
     (out/'empty').mkdir(exist_ok=True)
     newsq = out/'rootfs.squashfs'

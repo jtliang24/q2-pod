@@ -80,3 +80,20 @@ def test_msginfo_dialog_wants_stock(change):
     change(root)
     with pytest.raises(ValueError, match='^Unexpected toast dialog$'):
         m1plus_ipod.msginfo_dialog(root)
+
+
+def test_clear_icon_is_audited(monkeypatch):
+    """The unticked ring is rewritten only from V2.1's audited bytes (V064m pass)."""
+    monkeypatch.setattr(m1plus_ipod.ipod, 'imagemagick', lambda *a, data: pytest.fail('ran ImageMagick'))
+    with pytest.raises(ValueError, match='^unselect.png: unaudited ring icon$'):
+        m1plus_ipod.clear_icon('unselect.png', b'not V2.1')
+
+
+def test_clear_icon(monkeypatch):
+    """White, alpha times grey: ImageMagick's arguments on the audited bytes."""
+    calls = []
+    monkeypatch.setitem(m1plus_ipod.AUDIT['clear_icons'], 'unselect.png', m1plus_ipod.sha(b'ring'))
+    monkeypatch.setattr(m1plus_ipod.ipod, 'imagemagick', lambda *a, data: calls.append((a, data)) or b'png')
+    assert m1plus_ipod.clear_icon('unselect.png', b'ring') == b'png'
+    (args, data), = calls
+    assert data == b'ring' and args[-1] == 'png:-' and ('-alpha', 'shape') in zip(args, args[1:])
