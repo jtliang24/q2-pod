@@ -993,6 +993,7 @@ extern unsigned char m1_return_latch;
 #define BAR_MAX M1_UNPORTED
 #define EASE_FOLLOW 24 /* past AWTK's 24: coverflow.c's follow, never handed to easing_get */
 #define PL_RENAME_ROW M1_UNPORTED_ADDR
+#define PLAYLIST_KEYUP_ADDR M1_UNPORTED_ADDR /* V2.1's playlist_page binds no key-up; Classic is unported */
 #define ARTIST_TITLE M1_UNPORTED_ADDR
 #define G_ALLSELECT_FLAG M1_UNPORTED_ADDR
 #define PLAYMORE_INTO_FIRST M1_UNPORTED

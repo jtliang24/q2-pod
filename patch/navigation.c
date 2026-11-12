@@ -13194,7 +13194,7 @@ static void qm_playlist_bind(void *w, int depth, int (*pick)(void *, void *)) {
 enum { PL_SELECT_ALL, PL_NEW, PL_EDIT, PL_IMPORT, PL_EXPORT, PL_DELETE, PL_DONE, PL_N };
 static const unsigned pl_stock[PL_N] = { 0x4b1b88, 0x4b1a88, 0x4b19b8, 0x4b26d0,
                                          0x4b2528, 0x4b23c0, 0x4b1ad0 };
-#define PLAYLIST_KEYUP ((int (*)(void *, void *))0x4b1310)
+#define PLAYLIST_KEYUP ((int (*)(void *, void *))PLAYLIST_KEYUP_ADDR)
 
 /* A row's place on the list's two heights: name over second line in the page rows' boxes, which
  * hold their fonts; the dots or a mark at the right edge, centred on the picker's tick's column
