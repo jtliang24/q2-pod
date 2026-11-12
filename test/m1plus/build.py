@@ -529,6 +529,19 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     for page in m1plus_ipod.UI_ASSETS:
         data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
         assert page in m1plus_ipod.REWRITES or m1plus_ipod.patch_asset(page, data) == data, page
+    # 4.7: Quick Settings, the built pull-down: each switch and its label on the 320 px screen and clear of the others,
+    # the label under its icon; the brightness row exactly under the volume panel (vol_paint), inside the dialog; the
+    # sysbar's unused widgets transparent in place, never off screen (docs/m1plus-progress.md section 63).
+    qs = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.QUICK))
+    qs_named = {n[2].get('name'): n for n in walk(qs)}
+    boxes = [qs_named[f'{k}_{v}'][1] for i, l in zip(m1plus_ipod.QS_ICONS, m1plus_ipod.QS_LABELS) for k, v in (('img', i), ('label', l))]
+    assert all(x >= 0 and x + w <= m1plus_ipod.M1['UI_W'] for x, _, w, _ in boxes)
+    assert not any(a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+                   for i, a in enumerate(boxes) for b in boxes[i + 1:]), boxes
+    menu, light = qs_named['view_switchs'][1], qs_named['view_backlight'][1]
+    assert light[1::2] == [m1plus_ipod.M1['VOL_PANEL_Y'], m1plus_ipod.M1['VOL_PANEL_H']] and light[1] + light[3] <= qs[1][3] and menu[1] + menu[3] < light[1]
+    assert all(qs_named[k][2].get('opacity') == '0' and qs_named[k][1][0] >= 0 for k in ('img_volume', 'label_volume', 'img_digital', 'img_synclink'))
+    assert qs_named['slider_backlight'][2]['style'] == 's_ipod_progress' and qs_named['label_wifi'][2]['style:normal:font_size'] == '16'
     # ipod-ui 4.1, the styles: V2.1's default.bin is the file the audit hashed, each edit's old value is in exactly its
     # audited number of states, and the build's file differs from it in those states and nowhere else. Each edited style
     # is one a V2.1 page or its code names (a style nothing uses would edit nothing that paints).

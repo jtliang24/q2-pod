@@ -522,6 +522,78 @@ def bigcover_page(root):
     return root
 
 
+# 4.7: Quick Settings is V2.1's pull-down, dialog/dropdown_dialog (QUICK_NAME): a sysbar of the bar's widgets, which
+# dropdown_showface fills by name each second and never moves; eight 50 px switches over their labels (view_switchs),
+# each bound by name in dialog_dropdown_dialog_init; and the brightness row (view_backlight). The Q2's grid
+# (ipod.quick_settings) on the M1's 320 px: four 80 px columns, V2.1's own 50 px art, 16 px labels under each icon, and
+# a plain slider exactly under the volume panel (vol_paint), as the Q2's.
+QUICK = 'dialog/dropdown_dialog.bin'
+QS_ICONS = ['wifiswitch', 'btswitch', 'keylockswitch', 'gainswitch', 'usbmode', 'outputswitch', 'playset', 'sysset']
+QS_LABELS = ['wifi', 'bt', 'lock', 'gain', 'usbmode', 'outputway', 'playset', 'sysset']
+QS_TOP, QS_ICON, QS_LABEL_GAP, QS_LABEL_H, QS_ROW_GAP = 40, 50, 6, 40, ipod.QS_ROW_GAP
+QS_COLUMN = ipod.UI_W // 4
+QS_LABEL_W = QS_COLUMN - 4
+QS_PITCH = QS_ICON + QS_LABEL_GAP + QS_LABEL_H + QS_ROW_GAP
+QS_SUN = 20  # V2.1's drop_lighticon art
+QS_SYSBAR = ['view_bar_left', 'bar_dclock', 'view_bar_right', 'pgbar_battery', 'img_battery']
+
+
+def quick_settings(root):
+    """V2.1's pull-down as the iPod's Quick Settings."""
+    check(root[2].get('name') == 'dropdown_dialog' and root[1] == [0, -340, ipod.UI_W, 340] and
+          [n[2].get('name') for n in root[3]] == ['view_sysbar', 'view_switchs', 'view_backlight'], 'Unexpected quick settings')
+    sysbar, menu, light = root[3]
+    named = {n[2]['name']: n for n in menu[3]}
+    check(sorted(named) == sorted([f'img_{k}' for k in QS_ICONS] + [f'label_{v}' for v in QS_LABELS]),
+          'Unexpected quick settings controls')
+    for i, (icon, label) in enumerate(zip(QS_ICONS, QS_LABELS)):
+        image, text = named['img_' + icon], named['label_' + label]
+        check(image[1][2:] == [QS_ICON, QS_ICON] and image[1][1] == (14, 114)[i // 4] and
+              text[2].get('style:normal:font_size') == '18', f'{icon}: unexpected quick settings control')
+        x, y = i % 4 * QS_COLUMN, i // 4 * QS_PITCH
+        image[1] = [x + (QS_COLUMN - QS_ICON) // 2, y, QS_ICON, QS_ICON]
+        text[1] = [x + (QS_COLUMN - QS_LABEL_W) // 2, y + QS_ICON + QS_LABEL_GAP, QS_LABEL_W, QS_LABEL_H]
+        for state in TEXT_STATES:
+            text[2].update({f'style:{state}:font_size': '16', f'style:{state}:text_align_v': 'top',
+                            f'style:{state}:text_align_h': 'center'})
+    menu[1] = [0, QS_TOP, ipod.UI_W, 2 * QS_PITCH - QS_ROW_GAP]
+    slider, dim, bright = (next(n for n in light[3] if n[2]['name'] == k) for k in ('slider_backlight', 'image0', 'image1'))
+    check(len(light[3]) == 3 and dim[1][2:] == bright[1][2:] == [QS_SUN, QS_SUN] and
+          slider[2].get('slide_with_bar') == 'true', 'Unexpected brightness row')
+    touch = M1['VOL_PANEL_H']
+    light[1] = [0, menu[1][1] + menu[1][3] + QS_ROW_GAP, ipod.UI_W, touch]
+    check(light[1][1] == M1['VOL_PANEL_Y'] and light[1][1] + touch <= -root[1][1], 'The volume panel must cover the brightness row')
+    # Plain, as the Q2's: no pill behind the row; the suns centred under the first and last columns.
+    light[2] = {k: v for k, v in light[2].items() if 'bg_image' not in k and 'round_radius' not in k}
+    edge = (QS_COLUMN - QS_SUN) // 2
+    dim[1] = [edge, (touch - QS_SUN) // 2, QS_SUN, QS_SUN]
+    bright[1] = [ipod.UI_W - edge - QS_SUN, (touch - QS_SUN) // 2, QS_SUN, QS_SUN]
+    track = [edge + QS_SUN + 12, 0, ipod.UI_W - 2 * (edge + QS_SUN + 12), touch]
+    props = ipod.plain_slider(slider[2], ipod.NP_TRACK, ipod.NP_FILL, ipod.QS_BAR)  # the accent at runtime (quick_fill)
+    props.update(self_layout='default(x={},y=0,w={},h={})'.format(*track[::2], touch), dragger_size=str(touch))
+    props.pop('dragger_adapt_to_icon', None)
+    slider[1], slider[2] = track, props
+    # The sysbar as the bar (status_bar): the clock centred, Bluetooth, the play state and Wi-Fi at its right, V2.1's
+    # battery last; the volume, digital and link badges transparent in place (opacity 0), never moved off screen.
+    check([n[2].get('name') for n in sysbar[3]] == QS_SYSBAR, 'Unexpected quick settings sysbar')
+    left, clock, right, pgbar, battery = sysbar[3]
+    check([n[2].get('name') for n in left[3]] == STATUS_LEFT and [n[2].get('name') for n in right[3]] == STATUS_RIGHT,
+          'Unexpected quick settings sysbar widgets')
+    bar = {n[2]['name']: n for n in left[3] + right[3]}
+    bar['img_playstate'][1][2], bar['img_wifi'][1][2], bar['img_btclass'][1][2] = 12, 14, 42
+    height, gap = ipod.STATUS_H, ipod.inc('STATUS_GAP')
+    clock[1] = [(ipod.UI_W - CLOCK_W) // 2, 0, CLOCK_W, height]
+    right[1] = [clock[1][0] + CLOCK_W, 0, battery[1][0] - gap - clock[1][0] - CLOCK_W, height]
+    right[2]['children_layout'] = f'default(r=1,c=0,a=right,s={gap})'
+    right[3] = [bar['img_btclass'], bar['img_playstate'], bar['img_wifi']]
+    hidden = [bar[k] for k in ('img_volume', 'label_volume', 'img_digital', 'img_synclink')]
+    left[3] = []
+    sysbar[3] += hidden
+    for n in hidden:
+        n[1], n[2]['opacity'] = [0, 0, n[1][2], height], '0'
+    return root
+
+
 def quiet_icon(name, data):
     """The audited V2.1 control image (`quiet_icons`) as the iPod's quiet glyph of the same name, greyer when pressed."""
     check(sha(data) == AUDIT['quiet_icons'].get(name), f'{name}: unaudited control icon')
@@ -532,7 +604,8 @@ def quiet_icon(name, data):
 
 
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
-REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page, BIGCOVER: bigcover_page, VOLUME: volume_dialog} | {
+REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page, BIGCOVER: bigcover_page, VOLUME: volume_dialog,
+            QUICK: quick_settings} | {
     p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
     p: library_page(p) for p in LIBRARY_PAGES}
 
