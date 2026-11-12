@@ -503,11 +503,20 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert [word_at(a) & 0xffff for a, _, _ in quick['events']] == [0x103, 0xff, 0x101, m1plus_ipod.M1['EVT_WINDOW_CLOSE']]
     rows = [(word_at(y) & 0xffff, word_at(h) & 0xffff) for y, _, h, _, _ in confirm['prompt_rows']]
     assert max(y + h for y, h in rows) == m1plus_ipod.CONFIRM_PROMPTS_END < m1plus_ipod.M1['CONFIRM_TOP'], rows
+    demo_syms = symbols(directory/'stock-demo')
     rebuild = int(playlist['rebuild'], 16)
     assert all(word_at(a) == 0x04110000 | ((rebuild - int(a, 16) - 4) >> 2) & 0xffff for a, _, _ in playlist['calls'])
     assert word_at(playlist['add_mode'][0]) & 0xffff == m1plus_ipod.M1['PLAYLIST_ADD_MODE'] & 0xffff
+    # Add to Playlist from a hold menu (qm_run) opens V2.1's playlist_page in add mode 1, whose row click adds
+    # the batch selection from pdeq_showlist as the context's class, as V1.32's does (the payload's names).
+    import m1plus
+    got = lambda a: word_at(hex(m1plus.M1PLUS_GP - (0x10000 - (word_at(a) & 0xffff))))
+    assert [got(a) for a, _, _ in playlist['add_rows'][3:5]] == [demo_syms[m1plus.M1PLUS_CONTEXT_ALIASES.get(n, n)] for n in
+                                                                ('p_vector_select_record', 'p_deque_showlist')]
+    # V2.1 has no localmusic/ pages: the payload names none (V063m's hold menu opened a localmusic/playlist_page).
+    assert b'localmusic/' not in payload, 'patch.bin names a localmusic/ page'
     for a, w, why in (quick['edge'] + quick['states'] + quick['events'] + playlist['calls'] + playlist['events'] +
-                      [playlist['add_mode']] + [r[:2] + [r[4]] for r in confirm['prompt_rows']] +
+                      playlist['add_rows'] + [playlist['add_mode']] + [r[:2] + [r[4]] for r in confirm['prompt_rows']] +
                       [r[2:] for r in confirm['prompt_rows']]):
         assert word_at(a) == int(w, 16), why
     raw_styles = 'release/assets/default/raw/styles/'

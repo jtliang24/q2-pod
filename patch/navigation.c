@@ -2110,7 +2110,7 @@ int home_shortcut_open(void *ctx, void *event) {
     if (s == 6) return games_open(ctx, event);
     if (s == 8 || s == 9) return media_click((void *)(long)(s == 8 ? PODCASTS : AUDIOBOOKS), event);
     if (s == 7)
-        return navigator_to_with_context("localmusic/playlist_page",
+        return navigator_to_with_context(LOCAL_UI "playlist_page",
                                          (void *)0); /* as stock's Home */
     if (s == 2) {
         struct {
@@ -13568,8 +13568,10 @@ static int qm_run(const void *unused) {
             g_delete_flag = 1;          /* My Fav reloads, as Now Playing's heart (0x52b2e8) */
     } else if (r && a == QA_PLAYLIST) { /* the playlist page's add mode adds the selected row */
         qm_select();
+        /* M1 Plus: V2.1's mode 1 row click (0x53d470) adds the same selection from the same list
+         * (pdeq_showlist, pvec_selectrecord) as the context's class (m1plus_ipod.json playlist) */
         navigator_to_with_context(
-            "localmusic/playlist_page",
+            LOCAL_UI "playlist_page",
             (void *)(long)((st.qm_kind == QM_PLAYING ? 0x20000 : 0x10000) | cls));
         if (st.qm_kind == QM_PLAYING) {
             void *top = window_manager_get_top_window(window_manager());

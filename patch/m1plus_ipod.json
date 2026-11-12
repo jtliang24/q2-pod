@@ -1039,6 +1039,38 @@
       "0x53eb9c",
       "0xac506f50",
       "playlist_page_init keeps its context >> 16 at PLAYLIST_ADD_MODE (0xa06f50)"
+    ],
+    "add_rows": [
+      [
+        "0x53eb90",
+        "0xac436f54",
+        "playlist_page_init keeps its context & 0xffff at 0xa06f54: the class its add mode adds as (qm_run's cls)"
+      ],
+      [
+        "0x53d470",
+        "0x8e226f50",
+        "a playlist row's click (0x53d300) reads the add mode: 0 opens the playlist, else it adds to it"
+      ],
+      [
+        "0x53d484",
+        "0x8c726f54",
+        "and the class, batch_add_file's first argument"
+      ],
+      [
+        "0x53d488",
+        "0x8f83ac50",
+        "the selection: pvec_selectrecord (GOT gp-0x53b0), which qm_select's batch_init_selectrecord and batch_set_selectitem set"
+      ],
+      [
+        "0x53d574",
+        "0x8f82ac08",
+        "mode 1's rows: pdeq_showlist (GOT gp-0x53f8), the hold menu's list (qm_list); mode 2's are mcl_pdeqplaylist"
+      ],
+      [
+        "0x53d4b8",
+        "0x3405f00b",
+        "batch_add_file's second argument: the playlist class 0xf00b"
+      ]
     ]
   }
 }

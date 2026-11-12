@@ -700,9 +700,12 @@ GAPS = {
     '7bc1f1ab60': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13349 fk,fb,ft=font_row(classic_light,'Moscow Москва') [fixture extension]
     '9585f2ca3d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13429 for light,paper in (('1',0xffffffff),('0',0xff000000)): [fixture extension]
     '6b1afb0859': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:14390 for pt_ in ('0',): [fixture extension]
+    # View Queue from a hold menu off Shuffle opens V1.32's playerqueue_page, which V2.1 doesn't have (its queue is
+    # dialog/playqueue_dialog): found by the navigator mocks' page check (Phase 4.7 fixes; docs/m1plus-unported.md)
+    '07753a9258': "View Queue's stock queue page (playerqueue_page; unported)",  # patch.py:4297 m=playing_menu(); assert m.run(2) is None and m.opened[-1][0]==playerqueue_page and m.names()=
     # 1.6.7's new Shortcuts: the M1's are Favorites, Shuffle, Rated Albums, Artists and Albums (shortcut())
     'ddca64781d': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:10060 assert d.text(d.call(address=payload_syms[ipod_home_shortcut],args=(0,0,0,0),g
-    '0804d29cca': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:10062 assert [(d.text(c[1]),c[2]) for c in d.calls if c[0]==navigator_to_with_context
+    '700de58828': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12517 assert [(d.text(c[1]),c[2]) for c in d.calls if c[0]==navigator_to_with_context
     'c67b0e573f': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:10102 for label in (Favorites,Shuffle,Rated Albums,Playlists,Artists,Albums
     '4a2be76ac0': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12156 assert m.text(m.call(address=payload_syms[ipod_home_shortcut],args=(0,0,0,0),g
     'eb604de254': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12157 m.calls=[]; assert m.call(address=payload_syms[home_shortcut_open],args=(0,m.e

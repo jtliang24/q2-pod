@@ -80,9 +80,20 @@ if is_m1plus:
     from ipod import style_props
     THEME_STYLES = {s for _, s, *_ in style_props(subprocess.check_output(
         ['unsquashfs', '-cat', str(B/'rootfs.squashfs'), 'release/assets/default/raw/styles/default.bin']))}
+    # The pages V2.1's navigator can open: its ui/ and the payload's (V063m's hold menu opened a
+    # localmusic/playlist_page V2.1 doesn't have, and nothing opened). The machines' navigator mocks check each.
+    UI_PAGES = {l.split('raw/ui/',1)[1][:-4] for l in subprocess.check_output(
+        ['unsquashfs', '-l', str(B/'rootfs.squashfs'), 'release/assets/default/raw/ui'], text=True).splitlines()
+        if 'raw/ui/' in l and l.endswith('.bin')} | {str(f.relative_to(B/'ui'))[:-4] for f in (B/'ui').rglob('*.bin')}
 else:
     THEME_STYLES = None
+    UI_PAGES = None
     FREE_GOT = 0xa2638c
+def ui_page(page):  # M1 Plus: a page V2.1's navigator can't open fails the scenario
+    assert UI_PAGES is None or page in UI_PAGES, f'no such V2.1 page: {page}'
+    return page
+# Stock's playlist page (LOCAL_UI): V1.32's in localmusic/, V2.1's at ui/'s top
+PLAYLIST_PAGE = 'playlist_page' if is_m1plus else 'localmusic/playlist_page'
 # Quick Settings' window: V1.32's statusbar_dialog, V2.1's pull-down dropdown_dialog (QUICK_NAME, ipod-ui 4.7)
 QS_NAME = re.search(r'^#define QUICK_NAME "(\w+)"', (ROOT/('patch/m1plus_offsets.inc' if is_m1plus else 'patch/m1plus_q2.inc')).read_text(), re.M)[1]
 # The Library's rows: Q2's Local Music hook. V2.1 has no Local Music menu, so M1 Plus binds nothing
@@ -4107,7 +4118,7 @@ class QueueMachine(Machine):
         elif name=='window_manager_get_input_device_status': ret=self.status
         elif name=='airplayGetFlag': ret=self.airplay
         elif name=='navigator_to':
-            page=self.text(a)
+            page=ui_page(self.text(a))
             if page=='dialog/sortselect_dialog' and is_m1plus:
                 d=self.v21_sortselect(); self.opened.append((page,None if d else 'modal'))
                 if d: self.top=d; self.stack.append(d)
@@ -4115,10 +4126,10 @@ class QueueMachine(Machine):
                 self.top=self.dialog() if page=='dialog/sortselect_dialog' else self.bootvol() if page=='playset/bootvol_page' else self.node('window',page)
                 self.stack.append(self.top); self.opened.append((page,None))
         elif name=='navigator_to_with_context':
-            page=self.text(a)
+            page=ui_page(self.text(a))
             if page=='dialog/msginfo_dialog': self.toasts.append((page,self.get(b),self.get(b+4),self.text(b+8)))
             elif page=='playing_page': self.opened.append((page,self.names(self.get(b)),self.get(b+4),self.get(b+8),self.get(b+12)))
-            elif page=='localmusic/playlist_page': self.opened.append((page,b))
+            elif page==PLAYLIST_PAGE: self.opened.append((page,b))
             elif page=='localmusic/playlistsmore_page': self.opened.append((page,b))
             elif page=='albuminfo_page': self.opened.append((page,b)); self.top=self.node('window',page); self.stack.append(self.top)  # V2.1: row << 16 | class
             else: self.opened.append((page,self.get(b),self.get(b+4))); self.top=self.node('window',page); self.stack.append(self.top)
@@ -4292,7 +4303,7 @@ assert sel(m)[:2]==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]; p
 m=playing_menu(); m.favs.add('B'); assert m.run(3) is None
 assert [c[1] for c in m.calls if c[0]=='deleteMusicFromFav']==[m.items(m.get(syms['mcl_pdeqplaylist']))[1]]; passed()
 m=playing_menu(); m.run(4)
-assert m.opened[-1]==('localmusic/playlist_page',0x2f001)
+assert m.opened[-1]==(PLAYLIST_PAGE,0x2f001)
 assert sel(m)==[('batch_init_selectrecord',3),('batch_set_selectitem',1)]; passed()
 for action,page in ((5,'albuminfo_page' if is_m1plus else 'playerjumpinfo_page'),(6,'album_page' if is_m1plus else 'localmusic/artistinfo_page')):
     m=playing_menu(); m.config['ARTISTCF']='0'; m.run(action); assert m.opened[-1][0]==page
@@ -4337,7 +4348,7 @@ class PlayingPlaylistMachine(QueueMachine):
         if address==self.STOCK_PICK and address in self.handlers:
             self.added.append(self.names()[1])
             self.returns(0); return
-        opening=self.handlers.get(address)=='q:navigator_to_with_context' and self.text(u.reg_read(UC_MIPS_REG_A0))=='localmusic/playlist_page'
+        opening=self.handlers.get(address)=='q:navigator_to_with_context' and self.text(u.reg_read(UC_MIPS_REG_A0))==PLAYLIST_PAGE
         super().hook(u,address,size,unused)
         if opening:
             self.playlist_rows=[self.node('button',f'playlist_{i}') for i in range(3)]
@@ -4424,6 +4435,43 @@ if is_m1plus:
         if stale: m.word(O['MCL_POS'],2)
         assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
         assert m.added==([] if stale else ['B']); passed()
+    # A hold menu's Add to Playlist (V063m pass, finding C: it opened localmusic/playlist_page, which V2.1 doesn't
+    # have, so nothing opened). V2.1's playlist_page init (0x53eb24) runs for real with the hold menu's context: it
+    # keeps the class (0xa06f54) and add mode 1. Then its row click (PLAYLIST_PICK, 0x53d300), also V2.1's, adds the
+    # hold menu's selection (qm_select's batch record) from pdeq_showlist as that class, toasts, and closes.
+    class HoldPlaylistMachine(QueueMachine):
+        LAYOUTS=M1PlaylistMachine.LAYOUTS
+        def __init__(self,**kw):
+            self.adds=[]; super().__init__(**kw)
+            self.mock('list_item_create','widget_off_by_func','widget_get_prop_int','widget_set_prop_int','loadLocalClassList',
+                      'getFormatString',*self.LAYOUTS)
+            self.word(syms['p_deque_playlist'],self.deque([self.song(f'List {i}') for i in range(3)]))
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,''); a,b,c,d=[u.reg_read(r) for r in REGS]
+            if name in self.LAYOUTS:
+                if name=='playlist_listitem_layout': self.nodes[a]['name']=str(b)
+                self.returns(0); return
+            if name.endswith('batch_add_file'): self.adds.append((a,b,c,d))  # the selection record too
+            super().hook(u,address,size,unused)
+            if name=='q:widget_on' and b==O['EVT_CLICK']:
+                it=self.get(self.get(a+O['W_EMITTER'])); self.word(it,d); self.word(it+12,c)
+        def open_playlists(self):  # V2.1's navigator: the asset's page, then its init with the context
+            page,ctx=self.opened[-1]; assert page==PLAYLIST_PAGE
+            view=self.node('scroll_view','playlist_scrollview'); win=self.node('window','playlist_page',[view])
+            self.word(view+O['W_PARENT'],win); self.word(win+O['W_PARENT'],self.wm); self.top=win; self.stack.append(win)
+            assert self.call(address=syms['playlist_page_init'],args=(win,ctx,0,0),gap=0)==0
+            return win
+    for kw,row,cls in (({},3,0xf001),({'page':'folder_page','cls':1},3,1)):
+        m=HoldPlaylistMachine(**kw); assert m.run(row,steps=1) is None
+        assert m.opened[-1]==(PLAYLIST_PAGE,0x10000|cls),m.opened
+        assert [c[:2] for c in m.calls if c[0].startswith('batch_')]==[('batch_init_selectrecord',20),('batch_set_selectitem',1)]
+        win=m.open_playlists(); assert m.get(O['PLAYLIST_ADD_MODE'])==1
+        rows=m.nodes[m.nodes[win]['children'][0]]['children']; assert [m.nodes[r].get('name') for r in rows[1:]]==['0','1','2']
+        f,ctx=m.handler(rows[2],O['EVT_CLICK']); assert f==O['PLAYLIST_PICK_ADDR'] and ctx==rows[2]
+        record=m.alloc(0x10); m.word(syms['p_vector_select_record'],record)  # what batch_init_selectrecord made
+        m.calls=[]; m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+        assert m.adds==[(cls,0xf00b,m.get(syms['p_deque_showlist']),record)],m.adds
+        assert [t[0] for t in m.toasts]==['dialog/msginfo_dialog'] and m.get(O['PLAYLIST_ADD_MODE'])==0; passed()
 
 # V1.32's rows builder (0x4b2dac), which iPod's playlist_rebuild hook rebinds after; V2.1's (0x53e74c) above.
 if not is_m1plus:
@@ -5052,7 +5100,7 @@ for cls,flag in ((0xf001,0),(0xf00a,1)):
 # row selected, as the batch Add to playlist does; the page adds the row's songs itself.
 for kw,row in (({},3),({'cls':0xf003,'page':'album_page'},5)):
     m=QueueMachine(**kw); assert m.run(row,steps=1) is None
-    assert m.opened[-1]==('localmusic/playlist_page',0x10000|m.get(syms['g_class_type']))
+    assert m.opened[-1]==(PLAYLIST_PAGE,0x10000|m.get(syms['g_class_type']))
     assert sel(m)==[('batch_init_selectrecord',20),('batch_set_selectitem',1)] and m.names()==['A','B','C']; passed()
 # Shuffle plays the collection's songs from a random one with shuffle saved, as Shuffle Songs.
 # Then the payload's Shuffle Songs takes the queue over (test/playback.py), so Up Next has an order.
@@ -12466,7 +12514,7 @@ passed()
 CONFIG.clear(); CONFIG['SHORTCUT']='7'; d=Machine(); del CONFIG['SHORTCUT']
 assert d.text(d.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))=='Playlists'
 d.calls=[]; d.call(address=payload_syms['home_shortcut_open'],args=(0,d.event,0,0),gap=0)
-assert [(d.text(c[1]),c[2]) for c in d.calls if c[0]=='navigator_to_with_context']==[('localmusic/playlist_page',0)]; passed()
+assert [(d.text(c[1]),c[2]) for c in d.calls if c[0]=='navigator_to_with_context']==[(PLAYLIST_PAGE,0)]; passed()
 assert texts()==['Accent: Ivory','Home: Split','Battery: Icon','Theme: Minimal']; passed()
 def click(i):
     m.calls=[]; f,ctx=m.handler(buttons[i],O['EVT_CLICK'])
