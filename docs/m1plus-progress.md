@@ -4753,6 +4753,37 @@ changed (`home_shortcut_open`, `qm_run`, `quick_cancel`, `ringnav`, `ringnav_abo
 **For the device pass** (one `--dev` flash; Screen Off set to Off, restored after): the checklist in
 `.plan/phase4-7-fixes.md`'s Device pass section.
 
+**Device pass** (Nov 12, `V064m` = "1.7.0 dev 7", over q2remote; shots in `work/phase4/4.7b/pass/`). All six items
+pass:
+
+- **A:** in Knob: Navigation a single press closes Quick Settings on Home, a list and Now Playing, with the screen
+  lit and nothing selected or paused; a double press turns the screen off; turns change the volume; in Knob: Volume
+  the press is the power key; Previous restarts the track.
+- **C:** Add to Playlist from the hold menu opens V2.1's playlist page from All Songs, Folder, an album and an
+  artist's All Songs, to an existing playlist and through New playlist; the database held each song in the right
+  playlist. Now Playing's More route still works. The test playlists were deleted (Delete Playlist? sheet too).
+- **E and F:** Confirm Shutdown? and Delete Song? have their edge, and the Added To Playlist toast flips, in Dark,
+  Light, and Light with Tangerine.
+- **B:** Home's row stays highlighted under Quick Settings in Modern and Minimal. **D:** System Setting is dimmed
+  inside System settings, as V2.1 does.
+- **Regressions:** the pull-down's open and close, the Wi-Fi tile's hold, the brightness slider (back to 68), the
+  bar's play icon, the back chevron and the paused drag all work.
+
+Findings, not fixed (to plan):
+
+1. With Quick Settings open, a knob turn's volume bar hides Home's highlight until the bar closes
+   (`B-finding-volbar.png`).
+2. After Add to Playlist from an album, the album page comes back with the placeholder cover
+   (`finding-album-cover.png`).
+3. In Light Mode, Delete Song?'s unticked checkbox is a filled grey circle that reads as ticked
+   (`E-light-delsong.png`).
+4. Switching Theme from Minimal to Modern turns Light Mode on (`LIGHT` 0 to 1, reproduced twice), and the first
+   switch to Minimal reset `MINIMAL_ACCENT` from 7 (Ivory) to 0.
+
+Restored afterwards: Screen Off 1 min, boot target `rockbox`, Light Mode Off, Theme Modern, both accents, Knob:
+Navigation, volume 11, DLNA (a stray tap switched it off; turned back on). `config.ini` matches the pre-pass
+backup byte for byte.
+
 ## How to check a build now
 
 ```sh
