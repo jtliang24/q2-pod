@@ -4572,6 +4572,59 @@ pane, Cover Flow's raw wheel).
 - Ogg and FLAC tags in the Library (album artist, long values; `xiph.c` is new in the payload);
 - slide motion as `V05Xm`.
 
+## 81. A paused drag on Now Playing's bar waits for Play (Nov 11)
+
+Section 80's device pass on `V061m` found one bug to fix: on local Now Playing, paused at 00:20, a drag along the
+bar left playback running at 01:17 (`work/sync/1.7.0-device/strip26.png`, s26–s30). The plan is
+`.plan/paused-drag.md`.
+
+**Cause.** `ringnav_touch` cancels any scrub and passes a touch on the bar to V2.1, "so a drag seeks the stock way".
+V2.1's Now Playing visitor (`0x53b350`–`0x53b384` in `build-m1/stock-demo`) binds the slider's value-changing
+(`0x11d`) to `0x53c834`, which resets `BC_IDLE` to 20 and, with the page's mode word (`0xa06f44`) at 0, clears
+the page's timer and sets the mode. Value-changed (`0x11c`) goes to `0x53c5d0`, which acts only in that mode: it
+calls `0x53c2d8`, which calls `seek_time` (V2.1's `player_seek_time`, which resumes a paused track), restarts the
+timer and sets the mode back to 0. A tap takes the same two events, so a paused tap resumed too. The knob's scrub
+and Soloify's bar already held a paused target through `np_scrub_end` → `seek_position` (`mclSetSeek` alone).
+
+**Fix** (M1 only). `ringnav_playing` binds `np_bar_touch` (`patch/m1plus_np_view.c`) on `slider_play`'s
+value-changing and value-changed after the trampoline's init, so it runs before V2.1's pair (AWTK's newest-first
+order). `st.np_drag` records whose a touch is, decided at its first value-changing: 0 undecided (`np_cancel`, which
+`ringnav_touch` calls on every touch-down on the bar, resets it), 1 the scrub's (paused), 2 V2.1's.
+- Paused, value-changing resets `BC_IDLE` as V2.1's handler did, goes to `np_scrub_drag` (Soloify's path) and
+  returns `STOP`. V2.1's mode stays 0, so its value-changed does nothing, and the release seeks once through
+  `seek_position`; `settle_poll` keeps the bar on the target until Play, as after a paused knob scrub.
+- Playing, both return 0 and the touch is V2.1's, even if playback pauses mid-drag.
+- A value-changed with no touch behind it (a value set) is V2.1's, which ignores it in mode 0. If the scrub has
+  already ended (`SCRUB_MS` with the finger held still), the release is V2.1's too.
+- A `busy` guard skips the value-changed the preview's own value write may send.
+
+No V2.1 address is written. On screen, a paused drag fills the bar white (the scrub's look, as on Soloify's page);
+a drag while playing keeps the accent.
+
+**Tests.** `patch.py` (five scenarios after the paused reopen checks): a paused drag previews and seeks once
+(`mclSetSeek` 150 + the CUE start, no `player_seek_time`, no `mclSetResume`), holds through `SCRUB_MS` + 5 s and
+gives the bar back `SETTLE_PLAY_MS` into playing; a paused tap at the right end seeks once; a playing touch stays
+V2.1's when paused mid-drag, and the next paused touch is the scrub's; a value set seeks nothing; and the preview's
+own value-changed (an `EchoQueue` machine echoes it) neither ends the drag nor seeks. Against `V061m` the block fails
+at its first check (no handler on the bar). `patch_gaps.py` is unchanged: still **694 expected failures in the same
+11 gaps**, 2,150 scenarios.
+
+**Gates** (from `work/gatetree` at `2556458f` plus the change). On the M1, `--dev` **V062m** (About: 1.7.0 dev 5)
+in `work/paused-drag/V062m/` (update sha256 `62dd2c95e5dd…`) passes the build audit, `patch.py`, `boot.py` (plain,
+`--home-menu`, `--media`, `--now-playing`, `--soloify` (its drag still sends one seek), `--bar-keys`), `playback`,
+`m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`, `pytest test/unit` (1,184) and `pytest test/fw`
+(3,638), the last two with nixpkgs' wrapped `clang` on `PATH` (section 80). The Q2 image is byte-identical to
+1.7.0's, and `q2compare --suites` passes all 37 runs. Logs:
+`work/paused-drag/gates/`. The main tree's `.build-number` had fallen behind the gate worktree's (it built a second
+`V05Ym`, not used); both now read 218.
+
+**For the device pass** (Screen Off set to Off, restored after):
+- paused: drag the bar; it stays paused, the bar holds the target, and Play starts from it;
+- paused: tap the bar's right end; the same;
+- paused: a knob scrub, then a tap; it settles at the new place;
+- playing: a drag and a tap seek as before;
+- Soloify, paused: a drag, unchanged.
+
 ## How to check a build now
 
 ```sh

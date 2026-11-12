@@ -233,6 +233,10 @@ Since progress 72 the M1's Now Playing is `patch/m1plus_np_view.c`. Upstream's e
 - in `navigation.c`: `np_sync`, the `glyph` and album branch of `np_theme`, `scrub_start`, `scrub_end`, `settle_poll` and `np_key`;
 - in `spotify.c`: `scrub_commit`, the `#if !M1PLUS` key and scrub functions, and `spot_refresh`'s label loop.
 
+One M1 seam binds into the page: `ringnav_playing`'s `#if M1PLUS` block binds `np_bar_touch` on `slider_play` (value-changing
+and value-changed) after `stock_playing_trampoline`, so a paused touch on the bar scrubs (progress 81). Keep it after the
+trampoline: AWTK runs the newest handler first, and the binding must come after V2.1's.
+
 `test/m1plus/q2only.py <tag>` lists them, as it does any change in a Q2-only branch. Make each in `m1plus_np_view.c`, or rule it out, before `UPSTREAM_BASE` moves. A new label or Theme rule belongs in `np_write` or `np_view_theme`, where both of the M1's pages get it.
 
 ## Footprint

@@ -344,6 +344,12 @@ comments, so a sync never conflicts on a comment (roadmap U1c). By file and func
 - `navigation.c`, `ringnav_art_header`: V2.1's album page big cover snprintf is at `0x525b84`.
 - `navigation.c`, `qm_pick`: on V2.1, `qm_sortselect_init` clears `to_modal`, so the dialog is the top
   window once `navigator_to` returns.
+- `navigation.c`, `ringnav_touch` and `ringnav_playing`: a touch on Now Playing's bar while paused is the scrub's,
+  not "the stock way". V2.1's slider handlers (value-changing `0x53c834`, value-changed `0x53c5d0`) seek through
+  `player_seek_time`, which resumes a paused track, so `ringnav_playing` binds `np_bar_touch`
+  (`patch/m1plus_np_view.c`) on `slider_play` after V2.1's init, and it runs first: paused at the touch's first
+  value-changing, the drag or tap previews as the knob's scrub does and its release seeks once and waits for Play;
+  playing, the touch stays V2.1's (progress section 81).
 - `navigation.c`, `qm_hold`: a touch long-press (`LP_TOUCH`) takes the row under the finger instead of the
   highlighted one, with the finger still down and no key to swallow.
 - `playback.c`, `stock_memory` and `ringnav_savequeue`: an era's Play All, Most Played, Ratings, Long Songs and Coverflow's all-albums play load the all-songs class (`0xf001`), which V2.1's resume rebuilds as the whole library, so without advanced play such a queue came back after a power-off as every song, on the same track. Power-off also keeps a queue of that class, with advanced play off and up to `SAVE_LIMIT` tracks, in order in `/mnt/data/ringnav-subset` ([`subset_save`](../patch/m1plus_playback_subset.inc): a checksum, the count and size, then each track's path and CUE start and end, as the snapshot's); any other queue removes it. When stock's resume rebuilds `0xf001`, `subset_only` keeps the saved tracks found in its rebuild, in their order, and the resumed track's index among them; stock's second and seek stand. A bad checksum, or a resumed track not among them (a rescan, another card), leaves stock's queue. ponytail: written only at power-off and on the saving reboots, as stock's own record; a track since removed from the library is left out.
