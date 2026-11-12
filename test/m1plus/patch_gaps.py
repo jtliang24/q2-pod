@@ -482,7 +482,7 @@ GAPS = {
     '06388513e1': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3204 assert m.call(170,gap=0)==11
     # Q2 pointer dispatch ABI (Phase 5)
     'c2221ae651': 'Q2 pointer dispatch ABI (Phase 5)',  # patch.py:3383 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
-    '4fbeccd763': 'Q2 pointer dispatch ABI (Phase 5)',  # PullDispatchMachine uses Q2 vtable and emitter fixtures; V2.1 needs its own fixture
+    '225d0d79d5': 'Q2 pointer dispatch ABI (Phase 5)',  # PullDispatchMachine uses Q2 vtable and emitter fixtures; V2.1 needs its own fixture
     # Cases that run V1.32 stock code or read a Q2 build file: config_playmode, the hscroll tick at 0x5e8914,
     # and the Q2 build's default.ttf
     'ee43bd3ea1': "V1.32's own code and assets run by the case (config_playmode, the hscroll tick, default.ttf)",  # patch.py:4595 assert [c[1:3] for c in m.calls if c[0]==config_playmode]==[(2,1)]; passed()

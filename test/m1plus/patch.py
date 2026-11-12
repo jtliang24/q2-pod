@@ -3712,6 +3712,9 @@ m.block_open=False; m.animating=1; long_return(m); assert m.top==browse
 passed()
 
 # Pull-to-search observes the page's native before-children callbacks and stock dispatch.
+# A pull starts 29 px under the edge stock's pull-down opens from (QUICK_EDGE_PX: the Q2's 31, V2.1's 81), on a page
+# placed so that is its first row's middle: y 60 on the Q2's page at y 30.
+PULL_Y=O['QUICK_EDGE_PX']+29
 class PullMachine(Machine):
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,''); a,b,c,d=[u.reg_read(r) for r in REGS]
@@ -3737,8 +3740,8 @@ class PullMachine(Machine):
                 ret=self.call(key=x,address=callback,args=(ctx,self.event,0,0),event_type=typ,gap=0,clear=False)
                 if ret==11:break
         return ret
-    def start_pull(self,page,w,x=100,y=60):
-        self.top=page; self.word(w+O['W_PARENT'],page);self.word(page+O['W_Y'],30)
+    def start_pull(self,page,w,x=100,y=PULL_Y):
+        self.top=page; self.word(w+O['W_PARENT'],page);self.word(page+O['W_Y'],PULL_Y-30)  # the press 30 px into the first row
         self.word(self.event+O['EVENT_Y'],y)
         return self.call(key=x,address=HOOKS['on_wm_tsdown_before_fun'][0],event_type=O['EVT_POINTER_DOWN'],gap=0)
     def prompt(self,page):
@@ -3788,7 +3791,7 @@ for page_name in ('folder_page','localmusic_page','allmusic_page','radio_page'):
                 if empty:m.word(w+O['TABLE_ROWS'],0);m.nodes[w]['children']=[]
             else:w,es=m.page_list(0 if empty else 5,name=page_name)
             page=m.top;m.start_pull(page,w)
-            m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=60+distance)
+            m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=PULL_Y+distance)
             # Local Songs' stock search is iPod's; Internet Radio's own search is in both.
             enabled=page_name in (('radio_page','allmusic_page','folder_page') if is_m1plus else ('radio_page','localmusic_page'))
             assert bool(m.prompt(page)['visible'])==(enabled and distance>=8)
@@ -3796,10 +3799,10 @@ for page_name in ('folder_page','localmusic_page','allmusic_page','radio_page'):
                 assert m.prompt(page)['text']==('Release to search' if distance>=48 else 'Pull to search')
                 assert m.click(es[0])==11 if es else True
             # click() normally uses a one-second gap; gesture state still belongs to the page.
-            m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=60+distance)
+            m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y+distance)
             radio=lambda: [c for c in m.calls if c[0]=='stock_radio_search']
             assert len(m.searches()+radio())==(1 if enabled and distance>=48 else 0) and not (radio() and page_name!='radio_page')
-            m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=120)
+            m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y+60)
             assert len(m.searches()+radio())==(1 if enabled and distance>=48 else 0)
             assert not m.prompt(page)['visible']
             passed()
@@ -3808,9 +3811,9 @@ for page_name in ('folder_page','localmusic_page','allmusic_page','radio_page'):
 # nor does any Home under a set without that list.
 for boot,view,want in ((classic_light_boot,'scroll_view_localmusic',1),(classic_light_boot,'scroll_view_home',0),(lambda k:None,'scroll_view_home',0)):
     m=PullMachine(); boot(m); w,es=m.page_list(5,name='home_page'); m.nodes[w]['name']=view; page=m.top
-    m.start_pull(page,w); m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=120)
+    m.start_pull(page,w); m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=PULL_Y+60)
     assert bool(m.prompt(page)['visible'])==bool(want),(view,want)
-    m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=120)
+    m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y+60)
     assert len(m.searches())==want and not m.prompt(page)['visible']
 passed()
 # A failed registration leaves no partial page callbacks; retry binds each event once.
@@ -3822,23 +3825,23 @@ for fail in ('EVT_WINDOW_BACKGROUND','EVT_POINTER_UP_BEFORE'):
     assert m.nodes[page].get('handlers',[])==before and not m.nodes[page].get('_pull_bound',0)
     m.pull_bind_fail=None;m.start_pull(page,w)
     handlers=m.nodes[page]['handlers'];assert len(handlers)==len(before)+6 and len(handlers)==len(set(handlers))
-    m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=120);m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=120)
+    m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=PULL_Y+60);m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y+60)
     assert len([c for c in m.calls if c[0]=='stock_radio_search'])==1
     passed()
 
 # Local Songs' virtual table keeps its rows and top offset across a search.
 m=PullMachine();w,rows,es=m.table_page(name=LOCAL_SONGS);page=m.top
 m.start_pull(page,w);count=m.get(w+O['TABLE_ROWS'])
-m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=120);m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=120)
+m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=PULL_Y+60);m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y+60)
 assert len(m.searches())==1 and m.get(w+O['TABLE_ROWS'])==count and m.get(w+O['TABLE_TOP'])==0
 # Stock search opens a dialog on this page; resuming it needs no index translation.
-m.start_pull(page,w);m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=60)
+m.start_pull(page,w);m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y)
 assert m.click(es[0])==0
 passed()
-for cancel in ('below','horizontal','upward','midlist','outside','edge0','edge30','edge31',
+for cancel in ('below','horizontal','upward','midlist','outside','edge0','above_edge','edge',
                'wheel','button','screen','navigate','background','close','destroy','surface','abort','move_hook'):
     m=PullMachine();w,es=m.page_list(8,height=240,name=LOCAL_SONGS);page=m.top
-    y=30 if cancel=='edge30' else 0 if cancel=='edge0' else 31 if cancel=='edge31' else 60
+    y=O['QUICK_EDGE_PX']-1 if cancel=='above_edge' else 0 if cancel=='edge0' else O['QUICK_EDGE_PX'] if cancel=='edge' else PULL_Y
     if cancel=='midlist':m.word(w+O['SCROLL_Y'],20)
     m.start_pull(page,w,x=250 if cancel=='outside' else 100,y=y)
     if cancel=='horizontal':m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],x=170,y=y+20)
@@ -3858,7 +3861,7 @@ for cancel in ('below','horizontal','upward','midlist','outside','edge0','edge30
         m.word(m.event+O['EVENT_Y'],y+60)
         m.call(key=100,address=syms['on_wm_before_tsmove_fun' if is_m1plus else 'on_wm_tsmove_before_fun'],event_type=O['EVT_POINTER_MOVE_BEFORE'],gap=0,clear=False)
     m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=y+(47 if cancel=='below' else 60))
-    assert len(m.searches())==(1 if cancel in ('edge31','move_hook') else 0),cancel
+    assert len(m.searches())==(1 if cancel in ('edge','move_hook') else 0),cancel
     assert not m.prompt(page)['visible'],cancel
     passed()
 
@@ -3885,7 +3888,7 @@ for distance in (7,48):
     m=PullDispatchMachine();w,es=m.page_list(5,height=240,name=LOCAL_SONGS);page=m.top
     m.start_pull(page,w)
     m.word(page+O['W_VT'],1);m.word(page+O['W_EMITTER'],page)
-    m.word(m.event+O['EVENT_Y'],60+distance)
+    m.word(m.event+O['EVENT_Y'],PULL_Y+distance)
     for fn,typ in (('widget_on_pointer_move',0x101),('widget_on_pointer_up',0x103)):
         m.calls=[]
         ret=m.call(key=100,address=syms[fn],args=(page,m.event,0,0),event_type=typ,gap=0,clear=False)
@@ -3897,9 +3900,9 @@ for distance in (7,48):
 m=PullMachine();w,es=m.page_list(3,height=240,name=LOCAL_SONGS);page=m.top
 m.start_pull(page,w);m.handlers.pop(syms['widget_dispatch_event_to_target_recursive'])
 m.word(page+0x4c,w);m.word(w+0x4c,es[0])
-m.calls=[];m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=120)
+m.calls=[];m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=PULL_Y+60)
 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
-m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=100);assert not m.searches()
+m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y+40);assert not m.searches()
 assert m.click(es[0])==11
 passed()
 
@@ -3913,8 +3916,8 @@ class SearchNavigationMachine(PullMachine,NavigationMachine):
         self.mock('search_page_init' if is_m1plus else 'dialog_search_dialog_init',prefix='nav:'); self.mock('widget_on')
 m=SearchNavigationMachine();w,es=m.page_list(6,height=240,name=LOCAL_SONGS);page=m.top
 m.order=[page];m.sync_order()
-m.start_pull(page,w);m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=120)
-m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=120)
+m.start_pull(page,w);m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=PULL_Y+60)
+m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y+60)
 assert m.nodes[m.top]['name']==SEARCH_PAGE and m.order[0]==page
 # The stock dialog owns its Back handling and its callbacks are outside this harness;
 # model the window manager popping it. The Local Songs page must still be the same

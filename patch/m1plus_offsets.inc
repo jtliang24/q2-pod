@@ -156,7 +156,7 @@
 #define EVT_WINDOW_CLOSE 0x12e
 #define PULL_SEARCH_PX 48       /* device tuning: release distance from the initial touch */
 #define PULL_CLAIM_PX 8
-#define QUICK_EDGE_PX 31        /* stock on_wm_tsmove_fun @0x4e8d10 */
+#define QUICK_EDGE_PX 81        /* V2.1 on_wm_tsmove_fun opens the pull-down from y < 81 (0x4cd830) */
 #define EVT_CLICK 0x10c
 #define EVT_FOCUS 0x10d
 #define EVT_BLUR 0x10e

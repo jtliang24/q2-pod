@@ -499,7 +499,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     quick, confirm, playlist = M1_AUDIT['quick'], M1_AUDIT['confirm'], M1_AUDIT['playlist']
     def word_at(a): return struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0]
     assert symbols(directory/'stock-demo')['dialog_dropdown_dialog_init'] == int(quick['init'][0], 16)
-    assert [word_at(a) & 0xffff for a, _, _ in quick['edge']] == [81]
+    assert [word_at(a) & 0xffff for a, _, _ in quick['edge']] == [m1plus_ipod.M1['QUICK_EDGE_PX']]
     assert [word_at(a) & 0xffff for a, _, _ in quick['events']] == [0x103, 0xff, 0x101, m1plus_ipod.M1['EVT_WINDOW_CLOSE']]
     rows = [(word_at(y) & 0xffff, word_at(h) & 0xffff) for y, _, h, _, _ in confirm['prompt_rows']]
     assert max(y + h for y, h in rows) == 106, rows
