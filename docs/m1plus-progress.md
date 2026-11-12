@@ -4822,6 +4822,26 @@ three functions changed (`qm_run`, `ringnav_about`, `ringnav_paint_bg`, the last
 **For the device pass** (one `--dev` flash; Screen Off set to Off, restored after): the checklist in
 `.plan/phase4-7-pass-fixes.md`'s Device pass section.
 
+**Device pass** (Nov 12, `V068m`, over q2remote; shots in `work/phase4/4.7c/pass/`). All four fixes pass, with no
+new finding:
+
+- **View Queue** (Shuffle off, `PLAYMODE` 3): from Now Playing's hold menu (a Play/Pause hold) it opens V2.1's
+  queue. Enlarged Art stayed away for 25 s over it; Previous and a tap outside close it; a row plays (the queue stays
+  open, as V2.1's does). The plan's "from All Songs' hold menu" was wrong: View Queue is in Now Playing's menu only
+  (`QM_PLAYING`), as on the Q2.
+- **The cover:** on *After Laughter*, Add to Playlist from a track's hold menu through New playlist ("t"), then to
+  that existing playlist: the album's art came back both times, and the toast showed. The database held both songs
+  in "t"; the playlist was then deleted (Delete Playlist? sheet), leaving the table empty as before.
+- **The volume over Quick Settings:** a knob turn keeps Home's row highlighted under the pull-down, in Modern and
+  Minimal.
+- **The checkbox:** Delete Song?'s unticked box is a clear ring in Light and Dark, and ticked shows the accent dot
+  (then Cancel). The Theme picker's and Screen Off's rings are clear in Light.
+- **Regressions:** the knob's single press closes Quick Settings with the screen lit; the confirm sheet's edge; the
+  paused drag stays paused. Previous over Quick Settings on Home is the track key, as Home's Previous is by design.
+
+Restored afterwards: Screen Off 1 min, boot target `rockbox`, Theme Modern, Light Mode Off, both accents (Cobalt,
+Ivory), Shuffle, volume 11, Warm Blood paused at its start. `config.ini` matches the pre-pass backup byte for byte.
+
 ## How to check a build now
 
 ```sh
