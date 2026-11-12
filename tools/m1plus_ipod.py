@@ -41,7 +41,7 @@ M1_STR = {m[1]: m[2] for m in re.finditer(r'^#define\s+(\w+)\s+"([^"]*)"', (ROOT
 M1_VIEW_COVER, M1_VIEW_BIGCOVER, M1_VIEW_FAV, M1_VIEW_MORE = (M1_STR[n] for n in ('VIEW_COVER', 'VIEW_BIGCOVER', 'VIEW_FAV', 'VIEW_MORE'))
 
 AUDIT = json.loads((ROOT/'patch/m1plus_ipod.json').read_text())
-UI_ASSETS = AUDIT['assets'] | AUDIT['navbar_only'] | AUDIT['slide_only']
+UI_ASSETS = AUDIT['assets'] | AUDIT['navbar_only'] | AUDIT['slide_only'] | {p: r['sha256'] for p, r in AUDIT['m1_only'].items()}
 
 # 4.2: V2.1's system_bar.bin is a system_bar of view_bar_left (img_playstate, img_volume, label_volume, img_digital), a
 # digit_clock (bar_dclock), view_bar_right (img_btclass, img_synclink, img_wifi), and the battery as a progress bar
@@ -630,6 +630,25 @@ def confirm_dialog(root):
           CONFIRM_H == root[1][3], 'Unexpected confirm rows')
 
 
+# V2.1's toast (Added To Playlist and the rest): a clear 260x180 dialog over msginfo_bg, a black box with a #666666 edge,
+# whose labels its init makes white. The style hook flips the labels to ink in Light Mode, but not the art, so the text
+# went dark on black (V063m pass, finding F). Drawn in styles instead, the box, edge and text flip together.
+MSGINFO = 'dialog/msginfo_dialog.bin'
+
+
+def msginfo_dialog(root):
+    """V2.1's toast box in styles: black, a 1 px edge in CONFIRM_EDGE, its corners; size, place and highlight kept."""
+    style = {f'style:{s}:{k}': v for s in TEXT_STATES for k, v in (('bg_color', '#00000000'), ('bg_image', 'msginfo_bg'),
+                                                                   ('border_color', '#00000000'), ('round_radius', '12'))}
+    check(root[0] == 'dialog' and root[1] == [0, 0, 260, 180] and not root[3] and root[2] == {
+        'name': 'msginfo_dialog', 'highlight': 'default(alpha=100)', 'self_layout': 'default(x=c,y=m,w=260,h=180)', **style},
+          'Unexpected toast dialog')
+    for state in TEXT_STATES:
+        del root[2][f'style:{state}:bg_image']
+        root[2].update({f'style:{state}:bg_color': '#000000', f'style:{state}:border_color': CONFIRM_EDGE,
+                        f'style:{state}:border': 'all', f'style:{state}:border_width': '1'})
+
+
 def quiet_icon(name, data):
     """The audited V2.1 control image (`quiet_icons`) as the iPod's quiet glyph of the same name, greyer when pressed."""
     check(sha(data) == AUDIT['quiet_icons'].get(name), f'{name}: unaudited control icon')
@@ -641,7 +660,7 @@ def quiet_icon(name, data):
 
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
 REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page, BIGCOVER: bigcover_page, VOLUME: volume_dialog,
-            QUICK: quick_settings, CONFIRM: confirm_dialog} | {
+            QUICK: quick_settings, CONFIRM: confirm_dialog, MSGINFO: msginfo_dialog} | {
     p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
     p: library_page(p) for p in LIBRARY_PAGES}
 

@@ -287,6 +287,12 @@
     "playlist_page.bin": "4c01af954a2f43bd90be84729bda244eb2567f608ae7a369c4f341121cd95466",
     "system_bar.bin": "c05f9c3c928984edc81e4f02a0905ecf84ff71a80908a4520afca5fbf7545d18"
   },
+  "m1_only": {
+    "dialog/msginfo_dialog.bin": {
+      "sha256": "d7d2b3ae29e32d62e16fcc232e482e33876cf8affe4db97b0526fc2e81fa9e26",
+      "why": "V2.1's toast (no V1.32 page maps to it): its msginfo_bg art drawn in styles, so Light Mode flips the box with its text (Phase 4.7 fixes, F)"
+    }
+  },
   "navbar_only": {
     "audiosetting_page.bin": "5ea8332e1a1514d1a5cf0df18229989c75c6899870ac870dd9bdf01252f31fc8",
     "playset/balance_page.bin": "d2e59a8376b18b16055c199fc58030743a80cd9358b55e408fb0e52711c1f3a7",

@@ -47,3 +47,36 @@ def test_confirm_dialog_rows_clear_the_prompts(monkeypatch):
     monkeypatch.setattr(m1plus_ipod.ipod, 'CONFIRM_TOP', m1plus_ipod.CONFIRM_PROMPTS_END - 1)
     with pytest.raises(ValueError, match='^Unexpected confirm dialog$'):
         m1plus_ipod.confirm_dialog(confirm())
+
+
+def msginfo():
+    """V2.1's msginfo_dialog.bin: a clear 260x180 dialog over msginfo_bg, its corners; its init adds the labels."""
+    style = {f'style:{s}:{k}': v for s in STATES for k, v in (('bg_color', '#00000000'), ('bg_image', 'msginfo_bg'),
+                                                              ('border_color', '#00000000'), ('round_radius', '12'))}
+    return ['dialog', [0, 0, 260, 180], {'highlight': 'default(alpha=100)', 'name': 'msginfo_dialog',
+                                         'self_layout': 'default(x=c,y=m,w=260,h=180)', **style}, []]
+
+
+def test_msginfo_dialog():
+    """The toast's box in styles, so Light Mode flips it with its text (V063m pass, finding F)."""
+    root = msginfo()
+    m1plus_ipod.msginfo_dialog(root)
+    assert root[1] == [0, 0, 260, 180] and root[3] == []
+    assert (root[2]['name'], root[2]['highlight'], root[2]['self_layout']) == (
+        'msginfo_dialog', 'default(alpha=100)', 'default(x=c,y=m,w=260,h=180)')
+    assert not any(k.endswith('bg_image') for k in root[2])
+    for s in STATES:
+        assert [root[2][f'style:{s}:{k}'] for k in ('bg_color', 'border_color', 'border', 'border_width', 'round_radius')] == [
+            '#000000', '#666666', 'all', '1', '12']
+    assert m1plus_ipod.REWRITES[m1plus_ipod.MSGINFO] is m1plus_ipod.msginfo_dialog
+
+
+@pytest.mark.parametrize('change', [lambda r: r[2].update(name='x'), lambda r: r[1].__setitem__(3, 181),
+                                    lambda r: r[3].append(['button', [0, 128, 100, 52], {}, []]),
+                                    lambda r: r[2].update({'style:normal:bg_image': 'confirminfo_bg'})])
+def test_msginfo_dialog_wants_stock(change):
+    """rippercompleted_dialog's tree, a button over confirminfo_bg, isn't this one."""
+    root = msginfo()
+    change(root)
+    with pytest.raises(ValueError, match='^Unexpected toast dialog$'):
+        m1plus_ipod.msginfo_dialog(root)

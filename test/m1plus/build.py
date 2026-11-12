@@ -527,8 +527,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # Each V2.1 iPod page is the stock page the inventory hashed, decodes and re-encodes exactly, and its init
     # function is in V2.1's demo.
     from ipod import decode, encode, walk
-    for section in SECTIONS:
-        for page, digest in M1_AUDIT[section].items():
+    m1_only = {p: r['sha256'] for p, r in M1_AUDIT['m1_only'].items()}  # V2.1 pages no V1.32 page maps to
+    assert all(r['why'] for r in M1_AUDIT['m1_only'].values()) and not set(m1_only) & {r['v21'] for r in MAPPED.values()}
+    for section in (*SECTIONS, 'm1_only'):
+        for page, digest in (m1_only if section == 'm1_only' else M1_AUDIT[section]).items():
             data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
             assert sha(data) == digest and encode(decode(data)) == data, page
     for page, row in MAPPED.items():
