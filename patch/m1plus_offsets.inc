@@ -930,6 +930,9 @@ extern unsigned char m1_return_latch;
 #define BC_IDLE 0x97ccd0
 #define BC_IDLE_T int
 #define BC_IDLE_FULL 20
+/* V2.1's queue: Now Playing's More opens it (0x53b14c); V1.32's playerqueue_page isn't V2.1's, so a hold menu's
+ * View Queue off Shuffle opens this too. */
+#define STOCK_QUEUE_DIALOG "dialog/playqueue_dialog"
 /* Tidal's saved login, a string in theTidal (0xa44 bytes) that tidal_tidal_main_init (0x4b9e44) tests before it builds
  * its page under its login page (m1_tidal_login, CALL_SITES TIDAL_LOGIN). */
 #define TIDAL_SAVED_LOGIN 0x929

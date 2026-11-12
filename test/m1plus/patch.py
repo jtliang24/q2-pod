@@ -4294,7 +4294,12 @@ m.press(6000); assert m.hold()==11 and m.labels()==SONG_MENU[:2]+['View Queue']+
 # A folder play's untagged record: the player's parsed title once it has parsed that file.
 m=playing_menu(); id3=syms['g_play_id3_info']; m.u.mem_write(id3,b'/p/B\0'); m.u.mem_write(id3+O['ID3_TITLE'],b'Parsed\0')
 m.press(6000); assert m.hold()==11 and m.nodes[m.title]['text']=='Parsed'; passed()
-m=playing_menu(); assert m.run(2) is None and m.opened[-1][0]=='playerqueue_page' and m.names()==['A','B','C'] and not m.playback(); passed()
+# Off Shuffle, the stock queue. M1 Plus: V2.1's (no playerqueue_page), as Now Playing's More opens it (0x53b14c):
+# Enlarged Art's countdown reset first, so the big cover doesn't open over it.
+m=playing_menu()
+if is_m1plus: m.word(O['BC_IDLE'],3)
+assert m.run(2) is None and m.opened[-1][0]==ui_page('dialog/playqueue_dialog' if is_m1plus else 'playerqueue_page')
+assert m.names()==['A','B','C'] and not m.playback() and (not is_m1plus or m.get(O['BC_IDLE'])==O['BC_IDLE_FULL']); passed()
 for action,expected,said in ((0,['A','B','B','C'],None),(1,['A','B','C','B'],None)):
     m=playing_menu(); assert m.run(action)==said and m.names()==expected and not m.playback(); passed()
 m=playing_menu(); assert m.run(3) is None

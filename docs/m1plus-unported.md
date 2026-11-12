@@ -49,7 +49,7 @@ to its [progress](m1plus-progress.md) section.
 | [An artist's albums tab's album-artist rewrite](#an-artists-albums-tab) | 1.2.9 | `toolsQueryContentDbTable` | Planned |
 | [Folder's roots without OTG](#folders-roots-without-otg) | 1.2.2 | `folder_load_top` | Planned |
 | [The Wi-Fi transfer page](#the-wi-fi-transfer-page) | 1.3.0 | `WEB` | Planned |
-| [View Queue's stock queue page](#view-queues-stock-queue-page) | 1.2.2 | `qm_run`'s `QA_QUEUE` off Shuffle (`navigator_to("playerqueue_page")`) | Planned |
+| [View Queue's stock queue page](#view-queues-stock-queue-page) | 1.2.2 | `qm_run`'s `QA_QUEUE` off Shuffle (`navigator_to("playerqueue_page")`) | Ported (V2.1's queue, progress 84) |
 | [The rip-complete toast in Light Mode](#the-rip-complete-toast) | the M1's own | `dialog/rippercompleted_dialog.bin` (`tools/m1plus_ipod.py` `REWRITES`) | Planned |
 | [Quick Settings' brightness through a swipe up](#quick-settings-brightness) | 1.3.8 | `g_dropdown_menu_state`; `quick_stuck` (1.4.5) | Ported (ipod-ui 4.7, progress 82) |
 | [Knob: Navigation on Set Time Manually](#set-time-manually) | the M1's own | an `m1plus_contexts.inc` row | Planned |
@@ -86,9 +86,8 @@ album-worker cancellation and USB-storage shutdown covered in emulation, and the
 ## Known issues on the M1
 
 Found on the device and not fixed yet. Each goes to a fix round of its own:
-- **G1. View Queue does nothing without a shuffle.** `qm_run` falls back to
-  `navigator_to("playerqueue_page")`, a Q2 page V2.1 does not have: its queue is the player's list
-  dialog. With a shuffle on, View Queue opens. This predates 1.5.8
+- **G1. View Queue does nothing without a shuffle.** Fixed in progress 84: it opens V2.1's queue
+  ([View Queue's stock queue page](#view-queues-stock-queue-page)). Found before 1.5.8
   ([progress section 54](m1plus-progress.md#54-fixes-for-the-158-device-pass-nov-1)).
 - **G2. Now Playing shows a refused track.** After the player refuses a file (the oversized copy in
   section 54), Now Playing's position and the album list's highlight move to it while the previous
@@ -275,11 +274,10 @@ checked against the patch's strings.
 
 ### View Queue's stock queue page
 
-A hold menu's View Queue off Shuffle (`playback_listable()` false) opens V1.32's `playerqueue_page`, which V2.1
-doesn't have: its queue is `dialog/playqueue_dialog`, from Now Playing's More menu. So on the M1 that row does
-nothing. `patch.py`'s navigator mocks found it after the V063m pass (progress §83); it is the gap
-`View Queue's stock queue page` in `test/m1plus/patch_gaps.py`. Porting it needs V2.1's playqueue dialog
-audited (its context and how it is opened).
+Ported in progress 84. A hold menu's View Queue off Shuffle (`playback_listable()` false) opened V1.32's
+`playerqueue_page`, which V2.1 doesn't have, so the row did nothing. It now opens V2.1's queue,
+`dialog/playqueue_dialog`, as Now Playing's More does (`0x53b14c`): Enlarged Art's countdown (`BC_IDLE`) reset,
+then `navigator_to`. The dialog's init reads only the player's list, so it opens over any page.
 
 ### The rip-complete toast
 

@@ -13545,8 +13545,15 @@ static int qm_run(const void *unused) {
                 rec_hash(deque_at(queue, at)) == st.qm_forced_hash)
                 playback_move(at);
             up_next(page_closed, page_keyup);
-        } else
+        } else {
+#if M1PLUS /* no playerqueue_page: V2.1's queue, as Now Playing's More opens it (0x53b14c), which first resets
+            * Enlarged Art's countdown so the big cover doesn't open over it */
+            *(volatile BC_IDLE_T *)BC_IDLE = BC_IDLE_FULL;
+            navigator_to(STOCK_QUEUE_DIALOG);
+#else
             navigator_to("playerqueue_page");
+#endif
+        }
     } else if (a == QA_MORE && st.qm_kind == QM_PLAYLIST) {
 #if M1PLUS /* no playlistsmore_page: the playlist's editor (m1plus_nav_playlist_hold.inc) */
         if (r) ple_open((void *)(long)st.qm_idx, 0);
