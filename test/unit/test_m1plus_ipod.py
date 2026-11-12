@@ -21,7 +21,10 @@ def test_confirm_dialog():
     m1plus_ipod.confirm_dialog(root)
     top, w = m1plus_ipod.M1['CONFIRM_TOP'], m1plus_ipod.M1['UI_W']
     assert top == 112 and root[1] == [0, 0, w, top + 96] and root[2]['self_layout'] == 'default(x=0,y=0,w=100%,h=208)'
-    assert all(root[2][f'style:{s}:bg_color'] == '#000000' and root[2][f'style:{s}:border_color'] == '#00000000' for s in STATES)
+    assert all(root[2][f'style:{s}:bg_color'] == '#000000' for s in STATES)
+    # its foot's 1 px rule: Light Mode flips the sheet to the page's paper (V063m pass, finding E)
+    assert all((root[2][f'style:{s}:border_color'], root[2][f'style:{s}:border'], root[2][f'style:{s}:border_width']) ==
+               ('#666666', 'bottom', '1') for s in STATES)
     assert not any(k.endswith(('round_radius', 'bg_image')) for k in root[2])
     for i, (n, name, text) in enumerate(zip(root[3], ('btn_cancel', 'btn_enter'), ('Cancel', 'OK'))):
         assert n[0] == 'button' and n[1] == [0, top + 48 * i, w, 48]

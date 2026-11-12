@@ -602,6 +602,7 @@ def quick_settings(root):
 CONFIRM = 'dialog/confirminfo_dialog.bin'
 CONFIRM_STOCK = ([0, 0, 260, 180], [[1, 131, 128, 48], [131, 131, 128, 48]])
 CONFIRM_H = M1['CONFIRM_TOP'] + 2 * ipod.CONFIRM_ROW
+CONFIRM_EDGE = '#666666'  # V2.1's dialog edge (msginfo_bg's, confirminfo_bg's): about #9b9b9b in Light Mode
 CONFIRM_PROMPTS_END = 106  # m1plus_ipod.json confirm.prompt_rows: Delete File's check, y 66 and 40 tall
 
 
@@ -617,6 +618,13 @@ def confirm_dialog(root):
             del root[2][f'style:{state}:{key}']
         root[2][f'style:{state}:bg_color'] = '#000000'
     ipod.confirm_rows(root)
+    # The sheet ends above the page (the Q2's fills the screen), and V2.1 dims nothing under it: its init clears the
+    # highlight (set_dialog_highlight sets ""). Light Mode flips the black sheet to the page's paper, so a 1 px rule
+    # along its foot, V2.1's own dialog edge grey, which flips with it, keeps the two apart; only the foot, so the
+    # border stays clear over the bar's ends.
+    for state in TEXT_STATES:
+        root[2].update({f'style:{state}:border_color': CONFIRM_EDGE, f'style:{state}:border': 'bottom',
+                        f'style:{state}:border_width': '1'})
     check([n[1] for n in root[3]] == [[0, M1['CONFIRM_TOP'], ipod.UI_W, ipod.CONFIRM_ROW],
                                       [0, M1['CONFIRM_TOP'] + ipod.CONFIRM_ROW, ipod.UI_W, ipod.CONFIRM_ROW]] and
           CONFIRM_H == root[1][3], 'Unexpected confirm rows')
