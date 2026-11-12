@@ -953,6 +953,43 @@
         "0x2405012e",
         "init binds its window close (0x4750ec)"
       ]
+    ],
+    "into": [
+      [
+        "0x4742e4",
+        "0x8f82a96c",
+        "dropdown_dialog's visit reads syssetinto_flag (GOT gp-0x5694) at img_sysset"
+      ],
+      [
+        "0x4742ec",
+        "0x1c40ffe1",
+        "inside System settings (flag > 0) it branches to 0x474274: no click bound"
+      ],
+      [
+        "0x474264",
+        "0x8f82a95c",
+        "and playsetinto_flag (GOT gp-0x56a4) at img_playset"
+      ],
+      [
+        "0x47426c",
+        "0x18400007",
+        "inside Playback settings the same branch"
+      ],
+      [
+        "0x474274",
+        "0x8f99a8b4",
+        "which disables the switch (widget_set_enable, 0): drawn dimmed, by design (Phase 4.7 fixes, D)"
+      ],
+      [
+        "0x4754f4",
+        "0x14400013",
+        "System's click handler does nothing while syssetinto_flag is set"
+      ],
+      [
+        "0x475584",
+        "0x14400013",
+        "nor Playback's while playsetinto_flag is"
+      ]
     ]
   },
   "confirm": {

@@ -515,7 +515,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
                                                                 ('p_vector_select_record', 'p_deque_showlist')]
     # V2.1 has no localmusic/ pages: the payload names none (V063m's hold menu opened a localmusic/playlist_page).
     assert b'localmusic/' not in payload, 'patch.bin names a localmusic/ page'
-    for a, w, why in (quick['edge'] + quick['states'] + quick['events'] + playlist['calls'] + playlist['events'] +
+    # Inside System or Playback settings V2.1 disables that switch and binds it no click: dimmed by design.
+    assert [got(quick['into'][i][0]) for i in (0, 2, 4)] == [demo_syms[n] for n in
+                                                             ('syssetinto_flag', 'playsetinto_flag', 'widget_set_enable')]
+    for a, w, why in (quick['edge'] + quick['states'] + quick['events'] + quick['into'] + playlist['calls'] + playlist['events'] +
                       playlist['add_rows'] + [playlist['add_mode']] + [r[:2] + [r[4]] for r in confirm['prompt_rows']] +
                       [r[2:] for r in confirm['prompt_rows']]):
         assert word_at(a) == int(w, 16), why
