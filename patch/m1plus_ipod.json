@@ -876,5 +876,169 @@
         "dialog_volume_dialog_init moves the dialog to x 0"
       ]
     ]
+  },
+  "quick": {
+    "init": [
+      "0x475f04",
+      "dialog_dropdown_dialog_init (win): its window alone; a null one returns, and no widget moves after its visit (0x473f30) and dropdown_showface"
+    ],
+    "edge": [
+      [
+        "0x4cd830",
+        "0x28820051",
+        "on_wm_tsmove_fun opens the pull-down for a touch from y < 81 (QUICK_EDGE_PX)"
+      ]
+    ],
+    "states": [
+      [
+        "0x4cd84c",
+        "0x24020001",
+        "on_wm_tsmove_fun opens the pull-down at dropdown_menu_state 1"
+      ],
+      [
+        "0x475664",
+        "0x24020001",
+        "its pointer move drags it (state 1, then 2) from its bottom 60 px"
+      ],
+      [
+        "0x475690",
+        "0x24020002",
+        "its pointer move drags it (state 1, then 2) from its bottom 60 px"
+      ],
+      [
+        "0x4754bc",
+        "0x24030003",
+        "its slide timer (timer_idex) leaves it open at state 3"
+      ],
+      [
+        "0x475118",
+        "0xac400000",
+        "its window close sets state 0"
+      ],
+      [
+        "0x475310",
+        "0x2442ffff",
+        "its pointer-up starts the slide timer at states 1 and 2, wherever the release is (quick_stuck)"
+      ],
+      [
+        "0x475314",
+        "0x2c420002",
+        "its pointer-up starts the slide timer at states 1 and 2, wherever the release is (quick_stuck)"
+      ]
+    ],
+    "events": [
+      [
+        "0x475f34",
+        "0x24050103",
+        "init binds its pointer-up (0x4752f0): the release that slides it"
+      ],
+      [
+        "0x475f54",
+        "0x240500ff",
+        "init binds its pointer-down (0x47514c)"
+      ],
+      [
+        "0x475f74",
+        "0x24050101",
+        "init binds its pointer move (0x4755e8)"
+      ],
+      [
+        "0x475f94",
+        "0x2405012e",
+        "init binds its window close (0x4750ec)"
+      ]
+    ]
+  },
+  "confirm": {
+    "prompt_rows": [
+      [
+        "0x472d74",
+        "0x24060038",
+        "0x472d6c",
+        "0x24020014",
+        "a one-line prompt (type 1) at y 56, 20 tall"
+      ],
+      [
+        "0x472e30",
+        "0x24060019",
+        "0x472e28",
+        "0x24020050",
+        "a wrapped prompt (type 5) at y 25, 80 tall"
+      ],
+      [
+        "0x472eb0",
+        "0x24060022",
+        "0x472ea8",
+        "0x24020014",
+        "Delete File's prompt (type 3) at y 34, 20 tall"
+      ],
+      [
+        "0x472f40",
+        "0x24060042",
+        "0x472f34",
+        "0x24020028",
+        "Delete File's msg_delcheckbutton at y 66, 40 tall"
+      ],
+      [
+        "0x473008",
+        "0x24060022",
+        "0x473000",
+        "0x24020014",
+        "a prompt with a check (type 6) at y 34, 20 tall"
+      ],
+      [
+        "0x473098",
+        "0x24060042",
+        "0x47308c",
+        "0x24020028",
+        "its check button at y 66, 40 tall"
+      ],
+      [
+        "0x4730f0",
+        "0x24060028",
+        "0x4730e8",
+        "0x24020014",
+        "the countdown's prompt (type 7) at y 40, 20 tall"
+      ],
+      [
+        "0x473198",
+        "0x2406004b",
+        "0x47318c",
+        "0x24020012",
+        "its countdown line at y 75, 18 tall"
+      ]
+    ]
+  },
+  "playlist": {
+    "rebuild": "0x53e74c",
+    "calls": [
+      [
+        "0x53ebbc",
+        "0x0411fee3",
+        "playlist_page_init rebuilds its rows (bal 0x53e74c) with its window"
+      ],
+      [
+        "0x53eae8",
+        "0x0411ff18",
+        "its to-foreground handler (0x53ea2c) rebuilds them with its window"
+      ],
+      [
+        "0x53ea1c",
+        "0x0411ff4b",
+        "New Playlist's click (0x53e8e4) rebuilds them with its row: the rebuild takes widget_get_window"
+      ]
+    ],
+    "events": [
+      [
+        "0x53eb58",
+        "0x2405012d",
+        "playlist_page_init binds only its to-foreground (0x53ea2c): no key-up of its own (PLAYLIST_KEYUP)"
+      ]
+    ],
+    "add_mode": [
+      "0x53eb9c",
+      "0xac506f50",
+      "playlist_page_init keeps its context >> 16 at PLAYLIST_ADD_MODE (0xa06f50)"
+    ]
   }
 }

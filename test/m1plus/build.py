@@ -493,6 +493,23 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
     for a, w, why in home['safe_returns'] + [r[:2] + ['the pointer-up event id'] for r in home['unbound']]:
         assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
+    # 4.7's: V2.1's pull-down (dropdown_dialog) keeps V1.32's states (1 and 2 dragged or sliding, 3 open, 0 shut) and
+    # opens from QUICK_EDGE_PX; the confirm's prompts and checks end above CONFIRM_TOP; the playlist page's rows are one
+    # rebuild, called with any widget of its window, and it binds no key-up of its own.
+    quick, confirm, playlist = M1_AUDIT['quick'], M1_AUDIT['confirm'], M1_AUDIT['playlist']
+    def word_at(a): return struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0]
+    assert symbols(directory/'stock-demo')['dialog_dropdown_dialog_init'] == int(quick['init'][0], 16)
+    assert [word_at(a) & 0xffff for a, _, _ in quick['edge']] == [81]
+    assert [word_at(a) & 0xffff for a, _, _ in quick['events']] == [0x103, 0xff, 0x101, m1plus_ipod.M1['EVT_WINDOW_CLOSE']]
+    rows = [(word_at(y) & 0xffff, word_at(h) & 0xffff) for y, _, h, _, _ in confirm['prompt_rows']]
+    assert max(y + h for y, h in rows) == 106, rows
+    rebuild = int(playlist['rebuild'], 16)
+    assert all(word_at(a) == 0x04110000 | ((rebuild - int(a, 16) - 4) >> 2) & 0xffff for a, _, _ in playlist['calls'])
+    assert word_at(playlist['add_mode'][0]) & 0xffff == m1plus_ipod.M1['PLAYLIST_ADD_MODE'] & 0xffff
+    for a, w, why in (quick['edge'] + quick['states'] + quick['events'] + playlist['calls'] + playlist['events'] +
+                      [playlist['add_mode']] + [r[:2] + [r[4]] for r in confirm['prompt_rows']] +
+                      [r[2:] for r in confirm['prompt_rows']]):
+        assert word_at(a) == int(w, 16), why
     raw_styles = 'release/assets/default/raw/styles/'
     assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
         raw_styles + p for p in M1_AUDIT['styles']} | {
