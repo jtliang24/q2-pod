@@ -7696,7 +7696,7 @@ static int quick_slider(void *w) {
     void *win = w && !tk_strcmp(widget_get_prop_str(w, "name", ""), "slider_backlight")
                     ? window_of(w)
                     : (void *)0;
-    return win && !tk_strcmp(widget_get_prop_str(win, "name", ""), "statusbar_dialog");
+    return win && !tk_strcmp(widget_get_prop_str(win, "name", ""), QUICK_NAME);
 }
 static void quick_fill(void *w) {
     if (!quick_slider(w)) return;
@@ -8119,7 +8119,7 @@ int ringnav_paint_bg(void *w, void *canvas) {
             time_paint(w, canvas);
     }
     if (classic_pages() && P(canvas, CANVAS_LCD) &&
-        !tk_strcmp(widget_get_prop_str(w, "name", ""), "statusbar_dialog"))
+        !tk_strcmp(widget_get_prop_str(w, "name", ""), QUICK_NAME))
         quick_page(w, canvas);
     if (w == st.msg_win || w == st.usb_win) msg_paint(w, canvas);
     if (w == st.search_win) search_paint(w, canvas);
@@ -9232,7 +9232,7 @@ static void quick_swipe(void *target, void *event) {
     int from = I(g_pressdown_y, 0);
     if (from < QS_SWIPE_Y || from >= QS_SWIPE_STOCK || from - I(event, EVENT_Y) < SLIDE_PX ||
         I(g_dropdown_menu_state, 0) != 3 || (quick.slider && quick.slide > 0) || !classic_pages() ||
-        tk_strcmp(widget_get_prop_str(target, "name", ""), "statusbar_dialog"))
+        tk_strcmp(widget_get_prop_str(target, "name", ""), QUICK_NAME))
         return;
     I(g_pressdown_y, 0) = QS_SWIPE_STOCK;
 }
@@ -9268,7 +9268,7 @@ int ringnav_dispatch(void *target, void *event) {
         void *qs = target;
         if (type == EVT_POINTER_DOWN - 1 && target &&
             !tk_strcmp(widget_get_prop_str(target, "name", ""), "slider_backlight"))
-            while (qs && tk_strcmp(widget_get_prop_str(qs, "name", ""), "statusbar_dialog"))
+            while (qs && tk_strcmp(widget_get_prop_str(qs, "name", ""), QUICK_NAME))
                 qs = P(qs, W_PARENT); /* Quick Settings', not Settings' Brightness page */
         else
             qs = 0;
@@ -13984,11 +13984,15 @@ static int qm_hold(void) {
  * Play/Pause there switches it (ringnav_keylong). No toast: its msginfo_dialog would cover the
  * pull-down, taking the wheel and Centre for 2 s; the next tick shows the mode. */
 static int quick_volume(void) {
+#if M1PLUS /* the knob stays volume in Quick Settings (the user's choice, 2026-11-11): brightness is touch-only */
+    return 1;
+#endif
     if (!st.qs_wheel) st.qs_wheel = 1 + config_value("Q2POD", "QSVOLUME", 2, 0);
     return st.qs_wheel - 1;
 }
 static int quick_wheel_toggle(void *top) {
-    if (!usable() || !top || tk_strcmp(widget_get_prop_str(top, "name", ""), "statusbar_dialog"))
+    if (M1PLUS) return 0; /* no wheel to switch (quick_volume): the hold is stock's */
+    if (!usable() || !top || tk_strcmp(widget_get_prop_str(top, "name", ""), QUICK_NAME))
         return 0;
     int volume = !quick_volume();
     st.qs_wheel = 1 + volume;
@@ -14053,7 +14057,7 @@ static void stale_heal(void) {
  * does it. */
 static int quick_stuck(void *top) {
     return usable() && top &&
-           !tk_strcmp(widget_get_prop_str(top, "name", ""), "statusbar_dialog") &&
+           !tk_strcmp(widget_get_prop_str(top, "name", ""), QUICK_NAME) &&
            (unsigned)(I(g_dropdown_menu_state, 0) - 1) < 2 && !pointer_down() &&
            widget_get_prop_int(top, "timer_idex", -1) == -1;
 }
@@ -15871,7 +15875,7 @@ static int edit_single(const void *info) {
 
 static int edit_key(void *top, unsigned key) {
     static const unsigned release[EVENT_KEY / 4 + 1] = { [EVENT_KEY / 4] = WM_KEY_SLEEP };
-    int quick = top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "statusbar_dialog");
+    int quick = top && !tk_strcmp(widget_get_prop_str(top, "name", ""), QUICK_NAME);
     int n = fields(top);
     if (!quick && !n && !slider_page(top)) return 0;
     if (key == KEY_CENTER) {
@@ -16040,7 +16044,7 @@ int ringnav(void *ctx, void *event) {
          (key == KEY_RETURN && !*(volatile unsigned char *)RETURN_RELEASE_LATCH)) &&
         usable()) {
         void *top = window_manager_get_top_window(window_manager());
-        if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "statusbar_dialog")) {
+        if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), QUICK_NAME)) {
             dialog_quit(top, 0);
             return STOP;
         }

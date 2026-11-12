@@ -82,6 +82,8 @@ if is_m1plus:
 else:
     THEME_STYLES = None
     FREE_GOT = 0xa2638c
+# Quick Settings' window: V1.32's statusbar_dialog, V2.1's pull-down dropdown_dialog (QUICK_NAME, ipod-ui 4.7)
+QS_NAME = re.search(r'^#define QUICK_NAME "(\w+)"', (ROOT/('patch/m1plus_offsets.inc' if is_m1plus else 'patch/m1plus_q2.inc')).read_text(), re.M)[1]
 # The Library's rows: Q2's Local Music hook. V2.1 has no Local Music menu, so M1 Plus binds nothing
 # there and its rows are on the Q2 Pod page (library_page_open, checked on its own); the tests that click
 # the rows reach their handlers, the ones that page uses, through Q2's builder, entered directly.
@@ -2448,21 +2450,25 @@ for name in ('backlight_page','maxvol_page','bootvol_page','balance_page'):
     m.advance(300,clear=False); names=[c[0] for c in m.calls]
     assert 'on_wm_keyup_fun' in names and 'navigator_back' not in names; passed()
 # Quick Settings: the wheel sets its brightness slider within its range; Centre and Return close it,
-# as its swipe up does (dialog_quit), not stock's screen off and Home.
+# as its swipe up does (dialog_quit), not stock's screen off and Home. M1 Plus: the knob stays V2.1's volume there
+# (quick_volume, the user's choice, 2026-11-11), so a turn is stock's and the slider is touch-only.
 m=Machine(); bright=m.node('slider','slider_backlight',value=99)
-m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])]); m.mock('dialog_quit')
-assert m.call()==11 and m.nodes[bright]['value']==100
-assert m.call()==11 and m.nodes[bright]['value']==100
-assert m.call(O['KEY_PREV'])==11 and m.nodes[bright]['value']==99
+m.top=m.node('dialog',QS_NAME,[m.node('view','view_backlight',[bright])]); m.mock('dialog_quit')
+if is_m1plus:
+    assert m.call()!=11 and m.call(O['KEY_PREV'])!=11 and m.nodes[bright]['value']==99
+else:
+    assert m.call()==11 and m.nodes[bright]['value']==100
+    assert m.call()==11 and m.nodes[bright]['value']==100
+    assert m.call(O['KEY_PREV'])==11 and m.nodes[bright]['value']==99
 for key in ('KEY_CENTER','KEY_RETURN'):
     assert m.call(O[key])==11 and [c[1:3] for c in m.calls if c[0]=='dialog_quit']==[(m.top,0)]
 passed()
-if 'g_dropdown_menu_state' in syms:  # M1 Plus: a stub (V2.1's dropdown_menu_state unchecked)
+if True:  # M1 Plus: V2.1's dropdown_menu_state keeps V1.32's states (m1plus_ipod.json quick)
     # A swipe down whose release the pull-down never got (stock state 1 or 2, no touch, no slide timer)
     # leaves it on top off screen, the page under it stopped (#189): the next UI pass hands it the
     # release, which stock's handler slides; an open panel, a live drag and a running slide are left.
     for state,pressed,timer,stuck in ((1,0,None,1),(2,0,-1,1),(3,0,None,0),(0,0,None,0),(1,1,None,0),(1,0,7,0)):
-        m=Machine(); m.top=m.node('dialog','statusbar_dialog',**({} if timer is None else {'timer_idex':timer}))
+        m=Machine(); m.top=m.node('dialog',QS_NAME,**({} if timer is None else {'timer_idex':timer}))
         m.word(syms['g_dropdown_menu_state'],state); m.pressed=pressed
         m.handlers[payload_syms['stock_input_trampoline']]='stock_input'
         m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=O['EVT_POINTER_FIRST'],gap=0)  # a touch just now: a finger
@@ -2470,8 +2476,6 @@ if 'g_dropdown_menu_state' in syms:  # M1 Plus: a stub (V2.1's dropdown_menu_sta
         m.call(address=HOOKS['main_loop_sleep_default'][0],args=(0x1234,0,0,0),gap=0)
         assert m.ups==[m.top]*stuck,(state,pressed,timer)
     passed()
-else:
-    not_ported("Quick settings left off screen by a lost release closes on a key (quick_stuck, 1.4.5: g_dropdown_menu_state)")
 # A held Play/Pause there switches its wheel to stock's volume and back, kept as Q2POD QSVOLUME.
 # Q2 only (the user's choice, 2026-10-25): on M1 Plus the knob stays volume in Quick Settings, which
 # knob_nav_active leaves to stock, so there is no wheel there to switch.
@@ -2487,12 +2491,12 @@ if not is_m1plus:
     m=Machine(); m.config['QSVOLUME']='1'; bright=m.node('slider','slider_backlight',value=50)
     m.top=m.node('dialog','statusbar_dialog',[m.node('view','view_backlight',[bright])])
     assert m.call()!=11 and m.nodes[bright]['value']==50; passed()
-if 'g_dropdown_menu_state' in syms:  # M1 Plus: a stub until V2.1's dropdown_menu_state is checked (roadmap U4)
+if True:  # M1 Plus: V2.1's pull-down, at V2.1's dropdown_menu_state
     # A swipe up that closes it may start on the brightness slider: the slider gets its press only once the
     # touch goes 10 px more sideways than up or down, or with a tap's release; a touch that goes up first,
     # or any while stock slides the pull-down (g_dropdown_menu_state 1, 2), never reaches it, and a press
     # it has is aborted. Withheld events return 0, not STOP, so the window manager still sees the touch.
-    def slider_touch(steps,state=3,dialog='statusbar_dialog'):
+    def slider_touch(steps,state=3,dialog=QS_NAME):
         m=Machine(); bright=m.node('slider','slider_backlight',value=50)
         view=m.node('view','view_backlight',[bright]); m.top=m.node('dialog',dialog,[view])
         m.word(bright+O['W_PARENT'],view); m.word(view+O['W_PARENT'],m.top)
@@ -2512,8 +2516,6 @@ if 'g_dropdown_menu_state' in syms:  # M1 Plus: a stub until V2.1's dropdown_men
     assert slider_touch([('down',100,300),('up',100,300)],state=2)==[(0,[]),(0,[])]
     assert slider_touch([('down',100,300),('move',103,280)],dialog='backlight_page')==[(0,[D]),(0,[M])]  # Settings' slider is stock's
     passed()
-else:
-    not_ported("Quick settings' brightness kept through a swipe up (g_dropdown_menu_state: V2.1's dropdown_menu_state unchecked)")
 
 # Run stock's slider event handler with the packaged hit rectangle. Position arithmetic is
 # stock FP64 (unsupported by Unicorn); this checks capture and delivery, including outside drags.
@@ -12775,7 +12777,7 @@ for boot,classic in ((classic_light_on,True),(lambda k:k.config.update(THEME='0'
     assert m.nodes[q]['style']=='s_scrlabel_white20l'
     assert (on&0xffffffff,off&0xffffffff)==(color_t(O['STOCK_RED']),0xffffffff) if classic else (on,off)==(None,None)
 passed()
-if is_m1plus: not_ported("1.7.0 Quick Settings' swipe start (g_dropdown_menu_state unchecked)")
+# Q2 only: 1.7.0's swipe start is Classic's (quick_swipe runs under classic_pages() alone), and Classic is the Q2's.
 if not is_m1plus:
     # Quick Settings' swipe up, Classic: stock's handler starts it only from y 295 down, so a touch from y 250 on that's gone 10 px up counts as from there, the slider's or not, until the
     # slider has it. Above y 250 (the buttons), below 295 (stock's own), a short move or another window: left alone. Minimal: left alone.

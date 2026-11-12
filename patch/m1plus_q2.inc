@@ -96,6 +96,8 @@
 /* The playlist page's row click, which in add mode 2 (Now Playing's hold) adds the queue's selected
  * record, with the row as context. */
 #define PLAYLIST_PICK_ADDR 0x4b1d24
+/* Quick Settings' window (dialog_statusbar_dialog_init's), which navigation.c tells by name */
+#define QUICK_NAME "statusbar_dialog"
 /* Lock screen (lockscreen.c): the lock window's clock and battery, which Large lays out again. */
 #define VIEW_LOCK_TIME "clock_time"
 #define VIEW_LOCK_DATE "clock_date"

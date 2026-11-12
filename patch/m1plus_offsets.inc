@@ -536,6 +536,8 @@ static inline int arc_out(int r, int y) {
 /* The playlist page's row click, which in add mode 2 (Now Playing's hold) adds the queue's selected
  * record, with the row as context. */
 #define PLAYLIST_PICK_ADDR 0x53d300
+/* Quick Settings: V2.1's pull-down, dialog/dropdown_dialog.bin (dialog_dropdown_dialog_init, ipod-ui 4.7) */
+#define QUICK_NAME "dropdown_dialog"
 /* Lock screen (lockscreen.c): the lock window's clock and battery, which Large lays out again. */
 #define VIEW_LOCK_TIME "dclock_time"
 #define VIEW_LOCK_DATE "dclock_date"
@@ -972,6 +974,7 @@ extern unsigned char m1_return_latch;
 #define NP_IPOD_FAV_Y M1_UNPORTED
 #define NP_IPOD_BAR_X M1_UNPORTED
 #define NP_IPOD_BAR_Y M1_UNPORTED
+/* Classic's swipe up from Quick Settings' slider (quick_swipe, classic_pages() only): Classic is unported */
 #define QS_SWIPE_STOCK M1_UNPORTED
 #define QS_SWIPE_Y M1_UNPORTED
 #define STREAM_BG M1_UNPORTED

@@ -553,6 +553,10 @@ M1PLUS_CONTEXT_ALIASES = {
     'g_play_id3_info': 'playsong_id3info',
     'p_deque_screensaverlist': 'pdeq_screensaverlist',
     'g_power_chargestate': 'pmucharge_status',  # get_battery_capacity keeps 0-2 in both
+    # The pull-down (ipod-ui 4.7): on_wm_tsmove_fun and dropdown_dialog's handlers keep V1.32's states (1 and 2 dragged
+    # or sliding, 3 open, 0 shut; m1plus_ipod.json quick), and the window manager's pointer-down the touch's start
+    'g_dropdown_menu_state': 'dropdown_menu_state',
+    'g_pressdown_y': 'pressdown_y',
 }
 # V1.32's g_artist_type (load_localclass_list's flag) has no V2.1 twin: loadLocalClassList reads
 # artist_type itself, which home_page_init saves, so the payload's flag keeps its own storage.
