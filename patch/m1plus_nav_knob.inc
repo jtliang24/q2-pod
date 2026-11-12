@@ -8,6 +8,8 @@
         else if (key == KEY_VOLUMEDOWN) key = down, I(event, EVENT_KEY) = down;
         else if (key == KEY_POWER && !boot_guard) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
     }
+    /* Quick Settings keeps the knob's volume; its press closes it (quick_knob_key) */
+    if (quick_knob_key(key, boot_guard)) return STOP;
     /* Previous is Back: the page's back button, pressed (Home has nothing to go back to: there
      * it stays Previous track, but for its Settings list's back), also on a slider page, where the knob keeps the volume
      * (knob_back_active). It is the button stock takes as Previous: V2.1 swaps the two on a

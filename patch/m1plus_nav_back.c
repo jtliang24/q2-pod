@@ -190,6 +190,28 @@ static int knob_nav_active(void) {
     return knob_gate() && allowed_top(window_manager_get_top_window(window_manager()));
 }
 int ringnav_knob_nav(void) { return knob_nav_active(); }
+/* Quick Settings keeps the knob's volume (it isn't allowed_top: the user's choice, Nov 11), so its press
+ * stayed V2.1's power key, which turned the screen off where Centre closes it (ringnav). In Knob:
+ * Navigation a single press closes it instead, DOUBLE_CLICK_MS on, and a double press stays V2.1's
+ * power key, the screen off, as a double Centre does on every list (center_press). Knob: Volume keeps
+ * V2.1's key. The single runs only if the same pull-down is still on top. */
+static int quick_knob_single(const void *info) {
+    (void)info;
+    void *win = quick.knob_win;
+    quick.knob = 0;
+    quick.knob_win = 0;
+    if (win && usable() && window_manager_get_top_window(window_manager()) == win) dialog_quit(win, 0);
+    return 0;
+}
+static int quick_knob_key(unsigned key, int boot_guard) {
+    void *top = window_manager_get_top_window(window_manager());
+    if (key != KEY_POWER || boot_guard || !knob_gate() || !top ||
+        tk_strcmp(widget_get_prop_str(top, "name", ""), QUICK_NAME))
+        return 0;
+    quick.knob_win = top;
+    /* 2: the double press, V2.1's; 0: an overdue first's single ran now, and this press is taken */
+    return center_press(&quick.knob, &quick.knob_at, quick_knob_single, 0) != 2;
+}
 /* Previous is Back wherever ringnav navigates, and on V2.1's pages that keep the knob's volume but have a back
  * button: its sliders (Channel Balance, Startup and Max Volume, Brightness, Bluetooth volume, and the payload's
  * Crossfade, on Startup Volume's page) and the lock screen's About. On V039m Previous stayed a media key there.

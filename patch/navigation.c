@@ -3796,12 +3796,21 @@ static struct {
     void *win, *icon, *slider, *pressed; /* pressed: Classic's button under the finger */
     unsigned timer;
     int x, y, sx, sy, slide; /* slide: the slider's touch, 0 undecided, 1 its own, -1 the swipe's */
+#if M1PLUS
+    /* Knob: Navigation's press (quick_knob_key): its single's timer, the time of the press, and the
+     * pull-down it closes */
+    unsigned knob, knob_at;
+    void *knob_win;
+#endif
 } quick __attribute__((section(".scratch")));
 
 static int quick_cancel(void *ctx, void *event) {
     stop_timer(&quick.timer);
     quick.win = quick.icon = quick.slider = 0;
     if (ctx) quick.pressed = 0; /* the window's going */
+#if M1PLUS
+    if (ctx) stop_timer(&quick.knob), quick.knob_win = 0;
+#endif
     return 0;
 }
 static int quick_long(const void *unused) {

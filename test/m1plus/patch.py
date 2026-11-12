@@ -21861,6 +21861,28 @@ if is_m1plus:
         assert [knob(k,**kw) for k in ('KEY_VOLUMEUP','KEY_VOLUMEDOWN')]==[O['KEY_VOLUMEUP'],O['KEY_VOLUMEDOWN']],kw
     assert knob('KEY_POWER',setup=lambda m:m.byte(syms['g_power_longkey'],1))==O['KEY_POWER']
     assert knob('KEY_POWER',setup=lambda m:m.byte(O['BOOT_KEY_GUARD'],1))==O['KEY_POWER']; passed()
+    # Quick Settings keeps the knob's volume (not a page ringnav navigates), so its press was V2.1's power
+    # key, the screen off (V063m pass, finding A). In Knob: Navigation a single press closes it, DOUBLE_CLICK_MS
+    # on, and a double press stays V2.1's power key; Knob: Volume and a press the boot guard holds keep V2.1's key.
+    def qs_knob(mode='1',setup=lambda m:None):
+        m=input_machine(); m.config['KNOB']=mode; m.top=m.node('dialog',QS_NAME,[m.node()]); m.mock('dialog_quit')
+        setup(m); return m
+    def qs_quit(m): return [c[1:3] for c in m.calls if c[0]=='dialog_quit']
+    def qs_stock(m): return [c for c in m.calls if c[0]=='on_wm_keyup_fun']
+    m=qs_knob(); assert m.call(O['KEY_POWER'],gap=1000)==11 and not qs_stock(m)
+    m.advance(DC-1,clear=False); assert not qs_quit(m)
+    m.advance(1,clear=False); assert qs_quit(m)==[(m.top,0)] and not qs_stock(m); passed()
+    m=qs_knob(); assert m.call(O['KEY_POWER'],gap=1000)==11
+    assert m.call(O['KEY_POWER'],gap=100,clear=False)==0 and qs_stock(m) and m.get(m.event+O['EVENT_KEY'])==O['KEY_POWER']
+    m.advance(DC,clear=False); assert not qs_quit(m) and not m.timers; passed()
+    m=qs_knob(mode='0'); assert m.call(O['KEY_POWER'],gap=1000)==0 and qs_stock(m)
+    m.advance(DC,clear=False); assert not qs_quit(m); passed()
+    for setup in (lambda m:m.byte(syms['g_power_longkey'],1),lambda m:m.byte(O['BOOT_KEY_GUARD'],1)):
+        m=qs_knob(setup=setup); assert m.call(O['KEY_POWER'],gap=1000)==0 and qs_stock(m)
+        m.advance(DC,clear=False); assert not qs_quit(m); passed()
+    # Closed by its swipe before the single's time: nothing runs (the next top isn't the pull-down).
+    m=qs_knob(); qs=m.top; assert m.call(O['KEY_POWER'],gap=1000)==11
+    m.top=m.node('window','sysset_page',[m.node()]); m.advance(DC,clear=False); assert not qs_quit(m); passed()
 
 if is_m1plus:
     # Knob: Navigation (KNOB=1) on Now Playing, where the knob keeps the volume and its press is V2.1's
