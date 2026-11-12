@@ -8685,6 +8685,64 @@ assert did(m,'playing_timer_clear')==[m.win]; step(m,5000,wait=True); assert not
 centre(m); step(m); assert m.nodes[m.slider]['value']==110; passed()
 centre(m,50); m.playtime=111; reopen(m); assert m.nodes[m.slider]['value']==111 and m.starts==[]
 m.playtime=100; reopen(m); assert m.nodes[m.slider]['value']==100; passed()
+# M1: a touch on Now Playing's bar while paused is the scrub's (np_bar_touch, bound after V2.1's pair so it runs first, and
+# returning STOP so V2.1's value-changing never sets the mode its value-changed seeks in): it previews, its release seeks once
+# with mclSetSeek alone (V2.1's player_seek_time resumes) and the bar keeps the target until Play. Playing, the touch stays
+# V2.1's; a value-changed with no touch behind it (a value set) too. Whose a touch is is decided at its first value-changing.
+if is_m1plus:
+    class EchoQueue(QueueMachine):  # the slider's value set while echo is on sends value-changed, as AWTK's setter may
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            echo=(name=='widget_set_prop_int' and getattr(self,'echo',False) and u.reg_read(REGS[0])==getattr(self,'slider',0)
+                  and self.text(u.reg_read(REGS[1]))=='value')
+            r=super().hook(u,address,size,unused)
+            if echo: f,ctx=self.handler(self.slider,O['EVT_VALUE_CHANGED']); self.echoed.append(self.nested(f,ctx,self.event,0,0))
+            return r
+    def bar_page(status,machine=QueueMachine):
+        m=machine(queue=3,pos=1); m.handlers[playing+12]='stock_playing'; m.echoed=[]; scrub_page(m=m)
+        m.handlers.pop(syms['mclGetPlayStatus']); m.word(PLAY_STATUS,status)
+        for k,v in zip(('W_X','W_Y','W_W','W_H'),(40,300,240,30)): m.word(m.slider+O[k],v)
+        m.starts=[]; m.seeks=[]; return m
+    def bar_down(m):  # a finger down on the bar: the touch-down hook runs before the slider sees it
+        m.word(m.event+O['EVENT_Y'],310); step(m,100,address=HOOKS['on_wm_tsdown_before_fun'][0],event_type=O['EVT_POINTER_DOWN'],gap=50)
+    def bar(m,kind,value):  # the slider moved to value, then its event to the bound handlers (stock's own are V2.1's, not here)
+        m.advance(50,clear=False); m.nodes[m.slider]['value']=value
+        f,ctx=m.handler(m.slider,O[kind]); return step(m,address=f,args=(ctx,m.event,0,0),gap=0)
+    def idle(m): return m.u.mem_read(O['BC_IDLE'],1)[0]
+    # Paused drag: each move previews, white fill, BC_IDLE reset as V2.1's handler did; the release seeks once and holds.
+    m=bar_page(3); bar_down(m); m.byte(O['BC_IDLE'],3)
+    assert bar(m,'EVT_VALUE_CHANGING',120)==11 and did(m,'playing_timer_clear')==[m.win] and idle(m)==O['BC_IDLE_FULL']
+    for v in (140,150): assert bar(m,'EVT_VALUE_CHANGING',v)==11 and m.nodes[m.slider]['value']==v
+    assert m.nodes[m.elapsed]['text']=='02:30' and m.nodes[m.slider][FG]==-1 and not did(m,'mclSetSeek') and not m.seeks
+    m.word(m.items(m.get(syms['mcl_pdeqplaylist']))[1]+O['REC_CUE_START'],30)
+    assert bar(m,'EVT_VALUE_CHANGED',150)==11 and did(m,'mclSetSeek')==[180] and not m.seeks and not did(m,'mclSetResume')
+    assert bar(m,'EVT_VALUE_CHANGED',150)==0  # a value set after the touch: V2.1's
+    step(m,O['SCRUB_MS']+5000,wait=True); assert not m.seeks and not m.starts and m.nodes[m.slider]['value']==150
+    m.word(PLAY_STATUS,2); step(m,1000,wait=True); assert not m.starts
+    step(m,1500,wait=True); assert m.starts==[m.win] and not m.seeks; passed()
+    # Paused tap at the bar's right end: one seek, on the release.
+    m=bar_page(3); bar_down(m)
+    assert bar(m,'EVT_VALUE_CHANGING',225)==11 and not did(m,'mclSetSeek')
+    assert bar(m,'EVT_VALUE_CHANGED',225)==11 and did(m,'mclSetSeek')==[225]
+    step(m,O['SCRUB_MS']+5000,wait=True); assert not did(m,'mclSetSeek') and not m.seeks and m.nodes[m.slider]['value']==225; passed()
+    # Playing: V2.1's, even once paused mid-drag; the payload seeks nothing and the fill keeps the accent. A new touch,
+    # paused, is the scrub's.
+    m=bar_page(2); bar_down(m); m.byte(O['BC_IDLE'],3)
+    assert bar(m,'EVT_VALUE_CHANGING',150)==0 and not did(m,'playing_timer_clear') and m.nodes[m.slider][FG]==FILL_HI
+    m.word(PLAY_STATUS,3)
+    assert bar(m,'EVT_VALUE_CHANGING',160)==0 and bar(m,'EVT_VALUE_CHANGED',160)==0
+    assert not did(m,'mclSetSeek') and not m.seeks and not m.starts and m.nodes[m.slider][FG]==FILL_HI and idle(m)==3
+    bar_down(m); assert bar(m,'EVT_VALUE_CHANGING',170)==11 and m.nodes[m.slider][FG]==-1
+    assert bar(m,'EVT_VALUE_CHANGED',170)==11 and did(m,'mclSetSeek')==[170]; passed()
+    # A value set, no touch behind it: nothing, paused or playing, before any touch or after a touch-down.
+    for status in (3,2):
+        m=bar_page(status); assert bar(m,'EVT_VALUE_CHANGED',150)==0
+        bar_down(m); assert bar(m,'EVT_VALUE_CHANGED',150)==0 and not did(m,'mclSetSeek') and not m.seeks and not m.starts
+    passed()
+    # The preview's own value-changed (busy) neither ends the drag nor seeks; the release does.
+    m=bar_page(3,EchoQueue); bar_down(m); m.echo=True
+    assert bar(m,'EVT_VALUE_CHANGING',150)==11 and m.echoed==[0] and not did(m,'mclSetSeek') and m.nodes[m.slider][FG]==-1
+    m.echo=False; assert bar(m,'EVT_VALUE_CHANGED',150)==11 and did(m,'mclSetSeek')==[150]; passed()
 # SCRUB_MS without input commits once and gives the wheel back to the volume, not a tick sooner.
 m=scrub_page(); centre(m); step(m)
 step(m,O['SCRUB_MS']-1,wait=True); assert m.seeks==[] and not m.starts

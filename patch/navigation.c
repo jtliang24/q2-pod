@@ -546,6 +546,7 @@ typedef struct {
 #if M1PLUS
     const void *scrub_page; /* the np_page_t the scrub runs or settles on, 0 for the local page (m1plus_np_view.c) */
     unsigned np_repaint;    /* np_sync's repaint, after the frame that wrote the labels */
+    unsigned char np_drag;  /* whose the local bar's touch is: 0 not decided yet, 1 the scrub's, 2 V2.1's (np_bar_touch) */
 #endif
     int held_sec; /* a paused seek to scrub_to on scrub_track: the player's second then, +1; 0 none
                    */
@@ -6256,6 +6257,12 @@ int ringnav_playing(void *win, void *ctx) {
     st.np_cover = widget_lookup(win, VIEW_COVER, 1);
 #if M1PLUS
     if (st.np_cover) widget_on(st.np_cover, EVT_CLICK, np_art_click, (void *)0);
+    /* after stock's init bound V2.1's pair, so these run first: a paused touch scrubs (np_bar_touch) */
+    if (st.np_slider) {
+        widget_on(st.np_slider, EVT_VALUE_CHANGING, np_bar_touch, (void *)0);
+        widget_on(st.np_slider, EVT_VALUE_CHANGED, np_bar_touch, (void *)1);
+    }
+    st.np_drag = 0;
 #endif
     st.np_title = widget_lookup(win, "scrlabel_title", 1);
     st.np_bold = -1;
@@ -9186,7 +9193,8 @@ int ringnav_touch(void *ctx, void *event) {
     if (hold)
         stop_timer(&st.np_press); /* Swiping pages keeps the paused seek's preview. */
     else
-        np_cancel(); /* before the slider sees the touch, so a drag seeks the stock way */
+        np_cancel(); /* before the slider sees the touch, so a drag seeks the stock way; on
+                      * the M1, a paused one scrubs (np_bar_touch) */
     hide_outline();
     int result = stock_touch_trampoline(ctx, event);
     /* A tap is a fresh interaction: it cancels a pending screen-toggle pair and any spin. */

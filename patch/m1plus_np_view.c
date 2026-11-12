@@ -109,7 +109,8 @@ static void np_sync(void *top) {
  *
  * The local page follows stock's own key seek (0x52c754; docs/internals.md#scrub-ipod): its 250 ms timer stops, the slider and
  * label_playtime preview the target, player_seek_time commits it once on exit in track seconds (it adds a CUE track's start),
- * and the timer restarts. Spotify's page reads the target through np_scrub_shown, and seeks by its socket. */
+ * and the timer restarts. A paused touch on its bar scrubs too (np_bar_touch); a playing one is V2.1's. Spotify's page reads
+ * the target through np_scrub_shown, and seeks by its socket. */
 static void np_local_read(np_src_t *s) { *s = np_src_local(); }
 static void *np_local_bar(void) { return st.np_slider; }
 static int np_local_second(void) {
@@ -214,7 +215,8 @@ void np_scrub_start(const np_page_t *p) {
     rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
 }
 
-/* A finger on the page's bar: the target it holds, previewed as a scrub is, and seeking on its release. */
+/* A finger on the page's bar: the target it holds, previewed as a scrub is, and seeking on its release. Spotify's page sends
+ * its bar's every touch here; the local page only a paused one (np_bar_touch). */
 void np_scrub_drag(const np_page_t *p, int sec, int done) {
     if (!np_scrubbing(p)) np_scrub_start(p);
     st.scrub_to = sec;
@@ -227,10 +229,38 @@ void np_scrub_drag(const np_page_t *p, int sec, int done) {
     rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
 }
 
+/* The local bar's value-changing (ctx 0) and value-changed (ctx 1), bound after V2.1's, so they run first. V2.1's own pair
+ * seeks through player_seek_time, which resumes a paused track: value-changing (0x53c834) resets BC_IDLE, stops the page's
+ * timer and sets the page's mode word to 2, and value-changed (0x53c5d0) seeks only in that mode (0x53c2d8) and sets it back
+ * to 0. A touch is decided at its first value-changing, st.np_drag: paused, it is the scrub's, as Spotify's bar is, and its
+ * release seeks once and waits for Play (np_scrub_end); stopping value-changing is enough, V2.1's mode stays 0 and its
+ * value-changed does nothing. Playing, it stays V2.1's. A value-changed with no touch behind it (a value set) is V2.1's. */
+static int np_bar_touch(void *ctx, void *event) {
+    static unsigned char busy; /* the preview sets the slider's value, which may send value-changed */
+    int sec = widget_get_prop_int(st.np_slider, "value", 0);
+    (void)event;
+    if (busy) return 0;
+    if (!ctx) {
+        if (!st.np_drag) st.np_drag = mclGetPlayStatus() == 3 ? 1 : 2;
+        if (st.np_drag != 1) return 0;
+        *(volatile BC_IDLE_T *)BC_IDLE = BC_IDLE_FULL; /* V2.1's handler's, which no longer runs */
+    } else {
+        if (st.np_drag != 1) return 0;
+        st.np_drag = 2;
+        if (!np_scrubbing(&np_local)) return 0; /* ended SCRUB_MS after the finger stopped */
+    }
+    busy = 1;
+    np_scrub_drag(&np_local, sec, ctx != 0);
+    busy = 0;
+    return STOP;
+}
+
+/* Every touch on the local bar, before the slider sees it (ringnav_touch): it is decided afresh (np_bar_touch). */
 static void np_cancel(void) {
     unsigned settle = st.settle_timer; /* an earlier scrub's wait; the one scrub_end arms stays */
     const np_page_t *p = SCRUB_PAGE;
     stop_timer(&st.np_press);
+    st.np_drag = 0;
     scrub_end();
     if (!settle) return;
     stop_timer(&st.settle_timer);
