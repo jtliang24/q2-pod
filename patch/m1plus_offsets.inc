@@ -731,6 +731,9 @@ static inline int arc_out(int r, int y) {
 #define FORCE_REFRESH 0xa05a63 /* force_refreshflag: the stock queue row click sets it after start_playqueue (0x47a0f4) */
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
+/* albumcover_finishflag: the cover thread raises it as a task ends (set_albumcover_flag); the album page's cover
+ * timer (0x5261d8) sets the art then, and clears it */
+#define ALBUM_COVER_DONE 0xa05a5b
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
 /* V2.1 keeps the same block, the words at the same offsets from MCL_POS: mclGetPlayPos (0x5d4290),
  * mclGetPlayType, mclGetPlayMode, mclGetLastPos, mclGetRandomNum (the pool), mclCheckMplayerSocket

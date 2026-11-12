@@ -4477,6 +4477,23 @@ if is_m1plus:
         m.calls=[]; m.call(address=f,args=(ctx,m.event,0,0),gap=0)
         assert m.adds==[(cls,0xf00b,m.get(syms['p_deque_showlist']),record)],m.adds
         assert [t[0] for t in m.toasts]==['dialog/msginfo_dialog'] and m.get(O['PLAYLIST_ADD_MODE'])==0; passed()
+    # Its init sets cur_classtype to its own (0xf00b), so the album page under it reloads as it comes back (0x5266d4),
+    # its head's art laid out again as the placeholder; V2.1's cover timer (0x5261d8, run here) sets the art only on
+    # ALBUM_COVER_DONE, which it clears, long since consumed (V064m pass). Over the album page the hold menu binds a
+    # one-shot foreground handler that raises it again; over another page, none.
+    for page,bound in (('albuminfo_page',1),('allmusic_page',0)):
+        m=HoldPlaylistMachine(page=page); under=m.top; assert m.run(3,steps=1) is None and m.opened[-1][0]==PLAYLIST_PAGE
+        hs=[(f,ctx) for t,f,ctx in m.nodes[under].get('handlers',()) if t==O['EVT_WINDOW_FOREGROUND']]; assert len(hs)==bound, hs
+        if bound:
+            f,ctx=hs[0]; m.u.mem_write(O['ALBUM_COVER_DONE'],b'\0')
+            assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==7 and m.u.mem_read(O['ALBUM_COVER_DONE'],1)==b'\1'  # RET_REMOVE
+        passed()
+    for flag in (1,0):
+        m=QueueMachine(page='albuminfo_page'); m.handlers[0x525b00]='stock_album_cover'  # its art setter
+        for g in ('autochange_refresh','force_refreshflag'): m.u.mem_write(syms[g],b'\0')
+        m.u.mem_write(O['ALBUM_COVER_DONE'],bytes([flag])); info=m.alloc(0x40); m.word(info+0x24,m.top); m.calls=[]
+        assert m.call(address=0x5261d8,args=(info,0,0,0),gap=0)==8 and m.u.mem_read(O['ALBUM_COVER_DONE'],1)==b'\0'  # RET_REPEAT
+        assert [c[:2] for c in m.calls if c[0]=='stock_album_cover']==([('stock_album_cover',m.top)] if flag else []); passed()
 
 # V1.32's rows builder (0x4b2dac), which iPod's playlist_rebuild hook rebinds after; V2.1's (0x53e74c) above.
 if not is_m1plus:

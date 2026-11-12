@@ -13122,6 +13122,17 @@ static int qm_restore(void *page, void *event) {
     memcpy((void *)g_local_classinfo_save, st.qm_classinfo, sizeof st.qm_classinfo);
     return 0;
 }
+#if M1PLUS
+/* V2.1's playlist page (its init, 0x53eb24) sets cur_classtype to its own, so the album page it opened
+ * over reloads as it comes back (0x5266d4): its head is laid out again with the placeholder art, and its
+ * cover timer (0x5261d8) sets the album's only when the cover thread raises ALBUM_COVER_DONE, long done.
+ * Raised once more, the timer's next tick sets it again (0x525b00), from the same task and file. */
+static int qm_cover_again(void *page, void *event) {
+    (void)page, (void)event;
+    *(volatile unsigned char *)ALBUM_COVER_DONE = 1;
+    return 7; /* RET_REMOVE: once */
+}
+#endif
 
 /* Now Playing's More rows, for this record: Album info (0x5283b0) fills the album query and opens
  * playerjumpinfo_page; Artist info opens artistinfo_page with {class, record}. A song played in
@@ -13586,6 +13597,11 @@ static int qm_run(const void *unused) {
             g_delete_flag = 1;          /* My Fav reloads, as Now Playing's heart (0x52b2e8) */
     } else if (r && a == QA_PLAYLIST) { /* the playlist page's add mode adds the selected row */
         qm_select();
+#if M1PLUS /* the album's cover again as its page comes back (qm_cover_again) */
+        void *under = window_manager_get_top_window(window_manager());
+        if (under && !tk_strcmp(widget_get_prop_str(under, "name", ""), "albuminfo_page"))
+            widget_on(under, EVT_WINDOW_FOREGROUND, qm_cover_again, under);
+#endif
         /* M1 Plus: V2.1's mode 1 row click (0x53d470) adds the same selection from the same list
          * (pdeq_showlist, pvec_selectrecord) as the context's class (m1plus_ipod.json playlist) */
         navigator_to_with_context(
