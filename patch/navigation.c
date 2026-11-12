@@ -3780,6 +3780,7 @@ int ringnav_keylock_rows(void *win) {
     return 0;
 }
 static void quick_lock_text(void *win) {
+    if (M1PLUS) return; /* V2.1's pull-down keeps its own lock switch and label (quick_lock is native) */
     widget_set_text_utf8(widget_lookup(win, "label_lock", 1), lock_names[lock_choice()]);
     image_base_set_image(widget_lookup(win, "img_lock", 1),
                          g_keylock_flag ? "drop_keylockopen" : "drop_keylock");

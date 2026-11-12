@@ -65,6 +65,7 @@ if is_m1plus:
     HOOKS['player_change_music'] = M1PLUS_HOOKS['change_music']
     HOOKS['saverscreen_page_init'] = M1PLUS_HOOKS['screensaver_page_init']
     HOOKS['mclSetBtVol'] = M1PLUS_HOOKS['mclSetVol']  # V2.1's DAC and Bluetooth setter in one
+    HOOKS['dialog_statusbar_dialog_init'] = M1PLUS_HOOKS['dialog_dropdown_dialog_init']  # Quick Settings (QUICK_NAME)
     # Every hook a test enters is one V2.1 really jumps from (the renames above are the same entries).
     assert set(HOOKS.values()) <= set(M1PLUS_HOOKS.values())
     WM_PAINT_LEAF = WM_PAINT_LEAF_M1PLUS
@@ -19185,14 +19186,14 @@ if not is_m1plus:
 else:
     not_ported('Key lock and quick lock rows (keylock_rows, quick_lock not hooked in V2.1)')
 
-if 'dialog_statusbar_dialog_init' in HOOKS:  # M1 Plus: V2.1's own pull-down (native, roadmap 4)
+if True:  # M1 Plus: V2.1's pull-down, dropdown_dialog (QUICK_NAME, ipod-ui 4.7)
     # Quick settings (#70): a tap passes unchanged; a stationary hold opens settings (Playback: the EQ page) without a click.
     for radio,page in (('wifiswitch','systemset/wifi_page'),('btswitch','systemset/bluetooth_page'),('playset','playset/equalizer_page')):
         def quick_page():
             m=QueueMachine(); m.mock('dialog_quit','widget_dispatch_event_to_target_recursive')
             m.handlers[int(manifest['patch_symbols']['stock_quicksettings_trampoline'],16)]='stock_quicksettings'
             icon=m.node('image','img_'+radio)
-            win=m.node('dialog','statusbar_dialog',[icon,m.node('image','img_lock'),m.node('label','label_lock')])
+            win=m.node('dialog',QS_NAME,[icon,m.node('image','img_lock'),m.node('label','label_lock',text='Lock')])
             m.top=win
             m.call(address=HOOKS['dialog_statusbar_dialog_init'][0],args=(win,0,0,0),gap=0)
             def down():
@@ -19229,8 +19230,9 @@ if 'dialog_statusbar_dialog_init' in HOOKS:  # M1 Plus: V2.1's own pull-down (na
         m.advance(O['RATE_HOLD_MS']); assert not m.opened
         m,icon,win,down,dispatch=quick_page(); m.timer_fail=True; down()
         assert dispatch(O['EVT_CLICK'])==0 and not m.opened; passed()
-else:
-    not_ported("Quick settings' radio hold shortcuts (dialog_statusbar_dialog_init: V2.1's pull-down is its own)")
+    # The lock label is the Q2's lock choice; V2.1's pull-down keeps its own lock switch and label (quick_lock native).
+    m,icon,win,down,dispatch=quick_page()
+    assert m.nodes[named(m,win,'label_lock')]['text']==('Lock' if is_m1plus else 'Off'); passed()
 
 # Settings rows (docs/internals.md#charge-limit, #album-artists): Power management gains
 # Charge limit, Audio settings gains Artists, after the stock rows in the same widgets

@@ -419,7 +419,6 @@ M1PLUS_PORTS = {
                          'optional backends and apps, Internet Radio, AirPlay and Configuration'),
     'keylock_rows': ('native', "V2.1's Buttons lock has a switch and Volume, Keys and All modes (roadmap 4)"),
     'quick_lock': ('native', "V2.1's Buttons lock (roadmap 4)"),
-    'dialog_statusbar_dialog_init': ('native', "quick settings' lock label, which goes with quick_lock (roadmap 4)"),
     'read_artistype_value': ('native', "V2.1's Artists page has its own Artist/Album Artist switch (roadmap 4)"),
     'saver_cover': ('native', "V2.1's image_base_set_image always invalidates (progress 29)"),
     'folder_load_top': ('unported', "Folder's roots list OTG without a drive; V2.1's folder roots aren't checked yet"),
@@ -657,6 +656,9 @@ M1PLUS_HOOKS = {
     'image_manager_add': (0x655638, 'ringnav_image_add', 'image'),
     'ui_loader_load_widget_with_parent': (0x663a74, 'ringnav_ui_load', 'ui_load'),
     'widget_dispatch': (0x66cec8, 'ringnav_dispatch', 'dispatch'),
+    # Quick Settings (ipod-ui 4.7): V2.1's pull-down, dialog/dropdown_dialog, for V1.32's statusbar_dialog: the holds
+    # (Wi-Fi, Bluetooth, the EQ page) and quick_cancel; the lock label stays V2.1's (quick_lock is native)
+    'dialog_dropdown_dialog_init': (0x475f04, 'ringnav_quick_settings', 'quicksettings'),
     'on_wm_keylong_fun': (0x4cdd9c, 'ringnav_keylong', 'keylong'),
     'playset_equalizer_page_init': (0x49e358, 'peq_page_init', None),
     'set_equalizer_value': (0x4d851c, 'peq_stock_eq', 'eq'),
