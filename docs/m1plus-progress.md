@@ -4681,6 +4681,37 @@ to 1.7.0's at each item, and `q2compare --suites` passes all 37 runs.
 Delete File's checkbox keeps V2.1's x 0 and 260 px width, so it sits left of centre on the 320 px screen;
 `CONFIRM_PROMPT_PX` 22 was not checked on a preview sheet first.
 
+**Device pass (Nov 12, `V063m`, over q2remote; shots in the session scratchpad).** All 18 final gates passed
+(`work/phase4/4.7/gates/summary.txt`). The user flashed it and set Screen Off to Off. Screen Off (1 min), the boot target
+(`rockbox`), Gain, brightness, volume, Light Mode and knob mode were put back afterwards. The test playlist and a test MP3
+were deleted, and `favourites.m3u` is unchanged.
+
+- **Passed:**
+  - **Pull-down:** opens from Home, a list page and Now Playing; a swipe up closes it.
+  - **Switches:** a tap toggles; a hold opens the switch's page (Playback Setting → EQ).
+  - **Brightness:** the slider's tap and drag both work.
+  - **Knob:** turns volume with Quick Settings open, in Navigation and Volume modes.
+  - **Return:** with Quick Settings open, Return restarts the track. The user wants this, for full playback control
+    in Knob: Navigation.
+  - **Light Mode:** the pull-down, confirm sheet and keyboard follow it.
+  - **Confirm sheet:** used by Confirm Shutdown?, Delete Song? and Delete Playlist?; Cancel and OK work, and the
+    22 px prompt reads well.
+  - **Add to Playlist:** works from Now Playing's More menu, including New Playlist name entry.
+  - **Regressions:** the volume bar, bigcover, the bar's play/pause icon and the paused drag all pass.
+- **Notes confirmed:**
+  - The pull-down keeps V2.1's battery.
+  - Delete Song's checkbox sits left of centre.
+  - The playlist picker is V2.1's stock page.
+- **Findings** (to /plan):
+  - **A.** With Quick Settings open, a single Centre turns the screen off and brings up the lock screen. Reproduced
+    twice; on a plain page Centre selects.
+  - **C.** Add to Playlist from a hold menu (All Songs, Folder) closes the menu and does nothing. Now Playing's route
+    works.
+  - **E.** In Light Mode the confirm sheet is the page colour and has no edge, so it runs into the rows below.
+  - **F.** In Light Mode the "Added To Playlist" toast is a black box with dark text.
+  - **D (minor).** The System Setting switch is drawn dimmed while you are inside System settings.
+  - **B (minor).** The Home row highlight hides while Quick Settings is open and comes back when it closes.
+
 ## How to check a build now
 
 ```sh
