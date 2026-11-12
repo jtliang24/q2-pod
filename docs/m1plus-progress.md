@@ -4712,6 +4712,47 @@ were deleted, and `favourites.m3u` is unchanged.
   - **D (minor).** The System Setting switch is drawn dimmed while you are inside System settings.
   - **B (minor).** The Home row highlight hides while Quick Settings is open and comes back when it closes.
 
+## 83. Phase 4.7's device-pass fixes (Nov 12)
+
+The plan is `.plan/phase4-7-fixes.md`, for §82's six findings; `docs/m1plus-ipod-ui.md` item 7 records the outcome.
+Each item's new test fails on `V063m` and passes on the fix.
+
+- **A** (`5a0ca328`). In Knob: Navigation the knob's press arrives as `KEY_POWER` and becomes Centre only where
+  `knob_nav_active()` holds, which Quick Settings is kept out of so the turns stay the volume. So the press stayed
+  V2.1's power key. `quick_knob_key` (`patch/m1plus_nav_back.c`, called from `m1plus_nav_knob.inc`) sends the press
+  through `center_press` while `QUICK_NAME` is on top: a single press closes Quick Settings from a timer that checks
+  the same window is still on top and `usable()`; a double press stays the power key. Knob: Volume is unchanged.
+  `quick_cancel` stops the timer.
+- **C** (`e78cd602`). The hold menu and Home's shortcut opened `localmusic/playlist_page`, which V2.1 lacks; they now
+  use `LOCAL_UI "playlist_page"`. V2.1's `playlist_page_init` and row click take the held row's class and add its
+  songs through `batch_add_file`, as V1.32 does; `playlist.add_rows` pins those six words, and the build audit checks
+  their GOT slots. `patch.py`'s new `UI_PAGES` guard fails any `navigator_to` of a page the build doesn't ship.
+- **E** (`208a3c28`). V2.1's confirm init sets the dialog's `highlight` to "", so nothing under the sheet dims, in
+  either mode. `confirm_dialog` gives the sheet a 1 px bottom border (`CONFIRM_EDGE`, #666666): #666666 in Dark,
+  about #9c9c9c in Light (QEMU, y 207).
+- **F** (`4cfeeb34`). `msginfo_dialog.bin` drew its box from a black image. `msginfo_dialog` (checked against the
+  stock tree) drops the image for a styled box with a 1 px edge, so Light Mode flips box and text together; Dark is
+  unchanged. The new `m1_only` section of `m1plus_ipod.json` pins the stock file's digest. `rippercompleted_dialog`
+  has a different tree and is left alone (a row in `docs/m1plus-unported.md`).
+- **B** (`3c5560ed`). `paint_selection` hid the page's highlight whenever its window wasn't on top, except under a
+  sliding page. `quick_over` adds Quick Settings to that exception.
+- **D** (`4978200a`), by design. V2.1's dropdown visitor disables `img_sysset` and `img_playset`
+  (`widget_set_enable 0`) and binds no click while `syssetinto_flag` or `playsetinto_flag` is set, so the switch
+  dims inside its own settings. `quick.into` pins those words and the audit checks their GOT slots.
+
+**A new finding, not fixed.** The `UI_PAGES` guard found that View Queue in Now Playing's hold menu, with Shuffle
+off, opens `playerqueue_page`, which V2.1 lacks (its queue is `dialog/playqueue_dialog`), so it does nothing. It is
+gap `07753a9258` in `test/m1plus/patch_gaps.py` and a row in `docs/m1plus-unported.md`, to plan separately.
+
+**Gates** (`V064m`, `work/phase4/4.7b/gates/summary.txt`): all 19 pass. `patch.py` has **690 expected failures in 11
+gaps** (§82's 689 in 10, plus the View Queue gap), none unlisted; `pytest test/unit` 1,197; the Q2 `update.tar` is
+byte-identical to 1.7.0's and `q2compare --suites` passes all 37 runs. `fndiff.py` against `V063m`: six functions
+changed (`home_shortcut_open`, `qm_run`, `quick_cancel`, `ringnav`, `ringnav_about`, `ringnav_paint_bg`) and one added
+(`quick_knob_single`). QEMU shots of E and F, before and after in both modes, are in `work/phase4/4.7b/shots/`.
+
+**For the device pass** (one `--dev` flash; Screen Off set to Off, restored after): the checklist in
+`.plan/phase4-7-fixes.md`'s Device pass section.
+
 ## How to check a build now
 
 ```sh

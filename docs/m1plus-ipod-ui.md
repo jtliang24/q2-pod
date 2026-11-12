@@ -280,6 +280,12 @@ Each feature follows the same steps:
    V2.1's row builder (`playlist_rebuild`, `0x53e74c`): each playlist page keeps the add mode it opened with, and
    Now Playing's picker keeps its guarded pick on the rows New Playlist rebuilds. V2.1's New Playlist keyboard
    needs no rewrite (its `add_edit` has no `sensitive` prop). Pull-to-search now starts below the pull-down's edge.
+   After the V063m pass (progress §83): in Knob: Navigation a single knob press closes Quick Settings and a double
+   press turns the screen off (`quick_knob_key`); Knob: Volume keeps V2.1's power key. A hold menu's Add to Playlist
+   opens V2.1's `playlist_page`. The confirm sheet has a 1 px foot rule and V2.1's toast is drawn in styles, so both
+   read in Light Mode. The page under the pull-down keeps its highlighted row. The Playback and System Setting
+   switches are dimmed while you are inside those settings by V2.1's design: its visitor disables them there and
+   binds no click (`m1plus_ipod.json` `quick.into`).
 8. **Left Q2-only, as `NOT PORTED` rows:**
    - Games (they need a design without the Return key and the wheel); the 181 execution checks are
      grouped as `Games (ipod-ui 4.8, Q2 only)` in `patch_gaps.py`;

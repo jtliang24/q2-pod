@@ -49,6 +49,8 @@ to its [progress](m1plus-progress.md) section.
 | [An artist's albums tab's album-artist rewrite](#an-artists-albums-tab) | 1.2.9 | `toolsQueryContentDbTable` | Planned |
 | [Folder's roots without OTG](#folders-roots-without-otg) | 1.2.2 | `folder_load_top` | Planned |
 | [The Wi-Fi transfer page](#the-wi-fi-transfer-page) | 1.3.0 | `WEB` | Planned |
+| [View Queue's stock queue page](#view-queues-stock-queue-page) | 1.2.2 | `qm_run`'s `QA_QUEUE` off Shuffle (`navigator_to("playerqueue_page")`) | Planned |
+| [The rip-complete toast in Light Mode](#the-rip-complete-toast) | the M1's own | `dialog/rippercompleted_dialog.bin` (`tools/m1plus_ipod.py` `REWRITES`) | Planned |
 | [Quick Settings' brightness through a swipe up](#quick-settings-brightness) | 1.3.8 | `g_dropdown_menu_state`; `quick_stuck` (1.4.5) | Ported (ipod-ui 4.7, progress 82) |
 | [Knob: Navigation on Set Time Manually](#set-time-manually) | the M1's own | an `m1plus_contexts.inc` row | Planned |
 | [Tidal's cache and Tidal Downloads](#tidal) | 1.2.2 | `tidal_play`, `tidal_downloads`, `REC_TIDAL_ID` | Planned |
@@ -270,6 +272,21 @@ porting.
 
 The Q2's page is in English and takes folder uploads. V2.1 has `/usr/share/web`, whose files are to be
 checked against the patch's strings.
+
+### View Queue's stock queue page
+
+A hold menu's View Queue off Shuffle (`playback_listable()` false) opens V1.32's `playerqueue_page`, which V2.1
+doesn't have: its queue is `dialog/playqueue_dialog`, from Now Playing's More menu. So on the M1 that row does
+nothing. `patch.py`'s navigator mocks found it after the V063m pass (progress §83); it is the gap
+`View Queue's stock queue page` in `test/m1plus/patch_gaps.py`. Porting it needs V2.1's playqueue dialog
+audited (its context and how it is opened).
+
+### The rip-complete toast
+
+V2.1's `rippercompleted_dialog` uses the same black-box art as the toast (`confirminfo_bg`), so in Light Mode its
+flipped text may sit dark on black, as the toast's did before progress §83. Its tree differs from
+`msginfo_dialog`'s (an OK button over the art, the art in one state), so `msginfo_dialog`'s rewrite doesn't
+apply. It shows only after a CD rip.
 
 ### Quick Settings' brightness
 
