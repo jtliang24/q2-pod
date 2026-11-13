@@ -984,8 +984,48 @@ def test_only_split_names_take_the_art_prefix():
     assert {n for n in ipod.VALUE_NAMES if n.startswith('song_')} <= {'song_' + n for n in SPLIT}
 
 
-def test_geometry_has_every_value_name():
-    assert set(ipod.VALUE_NAMES) - {'scroll', 'np_bar_x', 'np_bar_w'} <= {f.name for f in dataclasses.fields(ipod.Geometry)}
+@pytest.fixture(params=['q2', 'm1plus'])
+def profile(request):
+    """tools/ipod.py as each device computes it: the Q2's module, or a fresh copy with the M1 Plus's PROFILE. Tests
+    taking it check what holds for any screen; the Q2's synthetic trees above stay the Q2's."""
+    if request.param == 'q2':
+        return ipod
+    from tools import m1plus_ipod
+    return m1plus_ipod.load()
+
+
+def test_geometry_has_every_value_name(profile):
+    assert set(profile.VALUE_NAMES) - {'scroll', 'np_bar_x', 'np_bar_w'} <= {f.name for f in dataclasses.fields(profile.Geometry)}
+
+
+def test_profile_window_is_under_the_bar(profile):
+    assert profile.BOTTOM == profile.UI_H - profile.STATUS_H
+
+
+def test_profile_settings_rows_fill_the_window(profile):
+    """As many whole settings rows as fit under SET_TOP, and no more."""
+    g = profile.SET0
+    assert g.set_top + g.set_rows * g.set_row <= profile.BOTTOM < g.set_top + (g.set_rows + 1) * g.set_row
+
+
+def test_profile_library_rows_hold_their_art_and_text(profile):
+    """The art and its inset inside the body, the body inside the pitch, each title inside the body."""
+    g = profile.SET0
+    assert g.art + 2 * g.lib_inset <= g.lib_body == profile.BODY <= profile.PITCH
+    assert all(0 <= profile.text_y(g, y) < profile.BODY for y in (11, 14, 21, 40, 41))
+
+
+def test_profile_confirm_fits(profile):
+    """The confirm sheet's Cancel and OK rows from CONFIRM_TOP stay on the screen."""
+    assert profile.CONFIRM_TOP + 2 * profile.CONFIRM_ROW <= profile.UI_H
+
+
+def test_profile_battery_room(profile):
+    """BATT_ROOM is what the bar leaves right of the widest clock, and the widest battery mode fits it beside Bluetooth's
+    reach and Wi-Fi."""
+    room = int(profile.UI_W - profile.STATUS_MARGIN - (profile.UI_W / 2 + profile.CLOCK_TEXT / 2 + profile.CLOCK_GAP))
+    widest = max(profile.BATT_PCT_W, profile.BATT_H_W, profile.inc('BATT_INSIDE_W') + profile.inc('BATT_NUB_W'))
+    assert profile.BATT_ROOM == room and profile.BT_REACH + 2 * profile.inc('STATUS_GAP') + 14 + widest <= room
 
 
 TEXT_SITES = {'0x4b0f88': 'pitch', '0x4b0608': 'pitch', '0x4b0fc0': 'body', '0x4b1058': 'text_art',
