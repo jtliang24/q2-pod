@@ -12157,6 +12157,36 @@ if is_m1plus:
             lo=lambda c: min(c>>16,c>>8&255,c&255)
             assert lo(got[3][0])<=lo(tone),(preset,name)  # the shade: past the tone
     passed()
+# navigation.c orange_red: V2.1's orange (and the brown of its pressed rows) as the same blend of stock red, on 0xRRGGBB.
+def orange_red(c):
+    r,g,b=c>>16,c>>8&255,c&255
+    if not (r>=g>=b and r-b>=8 and 5*(g-b)>=r-b and 60*(g-b)<=23*(r-b)) and c!=0x362221: return c
+    t=(r-b)*4096//190; k=b-t*64//4096
+    return sum(max(0,min(255,t*x//4096+k))<<s for x,s in ((0xff,16),(0x14,8),(0x48,0)))
+# The M1: V2.1's orange controls (prev, play_down, ...) follow the accent as stock red does, in dark and Light Mode and
+# under Crimson (red itself): each pixel maps as its red blend would, alpha kept, transparent and grey pixels left. A
+# photograph, not 95% orange, keeps its colours. Style colours: orange text takes the red tone, a fill the light tone,
+# and the pressed rows' brown its red blend's.
+if is_m1plus:
+    assert orange_red(0xfe7e40)==0xff1448 and orange_red(0x2050ff)==0x2050ff
+    px=[(0xfe7e40,255)]*8+[(0xfda580,255),(0x7f3f20,255),(0xfe7e40,0),(0x333333,255)]
+    red_px=[(orange_red(c) if a else c,a) for c,a in px]  # transparent pixels are left
+    for preset,config in [(p,{'ACCENT':str(p),'THEME':MODERN,'LIGHT':l}) for p in (O['CRIMSON'],2) for l in '01']+[(0,{})]:
+        for name in ('prev','play_down'):
+            got=rgba(config,name,px)
+            assert got==rgba(config,name,red_px),(config,name,[(hex(c),a) for c,a in got])
+            assert got[0][0]!=0xfe7e40 and got[10][1]==0 and got[11]==(0x333333,255),(config,name)
+            if config.get('LIGHT')=='0':
+                assert got[0]==((0xff1448 if preset==O['CRIMSON'] else ACCENTS[preset][3]),255),(config,name,hex(got[0][0]))
+        photo=[(0xfe7e40,255)]*8+[(0x2050ff,255)]*8
+        if config.get('LIGHT')!='1': assert rgba(config,'artist_0',photo)==photo,config
+        if config.get('LIGHT')=='0':
+            m=Machine(); m.config=config
+            want=lambda c,name: style_color(m,color_t(orange_red(c)),name)[1]
+            for name in ('text_color','bg_color','border_color'):
+                assert style_color(m,color_t(0xfe7e40),name)[1]==style_color(m,color_t(0xff1448),name)[1],(config,name)
+            assert style_color(m,color_t(0x362221),'bg_color')[1]==want(0x362221,'bg_color')!=color_t(0x362221),config
+    passed()
 # Minimal: the settings icons' discs turn MINIMAL_CHEVRON, their glyphs stay white, edges blend
 # by saturation against the disc's, and list_into's ink is MINIMAL_CHEVRON, alpha kept; other
 # images take Graphite whatever ACCENT holds.
