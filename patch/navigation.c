@@ -8321,7 +8321,8 @@ void *ringnav_style_gradient(void *style, const char *name, void *out) {
 }
 
 /* 1 if name is one of the settings rows' category icons (SETTINGS_ICON_NAMES in stock.h, from
- * ipod.json): their red is a category colour, like the purple and orange ones, not an accent. */
+ * ipod.json): their red is a category colour, like the purple and orange ones, not an accent.
+ * The M1's Classic gives them all the accent instead (accent_disc). */
 static int settings_icon(const char *name) { return named_in(SETTINGS_ICON_NAMES, name); }
 
 /* Decoded theme images are mapped once, before the image manager caches them. Only a plain asset
@@ -8425,6 +8426,55 @@ static void shrink_centred(void *bitmap, int to, int a) {
     *(unsigned short *)((char *)bitmap + 0xc) &= ~1u;
     bitmap_unlock_buffer(bitmap);
 }
+
+#if M1PLUS
+/* Classic (a theme without icons_mono): the settings rows' category icons and Home's Settings and
+ * Shortcut cards take the accent, one disc colour where V2.1 gave each category its own. A pixel's
+ * distance from white (the white point: the brightest least channel among solid pixels, 255, or
+ * a pressed _down's 127) against the disc's (the commonest distance among solid pixels: shading
+ * darker than the disc goes past the tone, clamped) blends it from white to tone, so the glyph
+ * stays white, edges stay smooth and V2.1's grey Settings gear colours as the coloured discs do.
+ * A _down image then takes half brightness, as V2.1's pressed art. Alpha kept; premultiplied
+ * pixels map their straight colour. 1 if it mapped the bitmap (its colours are final). */
+static int accent_disc(const char *name, void *bitmap, const unsigned char *o, unsigned tone) {
+    int w = I(bitmap, 0), h = I(bitmap, 4), stride = bitmap_get_line_length(bitmap);
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096 || stride < 4 * w) return 0;
+    unsigned char *px = bitmap_lock_buffer_for_write(bitmap);
+    if (!px) return 0;
+    int premul = *(unsigned short *)((char *)bitmap + 0xc) & BITMAP_PREMULTI, white = 0, disc = 0;
+    int down = tk_str_end_with(name, "_down");
+    unsigned count[256] = { 0 };
+    for (int pass = 0; pass < 3; ++pass) {
+        for (int y = 0; y < h; ++y)
+            for (unsigned char *p = px + y * stride, *end = p + 4 * w; p < end; p += 4) {
+                int a = p[o[3]], lo = p[o[0]] < p[o[1]] ? p[o[0]] : p[o[1]];
+                if (p[o[2]] < lo) lo = p[o[2]];
+                if (premul && a) lo = lo * 255 / a;
+                if (pass < 2 && a < 128) continue;
+                if (!pass) {
+                    if (lo > white) white = lo;
+                } else if (pass == 1) {
+                    if (lo < white) ++count[white - lo];
+                } else if (a) {
+                    int d = lo < white ? white - lo : 0;
+                    for (int c = 0; c < 3; ++c) {
+                        int v = 255 - (255 - (int)(tone >> (16 - 8 * c) & 255)) * d / disc;
+                        v = v < 0 ? 0 : v;
+                        if (down) v /= 2;
+                        p[o[c]] = (unsigned char)(premul ? v * a / 255 : v);
+                    }
+                }
+            }
+        if (pass == 1) {
+            for (int d = 1; d < 256; ++d)
+                if (count[d] > count[disc]) disc = d;
+            if (!disc) pass = 3; /* all glyph, no disc: left alone */
+        }
+    }
+    bitmap_unlock_buffer(bitmap);
+    return disc != 0;
+}
+#endif
 
 int ringnav_image_add(void *manager, const char *name, void *bitmap) {
     static const unsigned char at[4][4] = BITMAP_RGBA_AT;
@@ -8585,6 +8635,13 @@ int ringnav_image_add(void *manager, const char *name, void *bitmap) {
             }
         bitmap_unlock_buffer(bitmap);
     }
+#if M1PLUS
+    if (format < 4 && s && !*s && !T->icons_mono &&
+        (settings_icon(name) || tk_str_start_with(name, "home_card_settings") ||
+         tk_str_start_with(name, "home_card_rockbox")))
+        mapped |= accent_disc(name, bitmap, at[format],
+                              flip_if(paper, tone_of(tones_of(preset), TONE_RED)));
+#endif
     /* Minimal: a card app's Streaming icon (addon.c, a file:// image) greys as Streaming's own
      * stream_ icons do (mono, above), so its row matches theirs; Classic keeps its colours. */
     unsigned char *app = format < 4 && T->icons_addon_mono && addon_is_icon(name) &&
