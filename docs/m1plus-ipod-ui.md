@@ -343,7 +343,8 @@ Q2's bytes are unchanged, so there was no device flash.
 - **`test/m1plus/build.py --build`:** also pins `private_prologues` and `event_abi_words`, so every
   `m1plus_ipod.json` section is pinned.
 - **`test/m1plus/boot.py`:** the walk also opens and closes Quick Settings and walks the Carousel Home.
-- **Review sheets:** `test/m1plus/sheets.py BUILD OUT [bar|home|np|theme]` replaces the four sheet scripts.
+- **Review sheets:** `test/m1plus/sheets.py BUILD OUT [bar|home|np|theme|settings]` replaces the four sheet scripts
+  (the aesthetics pass added `settings`).
   `test/ui_preview.py` stays untouched: it is upstream's text (a q2compare base suite), so an M1 profile there would
   cost sync friction for a mock, when the QEMU sheets draw the real UI.
 
@@ -377,6 +378,22 @@ The Nov 4 finding that Now Playing needs a prominent back is closed by Phase 4.6
   Atmosphere Lamp Settings) start at the left edge, and "Atmosphere Lamp Settings" loses its first letters in both
   themes (`112-display.png`; again on `V04Om`, `work/phase4/4.5f/device-pass/008-display.png`). It may be a marquee
   caught mid-scroll.
+- **Display Settings icons** (the user, Nov 13): Brightness, Screen Off, Lock Screen and Atmosphere Lamp have no icon.
+
+Brought in from elsewhere (Nov 13), each with its source. The settings review sheet (`sheets.py BUILD OUT settings`)
+shows them; its baseline on V06Am is `work/aesthetics/base/`:
+- **Coverflow's back arrow** overlaps the left cover at the top left (roadmap §7). Closed: it went with
+  `m1plus_coverflow_back.c` when the bar's chevron replaced it; V06Am shows only the chevron
+  (`work/aesthetics/base/settings/classic-dark/12-coverflow.png`).
+- **The selection frame on V2.1's pickers** (Theme, Screen Rotation) reaches into the scroll bar (roadmap §7).
+- **The row `>` on the selection bar** keeps its rest colour: white on dark Minimal's light bar, ink on Light's ink bar
+  (progress §64, finding 6).
+- **Two back buttons:** some pages show both the bar's chevron and V2.1's navbar back (progress §64, finding 9; Now
+  Playing's is closed by Phase 4.6's large back).
+- **Configuration's confirm text,** "Press again to erase the login and cache", is longer than its row's 240 px
+  scrolling label, so a shot catches it mid-scroll (progress §64, clipped labels).
+- **V2.1's orange** (`fe7e40`, with its `362221` press) keeps its colour under every accent: `red_map` maps only blends
+  of `STOCK_RED` (progress §64 finding 3, and the accent-mapping gap in Phase 4.3's notes).
 
 ## Files
 
