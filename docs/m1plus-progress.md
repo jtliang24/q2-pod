@@ -4880,6 +4880,13 @@ gaps**, none unlisted, and 108 `NOT PORTED` lines (6 new); `pytest test/unit` 1,
 it is still down, press the knob: the knob's press opens the row (before, it was dropped). A plain knob press and
 Previous's hold (Hold Return) work as before.
 
+**Device check on `V069m` (Nov 12), over q2remote: passed, no findings.** In Knob: Navigation on Home, a knob press
+while Play/Pause was held opened Now Playing, and one while Next was held opened Library; each side key still
+acted on its release, as on stock (Play/Pause resumed, Next skipped). A plain knob press opened Artists, and
+Previous held on a list went to Now Playing without touching the track. Restored afterwards: Screen Off 1min,
+boot target Rockbox, playback paused; `config.ini` is byte-identical to the backup
+(`work/phase4/4.8/device-before/`). Shots are in `work/phase4/4.8/pass/`.
+
 ## How to check a build now
 
 ```sh
