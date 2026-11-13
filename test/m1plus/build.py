@@ -475,6 +475,17 @@ def m1plus_checks(directory, manifest, stock, demo, read):
               for a, _ in M1_AUDIT['row_layout_calls']['sites']]
     edits += [dict(address=hex(a), original='0x320f809', patched='0x0', purpose='library rebind retains the width owned by its row layouter')
               for a in (0x532f6c, 0x527918)]
+    # The private entries the payload calls (M1PLUS_PRIVATE_FUNCTIONS) and the event ids V2.1's code loads where the
+    # payload relies on them (li a1,<event>), pinned as audited: V2.1's own bytes, which the build leaves as they are.
+    assert M1_AUDIT['private_prologues'] == {'stock_search': '4e001c3ccc0b9c2721e09903', 'm1_home_click': '4d001c3c50039c2721e09903'}
+    events = {'0x534f70': 'EVT_INPUT_POINTER_DOWN', '0x534fbc': 'EVT_KEY_UP', '0x534ff4': 'EVT_POINTER_MOVE_BEFORE', '0x535010': 'EVT_POINTER_DOWN'}
+    assert M1_AUDIT['event_abi_words'] == {a: struct.pack('<I', 0x24050000 | m1plus_inc(e)).hex() for a, e in events.items()}
+    assert [m1plus_inc(e) for e in events.values()] == [0xff, 0x113, 0x102, 0x100]
+    pinned = [(M1PLUS_PRIVATE_FUNCTIONS[n], h) for n, h in M1_AUDIT['private_prologues'].items()]
+    pinned += [(int(a, 16), h) for a, h in M1_AUDIT['event_abi_words'].items()]
+    for address, original in pinned:
+        for image in (stock, demo):
+            assert image[fileoff(stock, address):][:len(original) // 2].hex() == original, hex(address)
     # 4.5's: Home's playing strip's tap is not bound, and its boot resume is ringnav_boot's; the init and refresh's
     # returns with the grid's widgets gone are pinned as they are (m1plus_ipod.json home).
     home = M1_AUDIT['home']
