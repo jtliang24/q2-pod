@@ -195,12 +195,6 @@ GAPS = {
     # Q2 pointer dispatch ABI (Phase 5)
     'c2221ae651': 'Q2 pointer dispatch ABI (Phase 5)',  # patch.py:3383 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
     '225d0d79d5': 'Q2 pointer dispatch ABI (Phase 5)',  # PullDispatchMachine uses Q2 vtable and emitter fixtures; V2.1 needs its own fixture
-    # Cases that run V1.32 stock code or read a Q2 build file: config_playmode, the hscroll tick at 0x5e8914,
-    # and the Q2 build's default.ttf
-    'ee43bd3ea1': "V1.32's own code and assets run by the case (config_playmode, the hscroll tick, default.ttf)",  # patch.py:4595 assert [c[1:3] for c in m.calls if c[0]==config_playmode]==[(2,1)]; passed()
-    '1b7552ad52': "V1.32's own code and assets run by the case (config_playmode, the hscroll tick, default.ttf)",  # patch.py:6078 for only_focus,want,stepped in ((1,7,False),(0,None,True)):
-    'f118915b4f': "V1.32's own code and assets run by the case (config_playmode, the hscroll tick, default.ttf)",  # patch.py:6086 font=TTFont(B/default.ttf); advance=lambda s: sum(font[hmtx][font.getBestCma
-    '49669592bd': "V1.32's own code and assets run by the case (config_playmode, the hscroll tick, default.ttf)",  # patch.py:6087 assert all(advance(s)<=271 for s in (Artist View: Cover Flow,Refresh Cover Fl
     # Classic (1.6.7): its own geometry set boots V1.32 immediates (theme_boot), and its bar, rows, fonts, pane and
     # Library on Home with it; the M1 builds Minimal and Modern only (tools/m1plus.py m1_themes)
     'a08dbf9b32': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9275 for config,preset in (({},0),({**C,K:1},1),({**C,K:2},2),({**C,K:3,HOME:

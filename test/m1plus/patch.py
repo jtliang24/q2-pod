@@ -5143,7 +5143,7 @@ class KeepsMachine(QueueMachine):
         if name=='keeps:np': self.nps+=1; return self.returns(0)
         return super().hook(u,address,size,unused)
 m=KeepsMachine(cls=0xf004,page='localclass_page'); assert m.run(2) is None and m.opened[-1][0]=='playing_page' and m.opened[-1][2]!=m.drawn[0] and not m.nps
-assert [c[1:3] for c in m.calls if c[0]=='config_playmode']==[(2,1)]; passed()
+assert [c[1:3] for c in m.calls if c[0]=='config_playmode']==([] if is_m1plus else [(2,1)]); passed()
 m=KeepsMachine(cls=0xf004,page='localclass_page'); m.found=m.found[:1]; assert m.run(2) is None and m.nps==1 and not [c for c in m.calls if c[0]=='config_playmode'] and m.opened[-1][0]!='playing_page'; passed()
 # Go to album fills the album query as Now Playing's Album info and opens playerjumpinfo_page; Go to
 # artist opens artistinfo_page with {class, record}. Closing either puts the browsing state back.
@@ -6655,18 +6655,22 @@ for n,gap in ((40,141),(16,100)):
     m,w,rs,es=letter_machine(False,n)
     for _ in range(6): m.call(gap=gap)
     m.paint(w,gap=0); assert not m.letters and not m.timers; passed()
-# Stock's own scroll tick (0x5e8914), executed from the image, not mocked: it stops an unfocused
-# only_focus label at once and steps any other, which is why marq_moved clears only_focus.
-for only_focus,want,stepped in ((1,7,False),(0,None,True)):
-    m=Machine(); t=m.node('hscroll_label'); m.byte(t+O['HSCROLL_ONLY_FOCUS'],only_focus)
-    m.handlers[0x5e7f28]='hscroll_label_cast'; m.handlers[0x5e8500]='hscroll_label_step'
-    info=m.alloc(0x58); m.word(info+0x20,t)
-    ret=m.call(address=0x5e8914,args=(info,0,0,0),gap=0); names=[c[0] for c in m.calls]
-    assert ('hscroll_label_step' in names)==stepped and ('hscroll_label_stop' in names)==(not stepped) and want in (None,ret),(names,ret); passed()
-# The rows this polish renamed or added fit stock's ellipsis: the settings text's 275 px less its 4 px of margins.
-from fontTools.ttLib import TTFont
-font=TTFont(B/'default.ttf'); advance=lambda s: sum(font['hmtx'][font.getBestCmap()[ord(c)]][0] for c in s)*24/font['head'].unitsPerEm
-assert all(advance(s)<=271 for s in ('Artist View: Cover Flow','Refresh Cover Flow','Cover Flow Sort: Album','Time in Title')); passed()
+if is_m1plus: not_ported("Stock's own hscroll tick at V1.32's 0x5e8914 (test: V1.32 code; the M1 has no hscroll_label_start hook)")
+else:
+    # Stock's own scroll tick (0x5e8914), executed from the image, not mocked: it stops an unfocused
+    # only_focus label at once and steps any other, which is why marq_moved clears only_focus.
+    for only_focus,want,stepped in ((1,7,False),(0,None,True)):
+        m=Machine(); t=m.node('hscroll_label'); m.byte(t+O['HSCROLL_ONLY_FOCUS'],only_focus)
+        m.handlers[0x5e7f28]='hscroll_label_cast'; m.handlers[0x5e8500]='hscroll_label_step'
+        info=m.alloc(0x58); m.word(info+0x20,t)
+        ret=m.call(address=0x5e8914,args=(info,0,0,0),gap=0); names=[c[0] for c in m.calls]
+        assert ('hscroll_label_step' in names)==stepped and ('hscroll_label_stop' in names)==(not stepped) and want in (None,ret),(names,ret); passed()
+if is_m1plus: not_ported("The Q2 settings rows fit the Q2 build's default.ttf (test: a Q2 build file; the M1 draws V2.1's own font)")
+else:
+    # The rows this polish renamed or added fit stock's ellipsis: the settings text's 275 px less its 4 px of margins.
+    from fontTools.ttLib import TTFont
+    font=TTFont(B/'default.ttf'); advance=lambda s: sum(font['hmtx'][font.getBestCmap()[ord(c)]][0] for c in s)*24/font['head'].unitsPerEm
+    assert all(advance(s)<=271 for s in ('Artist View: Cover Flow','Refresh Cover Flow','Cover Flow Sort: Album','Time in Title')); passed()
 # Every scrolling label's holds and pace (ringnav_hscroll_start, ringnav_hscroll_lull) through stock's
 # own hscroll_label code, run from the image: start, its delay, tick (0x5e8914), step, lull and stop.
 # A label shows its offset while it runs; stopped, stock paints its start with the ellipsis ('rest').
