@@ -4893,7 +4893,7 @@ boot target Rockbox, playback paused; `config.ini` is byte-identical to the back
 python3 test/m1plus/gates.py build-m1   # every gate, in order: q2compare --suites, a fresh --dev build, its suites
 python3 test/m1plus/gates.py build-m1 --from boot  # after a test-only fix: the failed gate onward, same build
 python3 test/m1plus/gates.py --list     # the steps; gates.py's STEPS says what each checks
-python3 test/m1plus/bar_sheets.py build-m1 sheets  # review sheets of the status bar at its busiest, both themes, dark and light (checks nothing)
+python3 test/m1plus/sheets.py build-m1 sheets   # review sheets (bar, home, np, theme) under QEMU; checks nothing but theme's renderer
 ```
 
 `gates.py` stops at the first failure and writes each step's log, its command on the first line, with a

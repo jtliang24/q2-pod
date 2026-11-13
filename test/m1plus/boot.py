@@ -687,7 +687,7 @@ def soloify(build, captures=None, themes=(0, 1)):
     album_band = (STATUS_H + M1['NP_ALBUM_Y'], STATUS_H + M1['NP_ALBUM_Y'] + 22)
     albums = {}
     global IPOD_CLASSIC, CARD_KNOB
-    CARD_KNOB = 1  # Knob: Navigation, whose press starts the scrub, whatever a caller set for its own runs (np_sheets.py)
+    CARD_KNOB = 1  # Knob: Navigation, whose press starts the scrub, whatever a caller set for its own runs (sheets.py np)
     for theme in themes:
         name = f'theme {theme}'
         with tempfile.TemporaryDirectory(prefix='m1-solo-') as tmp, tempfile.TemporaryDirectory(prefix='m1-card-', dir='/dev/shm') as cards:
