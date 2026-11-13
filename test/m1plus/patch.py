@@ -13728,28 +13728,30 @@ if 'device_reboot' in HOOKS:
 else:
     not_ported('A reboot saves the queue first (device_reboot and dialog_checkfw_dialog_init, 1.5.0)')
 
-def long_list(n=40,m=None):
-    m=m or Machine(); w,es=m.page_list(n,extent=n*48,name='allmusic_page'); m.paint(w); return m,w,es
-def turn(m,w,gaps,key=NEXT):
-    got=[]
-    for gap in gaps: assert m.call(key,gap=gap)==11; got.append(m.selected(w))
-    return got
-# 1. Every tick moves, however soon after the last (the wheel's ticks are real travel).
-# Short and long lists and virtual tables, from row 0.
-for table in (False,True):
-    for count in (16,40):
-        for gaps in ((1000,80),(1000,140),(1000,100,100),(1000,50,100),(1000,100,141,100,100)):
-            m=Machine()
-            if table:
-                w,rs,es=m.table_page(n=4,name='playerqueue_page',rebind=True); m.word(w+O['TABLE_ROWS'],count)
-            else: w,es=m.page_list(count,extent=count*48)
-            m.paint(w); assert turn(m,w,gaps)==list(range(1,len(gaps)+1)),(table,count,gaps)
-            passed()
-# Home as built: the same, its ends bump then wrap after a pause, and Centre opens the row that is highlighted.
-m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2]); m.paint(view)
-assert turn(m,view,(1000,100,100,1000,100,100,100,400))==[1,2,3,4,5,6,6,0]
-assert m.get(view+O['SCROLL_Y'])==0 and turn(m,view,(1000,400,100,100),PREV)==[0,6,5,4]
-assert m.confirm()==11 and m.dispatched()[0][1]==imgs[4]; passed()
+if is_m1plus: not_ported("The touch wheel's ticks: every one moves, and Home's ends bump, then wrap (ipod-ui 4.8, Q2 only; the M1's knob on Home is m1_home_modes)")
+else:
+    def long_list(n=40,m=None):
+        m=m or Machine(); w,es=m.page_list(n,extent=n*48,name='allmusic_page'); m.paint(w); return m,w,es
+    def turn(m,w,gaps,key=NEXT):
+        got=[]
+        for gap in gaps: assert m.call(key,gap=gap)==11; got.append(m.selected(w))
+        return got
+    # 1. Every tick moves, however soon after the last (the wheel's ticks are real travel).
+    # Short and long lists and virtual tables, from row 0.
+    for table in (False,True):
+        for count in (16,40):
+            for gaps in ((1000,80),(1000,140),(1000,100,100),(1000,50,100),(1000,100,141,100,100)):
+                m=Machine()
+                if table:
+                    w,rs,es=m.table_page(n=4,name='playerqueue_page',rebind=True); m.word(w+O['TABLE_ROWS'],count)
+                else: w,es=m.page_list(count,extent=count*48)
+                m.paint(w); assert turn(m,w,gaps)==list(range(1,len(gaps)+1)),(table,count,gaps)
+                passed()
+    # Home as built: the same, its ends bump then wrap after a pause, and Centre opens the row that is highlighted.
+    m=Machine(); view,imgs=home_list(m); click_target(m,imgs[2]); m.paint(view)
+    assert turn(m,view,(1000,100,100,1000,100,100,100,400))==[1,2,3,4,5,6,6,0]
+    assert m.get(view+O['SCROLL_Y'])==0 and turn(m,view,(1000,400,100,100),PREV)==[0,6,5,4]
+    assert m.confirm()==11 and m.dispatched()[0][1]==imgs[4]; passed()
 # A BUTTONS dialog: the same between its buttons, and nothing scrolls.
 m=Machine(); d=m.node('dialog','confirminfo_dialog'); m.word(d+O['W_PARENT'],m.wm); m.top=d
 buttons=[m.entry(d,220) for _ in range(3)]; m.nodes[d]['children']=buttons
@@ -13758,166 +13760,168 @@ m.paint(d); got=[]
 for gap in (1000,100,100): assert m.call(gap=gap)==11 and not m.moved(); got.append(m.selected(d))
 assert got==[1,2,2] and m.confirm()==11 and m.dispatched()[0][1]==buttons[2]; passed()
 
-# 4. List ends. Reaching an end ends the run, and every
-# tick against an end bumps and re-arms the stop, so ticks 100 or 200ms apart never wrap, and only a tick
-# EDGE_PAUSE_MS after the last one does, once. The tick after the wrap is a first one.
-def ring(name='playlist_page'):
-    m=Machine(); w,es=m.page_list(6,height=96,extent=288,name=name); m.paint(w)
-    assert turn(m,w,(1000,)*5)==[1,2,3,4,5]
-    return m,w,es
-m,w,es=ring()
-for gap in (100,100,200,200,O['EDGE_PAUSE_MS']-1):
-    assert m.call(gap=gap)==11 and m.selected(w)==5 and m.get(w+O['SCROLL_Y'])==192,gap
-    m.paint(w,gap=0); assert m.sel()==(0,42,240,48)  # bumped against the end
-assert m.call(gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==0 and m.get(w+O['SCROLL_Y'])==0
-m.paint(w,gap=0); assert m.sel()==(0,0,240,48)
-assert turn(m,w,(100,100,100))==[1,2,3] and turn(m,w,(100,100,100),PREV)==[2,1,0]
-assert m.call(PREV,gap=100)==11 and m.selected(w)==0
-m.paint(w,gap=0); assert m.sel()==(0,6,240,48)   # bumped down at the top, on the first tick
-assert m.call(PREV,gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==5; passed()
-# Settings keep hard ends: no bump and no wrap, however long the pause.
-m,w,es=ring('display_page')
-for gap in (100,O['EDGE_PAUSE_MS'],1000):
-    assert m.call(gap=gap)==11 and m.selected(w)==5
-    m.paint(w,gap=0); assert m.sel()==(0,48,240,48)
-passed()
+if is_m1plus: not_ported("The touch wheel's list ends, and Key Tone on the row change (ipod-ui 4.8, Q2 only: no wheel, no buzzer)")
+else:
+    # 4. List ends. Reaching an end ends the run, and every
+    # tick against an end bumps and re-arms the stop, so ticks 100 or 200ms apart never wrap, and only a tick
+    # EDGE_PAUSE_MS after the last one does, once. The tick after the wrap is a first one.
+    def ring(name='playlist_page'):
+        m=Machine(); w,es=m.page_list(6,height=96,extent=288,name=name); m.paint(w)
+        assert turn(m,w,(1000,)*5)==[1,2,3,4,5]
+        return m,w,es
+    m,w,es=ring()
+    for gap in (100,100,200,200,O['EDGE_PAUSE_MS']-1):
+        assert m.call(gap=gap)==11 and m.selected(w)==5 and m.get(w+O['SCROLL_Y'])==192,gap
+        m.paint(w,gap=0); assert m.sel()==(0,42,240,48)  # bumped against the end
+    assert m.call(gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==0 and m.get(w+O['SCROLL_Y'])==0
+    m.paint(w,gap=0); assert m.sel()==(0,0,240,48)
+    assert turn(m,w,(100,100,100))==[1,2,3] and turn(m,w,(100,100,100),PREV)==[2,1,0]
+    assert m.call(PREV,gap=100)==11 and m.selected(w)==0
+    m.paint(w,gap=0); assert m.sel()==(0,6,240,48)   # bumped down at the top, on the first tick
+    assert m.call(PREV,gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==5; passed()
+    # Settings keep hard ends: no bump and no wrap, however long the pause.
+    m,w,es=ring('display_page')
+    for gap in (100,O['EDGE_PAUSE_MS'],1000):
+        assert m.call(gap=gap)==11 and m.selected(w)==5
+        m.paint(w,gap=0); assert m.sel()==(0,48,240,48)
+    passed()
 
-# 5. Key Tone follows the row. Each tick is the pair the window manager delivers: key-down-before
-# through the hook and the stock callback, then key-up-before. The count is the buzzer commands
-# the real buzzeer_switch issues. On Home as built, four ticks leave rows 1, 2, 3, 4 and click
-# once each; stock's one-click-per-press latch is set by the press and cleared by the
-# release, as without the hook.
-def home_machine(tone=1):
-    m=audible(Machine(),tone); view,imgs=home_list(m); click_target(m,imgs[2]); m.paint(view)
-    return m,view
-m,view=home_machine(); got=[]
-for gap in (1000,100,100,1000):
-    n=press(m,gap=gap); assert n==0 and m.down==0 and m.u.mem_read(SOUND_LATCH,1)==b'\x01'
-    got.append((n+lift(m),m.selected(view))); assert m.ret==11
-assert got==[(1,1),(1,2),(1,3),(1,4)],got; passed()
-# Slow ticks click on every row; Home's end bumps silently, then the wrap after a pause clicks;
-# a repaint and a long wait add nothing.
-m,view=home_machine()
-assert [tick(m) for _ in range(6)]==[1]*6 and m.selected(view)==6
-assert [tick(m,gap=gap) for gap in (1000,50,400,100)]==[0,0,1,1] and m.selected(view)==1
-m.paint(view); assert not buzzes(m)
-m.advance(10000); assert not buzzes(m); passed()
-# buzzeer_switch also runs when it is silent, so its calls are not the count: stock always calls
-# it on the press, with Key Tone held off; a row change adds the release's call.
-m,view=home_machine(); seen=[]
-m.u.hook_add(UC_HOOK_CODE,lambda u,a,size,x: seen.append(u.mem_read(TONE,1)[0]),begin=syms['buzzeer_switch'],end=syms['buzzeer_switch'])
-assert tick(m)==1 and seen==[0,1] and tick(m,gap=100)==1 and seen==[0,1,0,1]; passed()
-# An accelerated step is one click however many rows it takes (100ms ticks step
-# 1,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8 rows).
-m,w,es=long_list(100,audible(Machine()))
-assert [tick(m,gap=100) for _ in range(16)]==[1]*16 and m.selected(w)==65; passed()
-# An end bump is silent and the wrap clicks once; the tick after it is a first one and clicks.
-m=audible(Machine()); w,es=m.page_list(6,height=96,extent=288,name='playlist_page'); m.paint(w)
-assert sum(tick(m) for _ in range(5))==5 and m.selected(w)==5
-assert [tick(m,gap=gap) for gap in (100,200,200,O['EDGE_PAUSE_MS']-1)]==[0,0,0,0] and m.selected(w)==5
-assert tick(m,gap=O['EDGE_PAUSE_MS'])==1 and m.selected(w)==0
-assert tick(m,gap=100)==1 and m.selected(w)==1; passed()
-# Rejected input is silent: a finger down, a window animation (held, its tick plays after),
-# stock's wheel lockout after a button (until its countdown ends), and a turn while the screen
-# is locked still clicks as stock.
-m,w,es=long_list(8,audible(Machine()))
-for field in ('pressed','animating'):
-    setattr(m,field,1); assert tick(m)==0 and m.ret==11 and m.selected(w)==0; setattr(m,field,0)
-m.advance(O['HOLD_POLL_MS']); assert m.selected(w)==1 and not m.timers  # the slide's tick plays after it
-assert press(m,RETURN)==1 and lift(m,RETURN)==0 and m.ret==0 and m.u.mem_read(KEY_LATCH,1)==b'\x08'
-assert tick(m)==0 and m.ret==11 and m.selected(w)==1
-debounced(m); assert tick(m)==1 and m.selected(w)==2; passed()
-# Restoring the selection is not a step: a recreated page recalls its row on paint silently.
-m,w,es=long_list(20,audible(Machine()))
-assert [tick(m) for _ in range(6)]==[1]*6 and m.selected(w)==6
-w2,es2=m.page_list(20,extent=960,name='allmusic_page'); m.paint(w2)
-assert m.selected(w2)==6 and not buzzes(m); passed()
-# Centre is a button: its press clicks as stock, and the delayed confirmation adds nothing.
-m,w,es=long_list(8,audible(Machine()))
-assert press(m,CENTER)==1 and lift(m,CENTER)==0 and m.ret==11
-m.advance(O['DOUBLE_CLICK_MS']); assert m.clicks==[es[0]] and not buzzes(m); passed()
-
-# 6. The Key Tone setting. Off: everything above is silent and the rows still move. The click
-# uses the setting at the moment of the step, and the byte is never left changed: press() and
-# lift() check it after every call, whatever its value.
-m,view=home_machine(tone=0)
-assert [tick(m) for _ in range(4)]==[0,0,0,0] and m.selected(view)==4 and m.u.mem_read(TONE,1)==b'\0'; passed()
-m,view=home_machine()
-assert press(m)==0; m.byte(TONE,0); assert lift(m)==0 and m.selected(view)==1      # switched off in between
-assert press(m)==0; m.byte(TONE,1); assert lift(m)==1 and m.selected(view)==2      # and back on
-m.byte(TONE,0x5a); assert tick(m)==1 and m.u.mem_read(TONE,1)==b'\x5a'; passed()
-# The paths outside row navigation sound exactly as the stock binary does, press for press,
-# and do what they did: the volume, a scrub, the carousels, the pixel-scroll fallback, the
-# buttons, a held key, a double press, and the wheel with the screen off or locked.
-def stock(keys,**flags):
-    s=audible(Machine(patched=False))
-    for flag,value in flags.items(): s.byte(syms[flag],value)
-    out=[]
-    for key in keys:
-        out.append(press(s,key)); s.call(key,address=HOOKS['on_wm_keyup_before_fun'][0],gap=0,debounce=True)
-    return out
-m=audible(Machine()); m.page('playing_page')
-assert [tick(m,key) for key in (NEXT,PREV,NEXT)]==stock((NEXT,PREV,NEXT))==[1,1,1] and m.ret==0; passed()
-m=audible(scrub_page()); centre(m); debounced(m)  # the double press's stock wheel lockout runs out
-assert [tick(m,gap=100) for _ in range(3)]==stock((NEXT,)*3)==[1,1,1] and m.nodes[m.slider]['value']==130; passed()
-m=audible(CoverflowMachine()); m.open()
-assert [tick(m,gap=20) for _ in range(2)]==[1,1] and slide(m,m.slide)[3]==120; passed()
-m=audible(Machine()); m.page('sysset_page','slide_menu')
-assert tick(m)==1 and [c[0] for c in m.moved()]==['slide_menu_scroll_to_next']; passed()
-m=audible(Machine()); w=m.page(t='table_client')
-assert [tick(m,gap=100) for _ in range(3)]==[1,1,1] and m.get(w+O['TABLE_TOP'])==288; passed()
-keys=(CENTER,RETURN,O['KEY_PLAY'],222,223)
-m,w,es=long_list(8,audible(Machine()))
-assert [tick(m,key) for key in keys]==stock(keys)==[1]*5 and m.selected(w)==0; passed()
-# Either jack or Bluetooth in: the buttons and a row change are silent.
-for kw in ({'po':1},{'bal':1},{'way':1}):
-    m,w,es=long_list(8,routed(audible(Machine()),**kw))
-    assert tick(m)==0 and m.selected(w)==1 and [tick(m,key) for key in keys]==[0]*5
-    assert m.u.mem_read(TONE,1)==b'\x01'
-passed()
-# Music playing with nothing plugged in: the speaker still clicks.
-m,w,es=long_list(8,routed(audible(Machine()),status=2))
-assert tick(m)==1 and m.selected(w)==1 and [tick(m,key) for key in keys]==[1]*5; passed()
-# A held key clicks once: stock's latch holds through its repeats and the long-press event.
-m,w,es=long_list(8,audible(long_machine()))
-assert [press(m,RETURN),press(m,RETURN,gap=500)]==[1,0]; long_return(m); assert not buzzes(m) and lift(m,RETURN)==0
-assert len(destinations(m))==0 and press(m,RETURN)==1; passed()
-m,w,es=long_list(3,audible(Machine()))
-assert press(m,CENTER)==1 and m.release()==11 and press(m,CENTER,gap=100)==1 and m.release()==0 and m.screens==[0]; passed()
-for flags in (dict(g_backlight_status=0),dict(g_backlight_status=0,g_keylock_flag=1,g_keylock_mode=1),
-              dict(g_lockscreen_pageflag=1),dict(g_testmode_flag=1)):
+    # 5. Key Tone follows the row. Each tick is the pair the window manager delivers: key-down-before
+    # through the hook and the stock callback, then key-up-before. The count is the buzzer commands
+    # the real buzzeer_switch issues. On Home as built, four ticks leave rows 1, 2, 3, 4 and click
+    # once each; stock's one-click-per-press latch is set by the press and cleared by the
+    # release, as without the hook.
+    def home_machine(tone=1):
+        m=audible(Machine(),tone); view,imgs=home_list(m); click_target(m,imgs[2]); m.paint(view)
+        return m,view
+    m,view=home_machine(); got=[]
+    for gap in (1000,100,100,1000):
+        n=press(m,gap=gap); assert n==0 and m.down==0 and m.u.mem_read(SOUND_LATCH,1)==b'\x01'
+        got.append((n+lift(m),m.selected(view))); assert m.ret==11
+    assert got==[(1,1),(1,2),(1,3),(1,4)],got; passed()
+    # Slow ticks click on every row; Home's end bumps silently, then the wrap after a pause clicks;
+    # a repaint and a long wait add nothing.
+    m,view=home_machine()
+    assert [tick(m) for _ in range(6)]==[1]*6 and m.selected(view)==6
+    assert [tick(m,gap=gap) for gap in (1000,50,400,100)]==[0,0,1,1] and m.selected(view)==1
+    m.paint(view); assert not buzzes(m)
+    m.advance(10000); assert not buzzes(m); passed()
+    # buzzeer_switch also runs when it is silent, so its calls are not the count: stock always calls
+    # it on the press, with Key Tone held off; a row change adds the release's call.
+    m,view=home_machine(); seen=[]
+    m.u.hook_add(UC_HOOK_CODE,lambda u,a,size,x: seen.append(u.mem_read(TONE,1)[0]),begin=syms['buzzeer_switch'],end=syms['buzzeer_switch'])
+    assert tick(m)==1 and seen==[0,1] and tick(m,gap=100)==1 and seen==[0,1,0,1]; passed()
+    # An accelerated step is one click however many rows it takes (100ms ticks step
+    # 1,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8 rows).
+    m,w,es=long_list(100,audible(Machine()))
+    assert [tick(m,gap=100) for _ in range(16)]==[1]*16 and m.selected(w)==65; passed()
+    # An end bump is silent and the wrap clicks once; the tick after it is a first one and clicks.
+    m=audible(Machine()); w,es=m.page_list(6,height=96,extent=288,name='playlist_page'); m.paint(w)
+    assert sum(tick(m) for _ in range(5))==5 and m.selected(w)==5
+    assert [tick(m,gap=gap) for gap in (100,200,200,O['EDGE_PAUSE_MS']-1)]==[0,0,0,0] and m.selected(w)==5
+    assert tick(m,gap=O['EDGE_PAUSE_MS'])==1 and m.selected(w)==0
+    assert tick(m,gap=100)==1 and m.selected(w)==1; passed()
+    # Rejected input is silent: a finger down, a window animation (held, its tick plays after),
+    # stock's wheel lockout after a button (until its countdown ends), and a turn while the screen
+    # is locked still clicks as stock.
     m,w,es=long_list(8,audible(Machine()))
-    for flag,value in flags.items(): m.byte(syms[flag],value)
-    locked='g_keylock_flag' in flags
-    assert [tick(m),tick(m,CENTER)]==stock((NEXT,CENTER),**flags)==[0 if locked else 1,1],flags
-    assert m.selected(w)==0; passed()
-# Between a press and its release the page may change. List to volume: the silenced press is
-# spent, the volume step is stock's, and the next press there clicks. Volume to list: stock
-# already clicked, so the row change adds none.
-m,w,es=long_list(8,audible(Machine())); lst=m.top
-assert press(m)==0; m.page('playing_page'); assert lift(m)==0 and m.ret==0 and m.selected(w)==0
-assert tick(m)==1 and m.ret==0
-assert press(m)==1; m.top=lst; assert lift(m)==0 and m.ret==11 and m.selected(w)==1
-assert tick(m)==1 and m.selected(w)==2; passed()
-# A recreated page between the two, or a surface rebuilt at the same address: one click for the
-# one row change on the live list.
-m,w,es=long_list(8,audible(Machine()))
-assert press(m)==0; w2,es2=m.page_list(8,extent=8*48,name='allmusic_page'); m.paint(w2,gap=0)
-assert lift(m)==1 and m.selected(w2)==1 and m.selected(w)==0
-wiped(m,w2); m.paint(w2,gap=0); assert m.selected(w2)==1 and tick(m)==1 and m.selected(w2)==2; passed()
-# A dropped release (AWTK aborts pressed keys when windows change) leaves nothing behind. The
-# next pair on the list clicks once. A new press elsewhere is stock's again: stock's own latch,
-# still set by the dropped press, skips one click there, then the volume clicks as before. A
-# release without its press moves the row silently, and a button's press takes the ownership
-# back (stock's lockout then rejects that wheel release). Key Tone is never left off.
-m,w,es=long_list(8,audible(Machine())); lst=m.top
-assert press(m)==0 and tick(m)==1 and m.selected(w)==1
-assert press(m)==0; m.page('playing_page'); assert [tick(m),tick(m)]==[0,1] and m.ret==0
-m.top=lst; assert lift(m)==0 and m.ret==11 and m.selected(w)==2
-assert press(m)==0 and press(m,RETURN)==0 and lift(m)==0 and m.ret==11 and m.selected(w)==2
-assert lift(m,RETURN)==0 and press(m,RETURN)==1 and lift(m,RETURN)==0
-debounced(m); assert tick(m)==1 and m.selected(w)==3
-m.advance(10000); assert not buzzes(m) and m.u.mem_read(TONE,1)==b'\x01'; passed()
+    for field in ('pressed','animating'):
+        setattr(m,field,1); assert tick(m)==0 and m.ret==11 and m.selected(w)==0; setattr(m,field,0)
+    m.advance(O['HOLD_POLL_MS']); assert m.selected(w)==1 and not m.timers  # the slide's tick plays after it
+    assert press(m,RETURN)==1 and lift(m,RETURN)==0 and m.ret==0 and m.u.mem_read(KEY_LATCH,1)==b'\x08'
+    assert tick(m)==0 and m.ret==11 and m.selected(w)==1
+    debounced(m); assert tick(m)==1 and m.selected(w)==2; passed()
+    # Restoring the selection is not a step: a recreated page recalls its row on paint silently.
+    m,w,es=long_list(20,audible(Machine()))
+    assert [tick(m) for _ in range(6)]==[1]*6 and m.selected(w)==6
+    w2,es2=m.page_list(20,extent=960,name='allmusic_page'); m.paint(w2)
+    assert m.selected(w2)==6 and not buzzes(m); passed()
+    # Centre is a button: its press clicks as stock, and the delayed confirmation adds nothing.
+    m,w,es=long_list(8,audible(Machine()))
+    assert press(m,CENTER)==1 and lift(m,CENTER)==0 and m.ret==11
+    m.advance(O['DOUBLE_CLICK_MS']); assert m.clicks==[es[0]] and not buzzes(m); passed()
+
+    # 6. The Key Tone setting. Off: everything above is silent and the rows still move. The click
+    # uses the setting at the moment of the step, and the byte is never left changed: press() and
+    # lift() check it after every call, whatever its value.
+    m,view=home_machine(tone=0)
+    assert [tick(m) for _ in range(4)]==[0,0,0,0] and m.selected(view)==4 and m.u.mem_read(TONE,1)==b'\0'; passed()
+    m,view=home_machine()
+    assert press(m)==0; m.byte(TONE,0); assert lift(m)==0 and m.selected(view)==1      # switched off in between
+    assert press(m)==0; m.byte(TONE,1); assert lift(m)==1 and m.selected(view)==2      # and back on
+    m.byte(TONE,0x5a); assert tick(m)==1 and m.u.mem_read(TONE,1)==b'\x5a'; passed()
+    # The paths outside row navigation sound exactly as the stock binary does, press for press,
+    # and do what they did: the volume, a scrub, the carousels, the pixel-scroll fallback, the
+    # buttons, a held key, a double press, and the wheel with the screen off or locked.
+    def stock(keys,**flags):
+        s=audible(Machine(patched=False))
+        for flag,value in flags.items(): s.byte(syms[flag],value)
+        out=[]
+        for key in keys:
+            out.append(press(s,key)); s.call(key,address=HOOKS['on_wm_keyup_before_fun'][0],gap=0,debounce=True)
+        return out
+    m=audible(Machine()); m.page('playing_page')
+    assert [tick(m,key) for key in (NEXT,PREV,NEXT)]==stock((NEXT,PREV,NEXT))==[1,1,1] and m.ret==0; passed()
+    m=audible(scrub_page()); centre(m); debounced(m)  # the double press's stock wheel lockout runs out
+    assert [tick(m,gap=100) for _ in range(3)]==stock((NEXT,)*3)==[1,1,1] and m.nodes[m.slider]['value']==130; passed()
+    m=audible(CoverflowMachine()); m.open()
+    assert [tick(m,gap=20) for _ in range(2)]==[1,1] and slide(m,m.slide)[3]==120; passed()
+    m=audible(Machine()); m.page('sysset_page','slide_menu')
+    assert tick(m)==1 and [c[0] for c in m.moved()]==['slide_menu_scroll_to_next']; passed()
+    m=audible(Machine()); w=m.page(t='table_client')
+    assert [tick(m,gap=100) for _ in range(3)]==[1,1,1] and m.get(w+O['TABLE_TOP'])==288; passed()
+    keys=(CENTER,RETURN,O['KEY_PLAY'],222,223)
+    m,w,es=long_list(8,audible(Machine()))
+    assert [tick(m,key) for key in keys]==stock(keys)==[1]*5 and m.selected(w)==0; passed()
+    # Either jack or Bluetooth in: the buttons and a row change are silent.
+    for kw in ({'po':1},{'bal':1},{'way':1}):
+        m,w,es=long_list(8,routed(audible(Machine()),**kw))
+        assert tick(m)==0 and m.selected(w)==1 and [tick(m,key) for key in keys]==[0]*5
+        assert m.u.mem_read(TONE,1)==b'\x01'
+    passed()
+    # Music playing with nothing plugged in: the speaker still clicks.
+    m,w,es=long_list(8,routed(audible(Machine()),status=2))
+    assert tick(m)==1 and m.selected(w)==1 and [tick(m,key) for key in keys]==[1]*5; passed()
+    # A held key clicks once: stock's latch holds through its repeats and the long-press event.
+    m,w,es=long_list(8,audible(long_machine()))
+    assert [press(m,RETURN),press(m,RETURN,gap=500)]==[1,0]; long_return(m); assert not buzzes(m) and lift(m,RETURN)==0
+    assert len(destinations(m))==0 and press(m,RETURN)==1; passed()
+    m,w,es=long_list(3,audible(Machine()))
+    assert press(m,CENTER)==1 and m.release()==11 and press(m,CENTER,gap=100)==1 and m.release()==0 and m.screens==[0]; passed()
+    for flags in (dict(g_backlight_status=0),dict(g_backlight_status=0,g_keylock_flag=1,g_keylock_mode=1),
+                  dict(g_lockscreen_pageflag=1),dict(g_testmode_flag=1)):
+        m,w,es=long_list(8,audible(Machine()))
+        for flag,value in flags.items(): m.byte(syms[flag],value)
+        locked='g_keylock_flag' in flags
+        assert [tick(m),tick(m,CENTER)]==stock((NEXT,CENTER),**flags)==[0 if locked else 1,1],flags
+        assert m.selected(w)==0; passed()
+    # Between a press and its release the page may change. List to volume: the silenced press is
+    # spent, the volume step is stock's, and the next press there clicks. Volume to list: stock
+    # already clicked, so the row change adds none.
+    m,w,es=long_list(8,audible(Machine())); lst=m.top
+    assert press(m)==0; m.page('playing_page'); assert lift(m)==0 and m.ret==0 and m.selected(w)==0
+    assert tick(m)==1 and m.ret==0
+    assert press(m)==1; m.top=lst; assert lift(m)==0 and m.ret==11 and m.selected(w)==1
+    assert tick(m)==1 and m.selected(w)==2; passed()
+    # A recreated page between the two, or a surface rebuilt at the same address: one click for the
+    # one row change on the live list.
+    m,w,es=long_list(8,audible(Machine()))
+    assert press(m)==0; w2,es2=m.page_list(8,extent=8*48,name='allmusic_page'); m.paint(w2,gap=0)
+    assert lift(m)==1 and m.selected(w2)==1 and m.selected(w)==0
+    wiped(m,w2); m.paint(w2,gap=0); assert m.selected(w2)==1 and tick(m)==1 and m.selected(w2)==2; passed()
+    # A dropped release (AWTK aborts pressed keys when windows change) leaves nothing behind. The
+    # next pair on the list clicks once. A new press elsewhere is stock's again: stock's own latch,
+    # still set by the dropped press, skips one click there, then the volume clicks as before. A
+    # release without its press moves the row silently, and a button's press takes the ownership
+    # back (stock's lockout then rejects that wheel release). Key Tone is never left off.
+    m,w,es=long_list(8,audible(Machine())); lst=m.top
+    assert press(m)==0 and tick(m)==1 and m.selected(w)==1
+    assert press(m)==0; m.page('playing_page'); assert [tick(m),tick(m)]==[0,1] and m.ret==0
+    m.top=lst; assert lift(m)==0 and m.ret==11 and m.selected(w)==2
+    assert press(m)==0 and press(m,RETURN)==0 and lift(m)==0 and m.ret==11 and m.selected(w)==2
+    assert lift(m,RETURN)==0 and press(m,RETURN)==1 and lift(m,RETURN)==0
+    debounced(m); assert tick(m)==1 and m.selected(w)==3
+    m.advance(10000); assert not buzzes(m) and m.u.mem_read(TONE,1)==b'\x01'; passed()
 CONFIG.clear()
 
 def fnv(s,h=2166136261):
@@ -15813,128 +15817,130 @@ if not is_m1plus:  # the M1's Shortcut has no Games (ipod-ui 4.8): a stored Game
     m.page=m.top; assert m.nodes[m.page]['name']=='games_page'
     m.close()
 else: assert m.text(m.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))=='Favorites'
-sheet,chooser=games_open(); G=m.get(payload_syms['g'])
-assert labels(chooser)==['Games','Sudoku','Vortex','Solitaire','Snake'] and not m.nodes[sheet]['visible']
-rows=m.nodes[m.find('scroll_view',chooser)]['children']
-# The wheel carries over at both ends of the real chooser: a bump, then after a pause the other end.
-w=m.find('scroll_view',chooser); m.paint(w,gap=0)
-for _ in range(5):
-    if m.selected(w)!=3: assert m.call(gap=1000)==11; m.paint(w,gap=0)
-assert m.selected(w)==3
-assert m.call(gap=100)==11 and m.selected(w)==3; m.paint(w,gap=0)
-assert m.call(gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==0; m.paint(w,gap=0)
-assert m.call(PREV,gap=100)==11 and m.selected(w)==0; m.paint(w,gap=0)
-assert m.call(PREV,gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==3; m.paint(w,gap=0); passed()
-def pick(i):
-    f,ctx=m.handler(rows[i],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.advance(0)
-def paint(): m.call(address=HOOKS['widget_on_paint_border'][0],args=(sheet,m.canvas,0,0),gap=0,clear=False,count=50_000_000)
-stock=[]; tramp=int(manifest['patch_symbols']['stock_keyup_trampoline'],16)
-for a in (tramp,payload_syms['media_key']): m.u.hook_add(UC_HOOK_CODE,lambda u,a,n,_: stock.append(a),begin=a,end=a)
-def key(k): r=m.call(k,count=2_000_000); assert r==11 and not stock,(k,stock); return r
-byte=lambda o: m.u.mem_read(G+o,1)[0]; word=lambda o: signed(m.get(G+o))
-frames=lambda: [t for t in m.timers.values() if t[1]==payload_syms['frame']]
-pick(0); assert m.nodes[sheet]['visible'] and not m.nodes[chooser]['visible'] and word(G_SCREEN)==1; paint()
-key(O['KEY_NEXT']); assert byte(G_CUR)==1
-key(O['KEY_PREV']); key(O['KEY_PREV']); assert byte(G_CUR)==80
-key(O['KEY_FWD_BTN']); assert byte(G_CUR)==8
-key(O['KEY_BACK_BTN']); assert byte(G_CUR)==80; passed()
-# Centre on a blank cell picks its digit with the wheel, Centre writes it and saves; Return cancels; a
-# clue takes no digit. Play/Pause then asks before a new game.
-cells=lambda: bytes(m.u.mem_read(G+G_CELL,81))
-blank=cells().index(0); clue=next(i for i,c in enumerate(cells()) if c&16)
-m.byte(G+G_CUR,clue); key(O['KEY_CENTER']); assert not word(G_PICKING)
-m.byte(G+G_CUR,blank); key(O['KEY_CENTER']); assert word(G_PICKING)
-for _ in range(3): key(O['KEY_NEXT'])
-paint(); key(O['KEY_CENTER']); assert cells()[blank]==3 and not word(G_PICKING)
-m.advance(2000); saved=bytes(m.files['/mnt/data/ringnav-sudoku']); assert len(saved)==92 and saved[4:85]==cells()
-key(O['KEY_CENTER']); key(O['KEY_NEXT']); key(O['KEY_RETURN']); assert cells()[blank]==3 and not word(G_PICKING) and word(G_SCREEN)==1
-before=cells(); key(O['KEY_PLAY']); assert cells()==before and word(52); paint()
-key(O['KEY_RETURN']); assert cells()==before and not word(52)
-key(O['KEY_RETURN']); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser]['visible'] and not m.nodes[sheet]['visible']
-assert m.key()==11; passed()
-# Vortex: the frame timer and the raw wheel while it plays; the wheel's travel turns the paddle.
-m.page=m.top; pick(1); assert word(G_SCREEN)==2 and len(frames())==1 and m.get(payload_syms['wheel_raw'])==1
-m.word(payload_syms['wheel_travel'],-50&0xffffffff); m.advance(34); assert word(G_VX+16)==0 and m.get(payload_syms['wheel_travel'])==0
-made=lambda *a: [c[0] for c in m.calls if c[0] in a]
-assert made('reset_poweroptions_timer') and made('widget_invalidate_force')
-# Idle, waiting to launch: no repaint and the screen's timeout runs; the ball in play repaints, still
-# leaving the screen to time out; a key the game ignores paints nothing.
-m.advance(500); assert not made('reset_poweroptions_timer','widget_invalidate_force')
-key(O['KEY_CENTER']); m.advance(500); assert word(G_VX)==1 and made('widget_invalidate_force') and not made('reset_poweroptions_timer'); paint()
-key(O['KEY_FWD_BTN']); assert not made('widget_invalidate_force')
-key(O['KEY_PLAY']); assert word(G_PAUSED)==1 and not frames() and m.get(payload_syms['wheel_raw'])==0
-x=word(G_VX+20),word(G_VX+24); m.advance(500); assert (word(G_VX+20),word(G_VX+24))==x; paint()
-key(O['KEY_PLAY']); assert word(G_PAUSED)==0 and len(frames())==1 and m.get(payload_syms['wheel_raw'])==1
-m.byte(syms['g_backlight_status'],0); m.advance(40); m.byte(syms['g_backlight_status'],1)
-assert word(G_PAUSED)==1 and not frames() and m.get(payload_syms['wheel_raw'])==0
-key(O['KEY_RETURN']); assert word(G_PAUSED)==2; key(O['KEY_NEXT']); paint(); key(O['KEY_CENTER']); m.advance(0)
-assert word(G_SCREEN)==0 and not frames() and m.get(payload_syms['wheel_raw'])==0
-assert m.key()==11; passed()  # Return in the chooser after Vortex goes back to the Library
-# Solitaire (piles 0 stock, 1 waste, 2-5 foundations, 6-12 columns; a card suit*13+rank, 64 up): Centre on
-# the stock draws and saves; the wheel walks the piles, Previous/Next jump between the rows; Centre picks a
-# run up and drops it where it fits, turning the card under it; Centre twice sends a card home; Return
-# drops the held run, then leaves.
-G_SOL=220; sol=lambda: bytes(m.u.mem_read(G+G_SOL,336)); n=lambda p: byte(G_SOL+316+p); cur=lambda: byte(G_SOL+329)
-def put(p,cards): m.u.mem_write(G+G_SOL+4+24*p,bytes(cards)); m.byte(G+G_SOL+316+p,len(cards))
-m.page=m.top; pick(2); assert word(G_SCREEN)==3 and cur()==0 and [n(p) for p in range(13)]==[24,0,0,0,0,0,1,2,3,4,5,6,7]; paint()
-key(O['KEY_CENTER']); m.advance(2000); assert (n(0),n(1))==(23,1) and bytes(m.files['/mnt/data/ringnav-solitaire'])==sol()
-key(O['KEY_NEXT']); assert cur()==1; key(O['KEY_FWD_BTN']); assert cur()==7; key(O['KEY_BACK_BTN']); assert cur()==1
-key(O['KEY_PREV']); key(O['KEY_PREV']); assert cur()==12; key(O['KEY_BACK_BTN']); assert cur()==5; passed()
-put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a face-down 4 under the J of spades
-key(O['KEY_CENTER']); assert word(G_PICKING) and word(48)==7; paint()
-key(O['KEY_FWD_BTN']); key(O['KEY_CENTER']); assert word(G_PICKING)  # not onto the waste
-key(O['KEY_FWD_BTN']); key(O['KEY_PREV']); key(O['KEY_CENTER']); assert not word(G_PICKING); m.advance(2000)
-assert (n(6),n(7),byte(G_SOL+4+24*6+1),byte(G_SOL+4+24*7))==(2,1,64|10,64|3) and bytes(m.files['/mnt/data/ringnav-solitaire'])==sol()
-put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O['KEY_CENTER']); key(O['KEY_CENTER'])  # the Ace of diamonds, home
-assert not word(G_PICKING) and n(1)==0 and n(2)==1 and byte(G_SOL+4+48)==64|26
-m.byte(G+G_SOL+329,6); key(O['KEY_CENTER']); key(O['KEY_CENTER']); assert not word(G_PICKING) and n(6)==2  # nothing home: put back
-key(O['KEY_CENTER']); key(O['KEY_RETURN']); assert not word(G_PICKING) and word(G_SCREEN)==3
-before_sol=sol(); key(O['KEY_PLAY']); assert word(52); paint(); key(O['KEY_RETURN']); assert not word(52) and sol()==before_sol
-key(O['KEY_RETURN']); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser]['visible']; passed()
-# Snake (the body a ring of cells y*20+x, head last; dir 0 up 1 right 2 down 3 left): its frame timer steps it
-# with side keys only; wheel ticks are consumed without changing the game. One turn waits for the next step. Play/Pause
-# pauses, Return's menu quits; a wall ends it, a record saves Best and says so, Centre plays again.
-G_SN=G_SOL+336+52+12; sn=lambda o: m.get(G+G_SN+o)&0xffff; body=lambda: [sn(2*((sn(800)+i)%400)) for i in range(sn(802))]
-def skey(k): r=m.call(k,gap=0,count=2_000_000); assert r==11 and not stock,(k,stock)  # no time between keys
-sdir=lambda: byte(G_SN+806); sstate=lambda: byte(G_SN+808)
-m.page=m.top; pick(3); assert word(G_SCREEN)==4 and len(frames())==1 and m.get(payload_syms['wheel_raw'])==0
-assert body()==[207,208,209] and sdir()==1 and sstate()==1; paint()
-snake_before=bytes(m.u.mem_read(G+G_SN,820))
-skey(O['KEY_NEXT']); skey(O['KEY_PREV']); assert bytes(m.u.mem_read(G+G_SN,820))==snake_before
-skey(O['KEY_FWD_BTN']); skey(O['KEY_FWD_BTN']); assert sdir()==2
-m.advance(170); assert body()[-1]==229 and sdir()==3 and made('widget_invalidate_force')  # the second turn, waiting
-skey(O['KEY_BACK_BTN']); assert sdir()==3  # waits for the next step
-skey(O['KEY_PLAY']); assert word(G_PAUSED)==1 and not frames(); was=body(); m.advance(500); assert body()==was; paint()
-skey(O['KEY_NEXT']); assert sdir()==3  # no turning while paused
-skey(O['KEY_PLAY']); assert word(G_PAUSED)==0 and len(frames())==1
-m.word(G+G_SN+812,5); m.advance(170*12); assert sstate()==2 and not frames() and body()[-1]==388  # left, then down to the wall
-best=bytes(m.files['/mnt/data/ringnav-snake']); assert len(best)==12 and best[:8]==b'SNK1'+struct.pack('<I',5)
-paint(); skey(O['KEY_CENTER']); assert sstate()==1 and body()==[207,208,209] and len(frames())==1
-skey(O['KEY_BACK_BTN']); assert sdir()==0  # side Previous turns left, without the wheel
-m.advance(170); assert body()[-1]==189
-skey(O['KEY_FWD_BTN']); assert sdir()==1  # side Next turns right
-skey(O['KEY_PLAY']); skey(O['KEY_BACK_BTN']); skey(O['KEY_FWD_BTN']); assert sdir()==1
-skey(O['KEY_PLAY'])
-skey(O['KEY_RETURN']); assert word(G_PAUSED)==2 and word(60)==0
-skey(O['KEY_NEXT']); assert word(60)==1  # the wheel picks in the menu
-skey(O['KEY_PREV']); assert word(60)==0
-skey(O['KEY_BACK_BTN']); assert word(60)==1
-skey(O['KEY_FWD_BTN']); assert word(60)==0
-skey(O['KEY_FWD_BTN']); paint(); skey(O['KEY_CENTER']); m.advance(0)
-assert word(G_SCREEN)==0 and not frames(); passed()
-# Closing frees the state, also mid-game; opening again starts clean and resumes the Sudoku.
-m.close(); assert m.get(payload_syms['g'])==0 and not frames()
-sheet,chooser=games_open(); G=m.get(payload_syms['g']); rows=m.nodes[m.find('scroll_view',chooser)]['children']
-pick(0); assert cells()==before
-key(O['KEY_RETURN']); m.advance(0); pick(2); assert sol()[:-4]==before_sol[:-4]  # and the cursor, kept on leaving
-# Moves save once, SAVE_MS after the first unsaved one, not per move; leaving with nothing new writes nothing.
-saves=[]; m.u.hook_add(UC_HOOK_CODE,lambda u,a,n,_: saves.append(a),begin=syms['rename@GLIBC_2.0'],end=syms['rename@GLIBC_2.0'])
-m.byte(G+G_SOL+329,0)
-for _ in range(10): m.call(O['KEY_CENTER'],gap=100,count=2_000_000)
-assert not saves; m.advance(2000); assert len(saves)==1 and bytes(m.files['/mnt/data/ringnav-solitaire'])==sol()
-key(O['KEY_RETURN']); m.advance(0); pick(0); key(O['KEY_RETURN']); m.advance(0); assert len(saves)==1; pick(2)
-key(O['KEY_RETURN']); m.advance(0); pick(1); assert len(frames())==1
-m.close(); assert m.get(payload_syms['g'])==0 and not frames() and m.get(payload_syms['wheel_raw'])==0; passed()
+if is_m1plus: not_ported('Games (ipod-ui 4.8, Q2 only: they need a touch design without the Return key and the wheel)')
+else:
+    sheet,chooser=games_open(); G=m.get(payload_syms['g'])
+    assert labels(chooser)==['Games','Sudoku','Vortex','Solitaire','Snake'] and not m.nodes[sheet]['visible']
+    rows=m.nodes[m.find('scroll_view',chooser)]['children']
+    # The wheel carries over at both ends of the real chooser: a bump, then after a pause the other end.
+    w=m.find('scroll_view',chooser); m.paint(w,gap=0)
+    for _ in range(5):
+        if m.selected(w)!=3: assert m.call(gap=1000)==11; m.paint(w,gap=0)
+    assert m.selected(w)==3
+    assert m.call(gap=100)==11 and m.selected(w)==3; m.paint(w,gap=0)
+    assert m.call(gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==0; m.paint(w,gap=0)
+    assert m.call(PREV,gap=100)==11 and m.selected(w)==0; m.paint(w,gap=0)
+    assert m.call(PREV,gap=O['EDGE_PAUSE_MS'])==11 and m.selected(w)==3; m.paint(w,gap=0); passed()
+    def pick(i):
+        f,ctx=m.handler(rows[i],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.advance(0)
+    def paint(): m.call(address=HOOKS['widget_on_paint_border'][0],args=(sheet,m.canvas,0,0),gap=0,clear=False,count=50_000_000)
+    stock=[]; tramp=int(manifest['patch_symbols']['stock_keyup_trampoline'],16)
+    for a in (tramp,payload_syms['media_key']): m.u.hook_add(UC_HOOK_CODE,lambda u,a,n,_: stock.append(a),begin=a,end=a)
+    def key(k): r=m.call(k,count=2_000_000); assert r==11 and not stock,(k,stock); return r
+    byte=lambda o: m.u.mem_read(G+o,1)[0]; word=lambda o: signed(m.get(G+o))
+    frames=lambda: [t for t in m.timers.values() if t[1]==payload_syms['frame']]
+    pick(0); assert m.nodes[sheet]['visible'] and not m.nodes[chooser]['visible'] and word(G_SCREEN)==1; paint()
+    key(O['KEY_NEXT']); assert byte(G_CUR)==1
+    key(O['KEY_PREV']); key(O['KEY_PREV']); assert byte(G_CUR)==80
+    key(O['KEY_FWD_BTN']); assert byte(G_CUR)==8
+    key(O['KEY_BACK_BTN']); assert byte(G_CUR)==80; passed()
+    # Centre on a blank cell picks its digit with the wheel, Centre writes it and saves; Return cancels; a
+    # clue takes no digit. Play/Pause then asks before a new game.
+    cells=lambda: bytes(m.u.mem_read(G+G_CELL,81))
+    blank=cells().index(0); clue=next(i for i,c in enumerate(cells()) if c&16)
+    m.byte(G+G_CUR,clue); key(O['KEY_CENTER']); assert not word(G_PICKING)
+    m.byte(G+G_CUR,blank); key(O['KEY_CENTER']); assert word(G_PICKING)
+    for _ in range(3): key(O['KEY_NEXT'])
+    paint(); key(O['KEY_CENTER']); assert cells()[blank]==3 and not word(G_PICKING)
+    m.advance(2000); saved=bytes(m.files['/mnt/data/ringnav-sudoku']); assert len(saved)==92 and saved[4:85]==cells()
+    key(O['KEY_CENTER']); key(O['KEY_NEXT']); key(O['KEY_RETURN']); assert cells()[blank]==3 and not word(G_PICKING) and word(G_SCREEN)==1
+    before=cells(); key(O['KEY_PLAY']); assert cells()==before and word(52); paint()
+    key(O['KEY_RETURN']); assert cells()==before and not word(52)
+    key(O['KEY_RETURN']); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser]['visible'] and not m.nodes[sheet]['visible']
+    assert m.key()==11; passed()
+    # Vortex: the frame timer and the raw wheel while it plays; the wheel's travel turns the paddle.
+    m.page=m.top; pick(1); assert word(G_SCREEN)==2 and len(frames())==1 and m.get(payload_syms['wheel_raw'])==1
+    m.word(payload_syms['wheel_travel'],-50&0xffffffff); m.advance(34); assert word(G_VX+16)==0 and m.get(payload_syms['wheel_travel'])==0
+    made=lambda *a: [c[0] for c in m.calls if c[0] in a]
+    assert made('reset_poweroptions_timer') and made('widget_invalidate_force')
+    # Idle, waiting to launch: no repaint and the screen's timeout runs; the ball in play repaints, still
+    # leaving the screen to time out; a key the game ignores paints nothing.
+    m.advance(500); assert not made('reset_poweroptions_timer','widget_invalidate_force')
+    key(O['KEY_CENTER']); m.advance(500); assert word(G_VX)==1 and made('widget_invalidate_force') and not made('reset_poweroptions_timer'); paint()
+    key(O['KEY_FWD_BTN']); assert not made('widget_invalidate_force')
+    key(O['KEY_PLAY']); assert word(G_PAUSED)==1 and not frames() and m.get(payload_syms['wheel_raw'])==0
+    x=word(G_VX+20),word(G_VX+24); m.advance(500); assert (word(G_VX+20),word(G_VX+24))==x; paint()
+    key(O['KEY_PLAY']); assert word(G_PAUSED)==0 and len(frames())==1 and m.get(payload_syms['wheel_raw'])==1
+    m.byte(syms['g_backlight_status'],0); m.advance(40); m.byte(syms['g_backlight_status'],1)
+    assert word(G_PAUSED)==1 and not frames() and m.get(payload_syms['wheel_raw'])==0
+    key(O['KEY_RETURN']); assert word(G_PAUSED)==2; key(O['KEY_NEXT']); paint(); key(O['KEY_CENTER']); m.advance(0)
+    assert word(G_SCREEN)==0 and not frames() and m.get(payload_syms['wheel_raw'])==0
+    assert m.key()==11; passed()  # Return in the chooser after Vortex goes back to the Library
+    # Solitaire (piles 0 stock, 1 waste, 2-5 foundations, 6-12 columns; a card suit*13+rank, 64 up): Centre on
+    # the stock draws and saves; the wheel walks the piles, Previous/Next jump between the rows; Centre picks a
+    # run up and drops it where it fits, turning the card under it; Centre twice sends a card home; Return
+    # drops the held run, then leaves.
+    G_SOL=220; sol=lambda: bytes(m.u.mem_read(G+G_SOL,336)); n=lambda p: byte(G_SOL+316+p); cur=lambda: byte(G_SOL+329)
+    def put(p,cards): m.u.mem_write(G+G_SOL+4+24*p,bytes(cards)); m.byte(G+G_SOL+316+p,len(cards))
+    m.page=m.top; pick(2); assert word(G_SCREEN)==3 and cur()==0 and [n(p) for p in range(13)]==[24,0,0,0,0,0,1,2,3,4,5,6,7]; paint()
+    key(O['KEY_CENTER']); m.advance(2000); assert (n(0),n(1))==(23,1) and bytes(m.files['/mnt/data/ringnav-solitaire'])==sol()
+    key(O['KEY_NEXT']); assert cur()==1; key(O['KEY_FWD_BTN']); assert cur()==7; key(O['KEY_BACK_BTN']); assert cur()==1
+    key(O['KEY_PREV']); key(O['KEY_PREV']); assert cur()==12; key(O['KEY_BACK_BTN']); assert cur()==5; passed()
+    put(6,[64|13+11]); put(7,[3,64|10]); m.byte(G+G_SOL+329,7)  # Q of hearts; a face-down 4 under the J of spades
+    key(O['KEY_CENTER']); assert word(G_PICKING) and word(48)==7; paint()
+    key(O['KEY_FWD_BTN']); key(O['KEY_CENTER']); assert word(G_PICKING)  # not onto the waste
+    key(O['KEY_FWD_BTN']); key(O['KEY_PREV']); key(O['KEY_CENTER']); assert not word(G_PICKING); m.advance(2000)
+    assert (n(6),n(7),byte(G_SOL+4+24*6+1),byte(G_SOL+4+24*7))==(2,1,64|10,64|3) and bytes(m.files['/mnt/data/ringnav-solitaire'])==sol()
+    put(1,[64|26]); m.byte(G+G_SOL+329,1); key(O['KEY_CENTER']); key(O['KEY_CENTER'])  # the Ace of diamonds, home
+    assert not word(G_PICKING) and n(1)==0 and n(2)==1 and byte(G_SOL+4+48)==64|26
+    m.byte(G+G_SOL+329,6); key(O['KEY_CENTER']); key(O['KEY_CENTER']); assert not word(G_PICKING) and n(6)==2  # nothing home: put back
+    key(O['KEY_CENTER']); key(O['KEY_RETURN']); assert not word(G_PICKING) and word(G_SCREEN)==3
+    before_sol=sol(); key(O['KEY_PLAY']); assert word(52); paint(); key(O['KEY_RETURN']); assert not word(52) and sol()==before_sol
+    key(O['KEY_RETURN']); m.advance(0); assert word(G_SCREEN)==0 and m.nodes[chooser]['visible']; passed()
+    # Snake (the body a ring of cells y*20+x, head last; dir 0 up 1 right 2 down 3 left): its frame timer steps it
+    # with side keys only; wheel ticks are consumed without changing the game. One turn waits for the next step. Play/Pause
+    # pauses, Return's menu quits; a wall ends it, a record saves Best and says so, Centre plays again.
+    G_SN=G_SOL+336+52+12; sn=lambda o: m.get(G+G_SN+o)&0xffff; body=lambda: [sn(2*((sn(800)+i)%400)) for i in range(sn(802))]
+    def skey(k): r=m.call(k,gap=0,count=2_000_000); assert r==11 and not stock,(k,stock)  # no time between keys
+    sdir=lambda: byte(G_SN+806); sstate=lambda: byte(G_SN+808)
+    m.page=m.top; pick(3); assert word(G_SCREEN)==4 and len(frames())==1 and m.get(payload_syms['wheel_raw'])==0
+    assert body()==[207,208,209] and sdir()==1 and sstate()==1; paint()
+    snake_before=bytes(m.u.mem_read(G+G_SN,820))
+    skey(O['KEY_NEXT']); skey(O['KEY_PREV']); assert bytes(m.u.mem_read(G+G_SN,820))==snake_before
+    skey(O['KEY_FWD_BTN']); skey(O['KEY_FWD_BTN']); assert sdir()==2
+    m.advance(170); assert body()[-1]==229 and sdir()==3 and made('widget_invalidate_force')  # the second turn, waiting
+    skey(O['KEY_BACK_BTN']); assert sdir()==3  # waits for the next step
+    skey(O['KEY_PLAY']); assert word(G_PAUSED)==1 and not frames(); was=body(); m.advance(500); assert body()==was; paint()
+    skey(O['KEY_NEXT']); assert sdir()==3  # no turning while paused
+    skey(O['KEY_PLAY']); assert word(G_PAUSED)==0 and len(frames())==1
+    m.word(G+G_SN+812,5); m.advance(170*12); assert sstate()==2 and not frames() and body()[-1]==388  # left, then down to the wall
+    best=bytes(m.files['/mnt/data/ringnav-snake']); assert len(best)==12 and best[:8]==b'SNK1'+struct.pack('<I',5)
+    paint(); skey(O['KEY_CENTER']); assert sstate()==1 and body()==[207,208,209] and len(frames())==1
+    skey(O['KEY_BACK_BTN']); assert sdir()==0  # side Previous turns left, without the wheel
+    m.advance(170); assert body()[-1]==189
+    skey(O['KEY_FWD_BTN']); assert sdir()==1  # side Next turns right
+    skey(O['KEY_PLAY']); skey(O['KEY_BACK_BTN']); skey(O['KEY_FWD_BTN']); assert sdir()==1
+    skey(O['KEY_PLAY'])
+    skey(O['KEY_RETURN']); assert word(G_PAUSED)==2 and word(60)==0
+    skey(O['KEY_NEXT']); assert word(60)==1  # the wheel picks in the menu
+    skey(O['KEY_PREV']); assert word(60)==0
+    skey(O['KEY_BACK_BTN']); assert word(60)==1
+    skey(O['KEY_FWD_BTN']); assert word(60)==0
+    skey(O['KEY_FWD_BTN']); paint(); skey(O['KEY_CENTER']); m.advance(0)
+    assert word(G_SCREEN)==0 and not frames(); passed()
+    # Closing frees the state, also mid-game; opening again starts clean and resumes the Sudoku.
+    m.close(); assert m.get(payload_syms['g'])==0 and not frames()
+    sheet,chooser=games_open(); G=m.get(payload_syms['g']); rows=m.nodes[m.find('scroll_view',chooser)]['children']
+    pick(0); assert cells()==before
+    key(O['KEY_RETURN']); m.advance(0); pick(2); assert sol()[:-4]==before_sol[:-4]  # and the cursor, kept on leaving
+    # Moves save once, SAVE_MS after the first unsaved one, not per move; leaving with nothing new writes nothing.
+    saves=[]; m.u.hook_add(UC_HOOK_CODE,lambda u,a,n,_: saves.append(a),begin=syms['rename@GLIBC_2.0'],end=syms['rename@GLIBC_2.0'])
+    m.byte(G+G_SOL+329,0)
+    for _ in range(10): m.call(O['KEY_CENTER'],gap=100,count=2_000_000)
+    assert not saves; m.advance(2000); assert len(saves)==1 and bytes(m.files['/mnt/data/ringnav-solitaire'])==sol()
+    key(O['KEY_RETURN']); m.advance(0); pick(0); key(O['KEY_RETURN']); m.advance(0); assert len(saves)==1; pick(2)
+    key(O['KEY_RETURN']); m.advance(0); pick(1); assert len(frames())==1
+    m.close(); assert m.get(payload_syms['g'])==0 and not frames() and m.get(payload_syms['wheel_raw'])==0; passed()
 
 # Videos (patch/books.c, docs/internals.md#videos): the card's Videos folder (case aside) lists its and
 # its subfolders' video files as Books does; a row stops the music and starts /usr/bin/q2video with
@@ -20859,8 +20865,10 @@ inp=HOOKS['window_manager_dispatch_input_event'][0]; m.handlers[inp+12]='stock_i
 m.call(address=inp,args=(m.wm,m.event,0,0),gap=0); assert m.pass_(1)[1]==[]; passed()  # input: full speed again
 # A wheel press tick_gate drops is no input to the idle clock; one with a frame behind it is.
 m=PowerMachine(); m.handlers[inp+12]='stock_input'; m.animating=1; m.pass_(1); m.pass_(O['IDLE_MS']); m.animating=0; assert m.pass_(1)[1]==[O['IDLE_SLEEP_MS']]
-m.call(address=inp,args=(m.wm,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0); assert m.pass_(1)[1]==[O['IDLE_SLEEP_MS']]
-m.word(payload_syms['wheel_frame_at'],m.now); m.call(address=inp,args=(m.wm,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0); assert m.pass_(1)[1]==[]; passed()
+if is_m1plus: not_ported('A wheel press tick_gate drops is no input to the idle clock (ipod-ui 4.8, Q2 only: the touch wheel)')
+else:
+    m.call(address=inp,args=(m.wm,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0); assert m.pass_(1)[1]==[O['IDLE_SLEEP_MS']]
+    m.word(payload_syms['wheel_frame_at'],m.now); m.call(address=inp,args=(m.wm,m.event,0,0),event_type=O['EVT_KEY_DOWN'],gap=0); assert m.pass_(1)[1]==[]; passed()
 # Now Playing keeps stock's pace only while its visualizer repaints; idle, it idles like any page.
 class Live(PowerMachine):
     def hook(self,u,address,size,unused):
