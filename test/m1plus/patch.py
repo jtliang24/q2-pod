@@ -2612,14 +2612,15 @@ for page in ('playmode_page','autosynctime_page'):
     m.paint(w); assert m.selected(w)==2,page; passed()
 # iPod Minimal: the selected row's white radio is drawn again dark on the off-white card: a ring,
 # and its dot when checked. Other rows keep stock's.
-for row,image,fills in ((2,'select',3),(0,'unselect',0),(2,'more',4),(0,'more',0)):
+CHECK='selected' if is_m1plus else 'select'  # V2.1 checks a choice with "selected" (CHOICE_CHECK)
+for row,image,fills in ((2,CHECK,3),(0,'unselect',0),(2,'more',4),(0,'more',0)):
     m=Machine(); w,es=m.page_list(4,name='playmode_page')
     radio=m.node('image',image=image); m.nodes[es[row]]['children']=[radio]
     if image=='more':
         m.nodes[radio]['name']='img_more0'
-        if row==2: m.nodes[es[row]]['children'].append(m.node('image',image='select'))
+        if row==2: m.nodes[es[row]]['children'].append(m.node('image',image=CHECK))
     m.word(radio+O['W_PARENT'],es[row]); m.word(radio+O['W_W'],50 if image=='more' else 26); m.word(radio+O['W_H'],70)
-    if row==0: m.nodes[es[2]]['children']=[m.node('image',image='select')]
+    if row==0: m.nodes[es[2]]['children']=[m.node('image',image=CHECK)]
     m.paint(w); m.paint(radio)
     expected=[(12,31,26,8),(14,33,4,4),(21,33,4,4),(28,33,4,4)] if image=='more' else [(0,22,26,26),(2,24,22,22),(7,29,12,12)]
     assert [r['rect'] for r in m.rounded]==expected[:fills] and m.lcd_colors()==LCD_COLORS, (image,m.rounded,m.lcd_colors())
@@ -12232,60 +12233,63 @@ def row_text(r):  # a row's label; a Classic value row (list_value) reads "title
     b=m.nodes[m.nodes[r]['children'][0]]; t=m.nodes[b['children'][1]]['text']
     v=[m.nodes[k]['text'] for k in b['children'] if m.nodes[k].get('name')=='_setting_value']
     return f'{t}: {v[0]}' if v else t
-m,main,_=display({},sub=0)
-kids=m.nodes[main]['children']
-assert len(kids)==7 and [row_text(r) for r in kids[2:4]+kids[5:]]==['Smart Awake','Night Shift: Off','Appearance','Cover Flow']
-keep_lit=kids[2]
-assert m.icons_set==['system_display','switch_off','display_backlight','list_into','system_display','list_into','playset_covermode','list_into']
-f,ctx=m.handler(m.nodes[kids[5]]['children'][0],O['EVT_CLICK']); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.opened[-1]==('systemset/display_page',None) and m.get(payload_syms['display_sub'])==0; passed()
-# Cover Flow: Artist View, Cover Flow Sort, Refresh Cover Flow; Controls, System's row: the wheel, the
-# buttons and what they do.
-cfv=display_page(m,2); cf,cf_sort,cf_refresh=m.nodes[cfv]['children']
-assert m.icons_set==['playset_covermode','playset_covermode','system_update']
-ctl=display_page(m,3); wheel,hold,scrub_one,tone,hp,lock,wake,guard=m.nodes[ctl]['children']
-assert [row_text(r) for r in (hold,scrub_one)]==['Hold Return: Recent','Single Press Scrub']; passed()
-view=display_page(m,1); rows=setting_rows(m,view)
-kids=m.nodes[view]['children']; light,corners,centred=kids[1],kids[3],kids[6]
-assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and m.nodes[rows[0]].get('visible',1)==1  # Theme, Light Mode, Accent, Corners, Home, Battery
-assert m.icons_set==['system_display','system_display','system_display','system_display','playset_covermode','system_powermanager'] and all(m.nodes[r]['type']=='list_item' and m.nodes[r]['style']==S('s_listitem_black') for r in rows)
-buttons=[m.nodes[r]['children'][0] for r in rows]; labels=[m.nodes[b]['children'][1] for b in buttons]
-for b,l in zip(buttons,labels):
-    icon=m.nodes[b]['children'][0]  # stock's 0x4c19bc icon geometry, which the row layouter maps
-    assert m.nodes[icon]['type']=='image' and [m.get(icon+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[10,0,52,70]
-    assert m.nodes[b]['style']==S('s_btn_listitem') and [m.get(b+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,70]
-    assert m.nodes[l]['type']=='hscroll_label' and m.nodes[l]['style']==S('s_scrlabel_white24l') and m.get(l+O['W_X'])==72
-def texts(): return [m.nodes[l]['text'] for l in labels]
-# Smart Awake (IPOD KEEPLIT, #57): a switch, off unless chosen, that only saves.
-keep_label=m.nodes[m.nodes[keep_lit]['children'][0]]['children'][1]; assert m.nodes[keep_label]['text']=='Smart Awake'
-f,ctx=m.handler(m.nodes[keep_lit]['children'][0],O['EVT_CLICK']); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,'image_manager_unload_all')
-assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(1,'IPOD','KEEPLIT')]
-m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-# Time in Title (IPOD TIMETITLE): a switch, on (the clock) unless chosen, that only saves; bar_title reads it.
-title_label=m.nodes[m.nodes[time_title]['children'][0]]['children'][1]; assert m.nodes[title_label]['text']=='Time in Title'
-f,ctx=m.handler(m.nodes[time_title]['children'][0],O['EVT_CLICK']); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,'image_manager_unload_all')
-assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(0,'IPOD','TIMETITLE')]
-m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-# Single Press Scrub (IPOD SCRUBSINGLE): a switch, off unless chosen, that only saves.
-one_label=m.nodes[m.nodes[scrub_one]['children'][0]]['children'][1]; assert m.nodes[one_label]['text']=='Single Press Scrub'
-f,ctx=m.handler(m.nodes[scrub_one]['children'][0],O['EVT_CLICK']); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,'image_manager_unload_all')
-assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(1,'IPOD','SCRUBSINGLE')]
-m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-# Centred Now Playing (IPOD NPCENTRED): a switch that only saves; the next Now Playing opens stock's
-# own page (PLAYING_STOCK) through the window loader, and no other window changes.
-centred_label=m.nodes[m.nodes[centred]['children'][0]]['children'][1]; assert m.nodes[centred_label]['text']=='Centred Now Playing'
-f,ctx=m.handler(m.nodes[centred]['children'][0],O['EVT_CLICK']); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,'image_manager_unload_all')
-assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(1,'IPOD','NPCENTRED')]
-load=HOOKS['ui_loader_load_widget_with_parent'][0]; m.handlers[int(manifest['patch_symbols']['stock_ui_load_trampoline'],16)]='stock_ui_load'
-def loaded(name):
-    m.calls=[]; m.call(address=load,args=(m.string(name),0,0,0),gap=0)
-    return [m.text(c[1]) for c in m.calls if c[0]=='stock_ui_load']
-assert loaded('playing_page')==['playing_page_stock'] and loaded('home_page')==['home_page']
-m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert loaded('playing_page')==['playing_page']; passed()
+load=HOOKS['ui_loader_load_widget_with_parent'][0]  # the page loader, which the geometry-set cases below call too
+if is_m1plus: not_ported("The Q2's Display page and its Appearance, Cover Flow and Controls rows on V1.32's layout (display_page; the M1's own Display page is checked with settings_page, m1plus_nav_display.c)")
+else:
+    m,main,_=display({},sub=0)
+    kids=m.nodes[main]['children']
+    assert len(kids)==7 and [row_text(r) for r in kids[2:4]+kids[5:]]==['Smart Awake','Night Shift: Off','Appearance','Cover Flow']
+    keep_lit=kids[2]
+    assert m.icons_set==['system_display','switch_off','display_backlight','list_into','system_display','list_into','playset_covermode','list_into']
+    f,ctx=m.handler(m.nodes[kids[5]]['children'][0],O['EVT_CLICK']); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.opened[-1]==('systemset/display_page',None) and m.get(payload_syms['display_sub'])==0; passed()
+    # Cover Flow: Artist View, Cover Flow Sort, Refresh Cover Flow; Controls, System's row: the wheel, the
+    # buttons and what they do.
+    cfv=display_page(m,2); cf,cf_sort,cf_refresh=m.nodes[cfv]['children']
+    assert m.icons_set==['playset_covermode','playset_covermode','system_update']
+    ctl=display_page(m,3); wheel,hold,scrub_one,tone,hp,lock,wake,guard=m.nodes[ctl]['children']
+    assert [row_text(r) for r in (hold,scrub_one)]==['Hold Return: Recent','Single Press Scrub']; passed()
+    view=display_page(m,1); rows=setting_rows(m,view)
+    kids=m.nodes[view]['children']; light,corners,centred=kids[1],kids[3],kids[6]
+    assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and m.nodes[rows[0]].get('visible',1)==1  # Theme, Light Mode, Accent, Corners, Home, Battery
+    assert m.icons_set==['system_display','system_display','system_display','system_display','playset_covermode','system_powermanager'] and all(m.nodes[r]['type']=='list_item' and m.nodes[r]['style']==S('s_listitem_black') for r in rows)
+    buttons=[m.nodes[r]['children'][0] for r in rows]; labels=[m.nodes[b]['children'][1] for b in buttons]
+    for b,l in zip(buttons,labels):
+        icon=m.nodes[b]['children'][0]  # stock's 0x4c19bc icon geometry, which the row layouter maps
+        assert m.nodes[icon]['type']=='image' and [m.get(icon+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[10,0,52,70]
+        assert m.nodes[b]['style']==S('s_btn_listitem') and [m.get(b+O[k]) for k in ('W_X','W_Y','W_W','W_H')]==[20,0,335,70]
+        assert m.nodes[l]['type']=='hscroll_label' and m.nodes[l]['style']==S('s_scrlabel_white24l') and m.get(l+O['W_X'])==72
+    def texts(): return [m.nodes[l]['text'] for l in labels]
+    # Smart Awake (IPOD KEEPLIT, #57): a switch, off unless chosen, that only saves.
+    keep_label=m.nodes[m.nodes[keep_lit]['children'][0]]['children'][1]; assert m.nodes[keep_label]['text']=='Smart Awake'
+    f,ctx=m.handler(m.nodes[keep_lit]['children'][0],O['EVT_CLICK']); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,'image_manager_unload_all')
+    assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(1,'IPOD','KEEPLIT')]
+    m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    # Time in Title (IPOD TIMETITLE): a switch, on (the clock) unless chosen, that only saves; bar_title reads it.
+    title_label=m.nodes[m.nodes[time_title]['children'][0]]['children'][1]; assert m.nodes[title_label]['text']=='Time in Title'
+    f,ctx=m.handler(m.nodes[time_title]['children'][0],O['EVT_CLICK']); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,'image_manager_unload_all')
+    assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(0,'IPOD','TIMETITLE')]
+    m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    # Single Press Scrub (IPOD SCRUBSINGLE): a switch, off unless chosen, that only saves.
+    one_label=m.nodes[m.nodes[scrub_one]['children'][0]]['children'][1]; assert m.nodes[one_label]['text']=='Single Press Scrub'
+    f,ctx=m.handler(m.nodes[scrub_one]['children'][0],O['EVT_CLICK']); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,'image_manager_unload_all')
+    assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(1,'IPOD','SCRUBSINGLE')]
+    m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    # Centred Now Playing (IPOD NPCENTRED): a switch that only saves; the next Now Playing opens stock's
+    # own page (PLAYING_STOCK) through the window loader, and no other window changes.
+    centred_label=m.nodes[m.nodes[centred]['children'][0]]['children'][1]; assert m.nodes[centred_label]['text']=='Centred Now Playing'
+    f,ctx=m.handler(m.nodes[centred]['children'][0],O['EVT_CLICK']); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,'image_manager_unload_all')
+    assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(1,'IPOD','NPCENTRED')]
+    load=HOOKS['ui_loader_load_widget_with_parent'][0]; m.handlers[int(manifest['patch_symbols']['stock_ui_load_trampoline'],16)]='stock_ui_load'
+    def loaded(name):
+        m.calls=[]; m.call(address=load,args=(m.string(name),0,0,0),gap=0)
+        return [m.text(c[1]) for c in m.calls if c[0]=='stock_ui_load']
+    assert loaded('playing_page')==['playing_page_stock'] and loaded('home_page')==['home_page']
+    m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert loaded('playing_page')==['playing_page']; passed()
 # Geometry sets: the first system_bar load rewrites only the stock immediates whose set value differs.
 settings_m=m  # the Appearance cases go on with it below
 from build import segments
@@ -12606,22 +12610,24 @@ m=settings_m
 hm=classic_light_on(Machine()); hv,himgs=home_list(hm); click_target(hm,himgs[2]); hm.clip=(0,0,375,320); hm.paint(hv)
 assert not hm.rounded and hm.bands and all(b[0]==0 and b[2]==HOME_LIST_W for b in hm.bands[:hm.sel()[3]])
 assert len(hm.icons)==1 and hm.icons[0][0]==168+25 and 'classic_light_chevron' in [hm.text(c[2]) for c in hm.calls if c[0]=='widget_load_image']; passed()
-# Artist albums (Q2POD ARTISTCF), the other layout choice, after Home; no key is Coverflow.
-cf_label=m.nodes[m.nodes[cf]['children'][0]]['children'][1]; assert m.nodes[cf_label]['text']=='Artist View: Cover Flow'
-f,ctx=m.handler(m.nodes[cf]['children'][0],O['EVT_CLICK']); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[cf_label]['text']=='Artist View: List'
-assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(2,'Q2POD','ARTISTCF')]
-m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label]['text']=='Artist View: Grid'
-m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label]['text']=='Artist View: Cover Flow'; passed()
-# Cover Flow Sort and Refresh Cover Flow (coverflow.c), the library Coverflow's Sort and Refresh cards
-# before: no saved order is Album; Refresh empties the art cache for the next open, and stock's Library covers
-# with AWTK's cached bitmaps, with a toast.
-sort_label,refresh_label=(m.nodes[m.nodes[r]['children'][0]]['children'][1] for r in (cf_sort,cf_refresh))
-assert m.nodes[sort_label]['text']=='Cover Flow Sort: Album' and m.nodes[refresh_label]['text']=='Refresh Cover Flow'
-f,ctx=m.handler(m.nodes[cf_refresh]['children'][0],O['EVT_CLICK']); m.mock('opendir@GLIBC_2.0'); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]=='Cover Flow rebuilds artwork next time'
-assert [m.text(c[1]) for c in m.calls if c[0]=='opendir@GLIBC_2.0']==['/mnt/mmc/.coverflow','/mnt/mmc/.sldp']
-assert did(m,'image_manager_unload_all') and m.nodes[refresh_label]['text']=='Refresh Cover Flow'; passed()
+if is_m1plus: not_ported("The Q2's Display page and its Appearance, Cover Flow and Controls rows on V1.32's layout (display_page; the M1's own Display page is checked with settings_page, m1plus_nav_display.c): Cover Flow's rows")
+else:
+    # Artist albums (Q2POD ARTISTCF), the other layout choice, after Home; no key is Coverflow.
+    cf_label=m.nodes[m.nodes[cf]['children'][0]]['children'][1]; assert m.nodes[cf_label]['text']=='Artist View: Cover Flow'
+    f,ctx=m.handler(m.nodes[cf]['children'][0],O['EVT_CLICK']); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[cf_label]['text']=='Artist View: List'
+    assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(2,'Q2POD','ARTISTCF')]
+    m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label]['text']=='Artist View: Grid'
+    m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label]['text']=='Artist View: Cover Flow'; passed()
+    # Cover Flow Sort and Refresh Cover Flow (coverflow.c), the library Coverflow's Sort and Refresh cards
+    # before: no saved order is Album; Refresh empties the art cache for the next open, and stock's Library covers
+    # with AWTK's cached bitmaps, with a toast.
+    sort_label,refresh_label=(m.nodes[m.nodes[r]['children'][0]]['children'][1] for r in (cf_sort,cf_refresh))
+    assert m.nodes[sort_label]['text']=='Cover Flow Sort: Album' and m.nodes[refresh_label]['text']=='Refresh Cover Flow'
+    f,ctx=m.handler(m.nodes[cf_refresh]['children'][0],O['EVT_CLICK']); m.mock('opendir@GLIBC_2.0'); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]=='Cover Flow rebuilds artwork next time'
+    assert [m.text(c[1]) for c in m.calls if c[0]=='opendir@GLIBC_2.0']==['/mnt/mmc/.coverflow','/mnt/mmc/.sldp']
+    assert did(m,'image_manager_unload_all') and m.nodes[refresh_label]['text']=='Refresh Cover Flow'; passed()
 # Shortcut: no key is Rockbox on a card with it, else Favorites (the M1's always Favorites: no Rockbox there).
 for card,first in ((True,'Favorites' if is_m1plus else 'Rockbox'),(False,'Favorites')):
     CONFIG.clear(); d=Machine(); d.rockbox_mode=0o100755 if card else 0
@@ -12635,126 +12641,128 @@ CONFIG.clear(); CONFIG['SHORTCUT']='7'; d=Machine(); del CONFIG['SHORTCUT']
 assert d.text(d.call(address=payload_syms['ipod_home_shortcut'],args=(0,0,0,0),gap=0))=='Playlists'
 d.calls=[]; d.call(address=payload_syms['home_shortcut_open'],args=(0,d.event,0,0),gap=0)
 assert [(d.text(c[1]),c[2]) for c in d.calls if c[0]=='navigator_to_with_context']==[(PLAYLIST_PAGE,0)]; passed()
-assert texts()==['Accent: Ivory','Home: Split','Battery: Icon','Theme: Minimal']; passed()
-def click(i):
-    m.calls=[]; f,ctx=m.handler(buttons[i],O['EVT_CLICK'])
-    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
-    return [c[1:] for c in m.calls if c[0]=='write_int_config']
-def pick_theme(t):  # the Theme picker's row for theme t (theme_pick), the Appearance page underneath
-    m.calls=[]; assert m.call(address=payload_syms['theme_pick'],args=(t,0,0,0),gap=0)==0
-    return [c[1:] for c in m.calls if c[0]=='write_int_config']
-# Initialize the real Home asset on this machine, then toggle its cached settings in Display.
-home=asset_tree(m,HOME_PAGE)
-m.handlers[HOOKS['home_page_init'][0]+12]='stock_home'
-m.call(address=HOOKS['home_page_init'][0],args=(home,0,0,0),gap=0)
-art=named(m,home,'img_homeart')
-def home_bounds(full,modern=False):
-    x0,end=(O['HOME_MODERN_TEXT_X'],O['HOME_MODERN_LABEL_END']) if modern else (HOME_TEXT_X,O['HOME_LABEL_END' if full else 'HOME_SPLIT_LABEL_END'])
-    split=O['HOME_SPLIT_W']
-    row=(O['HOME_MODERN_ROW'] if modern else O['HOME_FULL_ROW']) if full else split
-    for name in ('list_view_home','list_view_homeset'):
-        menu=named(m,home,name)
-        assert m.get(menu+O['W_W'])==(375 if full else split)
-        assert m.get(menu+O['W_Y'])==(0 if modern else O['HOME_TOP'])
-        for r in m.nodes[m.nodes[menu]['children'][0]]['children']:
-            label=m.nodes[r]['children'][0]
-            x,y,width,height=cf_geometry(m,label)
-            assert x==x0 and width>0 and x+width==row-end and m.get(r+O['W_W'])==row
-    assert m.nodes[art]['visible']==(not full)
-    assert tuple(signed(m.get(art+O[k])) for k in ('W_X','W_Y','W_W','W_H'))==(split,0,375-split,290)
-def carousel(on):
-    """Home: Carousel: stock's carousel and arrows in the lists' place, the art hidden; else the
-    main list, the carousel hidden, neither taking taps while hidden."""
-    def shown(name):
-        w=named(m,home,name); n=m.nodes[w]
-        taps=n.get('sensitive',int(n['asset'].get('sensitive')!='false'))
-        assert n['visible']==taps,name
-        return n['visible']
-    assert [shown(n) for n in ('slide_menu','img_left','img_right','list_view_home','list_view_homeset')]==[on]*3+[not on,0]
-    if on: assert not m.nodes[art]['visible']
-shortcut_button=m.nodes[shortcut]['children'][0]
-sf,sc=m.handler(shortcut_button,O['EVT_CLICK'])
-for label in ('Favorites','Shuffle','Rated Albums','Playlists','Artists','Albums','Games','Podcasts','Audiobooks','Rockbox'):
-    m.call(address=sf,args=(sc,m.event,0,0),gap=0)
-    assert m.nodes[named(m,home,'label_rockbox')]['text']==label
-home_bounds(False); carousel(False)
-writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(1,'HOME')] and texts()[1]=='Home: Full'
-home_bounds(True); carousel(False)
-assert not [c for c in m.calls if c[0]=='image_manager_unload_all']; passed()
-writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(2,'HOME')] and texts()[1]=='Home: Carousel'
-carousel(True); assert not [c for c in m.calls if c[0]=='image_manager_unload_all']; passed()
-click(1); assert texts()[1]=='Home: Split'; home_bounds(False); carousel(False); passed()
-# Rounded Corners: a switch, off with no key; a click saves it on, and Theme leaves it alone.
-corners_label=m.nodes[m.nodes[corners]['children'][0]]['children'][1]; assert m.nodes[corners_label]['text']=='Rounded Corners'
-def corners_switch(): return [m.nodes[c]['image'] for c in m.nodes[m.nodes[corners]['children'][0]]['children'] if m.nodes[c].get('name')=='_setting_switch']
-assert corners_switch()==['switch_off']
-f,ctx=m.handler(m.nodes[corners]['children'][0],O['EVT_CLICK']); m.calls=[]
-assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and corners_switch()==['switch_on']
-assert [(c[1],m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(1,'ROUNDED')] and ('widget_invalidate_force',m.wm) in [c[:2] for c in m.calls]
-# Light Mode: no key is Off; a click saves On, then Auto (LIGHT=2), then Off; each drops the cached images and repaints.
-light_label=m.nodes[m.nodes[light]['children'][0]]['children'][1]; assert m.nodes[light_label]['text']=='Light Mode: Off'
-f,ctx=f_light,ctx_light=m.handler(m.nodes[light]['children'][0],O['EVT_CLICK'])
-for value,text in ((1,'On'),(2,'Auto'),(0,'Off')):
-    m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[light_label]['text']=='Light Mode: '+text
-    assert [(c[1],m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(value,'LIGHT')]
-    assert ('image_manager_unload_all',0x1000500) in [c[:2] for c in m.calls] and ('widget_invalidate_force',m.wm) in [c[:2] for c in m.calls]
-    if value==2:  # Auto: the clock's minute drops the images and repaints as the hour crosses, once
-        for clock,flip in (((6,59),1),((6,59),0),((7,0),1),((7,1),0),((19,0),1)):
-            m.clock=clock; m.calls=[]
+if is_m1plus: not_ported("The Q2's Display page and its Appearance, Cover Flow and Controls rows on V1.32's layout (display_page; the M1's own Display page is checked with settings_page, m1plus_nav_display.c): Appearance's rows")
+else:
+    assert texts()==['Accent: Ivory','Home: Split','Battery: Icon','Theme: Minimal']; passed()
+    def click(i):
+        m.calls=[]; f,ctx=m.handler(buttons[i],O['EVT_CLICK'])
+        assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
+        return [c[1:] for c in m.calls if c[0]=='write_int_config']
+    def pick_theme(t):  # the Theme picker's row for theme t (theme_pick), the Appearance page underneath
+        m.calls=[]; assert m.call(address=payload_syms['theme_pick'],args=(t,0,0,0),gap=0)==0
+        return [c[1:] for c in m.calls if c[0]=='write_int_config']
+    # Initialize the real Home asset on this machine, then toggle its cached settings in Display.
+    home=asset_tree(m,HOME_PAGE)
+    m.handlers[HOOKS['home_page_init'][0]+12]='stock_home'
+    m.call(address=HOOKS['home_page_init'][0],args=(home,0,0,0),gap=0)
+    art=named(m,home,'img_homeart')
+    def home_bounds(full,modern=False):
+        x0,end=(O['HOME_MODERN_TEXT_X'],O['HOME_MODERN_LABEL_END']) if modern else (HOME_TEXT_X,O['HOME_LABEL_END' if full else 'HOME_SPLIT_LABEL_END'])
+        split=O['HOME_SPLIT_W']
+        row=(O['HOME_MODERN_ROW'] if modern else O['HOME_FULL_ROW']) if full else split
+        for name in ('list_view_home','list_view_homeset'):
+            menu=named(m,home,name)
+            assert m.get(menu+O['W_W'])==(375 if full else split)
+            assert m.get(menu+O['W_Y'])==(0 if modern else O['HOME_TOP'])
+            for r in m.nodes[m.nodes[menu]['children'][0]]['children']:
+                label=m.nodes[r]['children'][0]
+                x,y,width,height=cf_geometry(m,label)
+                assert x==x0 and width>0 and x+width==row-end and m.get(r+O['W_W'])==row
+        assert m.nodes[art]['visible']==(not full)
+        assert tuple(signed(m.get(art+O[k])) for k in ('W_X','W_Y','W_W','W_H'))==(split,0,375-split,290)
+    def carousel(on):
+        """Home: Carousel: stock's carousel and arrows in the lists' place, the art hidden; else the
+        main list, the carousel hidden, neither taking taps while hidden."""
+        def shown(name):
+            w=named(m,home,name); n=m.nodes[w]
+            taps=n.get('sensitive',int(n['asset'].get('sensitive')!='false'))
+            assert n['visible']==taps,name
+            return n['visible']
+        assert [shown(n) for n in ('slide_menu','img_left','img_right','list_view_home','list_view_homeset')]==[on]*3+[not on,0]
+        if on: assert not m.nodes[art]['visible']
+    shortcut_button=m.nodes[shortcut]['children'][0]
+    sf,sc=m.handler(shortcut_button,O['EVT_CLICK'])
+    for label in ('Favorites','Shuffle','Rated Albums','Playlists','Artists','Albums','Games','Podcasts','Audiobooks','Rockbox'):
+        m.call(address=sf,args=(sc,m.event,0,0),gap=0)
+        assert m.nodes[named(m,home,'label_rockbox')]['text']==label
+    home_bounds(False); carousel(False)
+    writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(1,'HOME')] and texts()[1]=='Home: Full'
+    home_bounds(True); carousel(False)
+    assert not [c for c in m.calls if c[0]=='image_manager_unload_all']; passed()
+    writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(2,'HOME')] and texts()[1]=='Home: Carousel'
+    carousel(True); assert not [c for c in m.calls if c[0]=='image_manager_unload_all']; passed()
+    click(1); assert texts()[1]=='Home: Split'; home_bounds(False); carousel(False); passed()
+    # Rounded Corners: a switch, off with no key; a click saves it on, and Theme leaves it alone.
+    corners_label=m.nodes[m.nodes[corners]['children'][0]]['children'][1]; assert m.nodes[corners_label]['text']=='Rounded Corners'
+    def corners_switch(): return [m.nodes[c]['image'] for c in m.nodes[m.nodes[corners]['children'][0]]['children'] if m.nodes[c].get('name')=='_setting_switch']
+    assert corners_switch()==['switch_off']
+    f,ctx=m.handler(m.nodes[corners]['children'][0],O['EVT_CLICK']); m.calls=[]
+    assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and corners_switch()==['switch_on']
+    assert [(c[1],m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(1,'ROUNDED')] and ('widget_invalidate_force',m.wm) in [c[:2] for c in m.calls]
+    # Light Mode: no key is Off; a click saves On, then Auto (LIGHT=2), then Off; each drops the cached images and repaints.
+    light_label=m.nodes[m.nodes[light]['children'][0]]['children'][1]; assert m.nodes[light_label]['text']=='Light Mode: Off'
+    f,ctx=f_light,ctx_light=m.handler(m.nodes[light]['children'][0],O['EVT_CLICK'])
+    for value,text in ((1,'On'),(2,'Auto'),(0,'Off')):
+        m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[light_label]['text']=='Light Mode: '+text
+        assert [(c[1],m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(value,'LIGHT')]
+        assert ('image_manager_unload_all',0x1000500) in [c[:2] for c in m.calls] and ('widget_invalidate_force',m.wm) in [c[:2] for c in m.calls]
+        if value==2:  # Auto: the clock's minute drops the images and repaints as the hour crosses, once
+            for clock,flip in (((6,59),1),((6,59),0),((7,0),1),((7,1),0),((19,0),1)):
+                m.clock=clock; m.calls=[]
+                m.call(address=payload_syms['clock_due'],args=(0,0,0,0),gap=0,clear=False)
+                assert [c[:2] for c in m.calls if c[0]=='image_manager_unload_all']==[('image_manager_unload_all',0x1000500)]*flip,clock
+            m.clock=(18,14)
             m.call(address=payload_syms['clock_due'],args=(0,0,0,0),gap=0,clear=False)
-            assert [c[:2] for c in m.calls if c[0]=='image_manager_unload_all']==[('image_manager_unload_all',0x1000500)]*flip,clock
-        m.clock=(18,14)
-        m.call(address=payload_syms['clock_due'],args=(0,0,0,0),gap=0,clear=False)
-passed()
-# Theme: Modern, on Minimal's set, applies at once: its preset (Light Mode on, Cobalt, square corners, Split, Time
-# in Title off), Home laid out with its own text inset and chevron row, and the accent's bar; back to Minimal, its
-# preset (dark, Graphite, rounded, Time in Title on). Only changes are saved.
-writes=pick_theme(2); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]==[(2,'IPOD','THEME'),(1,'IPOD','LIGHT'),(4,'IPOD','ACCENT'),(0,'IPOD','ROUNDED'),(0,'IPOD','TIMETITLE')]
-assert corners_switch()==['switch_off'] and m.nodes[light_label]['text']=='Light Mode: On'
-assert ('image_manager_unload_all',0x1000500) in [c[:2] for c in m.calls] and ('widget_invalidate_force',m.wm) in [c[:2] for c in m.calls]
-kids=m.nodes[view]['children']
-assert kids==[rows[3],light,rows[0],corners,rows[1],shortcut,rows[2],time_title,centred] and m.nodes[rows[0]].get('visible',1)==1
-assert texts()==['Accent: Cobalt','Home: Split','Battery: Icon','Theme: Modern']; home_bounds(False,True); passed()
-# Theme, the first row, keeps the selection, and the very next paint is the preset's Cobalt bar.
-m.paint(view); assert m.selected(view)==0 and [m.bands[i][4] for i in (0,1,47)]==[color_t(ACCENTS[4][i]) for i in (4,0,1)]; passed()
-click(1); assert texts()[1]=='Home: Full'; home_bounds(True,True); click(1); carousel(True)
-click(1); home_bounds(False,True); carousel(False); passed()
-# The preset's rows are the user's after it: Light Mode back off (On, Auto, Off) stays off.
-for _ in range(2): m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0)
-assert m.nodes[light_label]['text']=='Light Mode: Off'
-for value,name in ((5,'Tangerine'),(6,'Plum'),(8,'Green'),(0,'Graphite'),(1,'Crimson'),(2,'Tidal'),(3,'Champagne'),(4,'Cobalt'),(5,'Tangerine')):  # Ivory skipped
-    writes=click(0)
-    assert len(writes)==1 and writes[0][0]==value and m.text(writes[0][1])=='IPOD' and m.text(writes[0][2])=='ACCENT'
+    passed()
+    # Theme: Modern, on Minimal's set, applies at once: its preset (Light Mode on, Cobalt, square corners, Split, Time
+    # in Title off), Home laid out with its own text inset and chevron row, and the accent's bar; back to Minimal, its
+    # preset (dark, Graphite, rounded, Time in Title on). Only changes are saved.
+    writes=pick_theme(2); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]==[(2,'IPOD','THEME'),(1,'IPOD','LIGHT'),(4,'IPOD','ACCENT'),(0,'IPOD','ROUNDED'),(0,'IPOD','TIMETITLE')]
+    assert corners_switch()==['switch_off'] and m.nodes[light_label]['text']=='Light Mode: On'
     assert ('image_manager_unload_all',0x1000500) in [c[:2] for c in m.calls] and ('widget_invalidate_force',m.wm) in [c[:2] for c in m.calls]
-    assert texts()[0]=='Accent: '+name
-    m.paint(view)
-    assert {b[4]&0xffffff for b in m.bands if b[1]>m.bands[0][1]}=={color_t(ACCENTS[value][0])&0xffffff}
-    assert m.bands[0][4]==color_t(ACCENTS[value][4]); passed()
-writes=pick_theme(0); assert [(w[0],m.text(w[2])) for w in writes]==[(0,'THEME'),(0,'MINIMAL_ACCENT'),(1,'ROUNDED'),(1,'TIMETITLE')]
-assert texts()[3]=='Theme: Minimal' and corners_switch()==['switch_on'] and m.nodes[light_label]['text']=='Light Mode: Off'
-m.paint(view); assert m.selected(view)==0
-kids=m.nodes[view]['children']
-assert kids==[rows[3],light,rows[0],corners,rows[1],shortcut,rows[2],time_title,centred] and texts()[0]=='Accent: Graphite' and texts()[1]=='Home: Split'
-home_bounds(False)
-m.paint(view); assert not m.bands and m.rounded[0]['color']==color_t(ACCENTS[0][0]); passed()
-# Light Mode's Auto survives a Theme change; the other preset rows are the user's to change after.
-m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0)
-assert m.nodes[light_label]['text']=='Light Mode: Auto'
-for t in (2,0):
-    writes=pick_theme(t); assert 'LIGHT' not in [m.text(w[2]) for w in writes] and m.nodes[light_label]['text']=='Light Mode: Auto'
-m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); assert m.nodes[light_label]['text']=='Light Mode: Off'; passed()
-# Minimal's accents (MINIMAL_ACCENT): Ivory, then Modern's; a coloured one is the card's fill.
-for value,name in ((1,'Crimson'),(2,'Tidal'),(3,'Champagne'),(4,'Cobalt'),(5,'Tangerine'),(6,'Plum'),(8,'Green'),(7,'Ivory'),(0,'Graphite')):
-    writes=click(0); assert [(w[0],m.text(w[2])) for w in writes]==[(value,'MINIMAL_ACCENT')] and texts()[0]=='Accent: '+name
-    m.paint(view); assert not m.bands and m.rounded[0]['color']==color_t(0xeeeeec if value==7 else ACCENTS[value][0])
-passed()
-bar=m.node('window','system_bar'); m.word(syms['system_bar'],bar)
-for value,name in ((1,'Percent'),(2,'Icon + Percent'),(3,'Percent Inside'),(0,'Icon')):
-    writes=click(2); assert [(w[0],m.text(w[2])) for w in writes]==[(value,'BATTERY')] and texts()[2]=='Battery: '+name
-    assert ('widget_invalidate_force',bar) in [c[:2] for c in m.calls] and not [c for c in m.calls if c[0]=='image_manager_unload_all']
-passed()
-m,view,rows=display({'ACCENT':'2','HOME':'1','BATTERY':'2','SHORTCUT':'1'}); got=[m.nodes[m.nodes[m.nodes[r]['children'][0]]['children'][1]]['text'] for r in rows]; assert got==['Accent: Ivory','Home: Full','Battery: Icon + Percent','Theme: Minimal']; passed()
-m,view,rows=display({'BATTERY':'3'}); assert m.nodes[m.nodes[m.nodes[rows[2]]['children'][0]]['children'][1]]['text']=='Battery: Percent Inside'; passed()
+    kids=m.nodes[view]['children']
+    assert kids==[rows[3],light,rows[0],corners,rows[1],shortcut,rows[2],time_title,centred] and m.nodes[rows[0]].get('visible',1)==1
+    assert texts()==['Accent: Cobalt','Home: Split','Battery: Icon','Theme: Modern']; home_bounds(False,True); passed()
+    # Theme, the first row, keeps the selection, and the very next paint is the preset's Cobalt bar.
+    m.paint(view); assert m.selected(view)==0 and [m.bands[i][4] for i in (0,1,47)]==[color_t(ACCENTS[4][i]) for i in (4,0,1)]; passed()
+    click(1); assert texts()[1]=='Home: Full'; home_bounds(True,True); click(1); carousel(True)
+    click(1); home_bounds(False,True); carousel(False); passed()
+    # The preset's rows are the user's after it: Light Mode back off (On, Auto, Off) stays off.
+    for _ in range(2): m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0)
+    assert m.nodes[light_label]['text']=='Light Mode: Off'
+    for value,name in ((5,'Tangerine'),(6,'Plum'),(8,'Green'),(0,'Graphite'),(1,'Crimson'),(2,'Tidal'),(3,'Champagne'),(4,'Cobalt'),(5,'Tangerine')):  # Ivory skipped
+        writes=click(0)
+        assert len(writes)==1 and writes[0][0]==value and m.text(writes[0][1])=='IPOD' and m.text(writes[0][2])=='ACCENT'
+        assert ('image_manager_unload_all',0x1000500) in [c[:2] for c in m.calls] and ('widget_invalidate_force',m.wm) in [c[:2] for c in m.calls]
+        assert texts()[0]=='Accent: '+name
+        m.paint(view)
+        assert {b[4]&0xffffff for b in m.bands if b[1]>m.bands[0][1]}=={color_t(ACCENTS[value][0])&0xffffff}
+        assert m.bands[0][4]==color_t(ACCENTS[value][4]); passed()
+    writes=pick_theme(0); assert [(w[0],m.text(w[2])) for w in writes]==[(0,'THEME'),(0,'MINIMAL_ACCENT'),(1,'ROUNDED'),(1,'TIMETITLE')]
+    assert texts()[3]=='Theme: Minimal' and corners_switch()==['switch_on'] and m.nodes[light_label]['text']=='Light Mode: Off'
+    m.paint(view); assert m.selected(view)==0
+    kids=m.nodes[view]['children']
+    assert kids==[rows[3],light,rows[0],corners,rows[1],shortcut,rows[2],time_title,centred] and texts()[0]=='Accent: Graphite' and texts()[1]=='Home: Split'
+    home_bounds(False)
+    m.paint(view); assert not m.bands and m.rounded[0]['color']==color_t(ACCENTS[0][0]); passed()
+    # Light Mode's Auto survives a Theme change; the other preset rows are the user's to change after.
+    m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0)
+    assert m.nodes[light_label]['text']=='Light Mode: Auto'
+    for t in (2,0):
+        writes=pick_theme(t); assert 'LIGHT' not in [m.text(w[2]) for w in writes] and m.nodes[light_label]['text']=='Light Mode: Auto'
+    m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); assert m.nodes[light_label]['text']=='Light Mode: Off'; passed()
+    # Minimal's accents (MINIMAL_ACCENT): Ivory, then Modern's; a coloured one is the card's fill.
+    for value,name in ((1,'Crimson'),(2,'Tidal'),(3,'Champagne'),(4,'Cobalt'),(5,'Tangerine'),(6,'Plum'),(8,'Green'),(7,'Ivory'),(0,'Graphite')):
+        writes=click(0); assert [(w[0],m.text(w[2])) for w in writes]==[(value,'MINIMAL_ACCENT')] and texts()[0]=='Accent: '+name
+        m.paint(view); assert not m.bands and m.rounded[0]['color']==color_t(0xeeeeec if value==7 else ACCENTS[value][0])
+    passed()
+    bar=m.node('window','system_bar'); m.word(syms['system_bar'],bar)
+    for value,name in ((1,'Percent'),(2,'Icon + Percent'),(3,'Percent Inside'),(0,'Icon')):
+        writes=click(2); assert [(w[0],m.text(w[2])) for w in writes]==[(value,'BATTERY')] and texts()[2]=='Battery: '+name
+        assert ('widget_invalidate_force',bar) in [c[:2] for c in m.calls] and not [c for c in m.calls if c[0]=='image_manager_unload_all']
+    passed()
+    m,view,rows=display({'ACCENT':'2','HOME':'1','BATTERY':'2','SHORTCUT':'1'}); got=[m.nodes[m.nodes[m.nodes[r]['children'][0]]['children'][1]]['text'] for r in rows]; assert got==['Accent: Ivory','Home: Full','Battery: Icon + Percent','Theme: Minimal']; passed()
+    m,view,rows=display({'BATTERY':'3'}); assert m.nodes[m.nodes[m.nodes[rows[2]]['children'][0]]['children'][1]]['text']=='Battery: Percent Inside'; passed()
 # Home's Rockbox row (docs/boot.md#rockbox-from-home): its click saves the queue as power-off does,
 # stops the player, leaves S90play's flag and kills demo; without Rockbox on the card it says so.
 class RockboxMachine(Machine):
@@ -12783,15 +12791,19 @@ m=Machine(); m.rockbox_mode=0; m.config['SHORTCUT']='0'  # the M1's: a stored Ro
 assert m.call(address=payload_syms['ipod_home_rockbox'],args=(0,0,0,0),gap=0)==(1 if is_m1plus else 0)
 m.rockbox_mode=0o100755
 assert m.call(address=payload_syms['ipod_home_rockbox'],args=(0,0,0,0),gap=0)==1; passed()
-# The wheel walks onto the new rows and Centre clicks them, as any fixed settings list.
-m,view,_=display({},sub=0)
-m.paint(view)
-for _ in range(3): m.call()
-assert m.selected(view)==3 and m.confirm()==11 and m.dispatched()[0][1]==m.nodes[m.nodes[view]['children'][3]]['children'][0]; passed()
-# PEQ's value edit has action_text "done": stock edit_on_event reports the keyboard's OK only for it (or "next").
-stock=(B/'stock-demo').read_bytes()
-def at(va,n): return next(stock[o+va-v:o+va-v+n] for _,(t,o,v,_,f,*_) in segments(stock) if t==1 and v<=va<v+f)
-assert at(0x613ee8,4)==bytes.fromhex('1cc7a524') and at(0x77c71c,5)==b'done\0'; passed()  # edit_on_event: strcmp(action_text, "done")
+if is_m1plus: not_ported("The Q2's Display page and its Appearance, Cover Flow and Controls rows on V1.32's layout (display_page; the M1's own Display page is checked with settings_page, m1plus_nav_display.c): the wheel on its rows")
+else:
+    # The wheel walks onto the new rows and Centre clicks them, as any fixed settings list.
+    m,view,_=display({},sub=0)
+    m.paint(view)
+    for _ in range(3): m.call()
+    assert m.selected(view)==3 and m.confirm()==11 and m.dispatched()[0][1]==m.nodes[m.nodes[view]['children'][3]]['children'][0]; passed()
+if is_m1plus: not_ported("PEQ's value edit: V1.32's edit_on_event at 0x613ee8 (test: V1.32 code)")
+else:
+    # PEQ's value edit has action_text "done": stock edit_on_event reports the keyboard's OK only for it (or "next").
+    stock=(B/'stock-demo').read_bytes()
+    def at(va,n): return next(stock[o+va-v:o+va-v+n] for _,(t,o,v,_,f,*_) in segments(stock) if t==1 and v<=va<v+f)
+    assert at(0x613ee8,4)==bytes.fromhex('1cc7a524') and at(0x77c71c,5)==b'done\0'; passed()  # edit_on_event: strcmp(action_text, "done")
 
 # Settings rows (docs/ipod.md#settings). The real stock builders create their rows; the build
 # points the list_view layouter's vtable slot at ipod_list_layout, which normalises stock 78px
@@ -13154,87 +13166,89 @@ for classic in (0,2):  # Minimal's and Modern's; Classic's below (classic_light_
         after=tree(m,view); assert after!=before
         assert lay(m,view)==0 and tree(m,view)==after, builder  # a later layout changes nothing
         passed()
-# However often Theme flips between Minimal and Modern (picking the current one does nothing), the
-# Accent row stays right after Theme as a whole settings row, the cached pages take the new inset,
-# the wheel and Centre reach the row after Theme, and a tap selects it.
-CONFIG.clear(); m,view=settings('display',sub=1); items=m.nodes[view]['children']; theme,accent=items[0:2]  # Appearance: then Corners, Home, Battery
-button=lambda i: m.nodes[i]['children'][0]
-cached=m.node('list_view'); library=m.node('list_view')
-m.word(cached+O['LIST_DEFAULT_ITEM_HEIGHT'],SET['ROW']); m.word(cached+O['ROW_HEIGHT'],0); m.word(cached+O['W_Y'],SET['TOP'])
-m.word(library+O['W_Y'],0); m.word(library+O['LIST_DEFAULT_ITEM_HEIGHT'],72)
-previous=m.node('window','sysset_page',[cached,library]); m.nodes[m.wm]['children'].insert(0,previous)
-for classic in (0,2,0,2,0,2):  # each a Theme pick, from Minimal: no restart
-    assert m.call(address=payload_syms['theme_pick'],args=(classic,0,0,0),gap=0)==0
-    assert m.get(cached+O['W_Y'])==(0 if classic else SET['TOP'])  # cached page, before any layout
-    assert m.get(m.get(view+O['W_PARENT'])+O['W_Y'])==(0 if classic else SET['TOP'])
-    assert m.get(library+O['W_Y'])==0
-    assert lay(m,view)==0 and m.nodes[view]['children'][0:2]==[theme,accent] and m.nodes[accent].get('visible',1)==1
-    assert m.get(m.get(view+O['W_PARENT'])+O['W_Y'])==(0 if classic else SET['TOP'])
-    shown=[i for i in items if m.nodes[i]['visible']]; after=shown[shown.index(theme)+1]
-    assert after==accent
-    assert [geometry(m,i)[1] for i in shown]==[SET['ROW']*k for k in range(len(shown))]
-    for i in shown: check_row(m,i,0)
-    for _ in range(len(shown)): m.call(O['KEY_PREV'])
-    for _ in range(shown.index(after)): m.call()
-    m.paint(view); assert m.selected(view)==shown.index(after)
-    assert m.confirm()==11 and m.dispatched()[0][1]==button(after)
-    m.click(button(shown[1])); m.click(button(after)); assert m.selected(view)==shown.index(after)
-passed()
-# A list whose default_item_height is not SET_ROW (local pages, Home) keeps its rows as built.
-m,view=settings(0x4cbcc4,default=72); before=tree(m,view); lay(m,view); after=tree(m,view)
-assert [r[1] for r in after]==[r[1] for r in before] and all(r[0][3]==72 for r in after); passed()
-# Classic's settings rows: 32 px from the list's top (its list is found by the set's row), 40 px icons hidden,
-# the text where a row without an icon starts; a SET0 68 px list is not a Classic settings list.
-for builder in (0x4c43e4, 0x4cbcc4, 'display'):  # language, System settings, Display
-    CONFIG.clear(); m,view=settings(builder,default=32,boot=classic_light_boot); items=[i for i in m.nodes[view]['children'] if m.nodes[i]['visible']]
-    assert lay(m,view)==0 and m.get(m.get(view+O['W_PARENT'])+O['W_Y'])==0
-    assert [geometry(m,i)[1] for i in items]==[32*k for k in range(len(items))] and {geometry(m,i)[3] for i in items}=={32},builder
-    for i in items:
-        for c in m.nodes[m.nodes[i]['children'][0]]['children']:
-            x,y,w_,h=geometry(m,c)
-            if m.nodes[c]['type']=='image' and w_==O['SET_STOCK_ICON']: assert not m.nodes[c]['visible'],builder
-            elif m.nodes[c]['type']=='hscroll_label' and m.nodes[c]['name']!='_setting_value': assert x==SET['TEXT_X'] and 0<=y and y+h<=32,(builder,x,y,h)
-passed()
-CONFIG.clear(); m,view=settings(0x4cbcc4,boot=classic_light_boot); before=tree(m,view); lay(m,view)
-after=tree(m,view); assert [r[1] for r in after]==[r[1] for r in before] and all(r[0][3]==SET['ROW'] for r in after); passed()  # rows as built, stacked at the list's 68
-# A 78px item some other builder made (no stock settings button) keeps its height and children.
-m,view=settings(0x4cbcc4); odd=m.node('list_item'); other=m.node('button')
-m.nodes[odd]['children']=[other]; m.word(odd+O['W_H'],78); m.word(odd+O['W_W'],0)
-for k,v in (('W_X',8),('W_Y',0),('W_W',359),('W_H',70)): m.word(other+O[k],v)
-m.nodes[view]['children'].append(odd); lay(m,view)
-assert geometry(m,odd)[3]==78 and geometry(m,other)==(8,0,359,70); passed()
-# The wheel walks the laid-out rows, the bar spans the whole 68px row, the list
-# scrolls to keep the row in view, and Centre and a tap reach the same button.
-m,view=settings(0x4cbcc4); lay(m,view); items=m.nodes[view]['children']
-buttons=[m.nodes[i]['children'][0] for i in items]
-m.paint(view); assert m.selected(view)==0
-for k in range(1,len(items)):
-    m.call(); m.paint(view); i=k; assert m.selected(view)==i
-    y=geometry(m,items[i])[1]-signed(m.get(view+O['SCROLL_Y']))
-    assert 0<=y and y+SET['ROW']<=SET['ROWS']*SET['ROW'], (k,y)
-    assert not m.bands and m.sel()[2:]==(375,SET['ROW'])
-assert m.confirm()==11 and m.dispatched()[0][1]==buttons[-1]; passed()
-m.click(buttons[2]); assert m.selected(view)==2; passed()
+if is_m1plus: not_ported("The Q2's settings rows through V1.32's builders (0x4c43e4, 0x4cbcc4: test: V1.32 code) and the Q2 Display page's Appearance order; the M1's settings rows are ipod_list_layout's above and its Display page settings_page's")
+else:
+    # However often Theme flips between Minimal and Modern (picking the current one does nothing), the
+    # Accent row stays right after Theme as a whole settings row, the cached pages take the new inset,
+    # the wheel and Centre reach the row after Theme, and a tap selects it.
+    CONFIG.clear(); m,view=settings('display',sub=1); items=m.nodes[view]['children']; theme,accent=items[0:2]  # Appearance: then Corners, Home, Battery
+    button=lambda i: m.nodes[i]['children'][0]
+    cached=m.node('list_view'); library=m.node('list_view')
+    m.word(cached+O['LIST_DEFAULT_ITEM_HEIGHT'],SET['ROW']); m.word(cached+O['ROW_HEIGHT'],0); m.word(cached+O['W_Y'],SET['TOP'])
+    m.word(library+O['W_Y'],0); m.word(library+O['LIST_DEFAULT_ITEM_HEIGHT'],72)
+    previous=m.node('window','sysset_page',[cached,library]); m.nodes[m.wm]['children'].insert(0,previous)
+    for classic in (0,2,0,2,0,2):  # each a Theme pick, from Minimal: no restart
+        assert m.call(address=payload_syms['theme_pick'],args=(classic,0,0,0),gap=0)==0
+        assert m.get(cached+O['W_Y'])==(0 if classic else SET['TOP'])  # cached page, before any layout
+        assert m.get(m.get(view+O['W_PARENT'])+O['W_Y'])==(0 if classic else SET['TOP'])
+        assert m.get(library+O['W_Y'])==0
+        assert lay(m,view)==0 and m.nodes[view]['children'][0:2]==[theme,accent] and m.nodes[accent].get('visible',1)==1
+        assert m.get(m.get(view+O['W_PARENT'])+O['W_Y'])==(0 if classic else SET['TOP'])
+        shown=[i for i in items if m.nodes[i]['visible']]; after=shown[shown.index(theme)+1]
+        assert after==accent
+        assert [geometry(m,i)[1] for i in shown]==[SET['ROW']*k for k in range(len(shown))]
+        for i in shown: check_row(m,i,0)
+        for _ in range(len(shown)): m.call(O['KEY_PREV'])
+        for _ in range(shown.index(after)): m.call()
+        m.paint(view); assert m.selected(view)==shown.index(after)
+        assert m.confirm()==11 and m.dispatched()[0][1]==button(after)
+        m.click(button(shown[1])); m.click(button(after)); assert m.selected(view)==shown.index(after)
+    passed()
+    # A list whose default_item_height is not SET_ROW (local pages, Home) keeps its rows as built.
+    m,view=settings(0x4cbcc4,default=72); before=tree(m,view); lay(m,view); after=tree(m,view)
+    assert [r[1] for r in after]==[r[1] for r in before] and all(r[0][3]==72 for r in after); passed()
+    # Classic's settings rows: 32 px from the list's top (its list is found by the set's row), 40 px icons hidden,
+    # the text where a row without an icon starts; a SET0 68 px list is not a Classic settings list.
+    for builder in (0x4c43e4, 0x4cbcc4, 'display'):  # language, System settings, Display
+        CONFIG.clear(); m,view=settings(builder,default=32,boot=classic_light_boot); items=[i for i in m.nodes[view]['children'] if m.nodes[i]['visible']]
+        assert lay(m,view)==0 and m.get(m.get(view+O['W_PARENT'])+O['W_Y'])==0
+        assert [geometry(m,i)[1] for i in items]==[32*k for k in range(len(items))] and {geometry(m,i)[3] for i in items}=={32},builder
+        for i in items:
+            for c in m.nodes[m.nodes[i]['children'][0]]['children']:
+                x,y,w_,h=geometry(m,c)
+                if m.nodes[c]['type']=='image' and w_==O['SET_STOCK_ICON']: assert not m.nodes[c]['visible'],builder
+                elif m.nodes[c]['type']=='hscroll_label' and m.nodes[c]['name']!='_setting_value': assert x==SET['TEXT_X'] and 0<=y and y+h<=32,(builder,x,y,h)
+    passed()
+    CONFIG.clear(); m,view=settings(0x4cbcc4,boot=classic_light_boot); before=tree(m,view); lay(m,view)
+    after=tree(m,view); assert [r[1] for r in after]==[r[1] for r in before] and all(r[0][3]==SET['ROW'] for r in after); passed()  # rows as built, stacked at the list's 68
+    # A 78px item some other builder made (no stock settings button) keeps its height and children.
+    m,view=settings(0x4cbcc4); odd=m.node('list_item'); other=m.node('button')
+    m.nodes[odd]['children']=[other]; m.word(odd+O['W_H'],78); m.word(odd+O['W_W'],0)
+    for k,v in (('W_X',8),('W_Y',0),('W_W',359),('W_H',70)): m.word(other+O[k],v)
+    m.nodes[view]['children'].append(odd); lay(m,view)
+    assert geometry(m,odd)[3]==78 and geometry(m,other)==(8,0,359,70); passed()
+    # The wheel walks the laid-out rows, the bar spans the whole 68px row, the list
+    # scrolls to keep the row in view, and Centre and a tap reach the same button.
+    m,view=settings(0x4cbcc4); lay(m,view); items=m.nodes[view]['children']
+    buttons=[m.nodes[i]['children'][0] for i in items]
+    m.paint(view); assert m.selected(view)==0
+    for k in range(1,len(items)):
+        m.call(); m.paint(view); i=k; assert m.selected(view)==i
+        y=geometry(m,items[i])[1]-signed(m.get(view+O['SCROLL_Y']))
+        assert 0<=y and y+SET['ROW']<=SET['ROWS']*SET['ROW'], (k,y)
+        assert not m.bands and m.sel()[2:]==(375,SET['ROW'])
+    assert m.confirm()==11 and m.dispatched()[0][1]==buttons[-1]; passed()
+    m.click(buttons[2]); assert m.selected(view)==2; passed()
 
-# The payload's own accent drawing follows the preset, live: the bar, Now Playing's fill and
-# the fill a scrub restores.
-m,view,rows=display({'ACCENT':'2'}); m.paint(view)
-assert not m.bands and m.rounded[-1]['color']==color_t(0xeeeeec); passed()
-# Classic's band: Tidal's first stop, then Champagne's after a click on Accent (the row after Theme).
-CL_SEL=lambda i: color_t(theme_builtins()[1]['schemes'][i]['sel'][0][1])
-m,view,rows=display({'CLASSIC_LIGHT_ACCENT':'2'},setup=classic_light); m.paint(view)
-assert CL_SEL(2) in [b[4] for b in m.bands]; passed()
-accent_row=m.nodes[view]['children'][2]; f,ctx=m.handler(m.nodes[accent_row]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-m.paint(view); assert CL_SEL(3) in [b[4] for b in m.bands] and CL_SEL(2) not in [b[4] for b in m.bands]; passed()
-# Appearance is Theme, then the theme's options in order: Classic opened fresh with a stored Ivory shows Classic Blue, Modern
-# Graphite; THEME=3 is Minimal.
-m,view,rows=display({'THEME':'1','CLASSIC_LIGHT_ACCENT':'7'})
-assert [row_text(r) for r in m.nodes[view]['children']][:3]==['Theme: Classic','Light Mode: Off','Accent: Classic Blue']
-m,view,rows=display({'THEME':MODERN,'ACCENT':'7'})
-assert [row_text(r) for r in m.nodes[view]['children']]==['Theme: Modern','Light Mode: Off','Accent: Graphite','Rounded Corners','Home: Split','Shortcut: Rockbox','Battery: Icon','Time in Title','Centred Now Playing']
-m,view,rows=display({'THEME':'3'})
-assert [row_text(r) for r in m.nodes[view]['children']]==['Theme: Minimal','Light Mode: Off','Accent: Ivory','Rounded Corners','Home: Split','Shortcut: Rockbox','Battery: Icon','Time in Title','Centred Now Playing']
-passed()
+    # The payload's own accent drawing follows the preset, live: the bar, Now Playing's fill and
+    # the fill a scrub restores.
+    m,view,rows=display({'ACCENT':'2'}); m.paint(view)
+    assert not m.bands and m.rounded[-1]['color']==color_t(0xeeeeec); passed()
+    # Classic's band: Tidal's first stop, then Champagne's after a click on Accent (the row after Theme).
+    CL_SEL=lambda i: color_t(theme_builtins()[1]['schemes'][i]['sel'][0][1])
+    m,view,rows=display({'CLASSIC_LIGHT_ACCENT':'2'},setup=classic_light); m.paint(view)
+    assert CL_SEL(2) in [b[4] for b in m.bands]; passed()
+    accent_row=m.nodes[view]['children'][2]; f,ctx=m.handler(m.nodes[accent_row]['children'][0],O['EVT_CLICK']); m.call(address=f,args=(ctx,m.event,0,0),gap=0)
+    m.paint(view); assert CL_SEL(3) in [b[4] for b in m.bands] and CL_SEL(2) not in [b[4] for b in m.bands]; passed()
+    # Appearance is Theme, then the theme's options in order: Classic opened fresh with a stored Ivory shows Classic Blue, Modern
+    # Graphite; THEME=3 is Minimal.
+    m,view,rows=display({'THEME':'1','CLASSIC_LIGHT_ACCENT':'7'})
+    assert [row_text(r) for r in m.nodes[view]['children']][:3]==['Theme: Classic','Light Mode: Off','Accent: Classic Blue']
+    m,view,rows=display({'THEME':MODERN,'ACCENT':'7'})
+    assert [row_text(r) for r in m.nodes[view]['children']]==['Theme: Modern','Light Mode: Off','Accent: Graphite','Rounded Corners','Home: Split','Shortcut: Rockbox','Battery: Icon','Time in Title','Centred Now Playing']
+    m,view,rows=display({'THEME':'3'})
+    assert [row_text(r) for r in m.nodes[view]['children']]==['Theme: Minimal','Light Mode: Off','Accent: Ivory','Rounded Corners','Home: Split','Shortcut: Rockbox','Battery: Icon','Time in Title','Centred Now Playing']
+    passed()
 # Classic's stops painter: a 52 px selected row is the #94c7de top line, Classic Blue's six stops over the
 # 50 rows below it and the #004184 edge on its last, full width and square, its colours final
 # (unflipped), within the 100,000-instruction cap of one paint hook.
@@ -13484,7 +13498,9 @@ assert [row_text(r) for r in m.nodes[view]['children']]==['Theme: Classic','Ligh
 for stored,name in ((None,'Classic Blue'),('7','Classic Blue'),('12','Classic Blue'),('4','Cobalt')):
     m,view,rows=display({} if stored is None else {'CLASSIC_LIGHT_ACCENT':stored},setup=classic_light)
     assert row_text(rows[0])=='Accent: '+name,stored
-m,view,rows=display({},setup=classic_light); f,ctx=m.handler(m.nodes[rows[0]]['children'][0],O['EVT_CLICK'])
+if is_m1plus: not_ported("Classic's Accent row on the Q2 Display page (1.6.7; Classic unported)")
+else:
+    m,view,rows=display({},setup=classic_light); f,ctx=m.handler(m.nodes[rows[0]]['children'][0],O['EVT_CLICK'])
 for value,name in ((0,'Graphite'),(1,'Crimson'),(2,'Tidal'),(3,'Champagne'),(4,'Cobalt'),(5,'Tangerine'),(6,'Plum'),(8,'Green'),(9,'Classic Blue')):
     m.calls=[]; assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0
     assert [(c[1],m.text(c[3])) for c in m.calls if c[0]=='write_int_config']==[(value,'CLASSIC_LIGHT_ACCENT')] and row_text(rows[0])=='Accent: '+name
@@ -14813,7 +14829,9 @@ gm=PlaylistEditMachine(); set_geom(gm,GEOM_CLASSIC_LIGHT); gm.open_editor(); pas
 def swap_values(m,ms,easing):
     f,ctx=m.handler(named(m,m.top,'img_settings'),O['EVT_CLICK']); m.calls=[]; m.call(address=f,args=(ctx,m.event,0,0),gap=0)
     assert [c[2] for c in m.calls if c[0]=='widget_animator_prop_create'][:1]==[ms] and m.nodes[named(m,m.top,'list_view_homeset')]['animated_easing']==easing
-m=classic_light_home(); swap_values(m,120,0)
+if is_m1plus: not_ported("Classic's Settings list push on Home (1.6.7; Classic unported)")
+else:
+    m=classic_light_home(); swap_values(m,120,0)
 CONFIG.update(SHORTCUT='0',HOME='0'); m=ShuffleMachine(); del CONFIG['SHORTCUT'],CONFIG['HOME']; m.rockbox_mode=0; home_list(m)
 assert m.call(address=home_hook[0],args=(m.top,0,0,0),gap=0)==0; m.mock('widget_animator_prop_create','widget_animator_prop_set_params','widget_animator_start')
 swap_values(m,120,8); passed()
@@ -20046,6 +20064,28 @@ else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow an
     m.nodes[m.wm]={'type':'window_manager','children':[m.top]}
     m.calls=[]; assert m.call(address=payload_syms['theme_pick'],args=(1,0,0,0),gap=0)==0  # Modern's preset: Split
     assert (0,'IPOD','HOME') in [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]=='write_int_config'] and texts()[3]=='Home: Split'; passed()
+    # Appearance's other rows: Light Mode cycles Off, On and Auto, dropping the image cache each time (the theme's
+    # images redraw); Accent steps through Minimal's accents; Battery through its four modes. Each saves its key.
+    CONFIG.clear()
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=1)
+    assert texts()[1:3]==['Light Mode: Off','Accent: Ivory'] and texts()[4]=='Battery: Icon'
+    for value,name in ((1,'On'),(2,'Auto'),(0,'Off')):
+        m.calls=[]; assert click(1)==[(value,'IPOD','LIGHT')] and texts()[1]=='Light Mode: '+name and did(m,'image_manager_unload_all'),name
+    for value,name in ((0,'Graphite'),(1,'Crimson'),(2,'Tidal'),(3,'Champagne'),(4,'Cobalt'),(5,'Tangerine'),(6,'Plum'),(8,'Green'),
+                       (7,'Ivory'),(0,'Graphite')):
+        assert click(2)==[(value,'IPOD','MINIMAL_ACCENT')] and texts()[2]=='Accent: '+name,name
+    for value,name in ((1,'Percent'),(2,'Icon + Percent'),(3,'Percent Inside'),(0,'Icon')):
+        assert click(4)==[(value,'IPOD','BATTERY')] and texts()[4]=='Battery: '+name,name
+    passed()
+    # Cover Flow's rows: Artist View cycles Cover Flow, List and Grid (Q2POD ARTISTCF); Refresh Cover Flow drops both
+    # art caches' folders and the image cache, with a toast, and saves nothing.
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=2)
+    for value,name in ((2,'List'),(0,'Grid'),(1,'Cover Flow')):
+        assert click(0)==[(value,'Q2POD','ARTISTCF')] and texts()[0]=='Artist View: '+name,name
+    m.mock('opendir@GLIBC_2.0'); m.calls=[]
+    assert click(2)==[] and texts()[2]=='Refresh Cover Flow' and did(m,'image_manager_unload_all')
+    assert [m.text(c[1]) for c in m.calls if c[0]=='opendir@GLIBC_2.0']==['/mnt/mmc/.coverflow','/mnt/mmc/.sldp']
+    assert m.toasts[-1][3]=='Cover Flow rebuilds artwork next time'; passed()
 if is_m1plus:
     # Item 78 A: V2.1's rows own their icon directly. A pick and a reopened page must have
     # exactly one filled mark, including the saved THEME=1 (Modern, not unported Classic).

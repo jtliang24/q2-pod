@@ -5,159 +5,6 @@ listed under the docs/m1plus-ipod-ui.md item that makes it pass; that item's com
 check that passes fails the run). After an edit to patch.py, GAPS_DUMP=gaps.json python3 test/m1plus/patch.py BUILD
 writes every failing check, to rekey the list."""
 GAPS = {
-    # The Q2 Display page's Home rows (its Corners and Q2 rows around them): the M1's Home layouts and rows are
-    # m1_home_modes and the M1 Display test (ipod-ui 4.5); the fixture itself is Phase 5's
-    '466012b4b4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8866 home_bounds(False); carousel(False)
-    '8f720362a9': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8868 home_bounds(True); carousel(False)
-    '84b943d9a0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8870 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(2,HOME)] and te
-    '927dc434cc.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8870 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(2,HOME)] and te
-    '4fc57e7f8e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8871 carousel(True); assert not [c for c in m.calls if c[0]==image_manager_unload_all
-    '35d85e600e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
-    '466012b4b4.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
-    '715ae6bcff': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8872 click(1); assert texts()[1]==Home: Split; home_bounds(False); carousel(False); p
-    '4fc57e7f8e.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    '715ae6bcff.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    '715ae6bcff.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    'c0c3106d02': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    'fd1c55d76c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8908 click(1); assert texts()[1]==Home: Full; home_bounds(True,True); click(1); carou
-    '715ae6bcff.4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8909 click(1); home_bounds(False,True); carousel(False); passed()
-    'baa6580069.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8909 click(1); home_bounds(False,True); carousel(False); passed()
-    # The Q2's Display page after 1.6.4's restack (Smart Awake and Night Shift on it, Controls on System): the M1 keeps
-    # its own (m1plus_nav_display.c)
-    '84cc193a06': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9197 assert m.icons_set==[system_display,switch_off,display_backlight,list_into,syste
-    '8acf0e7dcb': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9198 f,ctx=m.handler(m.nodes[kids[5]][children][0],O[EVT_CLICK]); m.calls=[]
-    # Display and settings scenarios on V2.1's rows (Phase 5)
-    'a85f9167be': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:2165 for row,image,fills in ((2,select,3),(0,unselect,0),(2,more,4),(0,more,0)):
-    '4c768d5151': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9182 one_label=m.nodes[m.nodes[scrub_one][children][0]][child
-    '2402551706': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9182 one_label=m.nodes[m.nodes[scrub_one][children][0]][child
-    'cf1bf26734': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9183 f,ctx=m.handler(m.nodes[scrub_one][children][0],O[EVT_CL
-    '066151a889': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9185 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.call
-    '377ee02e26': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9213 assert [m.text(c[1]) for c in m.calls if c[0]==opendir@G
-    'e8cb08926c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8762 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.opened[-1]==(syst
-    'f6375d0298': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8766 assert m.icons_set==[playset_covermode,playset_covermode,system_update]
-    'dcddcb57a6': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8770 view=display_page(m,1); rows=setting_rows(m,view)
-    '944032aee2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8772 assert kids==[rows[3],light,rows[0],corners,rows[1],rows[2],centred] and m.nodes
-    '10c62dfae3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8772 kids=m.nodes[view]['children']; light,corners,centred=kids[1],kids[3],kids[6]
-    'c9c6fdc8c1': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8773 assert m.icons_set==[system_display,system_display,system_display,system_display
-    '0ac48111d4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8774 buttons=[m.nodes[r][children][0] for r in rows]; labels=[m.nodes[b][children][1]
-    '0e824e3e4f': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8774 buttons=[m.nodes[r][children][0] for r in rows]; labels=[m.nodes[b][children][1]
-    '549cb92260': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8775 for b,l in zip(buttons,labels):
-    '2ab19091a5': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8782 keep_label=m.nodes[m.nodes[keep_lit][children][0]][children][1]; assert m.nodes[
-    '70bf24c794': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8782 keep_label=m.nodes[m.nodes[keep_lit][children][0]][children][1]; assert m.nodes[
-    '4d56f7c40c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8783 f,ctx=m.handler(m.nodes[keep_lit][children][0],O[EVT_CLICK]); m.calls=[]
-    '86b4e73d17': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8784 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
-    '1bbb79bed9': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8785 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
-    '8271bfe8ff.10': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8786 m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    '86b4e73d17.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8790 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
-    '8271bfe8ff.11': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8792 m.call(address=f,args=(ctx,m.event,0,0),gap=0)
-    '341ae680b0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8795 centred_label=m.nodes[m.nodes[centred][children][0]][children][1]; assert m.node
-    'cb11270062': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8795 centred_label=m.nodes[m.nodes[centred][children][0]][children][1]; assert m.node
-    '41b6025c64': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8796 f,ctx=m.handler(m.nodes[centred][children][0],O[EVT_CLICK]); m.calls=[]
-    '86b4e73d17.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8797 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_man
-    '36ad551169': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8798 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
-    '3a615939a6': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8803 assert loaded(playing_page)==[playing_page_stock] and loaded(home_page)==[home_p
-    '8271bfe8ff.12': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8804 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert loaded(playing_page)==[pl
-    'a153bcc628': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8806 cf_label=m.nodes[m.nodes[cf][children][0]][children][1]; assert m.nodes[cf_label
-    'd3ef113228': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8807 f,ctx=m.handler(m.nodes[cf][children][0],O[EVT_CLICK]); m.calls=[]
-    '2a4b480d6f': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8809 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_con
-    '8271bfe8ff.13': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8810 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
-    '8271bfe8ff.14': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8811 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]==
-    '5350877c9a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8814 sort_label,refresh_label=(m.nodes[m.nodes[r][children][0]][children][1] for r in
-    'acc55bb4b8': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8816 f,ctx=m.handler(m.nodes[cf_refresh][children][0],O[EVT_CLICK]); m.mock(opendir@G
-    '1cdc7d997d': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8827 assert texts()==[Accent: Ivory,Home: Split,Battery: Icon,Theme: Minimal]; passed
-    '84fb5c2e21': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8861 shortcut_button=m.nodes[shortcut][children][0]
-    '5622a7e908': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8862 sf,sc=m.handler(shortcut_button,O[EVT_CLICK])
-    '927dc434cc': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8867 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(1,HOME)] and te
-    'a0f267beae': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8867 writes=click(1); assert [(w[0],m.text(w[2])) for w in writes]==[(1,HOME)] and te
-    '0c075ea462': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8876 corners_label=m.nodes[m.nodes[corners][children][0]][children][1]; assert m.node
-    '3fd3d27d9c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8876 corners_label=m.nodes[m.nodes[corners][children][0]][children][1]; assert m.node
-    '88774fb87c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8878 assert corners_switch()==[switch_off]
-    '66dc56914a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8879 f,ctx=m.handler(m.nodes[corners][children][0],O[EVT_CLICK]); m.calls=[]
-    '191084d657': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8880 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and corners_switch()==[
-    '445cf125f8': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8881 assert [(c[1],m.text(c[3])) for c in m.calls if c[0]==write_int_config]==[(1,ROU
-    '8329427fda': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8883 light_label=m.nodes[m.nodes[light][children][0]][children][1]; assert m.nodes[li
-    'a206a7a356': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8883 light_label=m.nodes[m.nodes[light][children][0]][children][1]; assert m.nodes[li
-    '7553168288': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8884 f,ctx=f_light,ctx_light=m.handler(m.nodes[light][children][0],O[EVT_CLICK])
-    '91dc641367': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8885 for value,text in ((1,On),(2,Auto),(0,Off)):
-    'd54d44a9a7': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8901 assert corners_switch()==[switch_off] and m.nodes[light_label][text]==Light Mode
-    'c181110dc5': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8902 assert (image_manager_unload_all,0x1000500) in [c[:2] for c in m.calls] and (wid
-    'baa6580069': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8905 assert texts()==[Accent: Cobalt,Home: Split,Battery: Icon,Theme: Classic]; home_
-    'bb0f2639c0': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8911 for _ in range(2): m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0)
-    'a206a7a356.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8912 assert m.nodes[light_label][text]==Light Mode: Off
-    '231e4ded71': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8913 for value,name in ((5,Tangerine),(6,Plum),(8,Green),(0,Graphite),(1,Crimson),(2,
-    '26a9fde919': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8922 assert texts()[3]==Theme: Minimal and corners_switch()==[switch_on] and m.nodes[
-    '466012b4b4.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8926 home_bounds(False)
-    '6c1776f92b': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8927 m.paint(view); assert not m.bands and m.rounded[0][color]==color_t(ACCENTS[0][0]
-    'a573372f36': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8929 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); m.call(address=f_lig
-    'a573372f36.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8929 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); m.call(address=f_lig
-    '9406000021': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8930 assert m.nodes[light_label][text]==Light Mode: Auto
-    'a206a7a356.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8933 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); assert m.nodes[light
-    'a573372f36.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8933 m.call(address=f_light,args=(ctx_light,m.event,0,0),gap=0); assert m.nodes[light
-    '472cbcd7f9': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8935 for value,name in ((1,Crimson),(2,Tidal),(3,Champagne),(4,Cobalt),(5,Tangerine),
-    '63150259f5': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8941 for value,name in ((1,Percent),(2,Icon + Percent),(3,Percent Inside),(0,Icon)):
-    '47417148e4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
-    'e44a70fe75': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
-    'f529705857': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8945 m,view,rows=display({ACCENT:2,HOME:1,BATTERY:2,SHORTCUT:1}); got=[m.nodes[
-    'b43f0ec9d3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8946 m,view,rows=display({BATTERY:3}); assert m.nodes[m.nodes[m.nodes[rows[2]][childr
-    'e8b43de32c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8946 m,view,rows=display({BATTERY:3}); assert m.nodes[m.nodes[m.nodes[rows[2]][childr
-    '3d40ff6b9b': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8981 assert m.selected(view)==3 and m.confirm()==11 and m.dispatched()[0][1]==m.nodes
-    'b32ce1e463': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8985 assert at(0x613ee8,4)==bytes.fromhex(1cc7a524) and at(0x77c71c,5)==bdone\0; pass
-    '01f9e7d40a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9083 CONFIG.clear(); m,view=settings(display,sub=1); items=m.nodes[view][children]; t
-    'd83a7b5843': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9107 m,view=settings(0x4cbcc4,default=72); before=tree(m,view); lay(m,view); after=tr
-    '6f053ba547': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9110 m,view=settings(0x4cbcc4); odd=m.node(list_item); other=m.node(button)
-    '6f053ba547.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9117 m,view=settings(0x4cbcc4); lay(m,view); items=m.nodes[view][children]
-    '330e6086e6.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9125 assert m.confirm()==11 and m.dispatched()[0][1]==buttons[-1]; passed()
-    '638c1bd20c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9126 m.click(buttons[2]); assert m.selected(view)==2; passed()
-    'ecbccc89c2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9126 m.click(buttons[2]); assert m.selected(view)==2; passed()
-    'f9bab94df3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9130 m,view,rows=display({ACCENT:2}); m.paint(view)
-    '8fe2090d8d': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9131 assert not m.bands and m.rounded[-1][color]==color_t(0xeeeeec); passed()
-    '8271bfe8ff.15': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9134 f,ctx=m.handler(m.nodes[rows[0]][children][0],O[EVT_CLICK]); m.call(address=f,ar
-    '91e3bc677a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9134 f,ctx=m.handler(m.nodes[rows[0]][children][0],O[EVT_CLICK]); m.call(address=f,ar
-    '205e8cce17': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9669 assert len(kids)==7 and [row_text(r) for r in kids[2:4]+kids[5:]]==[Smart Awake
-    '9c9c68e54a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9678 ctl=display_page(m,3); wheel,hold,scrub_one,tone,hp,lock,wake,guard=m.nodes[ctl]
-    'c248660b8f': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9679 assert [row_text(r) for r in (hold,scrub_one)]==[Hold Return: Recent,Single P
-    '721ce726ec': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9698 title_label=m.nodes[m.nodes[time_title][children][0]][children][1]; assert m
-    'c0543776ff': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9698 title_label=m.nodes[m.nodes[time_title][children][0]][children][1]; assert m
-    'c09c1d2d13': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9699 f,ctx=m.handler(m.nodes[time_title][children][0],O[EVT_CLICK]); m.calls=[]
-    '04ee26c974': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9701 assert [(c[1],m.text(c[2]),m.text(c[3])) for c in m.calls if c[0]==write_int_co
-    '86b4e73d17.4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:9713 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and not did(m,image_ma
-    '783dcdd2d8': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10035 cf_label=m.nodes[m.nodes[cf][children][0]][children][1]; assert m.nodes[cf_l
-    '5f8160d10d': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10037 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.nodes[cf_label][
-    'd35d8969d4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10039 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]
-    '783dcdd2d8.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10040 m.call(address=f,args=(ctx,m.event,0,0),gap=0); assert m.nodes[cf_label][text]
-    '292652f99c': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10045 assert m.nodes[sort_label][text]==Cover Flow Sort: Album and m.nodes[refresh
-    'fe25421f4e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12326 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.toasts[-1][3]=='C
-    'ed2956df57': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10049 assert did(m,image_manager_unload_all) and m.nodes[refresh_label][text]==Re
-    'e13a30a3e2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10141 assert kids==[rows[3],light,rows[0],corners,rows[1],shortcut,rows[2],time_title,
-    '9c302e240e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10142 assert texts()==[Accent: Cobalt,Home: Split,Battery: Icon,Theme: Modern]
-    '3eaa96bb9c.11': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10144 m.paint(view); assert m.selected(view)==0 and [m.bands[i][4] for i in (0,1,47)]=
-    'd97107e594': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10144 m.paint(view); assert m.selected(view)==0 and [m.bands[i][4] for i in (0,1,47)]=
-    '40067dec30': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10158 writes=pick_theme(0); assert [(w[0],m.text(w[2])) for w in writes]==[(0,THEME)
-    'f4010c9d31': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10158 writes=pick_theme(0); assert [(w[0],m.text(w[2])) for w in writes]==[(0,THEME)
-    '3eaa96bb9c.12': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10160 m.paint(view); assert m.selected(view)==0
-    '6ca09aa218': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10162 assert kids==[rows[3],light,rows[0],corners,rows[1],shortcut,rows[2],time_title,
-    '3eaa96bb9c.13': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10164 m.paint(view); assert not m.bands and m.rounded[0][color]==color_t(ACCENTS[0][
-    'd08cf6e780': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10168 for t in (2,0):
-    'd652ea7b25.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10422 m.paint(view); assert m.selected(view)==0
-    '8d1e687c98': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10437 m,view,rows=display({CLASSIC_LIGHT_ACCENT:2},setup=classic_light); m.paint(v
-    '1bd50aaf3a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10438 assert CL_SEL(2) in [b[4] for b in m.bands]; passed()
-    '8e9b60476e': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10439 accent_row=m.nodes[view][children][2]; f,ctx=m.handler(m.nodes[accent_row][ch
-    '4a5cac4138': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10439 accent_row=m.nodes[view][children][2]; f,ctx=m.handler(m.nodes[accent_row][ch
-    '8271bfe8ff.16': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10439 accent_row=m.nodes[view][children][2]; f,ctx=m.handler(m.nodes[accent_row][ch
-    '16f1862d89': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:10440 m.paint(view); assert CL_SEL(3) in [b[4] for b in m.bands] and CL_SEL(2) not in 
-    '36b49d8f56': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11948 cfv=display_page(m,2) [dependent]
-    '5db2661012': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11948 cf,cf_sort,cf_refresh=m.nodes[cfv]['children'] [fixture extension]
-    '66249771a8': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11950 ctl=display_page(m,3) [dependent]
-    'f92a41034a': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11952 view=display_page(m,1) [dependent]
-    'c497c56eab': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:11992 assert loaded('playing_page')==['playing_page'] [dependent]
-    'a7f54dea42': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12353 m.call(address=HOOKS['home_page_init'][0],args=(home,0,0,0),gap=0) [dependent]
-    '272249ba26': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12384 carousel(False) [fixture extension]
-    '272249ba26.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12386 carousel(False) [fixture extension]
-    '272249ba26.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12390 carousel(False) [fixture extension]
-    '272249ba26.4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12425 carousel(False) [fixture extension]
-    'd652ea7b25.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12439 assert m.selected(view)==0 [fixture extension]
-    '4aadbcc5de': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:14516 swap_values(m,120,0) [fixture extension]
-    'd7f4dc6863.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:14516 m=classic_light_home() [fixture extension]
     # Classic (1.6.7): its own geometry set boots V1.32 immediates (theme_boot), and its bar, rows, fonts, pane and
     # Library on Home with it; the M1 builds Minimal and Modern only (tools/m1plus.py m1_themes)
     'a08dbf9b32': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9275 for config,preset in (({},0),({**C,K:1},1),({**C,K:2},2),({**C,K:3,HOME:
@@ -223,7 +70,6 @@ GAPS = {
     'd108428531': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10027 assert image({},select,prep=classic_light)==image({},unselect,prep=classic_l
     '78d0895ece': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10033 assert len(hm.icons)==1 and hm.icons[0][0]==168+25 and classic_light_chevron i
     '832e4ebbc0': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10137 writes=pick_theme(2); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]=
-    'a98a01e63c': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10137 writes=pick_theme(2); assert [(w[0],m.text(w[1]),m.text(w[2])) for w in writes]=
     '2cd52126b1': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12811 assert [m.nodes[i]['image'] for i in marks]==['unselect','select','unselect'] an
     '7b5178656d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10307 assert {geometry(m,i) for i in marks}=={(375-SET[EDGE]-50,0,50,32)},[geometry(
     'fa9fefaafc': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12812 assert m.selected(view)==1,m.selected(view)
@@ -240,15 +86,6 @@ GAPS = {
     '707c4c2140': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10355 assert not m.nodes[lead][visible] and m.nodes[trail][visible] and geometry(m
     'ab58e79e1b': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10356 assert geometry(m,title)[0]==geometry(m,detail)[0]==SET[TEXT_X],(geometry(m,ti
     'e8786266c1': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10357 for classic in (0,2):  # Minimals and Moderns; Classics below (classic_light_
-    'd292e0301f': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10378 for classic in (0,2,0,2,0,2):  # each a Theme pick, from Minimal: no restart
-    'a8a58009af': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10400 for builder in (0x4c43e4, 0x4cbcc4, display):  # language, System settings, Di
-    'a49e14f46f': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10410 CONFIG.clear(); m,view=settings(0x4cbcc4,boot=classic_light_boot); before=tree(m
-    '804241dd89': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10443 m,view,rows=display({THEME:1,CLASSIC_LIGHT_ACCENT:7})
-    'ca6e8e9699': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10444 assert [row_text(r) for r in m.nodes[view][children]][:3]==[Theme: Classic,
-    '004086f705': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10445 m,view,rows=display({THEME:MODERN,ACCENT:7})
-    'acc08bec35': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10446 assert [row_text(r) for r in m.nodes[view][children]]==[Theme: Modern,Light
-    '5383884ab9': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10447 m,view,rows=display({THEME:3})
-    '45de4bc6cd': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10448 assert [row_text(r) for r in m.nodes[view][children]]==[Theme: Minimal,Ligh
     '0db6723159': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10467 assert [sk_rows[j] for j in range(52)]==[color_t(NB_TOP),color_t(0x27ade5)]+[col
     'ce5ad76def': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10485 assert boxof(al)==(20,0,280,32) and boxof(ap)==(0,0,300,32) and boxof(asort)==(3
     'eaae8489ea': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10486 assert am.nodes[asort][image]==classic_light_sort_bars and am.nodes[al][sty
@@ -275,7 +112,6 @@ GAPS = {
     'e0cfd27827': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10696 for stored,name in ((None,Classic Blue),(7,Classic Blue),(12,Classic Bl
     'a46a4d9b12': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10699 m,view,rows=display({},setup=classic_light); f,ctx=m.handler(m.nodes[rows[0]][c
     '9183036f78': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10700 for value,name in ((0,Graphite),(1,Crimson),(2,Tidal),(3,Champagne),(4,
-    'a46a4d9b12.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10710 m,view,rows=display({},setup=classic_light); art=m.nodes[view][children][9]
     'ffe66125a4': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10710 m,view,rows=display({},setup=classic_light); art=m.nodes[view][children][9]
     'cfc813ab00.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10711 assert [row_text(r) for r in m.nodes[view][children]]==[Theme: Classic,Ligh
     '8867c30f55': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10712 assert m.config_reads[13:17]==[(/mnt/data/config.ini,IPOD,k,v) for k,v in ((
@@ -299,7 +135,6 @@ GAPS = {
     'db09a5833f': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10761 assert m.call(address=f,args=(ctx,m.event,0,0),gap=0)==0 and m.opened[-1]==(sys
     'c6f97c6bab': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13256 assert [row_text(r) for r in m.nodes[view]['children']]==['Minimal','Modern','Cl
     '7857848972': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10766 m,view,rows=display({}); pview=display_page(m,4); m.calls=[]
-    '832e4ebbc0.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10768 writes=pick_theme(2); assert [(w[0],m.text(w[2])) for w in writes][:1]==[(2,THE
     'b5632ce2c1': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10768 writes=pick_theme(2); assert [(w[0],m.text(w[2])) for w in writes][:1]==[(2,THE
     'c7b928e81e': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13262 assert [m.nodes[m.nodes[m.nodes[r]['children'][0]]['children'][0]]['image'] for 
     '0d38a23f5d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10774 for answer,light,want in ((0,0,[]),(10,0,[(1,THEME),(1,LIGHT),(9,CLASSI
@@ -378,7 +213,6 @@ GAPS = {
     # 1.6.7's new Shortcuts: the M1's are Favorites, Shuffle, Rated Albums, Artists and Albums (shortcut())
     'ddca64781d': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:10060 assert d.text(d.call(address=payload_syms[ipod_home_shortcut],args=(0,0,0,0),g
     '700de58828': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12517 assert [(d.text(c[1]),c[2]) for c in d.calls if c[0]==navigator_to_with_context
-    'c67b0e573f': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:10102 for label in (Favorites,Shuffle,Rated Albums,Playlists,Artists,Albums
     '4a2be76ac0': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12156 assert m.text(m.call(address=payload_syms[ipod_home_shortcut],args=(0,0,0,0),g
     'eb604de254': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12157 m.calls=[]; assert m.call(address=payload_syms[home_shortcut_open],args=(0,m.e
     'b36537fa89': 'Playlists, Podcasts and Audiobooks as Shortcuts (1.6.7; unported)',  # patch.py:12158 assert [m.text(c[1]) for c in m.calls if c[0]==navigator_to]==[folder_page]
