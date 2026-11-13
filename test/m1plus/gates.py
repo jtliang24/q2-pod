@@ -12,9 +12,10 @@ manifest source_sha256 against the tree first: a hashed-source edit (tools/*, pa
 a fresh build and every gate, so --from and --only refuse a stale build. Edits under test/ keep it.
 
 Logs and summary.txt (`step: exit N after Ts`) go to --out, by default work/gates/<timestamp>/.
-Environment: GATES_PYTEST (the unit/fw runner, default this Python's pytest, else work/sync/venv's),
-GATES_CLANG (a wrapped host clang for unit/fw, default nixpkgs#clang's wrapper), GATES_FFMPEG (an
-ffmpeg binary for q2compare's suites, default nixpkgs#ffmpeg-headless; lame and flac come from nixpkgs)."""
+Environment: GATES_PYTEST (the unit/fw runner, default this Python's pytest, else work/sync/venv's, the main
+checkout's from a git worktree), GATES_CLANG (a wrapped host clang for unit/fw, default nixpkgs#clang's wrapper),
+GATES_FFMPEG (an ffmpeg binary for q2compare's suites, default nixpkgs#ffmpeg-headless; lame and flac come from
+nixpkgs)."""
 import argparse, datetime, importlib.util, json, os, pathlib, shlex, shutil, subprocess, sys, time
 sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first
 from build import ROOT, source_sha256
@@ -56,13 +57,22 @@ def build(ctx):
     return [sys.executable, 'tools/build.py', M1_ZIP, '--dev', '--out', ctx.build]
 
 
+def venv_python():
+    """work/sync/venv's python, in this checkout or, from a git worktree (work/gatetree), the main one."""
+    common = subprocess.run(['git', '-C', ROOT, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+                            stdout=subprocess.PIPE, text=True).stdout.strip()
+    for top in (ROOT, *([pathlib.Path(common).parent] if common else [])):
+        if (top/'work/sync/venv/bin/python').is_file():
+            return top/'work/sync/venv/bin/python'
+
+
 def pytest(ctx, suite):
     if os.environ.get('GATES_PYTEST'):
         runner = shlex.split(os.environ['GATES_PYTEST'])
     elif importlib.util.find_spec('pytest'):
         runner = [sys.executable, '-m', 'pytest']
-    elif (ROOT/'work/sync/venv/bin/python').is_file():
-        runner = [ROOT/'work/sync/venv/bin/python', '-m', 'pytest']
+    elif python := venv_python():
+        runner = [python, '-m', 'pytest']
     else:
         sys.exit('No pytest: set GATES_PYTEST, or make work/sync/venv with pytest in it')
     # The devShell's clang can't link a host .so (no crti.o): put the wrapped clang first, as a short
