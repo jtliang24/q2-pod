@@ -3496,6 +3496,64 @@ static void paint_into(void *w, void *canvas) {
     stock_canvas_set_fill_color(canvas, fill);
 }
 
+#if M1PLUS
+/* V2.1's settings rows' `>` (an image widget showing ROW_CHEVRON) on the selected row takes the
+ * row's text colour, as ringnav_style_color gives a white label there: the coloured selection's
+ * white (or its sel_text), or the card's dark ink (paper in Light Mode). The border hook runs after
+ * the image drew itself, so the glyph's alpha is drawn again over stock's in that colour (its soft
+ * edge keeps a trace of stock's); one tinted copy is kept, remade when the colour changes. Returns
+ * whether it drew. */
+static int sel_arrow(void *w, void *canvas) {
+    static void *tint;
+    static unsigned tinted;
+    unsigned bitmap[64]; /* bitmap_t: width @0, height @4, format @0xe */
+    if (!w || !st.sel_w || !P(canvas, CANVAS_LCD) ||
+        tk_strcmp(widget_get_prop_str(w, "image", ""), ROW_CHEVRON))
+        return 0;
+    const scheme_t *S = scheme();
+    unsigned c;
+    if ((ipod_light() || S->sel_text) && painting_in(st.sel_accent))
+        c = S->sel_text ? RGBA(S->sel_text) : 0xffffffffu;
+    else if (painting_in(st.sel_widget) && (st.sel_home || S->flags & SCHEME_CARD))
+        c = ui_ink(st.sel_home ? 0xffffffffu : RGBA(0x171717));
+    else
+        return 0;
+    if (widget_load_image(w, ROW_CHEVRON, bitmap)) return 0;
+    static const unsigned char at[4][4] = BITMAP_RGBA_AT;
+    unsigned format = *(unsigned short *)((char *)bitmap + 0xe) - 1u, bw = bitmap[0],
+             bh = bitmap[1];
+    if (format >= 4) return 0;
+    if (tint && (c != tinted || I(tint, 0) != (int)bw || I(tint, 4) != (int)bh)) {
+        bitmap_destroy(tint);
+        tint = (void *)0;
+    }
+    if (!tint) {
+        void *t = bitmap_create_ex(bw, bh, bw * 4, 1 /* RGBA8888 */);
+        unsigned char *d = t ? bitmap_lock_buffer_for_write(t) : (void *)0,
+                      *s = d ? bitmap_lock_buffer_for_write(bitmap) : (void *)0;
+        if (s) {
+            for (unsigned y = 0; y < bh; ++y) {
+                unsigned char *p = d + y * bitmap_get_line_length(t),
+                              *q = s + y * bitmap_get_line_length(bitmap);
+                for (unsigned x = 0; x < bw; ++x, p += 4, q += 4) {
+                    p[0] = (unsigned char)c, p[1] = (unsigned char)(c >> 8);
+                    p[2] = (unsigned char)(c >> 16), p[3] = q[at[format][3]];
+                }
+            }
+            bitmap_unlock_buffer(bitmap);
+        }
+        if (d) bitmap_unlock_buffer(t);
+        if (!s) {
+            if (t) bitmap_destroy(t);
+            return 0;
+        }
+        tint = t, tinted = c;
+    }
+    canvas_draw_icon(canvas, tint, I(w, W_W) / 2, I(w, W_H) / 2);
+    return 1;
+}
+#endif
+
 /* The theme's scrollbar (theme_t.sb_*), a thumb alone: stock's mobile bar fades, so it is drawn
  * from the list's border paint, after its children, in a final colour. list_bar is the scroll_bar_m
  * of a list that scrolls: stock's max is at least the bar's own h, which can pass a short list's,
@@ -3557,6 +3615,9 @@ static int search_del(void *w);
 int ringnav_paint(void *w, void *canvas) {
     if (st.pull_page && !pull_live()) pull_cancel();
     int result = search_del(w) ? 0 : stock_paint_trampoline(w, canvas);
+#if M1PLUS
+    sel_arrow(w, canvas);
+#endif
     night_paint(canvas);
     coverflow_paint(w, canvas);
     lockscreen_paint(w, canvas);

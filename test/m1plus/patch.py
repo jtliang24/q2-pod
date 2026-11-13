@@ -12688,6 +12688,45 @@ into_m,into_icons,into_fills=into_paint('0','1')  # Minimal Light: the middle ha
 assert into_icons==[(25,24)] and [c[0] for c in into_fills]==['canvas_fill_rounded_rect']+into_restore
 assert [(r['kind'],r['rect'],r['color']) for r in into_m.rounded]==[('fill',(0,12,50,25),color_t(ACCENTS[1][0]))],into_m.rounded
 into_m,into_icons,into_fills=into_paint('0','0'); assert not into_icons and not into_fills; passed()  # Minimal dark: stock's own
+if is_m1plus:
+    # The M1's settings rows' `>` (ROW_CHEVRON, V2.1's right_arrow, an image widget) on the selected row takes the row's
+    # text colour (sel_arrow): stock's draw is skipped and the glyph's alpha is drawn again, tinted. Minimal's card: dark
+    # ink (0x171717), its Light Mode flip 0xe0 (as the label's); Classic Light's Crimson band: white; an unselected row,
+    # and a dark half with no card or sel_text, keep stock's own.
+    ARROW_A=bytes((i*37+1)&255 for i in range(13*22))  # one alpha per pixel, varied
+    class ArrowMachine(Machine):
+        def __init__(self,**kw):
+            super().__init__(**kw); self.tints={}; self.drawn=[]; self.stock_paints=0
+            self.arrow=self.alloc(13*22*4)
+            self.u.mem_write(self.arrow,b''.join(bytes([0xff,0xff,0xff,a]) for a in ARROW_A))
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,''); a,b,c,d=[u.reg_read(r) for r in REGS]
+            if name=='widget_load_image' and self.text(b)=='right_arrow':
+                self.word(c,13); self.word(c+4,22); self.word(c+8,13*4); self.u.mem_write(c+0xc,struct.pack('<HH',0,1)); self.word(c+0x14,self.arrow); ret=0
+            elif name=='bitmap_create_ex':
+                ret=self.alloc(0x48); data=self.alloc(b*c)
+                self.word(ret,a); self.word(ret+4,b); self.word(ret+8,c); self.u.mem_write(ret+0xc,struct.pack('<HH',0,d)); self.word(ret+0x14,data)
+                self.tints[ret]=data
+            elif name=='bitmap_destroy': self.tints.pop(a,None); ret=0
+            elif name=='canvas_draw_icon': self.drawn.append((b,signed(c),signed(d))); ret=0
+            else: return super().hook(u,address,size,unused)
+            self.calls.append((name,a,b,c)); self.returns(ret,clobber=True)
+    def arrow_paint(theme,light,row=0):
+        am=ArrowMachine(); am.config.update(THEME=theme,LIGHT=light)
+        if theme=='1': am.config['ACCENT']='1'; classic_light_on(am)  # Crimson (a neutral accent's bar flips with its label)
+        aw,aes=am.page_list(10,height=96,extent=480,name='sysset_page'); window(am,'sysset_page',aw); am.paint(aw)
+        img=am.node('image','img_into',image='right_arrow'); am.nodes[aes[row]]['children']=[img]
+        am.word(img+O['W_PARENT'],aes[row]); am.word(img+O['W_W'],13); am.word(img+O['W_H'],22); am.drawn=[]; am.paint(img)
+        tint=[(bm,x,y) for bm,x,y in am.drawn if bm in am.tints]
+        if not tint: return None
+        (bm,x,y),=tint; px=bytes(am.u.mem_read(am.tints[bm],13*22*4))
+        assert (x,y)==(6,11) and px[3::4]==ARROW_A,(x,y)  # centred on the widget, the glyph's alpha kept
+        assert len(set(px[i:i+3] for i in range(0,len(px),4)))==1; return px[:3]
+    assert arrow_paint('0','0')==bytes([0x17]*3)  # Minimal's off-white card: dark ink
+    assert arrow_paint('0','1')==bytes([0xe0]*3)  # its Light Mode ink card: the label's paper
+    assert arrow_paint('1','1')==bytes([0xff]*3)  # Classic Light's band: white
+    assert arrow_paint('0','0',row=1) is None and arrow_paint('0','1',row=1) is None  # an unselected row: stock's
+    assert arrow_paint('1','0') is None; passed()  # Classic's dark half: stock's white already
 # Classic's Appearance: Theme, then its own options in order (Light Mode, Accent, Home, Shortcut, Battery, Time in
 # Title, Library on Home, Row Preview, Row Art; Corners and Centred NP are not declared). Each is a title with its value right-aligned; no switch
 # images.
