@@ -240,13 +240,15 @@ def executed(log, elf):
         if i >= 0: hits[funcs[i][1]] += 1
     return hits
 
-WALK_SECONDS = 260  # the walk's budget after startup, inside the same run
+WALK_SECONDS = 330  # the walk's budget after startup, inside the same run
 
 def tap(x, y): return [f'{x} {y} 200', 'wait 80', f'{x} {y} 0']
 def swipe(x0, y0, x1, y1, steps=10):
     return [line for i in range(steps + 1) for line in (f'{x0 + (x1 - x0) * i // steps} {y0 + (y1 - y0) * i // steps} 200', 'wait 16')] + [f'{x1} {y1} 0']
 NEXT_PAGE = swipe(280, 250, 40, 250)  # Home's carousel, a page right
 DOWN_LIST = swipe(160, 420, 160, 60)  # a list scrolled towards its end
+QUICK_OPEN = swipe(160, 5, 160, 300)  # V2.1's pull-down, dragged from the bar
+QUICK_CLOSE = swipe(160, 300, 160, 5)  # and pushed back up
 UP_LIST = swipe(160, 100, 160, 460)    # and back towards its start
 # The iPod settings rows (ipod-ui 4.3): SET_ROWS rows of SET_ROW, in Classic (the walk's theme) flush under the bar, the
 # same whether the list is at its start or scrolled to its end. V2.1's title bar is hidden there: the chevron and
@@ -353,7 +355,24 @@ WALK = [('settings', home_row(SETTINGS), 4, ('not', 'home')),  # its Playback an
         # Knob: Navigation on Home's rows: four turns from Library to Streaming, the press opens it, Previous closes it.
         ('home_knob', [KNOB_DOWN] * 4, 3, ('not', 'library_back')),
         ('home_knob_open', [PRESS], 4, ('not', 'home_knob')),
-        ('home_knob_back', [PREVIOUS], 4, ('as', 'home_knob'))]
+        ('home_knob_back', [PREVIOUS], 4, ('as', 'home_knob')),
+        # Quick Settings (ipod-ui 4.7) is V2.1's pull-down: a drag down from the bar opens it over Home, a drag up closes it.
+        ('quick', QUICK_OPEN, 4, ('not', 'home_knob_back')),
+        ('quick_closed', QUICK_CLOSE, 4, ('as', 'home_knob_back')),
+        # The Carousel Home (ipod-ui 4.5): Appearance's Home row, Full then Carousel; out through Display and System,
+        # whose back lands on the Carousel. A swipe pages it (Library), the knob's press opens the card, Previous closes that.
+        ('carousel_settings', home_row(SETTINGS), 4, ('not', 'quick_closed')),
+        ('carousel_system', home_row(SYSTEM), 4, ('not', 'carousel_settings')),
+        ('carousel_display', set_row(2), 4, ('not', 'carousel_system')),
+        ('carousel_display_end', DOWN_LIST + ['wait 800'], 4, ('not', 'carousel_display')),
+        ('appearance', set_row(3), 4, ('not', 'carousel_display_end')),
+        ('home_carousel', set_row(3), 4, ('not', 'appearance')),  # Home: Full, then Carousel
+        ('carousel_display_back', CHEVRON, 4, ('not', 'home_carousel')),
+        ('carousel_system_back', CHEVRON, 4, ('as', 'carousel_system')),
+        ('carousel', CHEVRON, 5, ('not', 'home_knob_back', 'carousel_settings')),
+        ('carousel_next', NEXT_PAGE, 4, ('not', 'carousel')),
+        ('carousel_open', [PRESS], 5, ('not', 'carousel_next')),
+        ('carousel_back', [PREVIOUS], 4, ('as', 'carousel_next'))]
 # --home-menu: V2.1's Home cards saved ([MAIN] HOMEMENU, six cards from My Music to Composer), which the iPod Home
 # replaces: the control is the same build without them, and both must draw the same Home and pages: the Library from
 # Home's row, closed by the chevron; Home's Settings list, closed by its chevron.
