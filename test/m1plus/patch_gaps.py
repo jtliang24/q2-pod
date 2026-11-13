@@ -189,12 +189,6 @@ GAPS = {
     'd652ea7b25.2': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:12439 assert m.selected(view)==0 [fixture extension]
     '4aadbcc5de': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:14516 swap_values(m,120,0) [fixture extension]
     'd7f4dc6863.3': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:14516 m=classic_light_home() [fixture extension]
-    # Q2 Return key and window-manager ABI (Phase 5)
-    'dfe4cdaacb': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3181 for existing in (False,True):
-    '06388513e1': 'Q2 Return key and window-manager ABI (Phase 5)',  # patch.py:3204 assert m.call(170,gap=0)==11
-    # Q2 pointer dispatch ABI (Phase 5)
-    'c2221ae651': 'Q2 pointer dispatch ABI (Phase 5)',  # patch.py:3383 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
-    '225d0d79d5': 'Q2 pointer dispatch ABI (Phase 5)',  # PullDispatchMachine uses Q2 vtable and emitter fixtures; V2.1 needs its own fixture
     # Classic (1.6.7): its own geometry set boots V1.32 immediates (theme_boot), and its bar, rows, fonts, pane and
     # Library on Home with it; the M1 builds Minimal and Modern only (tools/m1plus.py m1_themes)
     'a08dbf9b32': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9275 for config,preset in (({},0),({**C,K:1},1),({**C,K:2},2),({**C,K:3,HOME:

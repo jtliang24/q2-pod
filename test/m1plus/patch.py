@@ -3696,32 +3696,34 @@ class NavigationMachine(Machine):
         elif name=='access@GLIBC_2.0':ret=-1
         self.returns(ret)
 
-for existing in (False,True):
-    for empty in (False,True):
-        m=NavigationMachine(); w,es=m.page_list(20,name='folder_page'); browse=m.top
-        home=m.node('window','home_page',stage=3)
-        playing=m.node('window','playing_page',stage=3) if existing else 0
-        m.order=[home]+([playing] if playing else [])+[browse]; m.sync_order()
-        m.folder('/sd/music'); m.paint(w)
-        for _ in range(6):m.call()
-        selected,offset=m.selected(w),m.get(w+O['SCROLL_Y'])
-        for visit in range(3):
-            long_return(m)
-            assert m.nodes[m.top]['name']=='playing_page'
-            assert not any(c[0]=='player_start' for c in m.calls)
-            # The switch dropped the hold-release latch: the hold's release is ignored
-            # and the first short Return goes back instead of being swallowed.
-            assert m.u.mem_read(O['RETURN_RELEASE_LATCH'],1)==b'\0'
-            assert m.call(170,gap=0)==0 and m.nodes[m.top]['name']=='playing_page'
-            m.call(170,address=0x52c248,args=(m.top,m.event,0,0),gap=0)
-            assert m.top==browse, (existing,visit,[m.nodes[p]['name'] for p in m.order])
-            m.paint(w,gap=0); assert (m.selected(w),m.get(w+O['SCROLL_Y']))==(selected,offset)
-        passed()
-m=NavigationMachine(); m.page('folder_page'); browse=m.top; m.order=[browse]; m.sync_order()
-m.block_open=True; long_return(m); assert m.top==browse
-assert m.call(170,gap=0)==11
-m.block_open=False; m.animating=1; long_return(m); assert m.top==browse
-passed()
+if is_m1plus: not_ported("Hold Return opens Now Playing through the Q2's Return handler (0x52c248) and its release latch (test: V1.32 code; the M1's Hold Return is compact_now_playing, hold_return below)")
+else:
+    for existing in (False,True):
+        for empty in (False,True):
+            m=NavigationMachine(); w,es=m.page_list(20,name='folder_page'); browse=m.top
+            home=m.node('window','home_page',stage=3)
+            playing=m.node('window','playing_page',stage=3) if existing else 0
+            m.order=[home]+([playing] if playing else [])+[browse]; m.sync_order()
+            m.folder('/sd/music'); m.paint(w)
+            for _ in range(6):m.call()
+            selected,offset=m.selected(w),m.get(w+O['SCROLL_Y'])
+            for visit in range(3):
+                long_return(m)
+                assert m.nodes[m.top]['name']=='playing_page'
+                assert not any(c[0]=='player_start' for c in m.calls)
+                # The switch dropped the hold-release latch: the hold's release is ignored
+                # and the first short Return goes back instead of being swallowed.
+                assert m.u.mem_read(O['RETURN_RELEASE_LATCH'],1)==b'\0'
+                assert m.call(170,gap=0)==0 and m.nodes[m.top]['name']=='playing_page'
+                m.call(170,address=0x52c248,args=(m.top,m.event,0,0),gap=0)
+                assert m.top==browse, (existing,visit,[m.nodes[p]['name'] for p in m.order])
+                m.paint(w,gap=0); assert (m.selected(w),m.get(w+O['SCROLL_Y']))==(selected,offset)
+            passed()
+    m=NavigationMachine(); m.page('folder_page'); browse=m.top; m.order=[browse]; m.sync_order()
+    m.block_open=True; long_return(m); assert m.top==browse
+    assert m.call(170,gap=0)==11
+    m.block_open=False; m.animating=1; long_return(m); assert m.top==browse
+    passed()
 
 # Pull-to-search observes the page's native before-children callbacks and stock dispatch.
 # A pull starts 29 px under the edge stock's pull-down opens from (QUICK_EDGE_PX: the Q2's 31, V2.1's 81), on a page
@@ -3899,7 +3901,8 @@ class PullDispatchMachine(PullMachine):
 for distance in (7,48):
     m=PullDispatchMachine();w,es=m.page_list(5,height=240,name=LOCAL_SONGS);page=m.top
     m.start_pull(page,w)
-    m.word(page+O['W_VT'],1);m.word(page+O['W_EMITTER'],page)
+    # A vtable with no handlers: V2.1's widget_on_pointer_move calls through it after the children, where the Q2's doesn't.
+    m.word(page+O['W_VT'],m.alloc(0x100) if is_m1plus else 1);m.word(page+O['W_EMITTER'],page)
     m.word(m.event+O['EVENT_Y'],PULL_Y+distance)
     for fn,typ in (('widget_on_pointer_move',0x101),('widget_on_pointer_up',0x103)):
         m.calls=[]
@@ -3911,7 +3914,9 @@ for distance in (7,48):
 # Native abort delivery follows the pressed target chain; it is not an EVT_CLICK.
 m=PullMachine();w,es=m.page_list(3,height=240,name=LOCAL_SONGS);page=m.top
 m.start_pull(page,w);m.handlers.pop(syms['widget_dispatch_event_to_target_recursive'])
-m.word(page+0x4c,w);m.word(w+0x4c,es[0])
+# The pressed target: V2.1's widget_dispatch_event_to_target_recursive (0x66e08c) follows +0x48, the Q2's +0x4c.
+TARGET=0x48 if is_m1plus else 0x4c
+m.word(page+TARGET,w);m.word(w+TARGET,es[0])
 m.calls=[];m.emit(page,O['EVT_POINTER_MOVE_BEFORE'],y=PULL_Y+60)
 assert [c[1] for c in m.dispatched()]==[w,es[0]] and not m.clicks
 m.emit(page,O['EVT_POINTER_UP_BEFORE'],y=PULL_Y+40);assert not m.searches()
