@@ -2,7 +2,7 @@
 """M1 Plus: review sheets of the iPod UI, captured under qemu. Not gates: boot.py's walks check the UI; these draw it
 for a reviewer (theme also checks Theme's real renderer, as its pass did).
 
-    sheets.py BUILD OUT_DIR [bar|home|np|theme|all ...]   (default all; ImageMagick's montage)
+    sheets.py BUILD OUT_DIR [bar|home|np|theme|settings|all ...]   (default all; ImageMagick's montage)
 
 Each sheet writes into OUT_DIR/<sheet>/:
   bar    the status bar at its busiest (Wi-Fi, Bluetooth, the battery's percent), each theme in dark and Light Mode: Now
@@ -13,7 +13,9 @@ Each sheet writes into OUT_DIR/<sheet>/:
          volume band, the big cover, the panel over the list and V2.1's VOLUME; then the local page and Spotify's on
          boot.py's fake Soloify side by side (four runs of about two minutes, two of about five)
   theme  Theme and Appearance with V2.1's real renderer and input: the picker's marks, the preset tap's saved keys, the
-         focus pills (one run of about three minutes; --record-only keeps the captures without the checks)"""
+         focus pills (one run of about three minutes; --record-only keeps the captures without the checks)
+  settings  the settings pages in each theme, dark and Light: System, Display and its end, Controls, Screen Rotation's
+         and Theme's pickers, Configuration and Erase's armed confirm, and Coverflow (four runs of about two minutes)"""
 import argparse, collections, configparser, contextlib, json, pathlib, shutil, subprocess, sys, tempfile, time
 
 sys.path[:0] = [str(pathlib.Path(__file__).resolve().parent), str(pathlib.Path(__file__).resolve().parents[2]/'tools')]
@@ -237,7 +239,38 @@ def theme(s, out):
     print(f'Theme renderer and preset tap evidence: {out}')
 
 
-SHEETS = {'bar': bar, 'home': home, 'np': np, 'theme': theme}
+def settings(s, out):
+    """The settings pages and V2.1's pickers in each theme, dark and Light: System (and its selection bar after a knob
+    turn), Display, Controls, Screen Rotation and Theme (and their focus frames), Streaming's Configuration with Erase's
+    confirm armed, and Coverflow (the aesthetics pass's review sheet)."""
+    themes = {s.args.theme: THEMES[s.args.theme]} if s.args.theme is not None else THEMES
+    steps = [('system', boot.home_row(boot.SETTINGS) + ['wait 1500'] + boot.home_row(boot.SYSTEM)),
+             ('system_knob', [boot.KNOB_DOWN]),  # the selection bar, its row's arrow
+             ('display', boot.set_row(2)), ('display_end', boot.DOWN_LIST + ['wait 800']), ('controls', boot.set_row(5)),
+             ('system_end', boot.CHEVRON + ['wait 2000'] + boot.CHEVRON + ['wait 2000'] + (boot.DOWN_LIST + ['wait 800']) * 2),
+             ('rotation', boot.set_row(0)), ('rotation_knob', [boot.KNOB_DOWN]),  # the picker's frame
+             ('theme', boot.CHEVRON + ['wait 2000'] + boot.set_row(1)), ('theme_knob', [boot.KNOB_DOWN]),
+             ('configuration', boot.CHEVRON + ['wait 2000'] + boot.CHEVRON + ['wait 2000'] + boot.CHEVRON + ['wait 2000'] +
+              boot.home_row(boot.STREAMING) + ['wait 2000'] + boot.page_row(5)),
+             ('erase_armed', boot.page_row(2)),  # one tap arms the confirm; only a second erases
+             ('coverflow', boot.CHEVRON + ['wait 2000'] + boot.CHEVRON + ['wait 2000'] + boot.home_row(boot.COVERFLOW))]
+    wait = {'system': 6, 'system_end': 9, 'theme': 6, 'configuration': 12, 'coverflow': 12}
+    for t, theme in themes.items():
+        for light in (0, 1):
+            name = f'{theme}-{"light" if light else "dark"}'
+            boot.IPOD_CLASSIC = f'[IPOD]\nTHEME={t}\nACCENT=1\nLIGHT={light}\n'
+            with s.run(name, BOOT_S + sum(wait.get(k, STEP_S) for k, _ in steps) + 20, boot.HOME_FULL) as (run, shot):
+                (out/name).mkdir(exist_ok=True)
+                for i, (step, lines) in enumerate(steps):
+                    boot.send(run, lines)
+                    time.sleep(wait.get(step, STEP_S))
+                    shot(out/name/f'{i:02d}-{step}.png')
+        tiles = [a for light in ('dark', 'light') for shot in sorted((out/f'{theme}-{light}').glob('*.png'))
+                 for a in ('-label', f'{light}: {shot.stem[3:]}', str(shot))]
+        s.sheet(tiles, f'{len(steps)}x2', '200x+6+6', out/f'settings-{theme}.png')
+
+
+SHEETS = {'bar': bar, 'home': home, 'np': np, 'theme': theme, 'settings': settings}
 
 
 def main():
@@ -245,7 +278,7 @@ def main():
     ap.add_argument('build', type=pathlib.Path)
     ap.add_argument('out', type=pathlib.Path)
     ap.add_argument('which', nargs='*', choices=[*SHEETS, 'all'], default=['all'])
-    ap.add_argument('--theme', type=int, choices=THEMES, help='bar, np: this theme only')
+    ap.add_argument('--theme', type=int, choices=THEMES, help='bar, np, settings: this theme only')
     ap.add_argument('--layout', type=int, choices=(0, 1), help="np: this layout only (0 the iPod's, 1 Centred)")
     ap.add_argument('--light', action='store_true', help='np: in Light Mode')
     ap.add_argument('--uv', type=int, default=4300000, help="bar: the battery's voltage file, which steadies V2.1's level")
