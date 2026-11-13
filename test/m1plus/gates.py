@@ -2,6 +2,7 @@
 """The M1 Plus gates, in order, on one --dev build: every step every run, stopping at the first failure.
 
     python3 test/m1plus/gates.py BUILD            # all 19: q2compare --suites, a fresh build in BUILD, its gates
+    python3 test/m1plus/gates.py BUILD --base TAG  # at a sync: q2compare against the tag merged
     python3 test/m1plus/gates.py BUILD --from boot  # after a test-only fix: the failed gate onward, same build
     python3 test/m1plus/gates.py BUILD --release  # tools/release_m1.py validate()'s subset, on a release build
     python3 test/m1plus/gates.py --list [--release]
@@ -39,7 +40,7 @@ def q2compare(ctx):
     # TMPDIR=/tmp: under the devShell's long TMPDIR, peq's Tidal check fails on -Wformat-truncation.
     return ['bwrap', '--dev-bind', '/', '/', '--overlay-src', '/usr/bin', '--tmp-overlay', '/usr/bin',
             '--ro-bind', ffmpeg, '/usr/bin/ffmpeg', 'env', 'TMPDIR=/tmp', f'PATH={path}',
-            sys.executable, 'test/q2compare.py', '--suites', '--zip', Q2_ZIP]
+            sys.executable, 'test/q2compare.py', *([ctx.base] if ctx.base else []), '--suites', '--zip', Q2_ZIP]
 
 
 def replaceable(build):
@@ -91,14 +92,23 @@ STEPS = {
     'q2compare': (q2compare, False),
     'peq': (suite('peq', False), 'only'),  # q2compare's suites run it; validate() runs it on its own
     'build': (build, False),
+    # hook jumps, demo and rootfs diffs, updater rule, boot scripts
     'audit': (lambda ctx: [sys.executable, 'test/m1plus/build.py', '--build', ctx.build], True),
-    # Never with GAPS_DUMP: gaprun then exits 0 whatever fails.
+    # the payload under Unicorn, plus KNOWN GAP and NOT PORTED lines. Never with GAPS_DUMP: gaprun
+    # then exits 0 whatever fails.
     'patch': (lambda ctx: ['env', '-u', 'GAPS_DUMP', sys.executable, 'test/m1plus/patch.py', ctx.build], True),
+    # V2.1's demo under QEMU, stock vs patched (walked alongside), touch and key walk
     'boot': (boot(caps='boot-caps'), True),
+    # saved V2.1 Home cards change nothing: the same build without them is the control
     'menu': (boot('--home-menu', caps='menu-caps'), False),
+    # Home in Split, a card with long songs, a book and two photos: Library, Folder, Coverflow, Streaming, Shuffle
     'media': (boot('--media', caps='media-caps'), False),
+    # Now Playing and Centred in both themes: back, bar, art, the volume band, the big cover
     'np': (boot('--now-playing'), False),
+    # Spotify's page on a fake Soloify in both themes: layout, touch, scrub, the band, Hold Return, the
+    # message view, and a paused session after local music
     'solo': (boot('--soloify'), False),
+    # Back and Previous after a tap in the status bar, on Coverflow, Internet Radio and a V2.1 page
     'bar': (boot('--bar-keys'), False),
     'playback': (suite('m1plus/playback'), True),
     'm4b': (suite('m1plus/m4b'), True),
@@ -106,6 +116,7 @@ STEPS = {
     'headset': (suite('m1plus/headset_io'), False),
     'ldac': (suite('ldac'), True),
     'bluealsa': (suite('bluealsa'), False),
+    # every hook, site and name classified: ported, native, Q2 only or NOT PORTED
     'ports': (suite('m1plus/ports', False), False),
     'unit': (lambda ctx: pytest(ctx, 'unit'), False),
     'fw': (lambda ctx: pytest(ctx, 'fw'), False),
@@ -122,8 +133,8 @@ def manifest(build):
 
 
 class Context:
-    def __init__(self, build, out):
-        self.build, self.out = build, out
+    def __init__(self, build, out, base):
+        self.build, self.out, self.base = build, out, base
 
 
 def main():
@@ -133,6 +144,7 @@ def main():
     ap.add_argument('--only', nargs='+', choices=list(STEPS), metavar='STEP', help='just these steps (debugging)')
     ap.add_argument('--release', action='store_true', help="validate()'s subset, on a release build: " +
                     ' '.join(RELEASE))
+    ap.add_argument('--base', help="q2compare's base tag (default UPSTREAM_BASE; a sync passes the tag it merges)")
     ap.add_argument('--out', type=pathlib.Path, help='logs and summary.txt (default work/gates/<timestamp>/)')
     ap.add_argument('--list', action='store_true', help='print the steps and exit')
     args = ap.parse_args()
@@ -154,7 +166,7 @@ def main():
                      'fresh build and every gate, so run without --from/--only')
     out = (args.out or ROOT/'work/gates'/datetime.datetime.now().strftime('%Y%m%d-%H%M%S')).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    ctx = Context(build_dir, out)
+    ctx = Context(build_dir, out, args.base)
     env = {**os.environ, 'PYTHONUNBUFFERED': '1'}
     summary = open(out/'summary.txt', 'a')
     def report(line):
