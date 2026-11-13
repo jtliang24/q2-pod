@@ -371,14 +371,13 @@ The Nov 4 finding that Now Playing needs a prominent back is closed by Phase 4.6
 
 ## Verification
 
-After every commit:
-1. **Q2 unchanged:** `TMPDIR=/tmp python3 test/q2compare.py 1.5.9 --suites` (1.5.8 before Phase 1.5). The
-   iPod `update.tar` must be byte-identical.
-2. **M1 gates:** a fresh `--dev` build, then `test/m1plus/build.py --build`, `patch.py`, `boot.py` (plain,
-   `--home-menu` and `--media`), `playback.py`, `m4b`, `id3`, `headset_io`, `test/ldac.py`,
-   `test/bluealsa.py`, then `ports.py`. Each ported row moves from `unported` to `ported`, and a
-   `known_gap` that now passes is removed.
-3. **CI suite:** `pytest test/unit`, from the 1.6.2 sync on (upstream adds `test/unit` in 1.6.2).
+After every commit, `python3 test/m1plus/gates.py <build>` (inside the shell) runs every gate in order:
+1. **Q2 unchanged:** `test/q2compare.py --suites` against `UPSTREAM_BASE`. The iPod `update.tar` must be
+   byte-identical.
+2. **M1 gates:** a fresh `--dev` build and its suites, then `ports.py`. Each ported row moves from
+   `unported` to `ported`, and a `known_gap` that now passes is removed.
+3. **CI suite:** `pytest test/unit` (and `test/fw`), from the 1.6.2 sync on (upstream adds `test/unit` in
+   1.6.2).
 4. **Device:** at the end of each Phase 4 item, flash through the menu updater, then walk the feature over
    q2remote with screenshots. Record it as a progress section, with `test/m1plus/fndiff.py` against the
    build on the device.

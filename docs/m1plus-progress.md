@@ -4890,18 +4890,15 @@ boot target Rockbox, playback paused; `config.ini` is byte-identical to the back
 ## How to check a build now
 
 ```sh
-python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses unknown inputs and V2.1 names
-python3 test/m1plus/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
-python3 test/m1plus/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
-python3 test/m1plus/boot.py build-m1 --home-menu  # saved V2.1 Home cards change nothing: the same build without them is the control
-python3 test/m1plus/boot.py build-m1 --now-playing  # Now Playing and Centred in both themes: back, bar, art, the volume band, the big cover
-python3 test/m1plus/boot.py build-m1 --soloify  # Spotify's page on a fake Soloify in both themes: layout, touch, scrub, the band, Hold Return, the message view, and a paused session after local music
-python3 test/m1plus/boot.py build-m1 --bar-keys  # Back and Previous after a tap in the status bar, on Coverflow, Internet Radio and a V2.1 page
-python3 test/m1plus/boot.py build-m1 --media    # Home in Split, a card with long songs, a book and two photos: the Library, Folder, Coverflow, Streaming, Shuffle Songs
+python3 test/m1plus/gates.py build-m1   # every gate, in order: q2compare --suites, a fresh --dev build, its suites
+python3 test/m1plus/gates.py build-m1 --from boot  # after a test-only fix: the failed gate onward, same build
+python3 test/m1plus/gates.py --list     # the steps; gates.py's STEPS says what each checks
 python3 test/m1plus/bar_sheets.py build-m1 sheets  # review sheets of the status bar at its busiest, both themes, dark and light (checks nothing)
-python3 test/m1plus/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
-python3 test/m1plus/playback.py build-m1        # and test/m1plus/m4b, id3, headset_io; test/ldac, bluealsa
 ```
+
+`gates.py` stops at the first failure and writes each step's log, its command on the first line, with a
+`summary.txt` to `work/gates/<timestamp>/`. `--from` and `--only` refuse a build whose `source_sha256` no
+longer matches the tree: an edit to a hashed source needs a fresh build and every gate.
 
 On a `--dev` build, `python3 tools/q2remote.py` reaches the device over Wi-Fi: files, settings,
 screenshots and input, without a manual pass ([remote.md](remote.md)).

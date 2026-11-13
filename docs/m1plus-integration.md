@@ -249,12 +249,8 @@ takes: it takes `stock/Q2 Firmware V1.32.zip`, or `--zip`.
 # peq, mp3, remote, coverflow, release once). The base's builds are kept in work/q2compare/<commit>/.
 python3 test/q2compare.py --suites
 
-# R4: a fresh M1 build and its gates
-python3 tools/build.py 'stock/M1 Plus Firmware V2.1/update.bin' --out <scratch>/m1
-python3 test/m1plus/build.py --build <scratch>/m1
-python3 test/m1plus/patch.py <scratch>/m1
-python3 test/m1plus/boot.py <scratch>/m1
-python3 test/m1plus/ports.py
+# R4: a fresh M1 build and its gates, every one in order (R1-R3's q2compare run included)
+python3 test/m1plus/gates.py <scratch>/m1
 
 # Before a Q2 release
 python3 tools/release.py package 'stock/Q2 Firmware V1.32/update.tar' --out <scratch>/release

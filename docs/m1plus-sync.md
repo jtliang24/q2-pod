@@ -177,34 +177,33 @@ release, or at once after a structural step.
    - **A conflict in a doc** takes upstream's text. The M1 docs are the `m1plus-*.md` files. `README.md`
      is the fork's own front page, so its conflicts keep ours; read upstream's changes to it for
      anything the M1 section should say. An upstream PR of the port takes upstream's README back.
-3. **Gates, in order.**
-   1. **Q2 output and suites.** `TMPDIR=/tmp python3 test/q2compare.py <tag> --suites`, inside the
-      shell: `nix develop` sets its own `TMPDIR` over one set outside it. Under that long `TMPDIR`,
-      1.2.9's `test/peq.py` fails its Tidal check on `-Wformat-truncation`, upstream's own tree too.
-      1.3.8's `test/chapters.py` runs `/usr/bin/ffmpeg`, which NixOS lacks; bind one in with
-      bubblewrap: `F=$(nix build --inputs-from . nixpkgs#ffmpeg-headless --no-link --print-out-paths |
-      head -1)/bin/ffmpeg; bwrap --dev-bind / / --overlay-src /usr/bin --tmp-overlay /usr/bin --ro-bind $F
-      /usr/bin/ffmpeg sh -c 'TMPDIR=/tmp python3 test/q2compare.py <tag> --suites'`. An overlay, not a
-      tmpfs: on a merged-`/usr` host (Ubuntu) a tmpfs `/usr/bin` hides `/bin/sh`, so mksquashfs's `F`
-      entries (`cat` through a shell) write every swapped rootfs file empty, the base's build and this
-      tree's alike, and their `update.tar` still match (found Nov 3, at 1.5.9). In a fresh `work/gatetree`,
-      pass `--zip` (its `stock/` is the main tree's), not a `stock` link, which its snapshot would copy. The `update.tar` (Legacy and
-      iPod up to 1.5.8) must be byte-identical to `<tag>`'s own build, and the tag's suites must pass on it
-      ([the checklist](m1plus-integration.md#checklist)). It fails on a suite the tag adds that it
-      doesn't know how to run (`SUITES`), and names the suites whose text differs from the tag's.
+3. **Gates, in order.** `python3 test/m1plus/gates.py work/sync/<tag> --base <tag>`, inside the shell,
+   runs gates 1, 3 and 4 below in order (`--list` names its steps), stops at the first failure, and logs
+   to `work/gates/<timestamp>/`.
+   1. **Q2 output and suites.** gates.py's `q2compare` step runs `test/q2compare.py <tag> --suites` with
+      `TMPDIR=/tmp`: `nix develop` sets its own `TMPDIR` over one set outside it, and
+      under that long `TMPDIR` 1.2.9's `test/peq.py` fails its Tidal check on `-Wformat-truncation`,
+      upstream's own tree too. 1.3.8's `test/chapters.py` runs `/usr/bin/ffmpeg`, which NixOS lacks, so
+      the step binds one in with bubblewrap (and 1.6.7's player suites take lame and flac from `PATH`). An
+      overlay, not a tmpfs: on a merged-`/usr` host (Ubuntu) a tmpfs `/usr/bin` hides `/bin/sh`, so
+      mksquashfs's `F` entries (`cat` through a shell) write every swapped rootfs file empty, the base's
+      build and this tree's alike, and their `update.tar` still match (found Nov 3, at 1.5.9). It passes
+      `--zip` (a fresh `work/gatetree`'s `stock/` is the main tree's), not a `stock` link, which its
+      snapshot would copy. The `update.tar` must be byte-identical to `<tag>`'s own build, and the tag's
+      suites must pass on it ([the checklist](m1plus-integration.md#checklist)). It fails on a suite the
+      tag adds that it doesn't know how to run (`SUITES`), and names the suites whose text differs from the
+      tag's.
    2. **Q2 scenario counts.** `test/patch.py`'s counts are at least the tag's own: no case dropped or
       skipped.
-   3. **M1 gates.** The V2.1 name check (the M1 build itself: `m1plus_names` fails on a V2.1 name the rootfs lacks),
-      then on a fresh M1 build the suites of [How to check a build
-      now](m1plus-progress.md#how-to-check-a-build-now): `test/m1plus/build.py --build`,
-      `test/m1plus/patch.py`, `test/m1plus/boot.py` with and without `--home-menu` and `--media`,
-      `test/m1plus/playback.py`, `m4b`, `id3`, `headset_io`, `test/ldac.py` and `test/bluealsa.py`.
-      Edit no source between the build and its gates: they check its `source_sha256` against the
-      tree, and a table edit after the build fails every one. A failing gate is fixed in a follow-up
-      commit. A fix to tests alone keeps the build: run the failed gate and those after it on it. A
-      fix to a hashed source (`tools/*.py`, `patch/*`) needs a fresh build and every M1 gate again.
-   4. **Port report.** `python3 test/m1plus/ports.py` passes: every hook, site and name is classified
-      (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for
+   3. **M1 gates.** The V2.1 name check (the M1 build itself: `m1plus_names` fails on a V2.1 name the
+      rootfs lacks), then gates.py's steps on that fresh `--dev` build. Edit no source between the build
+      and its gates: they check its `source_sha256` against the tree, and a table edit after the build
+      fails every one. A failing gate is fixed in a follow-up commit. A fix to tests alone keeps the
+      build: `gates.py <build> --from <step>` reruns the failed gate and those after it on it. A fix to a
+      hashed source (`tools/*`, `patch/*`, `assets/**`) needs a fresh build and every gate: run gates.py
+      without `--from`, which refuses the stale build anyway.
+   4. **Port report.** gates.py's `ports` step (`python3 test/m1plus/ports.py`) passes: every hook, site
+      and name is classified (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for
       [m1plus-unported.md](m1plus-unported.md).
    5. **What changed on M1.** Keep the gated `--dev` build (`work/sync/<tag>/`; U3's are in
       `work/u3/<tag>/`), and list
