@@ -15401,7 +15401,9 @@ static int tick_gate(void *e) {
 }
 int ringnav_input(void *wm, void *e) {
     if (!M1PLUS && e && tick_gate(e)) return 0; /* the touch wheel's: the M1's knob ticks have no ring frame */
-    if (e && (chord_gate(e) || wake_gate(e))) return 0;
+    /* the rim's chords are the touch wheel's: the M1's knob press and its side keys are apart, and it has no Return
+     * (ipod-ui 4.8) */
+    if (e && ((!M1PLUS && chord_gate(e)) || wake_gate(e))) return 0;
     st.last_input = time_now_ms();
     unsigned type = e ? (unsigned)I(e, EVENT_TYPE) : 0;
     unsigned key = e ? (unsigned)I(e, EVENT_KEY) : 0;

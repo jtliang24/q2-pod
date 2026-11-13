@@ -19469,28 +19469,30 @@ if not is_m1plus:
     assert not wake(DOWN,gap=O['WAKE_MS']) and not wake(UP) and not wake(DOWN,gap=O['WAKE_MS']) and not wake(UP)  # too slow
 assert wake(DOWN,O['KEY_PLAY'],gap=1000) and wake(UP,O['KEY_PLAY']) and wake(UP,O['KEY_NEXT'])  # media and wheel work dark
 m.byte(syms['g_backlight_status'],1); assert wake(DOWN,gap=1000) and wake(UP) and all(wake(t,RET,gap=1000) for t in (DOWN,LONG,UP)); passed()
-# A loose wheel's Centre under a held Return (chord_gate): the press is dropped whole, Return passes;
-# Centre held first, or long after Return's press (a lost release), passes.
-assert wake(DOWN,RET,gap=1000) and not wake(DOWN,gap=30) and not wake(DOWN,gap=258) and not wake(UP,gap=50) and wake(UP,RET)
-assert wake(DOWN,gap=1000) and wake(DOWN,RET,gap=30) and wake(UP) and wake(UP,RET)
-assert wake(DOWN,RET,gap=1000) and wake(DOWN,gap=600) and wake(UP) and wake(UP,RET)
-assert wake(DOWN,RET,gap=1000) and not wake(DOWN,gap=30) and wake(UP,RET) and wake(DOWN,gap=1000)  # its release lost
-assert wake(DOWN,gap=1000) and wake(UP); passed()
-# A Return hold's release can ghost a press: one starting within RETURN_GHOST_MS is dropped whole;
-# later, or after a short press, it passes.
-hold=700
-assert wake(DOWN,RET,gap=1000) and wake(UP,RET,gap=hold) and not wake(DOWN,RET,gap=60) and not wake(UP,RET,gap=30)
-assert wake(DOWN,RET,gap=1000) and wake(UP,RET,gap=hold) and wake(DOWN,RET,gap=200) and wake(UP,RET,gap=30)
-assert wake(DOWN,RET,gap=1000) and wake(UP,RET,gap=100) and wake(DOWN,RET,gap=60) and wake(UP,RET,gap=30)
-# The stamp rounds up (| 1): a ghost in the same even millisecond as the release is still inside the window.
-assert wake(DOWN,RET,gap=1000); m.now+=hold; m.now+=m.now&1
-assert wake(UP,RET,gap=0) and not wake(DOWN,RET,gap=0) and not wake(UP,RET,gap=30); passed()
-# A hold whose release stock never saw (the windows closing under it) leaves its release latch armed, which would swallow
-# the next short Return: a new press clears it, a held press's repeats and a ghost (dropped whole) do not.
 LATCH=payload_syms['m1_return_latch'] if is_m1plus else O['RETURN_RELEASE_LATCH']  # the M1's is a payload byte, not a stock address
-assert wake(DOWN,RET,gap=1000); m.byte(LATCH,1); assert wake(DOWN,RET,gap=100) and m.u.mem_read(LATCH,1)==b'\1'
-assert wake(UP,RET,gap=hold) and not wake(DOWN,RET,gap=60) and m.u.mem_read(LATCH,1)==b'\1' and not wake(UP,RET,gap=30)
-assert wake(DOWN,RET,gap=200) and m.u.mem_read(LATCH,1)==b'\0' and wake(UP,RET,gap=30); passed()
+if is_m1plus: not_ported("chord_gate: Centre under a held Return, Return's ghost and its stale latch (ipod-ui 4.8, Q2 only: the M1 has no Return key, and its synthetic Return goes past ringnav_input)")
+else:
+    # A loose wheel's Centre under a held Return (chord_gate): the press is dropped whole, Return passes;
+    # Centre held first, or long after Return's press (a lost release), passes.
+    assert wake(DOWN,RET,gap=1000) and not wake(DOWN,gap=30) and not wake(DOWN,gap=258) and not wake(UP,gap=50) and wake(UP,RET)
+    assert wake(DOWN,gap=1000) and wake(DOWN,RET,gap=30) and wake(UP) and wake(UP,RET)
+    assert wake(DOWN,RET,gap=1000) and wake(DOWN,gap=600) and wake(UP) and wake(UP,RET)
+    assert wake(DOWN,RET,gap=1000) and not wake(DOWN,gap=30) and wake(UP,RET) and wake(DOWN,gap=1000)  # its release lost
+    assert wake(DOWN,gap=1000) and wake(UP); passed()
+    # A Return hold's release can ghost a press: one starting within RETURN_GHOST_MS is dropped whole;
+    # later, or after a short press, it passes.
+    hold=700
+    assert wake(DOWN,RET,gap=1000) and wake(UP,RET,gap=hold) and not wake(DOWN,RET,gap=60) and not wake(UP,RET,gap=30)
+    assert wake(DOWN,RET,gap=1000) and wake(UP,RET,gap=hold) and wake(DOWN,RET,gap=200) and wake(UP,RET,gap=30)
+    assert wake(DOWN,RET,gap=1000) and wake(UP,RET,gap=100) and wake(DOWN,RET,gap=60) and wake(UP,RET,gap=30)
+    # The stamp rounds up (| 1): a ghost in the same even millisecond as the release is still inside the window.
+    assert wake(DOWN,RET,gap=1000); m.now+=hold; m.now+=m.now&1
+    assert wake(UP,RET,gap=0) and not wake(DOWN,RET,gap=0) and not wake(UP,RET,gap=30); passed()
+    # A hold whose release stock never saw (the windows closing under it) leaves its release latch armed, which would swallow
+    # the next short Return: a new press clears it, a held press's repeats and a ghost (dropped whole) do not.
+    assert wake(DOWN,RET,gap=1000); m.byte(LATCH,1); assert wake(DOWN,RET,gap=100) and m.u.mem_read(LATCH,1)==b'\1'
+    assert wake(UP,RET,gap=hold) and not wake(DOWN,RET,gap=60) and m.u.mem_read(LATCH,1)==b'\1' and not wake(UP,RET,gap=30)
+    assert wake(DOWN,RET,gap=200) and m.u.mem_read(LATCH,1)==b'\0' and wake(UP,RET,gap=30); passed()
 # The symptom: left armed, stock's filter eats a short Return's release and Home does nothing; the new press clears it, and that first release reaches Home.
 def home_after_hold(press):
     h=NavigationMachine(); view,_=home_list(h); h.order=[h.top]; h.sync_order(); h.paint(view)
@@ -19500,27 +19502,29 @@ def home_after_hold(press):
     h.call(RET); return h.selected(view)
 if is_m1plus: assert home_after_hold(False)==0 and home_after_hold(True)==0; passed()  # the M1's latch is Previous's, spent at dispatch (m1plus_nav_input.inc): Return's release reaches Home either way
 else: assert home_after_hold(False)==3 and home_after_hold(True)==0; passed()
-# Every edge button guards Centre as Return does: a thumb on the rim closes Centre with Play/Pause,
-# Previous or Next too. Centre pressed first passes, but an edge press within CHORD_MS of it ends
-# Centre's hold timer, so stock's Centre hold (Shut Down) never comes; a later one leaves it.
-for k in (O['KEY_PLAY'],O['KEY_BACK_BTN'],O['KEY_FWD_BTN']):
-    assert wake(DOWN,k,gap=1000) and not wake(DOWN,gap=30) and not wake(UP,gap=50) and wake(UP,k),k
-hold_timer=payload_syms['ringnav_hold_timer']
-def centre_hold(): return m.call(address=hold_timer,args=(0x1234,m.wm,1000,O['KEY_CENTER']),gap=0,clear=False)
-FWD=O['KEY_FWD_BTN']
-assert wake(DOWN,gap=1000); t=centre_hold(); assert t in m.timers
-assert wake(DOWN,FWD,gap=100) and t not in m.timers and wake(UP,gap=50) and wake(UP,FWD)
-assert wake(DOWN,gap=1000); t=centre_hold(); assert wake(DOWN,FWD,gap=600) and t in m.timers
-m.timers.pop(t); assert wake(UP,gap=50) and wake(UP,FWD)
-# The stamp rounds up (| 1): an edge press in the same even millisecond as Centre's still ends the hold.
-m.now+=1000; m.now+=m.now&1; assert wake(DOWN,gap=0); t=centre_hold()
-assert wake(DOWN,FWD,gap=0) and t not in m.timers and wake(UP,gap=50) and wake(UP,FWD); passed()
-# A lost release (Standby while held) leaves the guards whole: a press long after its button's last
-# event is a new press, while repeats within 258 ms of each other are still the first press.
-assert wake(DOWN,FWD,gap=1000) and wake(DOWN,FWD,gap=1000) and not wake(DOWN,gap=30) and not wake(UP,gap=50) and wake(UP,FWD)
-assert wake(DOWN,FWD,gap=1000) and wake(DOWN,FWD,gap=258) and wake(DOWN,FWD,gap=258) and wake(DOWN,gap=100) and wake(UP,gap=50) and wake(UP,FWD)
-assert wake(DOWN,gap=1000) and wake(DOWN,gap=1000); t=centre_hold()  # Centre's release lost
-assert wake(DOWN,FWD,gap=100) and t not in m.timers and wake(UP,gap=50) and wake(UP,FWD); passed()
+if is_m1plus: not_ported("chord_gate's rim presses: an edge button guards Centre (ipod-ui 4.8, Q2 only: the M1's knob press and its side keys are apart)")
+else:
+    # Every edge button guards Centre as Return does: a thumb on the rim closes Centre with Play/Pause,
+    # Previous or Next too. Centre pressed first passes, but an edge press within CHORD_MS of it ends
+    # Centre's hold timer, so stock's Centre hold (Shut Down) never comes; a later one leaves it.
+    for k in (O['KEY_PLAY'],O['KEY_BACK_BTN'],O['KEY_FWD_BTN']):
+        assert wake(DOWN,k,gap=1000) and not wake(DOWN,gap=30) and not wake(UP,gap=50) and wake(UP,k),k
+    hold_timer=payload_syms['ringnav_hold_timer']
+    def centre_hold(): return m.call(address=hold_timer,args=(0x1234,m.wm,1000,O['KEY_CENTER']),gap=0,clear=False)
+    FWD=O['KEY_FWD_BTN']
+    assert wake(DOWN,gap=1000); t=centre_hold(); assert t in m.timers
+    assert wake(DOWN,FWD,gap=100) and t not in m.timers and wake(UP,gap=50) and wake(UP,FWD)
+    assert wake(DOWN,gap=1000); t=centre_hold(); assert wake(DOWN,FWD,gap=600) and t in m.timers
+    m.timers.pop(t); assert wake(UP,gap=50) and wake(UP,FWD)
+    # The stamp rounds up (| 1): an edge press in the same even millisecond as Centre's still ends the hold.
+    m.now+=1000; m.now+=m.now&1; assert wake(DOWN,gap=0); t=centre_hold()
+    assert wake(DOWN,FWD,gap=0) and t not in m.timers and wake(UP,gap=50) and wake(UP,FWD); passed()
+    # A lost release (Standby while held) leaves the guards whole: a press long after its button's last
+    # event is a new press, while repeats within 258 ms of each other are still the first press.
+    assert wake(DOWN,FWD,gap=1000) and wake(DOWN,FWD,gap=1000) and not wake(DOWN,gap=30) and not wake(UP,gap=50) and wake(UP,FWD)
+    assert wake(DOWN,FWD,gap=1000) and wake(DOWN,FWD,gap=258) and wake(DOWN,FWD,gap=258) and wake(DOWN,gap=100) and wake(UP,gap=50) and wake(UP,FWD)
+    assert wake(DOWN,gap=1000) and wake(DOWN,gap=1000); t=centre_hold()  # Centre's release lost
+    assert wake(DOWN,FWD,gap=100) and t not in m.timers and wake(UP,gap=50) and wake(UP,FWD); passed()
 # Standby's resume (STANDBY_WAKE, device_standby's awake_screen) stays dark in both modes, so the
 # resuming key acts as dark (#27); a wake press clears stock's resume guard, which would drop its release.
 # Q2 only: it goes with Wake's Double Press. M1 Plus keeps V2.1's own wake from Standby, which a screen
