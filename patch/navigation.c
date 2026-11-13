@@ -1494,6 +1494,17 @@ static void reveal(menu_t *m, int id, int immediate) {
     /* The first row brings in whatever heads the list above it (the EQ page's graph) when both
      * fit, rather than stopping a margin into it. Kind 1's ids are its row order. */
     if (m->kind == 1 && id == 0 && y + h + margin <= height) want = 0;
+#if M1PLUS
+    /* The M1's Home list is about 3.9 rows under Split's art and scrolls (the Q2's never does): a
+     * reading margin leaves a strip of the row above under the art. It scrolls by whole rows
+     * instead, so the top row is whole; the list's end stays max_top. */
+    if (h == HOME_ROW && home_menu(window_of(m->w))) {
+        want = y < top ? y : y + h > top + height ? y + h - height : top;
+        want = want < top   ? want / HOME_ROW * HOME_ROW
+               : want > top ? (want + HOME_ROW - 1) / HOME_ROW * HOME_ROW
+                            : top;
+    }
+#endif
     want = clamp_step(want, max_top(m), 0);
     const theme_t *T = theme();
     if (immediate || !T->recall_ms) {

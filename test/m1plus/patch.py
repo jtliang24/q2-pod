@@ -14645,6 +14645,23 @@ def m1_home_modes():
     for i in range(1,7): assert m.call()==11 and m.selected(view)==i
     click_target(m,named(m,m.top,'img_settings'))  # Centre opens the chosen row's image: Settings
     assert m.confirm()==11 and m.dispatched()[-1][1]==named(m,m.top,'img_settings'); passed()
+    # The knob walk scrolls by whole rows (aesthetics item 5): no reading margin, so no strip of the row above shows
+    # under the art; the top is a multiple of HOME_ROW but at the list's end (seven rows less the list's height), down
+    # and back up, in Split and Full, Minimal and Classic. Full scrolls only in Minimal (HOME_TOP), by its 6 px end.
+    # The harness's scroll view is its content's height: it is given the list's.
+    for theme in (0,1):
+        for mode in (0,1):
+            m,view,w=home(mode,theme); sv=named(m,w['list_view_home'],'scroll_view_home')
+            h=geometry(m,w['list_view_home'])[3]; end=max(0,7*HOME_ROW-h)
+            m.word(sv+O['W_H'],h); m.word(sv+O['VIEW_CONTENT_H'],7*HOME_ROW); m.paint(sv)
+            tops=[]
+            for k in [None]*6+[O['KEY_PREV']]*6:
+                m.call(k) if k else m.call(); m.paint(sv); tops.append(signed(m.get(sv+O['SCROLL_Y'])))
+            assert m.selected(sv)==0 and all(t%HOME_ROW==0 or t==end for t in tops),(theme,mode,tops)
+            want=[max(0,min(end,-(-(HOME_ROW*(i+1)-h)//HOME_ROW)*HOME_ROW)) for i in range(1,7)]  # down: each row's foot in view
+            assert tops[:6]==want and tops[6]==end and tops[-1]==0,(theme,mode,tops)
+            if mode==0: assert tops==[0,0,64,128,192,end,end,end,192,128,64,0],tops  # Split: 250 px (Classic), 242 (Minimal)
+    passed()
     # Settings, from the list or a card, puts the Settings list (Playback and System, bound to V2.1's pages) in the
     # menu's place, the art staying in Split; the chevron and Previous (Knob: Navigation) bring back the menu it came from,
     # its row or card kept. On Home's own menu, Previous stays a track key.
