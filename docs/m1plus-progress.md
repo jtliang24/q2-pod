@@ -4842,6 +4842,44 @@ new finding:
 Restored afterwards: Screen Off 1 min, boot target `rockbox`, Theme Modern, Light Mode Off, both accents (Cobalt,
 Ivory), Shuffle, volume 11, Warm Blood paused at its start. `config.ini` matches the pre-pass backup byte for byte.
 
+## 85. Phase 4.8: the Q2-only rows (Nov 12)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.8 leaves the wheel's and the Return key's features on the Q2, and
+marks them `NOT PORTED` instead of listing them as gaps. The roadmap's
+[Q2-only list](m1plus-roadmap.md#already-q2-only-by-design) now names them, and Games left
+[m1plus-unported.md](m1plus-unported.md).
+
+- **`chord_gate`** (`navigation.c`). It ran on the M1: a knob press (Centre) that started within `CHORD_MS` while
+  Previous, Next or Play/Pause was held was dropped whole, and a side key within `CHORD_MS` of a knob press ended
+  its hold timer. That is a guard for a thumb on the Q2's rim. The M1's knob and side keys are apart, so it only
+  ate deliberate presses. `ringnav_input` now calls it under `!M1PLUS`, as `tick_gate`. Its Return part was inert
+  on the M1: the M1's Return is `dispatch_key`'s, which calls stock past the hook. The payload is 928 bytes
+  smaller, and the Q2's bytes don't change. `patch.py`'s chord checks (Return's ghost and stale latch, and the
+  edge buttons) are `NOT PORTED` on the M1. Its `home_after_hold` check still runs there.
+- **The gap groups.** `patch_gaps.py`'s `Games (ipod-ui 4.8, Q2 only)` (196 checks) and `Q2 wheel keys and Key
+  Tone (ipod-ui 4.8, Q2 only)` (82) are gone. The Q2 scenarios they covered are now `if is_m1plus: not_ported(...)`
+  branches in `patch.py`:
+  - Games;
+  - the wheel's ticks, Home's ends and list ends;
+  - Key Tone on the row change;
+  - a dropped wheel press on the idle clock.
+
+  The Q2 runs them unchanged. A BUTTONS dialog's knob steps passed on the M1, so they stay outside the
+  branches.
+- **Already done.** `buzzeer_switch`, `on_wm_keydown_before_fun` and `WHEEL_TS_READ` were already `q2only` in
+  `M1PLUS_PORTS`. The M1's Display has no Corners, wheel or Click With Headphones rows (4.3). Its Library and
+  Shortcut have no Games (4.5).
+
+**Gates** (`V069m`, `work/phase4/4.8/gates/summary.txt`): all 19 pass. `patch.py` has **411 expected failures in 8
+gaps**, none unlisted, and 108 `NOT PORTED` lines (6 new); `pytest test/unit` 1,199; the Q2 `update.tar` is byte-identical to 1.7.0's and
+`q2compare --suites` passes all 37 runs. `fndiff.py` against `V068m`
+(`work/phase4/4.8/fndiff-V068m-V069m.txt`): `ringnav_input` changed (`chord_gate` was inlined into it), and
+`ringnav_about` (the version).
+
+**For the device check** (one `--dev` flash): on a list in Knob: Navigation, press Play/Pause or Next and, while
+it is still down, press the knob: the knob's press opens the row (before, it was dropped). A plain knob press and
+Previous's hold (Hold Return) work as before.
+
 ## How to check a build now
 
 ```sh

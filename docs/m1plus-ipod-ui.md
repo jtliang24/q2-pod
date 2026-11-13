@@ -293,13 +293,25 @@ Each feature follows the same steps:
    with Cobalt, and Minimal turns it off with Graphite (Light Mode's Auto is kept). So Minimal to Modern setting
    `LIGHT` is by design.
 8. **Left Q2-only, as `NOT PORTED` rows:**
-   - Games (they need a design without the Return key and the wheel); the 181 execution checks are
-     grouped as `Games (ipod-ui 4.8, Q2 only)` in `patch_gaps.py`;
+   - Games (they need a design without the Return key and the wheel);
    - the click sound (`buzzeer_switch`), unless the M1 has a buzzer;
    - `chord_gate`'s rim presses;
    - `WHEEL_TS_READ`;
    - Display's Corners (the glass is square), and Wheel QS, Wheel Sensitivity and Click With Headphones (no wheel,
      no buzzer) (4.3).
+
+   Done on Nov 12 (progress §85). The roadmap's [Q2-only list](m1plus-roadmap.md#already-q2-only-by-design) names
+   them all, and Games left `m1plus-unported.md`.
+   - **`patch.py`:** the 278 checks `patch_gaps.py` listed as `Games` and `Q2 wheel keys and Key Tone` (ipod-ui 4.8)
+     are now `if is_m1plus: not_ported(...)` branches around the Q2's scenarios, and the gap groups are gone.
+     The scenarios are Games, the wheel's ticks and list ends, Key Tone, and the dropped wheel press on the idle
+     clock. The Q2 runs them as before; `patch.py` expects 411 failures.
+   - **`chord_gate`** ran on the M1, where a knob press while Previous, Next or Play/Pause was held was dropped.
+     `ringnav_input` now calls it on the Q2 only (`!M1PLUS`), as `tick_gate`. Its Return part was already inert
+     there: the M1's Return is `dispatch_key`'s, which goes past the hook. Its checks are `NOT PORTED` on the M1.
+   - The rest needed nothing: `buzzeer_switch`, `on_wm_keydown_before_fun` and `WHEEL_TS_READ` were already `q2only`
+     rows in `M1PLUS_PORTS`. The M1's Display (`m1plus_nav_display.c`) has no Corners, wheel or Click With
+     Headphones rows. The Library and Shortcut have no Games.
 
 ## Phase 5: Tests
 

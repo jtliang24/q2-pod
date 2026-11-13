@@ -22,7 +22,6 @@ to its [progress](m1plus-progress.md) section.
 | Feature | Since | Q2 Pod's pieces | Status |
 |---|---|---|---|
 | [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8); Carousel, Click With Headphones, the art following the player's cover (1.5.9); Single Press Scrub (1.6.0) | In progress |
-| [Games](#games) | 1.3.9 | `games.c`, the iPod UI's Games row | Unplanned |
 | [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone`; `timezone_row`, `TIMEZONES` (1.5.0) | Planned |
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
 | [Battery: the MQA side chain](#battery-fixes) | 1.2.9 | `MQA_GATE`, `MQA_PROBE` (`tools/peq.py`) | Planned |
@@ -136,13 +135,14 @@ and `playlist_rebuild` (4.7, progress 82).
 
 ### Games
 
-Games are the iPod UI's. `games.c` has compiled on the M1 since the iPod path did, but its Library row is
-`ringnav_localmusic`'s, which the M1 doesn't hook: its Library rows are the Q2 Pod page's
-(`m1plus_nav_library.c`), which has no Games row, so they can't be opened. They stay unplanned
-within the iPod UI port ([m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.8), and they changed again in
-1.4.2 and 1.4.5 (Snake). They use the Return key, which the M1 lacks, so they need a touch design first.
-Card-app games (`addon_game_*`, 1.6.x) have no row either, and the M1's addon caps leave out `game`; the App
-Store still lists 1.6.3's Buddy (`q2-fidget`), which installs but can't be opened.
+Q2 only since Phase 4.8 of the iPod UI port ([m1plus-ipod-ui.md](m1plus-ipod-ui.md), progress 85), so the
+row moved to the roadmap's [Q2-only list](m1plus-roadmap.md#already-q2-only-by-design). `games.c` has compiled
+on the M1 since the iPod path did, but its Library row is `ringnav_localmusic`'s, which the M1 doesn't hook:
+its Library rows are the Q2 Pod page's (`m1plus_nav_library.c`), which has no Games row, and its Shortcut has
+no Games either, so they can't be opened. They use the Return key, which the M1 lacks, so they would need a
+touch design first. Card-app games (`addon_game_*`, 1.6.x) have no row either, and the M1's addon caps leave
+out `game`; the App Store still lists 1.6.3's Buddy (`q2-fidget`), which installs but can't be opened.
+`patch.py` prints the Games scenario as `NOT PORTED` on the M1.
 
 ### The extra time zones
 

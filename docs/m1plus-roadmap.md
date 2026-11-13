@@ -488,6 +488,12 @@ These are skipped on M1 on purpose (marked `Q2 only` in the tests), not gaps:
   include hands a key to stock first;
 - Quick Settings' brightness/volume switch on a Play/Pause hold (1.3.8): the M1's knob stays volume
   in Quick Settings, which Knob: Navigation leaves to stock (the user's choice, Oct 25).
+- From the iPod UI port ([m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.8, progress 85):
+  - Games (`games.c`; the card apps' games too): they need a design without the Return key and the wheel;
+  - `chord_gate`'s rim presses, and Return's ghost and stale latch: the M1's knob press and side keys are
+    apart, and its Return is synthetic, past `ringnav_input`;
+  - the wheel's own Display rows: Corners (the glass is square), Wheel QS, Wheel Sensitivity, and Click
+    With Headphones (no buzzer).
 
 The Rockbox dual boot stays: there is no Rockbox for the M1 Plus yet, but the hook serves as a boot-time
 diagnostic.
