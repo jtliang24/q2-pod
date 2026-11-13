@@ -3595,6 +3595,12 @@ static struct {
     unsigned long count_thread;
     unsigned asked, pane_read, count_timer, pane_timer;
     unsigned ring[4][HOME_PW];
+#if M1PLUS /* home_tex's backdrop is tw x th texels, the cover over it fw x fh; col and colw: the texel left of
+            * each column's centre and its weights, home_render's */
+    int th, fw, fh;
+    unsigned short col[HOME_PW];
+    unsigned colw[HOME_PW][4];
+#endif
     int clip[4];  /* the canvas clip while the art paints, restored after */
     int clipped;
 } home __attribute__((section(".scratch")));
@@ -3702,8 +3708,27 @@ static int home_drift(const void *unused) {
     return 8; /* RET_REPEAT */
 }
 
+#if M1PLUS
+/* The M1's Split shows the whole cover: a w x h image's size inside the panel at its proportions (at least a
+ * pixel); unknown sizes fill it. */
+static void home_fit(unsigned w, unsigned h, int *fw, int *fh) {
+    int pw = HOME_PW, ph = HOME_PH;
+    *fw = pw, *fh = ph;
+    if (w && h && w <= 8192 && h <= 8192) {
+        if ((unsigned)pw * h > (unsigned)ph * w)
+            *fw = (int)((unsigned)ph * w / h);
+        else
+            *fh = (int)((unsigned)pw * h / w);
+        *fw += !*fw, *fh += !*fh;
+    }
+}
+
+/* and its backdrop's: the size just covering the panel, the Q2's home_fit */
+static void home_cover(unsigned w, unsigned h, int *fw, int *fh) {
+#else
 /* A w x h image's size just covering the panel at its proportions; unknown sizes fill it. */
 static void home_fit(unsigned w, unsigned h, int *fw, int *fh) {
+#endif
     int pw = HOME_PW, ph = HOME_PH;
     *fw = pw, *fh = ph;
     if (w && h && w <= 8192 && h <= 8192) {
@@ -3765,6 +3790,57 @@ static void box_filter(const unsigned char *data, unsigned stride, const unsigne
     }
 }
 
+#if M1PLUS
+/* The M1's Split (docs/m1plus-ipod-ui.md 4.5): the whole cover, still and sharp, at the panel's centre over a
+ * backdrop of the same cover filling the panel, blurred and dimmed, which pans as the Q2's cover does. home.tex
+ * holds the backdrop: the cover's fill zoomed DRIFT_ZOOM_PCT, box filtered once to a texel each BACK_DIV px
+ * (tw x th), mixed BACK_DIM of 256 toward black (Light Mode: toward its paper) and bordered as the Q2's; then the
+ * cover at its fit (fw x fh), a texel a pixel. home_render magnifies the backdrop by its cubic B-spline, which
+ * is the blur, at no cost a frame. 1 when it pans, -1 when nothing loads, 0 for a 16-bit decode or a cover whose
+ * zoomed fill passes DRIFT_TEXELS, which shows still. */
+#define BACK_DIV 5
+#define BACK_DIM 141
+HOT unsigned lerp(unsigned a, unsigned b, unsigned k);
+static int home_tex(const char *url) {
+    static const unsigned char at[4][4] = BITMAP_RGBA_AT;
+    unsigned bitmap[64]; /* bitmap_t */
+    if (widget_load_image(home.art, url, bitmap)) return -1;
+    unsigned w = bitmap[0], h = bitmap[1], format = ((unsigned short *)bitmap)[7] - 1u;
+    int cw, ch, fw, fh;
+    home_cover(w, h, &cw, &ch);
+    home_fit(w, h, &fw, &fh);
+    int zw = cw * DRIFT_ZOOM_PCT / 100, zh = ch * DRIFT_ZOOM_PCT / 100, tw = zw / BACK_DIV,
+        th = zh / BACK_DIV;
+    const unsigned char *data = 0;
+    if (!home.frame) home.frame = opaque_frame(HOME_PW, HOME_PH);
+    if (home.frame && format < 4 && w && h && w <= 8192 && h <= 8192 && zw <= DRIFT_TEXELS / zh) {
+        free(home.tex);
+        home.tex = calloc((unsigned)(th + 3) * (unsigned)(tw + 3) + (unsigned)fw * (unsigned)fh, 4);
+        data = home.tex ? bitmap_lock_buffer_for_read(bitmap) : 0;
+    }
+    if (data) {
+        unsigned stride = bitmap_get_line_length(bitmap),
+                 paper = ipod_light() ? scheme()->paper & 255 : 0, dim = 0xff000000u | paper * 0x010101u;
+        int ts = tw + 3;                   /* the backdrop's row, its border included */
+        unsigned *tex = home.tex + ts + 1; /* texel 0, 0 */
+        box_filter(data, stride, at[format], w, h, tex, ts, tw, th, paper);
+        box_filter(data, stride, at[format], w, h, home.tex + (th + 3) * ts, fw, fw, fh, paper);
+        bitmap_unlock_buffer(bitmap);
+        for (int y = 0; y < th; ++y) {
+            unsigned *row = tex + y * ts;
+            for (int x = 0; x < tw; ++x) row[x] = lerp(row[x], dim, BACK_DIM);
+            row[-1] = row[0], row[tw] = row[tw + 1] = row[tw - 1];
+        }
+        memcpy(home.tex, home.tex + ts, (unsigned)ts * 4);
+        for (int y = th + 1; y < th + 3; ++y)
+            memcpy(home.tex + y * ts, home.tex + th * ts, (unsigned)ts * 4);
+        home.tw = tw, home.th = th, home.fw = fw, home.fh = fh, home.rx = zw - cw, home.ry = zh - ch;
+        home.u0 = (cw - HOME_PW) / 2, home.v0 = (ch - HOME_PH) / 2, home.du = -1;
+    }
+    widget_unload_image(home.art, bitmap);
+    return data != 0;
+}
+#else
 /* The cover at url, box filtered once to its fit zoomed DRIFT_ZOOM_PCT (home.tex, tw x th) and
  * composited over the page as Coverflow's decode does, for the pan to draw from. It pans across
  * the zoom's margin only (rx ry), from the old crop (u0 v0), so its edges never show. 1 when it
@@ -3812,6 +3888,7 @@ static int home_tex(const char *url) {
     widget_unload_image(home.art, bitmap);
     return data != 0;
 }
+#endif
 
 /* Cubic B-spline weights at phase t/256, in 1/256: all >= 0, summing to 256. */
 static void bspline_w(unsigned t, unsigned *w) {
@@ -3832,6 +3909,43 @@ HOT unsigned tap4(unsigned a, unsigned b, unsigned c, unsigned e, const unsigned
     return 0xff000000u | (rb >> 8 & 0xff00ffu) | (g >> 8 & 0xff00u);
 }
 
+#if M1PLUS
+/* The M1's panel at u, v (1/256 px of the zoomed fill): the backdrop magnified BACK_DIV times by a separable cubic
+ * B-spline, each texel row it needs filtered across once into home.ring (the columns' texels and weights first),
+ * each frame row down from the ring's four; then the cover at the panel's centre. */
+static void home_render(unsigned *d, int pitch, int u, int v) {
+    int ts = home.tw + 3, ue = (home.tw - 1) * 256, ve = (home.th - 1) * 256, have = -1;
+    unsigned *top = d;
+    for (int x = 0; x < HOME_PW; ++x) { /* each pixel's centre in texels, 1/256 */
+        int t = (u + x * 256 + 128) / BACK_DIV - 128;
+        t = t < 0 ? 0 : t > ue ? ue : t;
+        home.col[x] = (unsigned short)(t >> 8);
+        bspline_w((unsigned)t & 255, home.colw[x]);
+    }
+    for (int y = 0; y < HOME_PH; ++y, d += pitch) {
+        unsigned wy[4];
+        int t = (v + y * 256 + 128) / BACK_DIV - 128;
+        t = t < 0 ? 0 : t > ve ? ve : t;
+        int r = t >> 8; /* home.tex's rows r to r + 3: texels r - 1 to r + 2 */
+        bspline_w((unsigned)t & 255, wy);
+        if (have < r - 1) have = r - 1;
+        while (have < r + 3) {
+            const unsigned *s = home.tex + ++have * ts;
+            unsigned *o = home.ring[have & 3];
+            for (int x = 0; x < HOME_PW; ++x) {
+                const unsigned *p = s + home.col[x];
+                o[x] = tap4(p[0], p[1], p[2], p[3], home.colw[x]);
+            }
+        }
+        const unsigned *r0 = home.ring[r & 3], *r1 = home.ring[(r + 1) & 3],
+                       *r2 = home.ring[(r + 2) & 3], *r3 = home.ring[(r + 3) & 3];
+        for (int x = 0; x < HOME_PW; ++x) d[x] = tap4(r0[x], r1[x], r2[x], r3[x], wy);
+    }
+    const unsigned *fg = home.tex + (home.th + 3) * ts;
+    d = top + (HOME_PH - home.fh) / 2 * pitch + (HOME_PW - home.fw) / 2;
+    for (int y = 0; y < home.fh; ++y, d += pitch, fg += home.fw) memcpy(d, fg, (unsigned)home.fw * 4);
+}
+#else
 /* The panel from the zoomed cover at u, v (1/256 px), so the pan moves by fractions of a pixel:
  * in whole pixels its 1.5 a second jerked. A separable cubic B-spline over 4 x 4 texels: each
  * cover row the panel needs is filtered across once into home.ring, and each frame row down from
@@ -3851,6 +3965,7 @@ static void home_render(unsigned *d, int pitch, int u, int v) {
         d += pitch;
     }
 }
+#endif
 
 /* The pan's frame over the art (its image is empty), rendered again only once the pan moved. */
 static void home_paint(void *canvas) {
@@ -4324,7 +4439,12 @@ void coverflow_home_art(void *top) {
              * the clip crops it evenly */
             if (!shown && !image_show(home.art, HOME_PLACEHOLDER, size))
                 image_base_set_image(home.art, HOME_PLACEHOLDER);
+#if M1PLUS /* V2.1 draws a fill image its own size (the 320 px placeholder overflowed a 200 px box), so the art keeps
+            * the panel, which also paints the art under any repaint of it, and scale_auto shows the image whole */
+            image_set_draw_type(home.art, 4);
+#else
             home_fit(size[0], size[1], &fw, &fh);
+#endif
         }
     }
     widget_move_resize(home.art, HOME_ART_X + (HOME_PW - fw) / 2, (ch - fh) / 2, fw, fh);
@@ -4343,6 +4463,11 @@ void coverflow_home_clip(void *w, void *canvas, int begin) {
         int covers = pane_covers();
         if (w == home.art && covers && home.tw) home_paint(canvas);
         /* The art's box is the image's fit, so the panel's edge and rows are measured from it. */
+#if M1PLUS
+        else if (w == home.art && !covers)
+            home_pane_paint(canvas, HOME_ART_X - I(w, W_X), -I(w, W_Y), HOME_PW, HOME_PH);
+        /* the M1's panel spans the screen: no column meets it, so a cover has no shadow */
+#else
         else if (w == home.art && !covers)
             home_pane_paint(canvas, HOME_SPLIT_W - I(w, W_X), -I(w, W_Y), HOME_PW, client_h());
         /* a cover: the pane's own shadow over it, where the left column meets it */
@@ -4351,6 +4476,7 @@ void coverflow_home_clip(void *w, void *canvas, int begin) {
             pane_shadow(canvas, HOME_SPLIT_W - I(w, W_X), -I(w, W_Y), client_h());
             stock_canvas_set_fill_color(canvas, fill);
         }
+#endif
         if (home.clipped) canvas_set_clip_rect(canvas, home.clip);
         home.clipped = 0;
         return;

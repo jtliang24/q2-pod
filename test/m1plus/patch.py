@@ -7346,9 +7346,13 @@ assert m.sql.endswith('order by id asc') and m.results==[(101,0),(102,0),(103,0)
 # no file (V1.32's 1 and 3; V2.1's 2, and 1, which its Home shows as no cover).
 if is_m1plus: ART_X,PW,PH,LIST_W,EMBEDDED,NO_COVER=0,O['UI_W'],O['HOME_ART_H'],O['UI_W'],2,1
 else: ART_X,PW,PH,LIST_W,EMBEDDED,NO_COVER=O['HOME_SPLIT_W'],375-O['HOME_SPLIT_W'],290,O['HOME_SPLIT_W'],1,3
-def home_fit(w,h):  # coverflow.c home_fit: the size just covering the panel at the image's proportions
+def fill_size(w,h):  # the Q2's home_fit (the M1's home_cover): the size just covering the panel at the image's proportions
     if PW*h>PH*w: return PW,-(-PW*h//w)
     return -(-PH*w//h),PH
+def home_fit(w,h):  # coverflow.c home_fit; the M1's shows the whole cover: its size inside the panel, at least a pixel
+    if not is_m1plus: return fill_size(w,h)
+    if PW*h>PH*w: return max(PH*w//h,1),PH
+    return PW,max(PW*h//w,1)
 for theme in ('0','1'):
   CONFIG.clear(); CONFIG.update(THEME=theme); m=CoverflowMachine(); m.open(); m.top=m.home; CONFIG.clear()
   bar=m.node('window','system_bar'); m.word(syms['system_bar'],bar)
@@ -7368,7 +7372,8 @@ for theme in ('0','1'):
   # A cover with no pixels to pan (here none decode; on the device a 16-bit decode or one too long
   # for DRIFT_TEXELS) stays still: sized to its proportions, just covering the panel (native fill
   # then draws it whole), centred, and clipped to the panel from the background hook to the
-  # border hook, so it crops evenly and never stretches.
+  # border hook, so it crops evenly and never stretches. The M1's shows the whole cover: V2.1 draws a fill image its
+  # own size, so the art keeps the panel and draws it scale_auto (4), inside the panel and centred.
   assert m.nodes[m.art].get('sensitive')==0
   def geometry(): return [signed(m.get(m.art+O[k])) for k in ('W_X','W_Y','W_W','W_H')]
   def cover(w,h):
@@ -7377,9 +7382,11 @@ for theme in ('0','1'):
       m.u.mem_write(syms['g_lastcover_url'],b'/p/A\0'); art_image(m.home)
       return geometry()
   def fit(w,h): return [ART_X+int((PW-w)/2),int((PH-h)/2),w,h]
+  def still(w,h): return [ART_X,0,PW,PH] if is_m1plus else fit(*home_fit(w,h))
   for w,h in ((300,300),(2*PW,2*PH),(2*PW,PH),(600,400),(100,400)):
-      want=fit(*home_fit(w,h)); assert cover(w,h)==want,((w,h),geometry(),want)
-  if is_m1plus: assert [cover(*s) for s in ((300,300),(600,200))]==[[0,-60,320,320],[-140,0,600,200]]
+      want=still(w,h); assert cover(w,h)==want,((w,h),geometry(),want)
+      assert not is_m1plus or m.nodes[m.art].get('draw_type')==4
+  if is_m1plus: assert [home_fit(*s) for s in ((300,300),(600,200),(100,400),(8192,1))]==[(200,200),(320,106),(50,200),(320,1)]
   else: assert cover(300,300)==fit(290,290) and cover(600,400)==fit(435,290)
   passed()
   SCREEN=(0,0,O['UI_W'],O['UI_H'])
@@ -7400,8 +7407,8 @@ for theme in ('0','1'):
   # Neither a still cover nor the placeholder pans (the pan itself: after DepthMachine).
   def drifts(): return [t for t in m.timers.values() if t[1]==payload_syms['home_drift']]
   m.advance(O['DRIFT_TICK_MS']); art_image(m.home); assert not drifts()
-  assert cover(300,300)==fit(*home_fit(300,300)); art_image(m.home); m.advance(O['DRIFT_TICK_MS'])
-  assert not drifts() and cover(300,300)==fit(*home_fit(300,300))
+  assert cover(300,300)==still(300,300); art_image(m.home); m.advance(O['DRIFT_TICK_MS'])
+  assert not drifts() and cover(300,300)==still(300,300)
   passed()
 # Full: the art is hidden on the panel and never pans.
 CONFIG.clear(); CONFIG.update(HOME='1'); m=CoverflowMachine(); m.open(); m.top=m.home; CONFIG.clear()
@@ -11653,6 +11660,10 @@ print(f'Coverflow depth on MIPS: {rest_cost} instructions for the first paint (d
 # moves by fractions of a pixel at a sharpness that hardly changes with the phase. Each axis is a
 # linear ping-pong of its own period across the zoom's margin, from the unzoomed crop. One timer
 # runs it while Home is on top, lit and still; a step repaints only the panel (the model's: ART_X, PW, PH above).
+# The M1's shows the whole cover (home_fit), still and unfiltered, at the panel's centre, over a backdrop that pans:
+# the cover's fill zoomed the same, box filtered to a texel each BACK_DIV px, mixed BACK_DIM toward black, bordered
+# and magnified by the same B-spline, which blurs it.
+BACK_DIV,BACK_DIM=5,141
 X,Y,TICK=O['DRIFT_X_MS'],O['DRIFT_Y_MS'],O['DRIFT_TICK_MS']
 EXTERN=3 if is_m1plus else 2  # the player's cover type of a folder image (V2.1's, V1.32's)
 m=DepthMachine(); pan_counter=m.u.hook_add(UC_HOOK_BLOCK,count_block,begin=BASE,end=SCRATCH-1)  # before any code is cached
@@ -11664,15 +11675,25 @@ def drifts(): return [t for t in m.timers.values() if t[1]==payload_syms['home_d
 def invalidated(): return [(c[1],c[2] and tuple(signed(m.get(c[2]+4*i)) for i in range(4))) for c in m.calls if c[0]=='widget_invalidate_force']
 def tex_of(w,h):  # the last cover loaded (opaque) as home_tex leaves it, and its zoomed size
     url,=m.pixels; px=struct.unpack(f'<{w*h}I',bytes(m.u.mem_read(m.pixels[url],w*h*4)))
+    def box(tw,th):  # box_filter
+        out=[]
+        for y in range(th):
+            y0=y*h//th; y1=max((y+1)*h//th,y0+1)
+            for x in range(tw):
+                x0=x*w//tw; x1=max((x+1)*w//tw,x0+1); n=r=g=b=0
+                for sy in range(y0,y1,(y1-y0+3)//4):  # at most 4 x 4 samples
+                    for p in px[sy*w+x0:sy*w+x1:(x1-x0+3)//4]: r+=p&255; g+=p>>8&255; b+=p>>16&255; n+=1
+                out.append(0xff000000|r//n|g//n<<8|b//n<<16)
+        return out
+    if is_m1plus:
+        cw,ch=fill_size(w,h); zw,zh=cw*O['DRIFT_ZOOM_PCT']//100,ch*O['DRIFT_ZOOM_PCT']//100; tw,th=zw//BACK_DIV,zh//BACK_DIV
+        out=[tap4(p,0xff000000,0,0,(256-BACK_DIM,BACK_DIM,0,0)) for p in box(tw,th)]  # lerp toward black
+        rows=[out[y*tw:(y+1)*tw] for y in range(th)]; rows=[r[:1]+r+r[-1:]*2 for r in rows]; rows=rows[:1]+rows+rows[-1:]*2
+        fw,fh=home_fit(w,h)
+        return dict(px=[p for r in rows for p in r],ts=tw+3,tw=tw,th=th,fg=box(fw,fh),fw=fw,fh=fh,
+                    u0=(cw-PW)//2,v0=(ch-PH)//2,rx=zw-cw,ry=zh-ch)
     fw,fh=home_fit(w,h); tw,th=fw*O['DRIFT_ZOOM_PCT']//100,fh*O['DRIFT_ZOOM_PCT']//100
-    out=[]
-    for y in range(th):
-        y0=y*h//th; y1=max((y+1)*h//th,y0+1)
-        for x in range(tw):
-            x0=x*w//tw; x1=max((x+1)*w//tw,x0+1); n=r=g=b=0
-            for sy in range(y0,y1,(y1-y0+3)//4):  # at most 4 x 4 samples
-                for p in px[sy*w+x0:sy*w+x1:(x1-x0+3)//4]: r+=p&255; g+=p>>8&255; b+=p>>16&255; n+=1
-            out.append(0xff000000|r//n|g//n<<8|b//n<<16)
+    out=box(tw,th)
     def sharpen(line):  # home_sharpen: [-1,6,-1]/4 a channel, rounded and clamped, the ends their own neighbours
         return [0xff000000|sum(min(max((6*q-p-n_+2)>>2,0),255)<<s for s,p,q,n_ in ((s,a>>s&255,b>>s&255,c_>>s&255) for s in (0,8,16)))
                 for a,b,c_ in zip([line[0]]+line[:-1],line,line[1:]+[line[-1]])]
@@ -11688,8 +11709,21 @@ def bspline(t):  # bspline_w: the cubic B-spline's 4 weights at phase t/256, in 
 def tap4(a,b,c_,d,w):  # tap4: 4 texels weighted, rounded
     return (0xff000000|((a&0xff00ff)*w[0]+(b&0xff00ff)*w[1]+(c_&0xff00ff)*w[2]+(d&0xff00ff)*w[3]+0x800080)>>8&0xff00ff
             |((a&0xff00)*w[0]+(b&0xff00)*w[1]+(c_&0xff00)*w[2]+(d&0xff00)*w[3]+0x8000)>>8&0xff00)
+def back_at(p,n,i):  # the M1's backdrop: pixel i's centre in texels (1/256) from p, held to the n texels
+    return min(max((p+i*256+128)//BACK_DIV-128,0),(n-1)*256)
 def framed(c,t):  # the panel at phase t, as home_render filters it: across each cover row, then down
     u,v=c['u0']*256+at(c['rx'],X,t),c['v0']*256+at(c['ry'],Y,t); ts,px=c['ts'],c['px']
+    if is_m1plus:  # the backdrop, then the cover at the centre
+        cols=[(q>>8,bspline(q&255)) for q in (back_at(u,c['tw'],x) for x in range(PW))]; rows={}
+        def row(j):
+            if j not in rows: rows[j]=[tap4(*px[j*ts+k:j*ts+k+4],wx) for k,wx in cols]
+            return rows[j]
+        out=[]
+        for y in range(PH):
+            q=back_at(v,c['th'],y); wy=bspline(q&255); out+=[tap4(*k,wy) for k in zip(*map(row,range(q>>8,(q>>8)+4)))]
+        x0,y0,fw=(PW-c['fw'])//2,(PH-c['fh'])//2,c['fw']
+        for y in range(c['fh']): out[(y0+y)*PW+x0:(y0+y)*PW+x0+fw]=c['fg'][y*fw:(y+1)*fw]
+        return struct.pack(f'<{len(out)}I',*out)
     wx,wy=bspline(u&255),bspline(v&255); i=(v>>8)*ts+(u>>8)  # texel -1, -1 from u, v
     rows=[[tap4(*px[j+x:j+x+4],wx) for x in range(PW)] for j in range(i,i+(PH+3)*ts,ts)]
     out=[tap4(*k,wy) for y in range(PH) for k in zip(*rows[y:y+4])]
@@ -11708,6 +11742,11 @@ assert drawn()==framed(c,0) and ('bitmap_lock_buffer_for_write',) not in [x[:1] 
 paint_home(); m.advance(0); assert len(drifts())==1  # it arms on the next paint
 m.calls.clear(); m.advance(TICK); assert set(invalidated())=={(m.home,(ART_X,0,PW,PH))},invalidated()
 assert drawn()==framed(c,TICK)!=framed(c,0)  # a tick moves it by a fraction of a pixel
+if is_m1plus:  # the cover (319 square fits 200) whole at the centre, unmoved; the dimmed backdrop pans in the bands
+    a,b=(struct.unpack(f'<{PW*PH}I',framed(c,t_)) for t_ in (0,5000)); x0=(PW-200)//2
+    assert (c['fw'],c['fh'])==(200,200) and all(a[y*PW+x0:y*PW+x0+200]==b[y*PW+x0:y*PW+x0+200]==tuple(c['fg'][y*200:(y+1)*200]) for y in range(PH))
+    band=[i for i in range(PW*PH) if i%PW<x0 or i%PW>=x0+200]
+    assert any(a[i]!=b[i] for i in band) and all((p>>s&255)<=(256-BACK_DIM)*255//256+1 for i in band for p in (a[i],) for s in (0,8,16))
 m.advance(1000-TICK); assert drawn()==framed(c,1000) and len(drifts())==1; passed()
 m.advance(TICK); instructions[0]=0; assert drawn()==framed(c,1000+TICK); frame_cost=instructions[0]
 # A stalled loop steps at most DRIFT_MAX_STEP_MS.
@@ -11737,7 +11776,8 @@ instructions[0]=0; paint_home(); big_cost=instructions[0]; m.u.hook_del(pan_coun
 # A player cover too long for DRIFT_TEXELS stays still, even with a Coverflow thumbnail that
 # could pan; neither arms the timer.
 m.art_sizes={'externpic.jpg':(4000,100)}; m.byte(syms['g_playcover_type'],EXTERN); m.advance(TICK); paint_home(); m.advance(TICK); paint_home()
-assert not drifts() and m.nodes[m.art]['image'].endswith('externpic.jpg') and m.get(m.art+O['W_W'])==PH*40; passed()
+assert not drifts() and m.nodes[m.art]['image'].endswith('externpic.jpg') and m.get(m.art+O['W_W'])==(PW if is_m1plus else PH*40)
+assert not is_m1plus or m.nodes[m.art].get('draw_type')==4; passed()
 print(f'Home pan on MIPS: {frame_cost} instructions a frame (every DRIFT_TICK_MS), {filter_cost} and {big_cost} to filter a 638 and a 1914 px cover once (payload only)')
 
 # Accent (docs/internals.md#accent). The mapping: stock red blended with a neutral becomes the same
