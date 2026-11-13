@@ -5,12 +5,6 @@ listed under the docs/m1plus-ipod-ui.md item that makes it pass; that item's com
 check that passes fails the run). After an edit to patch.py, GAPS_DUMP=gaps.json python3 test/m1plus/patch.py BUILD
 writes every failing check, to rekey the list."""
 GAPS = {
-    # iPod UI assets (ipod-ui 3)
-    '2212dfddf4': 'iPod UI assets (ipod-ui 3)',  # patch.py:1383 m=Machine(); root=asset_node(m,decode((B/ui/localmusic/album_page.bin).read_byte
-    'ff3de6c4e5': 'iPod UI assets (ipod-ui 3)',  # patch.py:1383 m=Machine(); root=asset_node(m,decode((B/ui/localmusic/album_page.bin).read_byte
-    '5965b040da': 'iPod UI assets (ipod-ui 3)',  # patch.py:2092 for x in (22,187,353):
-    '30331ad68c': 'iPod UI assets (ipod-ui 3)',  # patch.py:11349 m.advance(3000); assert m.labels(np)==[Internet Radio,Three,Some Artist,A Song,M
-    '9e5dd4854f': 'iPod UI assets (ipod-ui 3)',  # patch.py:8720 for name in (local_album,local_photos,list_folder,list_tidal,player_playlist,
     # status bar scenarios on the V2.1 bar (Phase 5)
     '78b0d2089b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5441 for v in views:
     '8217be2fad': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5450 cells=laid_out()

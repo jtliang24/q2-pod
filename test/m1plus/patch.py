@@ -1661,9 +1661,11 @@ def asset_node(m,n,parent):
     for k,v in zip(('W_X','W_Y','W_W','W_H'),rect): m.word(w+O[k],v)
     m.nodes[w]['children']=[asset_node(m,c,w) for c in children]
     return w
-m=Machine(); root=asset_node(m,decode((B/'ui/localmusic/album_page.bin').read_bytes()),m.wm); m.top=root
-for button in [w for w,n in m.nodes.items() if n['type']=='button' and n['children']]:
-    check_album_tile(m,button)
+if is_m1plus: not_ported("The Q2 album grid's tiles (album_children; the M1's album page is V2.1's list)")
+else:
+    m=Machine(); root=asset_node(m,decode((B/'ui/localmusic/album_page.bin').read_bytes()),m.wm); m.top=root
+    for button in [w for w,n in m.nodes.items() if n['type']=='button' and n['children']]:
+        check_album_tile(m,button)
 
 # Folder row names are text, not printf formats (FOLDER_NAME): V2.1's row text (0x532e34) runs, its
 # tk_strncpy real, with the listing's record and the playing checks mocked.
@@ -2529,32 +2531,34 @@ if True:  # M1 Plus: V2.1's pull-down, at V2.1's dropdown_menu_state
     assert slider_touch([('down',100,300),('move',103,280)],dialog='backlight_page')==[(0,[D]),(0,[M])]  # Settings' slider is stock's
     passed()
 
-# Run stock's slider event handler with the packaged hit rectangle. Position arithmetic is
-# stock FP64 (unsupported by Unicorn); this checks capture and delivery, including outside drags.
-from ipod import decode,walk as ui_walk
-node=next(n for n in ui_walk(decode((B/'ui/playing_page.bin').read_bytes())) if n[2].get('name')=='slider_play')
-for x in (22,187,353):
-  for y in (234,255,276):
-   for end in (U,A):
-    m=Machine(); slider=m.node('slider','slider_play'); parent=m.node('window','playing_page',[slider])
-    m.word(slider+O['W_PARENT'],parent)
-    for k,v in zip(('W_X','W_Y','W_W','W_H'),node[1]): m.word(slider+O[k],v)
-    assert node[1][0]<=x<node[1][0]+node[1][2] and node[1][1]<=y<node[1][1]+node[1][3]
-    m.word(slider+0x98,int(node[2]['bar_size'])); m.byte(slider+0xa6,node[2]['slide_with_bar']=='true')
-    m.handlers[0x61a3f4]='stock_slider_preview'
-    m.mock('widget_find_animator','widget_set_state','widget_grab','widget_ungrab')
-    def pointer(typ,x,y):
-        m.byte(m.event+0x24,1); m.word(m.event+O['EVENT_Y'],y)
-        return m.call(x,address=0x61a934,args=(slider,m.event,0,0),event_type=typ,gap=0)
-    assert pointer(D,x,y)==11 and bytes(m.u.mem_read(slider+0xac,1))==b'\x01'
-    assert any(c[0]=='widget_grab' and c[1:3]==(parent,slider) for c in m.calls)
-    pointer(M,400,210)  # drift well above and beyond the bar without losing the drag
-    assert bytes(m.u.mem_read(slider+0xad,1))==b'\x01'
-    assert any(c[0]=='stock_slider_preview' for c in m.calls)
-    pointer(end,400,210)
-    assert bytes(m.u.mem_read(slider+0xac,2))==b'\x00\x00'
-    assert any(c[0]=='widget_ungrab' and c[1:3]==(parent,slider) for c in m.calls)
-    passed()
+if is_m1plus: not_ported("Stock's slider handler on the Q2's packaged slider_play (test: V1.32 code at 0x61a934)")
+else:
+    # Run stock's slider event handler with the packaged hit rectangle. Position arithmetic is
+    # stock FP64 (unsupported by Unicorn); this checks capture and delivery, including outside drags.
+    from ipod import decode,walk as ui_walk
+    node=next(n for n in ui_walk(decode((B/'ui/playing_page.bin').read_bytes())) if n[2].get('name')=='slider_play')
+    for x in (22,187,353):
+      for y in (234,255,276):
+       for end in (U,A):
+        m=Machine(); slider=m.node('slider','slider_play'); parent=m.node('window','playing_page',[slider])
+        m.word(slider+O['W_PARENT'],parent)
+        for k,v in zip(('W_X','W_Y','W_W','W_H'),node[1]): m.word(slider+O[k],v)
+        assert node[1][0]<=x<node[1][0]+node[1][2] and node[1][1]<=y<node[1][1]+node[1][3]
+        m.word(slider+0x98,int(node[2]['bar_size'])); m.byte(slider+0xa6,node[2]['slide_with_bar']=='true')
+        m.handlers[0x61a3f4]='stock_slider_preview'
+        m.mock('widget_find_animator','widget_set_state','widget_grab','widget_ungrab')
+        def pointer(typ,x,y):
+            m.byte(m.event+0x24,1); m.word(m.event+O['EVENT_Y'],y)
+            return m.call(x,address=0x61a934,args=(slider,m.event,0,0),event_type=typ,gap=0)
+        assert pointer(D,x,y)==11 and bytes(m.u.mem_read(slider+0xac,1))==b'\x01'
+        assert any(c[0]=='widget_grab' and c[1:3]==(parent,slider) for c in m.calls)
+        pointer(M,400,210)  # drift well above and beyond the bar without losing the drag
+        assert bytes(m.u.mem_read(slider+0xad,1))==b'\x01'
+        assert any(c[0]=='stock_slider_preview' for c in m.calls)
+        pointer(end,400,210)
+        assert bytes(m.u.mem_read(slider+0xac,2))==b'\x00\x00'
+        assert any(c[0]=='widget_ungrab' and c[1:3]==(parent,slider) for c in m.calls)
+        passed()
 
 # Set date and time: the wheel turns the outlined field, Centre moves on (to the time page after
 # the day) and then to OK, which Centre presses; a turn on OK goes back to the fields.
@@ -12129,8 +12133,10 @@ for name in ACTIVE:
 passed()
 import subprocess
 from ipod import imagemagick
-for name in ('local_album','local_photos','list_folder','list_tidal','player_playlist',
-             'small_stream','stream_spotify','stream_radio','tidal_fav_add','play_fav'):
+# M1 Plus: the three of these its rootfs ships; V2.1 has none of the others.
+for name in (('local_photos','stream_spotify','stream_radio') if is_m1plus else
+             ('local_album','local_photos','list_folder','list_tidal','player_playlist',
+              'small_stream','stream_spotify','stream_radio','tidal_fav_add','play_fav')):
     png=subprocess.check_output(['unsquashfs','-cat',str(B/'rootfs.squashfs'),
                                  'release/assets/default/raw/images/xx/'+name+'.png'])
     raw=imagemagick('png:-','-depth','8','rgba:-',data=png)
@@ -16594,7 +16600,8 @@ CONFIG.clear()
 m.word(syms['g_dacoff_time'],5)
 m.files[RSTATE]=bytearray(f'state=playing\ntitle=Some Artist - A Song\ncodec=MP3\nbitrate=128\nat={m.now}\n'.encode())
 m.poll(); assert ('reset_poweroptions_timer',1,1,0) in [c[:4] for c in m.calls] and m.get(syms['g_dacoff_time'])==0
-m.advance(3000); assert m.labels(np)==['Internet Radio','Three','Some Artist','A Song','MP3  128 kbps','0:03']
+# The time is stock's toolsTimeItoa's, whose minutes V2.1 pads (as Spotify's page shows them).
+m.advance(3000); assert m.labels(np)==['Internet Radio','Three','Some Artist','A Song','MP3  128 kbps','00:03' if is_m1plus else '0:03']
 # The volume reaches q2video for Bluetooth's and USB's soft volume, once a change.
 m.byte(syms['g_volume'],44); m.poll(); assert m.sent==[(m.sent[0][0],'v,',2,0x40,1,RSOCK,110)]; m.poll(); assert not m.sent; passed()
 # Play/Pause stops it (q, then its end) and starts it again; the side buttons step through the
