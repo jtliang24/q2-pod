@@ -4887,6 +4887,53 @@ Previous held on a list went to Now Playing without touching the track. Restored
 boot target Rockbox, playback paused; `config.ini` is byte-identical to the backup
 (`work/phase4/4.8/device-before/`). Shots are in `work/phase4/4.8/pass/`.
 
+## 86. Phase 5: tests, and one gate driver (Nov 13)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 5 finishes the test coverage that Phase 4 deferred and replaces the
+hand-copied gate scripts. Tests and tooling only: no `patch/` source changed, so the M1 image and the Q2's bytes
+are the same, and there is no device flash. Phase 6's landing on staging brings the next device pass.
+
+- **`test/m1plus/gates.py`** (9136e1ef, 5ea41625, 9421f936). It runs all 19 gates in order on one `--dev` build and
+  stops at the first failure. Per-step logs and `summary.txt` go to `--out`. There is one tier on purpose:
+  - every run runs every gate;
+  - `--from STEP` reruns from a failed gate on the same build, and refuses a build whose `source_sha256` no longer
+    matches the sources;
+  - `--release` is `tools/release_m1.py` validate()'s subset (7c88d9a7).
+
+  It needs no hardcoded paths:
+  - `patch` always runs with `GAPS_DUMP` unset;
+  - q2compare's suites get an ffmpeg bound in with bwrap;
+  - unit/fw get nixpkgs' wrapped clang as a short directory of two links, because the devShell's clang can't link
+    a host `.so` and the wrapper's long store path breaks the build otherwise;
+  - from a git worktree it finds the main checkout's `work/sync/venv`.
+
+  The five written gate lists now point at it (60fafedc).
+- **The gap groups** (6008db4d, 428617a8, daf399a5, e7b1fb0f, d477f5e5). `patch_gaps.py` went from 411
+  expected failures in 8 gaps to **213 in 2**: Classic and the theme engine (203) and Shortcuts' Playlists,
+  Podcasts and Audiobooks (10). Both are unported 1.6.7 features ([m1plus-unported.md](m1plus-unported.md)).
+  - The status bar scenarios run on V2.1's bar.
+  - Display's checks run on the V2.1 rows; the Q2 Display page is `NOT PORTED`.
+  - Pointer dispatch has a V2.1 fixture.
+  - The asset checks are resolved.
+  - The V1.32-own checks (`config_playmode`, hscroll, the font) are `NOT PORTED`.
+
+  `NOT PORTED` went from 108 to 121.
+- **Unit tests** (f11509d1, 8259646b). `test_m1plus_ipod.py` builds a synthetic V2.1 tree for every `REWRITES`
+  entry, and `test_every_rewrite_is_tested` keeps that true. `test_ipod.py`'s fit invariants run on both profiles.
+  `pytest test/unit` went from 1,199 to 1,266 tests.
+- **Pins** (e3943c12). `test/m1plus/build.py --build` now pins `m1plus_ipod.json`'s `private_prologues` and
+  `event_abi_words`, the last two sections it didn't pin.
+- **`boot.py`** (94e593a5) walks the Quick Settings pull-down and the Carousel Home layout.
+- **`test/m1plus/sheets.py`** (1a8868bb) replaces the four review-sheet scripts, as
+  `sheets.py BUILD OUT [bar|home|np|theme|all]`. On one build it writes the same files they did.
+  `test/ui_preview.py` stays upstream's.
+
+**Gates** (`V06Am`, `work/phase5/final-gates/summary.txt`, one `gates.py` run on a fresh build): all 19 pass, in
+about 87 minutes.
+- `patch.py` has 213 expected failures in 2 gaps, none unlisted, and 121 `NOT PORTED`.
+- `pytest test/unit` passes 1,266 and `test/fw` 3,638.
+- The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
+
 ## How to check a build now
 
 ```sh

@@ -326,6 +326,27 @@ Each feature follows the same steps:
   chevron).
 - **`test/ui_preview.py`:** an M1 profile for the review sheets before each device check.
 
+Done on Nov 13 (progress §86), with a pass over the gates themselves. Tests and tooling only: the payload and the
+Q2's bytes are unchanged, so there was no device flash.
+- **One gate driver.** `test/m1plus/gates.py BUILD` runs all 19 gates in order, every run, and stops at the first
+  failure; `--from STEP` reruns from a failed gate on the same build and refuses a build whose `source_sha256` no
+  longer matches. It replaces the hand-copied `work/**/gates.sh` scripts and the five written gate lists (this file's
+  Verification, sync.md, integration.md's R4, progress's How to check, and `tools/release_m1.py`'s `validate()`,
+  which now runs `gates.py --release`). There is one tier on purpose: no reduced per-commit set.
+- **`patch.py`:** the gap groups are down to the two unported 1.6.7 features, `Classic` (203 checks) and
+  `Shortcuts` (10), from 411. The status bar's scenarios run on V2.1's own `system_bar.bin` and layouter (every
+  Battery mode), pointer dispatch and its abort on V2.1's dispatcher, and the M1's Display rows (Light Mode, Accent,
+  Battery, Artist View, Refresh). Checks that need V1.32 code or the Q2's Display page are `NOT PORTED` branches, as
+  in Phase 4.8. It expects 213 failures and prints 121 `NOT PORTED` lines.
+- **`test/unit`:** `test_m1plus_ipod.py` builds a synthetic V2.1 tree for every `m1plus_ipod.py` rewrite, and
+  `test_every_rewrite_is_tested` keeps it so. `test_ipod.py`'s fit invariants run on both profiles.
+- **`test/m1plus/build.py --build`:** also pins `private_prologues` and `event_abi_words`, so every
+  `m1plus_ipod.json` section is pinned.
+- **`test/m1plus/boot.py`:** the walk also opens and closes Quick Settings and walks the Carousel Home.
+- **Review sheets:** `test/m1plus/sheets.py BUILD OUT [bar|home|np|theme]` replaces the four sheet scripts.
+  `test/ui_preview.py` stays untouched: it is upstream's text (a q2compare base suite), so an M1 profile there would
+  cost sync friction for a mock, when the QEMU sheets draw the real UI.
+
 ## Phase 6: Back to syncing
 
 Once the branch reaches parity (Phases 1 to 4.7 pass on the device):
