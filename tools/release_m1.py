@@ -99,11 +99,10 @@ def validate(directory, name):
             data = need(t.extractfile(member), f'Missing {member}').read()
             check(line.split() == [hashlib.md5(data).hexdigest(), member] and sha(data) == m[key],
                   'Update payload mismatch')
-    # The M1 suites (test/m1plus/): build checks V2.1's names, patch the payload, boot demo under QEMU.
-    for test, *args in (('peq',), ('m1plus/build', '--build', directory), ('m1plus/patch', directory),
-                        ('m1plus/boot', directory), ('m1plus/playback', directory), ('m1plus/m4b', directory),
-                        ('ldac', directory)):
-        subprocess.run([sys.executable, ROOT/f'test/{test}.py', *map(str, args)], check=True)
+    # The M1 suites, as test/m1plus/gates.py's release subset (gates.py --list --release): build checks
+    # V2.1's names, patch the payload, boot demo under QEMU.
+    subprocess.run([sys.executable, ROOT/'test/m1plus/gates.py', directory, '--release',
+                    '--out', directory.parent/'gates'], check=True)
 
 
 def archive_bytes(directory):
