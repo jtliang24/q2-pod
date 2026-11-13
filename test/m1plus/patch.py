@@ -1293,8 +1293,10 @@ assert show(page('Bootvol',shown=1))==time and show(page('Empty'))=='Empty' and 
 show(page('Albums')); assert t.wrote; show(t.top); assert not t.wrote; passed()  # only a new title is written
 t.clock=(6,15); t.advance(61000); assert t.nodes[label]['text']=='Albums'  # the clock's minute leaves a title alone
 assert show(t.node('window','home_page'))!=time; passed()
-t,label,show,page=title_machine(TIMETITLE='0',THEME=MODERN); assert show(page('Albums'))=='Albums' and t.nodes[label]['style:normal:font_name']=='bold'
-assert show(page(None))=='6:14 PM' and t.nodes[label]['style:normal:font_name']=='default'; passed()
+# Modern sets the Q2 bar's title bold and its clock plain; the M1's bar keeps V2.1's font for both.
+font=lambda want: t.nodes[label].get('style:normal:font_name')==(None if is_m1plus else want)
+t,label,show,page=title_machine(TIMETITLE='0',THEME=MODERN); assert show(page('Albums'))=='Albums' and font('bold')
+assert show(page(None))=='6:14 PM' and font('default'); passed()
 t,label,show,page=title_machine(); assert show(page('Albums'))=='6:14 PM'; passed()  # the clock unless chosen
 for h,mi,want in ((0,0,'12:00 AM'),(0,5,'12:05 AM'),(9,7,'9:07 AM'),(11,59,'11:59 AM'),(12,0,'12:00 PM'),
                   (12,59,'12:59 PM'),(13,0,'1:00 PM'),(23,59,'11:59 PM')):
@@ -6528,89 +6530,144 @@ for name in ('allmusic_page','albuminfo_page','artistinfo_page','album_page','fo
     m=Machine(); w,_=m.page_list(5,extent=240,name=name); window(m,name,w); m.paint(w)
     assert not m.icons and not loaded(m), name; passed()
 
-# The status bar as built (ui/system_bar.bin), laid out by the stock row layouter
-# (children_layouter_default, 0x628838) with every icon shown: the icons, 16px high and drawn
-# centred in their 30px cells, and the title clear the glass's rounded top corners.
-from ipod import STATUS_BAR, corner_inset
-m=Machine(); m.mock('strtol@GLIBC_2.0','strstr@GLIBC_2.0'); m.mock('tk_calloc','tk_free',prefix='alloc:')
-bar=asset_tree(m,STATUS_BAR); m.word(bar+O['W_W'],375)
-views=[named(m,bar,n) for n in ('view_left','view_right')]
-for v in views:
-    layout=m.call(address=syms['children_layouter_default_create'],args=(0,0,0,0),gap=0)
-    for param in re.fullmatch(r'default\((.*)\)',m.nodes[v]['asset']['children_layout'])[1].split(','):
-        assert m.call(address=syms['children_layouter_set_param_str'],args=(layout,*map(m.string,param.split('=')),0),gap=0)==0
-    m.word(v+O['W_CHILDREN_LAYOUT'],layout)
-def laid_out():
-    for v in views: native_row_layout(m,v)
-    return [(signed(m.get(v+O['W_X']))+signed(m.get(c+O['W_X'])),m.get(c+O['W_W']),m.get(c+O['W_H'])) for v in views
-            for c in m.nodes[v]['children'] if m.nodes[c]['visible']]
-cells=laid_out()
-inset=corner_inset((30-16)//2)
-assert all(h==30 and inset<=x and x+w<=375-inset for x,w,h in cells), (inset,cells)
-title=named(m,bar,'label_clock'); x,w=m.get(title+O['W_X']),m.get(title+O['W_W'])
-left,right=(cells[len(m.nodes[views[0]]['children'])-1],cells[len(m.nodes[views[0]]['children'])])
-assert left[0]+left[1]<=x and x+w<=right[0] and x+w/2==375/2, (left,right,x,w); passed()
-# Each Battery mode (bar_sync shows one of the three): the layout skips the hidden two, the
-# battery ends at the icons' margin, a percentage's text clears the corner there, and with
-# the plain Bluetooth glyph and Wi-Fi the group's ink stays CLOCK_GAP clear of the widest clock.
-from ipod import CLOCK_TEXT, CLOCK_GAP, STATUS_MARGIN, corner_x
-batt=[named(m,bar,n) for n in ('img_battery','label_battery','view_battery')]
-for mode,want in enumerate((10,O['BATT_PCT_W'],O['BATT_BODY_W']+O['BATT_NUB_W']+O['BATT_GAP']+O['BATT_PCT_W'])):
-    for i,b in enumerate(batt): m.nodes[b]['visible']=int(i==mode)
-    cells=laid_out(); bt=cells[len(m.nodes[views[0]]['children'])]
-    assert cells[-1][0]+cells[-1][1]==375-STATUS_MARGIN and cells[-1][1]==want, (mode,cells)
-    if mode==1: assert corner_x((30-O['BATT_PCT_PX'])//2,O['BATT_PCT_PX'])<=STATUS_MARGIN
-    ink=bt[0]+bt[1]-O['BT_REACH']
-    assert ink>=375/2+CLOCK_TEXT/2+CLOCK_GAP and 375-STATUS_MARGIN-ink<=O['BATT_ROOM'], (mode,cells)
-passed()
+if is_m1plus:
+    # V2.1's bar as built (ui/system_bar.bin, tools/m1plus_ipod.py status_bar), laid out by V2.1's own row layouter
+    # (children_layouter_default, its widget_layout_children through each widget's vtable) with every widget shown: each
+    # cell 30 px high on the square glass, the chevron left of V2.1's centred digit clock, and Bluetooth's ink (its 42 px
+    # canvas less BT_REACH) clear of the widest clock text.
+    import re
+    m=Machine(); m.mock('strtol@GLIBC_2.0','strstr@GLIBC_2.0'); m.mock('tk_calloc','tk_free',prefix='alloc:')
+    bar=asset_tree(m,home_ipod.STATUS_BAR); m.word(bar+O['W_W'],O['UI_W'])
+    views=[named(m,bar,n) for n in ('view_bar_left','view_bar_right')]
+    vt=m.alloc(0x100)  # no on_layout_children: AWTK's default layout, and the row layouter's own
+    for n in m.nodes: m.word(n+O['W_VT'],vt)
+    for v in views:
+        layout=m.call(address=syms['children_layouter_default_create'],args=(0,0,0,0),gap=0)
+        for param in re.fullmatch(r'default\((.*)\)',m.nodes[v]['asset']['children_layout'])[1].split(','):
+            assert m.call(address=syms['children_layouter_set_param_str'],args=(layout,*map(m.string,param.split('=')),0),gap=0)==0
+        m.word(v+O['W_CHILDREN_LAYOUT'],layout)
+    def laid_out():
+        for v in views: native_row_layout(m,v)
+        return {m.nodes[c]['name']:(signed(m.get(v+O['W_X']))+signed(m.get(c+O['W_X'])),m.get(c+O['W_W']),m.get(c+O['W_H'])) for v in views
+                for c in m.nodes[v]['children'] if m.nodes[c]['visible']}
+    def clear_of_clock(cells):
+        x,w,_=cells['img_btclass']
+        return x+w-O['BT_REACH']>=O['UI_W']/2+home_ipod.CLOCK_TEXT/2+home_ipod.CLOCK_GAP
+    for v in views:
+        for c in m.nodes[v]['children']: m.nodes[c]['visible']=1
+    cells=laid_out(); clock=named(m,bar,'bar_dclock'); x,w=m.get(clock+O['W_X']),m.get(clock+O['W_W'])
+    from m1plus_ipod import STATUS_SHOWN
+    assert list(cells)==STATUS_SHOWN
+    assert all(h==O['STATUS_H'] and 0<=cx and cx+cw<=O['UI_W'] for cx,cw,h in cells.values()), cells
+    assert 2*x+w==O['UI_W'] and sum(cells['img_back'][:2])<=x and clear_of_clock(cells), (cells,x,w); passed()
+    # The payload sizes its battery slot for each Battery mode (Display's row: setting_click 2, from Icon), and the
+    # group ends at the margin, Bluetooth still clear of the clock, with the play state shown or not (PLAY_STATUS).
+    m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar); m.word(syms['power_capacity'],100)
+    m.handlers.pop(syms['mclGetPlayStatus'],None); m.config={'BATTERY':'0'}
+    for v in views:
+        for c in m.nodes[v]['children']: m.nodes[c]['visible']=int(m.nodes[c]['name']!='img_back')
+    slot,state=named(m,bar,'view_battery'),named(m,bar,'img_playstate')
+    nub,body,gap,pct=(O[k] for k in ('BATT_NUB_W','BATT_BODY_W','BATT_GAP','BATT_PCT_W'))
+    for mode,want in ((1,pct),(2,body+nub+gap+pct),(3,O['BATT_INSIDE_W']+nub),(0,body+nub)):
+        m.call(address=payload_syms['setting_click'],args=(2,m.event,0,0),gap=0)
+        for status,icon in ((0,None),(2,'bar_play'),(3,'bar_pause')):
+            m.word(PLAY_STATUS,status)
+            m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0); m.advance(0)
+            cells=laid_out()
+            assert m.get(slot+O['W_W'])==want and sum(cells['view_battery'][:2])==O['UI_W']-O['STATUS_MARGIN'] and clear_of_clock(cells),(mode,status,cells)
+            assert ('img_playstate' in cells)==bool(icon) and (not icon or m.nodes[state]['image']==icon),(mode,status)
+    passed()
+    # V2.1's 1 s tick (systembar_showface, show_sysbar_face) hides img_playstate while its own player is stopped, as it is
+    # under Spotify or radio; the hook shows the payload's state again before any paint.
+    m.handlers[payload_syms['stock_showface_trampoline']]='stock_showface'
+    m.word(PLAY_STATUS,2); m.nodes[state]['visible']=0
+    assert m.call(address=HOOKS['systembar_showface'][0],args=(bar,0,0,0),gap=0)==0
+    assert ('stock_showface',bar) in [c[:2] for c in m.calls] and m.nodes[state]['visible']==1 and m.nodes[state]['image']=='bar_play'
+    passed()
+else:
+    # The status bar as built (ui/system_bar.bin), laid out by the stock row layouter
+    # (children_layouter_default, 0x628838) with every icon shown: the icons, 16px high and drawn
+    # centred in their 30px cells, and the title clear the glass's rounded top corners.
+    from ipod import STATUS_BAR, corner_inset
+    m=Machine(); m.mock('strtol@GLIBC_2.0','strstr@GLIBC_2.0'); m.mock('tk_calloc','tk_free',prefix='alloc:')
+    bar=asset_tree(m,STATUS_BAR); m.word(bar+O['W_W'],375)
+    views=[named(m,bar,n) for n in ('view_left','view_right')]
+    for v in views:
+        layout=m.call(address=syms['children_layouter_default_create'],args=(0,0,0,0),gap=0)
+        for param in re.fullmatch(r'default\((.*)\)',m.nodes[v]['asset']['children_layout'])[1].split(','):
+            assert m.call(address=syms['children_layouter_set_param_str'],args=(layout,*map(m.string,param.split('=')),0),gap=0)==0
+        m.word(v+O['W_CHILDREN_LAYOUT'],layout)
+    def laid_out():
+        for v in views: native_row_layout(m,v)
+        return [(signed(m.get(v+O['W_X']))+signed(m.get(c+O['W_X'])),m.get(c+O['W_W']),m.get(c+O['W_H'])) for v in views
+                for c in m.nodes[v]['children'] if m.nodes[c]['visible']]
+    cells=laid_out()
+    inset=corner_inset((30-16)//2)
+    assert all(h==30 and inset<=x and x+w<=375-inset for x,w,h in cells), (inset,cells)
+    title=named(m,bar,'label_clock'); x,w=m.get(title+O['W_X']),m.get(title+O['W_W'])
+    left,right=(cells[len(m.nodes[views[0]]['children'])-1],cells[len(m.nodes[views[0]]['children'])])
+    assert left[0]+left[1]<=x and x+w<=right[0] and x+w/2==375/2, (left,right,x,w); passed()
+    # Each Battery mode (bar_sync shows one of the three): the layout skips the hidden two, the
+    # battery ends at the icons' margin, a percentage's text clears the corner there, and with
+    # the plain Bluetooth glyph and Wi-Fi the group's ink stays CLOCK_GAP clear of the widest clock.
+    from ipod import CLOCK_TEXT, CLOCK_GAP, STATUS_MARGIN, corner_x
+    batt=[named(m,bar,n) for n in ('img_battery','label_battery','view_battery')]
+    for mode,want in enumerate((10,O['BATT_PCT_W'],O['BATT_BODY_W']+O['BATT_NUB_W']+O['BATT_GAP']+O['BATT_PCT_W'])):
+        for i,b in enumerate(batt): m.nodes[b]['visible']=int(i==mode)
+        cells=laid_out(); bt=cells[len(m.nodes[views[0]]['children'])]
+        assert cells[-1][0]+cells[-1][1]==375-STATUS_MARGIN and cells[-1][1]==want, (mode,cells)
+        if mode==1: assert corner_x((30-O['BATT_PCT_PX'])//2,O['BATT_PCT_PX'])<=STATUS_MARGIN
+        ink=bt[0]+bt[1]-O['BT_REACH']
+        assert ink>=375/2+CLOCK_TEXT/2+CLOCK_GAP and 375-STATUS_MARGIN-ink<=O['BATT_ROOM'], (mode,cells)
+    passed()
 
-# Cycle the live Battery setting with the actual parent row layouter. Icon
-# remains visible after Icon + Percent, so a width change must reposition it.
-m.config={'BATTERY':'0'}
-m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar)
-m.nodes[named(m,bar,'img_bt')]['visible']=0
-m.nodes[named(m,bar,'img_wifi')]['visible']=0
-slot=named(m,bar,'view_battery')
-m.nodes[named(m,bar,'label_battery')]['text']='50%'
-def paint_live_bar():
-    m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0)
-paint_live_bar()
-idle=named(m,bar,'label_idle'); state=named(m,bar,'img_state'); eq=named(m,bar,'label_eq')
-assert m.get(eq+O['W_W'])==28
-assert all(m.nodes[eq]['asset'][f'style:{s}:font_size']=='16' for s in ('normal','disable','focused'))
-clock_box=tuple(m.get(title+O[k]) for k in ('W_X','W_Y','W_W','W_H'))
-# bar_sync shows the play state (here local's, mclGetPlayStatus: 2 playing, 3 paused) itself.
-m.handlers.pop(syms['mclGetPlayStatus'],None)
-m.advance(0); shown=(m.nodes[state]['visible'],m.nodes[state].get('image'))
-for status,equalizer,icon in ((0,0,''),(2,0,'bar_play'),(3,0,'bar_pause'),(3,0,'bar_pause'),(0,1,''),(2,1,'bar_play'),(0,0,'')):
-    m.word(0xa3beac,status); m.nodes[eq]['visible']=equalizer
-    paint_live_bar(); playing=int(bool(icon))
-    # #116: a change made mid-paint repaints the whole bar once, after the frame.
-    m.advance(0)
-    now=(playing,m.nodes[state].get('image'))
-    changed=shown[0]!=playing or (playing and shown[1]!=now[1])
-    assert (('widget_invalidate_force',bar) in [c[:2] for c in m.calls])==changed, (status,icon)
-    shown=now
-    assert m.nodes[state]['visible']==playing and (not playing or m.nodes[state]['image']==icon)
-    assert m.nodes[idle]['visible']==int(not playing and not equalizer)
-    assert tuple(m.get(title+O[k]) for k in ('W_X','W_Y','W_W','W_H'))==clock_box
-passed()
-# Stock's 1 s tick (systembar_showface) hides img_state while its own player is stopped, as it
-# is under Spotify or radio; the hook shows the payload's state again before any paint.
-m.handlers[payload_syms['stock_showface_trampoline']]='stock_showface'
-m.word(0xa3beac,2); m.nodes[eq]['visible']=1; m.nodes[state]['visible']=0
-assert m.call(address=HOOKS['systembar_showface'][0],args=(bar,0,0,0),gap=0)==0
-assert ('stock_showface',bar) in [c[:2] for c in m.calls] and m.nodes[state]['visible']==1 and m.nodes[state]['image']=='bar_play'
-passed()
-for mode in (1,2,3,0,1,2,3,0):
-    m.call(address=payload_syms['setting_click'],args=(2,m.event,0,0),gap=0)
-    m.calls=[]; paint_live_bar()
-    assert ('widget_invalidate_force',slot) in [c[:2] for c in m.calls]
-    if mode != 1:
-        assert m.nodes[slot]['visible']
-        assert m.get(slot+O['W_W'])==(O['BATT_INSIDE_W'] if mode==3 else O['BATT_BODY_W'])+O['BATT_NUB_W']+(O['BATT_GAP']+O['BATT_PCT_W'] if mode==2 else 0)
-        assert signed(m.get(views[1]+O['W_X']))+signed(m.get(slot+O['W_X']))+m.get(slot+O['W_W'])==375-STATUS_MARGIN
-passed()
+    # Cycle the live Battery setting with the actual parent row layouter. Icon
+    # remains visible after Icon + Percent, so a width change must reposition it.
+    m.config={'BATTERY':'0'}
+    m.word(bar+O['W_PARENT'],m.wm); m.word(syms['system_bar'],bar)
+    m.nodes[named(m,bar,'img_bt')]['visible']=0
+    m.nodes[named(m,bar,'img_wifi')]['visible']=0
+    slot=named(m,bar,'view_battery')
+    m.nodes[named(m,bar,'label_battery')]['text']='50%'
+    def paint_live_bar():
+        m.call(address=HOOKS['widget_on_paint_background'][0],args=(bar,m.canvas,0,0),gap=0)
+    paint_live_bar()
+    idle=named(m,bar,'label_idle'); state=named(m,bar,'img_state'); eq=named(m,bar,'label_eq')
+    assert m.get(eq+O['W_W'])==28
+    assert all(m.nodes[eq]['asset'][f'style:{s}:font_size']=='16' for s in ('normal','disable','focused'))
+    clock_box=tuple(m.get(title+O[k]) for k in ('W_X','W_Y','W_W','W_H'))
+    # bar_sync shows the play state (here local's, mclGetPlayStatus: 2 playing, 3 paused) itself.
+    m.handlers.pop(syms['mclGetPlayStatus'],None)
+    m.advance(0); shown=(m.nodes[state]['visible'],m.nodes[state].get('image'))
+    for status,equalizer,icon in ((0,0,''),(2,0,'bar_play'),(3,0,'bar_pause'),(3,0,'bar_pause'),(0,1,''),(2,1,'bar_play'),(0,0,'')):
+        m.word(0xa3beac,status); m.nodes[eq]['visible']=equalizer
+        paint_live_bar(); playing=int(bool(icon))
+        # #116: a change made mid-paint repaints the whole bar once, after the frame.
+        m.advance(0)
+        now=(playing,m.nodes[state].get('image'))
+        changed=shown[0]!=playing or (playing and shown[1]!=now[1])
+        assert (('widget_invalidate_force',bar) in [c[:2] for c in m.calls])==changed, (status,icon)
+        shown=now
+        assert m.nodes[state]['visible']==playing and (not playing or m.nodes[state]['image']==icon)
+        assert m.nodes[idle]['visible']==int(not playing and not equalizer)
+        assert tuple(m.get(title+O[k]) for k in ('W_X','W_Y','W_W','W_H'))==clock_box
+    passed()
+    # Stock's 1 s tick (systembar_showface) hides img_state while its own player is stopped, as it
+    # is under Spotify or radio; the hook shows the payload's state again before any paint.
+    m.handlers[payload_syms['stock_showface_trampoline']]='stock_showface'
+    m.word(0xa3beac,2); m.nodes[eq]['visible']=1; m.nodes[state]['visible']=0
+    assert m.call(address=HOOKS['systembar_showface'][0],args=(bar,0,0,0),gap=0)==0
+    assert ('stock_showface',bar) in [c[:2] for c in m.calls] and m.nodes[state]['visible']==1 and m.nodes[state]['image']=='bar_play'
+    passed()
+    for mode in (1,2,3,0,1,2,3,0):
+        m.call(address=payload_syms['setting_click'],args=(2,m.event,0,0),gap=0)
+        m.calls=[]; paint_live_bar()
+        assert ('widget_invalidate_force',slot) in [c[:2] for c in m.calls]
+        if mode != 1:
+            assert m.nodes[slot]['visible']
+            assert m.get(slot+O['W_W'])==(O['BATT_INSIDE_W'] if mode==3 else O['BATT_BODY_W'])+O['BATT_NUB_W']+(O['BATT_GAP']+O['BATT_PCT_W'] if mode==2 else 0)
+            assert signed(m.get(views[1]+O['W_X']))+signed(m.get(slot+O['W_X']))+m.get(slot+O['W_W'])==375-STATUS_MARGIN
+    passed()
 
 # Fast-scroll letter (iPod): once the wheel ramp moves more than one row per detent on a long list,
 # the selected row's first character (a-z upper-cased, leading spaces skipped) is drawn centred over

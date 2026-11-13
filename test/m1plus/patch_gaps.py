@@ -5,31 +5,6 @@ listed under the docs/m1plus-ipod-ui.md item that makes it pass; that item's com
 check that passes fails the run). After an edit to patch.py, GAPS_DUMP=gaps.json python3 test/m1plus/patch.py BUILD
 writes every failing check, to rekey the list."""
 GAPS = {
-    # status bar scenarios on the V2.1 bar (Phase 5)
-    '78b0d2089b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5441 for v in views:
-    '8217be2fad': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5450 cells=laid_out()
-    '6faac8d410': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5452 assert all(h==30 and inset<=x and x+w<=375-inset for x,w,h in cells), (inset,cel
-    '4a0bdf3e2a': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5453 title=named(m,bar,label_clock); x,w=m.get(title+O[W_X]),m.get(title+O[W_W])
-    '83f4a0efd5': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5454 left,right=(cells[len(m.nodes[views[0]][children])-1],cells[len(m.nodes[views[0]
-    '953d4e8e49': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5455 assert left[0]+left[1]<=x and x+w<=right[0] and x+w/2==375/2, (left,right,x,w);
-    '4f4969742f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5461 for mode,want in enumerate((10,O[BATT_PCT_W],O[BATT_BODY_W]+O[BATT_NUB_W]+O[BATT
-    'b51c376171': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5474 m.nodes[named(m,bar,img_bt)][visible]=0
-    '019eb47519': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5477 m.nodes[named(m,bar,label_battery)][text]=50%
-    'd4e2e98ab7': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5480 paint_live_bar()
-    '54bedb9c88': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5482 assert m.get(eq+O[W_W])==28
-    'ee4849c484': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5483 assert all(m.nodes[eq][asset][fstyle:{s}:font_size]==16 for s in (normal,disable
-    '8fc0d6b69c': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5484 clock_box=tuple(m.get(title+O[k]) for k in (W_X,W_Y,W_W,W_H))
-    'd4333c8df2': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5487 m.advance(0); shown=(m.nodes[state][visible],m.nodes[state].get(image))
-    '406773bfbe': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5488 for status,equalizer,icon in ((0,0,),(2,0,bar_play),(3,0,bar_pause),(3,0,bar_pau
-    '2120c2ed3c': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5504 m.word(0xa3beac,2); m.nodes[eq][visible]=1; m.nodes[state][visible]=0
-    '2bfc5141c1': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5504 m.word(0xa3beac,2); m.nodes[eq][visible]=1; m.nodes[state][visible]=0
-    'c0c216337f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5504 m.word(0xa3beac,2); m.nodes[eq][visible]=1; m.nodes[state][visible]=0
-    '4cb62ca34f': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5506 assert (stock_showface,bar) in [c[:2] for c in m.calls] and m.nodes[state][visib
-    '0a9fe5785b': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:5508 for mode in (1,2,3,0,1,2,3,0):
-    'cda4a65073': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:1248 t,label,show,page=title_machine(TIMETITLE=0,THEME=MODERN); assert show(page(A
-    'b8f4f6235c': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:1249 assert show(page(None))==6:14 PM and t.nodes[label][style:normal:font_name]=
-    'ec806f3360.5': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:6409 m.advance(0) [dependent]
-    'e8b2f8b250': 'status bar scenarios on the V2.1 bar (Phase 5)',  # patch.py:6427 assert m.call(address=HOOKS['systembar_showface'][0],args=(bar,0,0,0),gap=0)==0 [dependent]
     # The Q2 Display page's Home rows (its Corners and Q2 rows around them): the M1's Home layouts and rows are
     # m1_home_modes and the M1 Display test (ipod-ui 4.5); the fixture itself is Phase 5's
     '466012b4b4': "Display and settings scenarios on V2.1's rows (Phase 5)",  # patch.py:8866 home_bounds(False); carousel(False)
