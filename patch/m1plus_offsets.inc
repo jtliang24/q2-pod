@@ -105,6 +105,9 @@
 #define ICON_POWER "sset_powermanager"
 #define ICON_KEYLOCK "sset_keylock"
 #define ICON_DISPLAY "sset_display"
+/* Display's four V2.1 rows (systemset_display_page_init builds them with no icon), in its order: Brightness, Screen
+ * Off, Lock screen, Atmosphere Lamp Settings; all V2.1's own (settings_icons) */
+#define DISPLAY_STOCK_ICONS { ICON_DISPLAY, "sset_lighttime", "sset_screenlock", "sset_atmosphereled" }
 #define ICON_COVERMODE "pset_covermode"
 #define ICON_KEYTONE ICON_DISPLAY /* Click With Headphones is Q2 only (no buzzer): no row on M1 */
 #define ICON_FOLDERJUMP "pset_jumpfolder"

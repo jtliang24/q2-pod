@@ -12834,7 +12834,7 @@ class SettingsMachine(Machine):
         return super().hook(u,address,size,x)
 SET={k:O['SET_'+k] for k in ('ROW','TOP','ROWS','ICON','ICON_X','GAP','TEXT_X','EDGE','STOCK_ROW')}
 def geometry(m,w): return tuple(signed(m.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H'))
-def settings(builder,default=SET['ROW'],sub=0,boot=None):
+def settings(builder,default=SET['ROW'],sub=0,boot=None,stock=None):
     m=SettingsMachine(); m.layouts=0; boot and boot(m)
     m.mock('list_item_create','button_create','image_create','hscroll_label_create','label_create','widget_use_style',
            'widget_set_name','image_set_draw_type','image_base_set_image','set_hscroll_label_attribute','widget_on',
@@ -12850,7 +12850,8 @@ def settings(builder,default=SET['ROW'],sub=0,boot=None):
     m.nodes[m.wm]={'type':'window_manager','children':[m.top]}
     m.word(view+O['W_W'],375); m.word(view+O['W_H'],SET['ROWS']*SET['ROW'])
     if builder=='display':  # the payload's Accent and Home rows, after three stock-shaped ones
-        m.handlers[tramp['display']]='stock_display'; m.nodes[view]['name']='scroll_view_display'; m.word(payload_syms['display_sub'],sub)
+        m.handlers[int(manifest['patch_symbols']['stock_display_trampoline'],16)]='stock_display'; m.nodes[view]['name']='scroll_view_display'  # tramp is rebound later; m.word(payload_syms['display_sub'],sub)
+        if stock: stock(m,view)  # the rows stock's builder made, before the payload's
         assert m.call(address=HOOKS['systemset_display_page_init'][0],args=(m.top,5,0,0),gap=0)==0
     else:
         m.call(address=builder,args=(m.top,0,0,0),gap=0)  # learn the name it looks up
@@ -20009,6 +20010,34 @@ else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow an
     assert texts()==['Appearance','Cover Flow','Controls'] and icons==['sset_display','pset_covermode','pset_jumpfolder']
     assert all(m.nodes[m.nodes[r]['children'][-1]].get('image')=='right_arrow' for r in rows)
     assert click(1)==[] and m.opened[-1]==('systemset/display_page',None) and m.get(payload_syms['display_sub'])==0
+    # V2.1's four rows (display_listitem_layout: a label at 12,20 and the arrow, no icon) get V2.1's own icons at 12,10
+    # and their label at 60, as list_row_core lays a row out, so the layout maps them as the payload's: the icon at
+    # SET_ICON_X, the text after it. The label rests on its start (only_focus, at offset 0): stock's own pass parked
+    # "Atmosphere Lamp Settings" on its end; the selected row's marquee scrolls it.
+    if True:
+        v21=[]
+        def v21_child(m,kind,x,y,w,h):
+            c=m.node(kind)
+            for k,v in zip(('W_X','W_Y','W_W','W_H'),(x,y,w,h)): m.word(c+O[k],v)
+            return c
+        def v21_rows(m,view):
+            m.nodes[view]['name']=NAMES['VIEW_DISPLAY']  # the M1's name, where settings() gives the Q2's
+            for text in ('Brightness','Screen Off','Lock screen','Atmosphere Lamp Settings'):
+                item=m.node('list_item'); label=v21_child(m,'hscroll_label',12,20,200,21); arrow=v21_child(m,'image',295,21,13,22)
+                m.nodes[label]['text']=text; m.nodes[arrow]['image']='right_arrow'; m.nodes[item]['children']=[label,arrow]
+                for c in (label,arrow): m.word(c+O['W_PARENT'],item)
+                m.word(item+O['W_W'],0); m.word(item+O['W_H'],0)  # 0x0 until its list lays it out
+                m.word(item+O['W_PARENT'],view); m.nodes[view]['children'].append(item); v21.append((item,label))
+            m.mock('hscroll_label_set_only_focus','hscroll_label_set_xoffset')
+        def geo(m,w): return tuple(signed(m.get(w+O[k])) for k in ('W_X','W_Y','W_W','W_H'))  # geometry is rebound above
+        m,view=settings('display',stock=v21_rows); lay(m,view)
+        for (item,label),icon in zip(v21,('sset_display','sset_lighttime','sset_screenlock','sset_atmosphereled')):
+            images=[c for c in m.nodes[item]['children'] if m.nodes[c]['type']=='image' and m.nodes[c].get('image')!='right_arrow']
+            assert [m.nodes[c]['image'] for c in images]==[icon] and geo(m,images[0])==(SET['ICON_X'],(SET['ROW']-SET['ICON'])//2,SET['ICON'],SET['ICON']),(icon,[geo(m,c) for c in images])
+            assert geo(m,label)[0]==SET['ICON_X']+SET['ICON']+SET['GAP']==80,geo(m,label)
+            assert m.nodes[label]['hscroll_label_set_only_focus']==1 and m.nodes[label]['hscroll_label_set_xoffset']==0
+        assert [m.nodes[l]['text'] for _,l in v21][3]=='Atmosphere Lamp Settings'
+        passed()
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=2)
     assert texts()==['Artist View: Cover Flow','Cover Flow Sort: Album','Refresh Cover Flow']  # 1.6.7's names
     assert icons==['pset_covermode','pset_covermode','system_update'] and m.nodes[m.settings_view]['children']==rows

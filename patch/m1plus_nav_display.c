@@ -22,6 +22,20 @@ int ringnav_display(void *win, void *ctx) {
     void *view = win ? widget_lookup(win, VIEW_DISPLAY, 1) : (void *)0;
     if (!view) return result;
     if (!sub) {
+        /* V2.1's four rows (display_listitem_layout: a label at 12,20 and the arrow, no icon) get one at 12,10 and
+         * their label at 60, as list_row_core lays a row out, before ipod_list_layout maps them. The label rests on
+         * its start (only_focus: stock's own pass parked "Atmosphere Lamp Settings" on its end); the selected row's
+         * marquee (marq_poll) scrolls it. */
+        static const char *const stock_icons[] = DISPLAY_STOCK_ICONS;
+        _Static_assert(sizeof stock_icons / sizeof *stock_icons == 4, "Display's four V2.1 rows");
+        for (unsigned i = 0; i < 4 && i < widget_count_children(view); ++i) {
+            void *row = widget_get_child(view, i), *label = row_scroller(row, 0);
+            if (!label || I(label, W_X) != 12) continue;
+            image_base_set_image(image_create(row, 12, 10, 40, 40), stock_icons[i]);
+            widget_move_resize(label, 60, I(label, W_Y), 220, I(label, W_H));
+            hscroll_label_set_only_focus(label, 1);
+            hscroll_label_set_xoffset(label, 0);
+        }
         for (int i = DISPLAY_APPEARANCE; i <= DISPLAY_CONTROLS; ++i)
             widget_set_text_utf8(list_row_into(view, sub_icons[i], display_open, (void *)(long)i), titles[i]);
         return result;
