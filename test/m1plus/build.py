@@ -856,7 +856,9 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     centred_page = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK))
     assert centred_page[2]['name'] == 'playing_page' and centred_page[3][0][1] == np_stock[3][0][1]
     centred = {n[2].get('name'): n for n in walk(centred_page)}
-    for name in ('slide_view_view', 'img_playcover', 'btn_return', 'scrlabel_title', 'label_playtime', 'view_buttons', 'btn_fav', 'btn_more'):
+    assert centred['img_playcover'][1] == [(320 - 254) // 2] + np_old['img_playcover'][1][1:] == [33, 0, 254, 254]
+    assert centred['img_playcover'][1][0] == np_old['img_playcover1'][1][0]  # the centre line, as the DLNA twin
+    for name in ('slide_view_view', 'btn_return', 'scrlabel_title', 'label_playtime', 'view_buttons', 'btn_fav', 'btn_more'):
         assert centred[name][1] == np_old[name][1], name
     assert centred['slider_play'][1] == np_old['slider_play'][1] and centred['slider_play'][2]['style'] == 's_ipod_progress'
     assert centred['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=100%,h=-20)' and centred['label_lyricmsg'][2]['self_layout'] == 'default(x=0,y=100,w=100%,h=28)'

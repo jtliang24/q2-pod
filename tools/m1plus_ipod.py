@@ -437,9 +437,9 @@ def playing_page(root):
 
 
 # Display's Centred Now Playing (IPOD NPCENTRED) opens V2.1's own page, as PLAYING_STOCK (navigation.c ringnav_ui_load), named
-# playing_page too, as the Q2's opens its stock one. It keeps V2.1's layout and transport, with the iPod's bar (the accent and
-# Theme), the marquee holds, the page's black under the art's corners, and lyrics across their column. Its back is V2.1's
-# top-left btn_return, as on the iPod page, with no chevron.
+# playing_page too, as the Q2's opens its stock one. It keeps V2.1's layout and transport, with the cover on the centre line,
+# the iPod's bar (the accent and Theme), the marquee holds, the page's black under the art's corners, and lyrics across their
+# column. Its back is V2.1's top-left btn_return, as on the iPod page, with no chevron.
 PLAYING_STOCK = 'playing_page_stock.bin'
 NP_STOCK_BAR_CY = 342 + 30 // 2
 
@@ -451,6 +451,9 @@ def playing_stock(data):
     _, _, named = np_tree(root)
     root[2]['style:normal:bg_color'] = '#000000'
     named[M1_VIEW_COVER][2]['clickable'] = 'true'  # its tap opens the big cover (navigation.c np_art_click)
+    cover = named['img_playcover']
+    check(cover[1] == [36, 0, 254, 254], 'Unexpected Centred cover')
+    cover[1][0] = (ipod.UI_W - 254) // 2  # on the centre line, as its DLNA twin img_playcover1 (V2.1 has 36)
     for name in ('scrlabel_title', 'scrlabel_artist'):
         named[name][2].update(delay=str(ipod.inc('MARQUEE_HOLD_MS')), lull=str(ipod.inc('MARQUEE_HOLD_MS')))
     np_bar(named['slider_play'], NP_STOCK_BAR_CY, 30)
