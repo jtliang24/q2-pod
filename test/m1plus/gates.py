@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The M1 Plus gates, in order, on one --dev build: every step every run, stopping at the first failure.
 
-    python3 test/m1plus/gates.py BUILD            # all 19: q2compare --suites, a fresh build in BUILD, its gates
+    python3 test/m1plus/gates.py BUILD            # all 20: q2compare --suites, a fresh build in BUILD, its gates
     python3 test/m1plus/gates.py BUILD --base TAG  # at a sync: q2compare against the tag merged
     python3 test/m1plus/gates.py BUILD --from boot  # after a test-only fix: the failed gate onward, same build
     python3 test/m1plus/gates.py BUILD --release  # tools/release_m1.py validate()'s subset, on a release build
@@ -123,6 +123,8 @@ STEPS = {
     'playback': (suite('m1plus/playback'), True),
     'm4b': (suite('m1plus/m4b'), True),
     'id3': (suite('m1plus/id3'), False),
+    # the real hciplayer under Unicorn: get-music-info with no stream
+    'faults': (suite('m1plus/player_faults'), True),
     'headset': (suite('m1plus/headset_io'), False),
     'ldac': (suite('ldac'), True),
     'bluealsa': (suite('bluealsa'), False),

@@ -370,7 +370,10 @@ def shared_checks(directory, manifest, stock, demo, read):
     text = re.search(r'\.text +PROGBITS +[0-9a-f]+ ([0-9a-f]+) ([0-9a-f]+) ', run('readelf', '-SW', directory/'peq'/'stock-hciplayer'))
     start, size = int(text[1], 16), int(text[2], 16)
     off = fileoff(old, profile['vbr_scan'])
-    if m1plus: profile = dict(profile, eq_rate_gates=(*profile['eq_rate_gates'], profile['pause_sleep']))
+    # the M1's audited words, checked as the EQ gates: the pause sleep, get-music-info's NULL branches
+    # (MEDIA_INFO_NULL)
+    if m1plus: profile = dict(profile, eq_rate_gates=(*profile['eq_rate_gates'], profile['pause_sleep'],
+                                                      *profile['media_info_null']))
     gates = [fileoff(old, a) for a in (*(a for a, _, _ in profile['eq_rate_gates']), *profile['id3_calls'])]
     if not m1plus:
         from peq import IDLE_WAIT, PAUSE_WAIT, CMD_DONE, MP3_ALLOC, MP3_FILTER, MP3_CLOSE, MP3_READ

@@ -839,6 +839,10 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
                       (0x42fa78, 0x14400052, 0x10000052)),  # bnez $v0 to the insert -> b
     # MPlayer pause loop: usec_sleep(20000) in its command/event loop, 50 ms as upstream.
     'pause_sleep': (0x42ff2c, 0x24044e20, 0x3404c350),
+    # peq.py's MEDIA_INFO_NULL: get-music-info's NULL sh_audio branch answers as with no stream (the block is V1.32's
+    # 0x42c030 less 0x9c; the reply at 0x42c3c0 sends "{media-info\no-playing-status}", 0x8864e0)
+    'media_info_null': ((0x42bfcc, 0x10600008, 0x106000fc),   # beqz $v1, 0x42bff0 -> 0x42c3c0 (Q2 0x42c068)
+                        (0x42c4ec, 0x8fa21b20, 0x1060ffb4)),  # lw $v0 (dead) -> beqz $v1, 0x42c3c0 (Q2 0x42c588)
     'seek_slot': 0x89f76c,
     'stock_seek': 0x48cc6c,
     'id3_calls': (0x48ee74, 0x492028, 0x492ab4),
@@ -994,6 +998,8 @@ def patch_player(raw, out):
         patch_word(data, address, stock, patched, 'Equalizer rate gate')
     pause_addr, pause_old, pause_new = prof['pause_sleep']
     patch_word(data, pause_addr, pause_old, pause_new, 'pause loop sleep')
+    for address, stock, patched in prof['media_info_null']:
+        patch_word(data, address, stock, patched, 'Music info with no stream')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')
