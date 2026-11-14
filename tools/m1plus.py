@@ -230,6 +230,10 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
         # V2.1 toolsGetMusicInfo's genre strcpy (dst info+0x200, the 0x80-byte style field before the title at
         # +0x280; its delay slot moves the joined genre into a1), its lw $t9 strcpy pinned (1.6.7).
         'GENRE_COPY': ((0x5ecaa0, 0x0320f809, 'ringnav_genre_copy'), (0x5eca9c, 0x8f99f324, None)),
+        # V2.1 importPlayList's (0x4ef394) jalr toolsGetDirectoryM3u8, its lw $t9 pinned; the delay slot's addiu
+        # of the export folder stays. The card apps' library update is unported (addon.c library_poll), so
+        # addon_m3u_dir lists the whole folder: on M1 it is the watchdog's long count for the import (1.6.2).
+        'M3U_DIR_CALL': ((0x4ef434, 0x0320f809, 'addon_m3u_dir'), (0x4ef430, 0x8f99bad8, None)),
         # V2.1's CUE parser has seven bal conversions plus a shared jalr for track titles.
         # The jalr can call toolsIconvConvert or toolsIconvConvertNew (UTF-8 <- GBK).
         'CUE_TEXT': ((0x5e72dc, 0x0411f1b4, 'ringnav_cue_text'),
@@ -471,8 +475,6 @@ M1PLUS_PORTS = {
     'STREAM_POLL_CALLS': ('native', "V2.1 creates a Tidal URL worker per request (get_tidal_trackurl, 0x512ed0); "
                           "no boot worker or idle start-flag poll, and no Baidu Pan"),
     'TIDAL_PAGE_DONE': ('unported', 'Tidal lists past 50 (1.5.0): goes with the Tidal list threads'),
-    'M3U_DIR_CALL': ('unported', "a card app's library update imports only its own playlists (1.5.9); V2.1's "
-                     'importPlayList is 0x4ef394, its listing call not yet found'),
     'timezone_row': ('unported', "the time zone rows' offsets in effect now (1.5.0): goes with select_timezone"),
     'folder_click': ('unported', "videos played from Folder view (1.5.0), where the Q2's Videos row now opens; "
                      "V2.1's folder row click is not yet found. The M1's Videos row keeps 1.4.5's list "
@@ -681,8 +683,6 @@ M1PLUS_HOOKS = {
     'systemset_display_page_init': (0x4a5eb8, 'ringnav_display', 'display'),
     'get_screensaver_image': (0x4d7524, 'lockscreen_images', 'saverlist'),
     'save_memoryplay_info': (0x4e3340, 'ringnav_savequeue', 'savequeue'),
-    'mclLoadPlayList': (0x5d1f28, 'ringnav_load', 'load'),
-    'mclNextSong': (0x5d5800, 'ringnav_next', 'next'),
     # A reboot and the card update are clean ends (ringnav_clean_end: the watchdog stops, no crash log at the next
     # boot) and save the queue first, as power-off does (1.5.0). V2.1's update is the card's alone: its dialog's
     # init stops the player and starts the update_firmware thread (0x471070), whose timer (0x471198) reboots; it
@@ -690,6 +690,8 @@ M1PLUS_HOOKS = {
     # reboot itself: a forced restart, logged as one.
     'device_reboot': (0x4e743c, 'ringnav_reboot', 'reboot'),
     'dialog_cardupdate_dialog_init': (0x471578, 'ringnav_checkfw', 'checkfw'),
+    'mclLoadPlayList': (0x5d1f28, 'ringnav_load', 'load'),
+    'mclNextSong': (0x5d5800, 'ringnav_next', 'next'),
     'mclPrevSong': (0x5d56dc, 'ringnav_prev', 'prev'),
     'mclSetPlayMode': (0x5d278c, 'ringnav_mode', 'mode'),
     'mclSetPlaySpeed': (0x5d281c, 'ringnav_speed', 'speed'),

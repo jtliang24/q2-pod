@@ -14586,7 +14586,9 @@ void ringnav_wdt_long(void) {
     wdt_span(WDT_LONG_MS);
 }
 static void wdt_poll(void) {
-    if (M1PLUS || st.ended || st.wdt < 0) return; /* M1 Plus: unported (m1plus_offsets.inc WDT_MS) */
+    /* M1 Plus: --dev builds only until its first device pass, since a misfire is a reboot loop
+     * (m1plus_offsets.inc WDT_MS) */
+    if ((M1PLUS && !Q2POD_DEV) || st.ended || st.wdt < 0) return;
     if (st.wdt && st.wdt_long) {
         st.wdt_long = 0;
         wdt_span(WDT_MS);
@@ -14609,7 +14611,7 @@ static char *put(char *p, const char *s) {
 static void state_poll(void) {
     static const char *const play[] = { "?", "stopped", "playing", "paused" };
     static const char *const out[] = { "jack", "bluetooth", "usb" };
-    if (M1PLUS || st.ended) return; /* M1 Plus: unported, with the watchdog */
+    if (st.ended) return;
     unsigned ps = (unsigned)mclGetPlayStatus(), ow = (unsigned)mclGetOutputWay();
     unsigned pct = (unsigned)I(g_power_capacity, 0), n = 0;
     char s[sizeof st.state], d[4], *p = s;
