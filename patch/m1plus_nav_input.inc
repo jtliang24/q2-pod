@@ -13,6 +13,13 @@
     lp_input(e);
     if (e && video_on()) video_touch(e);
     if (!video_on()) {
+        /* a finger the window manager gets (stale_heal), noted as navigation.c's ringnav_input does past here */
+        if (type >= EVT_POINTER_FIRST && type <= EVT_POINTER_ABORT) {
+            st.touch_at = st.last_input;
+            st.touch_type = (int)type;
+            st.touch_x = I(e, EVENT_X);
+            st.touch_y = I(e, EVENT_Y);
+        }
         int result = stock_input_trampoline(wm, e);
         bar_key_target(e);
         if (e && I(e, EVENT_TYPE) == EVT_POINTER_UP) st.lp_swallow = 0; /* its click is past */

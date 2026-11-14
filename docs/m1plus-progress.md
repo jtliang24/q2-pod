@@ -5077,6 +5077,61 @@ and stale-press log (the patch is 624 bytes smaller). On that match the user ski
 GitHub; the user pushed `staging` and `feature/m1-ipod`, the draft verified, and it was published on Nov 14. `main`
 moved from 1.5.8-m1.1 (f855ff08) to 6c2d9f86. Next: the upstream sync resumes from 1.7.0 ([m1plus-sync.md](m1plus-sync.md)).
 
+## 90. Unported, round 1 (Nov 14)
+
+Round 1 of the unported queue ports the crash fixes and the small upstream fixes that V2.1 also needs, on
+`feature/m1-unported-r1`. V2.1 has every fault, so no row closed as native.
+
+**The items**, each built and gated on its own and committed with its tests:
+- **1.1** (a6b23d79) `MEDIA_INFO_NULL`: a status request between tracks no longer kills the player (`0x42bfcc`,
+  `0x42c4ec` in `PLAYER_PROFILE`).
+- **1.2** (e3c380c3) `FLAC_META_EOF`: a FLAC cut after STREAMINFO no longer loops (`0x490660`, `0x492464`). A new
+  gate, `faults` (`test/m1plus/player_faults.py`), runs V2.1's own `hciplayer` under `hci_emu`: stock faults or
+  loops; patched passes.
+- **1.3** (b08097fd) `GENRE_COPY`: a genre over 128 bytes no longer runs into the title (`0x5ecaa0`).
+- **1.4** (37895d8c) `mclIsUtf8WithoutBOM` (`0x5d1824`) is `ringnav_lrc_utf8`: an emoji or spaced Korean .lrc is
+  read as UTF-8.
+- **1.5** (12f3eb16, ed4cdf7a) `createPlayListItem` (`0x4eeca8`) allocates under the database lock, whatever the
+  list's order; the multi-select Delete (`0x53dbcc`, `m1plus_nav_playlist_delete.inc`) deletes in one transaction.
+- **1.6** (4e106470) `m1plus_nav_input.inc` notes the last pointer event, so `stale_heal` runs on the M1.
+- **1.7, 1.8** (9d36d51a, 95513894) `device_reboot` (`0x4e743c`) and `dialog_cardupdate_dialog_init` (`0x471578`)
+  save the queue and end cleanly; `state_poll` runs on every M1 build and `wdt_poll` on `--dev` builds only;
+  `M3U_DIR_CALL` (`0x4ef434`) gives an import the watchdog's long count.
+
+**Gates** (`V06Mm`, `work/unported/r1/final/gates/summary.txt`): all 20 pass. `patch.py` runs 2,162 scenarios, 0 known
+gaps, 115 `NOT PORTED`; `pytest test/unit` passes 1,270 and `test/fw` 3,638; the Q2's `update.tar` is byte-identical
+to 1.7.0's and `q2compare --suites` passes all 37 runs.
+
+**The device pass** on `V06Mm` (flashed by the user over `V06Cm`; About: 1.7.0 dev 25), over q2remote:
+- 1.1: 75 Next presses on Now Playing at 300, 150 and 80 ms: `hciplayer` kept its pid and kept playing.
+- 1.2: a FLAC cut after STREAMINFO is skipped at once when picked and when reached by Next (finding G3 below).
+- 1.3: a 200-byte genre: Now Playing and the Library (after Scan music now) show the title whole.
+- 1.4: the emoji and spaced Korean .lrc files read as UTF-8 (the font has no emoji glyphs, so those are blank);
+  a GB18030 .lrc still reads right.
+- 1.5: with "a" (id 1) sorted above "b" (id 0), a New Playlist got id 2 and an import id 3, its songs under it.
+  Two ticked playlists went with "Playlist Deleted" and the page reloaded; an imported one went with its songs,
+  and a New Playlist reusing its id started empty.
+- 1.6: a press with no release: the window manager's pressed flag (`wm+0x104`) cleared about 5 s later.
+- 1.7, 1.8: the flash itself left no crash log; demo holds `/dev/jz_watchdog`. A stopped demo (`kill -STOP`)
+  rebooted 64 s later with `q2-crash.log` ("demo did not end") and the watchdog reopened. A shell `reboot` with the
+  watchdog running came back in 25 s and stayed up (its crash log is expected).
+
+The M1 shows no Restart (only the unported Classic asks for one), so `device_reboot` was not reached; the card
+update's hook first runs on the next flash.
+
+Standby and power-off, by the user: after more than 5 minutes in Standby the M1 woke on the same track ("R1 Emoji
+Lyrics", 5 of 7, paused). A power-off and power-on came back to that track at 00:00, as Resume Songs keeps a place
+only for tracks of 30 minutes or more (the test track is 30 s). Neither left a `q2-crash.log`, and demo held the
+watchdog again after the power-on. That completes the watchdog's device pass. Turning it on for release builds is a
+separate change.
+
+Restored after the pass: Screen Off at 1 min, shuffle (PLAYMODE 2) and boot-target "rockbox". The config is
+byte-identical to the backup. The test folders (`MusicLibrary/R1Test`, `_explaylist_data`) were
+removed and the library rescanned. Recently Played and Most Played still list the seven test tracks.
+
+**Finding G3** ([unported doc](m1plus-unported.md#known-issues-on-the-m1)): when the track before it ends on its own,
+the cut FLAC sits on Now Playing at 00:00, playing, until Next (45 s and more; the CPU idle). It goes to a fix round.
+
 ## How to check a build now
 
 ```sh

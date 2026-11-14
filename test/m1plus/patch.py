@@ -1500,35 +1500,34 @@ m.pressed=1
 assert m.confirm()==11 and not m.dispatched()
 assert m.call()==11 and m.selected(w)==2
 m.pressed=0; passed()
-if not is_m1plus:  # stale_heal runs on the Q2 only (the M1's ringnav_input notes no finger)
-    # A press with no pointer event for STALE_TOUCH_MS is healed once per pass of ringnav_sleep: an abort to the
-    # top window's targets, so a row can't click, then the release stock never got, at the touch's last place. Only
-    # events that reach the window manager count, pointer events only: a key is no finger, and a move is. A --dev
-    # build also notes it in q2-wheel.log; a release build opens no file.
-    m.handlers[payload_syms['stock_input_trampoline']]='stock_input'
-    m.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
-    m.mock('widget_dispatch_event_to_target_recursive')
-    def wm_event(kind): return m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=kind,gap=0)
-    def heal():
-        m.calls=[]; m.call(address=HOOKS['main_loop_sleep_default'][0],args=(0x1234,0,0,0),gap=0)
-        return [c for c in m.calls if c[0] in ('widget_dispatch_event_to_target_recursive','stock_input')]
-    def opens(): return [c for c in m.calls if c[0]=='fopen@GLIBC_2.2' and m.text(c[1])=='/mnt/data/q2-wheel.log']
-    m.word(m.event+O['EVENT_Y'],44); m.call(33,address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=O['EVT_POINTER_FIRST'],gap=0); m.pressed=1  # the event's x is its key's word
-    assert not heal(); m.now+=O['STALE_TOUCH_MS']-1; assert not heal() and not opens()
-    m.now+=1; steps=heal()
-    assert [c[0] for c in steps]==['widget_dispatch_event_to_target_recursive','stock_input']
-    assert steps[0][1]==m.top and m.get(steps[0][2])==O['EVT_POINTER_ABORT']
-    assert steps[1][1]==m.wm and m.get(steps[1][2])==O['EVT_POINTER_UP_BEFORE']-1 and (m.get(steps[1][2]+O['EVENT_X']),m.get(steps[1][2]+O['EVENT_Y']))==(33,44)
-    assert len(opens())==(1 if manifest['dev'] else 0)
-    if manifest['dev']: assert m.text(opens()[0][2])=='ab'
-    assert not heal()  # still pressed (stock's flag not what it reads): one try per STALE_TOUCH_MS, not every pass
-    m.now+=O['STALE_TOUCH_MS']; assert len(heal())==2
-    m.pressed=0; m.now+=O['STALE_TOUCH_MS']; assert not heal()  # nothing pressed: nothing to do
-    assert m.call()==11 and m.selected(w)==3; m.paint(w); assert m.drawn()
-    wm_event(O['EVT_POINTER_FIRST']); m.pressed=1; m.now+=O['STALE_TOUCH_MS']-1; wm_event(O['EVT_POINTER_FIRST']+2); m.now+=1; assert not heal()  # a move
-    wm_event(O['EVT_KEY_DOWN']); m.now+=O['STALE_TOUCH_MS']; assert len(heal())==2  # a key is no finger
-    m.pressed=0; passed()
-else: not_ported('The stale press backstop (stale_heal, 1.6.4): the M1 notes no finger in ringnav_input')
+# A press with no pointer event for STALE_TOUCH_MS is healed once per pass of ringnav_sleep: an abort to the
+# top window's targets, so a row can't click, then the release stock never got, at the touch's last place. Only
+# events that reach the window manager count, pointer events only: a key is no finger, and a move is. A Q2
+# --dev build also notes it in q2-wheel.log; a release build, and the M1's, opens no file.
+m.handlers[payload_syms['stock_input_trampoline']]='stock_input'
+m.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
+m.mock('widget_dispatch_event_to_target_recursive')
+def wm_event(kind): return m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=kind,gap=0)
+def heal():
+    m.calls=[]; m.call(address=HOOKS['main_loop_sleep_default'][0],args=(0x1234,0,0,0),gap=0)
+    return [c for c in m.calls if c[0] in ('widget_dispatch_event_to_target_recursive','stock_input')]
+def opens(): return [c for c in m.calls if c[0]=='fopen@GLIBC_2.2' and m.text(c[1])=='/mnt/data/q2-wheel.log']
+m.word(m.event+O['EVENT_Y'],44); m.call(33,address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=O['EVT_POINTER_FIRST'],gap=0); m.pressed=1  # the event's x is its key's word
+assert not heal(); m.now+=O['STALE_TOUCH_MS']-1; assert not heal() and not opens()
+m.now+=1; steps=heal()
+assert [c[0] for c in steps]==['widget_dispatch_event_to_target_recursive','stock_input']
+assert steps[0][1]==m.top and m.get(steps[0][2])==O['EVT_POINTER_ABORT']
+assert steps[1][1]==m.wm and m.get(steps[1][2])==O['EVT_POINTER_UP_BEFORE']-1 and (m.get(steps[1][2]+O['EVENT_X']),m.get(steps[1][2]+O['EVENT_Y']))==(33,44)
+logs=manifest['dev'] and not is_m1plus
+assert len(opens())==(1 if logs else 0)
+if logs: assert m.text(opens()[0][2])=='ab'
+assert not heal()  # still pressed (stock's flag not what it reads): one try per STALE_TOUCH_MS, not every pass
+m.now+=O['STALE_TOUCH_MS']; assert len(heal())==2
+m.pressed=0; m.now+=O['STALE_TOUCH_MS']; assert not heal()  # nothing pressed: nothing to do
+assert m.call()==11 and m.selected(w)==3; m.paint(w); assert m.drawn()
+wm_event(O['EVT_POINTER_FIRST']); m.pressed=1; m.now+=O['STALE_TOUCH_MS']-1; wm_event(O['EVT_POINTER_FIRST']+2); m.now+=1; assert not heal()  # a move
+wm_event(O['EVT_KEY_DOWN']); m.now+=O['STALE_TOUCH_MS']; assert len(heal())==2  # a key is no finger
+m.pressed=0; passed()
 # With three rows in view the difference shows: the middle one wins, not the top edge.
 m=Machine(); w,es=m.page_list(8,height=192,extent=1000)
 m.paint(w); m.touch(); m.word(w+O['SCROLL_Y'],200); m.word(w+O['VIEW_ANIMATOR'],0x1234)
@@ -3975,8 +3974,8 @@ else:
 # mclLoadPlayList, mclNextSong and key filters run for real.
 from build import fileoff
 class QueueMachine(Machine):
-    def __init__(self,page='allmusic_page',rows=20,queue=3,pos=0,mode=0,cls=0xf001):
-        super().__init__()
+    def __init__(self,page='allmusic_page',rows=20,queue=3,pos=0,mode=0,cls=0xf001,patched=True):
+        super().__init__(patched)
         self.deqs={}; self.toasts=[]; self.sent=[]; self.picks=[]; self.airplay=0
         self.imports=[]; self.import_ret=1; self.m3u_files=[]; self.uncreated=set(); self.on_toast=None; self.on_open=None
         for n in ('_create_deque','deque_init','deque_init_copy','deque_size','deque_at','_deque_push_back',
@@ -7013,8 +7012,8 @@ def finger(m,view,points,ms=400,kinds=None):
 if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no playlistsmore_page; the hold menu's More… opens the editor
     # Local playlist editor: real MIPS UI/control code and real SQLite transactions at its ABI boundary.
     class PlaylistEditMachine(CoverflowMachine):
-        def __init__(self,count=3):
-            super().__init__()
+        def __init__(self,count=3,patched=True):
+            super().__init__(patched=patched)
             self.db=sqlite3.connect(':memory:',isolation_level=None)
             self.db.execute('create table playlist(id integer primary key,cd_num,fileurl,time,time_end,filename)')
             self.db.execute("insert into playlist values(0,0,'',0,0,'Mix')")
@@ -9366,14 +9365,11 @@ if 'mclLoadExLyric' in HOOKS:
         # Stock's test of whether a .lrc is UTF-8 before it converts it from GB18030 (mclIsUtf8WithoutBOM) is
         # ringnav_lrc_utf8's, over the file: stock's read 6 bytes from the first non-ASCII one and no 4-byte
         # character, so an emoji, or a character starting 4 or 5 bytes on (Korean's one-syllable words), failed it.
-        if 'mclIsUtf8WithoutBOM' in HOOKS:
-            m=LrcMachine(files={'/e':'[00:01.00]Hi 🎵\n'.encode(),'/q':'[00:01.00]Café da’s\n'.encode(),
-                                '/k':'[00:01.00]나 는\n'.encode(),'/a':b'[00:01.00]plain\n',
-                                '/g':'[00:01.00]你好\n'.encode('gb18030'),'/l':'[00:01.00]Café\n'.encode('latin-1')})
-            def is_utf8(path): return m.call(address=HOOKS['mclIsUtf8WithoutBOM'][0],args=(m.string(path),0,0,0),gap=0)
-            assert [is_utf8(p) for p in ('/e','/q','/k','/a','/g','/l','/none')]==[1,1,1,1,0,0,0]; passed()
-        else:
-            not_ported("an .lrc's UTF-8 test reads 4-byte characters (mclIsUtf8WithoutBOM not hooked on V2.1)")
+        m=LrcMachine(files={'/e':'[00:01.00]Hi 🎵\n'.encode(),'/q':'[00:01.00]Café da’s\n'.encode(),
+                            '/k':'[00:01.00]나 는\n'.encode(),'/a':b'[00:01.00]plain\n',
+                            '/g':'[00:01.00]你好\n'.encode('gb18030'),'/l':'[00:01.00]Café\n'.encode('latin-1')})
+        def is_utf8(path): return m.call(address=HOOKS['mclIsUtf8WithoutBOM'][0],args=(m.string(path),0,0,0),gap=0)
+        assert [is_utf8(p) for p in ('/e','/q','/k','/a','/g','/l','/none')]==[1,1,1,1,0,0,0]; passed()
 
 
         # The lyrics page (lyrics.c, iPod). Each load sends its lines, milliseconds
@@ -9675,8 +9671,8 @@ else:
 # the 256-byte field.
 TAG_TEXT, CUE_TEXT, SCAN_DIRS = (SITES[n] for n in ('TAG_TEXT', 'CUE_TEXT', 'SCAN_DIRS'))
 class TagTextMachine(Machine):
-    def __init__(self):
-        super().__init__()
+    def __init__(self,patched=True):
+        super().__init__(patched)
         self.word((0xa03ed0-0xd4c) if is_m1plus else (0xa26cc0-0xabc),0x1000014); self.handlers[0x1000014]='t:malloc'  # lazy-bound, as RolloverMachine's
         self.word((0xa03ed0-0xbdc) if is_m1plus else 0xa2638c,0x1000010); self.handlers[0x1000010]='t:free'
         self.handlers[syms['strcpy@GLIBC_2.0']]='t:strcpy'; self.handlers[syms['toolsIconvConvert']]='t:iconv'
@@ -9734,6 +9730,36 @@ if 'GENRE_COPY' in SITES:
     out = m.alloc(0x100); m.u.mem_write(out, b'\xa5' * 0x100)
     assert m.call(address=payload_syms['ringnav_genre_copy'], args=(out, bad, 0, 0), gap=0) == out and m.raw(out) == b''
     passed()
+    if is_m1plus:
+        # V2.1's own toolsGetMusicInfo TagLib branch, stock and patched (entered past the hook, at its trampoline),
+        # libtag_c mocked: its title is copied first, so stock's genre strcpy of 200 bytes ran on into it.
+        class GenreInfoMachine(TagTextMachine):
+            FIELDS = {'title': 'Born Dead Buried Alive', 'artist': 'Hypocrisy', 'album': 'The Arrival',
+                      'genre': 'x' * 200, 'composer': 'Peter Tagtgren', 'abmartist': 'Hypocrisy'}
+            def __init__(self, patched):
+                super().__init__(patched); self.patched = patched; self.opened = []
+                self.handlers.pop(syms['toolsGetMusicInfo'], None)  # run stock's body itself
+                for n in ['taglib_file_new', 'taglib_file_tag', 'taglib_file_free', 'taglib_tag_islatin1', 'taglib_tag_year',
+                          'taglib_tag_track', 'taglib_tag_mqaflag', 'taglib_tag_free_strings'] + ['taglib_tag_' + f for f in self.FIELDS]:
+                    self.handlers[syms[n]] = 'g:' + n
+            def hook(self, u, address, size, unused):
+                name = self.handlers.get(address, '')
+                if not name.startswith('g:'): return super().hook(u, address, size, unused)
+                name = name[2:]; a = u.reg_read(UC_MIPS_REG_A0); ret = 0
+                if name == 'taglib_file_new': self.opened.append(self.text(a)); ret = 0x1170000
+                elif name == 'taglib_file_tag': assert a == 0x1170000; ret = 0x1170100
+                elif name.removeprefix('taglib_tag_') in self.FIELDS: ret = self.string(self.FIELDS[name.removeprefix('taglib_tag_')])
+                self.returns(ret, clobber=True)
+            def info(self, path):
+                info = self.alloc(0x6a0); self.u.mem_write(info, bytes(0x6a0))
+                entry = int(manifest['patch_symbols']['stock_music_info_trampoline'], 16) if self.patched else syms['toolsGetMusicInfo']
+                assert self.call(address=entry, args=(0, info, self.string(path), 0), gap=0) == 1 and self.opened == [path]
+                return [self.raw(info + o).decode() for o in (0x280, 0x100, 0, 0x200, 0x480, 0x580)]
+        f = GenreInfoMachine.FIELDS
+        want = [f['title'], f['artist'], f['album'], 'x' * 127, f['composer'], f['abmartist']]
+        stock = GenreInfoMachine(False).info('/mnt/mmc/a.mp3')
+        assert stock == ['x' * 72, f['artist'], f['album'], 'x' * 200, f['composer'], f['abmartist']], stock  # the title overrun
+        assert GenreInfoMachine(True).info('/mnt/mmc/a.mp3') == want; passed()
 else:
     not_ported('Long multi-value genres kept out of the title (GENRE_COPY, 1.6.7)')
 if 'CUE_TEXT' in SITES:
@@ -13883,8 +13909,10 @@ if not is_m1plus:
 # A reboot keeps the place (playback.c ringnav_reboot): Restart (device_reboot) and the firmware update's
 # dialog, which stops the player before it flashes, save as power-off does (save_memoryplay_info, which
 # ringnav_savequeue hooks) before stock runs, with the dialog's arguments; a stopped player (1) saves nothing.
+# V2.1's update is the card's: dialog_cardupdate_dialog_init, which stops the player and starts the update's thread.
+REBOOTS=(('device_reboot','reboot'),('dialog_cardupdate_dialog_init' if is_m1plus else 'dialog_checkfw_dialog_init','checkfw'))
 if 'device_reboot' in HOOKS:
-    for entry,stock in (('device_reboot','reboot'),('dialog_checkfw_dialog_init','checkfw')):
+    for entry,stock in REBOOTS:
         for status in (1,2,3):
             m=Machine(); m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,status)
             m.handlers[payload_syms[f'stock_{stock}_trampoline']]='stock_'+stock
@@ -13895,6 +13923,11 @@ if 'device_reboot' in HOOKS:
     passed()
 else:
     not_ported('A reboot saves the queue first (device_reboot and dialog_checkfw_dialog_init, 1.5.0)')
+if is_m1plus:  # both of V2.1's routines begin with the PIC prologue the hook replaces and the trampoline resumes past
+    for entry,_ in REBOOTS:
+        d=(B/'stock-demo').read_bytes(); from build import fileoff
+        w=struct.unpack_from('<3I',d,fileoff(d,HOOKS[entry][0])); assert w[0]>>16==0x3c1c and w[1]>>16==0x279c and w[2]==0x0399e021,(entry,[hex(x) for x in w])
+    passed()
 
 if is_m1plus: not_ported("The touch wheel's ticks: every one moves, and Home's ends bump, then wrap (ipod-ui 4.8, Q2 only; the M1's knob on Home is m1_home_modes)")
 else:
@@ -21171,28 +21204,31 @@ if 'toolsIntoStandby' in HOOKS:
     for usb,play in ((1,3),(0,2)):  # a cable in, or playing: it stays on, and no later pass powers off
         m=StandbyMachine({'STANDBYLIMIT':'1'}); m.standby(); m.byte(syms['g_usbdet_value'],usb); m.word(PLAY_STATUS,play)
         assert not m.off() and not m.off(); passed()
-    if not is_m1plus:  # M1 Plus: no watchdog or state record (navigation.c, m1plus_offsets.inc WDT_MS)
-        # Hardware watchdog and the state record (docs/internals.md#watchdog). The first pass opens
-        # /dev/jz_watchdog and starts it at WDT_MS, every pass feeds it, Standby stops it around the suspend
-        # and starts it again, and a clean end stops it and removes the record; nothing is fed or written
-        # after. No device, or a refused start: tried once, and the record is kept all the same. The record
-        # is rewritten only when it changes, and as suspending just before Standby's suspend.
-        WDT_START,WDT_STOP,WDT_FEED=0x8004570d,0x2000570e,0x2000570f
-        class WatchdogMachine(StandbyMachine):
-            def __init__(self,config={},fd=3,refuse_start=False,**k):
-                super().__init__(config,**k); self.fd,self.refuse_start,self.ioctls,self.wdt_opens=fd,refuse_start,[],0
-                self.handlers[syms['ioctl@GLIBC_2.0']]='d:ioctl'
-                self.byte(syms['g_backlight_status'],1); self.byte(syms['g_usbdet_value'],0)
-            def hook(self,u,address,size,unused):
-                name=self.handlers.get(address,''); a,b,c=[u.reg_read(r) for r in REGS[:3]]
-                if name=='p:open@GLIBC_2.0':
-                    assert self.text(a)=='/dev/jz_watchdog' and b==0x80002; self.wdt_opens+=1; self.returns(self.fd&0xffffffff); return
-                if name=='d:ioctl':
-                    self.ioctls.append((a,b,self.get(c)) if b==WDT_START else (a,b))
-                    if b!=WDT_FEED: self.events.append(('wdt',b))
-                    self.returns(0xffffffff if b==WDT_START and self.refuse_start else 0); return
-                return super().hook(u,address,size,unused)
-            def record(self): return self.files.get(RECORD)
+    # Hardware watchdog and the state record (docs/internals.md#watchdog). The first pass opens
+    # /dev/jz_watchdog and starts it at WDT_MS, every pass feeds it, Standby stops it around the suspend
+    # and starts it again, and a clean end stops it and removes the record; nothing is fed or written
+    # after. No device, or a refused start: tried once, and the record is kept all the same. The record
+    # is rewritten only when it changes, and as suspending just before Standby's suspend.
+    # M1 Plus: the watchdog in --dev builds only until its first device pass (navigation.c wdt_poll); the
+    # record and the clean end in every build.
+    WDT_START,WDT_STOP,WDT_FEED=0x8004570d,0x2000570e,0x2000570f
+    class WatchdogMachine(StandbyMachine):
+        def __init__(self,config={},fd=3,refuse_start=False,**k):
+            super().__init__(config,**k); self.fd,self.refuse_start,self.ioctls,self.wdt_opens=fd,refuse_start,[],0
+            self.handlers[syms['ioctl@GLIBC_2.0']]='d:ioctl'; self.listed=[]
+            self.byte(syms['g_backlight_status'],1); self.byte(syms['g_usbdet_value'],0)
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,''); a,b,c=[u.reg_read(r) for r in REGS[:3]]
+            if name=='p:open@GLIBC_2.0':
+                assert self.text(a)=='/dev/jz_watchdog' and b==0x80002; self.wdt_opens+=1; self.returns(self.fd&0xffffffff); return
+            if name=='d:ioctl':
+                self.ioctls.append((a,b,self.get(c)) if b==WDT_START else (a,b))
+                if b!=WDT_FEED: self.events.append(('wdt',b))
+                self.returns(0xffffffff if b==WDT_START and self.refuse_start else 0); return
+            if name=='m3u_dir': self.listed.append((self.text(a),b,list(self.ioctls))); self.returns(7); return
+            return super().hook(u,address,size,unused)
+        def record(self): return self.files.get(RECORD)
+    if not is_m1plus or manifest['dev']:
         m=WatchdogMachine(key=600); m.pass_(1)
         assert m.wdt_opens==1 and m.ioctls==[(3,WDT_START,O['WDT_MS'])],(m.ioctls)
         assert m.record()==b'screen:on power:running cable:out battery:0 play:paused out:jack\n',m.record()
@@ -21212,16 +21248,43 @@ if 'toolsIntoStandby' in HOOKS:
         assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])],m.ioctls; m.ioctls=[]
         m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; m.ioctls=[]
         m.pass_(1); assert m.ioctls==[(3,WDT_FEED)] and O['WDT_LONG_MS']>O['WDT_MS']==60000; passed()
+        if is_m1plus:  # V2.1's importPlayList listing (M3U_DIR_CALL): the long count first, then stock's listing as called
+            site_patched('M3U_DIR_CALL'); site=SITES['M3U_DIR_CALL'][0][0]
+            m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]; m.handlers[syms['toolsGetDirectoryM3u8']]='m3u_dir'
+            m.u.hook_add(UC_HOOK_CODE,lambda u,a,s,x: u.reg_write(UC_MIPS_REG_PC,0x1000000),begin=site+8,end=site+8)
+            m.call(address=site,args=(m.string('/mnt/mmc/_explaylist_data')+0x3aa0,0x4321,0,0),gap=0)  # the delay slot's addiu
+            assert m.listed==[('/mnt/mmc/_explaylist_data',0x4321,[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])])],m.listed
+            assert m.u.reg_read(UC_MIPS_REG_V0)==7; m.ioctls=[]
+            m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; passed()
         # a clean end: the watchdog stops, the record goes, and nothing is fed or written after it
         m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
         m.call(address=payload_syms['ringnav_clean_end'],args=(0,0,0,0),gap=0)
         assert m.ioctls==[(3,WDT_STOP)] and RECORD not in m.files; n=len(m.records); m.ioctls=[]
         level(m,5,0); m.pass_(1); assert not m.ioctls and len(m.records)==n and RECORD not in m.files; passed()
+        if 'device_reboot' in HOOKS:  # Restart and the firmware update's dialog are clean ends (playback.c reboot_save)
+            for entry,stock in REBOOTS:
+                m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]; m.handlers[payload_syms[f'stock_{stock}_trampoline']]='stock_'+stock
+                m.call(address=HOOKS[entry][0],args=(0x1234,0x5678,0,0),gap=0)
+                assert m.ioctls==[(3,WDT_STOP)] and RECORD not in m.files and m.calls[-1][0]=='stock_'+stock,(entry,m.ioctls,m.calls[-3:])
+                m.ioctls=[]; n=len(m.records); level(m,5,0); m.pass_(1); assert not m.ioctls and len(m.records)==n and RECORD not in m.files
+            passed()
         m=WatchdogMachine(key=600,fd=-1); m.pass_(1); m.pass_(1)
         assert m.wdt_opens==1 and not m.ioctls and m.record() and m.standby()==['suspend']; passed()
         m=WatchdogMachine(key=600,refuse_start=True); m.pass_(1); m.pass_(1)
         assert m.ioctls==[(3,WDT_START,O['WDT_MS'])] and m.record() and m.standby()==['suspend']; passed()
-    else: not_ported('The hardware watchdog and the state record (1.6.2)')
+    else:  # an M1 Plus release build: the device is never opened; the record, Standby's and the clean end are the Q2's
+        m=WatchdogMachine(key=600); m.pass_(1); m.pass_(1)
+        assert m.wdt_opens==0 and not m.ioctls and len(m.records)==1
+        assert m.record()==b'screen:on power:running cable:out battery:0 play:paused out:jack\n',m.record()
+        m.call(address=payload_syms['ringnav_wdt_long'],args=(0,0,0,0),gap=0); assert m.standby()==['suspend'] and not m.ioctls
+        assert m.records[-1][1]==b'screen:on power:suspending cable:out battery:0 play:paused out:jack\n'; passed()
+        for entry,stock in REBOOTS+((None,None),):
+            m=WatchdogMachine(key=600); m.pass_(1)
+            if entry: m.handlers[payload_syms[f'stock_{stock}_trampoline']]='stock_'+stock
+            m.call(address=HOOKS[entry][0] if entry else payload_syms['ringnav_clean_end'],args=(0x1234,0x5678,0,0),gap=0)
+            n=len(m.records); level(m,5,0); m.pass_(1)
+            assert m.wdt_opens==0 and not m.ioctls and len(m.records)==n and RECORD not in m.files,entry
+        passed()
 
 else:
     not_ported("Standby Limit (toolsIntoStandby not hooked on M1 Plus)")
@@ -22509,7 +22572,102 @@ elif not is_m1plus:
 if is_m1plus:
     exec(compile((ROOT/"test/m1plus/feature_batch.py").read_text(), str(ROOT/"test/m1plus/feature_batch.py"), "exec"))
 
-if 'createPlayListItem' in HOOKS and 'playlist_delete_click' in HOOKS:
+if is_m1plus:
+    # M1 Plus: V2.1's createPlayListItem (0x4eeca8) and playlist_page's Delete click (0x53dbcc), each run as stock
+    # V2.1 (patched=False) and as the port, against real SQLite at the import boundary. Library -> Playlists lists
+    # the headers by name (ringnav_library_query), so the ids aren't in the list's order.
+    class PlaylistLifecycleMachine(PlaylistEditMachine):
+        MALLOC=0x1000018  # stock malloc's GOT slot (0xa03184) is 0 until lazy binding, as free's
+        def __init__(self,patched=True):
+            super().__init__(patched=patched)
+            self.db.execute('drop table playlist')
+            self.db.execute('create table playlist(id integer primary key,filename,fileurl,album,songer,style,name,composer,albumsonger,year,track,cd_num,time,time_end,time_create,Initial,bitdepth,samprate)')
+            for ident,name in enumerate(('Zulu','Alpha','Echo','Bravo','Delta','Charlie')):
+                self.db.execute('insert into playlist(id,filename,name,cd_num) values(?,?,?,?)',(ident,name,name,ident))
+            self.db.execute("insert into playlist(id,filename,cd_num) values(101,'song',0),(102,'other',1),(103,'third',3)")
+            records=[]
+            for ident,name in self.db.execute('select id,name from playlist where id<=100 order by name'):
+                r=self.song(name,4); self.word(r+O['REC_ID'],ident); self.word(r+O['REC_DISC'],ident)
+                self.word(r+O['REC_TITLE'],self.string(name)); records.append(r)
+            self.word(syms['p_deque_playlist'],self.deque(records))
+            self.word(syms['g_class_type'],0xf00b)
+            self.ticked=self.alloc(4*len(records)); self.rows=len(records); self.tick()
+            self.word(syms['p_vector_select_record'],self.alloc(0x20))
+            self.word(0xa03184,self.MALLOC); self.handlers[self.MALLOC]='life:malloc'
+            for n in ('vector_size','vector_at','sqlite3_free','navigator_back'): self.handlers[syms[n]]='life:'+n
+            self.handlers.pop(syms['select_recordempty'],None)  # V2.1's own, on the vector above
+            self.mock('getFormatString','strcpy@GLIBC_2.0')
+            self.answer=10; self.asked=[]; self.backs=0; self.word(syms['g_delete_flag'],0)
+        def tick(self,*rows):  # the selection, by row of the name-ordered list
+            for i in range(self.rows): self.word(self.ticked+4*i,int(i in rows))
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if name.startswith('life:'):
+                a,b=u.reg_read(REGS[0]),u.reg_read(REGS[1]); ret=0
+                if name=='life:malloc': ret=self.alloc((a+3)&~3)
+                elif name=='life:vector_size': assert a==self.get(syms['p_vector_select_record']); ret=self.rows
+                elif name=='life:vector_at': assert b<self.rows; ret=self.ticked+4*b
+                elif name=='life:navigator_back': self.backs+=1
+                self.returns(ret); return
+            if name in ('c:navigator_to_with_context','q:navigator_to_with_context') and self.text(u.reg_read(REGS[0]))=='dialog/confirminfo_dialog':
+                self.asked.append(self.text(u.reg_read(REGS[1])+8)); self.returns(self.answer); return
+            super().hook(u,address,size,unused)
+        def create(self,name):
+            return signed(self.call(address=HOOKS['createPlayListItem'][0],args=(self.get(syms['p_deque_playlist']),self.string(name),0,0),gap=0))
+        def delete(self,*rows):
+            self.tick(*rows)
+            return self.call(address=HOOKS['playlist_delete_click'][0],args=(0,self.event,0,0),gap=0)
+        def headers(self): return [r[0] for r in self.db.execute('select id from playlist where id<=100 order by id')]
+        def entries(self): return [r[0] for r in self.db.execute('select id from playlist where id>100 order by id')]
+        def said(self): return [t[3] for t in self.toasts]
+    ENTRIES={True:'delete from playlist where id>100',False:'delete from playlist where id > 100'}  # the port's, stock's
+
+    # The id race: the list in name order starts Alpha (1), so stock's first row whose id isn't its index is 0,
+    # Zulu's. Its insert fails on the key and stock returns 0 anyway, as if it had made the playlist, and an
+    # import or New Playlist then files songs under Zulu. The port takes the first free id under BEGIN IMMEDIATE.
+    s=PlaylistLifecycleMachine(patched=False); before=s.db.execute('select * from playlist').fetchall()
+    assert s.create('New')==0 and s.db.execute('select * from playlist').fetchall()==before  # stock V2.1's fault
+    m=PlaylistLifecycleMachine(); assert m.create("O'Brien")==6
+    assert m.db.execute('select id,filename,name,cd_num from playlist where id=6').fetchone()==(6,"O'Brien","O'Brien",6)
+    assert m.create("O'Brien")==-2 and not m.db.in_transaction; passed()
+    # A name stored cut to 63 bytes never matches the whole one, as in stock
+    m=PlaylistLifecycleMachine(); assert m.create('L'*70)==6 and m.create('L'*70)==7; passed()
+    for failure in ('open','begin','insert','commit'):
+        m=PlaylistLifecycleMachine(); before=m.db.execute('select * from playlist').fetchall(); m.fail=failure
+        assert m.create('New')==-1
+        assert m.db.execute('select * from playlist').fetchall()==before and not m.db.in_transaction; passed()
+    m=PlaylistLifecycleMachine(); m.db.executemany('insert into playlist(id) values(?)',[(i,) for i in range(6,100)])
+    assert m.create('Full')==-1; passed()
+
+    # Delete: rows 0 and 2 of the name-ordered list are Alpha (1) and Charlie (5); Alpha's entry is 102.
+    for patched in (False,True):
+        m=PlaylistLifecycleMachine(patched=patched); m.delete(0,2)
+        assert m.asked==['msg_delplaylist'] and m.headers()==[0,2,3,4] and m.entries()==[101,103]
+        assert m.said()==['msg_delplaylistsuccess'] and m.get(syms['g_delete_flag'])&255==1 and not m.backs
+        assert not m.db.in_transaction; passed()
+    # The entries' delete fails: stock has already deleted the header, leaves its songs filed under a free id
+    # (the next playlist made there gets them) and says it deleted the playlist. The port keeps both, says it
+    # couldn't, and leaves delete_flag clear.
+    s=PlaylistLifecycleMachine(patched=False); s.fail=ENTRIES[False]; s.delete(0)
+    assert s.headers()==[0,2,3,4,5] and s.entries()==[101,102,103] and s.said()==['msg_delplaylistsuccess']  # stock V2.1's fault
+    for failure in ('open','begin',ENTRIES[True],'delete from playlist where id=','commit'):
+        m=PlaylistLifecycleMachine(); before=m.db.execute('select * from playlist').fetchall(); m.fail=failure; m.delete(0,2)
+        assert m.db.execute('select * from playlist').fetchall()==before and m.said()==['Could not delete playlist']
+        assert m.get(syms['g_delete_flag'])&255==0 and not m.db.in_transaction,failure; passed()
+    # The second playlist's header is already gone (deleted elsewhere): changes() is 0, so the first's delete
+    # rolls back too.
+    m=PlaylistLifecycleMachine(); m.db.execute('delete from playlist where id=5'); before=m.db.execute('select * from playlist').fetchall()
+    m.delete(0,2); assert m.db.execute('select * from playlist').fetchall()==before and m.said()==['Could not delete playlist']; passed()
+    # Stock's own paths stay: nothing ticked says msg_delplaylistfailed and asks nothing; No at the confirm deletes nothing.
+    for patched in (False,True):
+        m=PlaylistLifecycleMachine(patched=patched); before=m.db.execute('select * from playlist').fetchall(); m.delete()
+        assert not m.asked and m.said()==['msg_delplaylistfailed'] and m.db.execute('select * from playlist').fetchall()==before
+        m.answer=0; m.toasts.clear(); m.delete(1)
+        assert m.asked==['msg_delplaylist'] and not m.said() and m.db.execute('select * from playlist').fetchall()==before; passed()
+    # After a delete, New Playlist reuses the freed id.
+    m=PlaylistLifecycleMachine(); m.delete(5); assert m.headers()==[1,2,3,4,5] and m.create('Replacement')==0; passed()
+
+elif 'createPlayListItem' in HOOKS and 'playlist_delete_click' in HOOKS:
     # Header creation uses the database IDs even when the displayed list is alphabetized.
     class PlaylistLifecycleMachine(PlaylistEditMachine):
         def __init__(self):
@@ -22579,9 +22737,6 @@ if 'createPlayListItem' in HOOKS and 'playlist_delete_click' in HOOKS:
     assert m.db.execute('select id from playlist where id=101').fetchall()==[(101,)] and m.toasts[-1][3]=='Could not delete playlist'; passed()
     m=PlaylistLifecycleMachine(); m.answer=0; before=m.db.execute('select * from playlist').fetchall(); m.delete()
     assert m.db.execute('select * from playlist').fetchall()==before and not m.backs and not m.reload_pending(); passed()
-
-else:
-    not_ported('playlist allocation and transactional deletion (1.5.5)')
 
 # A Videos folder's listed videos never join a queue (#128): stock loads a copy without them, its start
 # on the same song, or the next after a video; the caller's list stays whole. Videos alone leave an empty queue.

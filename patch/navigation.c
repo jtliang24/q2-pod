@@ -13117,6 +13117,8 @@ static int confirm_over(void *prompt, const char *verb) {
     st.confirm_win = (void *)0;
     return answer;
 }
+#include "m1plus_nav_playlist_delete.inc"
+#if !M1PLUS
 int ringnav_playlist_delete(void *win, void *event) {
     void *list = P(p_deque_playlist, 0), *db = 0;
     int row = widget_get_prop_int(win, "_playlist", -1), ok = 0;
@@ -13149,6 +13151,7 @@ done:
     toast(ok ? "Playlist deleted" : "Could not delete playlist");
     return 0;
 }
+#endif
 
 int ringnav_playlistsmore(void *win, void *ctx) {
     int result = stock_playlistsmore_trampoline(win, ctx);
@@ -14178,7 +14181,7 @@ static void stale_heal(void) {
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
     unsigned now = (unsigned)time_now_ms(), age = now - st.touch_at, abort_event[12], up[12];
     if (age < STALE_TOUCH_MS || !window_manager_get_pointer_pressed(wm)) return;
-    if (Q2POD_DEV) stale_note(age);
+    if (Q2POD_DEV && !M1PLUS) stale_note(age); /* the log is the Q2's wheel log */
     st.touch_at = now;
     if (top)
         widget_dispatch_event_to_target_recursive(
@@ -14583,7 +14586,9 @@ void ringnav_wdt_long(void) {
     wdt_span(WDT_LONG_MS);
 }
 static void wdt_poll(void) {
-    if (M1PLUS || st.ended || st.wdt < 0) return; /* M1 Plus: unported (m1plus_offsets.inc WDT_MS) */
+    /* M1 Plus: --dev builds only until its first device pass, since a misfire is a reboot loop
+     * (m1plus_offsets.inc WDT_MS) */
+    if ((M1PLUS && !Q2POD_DEV) || st.ended || st.wdt < 0) return;
     if (st.wdt && st.wdt_long) {
         st.wdt_long = 0;
         wdt_span(WDT_MS);
@@ -14606,7 +14611,7 @@ static char *put(char *p, const char *s) {
 static void state_poll(void) {
     static const char *const play[] = { "?", "stopped", "playing", "paused" };
     static const char *const out[] = { "jack", "bluetooth", "usb" };
-    if (M1PLUS || st.ended) return; /* M1 Plus: unported, with the watchdog */
+    if (st.ended) return;
     unsigned ps = (unsigned)mclGetPlayStatus(), ow = (unsigned)mclGetOutputWay();
     unsigned pct = (unsigned)I(g_power_capacity, 0), n = 0;
     char s[sizeof st.state], d[4], *p = s;
@@ -15255,7 +15260,7 @@ static void thumb_poll(void) {
 }
 
 int ringnav_sleep(void *loop) {
-    if (!M1PLUS) stale_heal(); /* the M1 notes no finger (ringnav_input), so it is unported */
+    stale_heal(); /* the M1 notes its fingers in m1plus_nav_input.inc */
     quick_poll();
     headset_poll();
     headset_eq_poll();

@@ -50,6 +50,11 @@ M1PLUS_FUNCTIONS = {
  'volume_refresh': ('void', 'void *'),  # the volume dialog shows the output's level
  'text_edit_set_select': ('int', 'void *, unsigned, unsigned'),  # the M1 Plus's edit_set_select (patch/m1plus_peq.h)
  'navigator_replace': ('int', 'const char *'),  # Tidal's login in its main page's place (m1_tidal_login)
+ # Delete Playlist's ticked rows (m1plus_nav_playlist_delete.inc): pvec_selectrecord, a libcstl vector of int
+ # (1 ticked), as V2.1's own select_recordempty (1 when none is) and batch_delete_file walk it
+ 'select_recordempty': ('int', 'void'),
+ 'vector_size': ('unsigned', 'void *'),
+ 'vector_at': ('void *', 'void *, unsigned'),
 }
 WM_PAINT_LEAF_M1PLUS = ('window_manager_paint', 0x677b44, 'ringnav_wm_paint', (0x10800009, 0, 0x8c820088))
 # style_get_gradient (docs/m1plus-ipod-ui.md 4.1) is the Q2's leaf again: beqz a0; nop; lw v0, 0(a0), then the
@@ -222,6 +227,13 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
         'MQA_ACCEPT': ((0x5d0030, 0x0320f809, 'mqa_accept'),),
         # V2.1 toolsFixId3ErrorCode's round-trip strcmp, with the Latin-1 source in a1.
         'TAG_TEXT': ((0x5ec5e4, 0x0320f809, 'ringnav_gbk_tag'),),
+        # V2.1 toolsGetMusicInfo's genre strcpy (dst info+0x200, the 0x80-byte style field before the title at
+        # +0x280; its delay slot moves the joined genre into a1), its lw $t9 strcpy pinned (1.6.7).
+        'GENRE_COPY': ((0x5ecaa0, 0x0320f809, 'ringnav_genre_copy'), (0x5eca9c, 0x8f99f324, None)),
+        # V2.1 importPlayList's (0x4ef394) jalr toolsGetDirectoryM3u8, its lw $t9 pinned; the delay slot's addiu
+        # of the export folder stays. The card apps' library update is unported (addon.c library_poll), so
+        # addon_m3u_dir lists the whole folder: on M1 it is the watchdog's long count for the import (1.6.2).
+        'M3U_DIR_CALL': ((0x4ef434, 0x0320f809, 'addon_m3u_dir'), (0x4ef430, 0x8f99bad8, None)),
         # V2.1's CUE parser has seven bal conversions plus a shared jalr for track titles.
         # The jalr can call toolsIconvConvert or toolsIconvConvertNew (UTF-8 <- GBK).
         'CUE_TEXT': ((0x5e72dc, 0x0411f1b4, 'ringnav_cue_text'),
@@ -370,6 +382,7 @@ CALL_SITE_PURPOSES = {
     'HOLD_KEYS': 'Play/Pause and Return hold time',
     'MAINSCHEDULING_CALL': 'pace player scheduling',
     'TAG_TEXT': 'tag text GBK only when it reads as GBK',
+    'GENRE_COPY': 'long genre tags stay inside the style field',
     'CUE_TEXT': 'CUE text read as UTF-8, GBK or Windows-1252',
     'SCAN_DIRS': 'the library scan skips hidden folders',
     'STREAM_POLL_CALLS': 'stream threads park while idle',
@@ -407,8 +420,6 @@ M1PLUS_PORTS = {
     'TABLE_LOAD_CALL': ('unported', '1.7.0: Classic pooled-row faces; Classic is unported'),
 
     # Hooks
-    'createPlayListItem': ('unported', 'playlist ID allocation (1.5.5); V2.1 allocator not yet pinned'),
-    'playlist_delete_click': ('unported', 'transactional playlist deletion (1.5.5); V2.1 delete callback not yet pinned'),
     'on_wm_keydown_before_fun': ('q2only', "Key Tone's click on the wheel's press; V2.1 has no buzzer command (progress 15)"),
     'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
     'localmusic_page_init': ('ported', "the Library's rows are the Q2 Pod page's Library page (progress 17)"),
@@ -440,8 +451,6 @@ M1PLUS_PORTS = {
     # unhooked until its item ports it
     'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
                          "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
-    'mclIsUtf8WithoutBOM': ('unported', "an .lrc's UTF-8 test that reads 4-byte characters (1.5.9); V2.1's "
-                            'mclIsUtf8WithoutBOM is 0x5d1824, not yet checked'),
     # 1.6.7's audio timing and Previous's resume ask, V1.32's player routines (docs/m1plus-unported.md)
     'player_seek_time': ('unported', "a user's seek stamps a press (1.6.7, playback.c press_stamp); V2.1's seek_time not pinned"),
     'player_seek_start': ('unported', "Previous's restart past 10 s asks too (1.6.7 restart_refused); V2.1's not pinned"),
@@ -449,7 +458,6 @@ M1PLUS_PORTS = {
     # Call sites
     'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's mclStartPlayer not pinned"),
     'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's mclStartPlayer not pinned"),
-    'GENRE_COPY': ('unported', "long multi-value genres kept out of titles (1.6.7); V2.1's tag reader's copy not pinned"),
     'SONG_UNKNOWN_CALL': ('q2only', "a song row's empty artist line under a set without text-row artwork: Classic's only (1.6.7)"),
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -467,18 +475,12 @@ M1PLUS_PORTS = {
     'STREAM_POLL_CALLS': ('native', "V2.1 creates a Tidal URL worker per request (get_tidal_trackurl, 0x512ed0); "
                           "no boot worker or idle start-flag poll, and no Baidu Pan"),
     'TIDAL_PAGE_DONE': ('unported', 'Tidal lists past 50 (1.5.0): goes with the Tidal list threads'),
-    'M3U_DIR_CALL': ('unported', "a card app's library update imports only its own playlists (1.5.9); V2.1's "
-                     'importPlayList is 0x4ef394, its listing call not yet found'),
     'timezone_row': ('unported', "the time zone rows' offsets in effect now (1.5.0): goes with select_timezone"),
     'folder_click': ('unported', "videos played from Folder view (1.5.0), where the Q2's Videos row now opens; "
                      "V2.1's folder row click is not yet found. The M1's Videos row keeps 1.4.5's list "
                      '(m1plus_books_video.c videos_open)'),
     'main_loop_post_key_event': ('unported', "SyncLink's keys past the Buttons lock (1.5.0); V2.1's is 0x693d9c, "
                                  'and its Buttons lock is its own (keylock_rows native): not yet checked'),
-    'device_reboot': ('unported', "a reboot saves the queue first (1.5.0); V2.1's device_reboot is 0x4e743c, its "
-                      'queue on a reboot not yet checked'),
-    'dialog_checkfw_dialog_init': ('unported', "the firmware update's dialog saves the queue (1.5.0); V2.1 has no "
-                                   'dialog_checkfw_dialog_init by name'),
     'get_tidal_trackurl': ('native', "V2.1 launches an on-demand URL worker instead of waking a polling worker"),
     'tidalPlaylistDetailThd': ('unported', "Tidal playlists past 50 (1.5.0); V2.1's is 0x516b9c, but V2.1 has no "
                                'tidal_albuminfo_thread_run, its done flag not yet found'),
@@ -567,6 +569,7 @@ M1PLUS_RAW_GLOBALS = {'g_power_longkey': 0xa041b8}
 # Local V2.1 routines, each checked to be a PIC entry with V2.1's GOT base.
 M1PLUS_PRIVATE_FUNCTIONS = {
     'm1_home_click': 0x533b80,  # V2.1 Home destination dispatcher; widget name is the native menu id
+    'playlist_delete_click': 0x53dbcc,  # playlist_page's Delete button click (widget_on at 0x53d78c), hooked
 
     # The status bar's 1 s tick (docs/m1plus-ipod-ui.md 4.2): systembar_timer_start (0x5453c8) arms a 1000 ms timer on
     # 0x545394, which calls this with 0. It finds the bar's widgets by name from the system_bar global, as the Q2's
@@ -680,6 +683,13 @@ M1PLUS_HOOKS = {
     'systemset_display_page_init': (0x4a5eb8, 'ringnav_display', 'display'),
     'get_screensaver_image': (0x4d7524, 'lockscreen_images', 'saverlist'),
     'save_memoryplay_info': (0x4e3340, 'ringnav_savequeue', 'savequeue'),
+    # A reboot and the card update are clean ends (ringnav_clean_end: the watchdog stops, no crash log at the next
+    # boot) and save the queue first, as power-off does (1.5.0). V2.1's update is the card's alone: its dialog's
+    # init stops the player and starts the update_firmware thread (0x471070), whose timer (0x471198) reboots; it
+    # stands for V1.32's dialog_checkfw_dialog_init. A power key held (on_poweroff_keylong_fun, 0x53ebf0) runs
+    # reboot itself: a forced restart, logged as one.
+    'device_reboot': (0x4e743c, 'ringnav_reboot', 'reboot'),
+    'dialog_cardupdate_dialog_init': (0x471578, 'ringnav_checkfw', 'checkfw'),
     'mclLoadPlayList': (0x5d1f28, 'ringnav_load', 'load'),
     'mclNextSong': (0x5d5800, 'ringnav_next', 'next'),
     'mclPrevSong': (0x5d56dc, 'ringnav_prev', 'prev'),
@@ -690,6 +700,9 @@ M1PLUS_HOOKS = {
     'start_playqueue': (0x4e47d0, 'ringnav_start_queue', 'start_queue'),
     # A track's LYRICS tag without a .lrc; stock's loader runs first, from every caller's GOT call
     'mclLoadExLyric': (0x5d41e4, 'ringnav_lyric', 'lyric'),
+    # An .lrc's UTF-8 test (1.5.9), the local loader's (bal at 0x5d3d34) and the match page's (online_loadexlyric,
+    # GOT call at 0x508da0): V2.1's reads 6 bytes from the first non-ASCII one and no 4-byte character, as V1.32's did
+    'mclIsUtf8WithoutBOM': (0x5d1824, 'ringnav_lrc_utf8', None),
     # Online lyric and cover search: LRCLIB, then MusicBrainz and iTunes, before stock's Kugou. Both,
     # online_getkeyword_info and online_setkeyword_info are V1.32's but for their data addresses.
     'kugou_obtainlyric': (0x509ee4, 'ringnav_lyric_search', None),  # LRCLIB alone (1.5.0): no stock trampoline
@@ -740,6 +753,14 @@ M1PLUS_HOOKS = {
     # Add to Playlist (ipod-ui 4.7): each playlist_page keeps the add mode it opened with, and Now Playing's picker
     # keeps its guarded pick on the rows New Playlist rebuilds
     'playlist_rebuild': (0x53e74c, 'ringnav_playlist', 'playlist'),
+    # New Playlist and importPlayList's create (1.5.5): V2.1's allocator takes the first row whose id isn't its
+    # index (0x4eed5c), so the name-ordered list (ringnav_library_query) gives it an occupied id, and it returns
+    # that id although addPlayList ignored the failed insert. The Q2's allocator reads the ids under BEGIN IMMEDIATE.
+    'createPlayListItem': (0x4eeca8, 'ringnav_playlist_create', None),
+    # Delete Playlist (1.5.5): playlist_page's Delete button click, V2.1's own multi-select (no playlistsmore_page);
+    # every ticked playlist in one transaction (m1plus_nav_playlist_delete.inc), where stock's batch_delete_file
+    # (0x4e1408) deletes each header and its entries apart and says success whatever happened.
+    'playlist_delete_click': (0x53dbcc, 'ringnav_playlist_delete', None),
 }
 
 def m1plus_symbols(syms, symbol_table):
@@ -838,6 +859,14 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
                       (0x42fa78, 0x14400052, 0x10000052)),  # bnez $v0 to the insert -> b
     # MPlayer pause loop: usec_sleep(20000) in its command/event loop, 50 ms as upstream.
     'pause_sleep': (0x42ff2c, 0x24044e20, 0x3404c350),
+    # peq.py's MEDIA_INFO_NULL: get-music-info's NULL sh_audio branch answers as with no stream (the block is V1.32's
+    # 0x42c030 less 0x9c; the reply at 0x42c3c0 sends "{media-info\no-playing-status}", 0x8864e0)
+    'media_info_null': ((0x42bfcc, 0x10600008, 0x106000fc),   # beqz $v1, 0x42bff0 -> 0x42c3c0 (Q2 0x42c068)
+                        (0x42c4ec, 0x8fa21b20, 0x1060ffb4)),  # lw $v0 (dead) -> beqz $v1, 0x42c3c0 (Q2 0x42c588)
+    # peq.py's FLAC_META_EOF: demux_audio_open's FLAC metadata walk ends on a length read past the file's end (V1.32's
+    # walk less 0x540; 0x490704 follows the last block's branch, as V1.32's 0x490c44)
+    'flac_meta_eof': ((0x490660, 0x06000163, 0x06000028),   # bltz $s0, 0x490bf0 -> 0x490704 (Q2 0x490ba0)
+                      (0x492464, 0x1000f9e2, 0x1000f8a7)),  # b 0x490bf0 -> b 0x490704 (Q2 0x4929a4)
     'seek_slot': 0x89f76c,
     'stock_seek': 0x48cc6c,
     'id3_calls': (0x48ee74, 0x492028, 0x492ab4),
@@ -993,6 +1022,10 @@ def patch_player(raw, out):
         patch_word(data, address, stock, patched, 'Equalizer rate gate')
     pause_addr, pause_old, pause_new = prof['pause_sleep']
     patch_word(data, pause_addr, pause_old, pause_new, 'pause loop sleep')
+    for address, stock, patched in prof['media_info_null']:
+        patch_word(data, address, stock, patched, 'Music info with no stream')
+    for address, stock, patched in prof['flac_meta_eof']:
+        patch_word(data, address, stock, patched, 'FLAC metadata at EOF')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')
@@ -1226,7 +1259,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     release = m1_release[0] if m1_release else VERSION
     header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{release}{f" dev {dev_count}" if dev else ""}"',
                f'#define Q2POD_TAG "{"" if dev else release}"',  # netupdate.c (unported on M1): the release tag, none when --dev
-               f'#define Q2POD_DEV {1 if dev else 0}',  # navigation.c stale_note (Q2 only: stale_heal is unported)
+               f'#define Q2POD_DEV {1 if dev else 0}',  # navigation.c stale_note (Q2 only: the M1's stale_heal logs nothing)
                '#define Q2POD_REPO "jtliang24/q2-pod"',  # netupdate.c (unported on M1): the repo of its releases
                f'#define Q2POD_UA "Q2Pod/{release} (https://github.com/jtliang24/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
     themes, theme = m1_themes()
