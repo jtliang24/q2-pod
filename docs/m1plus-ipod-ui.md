@@ -48,7 +48,7 @@ Moving between them is clunky.
    - `m1plus-roadmap.md` section 5 points here.
    - The ground rule "Prefer V2.1's own UI conventions" becomes "the iPod UI's conventions".
    - "Every page has an explicit Back button" is restated for the chevron.
-   - [m1plus-unported.md](m1plus-unported.md#the-ipod-ui)'s row changes to "in progress".
+   - [m1plus-unported.md](m1plus-unported.md)'s iPod UI row changes to "in progress".
    - R1 is unchanged: Q2 Legacy and iPod `update.tar` stay byte-identical (`test/q2compare.py`).
 
 ## Phase 1: The M1 compiles the iPod path

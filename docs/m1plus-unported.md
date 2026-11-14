@@ -21,14 +21,12 @@ to its [progress](m1plus-progress.md) section.
 
 | Feature | Since | Q2 Pod's pieces | Status |
 |---|---|---|---|
-| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8); Carousel, Click With Headphones, the art following the player's cover (1.5.9); Single Press Scrub (1.6.0) | Ported (ipod-ui Phases 1 to 5; released in 1.7.0-m1.1) |
 | [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone`; `timezone_row`, `TIMEZONES` (1.5.0) | Planned |
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
 | [Battery: the MQA side chain](#battery-fixes) | 1.2.9 | `MQA_GATE`, `MQA_PROBE` (`tools/peq.py`) | Planned |
 | [Battery: Tidal's stream thread parked](#battery-fixes) | 1.4.5 | `STREAM_POLL_CALLS` and `get_tidal_trackurl` (1.5.0; 1.4.5's `STREAM_POLLS`) | Native; live validation pending |
 | [Battery: the kernel modules' idle clocks](#battery-fixes) | 1.5.0 | `tools/aic.py`, `rotator.py`, `pwm.py`, `mcu_park.py` (`--aic-idle-wait`, `--rotator-lazy-clock`, `--pwm-idle-clock`, `--mcu-idle-sleep`) | Planned |
 | [FLAC fast paths](#flac-fast-paths) | 1.5.0 | `tools/flac.py`, `patch/flac_*.c` (`tools/peq.py`, `--flac-experiments`) | Planned |
-| [Display's sub-pages](#displays-sub-pages) | 1.5.0 | `ringnav_display`'s Appearance, Coverflow and Controls, `display_sub` | Ported (ipod-ui 4.3, 4.5, 4.6) |
 | [Videos in Folder view](#videos-in-folder-view) | 1.5.0 | `folder_click`, `books_video`, `LOAD_DIRECTORY_RET` (1.5.5) | Planned |
 | [A reboot keeping the place](#a-reboot-keeping-the-place) | 1.5.0 | `device_reboot`, `dialog_checkfw_dialog_init` (V2.1's `dialog_cardupdate_dialog_init`) | Ported; device check pending (progress 90) |
 | [SyncLink's keys past the Buttons lock](#synclinks-keys) | 1.5.0 | `main_loop_post_key_event` | Planned |
@@ -47,15 +45,12 @@ to its [progress](m1plus-progress.md) section.
 | [An artist's albums tab's album-artist rewrite](#an-artists-albums-tab) | 1.2.9 | `toolsQueryContentDbTable` | Planned |
 | [Folder's roots without OTG](#folders-roots-without-otg) | 1.2.2 | `folder_load_top` | Planned |
 | [The Wi-Fi transfer page](#the-wi-fi-transfer-page) | 1.3.0 | `WEB` | Planned |
-| [View Queue's stock queue page](#view-queues-stock-queue-page) | 1.2.2 | `qm_run`'s `QA_QUEUE` off Shuffle (`navigator_to("playerqueue_page")`) | Ported (V2.1's queue, progress 84) |
 | [The rip-complete toast in Light Mode](#the-rip-complete-toast) | the M1's own | `dialog/rippercompleted_dialog.bin` (`tools/m1plus_ipod.py` `REWRITES`) | Planned |
-| [Quick Settings' brightness through a swipe up](#quick-settings-brightness) | 1.3.8 | `g_dropdown_menu_state`; `quick_stuck` (1.4.5) | Ported (ipod-ui 4.7, progress 82) |
 | [Knob: Navigation on Set Time Manually](#set-time-manually) | the M1's own | an `m1plus_contexts.inc` row | Planned |
 | [Tidal's cache and Tidal Downloads](#tidal) | 1.2.2 | `tidal_play`, `tidal_downloads`, `REC_TIDAL_ID` | Planned |
 | [Tidal's lists past 50](#tidal) | 1.5.0 | `tidalPlaylistDetailThd`, `tidalAlbumDetailThd`, `tidalColTracksThd`, `TIDAL_PAGE_DONE` | Planned |
 | [Knob: Navigation on the Tidal and HiFi store pages](#tidal) | the M1's own | `m1plus_contexts.inc` rows | Planned |
 | [Card apps' library update](#card-apps-library-update) | 1.5.9 | `addon_library.c` (`library_poll`), the caps' `library` | Planned (`M3U_DIR_CALL` ported, progress 90) |
-| [A playlist row's hold menu](#a-playlist-rows-hold-menu) | 1.5.9 | `qm_hold`'s `QM_PLAYLIST` | Ported; dev 57 device pass |
 | [Night Shift](#night-shift) | 1.6.0 | `nightshift.c`, `night_row`, `LCD_*` (`offsets.inc`) | Planned |
 | [The watchdog and the crash log](#the-watchdog-and-the-crash-log) | 1.6.1, 1.6.2 | `wdt_poll`, `state_poll`, `WDT_MS`, `WDT_LONG_MS` (`navigation.c`) | Ported and device-checked (progress 90); the watchdog runs on `--dev` builds only until release builds turn it on |
 | [A USB DAC across a gapless change](#a-usb-dac-across-a-gapless-change) | 1.6.1 | `ao_init` (`peq_player.c`), `AO_INIT_SLOT`, `USB_BUFFER` (`tools/peq.py`) | Planned |
@@ -78,6 +73,19 @@ playlist allocation and deletion, an .lrc's UTF-8 test, the stale press backstop
 `LOOP_PRESSED`, `QUEUE_LEAF` and `WHEEL_LOG_HOOK` stay the Q2's), long multi-value genres, and the player's
 `MEDIA_INFO_NULL` and `FLAC_META_EOF`.
 
+Ported and passed on the device earlier:
+- The iPod UI: ipod-ui Phases 1 to 5, first released in 1.7.0-m1.1
+  ([progress section 89](m1plus-progress.md#89-phase-6-170-m11-the-ipod-uis-first-release-nov-14)). The looks
+  left open are in [m1plus-ipod-ui.md](m1plus-ipod-ui.md)'s Aesthetics queue.
+- Display's sub-pages (Appearance, Coverflow and Controls): ipod-ui 4.3
+  ([progress section 66](m1plus-progress.md#66-phase-43-the-settings-pages-nov-6)), then 4.5 and 4.6.
+- View Queue off Shuffle opens V2.1's queue (`dialog/playqueue_dialog`), which fixed G1
+  ([progress section 84](m1plus-progress.md#84-v064ms-device-pass-fixes-nov-12)).
+- Quick Settings' brightness through a swipe up (`g_dropdown_menu_state`, `quick_stuck`): ipod-ui 4.7
+  ([progress section 82](m1plus-progress.md#82-phase-47-quick-settings-the-confirm-dialog-and-add-to-playlist-nov-12)).
+- A playlist row's hold menu (`QM_PLAYLIST`): ipod-ui 4.4, dev 57
+  ([progress section 68](m1plus-progress.md#68-phase-44-compact-library-holds-and-search-nov-7)).
+
 Era, Western tag/CUE text, hidden-folder exclusions, Streaming Configuration, user-space idle
 changes and lyrics passed the combined device checks in [progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28).
 The [validation record](m1plus-validation-1.5.0.md) retains limits of the hardware pass, including
@@ -86,9 +94,6 @@ album-worker cancellation and USB-storage shutdown covered in emulation, and the
 ## Known issues on the M1
 
 Found on the device and not fixed yet. Each goes to a fix round of its own:
-- **G1. View Queue does nothing without a shuffle.** Fixed in progress 84: it opens V2.1's queue
-  ([View Queue's stock queue page](#view-queues-stock-queue-page)). Found before 1.5.8
-  ([progress section 54](m1plus-progress.md#54-fixes-for-the-158-device-pass-nov-1)).
 - **G2. Now Playing shows a refused track.** After the player refuses a file (the oversized copy in
   section 54), Now Playing's position and the album list's highlight move to it while the previous
   track keeps playing. Cosmetic.
@@ -115,20 +120,6 @@ These features run on the M1, but a few of their suite cases can't run there:
   choice.
 
 ## Notes
-
-### The iPod UI
-
-Ported on `feature/m1-ipod` (the user's choice, Nov 2), per [m1plus-ipod-ui.md](m1plus-ipod-ui.md), and first
-released in 1.7.0-m1.1 (Phase 6). Its looks left open are in that plan's Aesthetics queue.
-This replaces the Oct 26 decision to keep V2.1's own look. Upstream 1.5.9 deleted the Legacy path the
-M1 compiles, and the M1's mix of V2.1 pages and Q2 Pod pages is clunky (roadmap section 5). The iPod
-UI is built for the Q2's 375x320 landscape screen and touch wheel, and patches V1.32's UI assets,
-styles and code layout. The M1 version reflows it for the 320x480 portrait touchscreen and knob, and
-rewrites V2.1's assets the same way. Phase 1 is done: the M1 compiles the iPod path, and the port report
-lists each iPod hook as `unported` with the Phase 4 item that ports it (`style_get_color`,
-`image_manager_add`, `widget_on_paint_background` and `ui_loader_load_widget_with_parent` 4.1;
-`systembar_showface` 4.2; `list_get_img_pic` 4.4; `playlist_rebuild` 4.7). `bigcover_page_init` is ported (4.6, progress 71),
-and `playlist_rebuild` (4.7, progress 82).
 
 ### Now Playing's owners and pages
 
@@ -203,21 +194,6 @@ row's click.
 `tools/flac.py`. V2.1's `hciplayer` is another build: `PLAYER_PROFILE` takes none of its words, and its
 decoder's routines are to be found by the same callers.
 
-### Display's sub-pages
-
-1.5.0 splits Display into Appearance (iPod), Coverflow and Controls, each reopening stock's page with its
-own rows. Ported with the iPod settings pages (ipod-ui 4.3, progress 66), device-checked through progress 66 and 68:
-- **Appearance:** Theme, Light Mode, Accent, Home and Battery.
-- **Coverflow:** Artist Albums, Coverflow Sort and Refresh Coverflow.
-- **Controls:** Shortcut, Smart Awake, Hold Return (Recent or Home), then the knob and its direction.
-
-Home (in Appearance) and Shortcut came with Home (4.5, progress 69). The M1's Shortcut offers Favorites, Shuffle,
-Rated Albums, Artists and Albums: Rockbox and Games stay Q2-only, and a stored value for either reads as Favorites
-until the row is changed. Centred Now Playing came with Now Playing (4.6, progress 71): it opens V2.1's own page. Hold Return is
-ported with the Library (4.4): hold Previous in Knob: Navigation wherever it is Back, or hold the status bar
-chevron in either Knob mode. Corners (square glass), Wheel QS, Wheel Sensitivity and Click With Headphones (no wheel, no
-buzzer) stay Q2-only. V2.1's page reopens over itself as the Q2's does.
-
 ### Videos in Folder view
 
 1.5.0's Library Videos row opens Folder view, where `folder_click` (V1.32's `0x521bc4`) plays a video
@@ -281,25 +257,12 @@ porting.
 The Q2's page is in English and takes folder uploads. V2.1 has `/usr/share/web`, whose files are to be
 checked against the patch's strings.
 
-### View Queue's stock queue page
-
-Ported in progress 84. A hold menu's View Queue off Shuffle (`playback_listable()` false) opened V1.32's
-`playerqueue_page`, which V2.1 doesn't have, so the row did nothing. It now opens V2.1's queue,
-`dialog/playqueue_dialog`, as Now Playing's More does (`0x53b14c`): Enlarged Art's countdown (`BC_IDLE`) reset,
-then `navigator_to`. The dialog's init reads only the player's list, so it opens over any page.
-
 ### The rip-complete toast
 
 V2.1's `rippercompleted_dialog` uses the same black-box art as the toast (`confirminfo_bg`), so in Light Mode its
 flipped text may sit dark on black, as the toast's did before progress §83. Its tree differs from
 `msginfo_dialog`'s (an OK button over the art, the art in one state), so `msginfo_dialog`'s rewrite doesn't
 apply. It shows only after a CD rip.
-
-### Quick Settings' brightness
-
-Ported in Phase 4.7 (progress 82). V2.1's `dropdown_menu_state` (`0xa05a2c`) has V1.32's states (0 shut, 1 and 2
-sliding, 3 open), so `g_dropdown_menu_state` is aliased to it, and 1.4.5's `quick_stuck` fires on the M1. The
-brightness is V2.1's `slider_backlight`, laid out as the iPod's.
 
 ### Set Time Manually
 
@@ -375,14 +338,6 @@ answered on the Q2 alone: `addon_poll` skips `library_poll` on M1, and the caps 
 `library`, so an app doesn't ask. The import reads V1.32's Playlists class (`0xf00b`) and patches
 `importPlayList`'s listing call (`M3U_DIR_CALL`). On V2.1 that call is at `0x4ef434` and is ported (progress 90),
 listing the whole folder under the watchdog's long count; `library_poll` and the caps stay Q2 only for now.
-
-### A playlist row's hold menu
-
-1.5.9's Play/Pause hold on a Playlists row opens the queue menu (Play Next, Add to Queue, Shuffle,
-More…). Ported in the Library item (m1plus-ipod-ui.md 4.4): Play/Pause hold and touch long-press open
-`QM_PLAYLIST` on V2.1's numeric playlist rows. More… opens the payload's playlist editor
-(`m1plus_nav_playlist_hold.inc`), since V2.1 has no `playlistsmore_page`. New, Import and the Add to Playlist
-picker keep their own actions. The dev 57 device pass confirmed the menu and editor.
 
 ### Night Shift
 
