@@ -13909,8 +13909,10 @@ if not is_m1plus:
 # A reboot keeps the place (playback.c ringnav_reboot): Restart (device_reboot) and the firmware update's
 # dialog, which stops the player before it flashes, save as power-off does (save_memoryplay_info, which
 # ringnav_savequeue hooks) before stock runs, with the dialog's arguments; a stopped player (1) saves nothing.
+# V2.1's update is the card's: dialog_cardupdate_dialog_init, which stops the player and starts the update's thread.
+REBOOTS=(('device_reboot','reboot'),('dialog_cardupdate_dialog_init' if is_m1plus else 'dialog_checkfw_dialog_init','checkfw'))
 if 'device_reboot' in HOOKS:
-    for entry,stock in (('device_reboot','reboot'),('dialog_checkfw_dialog_init','checkfw')):
+    for entry,stock in REBOOTS:
         for status in (1,2,3):
             m=Machine(); m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,status)
             m.handlers[payload_syms[f'stock_{stock}_trampoline']]='stock_'+stock
@@ -13921,6 +13923,11 @@ if 'device_reboot' in HOOKS:
     passed()
 else:
     not_ported('A reboot saves the queue first (device_reboot and dialog_checkfw_dialog_init, 1.5.0)')
+if is_m1plus:  # both of V2.1's routines begin with the PIC prologue the hook replaces and the trampoline resumes past
+    for entry,_ in REBOOTS:
+        d=(B/'stock-demo').read_bytes(); from build import fileoff
+        w=struct.unpack_from('<3I',d,fileoff(d,HOOKS[entry][0])); assert w[0]>>16==0x3c1c and w[1]>>16==0x279c and w[2]==0x0399e021,(entry,[hex(x) for x in w])
+    passed()
 
 if is_m1plus: not_ported("The touch wheel's ticks: every one moves, and Home's ends bump, then wrap (ipod-ui 4.8, Q2 only; the M1's knob on Home is m1_home_modes)")
 else:

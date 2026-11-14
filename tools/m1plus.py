@@ -479,10 +479,6 @@ M1PLUS_PORTS = {
                      '(m1plus_books_video.c videos_open)'),
     'main_loop_post_key_event': ('unported', "SyncLink's keys past the Buttons lock (1.5.0); V2.1's is 0x693d9c, "
                                  'and its Buttons lock is its own (keylock_rows native): not yet checked'),
-    'device_reboot': ('unported', "a reboot saves the queue first (1.5.0); V2.1's device_reboot is 0x4e743c, its "
-                      'queue on a reboot not yet checked'),
-    'dialog_checkfw_dialog_init': ('unported', "the firmware update's dialog saves the queue (1.5.0); V2.1 has no "
-                                   'dialog_checkfw_dialog_init by name'),
     'get_tidal_trackurl': ('native', "V2.1 launches an on-demand URL worker instead of waking a polling worker"),
     'tidalPlaylistDetailThd': ('unported', "Tidal playlists past 50 (1.5.0); V2.1's is 0x516b9c, but V2.1 has no "
                                'tidal_albuminfo_thread_run, its done flag not yet found'),
@@ -687,6 +683,13 @@ M1PLUS_HOOKS = {
     'save_memoryplay_info': (0x4e3340, 'ringnav_savequeue', 'savequeue'),
     'mclLoadPlayList': (0x5d1f28, 'ringnav_load', 'load'),
     'mclNextSong': (0x5d5800, 'ringnav_next', 'next'),
+    # A reboot and the card update are clean ends (ringnav_clean_end: the watchdog stops, no crash log at the next
+    # boot) and save the queue first, as power-off does (1.5.0). V2.1's update is the card's alone: its dialog's
+    # init stops the player and starts the update_firmware thread (0x471070), whose timer (0x471198) reboots; it
+    # stands for V1.32's dialog_checkfw_dialog_init. A power key held (on_poweroff_keylong_fun, 0x53ebf0) runs
+    # reboot itself: a forced restart, logged as one.
+    'device_reboot': (0x4e743c, 'ringnav_reboot', 'reboot'),
+    'dialog_cardupdate_dialog_init': (0x471578, 'ringnav_checkfw', 'checkfw'),
     'mclPrevSong': (0x5d56dc, 'ringnav_prev', 'prev'),
     'mclSetPlayMode': (0x5d278c, 'ringnav_mode', 'mode'),
     'mclSetPlaySpeed': (0x5d281c, 'ringnav_speed', 'speed'),
