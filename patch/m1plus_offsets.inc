@@ -14,8 +14,16 @@
 #define UI_W 320
 #define UI_H 480
 #define BOTTOM 450
+#define STATUS_H 30 /* the status bar: BOTTOM is UI_H - STATUS_H */
 #define CORNER_R 0
-#define STATUS_MARGIN 0
+#define STATUS_MARGIN 6 /* corner_x(7, 16) + STATUS_PAD of tools/ipod.py: the glass is square, the slack stays */
+#define BAR_BACK_W 32 /* the status bar's back chevron: its image's width, STATUS_H tall (ipod-ui 4.2) */
+/* Its tap (ipod-ui 4.3): twice the image's width, so a finger (or a case's lip) finds it, and in Minimal SET_TOP into
+ * the page too, above a settings list's first row (Classic's sits flush under the bar); the image keeps its slim
+ * look. */
+#define BAR_BACK_HIT_W 64
+/* The status bar's play state as a Play/Pause button: its tap's width, centred on the icon (m1plus_nav_back.c). */
+#define BAR_PLAY_HIT_W 45
 #define BAR_CORNER_R 0
 #define I(p, o) (*(int *)((char *)(p) + (o)))
 #define P(p, o) (*(void **)((char *)(p) + (o)))
@@ -33,13 +41,17 @@
  * window_close and widget_to_global, emitter widget_off_by_func, children layout
  * widget_set_children_layout, vtable widget_get_type 0x70); subclasses still start at 0x78. */
 #define W_PARENT 0x44
+#define W_KEY_TARGET 0x54 /* the child that takes keys: widget_on_keyup @0x670e44, widget_on_pointer_down_children @0x671588 */
 #define W_CHILDREN 0x58
 #define W_EMITTER 0x5c
 #define W_CHILDREN_LAYOUT 0x64
 #define W_VT 0x70
-#define CHILDREN_LAYOUT_VTABLE 0x10
-#define DEFAULT_LAYOUT_X_MARGIN 0x18
-#define DEFAULT_LAYOUT_SPACING 0x1a
+/* children_layouter_t: V2.1's str_t params is 12 bytes (V1.32's 16), so its vtable is at 0xc
+ * (children_layouter_default_create, 0x63af2c). The default layouter's rows and cols follow at 0x10
+ * and 0x12, then its x, y and spacing bytes (its set_param, 0x63a0e4: x 0x14, y 0x15, s 0x16). */
+#define CHILDREN_LAYOUT_VTABLE 0x0c
+#define DEFAULT_LAYOUT_X_MARGIN 0x14
+#define DEFAULT_LAYOUT_SPACING 0x16
 #define EMIT_TYPE 0x08
 #define EMIT_PENDING_REMOVE 0x14 /* emitter_remove_item sets it there; V2.1 keeps no other flag */
 #define EMIT_NEXT 0x20
@@ -63,6 +75,7 @@
 #define EVENT_TIME 0x08 /* low word of the uint64 time_now_ms stamp: V2.1's event_init (0x6f4c40) stores it at 8 */
 #define EVENT_X 0x18           /* pointer_event_init @0x640298 */
 #define EVENT_Y 0x1c
+#define EVT_POINTER_FIRST 0xff /* the pointer events the wm dispatches: tslib_run's down 0xff (V2.1 0x637634, as EVT_INPUT_POINTER_DOWN) */
 #define EVT_POINTER_DOWN 0x100 /* wm registers on_wm_tsdown_before_fun for this type @0x523ef0 */
 #define EVT_POINTER_MOVE_BEFORE 0x102 /* wm move-before forwards this type to the down hook @0x523ed4 */
 #define EVT_POINTER_UP_BEFORE 0x104
@@ -82,10 +95,6 @@
 #define ROW_STYLE "list_item_style"            /* V2.1's settings row (list_row_core) */
 #define ROW_LABEL_STYLE "srlabel_leftwhite21_style"
 #define ROW_CHEVRON "right_arrow"
-/* page_list's rows on M1 (m1plus_coverflow_rows.c): list_row_core's height, the caption at its x */
-#define PAGE_ROW_H 64
-#define PAGE_ROW_X 12
-#define PAGE_ROW_W 270
 #define VIEW_SYSSET "sysset_scrollview"
 #define VIEW_POWER "standby_scrollview" /* Idle (powermanager_page) */
 #define VIEW_DISPLAY "display_scrollview"
@@ -96,7 +105,11 @@
 #define ICON_POWER "sset_powermanager"
 #define ICON_KEYLOCK "sset_keylock"
 #define ICON_DISPLAY "sset_display"
+/* Display's four V2.1 rows (systemset_display_page_init builds them with no icon), in its order: Brightness, Screen
+ * Off, Lock screen, Atmosphere Lamp Settings; all V2.1's own (settings_icons) */
+#define DISPLAY_STOCK_ICONS { ICON_DISPLAY, "sset_lighttime", "sset_screenlock", "sset_atmosphereled" }
 #define ICON_COVERMODE "pset_covermode"
+#define ICON_KEYTONE ICON_DISPLAY /* Click With Headphones is Q2 only (no buzzer): no row on M1 */
 #define ICON_FOLDERJUMP "pset_jumpfolder"
 #define ICON_MEMPLAY "pset_memplay" /* Resume Songs' row */
 #define ICON_BALANCE "pset_balance" /* Mono Audio's row */
@@ -110,35 +123,24 @@
 #define STYLE_LABEL_WHITE18C "label_centerwhite20_style"
 #define STYLE_LABEL_WHITE20C "label_centerwhite20_style"
 #define STYLE_LABEL_WHITE20L "navbar_leftlabel_white"
+/* Now Playing's genre scroller (genre_fill, 1.6.7) stands in for V2.1's label_genre, inline white 18 px centred: V2.1's theme
+ * has no such named style, and its white centred scroll label is 20 px */
+#define STYLE_SCRLABEL_WHITE16C "srlabel_msgwhite_style"
 #define STYLE_SCRLABEL_WHITE20C "srlabel_msgwhite_style"
 #define STYLE_SCRLABEL_WHITE20L "srlabel_leftwhite20_style"
 #define STYLE_SCRLABEL_WHITE20R "srlabel_item_right_gray16_styl"
 #define STYLE_SCRLABEL_WHITE24L "srlabel_leftwhite22_style"
-/* V2.1's title-bar back button (btn_return in its pages' navigationbar_view), which back_button copies. */
+/* V2.1's title-bar back button (btn_return in its pages' navigationbar_view). The payload's pages no longer copy it: the
+ * status bar's chevron closes them (4.2). */
 #define STYLE_NAVBAR_RETURN "navbar_btnreturn_style"
 #define ICON_RETURN "return"
 #define ICON_RETURN_DOWN "return_down"
-#define BACK_W 48 /* back_button's width, the payload's title-bar height: titles start after it */
-/* V2.1's Home: home_page_init's grid builder (0x534064) fills home_sview, a slide_view, with one
- * 320x364 page view per HOME_CARDS ids of pdeq_choicemenu and sets home_sindicator's max to the pages.
- * Each card (0x533d8c) is a HOME_CARD_W x HOME_CARD_H view, two columns from HOME_CARD_X, rows from 0:
- * a clickable 66 px image at HOME_ICON_X, HOME_ICON_Y in home_<name>_style (bg_image <name>, pressed
- * <name>_down) and a line-wrapped label under it in STYLE_HOME_LABEL, from Home's own style file. */
-#define VIEW_HOME_SLIDES "home_sview"
-#define VIEW_HOME_DOTS "home_sindicator"
-#define STYLE_HOME_LABEL "label_centerwhitehome_white"
-#define HOME_CARDS 6
-#define HOME_PAGE_W 320
-#define HOME_PAGE_H 364
-#define HOME_CARD_X 6
-#define HOME_CARD_W 154
-#define HOME_CARD_H 118
-#define HOME_ICON_X 44
-#define HOME_ICON_Y 20
-#define HOME_ICON 66
-#define HOME_LABEL_Y 92
-#define HOME_LABEL_H 36
-#define HOME_FRAME_INSET 2 /* Knob: Navigation's frame inside a card (m1plus_nav_home.c) */
+#define M1_BACK_W 48 /* the width titles keep clear at a payload page's top left, where the button was: 4.4 and 4.5 relay them */
+/* The iPod Home in portrait (ipod-ui 4.5, tools/m1plus_ipod.py home_page): HOME_ROW rows, the library's pitch; Split's
+ * art across the top, UI_W x HOME_ART_H, the menu under it; Carousel's cards HOME_CARD square (190 px art, caption). */
+#define HOME_ROW 64
+#define HOME_ART_H 200
+#define HOME_CARD 290
 #define M1PLUS_CONTEXTS "m1plus_contexts.inc" /* V2.1's pages ringnav navigates, for patch/contexts.inc */
 /* A CHOICE picker's checked option: V2.1 has no "select" image; its pickers set "selected", and
  * "unselect" otherwise, as V1.32 (timezone_listitem_layout, 0x4a2388 and 0x4a2420) */
@@ -157,7 +159,7 @@
 #define EVT_WINDOW_CLOSE 0x12e
 #define PULL_SEARCH_PX 48       /* device tuning: release distance from the initial touch */
 #define PULL_CLAIM_PX 8
-#define QUICK_EDGE_PX 31        /* stock on_wm_tsmove_fun @0x4e8d10 */
+#define QUICK_EDGE_PX 81        /* V2.1 on_wm_tsmove_fun opens the pull-down from y < 81 (0x4cd830) */
 #define EVT_CLICK 0x10c
 #define EVT_FOCUS 0x10d
 #define EVT_BLUR 0x10e
@@ -241,7 +243,7 @@ static inline int arc_out(int r, int y) {
     while ((s + 1) * (s + 1) <= v) ++s;
     return 16 * r - s;
 }
-#define PLACEHOLDER (IPOD ? "default_album_flow" : "default_album_big") /* Cover Flow's and Spotify's missing art */
+#define PLACEHOLDER "default_album_flow" /* Cover Flow's and Spotify's missing art */
 #define VOL_POLL_MS 50 /* how often the volume indicator checks for a change */
 /* The volume panel off Now Playing (vol_paint): exactly over Quick Settings' brightness row
  * (tools/ipod.py checks it), its rounded corners clear of the 80px glass corners. */
@@ -273,7 +275,7 @@ static inline int arc_out(int r, int y) {
 #define BATT_PCT_DY 1
 #define BATT_CHARGE_RGB 0x34c759
 #define BATT_LOW_RGB 0xff1448
-#define BATT_ROOM 94
+#define BATT_ROOM 115 /* 320 - STATUS_MARGIN - (160 + CLOCK_TEXT / 2 + CLOCK_GAP): the right group clears the clock (ipod-ui 4.2) */
 /* Plain Bluetooth ink and codec reaches from the right edge of their stock canvases. */
 #define BT_REACH 10
 #define BT_CODECS { "bar_sbc", "bar_aac", "bar_aptx", "bar_aptxhd", "bar_ldac" }
@@ -303,11 +305,11 @@ static inline int arc_out(int r, int y) {
 #define HOME_DOT 6
 #define HOME_DOT_GAP 8
 #define HOME_SPLIT_W 160
-#define HOME_CLASSIC_ROW 314
-#define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
+#define HOME_MODERN_ROW 314 /* Modern's Full rows (1.6.7 renamed Classic, as 1.6.4 had it, Modern) */
+#define HOME_TOP 8 /* Minimal's decorative inset; Modern starts below the status bar. */
 #define HOME_CHEVRON_SHIFT 6
-#define HOME_CLASSIC_TEXT_X 20
-#define HOME_CLASSIC_LABEL_END (CHEVRON_W - 10)
+#define HOME_MODERN_TEXT_X 20
+#define HOME_MODERN_LABEL_END (CHEVRON_W - 10)
 #define NP_BAR_CLASSIC 8
 #define NP_BAR_MINIMAL 4
 #define MINIMAL_FILL 0xeeeeec
@@ -318,7 +320,7 @@ static inline int arc_out(int r, int y) {
  * colour flips too when it is mostly glyph: under LIGHT_SURFACE (1/n of its area) opaque and darker
  * than LIGHT_GLYPH, so a grey or dark disc keeps its white glyph. The M1 has no iPod build, so the
  * Q2's white chevron is never loaded. */
-#define LIST_INTO_WHITE M1_UNPORTED
+#define LIST_INTO_WHITE "right_arrow" /* V2.1's payload row chevron */
 #define LIGHT_PAPER 0xf4
 #define LIGHT_INK 0x16
 #define LIGHT_SPREAD 16
@@ -358,49 +360,96 @@ static inline int arc_out(int r, int y) {
 #define LYRIC_LIT 0xffffff
 #define LYRIC_DIM 0x808080
 #define LYRIC_REST 0x5f5f5f
-/* Spotify's and Internet Radio's Now Playing layout (tools/ipod.py NP_*, which checks they match):
- * the art and the text 16px from the sides, 12 apart, the bar and times clear of the glass's corners.
- * The title, artist and album beside the art on the Q2; on the M1's portrait screen, under it, with
- * the page's tag after the back button and Radio's heart at the top right. */
-#define SPOT_ART_X 50
-#define SPOT_ART_Y 50
-#define SPOT_ART_PX 220
-#define SPOT_TEXT_X 16
-#define SPOT_TEXT_W 288
-#define SPOT_TITLE_Y 280
-#define SPOT_ARTIST_Y 312
-#define SPOT_ALBUM_Y 338
-#define SPOT_BAR_X 12
-#define SPOT_BAR_Y 374
-#define SPOT_BAR_W 296
-#define SPOT_BAR_H 8
-#define SPOT_TIMES_Y 392
-#define SPOT_TIME_X 12
-#define SPOT_TAG_X BACK_W
-#define SPOT_HEART_X (UI_W - 54)
-#define SPOT_HEART_Y 0
+/* Now Playing (ipod-ui 4.6, tools/m1plus_ipod.py playing_page), in the 320x450 window: the top row, the art slide with the
+ * art and the text under it, the dots, the bar (V2.1's x and width, a touch high around its row), the times, then V2.1's
+ * transport row. */
+#define NP_TOP_H 40
+#define NP_BACK_W 48
+#define NP_ICON_W 46
+#define NP_SLIDE_Y 44
+#define NP_ART_X 56
+#define NP_ART_Y 44
+#define NP_ART 208
+#define NP_TEXT_X 16
+#define NP_TEXT_W 288
+#define NP_TITLE_Y 258
+#define NP_ARTIST_Y 290
+#define NP_ALBUM_Y 316
+#define NP_DOTS_Y 340
+#define NP_BAR_X 12
+#define NP_BAR_W 296
+#define NP_BAR_CY 362
+#define NP_BAR_TOUCH 28
+#define NP_AB_Y 364 /* getx_by_playtime's row for the A-B dots (0x53b9c4) */
+#define NP_TIMES_Y 368
+#define NP_BUTTONS_Y 384
+/* Internet Radio's Now Playing keeps its stack (ipod-ui 4.6). */
+#define RADIO_ART_X 50
+#define RADIO_ART_Y 50
+#define RADIO_ART_PX 220
+#define RADIO_TEXT_X 16
+#define RADIO_TEXT_W 288
+#define RADIO_TITLE_Y 280
+#define RADIO_ARTIST_Y 312
+#define RADIO_ALBUM_Y 338
+#define RADIO_TIMES_Y 392
+#define RADIO_TIME_X 12
+#define RADIO_TAG_X M1_BACK_W
+#define RADIO_HEART_X (UI_W - 54)
+#define RADIO_HEART_Y 0
+/* Spotify's Now Playing (spotify.c spot_np, for both backends): Now Playing's layout (ipod-ui 4.6). The bar's view holds the
+ * Theme's line in its middle, on NP_BAR_CY (np_bar_fill); the seek's slider takes the touch around it. */
+#define SPOT_ART_X NP_ART_X
+#define SPOT_ART_Y NP_ART_Y
+#define SPOT_ART_PX NP_ART
+#define SPOT_TEXT_X NP_TEXT_X
+#define SPOT_TEXT_W NP_TEXT_W
+#define SPOT_TITLE_Y NP_TITLE_Y
+#define SPOT_ARTIST_Y NP_ARTIST_Y
+#define SPOT_ALBUM_Y NP_ALBUM_Y
+#define SPOT_BAR_X NP_BAR_X
+#define SPOT_BAR_H NP_BAR_CLASSIC
+#define SPOT_BAR_Y 358
+#define SPOT_BAR_W NP_BAR_W
+#define SPOT_TIMES_Y NP_TIMES_Y
+#define SPOT_TIME_X NP_BAR_X
+#define SPOT_TAG_X 56
 /* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic flush, and
- * holds SET_ROWS complete SET_ROW rows. Stock builds each row as a list_item holding a
- * SET_STOCK_W x SET_STOCK_BODY button at x SET_STOCK_X with a SET_STOCK_ICON icon, a label and a
- * 50px trailing image (chevron, tick or switch); items made SET_STOCK_ROW high are normalised to
- * SET_ROW. The icon shrinks to SET_ICON at SET_ICON_X, the text starts SET_GAP after it (or at
- * SET_TEXT_X without one) and trailing images end SET_EDGE from the right edge; test/build.py
- * and test/patch.py check them against the rounded glass in the first and last visible rows. */
-#define SET_ROW 68
+ * holds SET_ROWS complete SET_ROW rows (ipod-ui 4.3: six 72 px rows in the 450 px under the bar). V2.1 builds
+ * each row as a list_item_style list_item holding its children itself, no inner button (m1plus_nav_rows.c):
+ * a SET_STOCK_ICON icon at 12,10, a label at 60,20 (12,20 without an icon) and trailing images ending at x
+ * 308 (a 57x28 switch, right_arrow, a tick), all centred on a SET_STOCK_BODY body; items made SET_STOCK_ROW
+ * high, or left 0 for the list's default height, become SET_ROW. The icon stays SET_ICON at SET_ICON_X, the
+ * text starts SET_GAP after it (or at SET_TEXT_X without one) and trailing images end SET_EDGE from the right
+ * edge. SET_STOCK_X and SET_STOCK_W are the row itself; SET_STOCK_TRAIL is a 50 px image ending at 308. */
+#define SET_ROW 72
 #define SET_TOP 8
-#define SET_ROWS 4
+#define SET_ROWS 6
 #define SET_ICON 40
 #define SET_ICON_X 28
 #define SET_GAP 12
 #define SET_TEXT_X 20
 #define SET_EDGE 24
-#define SET_STOCK_ROW 78
-#define SET_STOCK_BODY 70
-#define SET_STOCK_X 20
-#define SET_STOCK_W 335
-#define SET_STOCK_ICON 52
-#define SET_STOCK_TRAIL 276   /* the usual trailing image x in the stock button */
+#define SET_STOCK_ROW 64
+#define SET_STOCK_BODY 60
+#define SET_STOCK_X 0
+#define SET_STOCK_W UI_W
+#define SET_STOCK_ICON 40
+#define SET_STOCK_TRAIL 258   /* a 50 px trailing image ending where V2.1's end, at x 308 */
 #define SET_RIGHT_SIDE 150    /* stock children starting here keep to the right edge */
+#define SET_MAPPED "_set_row" /* a V2.1 row's custom prop once ipod_list_layout has mapped it */
+/* iPod library rows (ipod-ui 4.4): LIB_ROWS complete LIB_PITCH rows from the top of the 450 px under the bar (the
+ * title bar hidden), each a LIB_BODY body, as V2.1's Folders rows already are. V2.1's other library rows are 60 on a
+ * 56 body (LIB_STOCK_PITCH, LIB_STOCK_BODY); their text views re-centre by half the difference. Their art keeps V2.1's
+ * size, LIB_ART: 40 px icons drawn 1:1 (centred) and 60 px album covers the layouter scales, so ART_INSET is
+ * LIB_ART_INSET. */
+#define LIB_PITCH 64
+#define LIB_BODY 60
+#define LIB_ROWS 7
+#define LIB_ART 40
+#define LIB_ART_INSET 10
+#define LIB_STOCK_PITCH 60
+#define LIB_STOCK_BODY 56
 #define LIST_DEFAULT_ITEM_HEIGHT 0x7c  /* list_view default_item_height */
 #define IMAGE_DRAW_SCALE_DOWN 5        /* "scale_down" in the stock draw type table @0x9272c0 */
 #define IMAGE_DRAW_CENTER 1            /* "center", the same table */
@@ -472,6 +521,17 @@ static inline int arc_out(int r, int y) {
 /* Now Playing's heart and its stock click, which toggles My Fav for the playing track (manage_myfav)
  * and the heart with it; playing_page_init binds it with the window. */
 #define VIEW_FAV "btn_fav"
+/* Now Playing's, the big cover's and the volume dialog's other widgets, by V2.1's names. */
+#define NP_COLUMN_X 0 /* V2.1's column, its x and width, and its slide_view's height (Centred Now Playing's np_full) */
+#define NP_COLUMN_W 320
+#define NP_COLUMN_SLIDE_H 254
+#define VIEW_COVER "img_playcover"
+#define VIEW_BIGCOVER "img_playcover"
+#define VIEW_LYRIC "view_lyrics"
+#define VIEW_DOTS "slide_indicator"
+#define VIEW_MORE "btn_more"
+#define VIEW_VOL "progressbar_vol"
+#define ICON_BIGCOVER "p_bigdefault"
 #define FAV_CLICK_ADDR 0x53b480
 #define STYLE_FAV "btn_imgfav_style"
 #define ICON_FAV "p_fav"
@@ -479,6 +539,8 @@ static inline int arc_out(int r, int y) {
 /* The playlist page's row click, which in add mode 2 (Now Playing's hold) adds the queue's selected
  * record, with the row as context. */
 #define PLAYLIST_PICK_ADDR 0x53d300
+/* Quick Settings: V2.1's pull-down, dialog/dropdown_dialog.bin (dialog_dropdown_dialog_init, ipod-ui 4.7) */
+#define QUICK_NAME "dropdown_dialog"
 /* Lock screen (lockscreen.c): the lock window's clock and battery, which Large lays out again. */
 #define VIEW_LOCK_TIME "dclock_time"
 #define VIEW_LOCK_DATE "dclock_date"
@@ -497,6 +559,18 @@ static inline int arc_out(int r, int y) {
 #define SAVER_ROW 143
 #define SAVER_ITEM 58 /* Time show to About */
 #define VIEW_LOCK_BATTERY "img_battery"
+/* The status bar's widgets by name (ipod-ui 4.2): V2.1's system_bar.bin has img_playstate, img_btclass and the battery as
+ * a progress bar over its icon, and no label_eq, label_idle or label_battery; the rewrite adds view_battery. A name
+ * absent from the bar is a null lookup, which bar_state_sync tolerates. */
+#define STATUSW_BT "img_btclass"
+#define STATUSW_WIFI "img_wifi"
+#define STATUSW_PCT "pgbar_battery"
+#define STATUSW_SLOT "view_battery"
+#define STATUSW_ICON "img_battery"
+#define STATUSW_IDLE "label_idle"
+#define STATUSW_STATE "img_playstate"
+#define STATUSW_EQ "label_eq"
+#define STATUS_LOWCHARGE "bar_lowpower"
 /* M1 Plus: a press held still this long on a library row opens its hold menu (ringnav_input). */
 #define LONG_PRESS_MS 500
 /* Long Songs (docs/internals.md#long-songs): songs longer than this. */
@@ -534,6 +608,17 @@ static inline int arc_out(int r, int y) {
 #define WHEEL_TICK_UNITS 28
 #define WHEEL_INFO_EVENT 0x20 /* event type: 0x110 key down, 0x114 key up */
 #define WHEEL_INFO_KEY 0x38   /* the event's key (EVENT_KEY) */
+/* main_loop_queue_event (0x658f18) is V2.1's leaf too, its queue_event slot at +0x18; the M1 doesn't take
+ * upstream's QUEUE_LEAF (1.6.4: Wheel QS's lift flooded the queue with the touch thread's empty events). */
+#define LOOP_POST 0x18
+/* The stale press backstop (navigation.c stale_heal, 1.6.4) runs only on the Q2 (unported: the M1's
+ * ringnav_input returns before it notes a finger), so its --dev note's main_loop_simple byte is unread. */
+#define LOOP_PRESSED M1_UNPORTED
+#define STALE_TOUCH_MS 5000
+/* An empty Library list's page (navigation.c empty_toast): V2.1's window_base_on_event (0x676b5c) sets the
+ * window's stage 3 on EVT_WINDOW_OPEN (0x12b, 0x676c24), as V1.32's. */
+#define WINDOW_STAGE_OPENED 3
+#define EMPTY_POLL_MS 50
 /* V2.1 has no wheel lockout and no Return key latch. on_wm_keyup_fun (0x4cd9ac) drops a power
  * (knob) release while this byte or g_power_longkey (tools/build.py M1PLUS_RAW_GLOBALS) is set and
  * clears both; to_poweroptions sets this one after into_standby returns (0x4ce6d4). */
@@ -617,6 +702,10 @@ static inline int arc_out(int r, int y) {
 /* One row per album, as album_cmp tells them apart (coverflow.c; navigation.c's Era). */
 #define ALBUM_GROUP " group by album COLLATE NOCASE," \
     "ifnull(albumsonger,'') COLLATE NOCASE,case ifnull(albumsonger,'') when '' then rtrim(fileurl,replace(fileurl,'/','')) end"
+/* An album group's art track, as offsets.inc's (1.6.3): V2.1's songtable has the same cd_num, track and fileurl. */
+#define ALBUM_TRACK \
+    "substr(min(substr(10000+min(max(ifnull(cd_num,0),0),9999),2)||" \
+    "substr(10000+min(max(ifnull(track,0),0),9999),2)||fileurl),9)"
 /* An artist's albums. V2.1 loads them with this class too: loadAlbumList stores 0xff01 in classinfo_save,
  * then branches to loadLocalClassList (0x4ee930, 0x4ee9a8), where V1.32 loads 0xff11 (ringnav_localclass's
  * artist_tab). */
@@ -629,9 +718,9 @@ static inline int arc_out(int r, int y) {
 /* playlist_page_init's context >> 16 (0x53eb9c): Add to Playlist's mode, 0 when browsing; its row
  * click adds in a mode > 0 (0x53d470), as V1.32's 0xa27894 */
 #define PLAYLIST_ADD_MODE 0xa06f50
-/* The playlist editor's tick (ple_tick) at the end of V2.1's PAGE_ROW_H row, before the scroll bar */
+/* The playlist editor's tick (ple_tick) at the end of a compact row, before the scroll bar */
 #define PLE_TICK_X 284
-#define PLE_ROW_H PAGE_ROW_H
+#define PLE_ROW_H LIB_PITCH
 /* ple_mutate's temporary id. V2.1's libsqlite3 is 3.19.3, which refuses HAVING without GROUP BY ("a
  * GROUP BY clause is required before HAVING"), so Move Up/Down said "Could not save playlist": a CASE
  * gives NULL at the top id instead, which ple_number refuses as the Q2's empty result is */
@@ -645,6 +734,9 @@ static inline int arc_out(int r, int y) {
 #define FORCE_REFRESH 0xa05a63 /* force_refreshflag: the stock queue row click sets it after start_playqueue (0x47a0f4) */
 /* The albums row the album page opened: its init's context >> 16, which it keeps */
 #define ALBUMINFO_ROW 0xa06680  /* albuminfo_page_init (0x526828) */
+/* albumcover_finishflag: the cover thread raises it as a task ends (set_albumcover_flag); the album page's cover
+ * timer (0x5261d8) sets the art then, and clears it */
+#define ALBUM_COVER_DONE 0xa05a5b
 /* Static mcl queue state (mclLoadPlayList @0x5aa8d4, mclNextSong @0x5adbbc). */
 /* V2.1 keeps the same block, the words at the same offsets from MCL_POS: mclGetPlayPos (0x5d4290),
  * mclGetPlayType, mclGetPlayMode, mclGetLastPos, mclGetRandomNum (the pool), mclCheckMplayerSocket
@@ -739,7 +831,7 @@ static inline int arc_out(int r, int y) {
 #define CF_BRIGHT1 192
 #define CF_BRIGHT2 128
 #define CF_REFLECT 24
-#define CF_REFLECT_TOP (IPOD ? 48 : 64)
+#define CF_REFLECT_TOP 48
 #define CF_STRIDE 100
 #define CF_TEXT_Y 268
 
@@ -759,7 +851,7 @@ static inline int arc_out(int r, int y) {
 #define PEQ_PLOT_TOP 8
 #define PEQ_PLOT_BOTTOM 98
 
-#define VIS_H 240
+#define VIS_H (NP_DOTS_Y - NP_SLIDE_Y) /* the visualizer's page: the slide's height */
 #define BOOK_ROWS 16
 #define PH_GREY 0xff333333 /* color_t #333333 */
 #define PHOTOS_MAX 500 /* ponytail: ringnav navigates at most MAX_ENTRIES (512) rows; page beyond */
@@ -788,3 +880,137 @@ static inline int arc_out(int r, int y) {
 
 /* Folder videos stay off until folder_click is ported; no V2.1 return address matches zero. */
 #define LOAD_DIRECTORY_RET M1_UNPORTED
+
+/* iPod UI (docs/m1plus-ipod-ui.md, Phase 1): the shared C is the iPod path alone, so the iPod code inside
+ * routines the M1 already hooks (ringnav, ringnav_playing, the paint hooks, lyric_poll) is live. A name
+ * it reads gets a value that can't fault; the Phase 4 item that ports the feature replaces it. */
+/* Timing is behaviour, not device: Q2's values. */
+#define MARQUEE_HOLD_MS 1500
+#define MARQUEE_PASSES 3 /* the selected row's title: navigation.c marq_poll (1.6.7) */
+#define HSCROLL_ONLY_FOCUS 0x78 /* hscroll_label_t, a char: V2.1's hscroll_label_set_only_focus (0x60929c) */
+#define HSCROLL_TEXT_W 0x90 /* its measured text width: V2.1's get_range (0x6093cc) reads it at 0x609454; V1.32's 0x94 */
+#define WHEEL_FRESH_MS 1000 /* tick_gate's: the touch wheel's, which runs on the Q2 only */
+/* Classic's Home Library list (navigation.c library_rows, 1.6.7): Classic is unported */
+#define LOCALMUSIC_BG M1_UNPORTED
+/* The return addresses two live playback.c hooks compare (1.6.7): View Queue's pick of the playing file keeps it
+ * playing (ringnav_start_queue), and the skip past an unplayable file is no press (ringnav_change). V2.1's callers
+ * aren't pinned, so on M1 neither matches and both act as in 1.6.4 (docs/m1plus-unported.md). */
+#define VIEW_QUEUE_RET M1_UNPORTED
+#define UNPLAYABLE_NEXT_RET M1_UNPORTED
+#define LYRIC_PUSH_DETENTS 2
+#define LYRIC_PUSH_MS 1000
+#define DRIFT_ZOOM_PCT 110
+#define DRIFT_X_MS 20000
+#define DRIFT_Y_MS 26000
+#define DRIFT_TICK_MS 200
+#define DRIFT_MAX_STEP_MS 500
+/* Split's pan (4.5): a cover whose zoomed fit passes four of the M1's panels (4 x 320 x 200, home_tex's calloc of
+ * a megabyte) stays still, as the Q2's four of its own. */
+#define DRIFT_TEXELS 256000
+/* The screen glass is square (CORNER_R 0), so nothing keeps clear of a rounded corner. */
+#define GLASS_R 0
+#define GLASS_SLACK 4
+#define BC_TITLE_PAD 12 /* the song name's inset from the art's sides */
+#define HOME_FULL_CHEVRON_SHIFT 10
+/* The confirm pop-up (4.7, tools/m1plus_ipod.py confirm_dialog): Cancel and OK rows from CONFIRM_TOP, under V2.1's
+ * prompts and Delete File's check (all end by y 106); the prompt at CONFIRM_PROMPT_PX, the Q2's 24 at 375 px. */
+#define CONFIRM_TOP 112
+#define CONFIRM_PROMPT_PX 22
+/* The default children layouter's vtable ("default", 8 words: the layout at [2]), which compact_set_row_layout
+ * copies for the library rows (ipod-ui 4.4). */
+#define DEFAULT_LAYOUT_VTABLE 0x904924
+/* V2.1's list_view layouter (children_layouter_list_view_create, 0x60b79c): its vtable 0x9047a0's layout slot,
+ * which patch_code points at ipod_list_layout, and the layout it held (ipod-ui 4.3). */
+#define LIST_VIEW_LAYOUT 0x60abb0
+#define LIST_VIEW_LAYOUT_SLOT 0x9047a8
+/* style_get_color's bal style_get_gradient (0x65a048, V2.1's) returns here (4.1). */
+#define STYLE_COLOR_GRADIENT_RET 0x65a050
+/* V2.1 has no long Return (HOLD_RETURN is Q2 only): the latch is a byte of the payload's own, which Previous's hold
+ * (hold_previous, ipod-ui 4.4) arms and its release clears (m1plus_nav_knob.inc). */
+extern unsigned char m1_return_latch;
+#define RETURN_RELEASE_LATCH ((unsigned)&m1_return_latch)
+/* Enlarged Album Art's countdown (4.6): V2.1's big cover is unported, so ringnav_sleep's reset goes to a
+ * byte of the payload's own that nothing reads. */
+/* Enlarged Art's countdown: V2.1's word, which Now Playing's 500 ms timer takes down while a song plays there
+ * (playing_choiceshowpage 0x53d0d4); at 0 it opens bigcover_page and sets it back to BC_IDLE_FULL (0x53d0f4), 10 s. */
+#define BC_IDLE 0x97ccd0
+#define BC_IDLE_T int
+#define BC_IDLE_FULL 20
+/* V2.1's queue: Now Playing's More opens it (0x53b14c); V1.32's playerqueue_page isn't V2.1's, so a hold menu's
+ * View Queue off Shuffle opens this too. */
+#define STOCK_QUEUE_DIALOG "dialog/playqueue_dialog"
+/* Tidal's saved login, a string in theTidal (0xa44 bytes) that tidal_tidal_main_init (0x4b9e44) tests before it builds
+ * its page under its login page (m1_tidal_login, CALL_SITES TIDAL_LOGIN). */
+#define TIDAL_SAVED_LOGIN 0x929
+/* Night Shift (1.6.3) is unported: night_paint returns at once on M1, and Display has no row for it. V2.1's
+ * lcd_mem layout is not yet checked against V1.32's. */
+#define LCD_END_FRAME M1_UNPORTED
+#define LCD_W M1_UNPORTED
+#define LCD_H M1_UNPORTED
+#define LCD_DRAW_MODE M1_UNPORTED
+#define LCD_DRAW_NORMAL M1_UNPORTED
+#define LCD_DIRTY M1_UNPORTED
+#define LCD_OFFLINE_FB M1_UNPORTED
+#define LCD_LINE_LENGTH M1_UNPORTED
+#define LCD_FORMAT M1_UNPORTED
+#define LCD_BGRA8888 M1_UNPORTED
+/* The hardware watchdog and its state record (1.6.3) are unported: wdt_poll and state_poll return at once on
+ * M1. V2.1 ships the same soc_watchdog.ko, but its ioctls and S90play's crash log are not yet checked. */
+#define WDT_MS 60000
+#define WDT_LONG_MS 900000
+
+#define W_ASTYLE M1_UNPORTED
+#define ALIGN_H_LEFT 2 /* stock's align_h_t, in a style's text_align_h */
+#define TABLE_LOAD_DATA M1_UNPORTED
+#define SLANT_FAR 224
+#define SLANT_REFLECT_A 84
+#define SLANT_REFLECT_PCT 22
+#define NP_BAR_IPOD M1_UNPORTED
+#define SCRUB_REFLECT_A 38
+#define SCRUB_REFLECT_ROWS 6
+#define NP_IPOD_TIME_PX 21
+#define NP_IPOD_TIME_H 21 /* the times' box over the bar's rows, as near centred as an odd box goes */
+#define NP_IPOD_TIME_W1 35
+#define NP_IPOD_TIME_W2 43
+#define NP_IPOD_TIME_W 56
+#define NP_IPOD_TIME_GAP 8
+#define NP_SCRUB_MARK 8 /* the scrub's diamond: 17 rows, one in from the bar's top line, two from its foot */
+#define NP_IPOD_ART M1_UNPORTED
+#define NP_IPOD_ART_Y M1_UNPORTED
+#define NP_IPOD_ART_DROP M1_UNPORTED
+#define NP_IPOD_TEXT_X M1_UNPORTED
+#define NP_IPOD_TEXT_Y M1_UNPORTED
+#define NP_IPOD_FAV_X M1_UNPORTED
+#define NP_IPOD_FAV_Y M1_UNPORTED
+#define NP_IPOD_BAR_X M1_UNPORTED
+#define NP_IPOD_BAR_Y M1_UNPORTED
+/* Classic's swipe up from Quick Settings' slider (quick_swipe, classic_pages() only): Classic is unported */
+#define QS_SWIPE_STOCK M1_UNPORTED
+#define QS_SWIPE_Y M1_UNPORTED
+#define STREAM_BG M1_UNPORTED
+#define GLIDE_MS 300 /* a remembered row's recall glide */
+#define HOME_SLIDE_MS 200 /* Cover Flow's and the carousel's wheel step */
+#define HOME_FAST_SLIDE_MS 120 /* ... and within HOME_FAST_WINDOW_MS of the last */
+#define HSCROLL_LOOP M1_UNPORTED
+#define HSCROLL_YOYO M1_UNPORTED
+#define HSCROLL_DELAY M1_UNPORTED
+#define HSCROLL_SPEED M1_UNPORTED
+#define HSCROLL_TIMER M1_UNPORTED
+#define HSCROLL_PACE 0x3d4ccccd
+#define TIMER_CTX M1_UNPORTED
+#define IMAGE_DRAW_FILL M1_UNPORTED
+#define BAR_MAX M1_UNPORTED
+#define EASE_FOLLOW 24 /* past AWTK's 24: coverflow.c's follow, never handed to easing_get */
+#define PL_RENAME_ROW M1_UNPORTED_ADDR
+#define PLAYLIST_KEYUP_ADDR M1_UNPORTED_ADDR /* V2.1's playlist_page binds no key-up; Classic is unported */
+#define ARTIST_TITLE M1_UNPORTED_ADDR
+#define G_ALLSELECT_FLAG M1_UNPORTED_ADDR
+#define PLAYMORE_INTO_FIRST M1_UNPORTED
+#define PLAYMORE_INTO_LAST M1_UNPORTED
+#define SCAN_WHOLE M1_UNPORTED_ADDR
+#define CF_GREY_BOLD 0xff8a8a8a /* Classic Light's dark half */
+#define CF_BOUNCE 5 /* an artist's last album: a step past kicks it 1/5 of a stride, then back */
+#define CF_ANGLE 60   /* a side cover's turn, degrees */
+#define CF_HORIZON 50 /* % down the cover its centre sits on the shared horizon */
+#define CF_THIRD 1    /* 1: the third out stays, gone half a step past it */
+

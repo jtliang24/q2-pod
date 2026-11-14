@@ -5,6 +5,19 @@ carries and an M1 revision, `<version>-m1.<n>`. `tools/release_m1.py` takes the 
 turns its text into the release notes, as `tools/release.py` does with [changelog.md](changelog.md).
 Upstream's changes are in that file.
 
+- **1.7.0-m1.1**:
+  - Q2 Pod 1.7.0 on the M1 Plus's stock firmware V2.1, now with Q2 Pod's iPod UI as its only UI, laid out for the portrait screen and the knob. Upstream's changes since 1.5.8 that run on the M1 Plus are below; Q2 Pod's own changelog has the rest.
+  - Home: **Split** shows the playing album's whole cover across the top, over a blurred copy of it, with the menu below; **Full** is the menu alone and **Carousel** a row of cards. Display → Appearance → Home chooses.
+  - Every page has a status bar with the clock, a back chevron at the top left, and Bluetooth, play/pause, Wi-Fi and the battery on the right. Tap the chevron to go back, or hold it to return to Now Playing or Home. **Knob: Navigation** is the default: the knob moves through the rows, its press opens one, and Previous goes back.
+  - Settings, the Library and their lists use the iPod's rows. Display's **Appearance**, **Cover Flow** and **Controls** hold Theme, Light Mode, Accent, Home, Shortcut, Battery and the knob's settings.
+  - Now Playing: the iPod's layout with V2.1's transport buttons and a large Back at the top. **Centred Now Playing** in Appearance opens V2.1's own page instead. Spotify's page takes the same layout.
+  - Quick Settings is V2.1's pull-down from the top of the screen, laid out as the iPod's. Confirm prompts are a sheet across the top with Cancel and OK as rows.
+  - Themes: **Minimal** and **Modern**, each in Light Mode or dark, with your accent. Choosing one applies its look at once.
+  - Spotify: **Soloify** plays a Spotify account through Soloist. Install it from **System settings → Apps**; it gets its own Streaming row.
+  - EQ: **EQ per Output** keeps a separate EQ for the 3.5 mm and 4.4 mm jacks, USB and each Bluetooth device.
+  - Library: **Recently Added** goes by the date the card created each file, and Cover Flow's rows have new names, among them **Artist View**.
+  - Not on the M1 Plus yet: **Theme: Classic**, Night Shift, the extra time zones, Network Update, Playlists, Podcasts and Audiobooks as Shortcuts, Games (they need the wheel), and the rest of the port report (docs/m1plus-unported.md).
+
 - **1.5.8-m1.1**:
   - Q2 Pod 1.5.8 on the M1 Plus's stock firmware V2.1. Upstream's changes since 1.4.2 that run on the M1 Plus are below; Q2 Pod's own changelog has the rest.
   - Library: **Era**, after Genre, lists each decade with dated albums. A decade has **Play All**, **Shuffle** and its albums by year.

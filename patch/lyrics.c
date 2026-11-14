@@ -1,5 +1,5 @@
-/* Lyrics: the loader (stock's .lrc, else the track's tags, with milliseconds and word stamps), in
- * both builds, then iPod Now Playing's lyrics page (docs/ipod.md#lyrics,
+/* Lyrics: the loader (stock's .lrc, else the track's tags, with milliseconds and word stamps),
+ * then Now Playing's lyrics page (docs/ipod.md#lyrics,
  * docs/internals.md#word-timed-lyrics): large lines, the playing one in the middle, lit word by
  * word as it is sung. Stock's rows stay, one blank label a line as high as it, so its scroll view,
  * the wheel and the follow move them as before (navigation.c); each row's line is painted over it
@@ -7,6 +7,7 @@
 #include "offsets.inc"
 #include "peq.h"
 #include "stock.h"
+#include "xiph.h"
 
 /* Lyrics from tags: stock reads a local track's lyrics only from a .lrc beside it. Without one,
  * the track's LYRICS tag (else UNSYNCEDLYRICS) fills stock's list. A tag in LRC form, a
@@ -15,10 +16,11 @@
  * a line with several stamps once for each, and lines without one (LRC's "[ar:...]" tags) left out.
  * Plain text fills it a line each, at a time no track reaches, so the page stays at its top as
  * before a .lrc's first stamp. libtag_c's property calls are found from taglib_file_new's address,
- * which that call binds in demo's GOT. ponytail: no SYLT frame, and lines starting in its first
- * LYRIC_TAG_MAX bytes. The lines keep their milliseconds and A2 word stamps ("<mm:ss.xx>" before
- * a word, cut from the text) for iPod's lyrics page (lyrics.c), lose the spaces at their ends, and
- * blank ones go; a .lrc's synced lines replace stock's, read alike. */
+ * which that call binds in demo's GOT. ponytail: no SYLT frame, lines starting in its first
+ * LYRIC_TAG_MAX bytes, and none from an Ogg file whose comment header is over OGG_TAGS_MAX (xiph.h:
+ * TagLib would hold it ~4 times over). The lines keep their milliseconds and A2 word stamps
+ * ("<mm:ss.xx>" before a word, cut from the text) for iPod's lyrics page (lyrics.c), lose the
+ * spaces at their ends, and blank ones go; a .lrc's synced lines replace stock's, read alike. */
 #define LYRIC_TAG_MAX 65536
 extern int stock_lyric_trampoline(void);
 
@@ -162,6 +164,21 @@ void *ringnav_lrc_open(const char *path, const char *mode) {
     return f;
 }
 
+/* Stock's mclIsUtf8WithoutBOM (0x5a959c), which the .lrc loader and the lyrics match page ask
+ * before converting a file from GB18030: it checked only the 6 bytes from the first non-ASCII one
+ * and knew no 4-byte character, so a UTF-8 .lrc with an emoji, or a character crossing those 6
+ * bytes (an accent, then a ’ four letters on), was converted and loaded garbled or cut short.
+ * This checks the first LYRIC_TAG_MAX bytes, as the loader parses them.
+ * ponytail: a character cut at that limit fails it; a .lrc that long has not been seen. */
+int ringnav_lrc_utf8(const char *path) {
+    void *f = fopen(path, "rb");
+    char *s = f ? calloc(1, LYRIC_TAG_MAX + 1) : 0;
+    int ok = s && (fread(s, 1, LYRIC_TAG_MAX, f), utf8_text(s));
+    if (f) fclose(f);
+    free(s);
+    return ok;
+}
+
 int ringnav_lyric(void) {
     free(lrc_file);
     lrc_file = 0;
@@ -182,7 +199,7 @@ int ringnav_lyric(void) {
     unsigned pos = (unsigned)I(MCL_POS, 0);
     if (!(mclGetLyricSize() > 0 || (unsigned)(I(MCL_TYPE, 0) - 0xf1) < 2 || !q ||
           pos >= deque_size(q) || !(r = deque_at(q, pos)) || I(r, REC_TYPE) != 8 ||
-          !P(r, REC_PATH) || *(char *)P(r, REC_PATH) != '/'))
+          !P(r, REC_PATH) || *(char *)P(r, REC_PATH) != '/' || ogg_tags(P(r, REC_PATH), 0)))
         f = taglib_file_new(P(r, REC_PATH), 0);
     if (f) {
         unsigned at = (unsigned)I(TAGLIB_NEW_GOT, 0);
@@ -200,10 +217,8 @@ int ringnav_lyric(void) {
             ret = 1;
         }
     }
-#if IPOD
     /* every load sends its synced lines, or none (the rows hold unsynced ones): never the last's */
     lyrics_publish(l, n > 0 && l[0].time != LRC_FAR ? n : 0, m);
-#endif
     if (v) ((void (*)(char **))(lib + TAGLIB_PROPERTY_FREE))(v);
     if (f) taglib_file_free(f);
     free(file);
@@ -212,7 +227,6 @@ int ringnav_lyric(void) {
     return ret;
 }
 
-#if IPOD
 
 /* Every line LYRIC_PX, as large as reads well in the page's width, as many rows as it takes up to
  * LYRIC_ROWS (the rest cut; so many still fit the page), LY_PITCH apart; its row on the page is
@@ -395,14 +409,20 @@ int lyrics_rows(void *lrc) {
         }
         if (t) t->sum = sum;
     }
+    return lyrics_fit(lrc);
+}
+
+/* The page's rows laid out at lrc's width, again when it changes: the iPod page's span the
+ * screen, the centred (stock) page's its 225 px column, or the screen in full screen (navigation.c
+ * np_full). */
+int lyrics_fit(void *lrc) {
     if (!lyrics_on(lrc)) return 0; /* none, or out of memory: stock's rows stay */
-    /* the iPod page's rows span the screen, the centred (stock) page's its 225 px column */
     if (ly.w != I(lrc, W_W) - 2 * LYRIC_X) {
         ly.w = I(lrc, W_W) - 2 * LYRIC_X;
         for (unsigned i = 0; i < ly.tab->n; ++i) ly.tab->line[i].px = 0;
     }
     void *canvas = widget_get_canvas(lrc);
-    for (unsigned i = 0; i < n; ++i) {
+    for (unsigned i = 0; i < ly.rows; ++i) {
         void *row = widget_get_child(lrc, i);
         ly_line *l = &ly.tab->line[i];
         if (canvas && !l->px) ly_layout(canvas, l);
@@ -604,4 +624,3 @@ void lyrics_paint(void *row, void *canvas) {
     canvas_set_clip_rect(canvas, base);
     stock_canvas_set_text_color(canvas, text);
 }
-#endif

@@ -9,7 +9,7 @@ still calls it. Why the branch works this way, and what has to be in place first
 The M1 code sits in `tools/m1plus.py`, `patch/m1plus_*` and `test/m1plus/` (U1). These tools check a
 sync (U2):
 - `UPSTREAM_BASE`, at the repo's root, names the upstream tag or commit the branch is level with;
-- `test/q2compare.py` builds it and this tree, Legacy and iPod, and requires byte-identical `update.tar`;
+- `test/q2compare.py` builds it and this tree (the one iPod build since 1.5.9) and requires byte-identical `update.tar`;
 - `test/m1plus/ports.py`, the port report, classifies every Q2 hook, call site and `offsets.inc` name for
   M1. It fails on any it can't place;
 - `test/m1plus/q2only.py` lists the tag's changes inside Q2-only branches, whose M1 side the merge
@@ -153,6 +153,12 @@ release, or at once after a structural step.
      Frequent and Recent (`0xf008`, `0xf007`) are V2.1's too (`guide_page_init`). An address goes in
      `offsets.inc` before its code runs on M1; until then the hook or site that reaches it stays
      unported (1.3.9's `ringnav_lyric_rows`).
+   - **The Q2 side of each merged file.** A hunk the merge kept on both sides compiles on the M1 and
+     breaks only the Q2 build, which q2compare reaches last: 1.6.3's merge kept the Q2's old
+     `scrub_start` beside upstream's moved one (a redefinition). Before the gates, put each
+     `patch/*` file the merge touched through `unifdef -DM1PLUS=0` and diff it with the tag's own;
+     what's left should be the seams' equivalent Q2 lines. Strip comments after `#if`/`#else`/`#endif`
+     first: unifdef refuses one that runs onto the next line ("Obfuscated preprocessor control line").
    - **A test conflict** keeps upstream's case as upstream wrote it. Its M1 path, if any, goes in
      `test/m1plus/`. `test/m1plus/boot.py`'s walks tap screen positions: an upstream row added above
      one they tap moves it (1.4.5's Coverflow Sort and Refresh pushed Knob: Navigation off Display's
@@ -171,30 +177,33 @@ release, or at once after a structural step.
    - **A conflict in a doc** takes upstream's text. The M1 docs are the `m1plus-*.md` files. `README.md`
      is the fork's own front page, so its conflicts keep ours; read upstream's changes to it for
      anything the M1 section should say. An upstream PR of the port takes upstream's README back.
-3. **Gates, in order.**
-   1. **Q2 output and suites.** `TMPDIR=/tmp python3 test/q2compare.py <tag> --suites`, inside the
-      shell: `nix develop` sets its own `TMPDIR` over one set outside it. Under that long `TMPDIR`,
-      1.2.9's `test/peq.py` fails its Tidal check on `-Wformat-truncation`, upstream's own tree too.
-      1.3.8's `test/chapters.py` runs `/usr/bin/ffmpeg`, which NixOS lacks; bind one in with
-      bubblewrap: `F=$(nix build --inputs-from . nixpkgs#ffmpeg-headless --no-link --print-out-paths |
-      head -1)/bin/ffmpeg; bwrap --dev-bind / / --tmpfs /usr/bin --ro-bind $F /usr/bin/ffmpeg
-      --ro-bind /usr/bin/env /usr/bin/env sh -c 'TMPDIR=/tmp python3 test/q2compare.py <tag> --suites'`. Legacy and iPod `update.tar`
-      must be byte-identical to `<tag>`'s own build, and the tag's suites must pass on both
-      ([the checklist](m1plus-integration.md#checklist)). It fails on a suite the tag adds that it
-      doesn't know how to run (`SUITES`), and names the suites whose text differs from the tag's.
+3. **Gates, in order.** `python3 test/m1plus/gates.py work/sync/<tag> --base <tag>`, inside the shell,
+   runs gates 1, 3 and 4 below in order (`--list` names its steps), stops at the first failure, and logs
+   to `work/gates/<timestamp>/`.
+   1. **Q2 output and suites.** gates.py's `q2compare` step runs `test/q2compare.py <tag> --suites` with
+      `TMPDIR=/tmp`: `nix develop` sets its own `TMPDIR` over one set outside it, and
+      under that long `TMPDIR` 1.2.9's `test/peq.py` fails its Tidal check on `-Wformat-truncation`,
+      upstream's own tree too. 1.3.8's `test/chapters.py` runs `/usr/bin/ffmpeg`, which NixOS lacks, so
+      the step binds one in with bubblewrap (and 1.6.7's player suites take lame and flac from `PATH`). An
+      overlay, not a tmpfs: on a merged-`/usr` host (Ubuntu) a tmpfs `/usr/bin` hides `/bin/sh`, so
+      mksquashfs's `F` entries (`cat` through a shell) write every swapped rootfs file empty, the base's
+      build and this tree's alike, and their `update.tar` still match (found Nov 3, at 1.5.9). It passes
+      `--zip` (a fresh `work/gatetree`'s `stock/` is the main tree's), not a `stock` link, which its
+      snapshot would copy. The `update.tar` must be byte-identical to `<tag>`'s own build, and the tag's
+      suites must pass on it ([the checklist](m1plus-integration.md#checklist)). It fails on a suite the
+      tag adds that it doesn't know how to run (`SUITES`), and names the suites whose text differs from the
+      tag's.
    2. **Q2 scenario counts.** `test/patch.py`'s counts are at least the tag's own: no case dropped or
       skipped.
-   3. **M1 gates.** The V2.1 name check (the M1 build itself: `m1plus_names` fails on a V2.1 name the rootfs lacks),
-      then on a fresh M1 build the suites of [How to check a build
-      now](m1plus-progress.md#how-to-check-a-build-now): `test/m1plus/build.py --build`,
-      `test/m1plus/patch.py`, `test/m1plus/boot.py` with and without `--home-menu` and `--media`,
-      `test/m1plus/playback.py`, `m4b`, `id3`, `headset_io`, `test/ldac.py` and `test/bluealsa.py`.
-      Edit no source between the build and its gates: they check its `source_sha256` against the
-      tree, and a table edit after the build fails every one. A failing gate is fixed in a follow-up
-      commit. A fix to tests alone keeps the build: run the failed gate and those after it on it. A
-      fix to a hashed source (`tools/*.py`, `patch/*`) needs a fresh build and every M1 gate again.
-   4. **Port report.** `python3 test/m1plus/ports.py` passes: every hook, site and name is classified
-      (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for
+   3. **M1 gates.** The V2.1 name check (the M1 build itself: `m1plus_names` fails on a V2.1 name the
+      rootfs lacks), then gates.py's steps on that fresh `--dev` build. Edit no source between the build
+      and its gates: they check its `source_sha256` against the tree, and a table edit after the build
+      fails every one. A failing gate is fixed in a follow-up commit. A fix to tests alone keeps the
+      build: `gates.py <build> --from <step>` reruns the failed gate and those after it on it. A fix to a
+      hashed source (`tools/*`, `patch/*`, `assets/**`) needs a fresh build and every gate: run gates.py
+      without `--from`, which refuses the stale build anyway.
+   4. **Port report.** gates.py's `ports` step (`python3 test/m1plus/ports.py`) passes: every hook, site
+      and name is classified (ported, native in V2.1, Q2 only, or `NOT PORTED`). `--unported` prints the rows for
       [m1plus-unported.md](m1plus-unported.md).
    5. **What changed on M1.** Keep the gated `--dev` build (`work/sync/<tag>/`; U3's are in
       `work/u3/<tag>/`), and list
@@ -216,6 +225,18 @@ release, or at once after a structural step.
 6. **Land.** Merge `sync/<tag>` into `staging` with `--no-ff`.
 7. **Release.** Add a `- **<tag>-m1.1**:` entry to [m1plus-changelog.md](m1plus-changelog.md), then
    release by [m1plus-releasing.md](m1plus-releasing.md).
+
+## Now Playing's Q2-only code
+
+Since progress 72 the M1's Now Playing is `patch/m1plus_np_view.c`. Upstream's edits to these merge cleanly and **don't reach the M1**:
+- in `navigation.c`: `np_sync`, the `glyph` and album branch of `np_theme`, `scrub_start`, `scrub_end`, `settle_poll` and `np_key`;
+- in `spotify.c`: `scrub_commit`, the `#if !M1PLUS` key and scrub functions, and `spot_refresh`'s label loop.
+
+One M1 seam binds into the page: `ringnav_playing`'s `#if M1PLUS` block binds `np_bar_touch` on `slider_play` (value-changing
+and value-changed) after `stock_playing_trampoline`, so a paused touch on the bar scrubs (progress 81). Keep it after the
+trampoline: AWTK runs the newest handler first, and the binding must come after V2.1's.
+
+`test/m1plus/q2only.py <tag>` lists them, as it does any change in a Q2-only branch. Make each in `m1plus_np_view.c`, or rule it out, before `UPSTREAM_BASE` moves. A new label or Theme rule belongs in `np_write` or `np_view_theme`, where both of the M1's pages get it.
 
 ## Footprint
 
@@ -254,3 +275,9 @@ stay flat or fall.
 | Merge step: sync to 1.5.5 (Oct 30) | 1.5.5 (`4a23606`) | +1,533/−314 over 32 files: model-specific Folder video return address; existing navigation/seek include seams retained |
 | Merge step: sync to 1.5.8 (Oct 30) | 1.5.8 (`d7c8594`) | +1,554/−310 over 32 files: deferred Coverflow gestures, Simple EQ shortcut and wheel QS seams; native animator easing field |
 | 1.5.8 device-pass fixes (Nov 1) | 1.5.8 (`d7c8594`) | +1,573/−313 over 32 files: `FORCE_REFRESH` after a queue start, the subset resume's three `M1PLUS` lines, `TOO_LONG_PLAY` and `TOO_LONG_CHAPTERS`, and q2remote's Phys parsing |
+| Merge step: sync to 1.5.9 on `feature/m1-ipod` (Nov 3) | 1.5.9 (`43a611f`) | +1,712/−345 over 32 files: Stock's outline moved to `m1plus_nav_outline.c`, Soloify's `special[]` row, the card apps' caps and `library_poll` seams |
+| Phases 2 to 4.6 and Soloify on `feature/m1-ipod` (Nov 9) | 1.5.9 (`43a611f`) | +2,599/−499 over 33 files |
+| Merge step: sync to 1.6.3 on `feature/m1-ipod` (Nov 9) | 1.6.3 (`cea52bb`) | +2,608/−490 over 34 files: `nightshift.c`'s and the watchdog's `M1PLUS` returns, the btvol `volume_dialog` seam, `ADDON_CAPS` without `game` |
+| Merge step: sync to 1.6.4 on `feature/m1-ipod` (Nov 10) | 1.6.4 (`fb1890d`) | +2,579/−480 over 35 files: the M1's Display, System and Playback builders moved to `m1plus_nav_display.c`, `m1plus_nav_sysset.c` and `m1plus_nav_audioset.c`; `stale_heal`'s `!M1PLUS` |
+| Merge step: sync to 1.6.7 on `feature/m1-ipod` (Nov 10) | 1.6.7 (`bf471b5`) | +2,598/−479 over 36 files: the theme engine's tables built for the M1 in `m1plus.py` (Minimal and Modern), Classic's Home bindings and `tick_gate` behind `!M1PLUS`, `client_h()`'s `UI_H`, `HSCROLL_*` and the player's flags as names |
+| Merge step: sync to 1.7.0 on `feature/m1-ipod` (Nov 11) | 1.7.0 (`85fe884`) | +2,668/−425 over 36 files: `PAGE_X`'s CF_EDGE for page rows, `np_beside`'s M1 return, `M1_BACK_W` apart from Classic's `BACK_W`, the new Classic and raw-wheel paths behind `!M1PLUS` |

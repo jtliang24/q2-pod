@@ -48,18 +48,16 @@ One step at a time; the next starts from the landed result of this one. Re-run `
    No feature ports in a step: a new upstream feature gets a `NOT PORTED` row, and its suite cases
    a guard with a `not_ported` line.
 4. **Gates** (runbook step 3), from the gate worktree `work/gatetree` so the main tree stays free:
-   `git -C work/gatetree checkout --detach sync/<tag>`, then in it `nix develop`, Q2 first
-   (`TMPDIR=/tmp python3 test/q2compare.py <tag> --suites`, with the ffmpeg bind the runbook gives),
-   then a fresh `--dev` M1 build (`python3 tools/build.py 'stock/M1 Plus Firmware V2.1.zip' --dev --out
-   <main tree>/work/sync/<tag>`: an absolute path, since the worktree's own `work/` is apart) and its gates (`docs/m1plus-progress.md`'s "How
-   to check a build now": `test/m1plus/build.py --build`, `patch.py`, `boot.py` alone and with
-   `--home-menu` and `--media`, `playback.py`, `m4b`, `id3`, `headset_io`, `test/ldac.py`,
-   `test/bluealsa.py`), then `test/m1plus/ports.py`. The full run is about 30 minutes: run it in the
-   background and don't edit hashed sources (`tools/*.py`, `patch/*`) of the tree it builds meanwhile.
-   Stop at the first failure, so a fix doesn't wait on the rest.
+   `git -C work/gatetree checkout --detach sync/<tag>`, then in it `nix develop` and
+   `python3 test/m1plus/gates.py <main tree>/work/sync/<tag> --base <tag> --out <main tree>/work/sync/<tag>-gates`
+   (absolute paths, since the worktree's own `work/` is apart). It runs every gate in order, Q2 first
+   (q2compare with the ffmpeg bind the runbook gives), then a fresh `--dev` M1 build in that directory
+   and its gates, and stops at the first failure, so a fix doesn't wait on the rest. The full run is
+   about 1 h 35 min: run it in the background and don't edit hashed sources (`tools/*`, `patch/*`) of
+   the tree it builds meanwhile.
    A failing gate is fixed in a follow-up commit on `sync/<tag>` (made in the main tree; the worktree
-   checks it out). A fix to tests alone keeps the build: run the failed gate and those after it on
-   it. A fix to a hashed source needs a fresh build and every M1 gate again.
+   checks it out). A fix to tests alone keeps the build: rerun with `--from <step>`. A fix to a
+   hashed source needs a fresh build and every gate again (gates.py refuses `--from` then).
 5. **Function diff:** `python3 test/m1plus/fndiff.py <the build on the device> work/sync/<tag>/`.
    The build on the device is the `--dev` build of the newest device pass in `docs/m1plus-progress.md`
    (find its directory by the `version` in each `work/*/manifest.json`; on Oct 26, dev 10 in

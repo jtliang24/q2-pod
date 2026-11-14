@@ -7,6 +7,9 @@
  * whose Now Playing is the page for it. */
 #include "offsets.inc"
 #include "peq.h"
+#if M1PLUS
+#include "m1plus_np_view.h"
+#endif
 #ifndef PEQ_HOST
 #include "stock.h"
 #endif
@@ -130,19 +133,18 @@ static struct {
 
 /* The page, while open. */
 static struct {
+#if M1PLUS
+    void *play, *seek; /* the transport row's Play and the bar's touch (np_controls) */
+    np_view_t view; /* the page's labels, as np_write writes them */
+    int level; /* the browser's level np_browse opens */
+#endif
     void *page, *info, *msg, *art, *bar, *glyph, *title, *artist, *album, *elapsed, *remain, *note,
         *sub;
     unsigned timer, leave, scrub_at, shown, playing, press, press_at, bar_drawn; /* bar_drawn: its state + 1 */
-    int scrub, scrub_ms;
+    int scrub, scrub_ms, ipod;         /* ipod: Classic's layout (stream_ipod) */
     char art_track[64], art_tried[64]; /* art_tried: the track whose cover failed, tried art_tries times */
     int art_tries;
 } ui __attribute__((section(".scratch")));
-
-unsigned long long now_ms(void) { /* shared with radio.c; not now_ns() / 1e6: no __udivdi3 here */
-    int ts[2];            /* o32 timespec */
-    clock_gettime(1, ts); /* CLOCK_MONOTONIC, librespot's at= clock */
-    return (unsigned long long)(unsigned)ts[0] * 1000 + (unsigned)ts[1] / 1000000;
-}
 
 /* c to the datagram socket at path, *sock opened on first use. Shared with radio.c. */
 void dgram_send(int *sock, const char *path, const char *c, unsigned n) {
@@ -259,16 +261,44 @@ static void spot_launch(void) {
     system(SPOT_RUN);
 }
 
+#if !M1PLUS
 static void scrub_commit(void) {
     char c[16];
     int n = tk_snprintf(c, sizeof c, "S%d", ui.scrub_ms);
     ui.scrub = 0;
     dgram_send(&sp.sock, SPOT_SOCK, c, (unsigned)n);
 }
+#define SCRUBBING() ui.scrub
+#endif
 
 static void spot_refresh(void);
 static void *browsing(void);
 static void spot_restarting(void);
+
+#if M1PLUS
+/* The page, to the scrub both Now Playing pages share (m1plus_np_view.c). The target's seek goes by the socket; the page's
+ * tick reads the target through spot_src, so nothing here stops it. */
+static void spot_src(np_src_t *s);
+static void *spot_scrub_bar(void) { return ui.page ? ui.bar : 0; }
+static unsigned spot_track(void) { return fnv(FNV_SEED, (const unsigned char *)sp.track); }
+static int spot_second(void) { return (int)(spot_position() / 1000); }
+static int spot_player(void) { return sp.playing ? 2 : sp.paused ? 3 : 0; }
+static void spot_seek(unsigned ms) {
+    char c[16];
+    int n = tk_snprintf(c, sizeof c, "S%u", ms);
+    dgram_send(&sp.sock, SPOT_SOCK, c, (unsigned)n);
+}
+static void spot_keep(int on) {}
+static void spot_show(int unused) { spot_refresh(); }
+static const np_page_t spot_ops = { spot_src, spot_scrub_bar, spot_track, spot_second, spot_player,
+                                    spot_seek, spot_keep, spot_show, spot_show };
+static void spot_src(np_src_t *s) {
+    *s = (np_src_t){ .title = sp.title, .artist = sp.artist, .album = sp.album,
+                     .pos_ms = np_scrub_shown(&spot_ops, spot_position()), .dur_ms = sp.duration, .playing = sp.playing };
+}
+#define SCRUBBING() np_scrubbing(&spot_ops)
+#define scrub_commit np_scrub_end
+#endif
 
 /* SPOT_LOG's length, 0 without one. */
 static long log_size(void) {
@@ -361,13 +391,22 @@ void spot_poll(void) {
     } else if (mclGetPlayStatus() == 2)
         sp.local = 1; /* local music plays: the keys are its again */
     sp.active = (playing || sp.paused) && !sp.local;
+#if M1PLUS /* the Now Playing page holds it as the browser does: stopped under it, it said the binary is missing */
+    if (playing || downloading || ((browsing() || ui.page) && g_backlight_status))
+#else
     if (playing || downloading || (browsing() && g_backlight_status))
+#endif
         sp.played |= playing, sp.idle_at = now;
     else if (now - sp.idle_at >= (sp.played ? SPOT_IDLE_MS : SPOT_CAST_MS)) {
+#if M1PLUS /* left open dark too: shut first, unseen, as np_browse does */
+        if (ui.page) window_manager_close_window_force(window_manager(), ui.page);
+#endif
         if (browsing()) window_close(browsing()); /* left open dark: shut, as Back would */
         spot_stop();
     }
+#if !M1PLUS /* the M1's scrub has its timer */
     if (ui.scrub && now - ui.scrub_at >= SCRUB_MS) scrub_commit();
+#endif
 }
 
 /* mclStartPlayer's hook (navigation.c): local music is about to open the PCM. A playing librespot
@@ -388,6 +427,18 @@ void spot_yield(void) {
     sp.playing = !strcmp(state, "playing"); /* the next track's start need not ask again */
 }
 
+#if M1PLUS
+/* A paused session's own page. sp.local stays set from local music until Soloify plays, so the session isn't active,
+ * the page's buttons did nothing and the keys were local's, while the page showed it ready to play. On its page on top,
+ * a press may claim it. The browser's keys are as they were. */
+static int spot_claim(void) {
+    if (sp.active || !sp.paused || !ui.page || window_manager_get_top_window(window_manager()) != ui.page) return 0;
+    sp.local = 0;
+    sp.active = 1;
+    return 1;
+}
+#endif
+
 /* ringnav(), any page, after stock's key-lock filter: while Spotify is the last thing played,
  * Play/Pause and the side buttons are its. */
 int spot_media(unsigned key) {
@@ -395,12 +446,16 @@ int spot_media(unsigned key) {
                     : key == KEY_FWD_BTN  ? "n"
                     : key == KEY_BACK_BTN ? "b"
                                           : 0;
+#if M1PLUS /* the glyph pressed is right: with local playing, the bar's icon and these keys pause it, as the bar shows; the next press claims */
+    if (c && mclGetPlayStatus() != 2) spot_claim();
+#endif
     if (!c || !sp.active) return 0;
     headset_manual();
     dgram_send(&sp.sock, SPOT_SOCK, c, 1);
     return 1;
 }
 
+#if !M1PLUS /* the M1's are m1plus_np_view.c's */
 /* A single centre press, DOUBLE_CLICK_MS on, never while scrubbing: it replays the release to stock
  * on_wm_keyup_fun, which turns the screen off, as Now Playing's np_single. */
 static int spot_single(const void *info) {
@@ -433,6 +488,19 @@ int spot_key(void *top, unsigned key) {
     return 1;
 }
 
+#else
+const np_page_t *spot_np_page(void *top) {
+    return ui.page && top == ui.page && !sp.loading && sp.auth >= 0 && sp.track[0] && sp.duration ? &spot_ops : 0;
+}
+/* vol_paint: the page's bar and elapsed time, the band's place, as Now Playing's. */
+int spot_band(void *win, void **bar, void **times) {
+    if (!ui.page || win != ui.page) return 0;
+    *bar = ui.bar, *times = ui.elapsed;
+    return 1;
+}
+#endif
+
+#if !M1PLUS
 static void times(unsigned ms) {
     char t[24];
     toolsTimeItoa(t, (int)(ms / 1000));
@@ -441,14 +509,15 @@ static void times(unsigned ms) {
     toolsTimeItoa(t + 1, (int)(sp.duration / 1000 - ms / 1000));
     widget_set_text_utf8(ui.remain, t);
 }
+#endif
 
 /* The page from sp: the track, or why there is none. Labels are written only when they change. */
 static void spot_refresh(void) {
     if (sp.loading == 1 && time_now_ms() - sp.load_at >= SPOT_WAIT_MS) sp.loading = 2;
     if (sp.loading == 2 && spot_started()) sp.loading = 0; /* a paused track writes no new state */
     int track = sp.auth >= 0 && !sp.loading && sp.track[0] && strcmp(sp.state, "none"), installed = sp.launched;
-    widget_set_visible(ui.info, track, 0);
-    widget_set_visible(ui.msg, !track, 0);
+    view_show(ui.info, track); /* hidden is not insensitive: ui.msg, made last, would take the info view's taps */
+    view_show(ui.msg, !track);
     if (!track) {
         const char *note = "Loading…", *sub = SPOT_T_WAIT_SUB;
         if (!installed) note = SPOT_T_MISSING_NOTE, sub = SPOT_T_MISSING_SUB;
@@ -462,19 +531,23 @@ static void spot_refresh(void) {
         widget_set_text_utf8(ui.sub, sub);
         return;
     }
+#if !M1PLUS /* np_write, below */
     void *fields[] = { ui.title, ui.artist, ui.album };
     const char *values[] = { sp.title, sp.artist, sp.album };
     for (unsigned i = 0; i < 3; ++i)
         if (text_differs(fields[i], values[i])) {
             widget_set_text_utf8(fields[i], values[i]);
             widget_set_prop_int(fields[i], "xoffset", 0);
+            if (ui.ipod && !i)
+                theme_font(fields[i], ROLE_NP, FONT_ROW); /* the local page's title */
         }
+#endif
     /* ponytail: the cover is sized on the UI thread, one decode a track; a worker if it stutters */
     /* A cover that fails (written after its state line, or bad) is tried again on the next 3 ticks. */
     if (tk_strcmp(ui.art_tried, sp.track)) ui.art_tries = 0;
     if (sp.cover && tk_strcmp(ui.art_track, sp.track) && ui.art_tries < 4) {
-        if (thumb(SPOT_COVER, SPOT_ART, SPOT_ART_PX, SPOT_ART_PX) &&
-            image_show(ui.art, "file://" SPOT_ART, 0))
+        int px = I(ui.art, W_W); /* Classic's slanted art is wider */
+        if (thumb(SPOT_COVER, SPOT_ART, px, px) && image_show(ui.art, "file://" SPOT_ART, 0))
             tk_snprintf(ui.art_track, sizeof ui.art_track, "%s", sp.track);
         else {
             tk_snprintf(ui.art_tried, sizeof ui.art_tried, "%s", sp.track);
@@ -485,21 +558,38 @@ static void spot_refresh(void) {
         ui.art_track[0] = 0;
         image_base_set_image(ui.art, PLACEHOLDER);
     }
+#if M1PLUS
+    np_src_t src;
+    spot_src(&src);
+    np_write(&ui.view, &src);
+#else
+    if (ui.ipod)
+        ipod_times(ui.elapsed, ui.remain, ui.bar, (int)(sp.duration / 1000)); /* a new length */
     unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
     if (ms / 1000 + 1 != ui.shown) {
         ui.shown = ms / 1000 + 1;
         times(ms);
     }
+#endif
     /* only when the drawn width (spot_paint's) or the scrub's colour moves: this runs every tick */
-    unsigned bar = (unsigned)((ms >> 4) * SPOT_BAR_W / ((sp.duration >> 4) | 1)) << 1 | (ui.scrub != 0);
+#if M1PLUS
+    int scrub = SCRUBBING();
+    unsigned bar = (unsigned)np_bar_fill(src.pos_ms, sp.duration, scrub, SPOT_BAR_W, SPOT_BAR_H).x << 1 | (scrub != 0);
+#else
+    /* Classic's fitted to the track (ipod_times), the others' SPOT_BAR_W */
+    unsigned bw = (unsigned)I(ui.bar, W_W);
+    unsigned bar = (unsigned)((ms >> 4) * bw / ((sp.duration >> 4) | 1)) << 1 | (ui.scrub != 0);
+#endif
     if (bar + 1 != ui.bar_drawn) {
         ui.bar_drawn = bar + 1;
         widget_invalidate_force(ui.bar, 0);
     }
+#if !M1PLUS /* the M1's transport row shows it: np_write */
     if (ui.playing != (unsigned)sp.playing + 1) {
         ui.playing = (unsigned)sp.playing + 1;
         widget_invalidate_force(ui.glyph, 0);
     }
+#endif
 }
 
 static int tick(const void *unused) {
@@ -516,19 +606,28 @@ static void box(void *canvas, int x, int y, int w, int h, unsigned color, unsign
 }
 
 /* ringnav_paint, every widget after stock painted it: the bar, as Now Playing's capsule (the
- * accent's light tone in iPod, stock red in Stock), and the play state in the top row. */
+ * accent's light tone), and the play state in the top row. */
 void spot_paint(void *w, void *canvas) {
-    if (!ui.page || !w || !P(canvas, CANVAS_LCD) || (w != ui.bar && w != ui.glyph)) return;
+    if (!ui.page || !w || !P(canvas, CANVAS_LCD) || (w != ui.bar && (M1PLUS || w != ui.glyph))) return;
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
-#if IPOD
-    unsigned tone = rgba(accent_tone(2), 255);
-#else
-    unsigned tone = rgba(STOCK_RED, 255);
-#endif
+#if M1PLUS
     if (w == ui.bar) {
+        np_bar_t bar = np_bar_fill(np_scrub_shown(&spot_ops, spot_position()), sp.duration, SCRUBBING(), SPOT_BAR_W, SPOT_BAR_H);
+        box(canvas, 0, bar.y, SPOT_BAR_W, bar.h, bar.track, bar.radius);
+        if (bar.x) box(canvas, 0, bar.y, bar.x, bar.h, bar.fill, bar.radius);
+    }
+#else
+    unsigned tone = rgba(accent_tone(2), 255);
+    if (w == ui.bar && ui.ipod) { /* Classic's, as the local page's, its scrub's cue on it */
+        int bw = I(w, W_W);
+        unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
+        ipod_bar(canvas, 0, 0, bw, (int)((ms >> 4) * (unsigned)bw / ((sp.duration >> 4) | 1)),
+                 ui.scrub);
+    } else if (w == ui.bar) {
         unsigned ms = ui.scrub ? (unsigned)ui.scrub_ms : spot_position();
         int x = (int)((ms >> 4) * SPOT_BAR_W / ((sp.duration >> 4) | 1)); /* 32-bit to 57 h */
-        int h = np_bar_h();
+        /* Minimal's 4 px line, Modern's 8 px capsule: the view's height at most */
+        int h = theme()->np_bar < SPOT_BAR_H ? theme()->np_bar : SPOT_BAR_H;
         box(canvas, 0, 0, SPOT_BAR_W, h, rgba(TRACK_COLOR, 255), h / 2);
         if (x) box(canvas, 0, 0, x < h ? h : x, h, ui.scrub ? 0xffffffffu : tone, h / 2);
     } else { /* a triangle playing, two bars otherwise */
@@ -538,6 +637,7 @@ void spot_paint(void *w, void *canvas) {
         else
             canvas_fill_rect(canvas, 0, 0, 4, 14), canvas_fill_rect(canvas, 8, 0, 4, 14);
     }
+#endif
     stock_canvas_set_fill_color(canvas, fill);
 }
 
@@ -550,7 +650,7 @@ static int leave(const void *unused) {
 /* Return: a scrub seeks first, as on Now Playing; then back to the browser. */
 static int keyup(void *ctx, void *event) {
     if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
-    if (ui.scrub)
+    if (SCRUBBING())
         scrub_commit();
     else
         rearm(&ui.leave, leave, 0);
@@ -561,8 +661,13 @@ static int closed(void *ctx, void *event) {
     stop_timer(&ui.timer);
     stop_timer(&ui.leave);
     stop_timer(&ui.press);
+#if M1PLUS /* its target goes with the page, as Now Playing's (np_gone) */
+    memset(&ui, 0, sizeof ui);
+    np_scrub_gone(&spot_ops);
+#else
     if (ui.scrub) scrub_commit();
     memset(&ui, 0, sizeof ui);
+#endif
     return 0;
 }
 
@@ -575,16 +680,82 @@ void *label(void *parent, int x, int y, int w, int h, const char *style, int px,
     return l;
 }
 
+#if M1PLUS
+/* The page's own back (ipod-ui 4.6): a Return's, a scrub seeking first. */
+static int np_back(void *ctx, void *event) {
+    if (SCRUBBING())
+        scrub_commit();
+    else
+        rearm(&ui.leave, leave, 0);
+    return 0;
+}
+/* The transport row's Previous, Play and Next, as the keys' commands (spot_media). They are the session's even with local
+ * playing, which stops first: the next poll would otherwise hand the keys straight back to it (sp.local). */
+static int np_transport(void *ctx, void *event) {
+    if (spot_claim()) spot_take();
+    spot_media((unsigned)(long)ctx);
+    return 0;
+}
+/* The bar's touch: a slider nothing draws (opacity 0), which grabs the drag itself, its value a thousandth of the track: a
+ * drag previews as a scrub does, and its release seeks. */
+#define SEEK_MAX 1000
+static int np_seek(void *ctx, void *event) {
+    int at = widget_get_prop_int(ui.seek, "value", 0);
+    if (!sp.duration) return 0;
+    np_scrub_drag(&spot_ops, (int)(((sp.duration >> 4) * (unsigned)at / SEEK_MAX) << 4) / 1000, ctx != 0); /* 32-bit to 19 h */
+    return 0;
+}
+/* A button on the page, in V2.1's style, its images (normal, pressed) when it draws them as its background. */
+static void *np_button(void *parent, int x, int y, int w, int h, const char *style, const char *image, const char *down) {
+    static const char *const shown[] = { "style:normal:bg_image", "style:over:bg_image", "style:disable:bg_image", "style:focused:bg_image" };
+    void *b = widget_factory_create_widget(widget_factory(), "button", parent, x, y, w, h);
+    widget_use_style(b, style);
+    widget_set_prop_str(b, "style:normal:bg_color", "#00000000");
+    for (unsigned i = 0; image && i < sizeof shown / sizeof *shown; ++i) widget_set_prop_str(b, shown[i], image);
+    if (image) widget_set_prop_str(b, "style:pressed:bg_image", down);
+    return b;
+}
+static void np_level(int menu); /* the browser's */
+static int np_queue(void *ctx, void *event) {
+    np_level((int)(long)ctx);
+    return 0;
+}
+/* The back in the top row, the seek's touch, and V2.1's transport row at Now Playing's place (its x and widths): Previous,
+ * Play and Next send the keys' commands, Queue and Mode open the browser's Queue and Playback Settings, Mode's icon static:
+ * the page's state doesn't carry the mode. */
+static void np_controls(void) {
+    void *back = np_button(ui.page, 0, 0, NP_BACK_W, NP_TOP_H, STYLE_NAVBAR_RETURN, 0, 0);
+    widget_on(back, EVT_CLICK, np_back, 0);
+    ui.seek = widget_factory_create_widget(widget_factory(), "slider", ui.info, NP_BAR_X, NP_BAR_CY - NP_BAR_TOUCH / 2, NP_BAR_W, NP_BAR_TOUCH);
+    widget_set_prop_str(ui.seek, "slide_with_bar", "true");
+    widget_set_prop_int(ui.seek, "max", SEEK_MAX);
+    widget_set_opacity(ui.seek, 0);
+    widget_on(ui.seek, EVT_VALUE_CHANGING, np_seek, (void *)0);
+    widget_on(ui.seek, EVT_VALUE_CHANGED, np_seek, (void *)1);
+    void *row = widget_factory_create_widget(widget_factory(), "view", ui.info, 0, NP_BUTTONS_Y, UI_W, UI_H - STATUS_H - NP_BUTTONS_Y);
+    int h = UI_H - STATUS_H - NP_BUTTONS_Y;
+    widget_on(np_button(row, 58, 0, 65, h, "img_btn_style", "prev", "prev_down"), EVT_CLICK, np_transport, (void *)(long)KEY_BACK_BTN);
+    ui.play = np_button(row, 123, 0, 80, h, "btn_imgplay_style", 0, 0);
+    widget_on(ui.play, EVT_CLICK, np_transport, (void *)(long)KEY_PLAY);
+    widget_on(np_button(row, 203, 0, 59, h, "img_btn_style", "next", "next_down"), EVT_CLICK, np_transport, (void *)(long)KEY_FWD_BTN);
+    /* its image directly: V2.1's btn_imgrandom_style is playing_page.bin's, no style a payload page has */
+    widget_on(np_button(row, 0, 0, 48, h, "img_btn_style", "p_random", "p_random"), EVT_CLICK, np_queue, (void *)1);
+    widget_on(np_button(row, 272, 0, 48, h, "img_btn_style", "p_playqueue", "p_playqueuedown"), EVT_CLICK, np_queue, (void *)0);
+}
+#endif
+
 /* The Now Playing page: the browser's row, a track it started, or without librespot on the card. */
 static void spot_np(void) {
     if (ui.page || !(ui.page = page_open("spotify_page", closed, keyup))) return;
     void *f = widget_factory(), *page = ui.page;
-    int h = widget_get_prop_int(page, "h", BOTTOM);
+    int h = widget_get_prop_int(page, "h", client_h());
     ui.info = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     ui.msg = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
-    widget_set_text_utf8(label(ui.info, SPOT_TAG_X, 12, 200, 16, STYLE_SCRLABEL_WHITE20L, 16, SPOT_GREY),
-                         SPOT_T_LABEL);
-    ui.glyph = widget_factory_create_widget(f, "view", ui.info, UI_W - 38, 13, 14, 14); /* NP's top row */
+    void *name = label(ui.info, SPOT_TAG_X, 12, 200, 16, STYLE_SCRLABEL_WHITE20L, 16, SPOT_GREY);
+    widget_set_text_utf8(name, SPOT_T_LABEL);
+#if !M1PLUS /* the M1 transport row shows it */
+    ui.glyph = widget_factory_create_widget(f, "view", ui.info, 337, 13, 14, 14); /* NP's top row */
+#endif
     ui.art = image_create(ui.info, SPOT_ART_X, SPOT_ART_Y, SPOT_ART_PX, SPOT_ART_PX);
     image_set_draw_type(ui.art, 4); /* as Coverflow's covers */
     image_base_set_image(ui.art, PLACEHOLDER);
@@ -592,10 +763,10 @@ static void spot_np(void) {
         label(ui.info, SPOT_TEXT_X, SPOT_TITLE_Y, SPOT_TEXT_W, 28, STYLE_SCRLABEL_WHITE20L, NP_TITLE_PX, 0xffffffffu);
     ui.artist =
         label(ui.info, SPOT_TEXT_X, SPOT_ARTIST_Y, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
-              IPOD ? (0xff000000u | NP_ARTIST_RGB) : SPOT_GREY);
+              0xff000000u | NP_ARTIST_RGB);
     ui.album =
         label(ui.info, SPOT_TEXT_X, SPOT_ALBUM_Y, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
-              IPOD ? (0xff000000u | NP_ALBUM_RGB) : SPOT_GREY);
+              0xff000000u | NP_ALBUM_RGB);
     void *fields[] = { ui.title, ui.artist, ui.album };
     for (unsigned i = 0; i < 3; ++i) {
         hscroll_label_set_only_focus(fields[i], 0);
@@ -607,12 +778,19 @@ static void spot_np(void) {
         label(ui.info, SPOT_TIME_X, SPOT_TIMES_Y, 80, 16, STYLE_SCRLABEL_WHITE20L, 14, SPOT_GREY);
     ui.remain = label(ui.info, UI_W - SPOT_TIME_X - 80, SPOT_TIMES_Y, 80, 16, STYLE_SCRLABEL_WHITE20R,
                       14, SPOT_GREY);
+    /* Classic: the local page's places, its title bar naming the page and showing the play state */
+    void *rows[4] = { ui.title, ui.artist, ui.album, 0 };
+    ui.ipod = stream_ipod(ui.art, rows, ui.elapsed, ui.remain, ui.bar, 0);
+    if (ui.ipod) widget_set_visible(name, 0, 0), widget_set_visible(ui.glyph, 0, 0);
     ui.note =
         label(ui.msg, CF_EDGE, 100, UI_W - 2 * CF_EDGE, 30, STYLE_SCRLABEL_WHITE20C, 20, 0xffffffffu);
     ui.sub =
         label(ui.msg, CF_EDGE, 134, UI_W - 2 * CF_EDGE, 24, STYLE_SCRLABEL_WHITE20C, 16, SPOT_GREY);
 #if M1PLUS
-    back_button(page); /* over both views; Return closes the page */
+    np_controls();
+    ui.view = (np_view_t){ .win = page, .title = ui.title, .artist = ui.artist, .album = ui.album, .elapsed = ui.elapsed,
+                           .remain = ui.remain, .play = ui.play, .bold = -1 };
+    np_view_theme(&ui.view);
 #endif
     ui.timer = timer_add(tick, 0, 250);
     spot_refresh();
@@ -1089,12 +1267,13 @@ static int go(const void *unused) {
             l->sel = widget_get_prop_int(br.view, "_ringnav_index", 0);
             widget_destroy_children(br.page), br.view = 0; /* the box alone: the keyboard leaves no room for the rows */
             br.edit = edit_create(br.page, "text", 2, 26);
-            widget_set_prop_str(br.edit, "tips", SPOT_T_TIPS);
 #if M1PLUS
+            widget_set_prop_str(br.edit, "tips", SPOT_T_TIPS);
             widget_on(br.edit, EVT_VALUE_CHANGED, searched, br.edit);
             widget_on(br.edit, EVT_IM_ACTION, searched, br.edit);
             widget_on(br.edit, EVT_BLUR, search_left, br.edit);
 #else
+            t9_box(br.page, br.edit, "Search Spotify");
             widget_on(br.edit, EVT_VALUE_CHANGED, searched, 0);
             widget_on(br.edit, EVT_IM_ACTION, searched, 0);
             widget_on(br.edit, EVT_BLUR, search_left, 0);
@@ -1255,6 +1434,37 @@ int spot_open(void *ctx, void *event) {
     return 0;
 }
 
+#if M1PLUS
+static void np_push(int menu) {
+    int r = menu ? M_SETTINGS : M_QUEUE;
+    push(L_LIST, r == M_QUEUE ? "queue" : "settings", "", "", MENU[r]);
+}
+/* Hold Return opens the page with no browser under it (spot_now_playing). The page closes first, unanimated and unseen,
+ * as m1plus_play_page closes the stale one, then the browser opens at the level: Back goes down its levels, then to
+ * where the hold began. On a timer: the click that asked is still the page's. */
+static int np_browse(const void *unused) {
+    int menu = ui.level;
+    ui.leave = 0;
+    window_manager_close_window_force(window_manager(), ui.page);
+    spot_open((void *)(long)spot_be, 0);
+    if (br.page) np_push(menu);
+    return 0;
+}
+/* The Now Playing page's Queue (0) and Mode (1): the browser's Queue and Playback Settings levels, the page gone. */
+static void np_level(int menu) {
+    if (SCRUBBING()) scrub_commit();
+    if (!br.page) {
+        ui.level = menu;
+        rearm(&ui.leave, np_browse, 0);
+        return;
+    }
+    rearm(&ui.leave, leave, 0);
+    np_push(menu);
+}
+/* compact_now_playing's, while Spotify or Soloify owns playback (media_owner). */
+void spot_now_playing(void) { spot_np(); }
+#endif
+
 /* ringnav_keylong: Play/Pause held on a track row adds it to Spotify's queue, on a playlist row
  * downloads it, the reply toasted; 1 when it was one. */
 int spot_hold(void *w) {
@@ -1276,6 +1486,12 @@ int spot_hold(void *w) {
 
 /* iPod's Now Playing corners (navigation.c paint_cover) round the art too. */
 void *spot_art(void) { return ui.art; }
+#if M1PLUS
+void *spot_album(void) { return ui.album; }
+void spot_theme(void) {
+    if (ui.page) np_view_theme(&ui.view);
+}
+#endif
 
 static struct {
     unsigned until;

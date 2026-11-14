@@ -29,7 +29,8 @@ now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
 check and is not published, since upstream is past 1.2.2, so the first published M1 release is
 U3's `<tag>-m1.1`), and U1 (the M1 code beside upstream's: +1,417/−279 lines over upstream's files,
 from +6,417/−2,036). The M1 feature work waits until U3 lands: Spotify on the
-device (section 3) and the final pass (section 7); the iPod UI (section 5) is unplanned. Section 4 is done for 1.2.2;
+device (section 3) and the final pass (section 7); the iPod UI (section 5) is in progress on
+`feature/m1-ipod` ([m1plus-ipod-ui.md](m1plus-ipod-ui.md)). Section 4 is done for 1.2.2;
 one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes
 first: items that only change how something looks wait for the final pass (section 7).
 
@@ -58,12 +59,14 @@ first: items that only change how something looks wait for the final pass (secti
   shared code, so the build's V2.1 name check covers it and the Q2 keeps its own.
 - **Build rows with `list_row`/`row_of`.** They build V2.1's row structure on M1. Don't reach a row's
   parts by child index.
-- **Prefer V2.1's own UI conventions.** Its title-bar back button, its row styles, and its native
-  settings where one exists (for example Double wake). Avoid copying a Q2 control V2.1 already has.
-- **Every page has an explicit Back button.** Every page Q2 Pod opens or replaces on M1 shows V2.1's
-  title-bar back button at its top left. Make it with `back_button`, or with `page_title`, which adds
-  one; its click sends Return, and the page's keyup decides whether that closes the page or steps
-  back one screen. The M1 has no Return key. Previous, Next and Play/Pause are media keys, as on
+- **Follow the iPod UI's conventions.** New pages and rows follow upstream's iPod UI, reflowed for
+  320x480 ([m1plus-ipod-ui.md](m1plus-ipod-ui.md)). V2.1's own look is used only where the iPod UI
+  opens a stock page. Until a page is ported, it keeps V2.1's title-bar back button and row styles.
+- **Every page has an explicit Back button.** Every page Q2 Pod opens or replaces on M1 shows a back
+  control at its top left. On an iPod page it is the slim back chevron beside the title
+  ([m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.2). Until a page is ported, it is V2.1's title-bar
+  back button, made with `back_button`, or with `page_title`, which adds one. Either way its click
+  sends Return, and the page's keyup decides whether that closes the page or steps back one screen. The M1 has no Return key. Previous, Next and Play/Pause are media keys, as on
   stock, except that in Knob: Navigation Previous also presses the page's back button. So no
   gesture, hidden tap or key may be a page's only way out. Each new page's `test/m1plus/boot.py` step
   closes it with the button (`BACK`).
@@ -350,16 +353,20 @@ Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 Now Playing's info lines (`NP_INFO_CALL`) only change how the lines read, so they are in section 7.
 Their V2.1 site is the fill's one call, `0x53bebc` (`0x0411f760`, the fill at `0x539c40`).
 
-## 5. The iPod UI on M1: unplanned
+## 5. The iPod UI on M1: ported
 
-Unplanned (the user's choice, Oct 26): the form factors are too different for a straightforward port,
-so the M1 keeps V2.1's own look ([m1plus-unported.md](m1plus-unported.md#the-ipod-ui)). The reasons:
+Ported on `feature/m1-ipod` (the user's choice, Nov 2), and released from `staging` as 1.7.0-m1.1 (Phase 6): the
+iPod UI is the M1's only UI, as on the Q2. The plan, its phases and its design decisions are
+in [m1plus-ipod-ui.md](m1plus-ipod-ui.md). Two things changed the Oct 26 decision, which kept V2.1's own
+look:
+- upstream 1.5.9 (`4fee7d5`) deleted the Legacy path the M1 compiles (`-DIPOD=0`);
+- the M1's mix of V2.1 pages and Q2 Pod pages is clunky to move between.
 
-`--ipod` is refused for M1 Plus. The iPod UI patches V1.32's UI assets, styles and code layout, and
-assumes the Q2's 375x320 landscape screen and touch wheel. An M1 version would be a redesign for a
-320x480 portrait touchscreen with a knob, not a port. If it is ever taken up, two `test/m1plus/patch.py`
-checks go with it: the library rows' title bounds (`compact_row_layout`) and the info pages' unwind
-(`navigator_close`). In the Stock UI each runs V1.32's own code as a control.
+The iPod UI patches V1.32's UI assets, styles and code layout, and assumes the Q2's 375x320 landscape
+screen and touch wheel, so the M1 version reflows it for a 320x480 portrait touchscreen with a knob. Phase 1
+([progress](m1plus-progress.md) section 57) built the M1 as the iPod variant with no iPod assets. Two
+`test/m1plus/patch.py` checks go with the port: the library rows' title bounds (`compact_row_layout`) and the
+info pages' unwind (`navigator_close`). Both are in `test/m1plus/patch_gaps.py` until their Phase 4 items.
 
 ## 6. Tooling and release
 
@@ -439,9 +446,12 @@ checks go with it: the library rows' title bounds (`compact_row_layout`) and the
 
 **Done (Oct 25,** [m1plus-progress.md](m1plus-progress.md) **section 46),** with the knob on Home: the
 `page_list` pages' rows, the Streaming icons and Now Playing's info lines. Coverflow's touch works as
-designed on the device; its feel is the user's call. Left:
-- **Coverflow's back arrow** overlaps the left cover at the top left.
-- **The selection frame on V2.1's pickers** (Theme, Screen Rotation) reaches into the scroll bar.
+designed on the device; its feel is the user's call. The aesthetics pass (Nov 13, progress section 87) closed the
+rest of the visual list: Coverflow's back arrow over the left cover went with the bar's chevron, and the frame on
+V2.1's pickers was their stray full-height scroll bar, now cleared. Kept for later:
+- **Theme preset resets.** Theme picks intentionally apply presets: Modern enables Light Mode and Minimal
+  resets its accent to Graphite (progress section 78). If repeated resets become troublesome, consider keeping
+  customized values when returning to a theme. Keep the present presets until that usability change is needed.
 
 The items as recorded:
 
@@ -478,6 +488,12 @@ These are skipped on M1 on purpose (marked `Q2 only` in the tests), not gaps:
   include hands a key to stock first;
 - Quick Settings' brightness/volume switch on a Play/Pause hold (1.3.8): the M1's knob stays volume
   in Quick Settings, which Knob: Navigation leaves to stock (the user's choice, Oct 25).
+- From the iPod UI port ([m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.8, progress 85):
+  - Games (`games.c`; the card apps' games too): they need a design without the Return key and the wheel;
+  - `chord_gate`'s rim presses, and Return's ghost and stale latch: the M1's knob press and side keys are
+    apart, and its Return is synthetic, past `ringnav_input`;
+  - the wheel's own Display rows: Corners (the glass is square), Wheel QS, Wheel Sensitivity, and Click
+    With Headphones (no buzzer).
 
 The Rockbox dual boot stays: there is no Rockbox for the M1 Plus yet, but the hook serves as a boot-time
 diagnostic.

@@ -1,5 +1,5 @@
-/* M1 Plus: System Setting's Apps row. patch/navigation.c includes this before ringnav_systemset
- * (docs/m1plus-roadmap.md U4). */
+/* M1 Plus: System Setting in the iPod's order. patch/navigation.c includes this before ringnav_systemset
+ * (docs/m1plus-ipod-ui.md item 3). */
 #if M1PLUS
 /* Whether w, or a widget under it, draws the image named image (a V2.1 row's icon). */
 static int draws_image(void *w, const char *image, int depth) {
@@ -9,17 +9,73 @@ static int draws_image(void *w, const char *image, int depth) {
         if (draws_image(widget_get_child(w, i), image, depth + 1)) return 1;
     return 0;
 }
-/* reorder keeps V2.1's rows as built, so the Apps row list_row appended, the last, goes before V2.1's
- * System Update row (its system_update icon), as 1.4.2 orders them on the Q2; About stays last. It
- * opens a page, so it draws V2.1's chevron, as page_row_into's rows do. */
-static void apps_before_update(void *view) {
+/* view's last row: the one list_row or list_row_into has just added. */
+static void *last_row(void *view) {
     unsigned n = view ? widget_count_children(view) : 0;
-    void *apps = n ? widget_get_child(view, n - 1) : 0;
-    if (apps) image_base_set_image(image_create(apps, 295, 21, 13, 22), ROW_CHEVRON);
-    for (unsigned i = 0; apps && i + 1 < n; ++i)
-        if (draws_image(widget_get_child(view, i), "system_update", 0)) {
-            widget_restack(apps, i);
-            return;
-        }
+    return n ? widget_get_child(view, n - 1) : (void *)0;
 }
+/* The rows by role, as the Q2's sysset_order has them, then V2.1's extras, then maintenance, About last (the
+ * user's order, Nov 6). V2.1's builder (systemset_sysset_page_init) makes a row per syssetMenu entry, its icon
+ * get_systemset_showinfo's (two tables, which differ only in Double Tap's icon, by a GPIO), and its click reads
+ * the row's name, which is its menu index, so restacking keeps each click. The payload's two rows are matched by
+ * pointer: App Store draws system_update as Update does, Boot to sset_powermanager as Idle does. */
+#define SYSSET_BOOT ((const char *)1)
+#define SYSSET_APPS ((const char *)2)
+#define SYSSET_OTHER ((const char *)3) /* a row matching no role (a later firmware's, or sset_prove) */
+static const char *const sysset_roles[] = {
+    "sset_wifiset",    "sset_netservice", "sset_display",      "sset_powermanager" /* Idle */,
+    "sset_keylock" /* Buttons lock */,    "system_time",       "system_language",
+    "sset_carmode" /* In-Vehicle */,      SYSSET_BOOT,         SYSSET_APPS,
+    "sset_doublewake", "sset_tswake" /* Double Tap to Turn On */, "system_scrotate", "sset_theme",
+    SYSSET_OTHER,      "system_update",   "system_reset",      "system_formatcard",
+    "sset_about",
+};
+#define SYSSET_ROLES (sizeof sysset_roles / sizeof *sysset_roles)
+static unsigned sysset_role(void *row, void *apps, void *boot) {
+    const char *want = row == apps ? SYSSET_APPS : row == boot ? SYSSET_BOOT : 0;
+    unsigned other = 0;
+    for (unsigned k = 0; k < SYSSET_ROLES; ++k) {
+        const char *role = sysset_roles[k];
+        int named = role != SYSSET_BOOT && role != SYSSET_APPS && role != SYSSET_OTHER;
+        if (role == SYSSET_OTHER) other = k;
+        if (want ? role == want : named && draws_image(row, role, 0)) return k;
+    }
+    return other;
+}
+/* Restacks the rows once, after the payload's are added (apps, App Store, and boot, Boot to, or 0 without
+ * Rockbox), each role in its place, rows of one role in V2.1's order. App Store opens a page, so it draws V2.1's
+ * chevron, as page_row_into's rows do. */
+static void sysset_ipod_order(void *view, void *apps, void *boot) {
+    void *rows[32];
+    unsigned char role[32];
+    unsigned n = view ? widget_count_children(view) : 0;
+    if (apps) image_base_set_image(image_create(apps, 295, 21, 13, 22), ROW_CHEVRON);
+    if (n > sizeof rows / sizeof *rows) return;
+    for (unsigned i = 0; i < n; ++i) {
+        rows[i] = widget_get_child(view, i);
+        role[i] = sysset_role(rows[i], apps, boot);
+    }
+    unsigned at = 0;
+    for (unsigned k = 0; k < SYSSET_ROLES; ++k)
+        for (unsigned i = 0; i < n; ++i)
+            if (role[i] == k) widget_restack(rows[i], at++);
+}
+/* System settings: App Store, then Boot to with Rockbox on the card, then the iPod's order. Upstream 1.6.4 moved
+ * In-Vehicle Mode and Boot to onto Power, and Key Tone and Buttons lock onto a Controls row here; on the M1 these
+ * stay V2.1's own rows (sset_carmode, sset_keylock) until that is ported (docs/m1plus-unported.md). */
+int ringnav_systemset(void *win, void *ctx) {
+    int result = stock_systemset_trampoline(win, ctx);
+    void *view = win ? widget_lookup(win, VIEW_SYSSET, 1) : (void *)0, *apps = (void *)0, *boot = (void *)0;
+    if (!view) return result;
+    widget_set_text_utf8(list_row_into(view, "system_update", shelf_open, 0), "App Store");
+    apps = last_row(view);
+    if (rockbox_available()) {
+        boot_row(view);
+        boot = last_row(view);
+    }
+    sysset_ipod_order(view, apps, boot);
+    return result;
+}
+/* Named as m1plus_nav_library.c's tidal_downloads is: the Q2's System order. */
+static const void *const m1_unported_sysset_order __attribute__((unused)) = sysset_order;
 #endif

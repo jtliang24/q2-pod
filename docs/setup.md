@@ -4,7 +4,7 @@ For a brand new Q2. You need the Q2, its microSD card, a USB-C cable and a compu
 
 ## 1. Install Q2 Pod
 
-1. Download the latest `update.tar` here: https://github.com/DiamondBond/q2-pod/releases/latest (`update-legacy.tar` is the same firmware without the iPod UI; rename `update-legacy.tar` to `update.tar` before you copy it to the card).
+1. Download the latest `update.tar` here: https://github.com/DiamondBond/q2-pod/releases/latest.
 2. Copy `update.tar` onto the card (the main folder, not inside a folder). Eject the card and unplug the Q2.
 3. Put the card in the Q2 and turn it on.
 4. On the Q2: **System settings → System Update → TF card update**. Leave the card in until the Q2 restarts. Do not unplug it while it updates.
@@ -34,7 +34,7 @@ Or, with Q2 Pod on Wi-Fi: **System settings → App Store → Rockbox** installs
 
 ## How to use it
 
-- **Want Q2 Pod instead of Rockbox?** Hold Play/Pause while turning the Q2 on. It only lasts that time; the next start is Rockbox. To always start Q2 Pod, set **System settings → Boot to: Q2 Pod**.
+- **Want Q2 Pod instead of Rockbox?** Hold Play/Pause while turning the Q2 on. It only lasts that time; the next start is Rockbox. To always start Q2 Pod, set **System settings → Power → Boot to: Q2 Pod**.
 - **To copy music over USB:** turn on with Play/Pause held, plug in, drag your files over.
 - **No card in it?** It starts Q2 Pod.
 - **Bluetooth headphones with Rockbox:** shut Rockbox down (it goes to Q2 Pod), turn on Bluetooth and connect your headphones, and pick **Rockbox** on the Home menu (above Streaming). Rockbox starts and plays through the headphones. When it shuts down, you are back in Q2 Pod.

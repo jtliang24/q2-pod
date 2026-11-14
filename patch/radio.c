@@ -144,11 +144,12 @@ enum { MENU, PICK, STATIONS };
 enum { R_PLAYING, R_FAVS, R_FEATURED, R_TOP, R_COUNTRY, R_GENRE, A_PICK, A_SEARCH, A_SHOW };
 
 /* The lists page and the Now Playing page, while open. note: a caption over no rows (loading or a
- * failed fetch) stands in for level's list; want is the level a fetch fills. */
+ * failed fetch) stands in for level's list; want is the level a fetch fills, az whether it sorts it
+ * A-Z. */
 static struct {
     void *page, *view, *edit; /* edit: the pull-down's search box */
     unsigned timer, go, leave;
-    int level, next, arg, want, note, genre, favs, from, rows[6], sel[3];
+    int level, next, arg, want, az, note, genre, favs, from, rows[6], sel[3];
     list_t pick, list;
     char caption[64];
 } ui __attribute__((section(".scratch")));
@@ -156,6 +157,7 @@ static struct {
 static struct {
     void *page, *station, *artist, *song, *info, *elapsed, *heart;
     unsigned timer, leave, seen; /* seen: rd.serial the heart shows */
+    int ipod;                    /* Classic's layout (stream_ipod) */
 } np __attribute__((section(".scratch")));
 
 static void list_free(list_t *l) {
@@ -186,6 +188,27 @@ static void list_copy(list_t *to, const list_t *from) {
 
 static const char *name_of(const list_t *l, int i) { return l->buf + l->name[i]; }
 static const char *url_of(const list_t *l, int i) { return l->buf + l->url[i]; }
+
+extern void ringnav_sort_key(char *s);
+
+/* a before b A-Z, as the library sorts: without a leading article, ASCII case ignored. */
+static int before(const char *a, const char *b) {
+    char x[64], y[64];
+    tk_snprintf(x, sizeof x, "%s", a), tk_snprintf(y, sizeof y, "%s", b);
+    ringnav_sort_key(x), ringnav_sort_key(y);
+    return strcasecmp(x, y) < 0;
+}
+
+/* l A-Z, stable, so equal names keep the directory's vote order. ponytail: insertion sort,
+ * RADIO_MAX (200) rows once per fetch; qsort with precomputed keys if lists grow. */
+static void list_sort(list_t *l) {
+    for (int i = 1; i < l->n; ++i)
+        for (int k = i; k > 0 && before(name_of(l, k), name_of(l, k - 1)); --k) {
+            unsigned n = l->name[k], u = l->url[k];
+            l->name[k] = l->name[k - 1], l->url[k] = l->url[k - 1];
+            l->name[k - 1] = n, l->url[k - 1] = u;
+        }
+}
 
 /* path's bytes appended to buf at *n, below cap, then a newline. */
 static int slurp(const char *path, char *buf, unsigned *n, unsigned cap) {
@@ -372,6 +395,8 @@ static void np_refresh(void) {
     memcpy(artist, rd.title, a);
     artist[a] = 0;
     set(np.station, rd.list.n ? name_of(&rd.list, rd.at) : "");
+    if (np.ipod)
+        theme_font(np.station, ROLE_NP, FONT_ROW); /* the local page's title; by its text */
     set(np.artist, artist);
     if (np.seen != rd.serial && rd.list.n) {
         list_t favs = { 0 };
@@ -394,8 +419,11 @@ static void np_refresh(void) {
         tk_snprintf(t, sizeof t, rd.bitrate[0] ? "%s  %s kbps" : "%s", rd.codec, rd.bitrate);
     set(np.info, t);
     t[0] = 0;
-    if (rd.pid && rd.since)
-        toolsTimeItoa(t, (int)((unsigned)(now_ms() - rd.since) / 1000)); /* 32-bit: 49 days */
+    int sec = rd.pid && rd.since ? (int)((unsigned)(now_ms() - rd.since) / 1000) : -1; /* 49 days */
+    if (sec >= 0) toolsTimeItoa(t, sec);
+    /* Classic: boxes for "-59:59" until the hour, then the hours': the running time only grows, so
+     * they never shrink while a stream plays; the next one starts on the minutes' again */
+    if (np.ipod) ipod_times(np.elapsed, 0, 0, sec < 3600 ? 600 : sec);
     set(np.elapsed, t);
 }
 
@@ -427,33 +455,39 @@ static int np_heart(void *ctx, void *event) {
     return 0;
 }
 
-/* Spotify's Now Playing layout, the radio's icon for the art, and local Now Playing's heart. The wheel and Centre stay stock's:
- * the volume, and the screen. */
+/* Spotify's Now Playing layout, the radio's icon for the art, and local Now Playing's heart. The
+ * wheel and Centre stay stock's: the volume, and the screen. Under Classic the local page's
+ * (stream_ipod), as an album: the build's station cover slanted, the station, artist and song in
+ * the title's, artist's and album's rows, the stream in "3 of 12"'s, the running time left of a bar
+ * that is always full, the heart. */
 static void np_open(void) {
     if (np.page || !(np.page = page_open("radionp_page", np_closed, np_keyup))) return;
     void *page = np.page;
-    widget_set_text_utf8(label(page, SPOT_TAG_X, 12, 200, 16, STYLE_SCRLABEL_WHITE20L, 16, SPOT_GREY),
-                         "Internet Radio");
-    void *art = image_create(page, SPOT_ART_X, SPOT_ART_Y, SPOT_ART_PX, SPOT_ART_PX);
+    void *name = label(page, RADIO_TAG_X, 12, 200, 16, STYLE_SCRLABEL_WHITE20L, 16, SPOT_GREY);
+    widget_set_text_utf8(name, "Internet Radio");
+    void *art = image_create(page, RADIO_ART_X, RADIO_ART_Y, RADIO_ART_PX, RADIO_ART_PX);
     image_set_draw_type(art, IMAGE_DRAW_SCALE_DOWN);
     image_base_set_image(art, "stream_radio");
     np.station =
-        label(page, SPOT_TEXT_X, SPOT_TITLE_Y, SPOT_TEXT_W, 28, STYLE_SCRLABEL_WHITE20L, NP_TITLE_PX, 0xffffffffu);
-    np.artist = label(page, SPOT_TEXT_X, SPOT_ARTIST_Y, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
-                      IPOD ? (0xff000000u | NP_ARTIST_RGB) : SPOT_GREY);
-    np.song = label(page, SPOT_TEXT_X, SPOT_ALBUM_Y, SPOT_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
-              IPOD ? (0xff000000u | NP_ALBUM_RGB) : SPOT_GREY);
-    np.info = label(page, SPOT_TIME_X, SPOT_TIMES_Y, UI_W - 2 * SPOT_TIME_X - 80, 16, STYLE_SCRLABEL_WHITE20L, 14, SPOT_GREY);
-    np.elapsed = label(page, UI_W - SPOT_TIME_X - 80, SPOT_TIMES_Y, 80, 16, STYLE_SCRLABEL_WHITE20R,
+        label(page, RADIO_TEXT_X, RADIO_TITLE_Y, RADIO_TEXT_W, 28, STYLE_SCRLABEL_WHITE20L, NP_TITLE_PX, 0xffffffffu);
+    np.artist = label(page, RADIO_TEXT_X, RADIO_ARTIST_Y, RADIO_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
+                      0xff000000u | NP_ARTIST_RGB);
+    np.song = label(page, RADIO_TEXT_X, RADIO_ALBUM_Y, RADIO_TEXT_W, 22, STYLE_SCRLABEL_WHITE20L, NP_META_PX,
+              0xff000000u | NP_ALBUM_RGB);
+    np.info = label(page, RADIO_TIME_X, RADIO_TIMES_Y, UI_W - 2 * RADIO_TIME_X - 80, 16, STYLE_SCRLABEL_WHITE20L, 14, SPOT_GREY);
+    np.elapsed = label(page, UI_W - RADIO_TIME_X - 80, RADIO_TIMES_Y, 80, 16, STYLE_SCRLABEL_WHITE20R,
                        14, SPOT_GREY);
-    np.heart = image_create(page, SPOT_HEART_X, SPOT_HEART_Y, 50, 50);
+    np.heart = image_create(page, RADIO_HEART_X, RADIO_HEART_Y, 50, 50);
     image_set_draw_type(np.heart, IMAGE_DRAW_CENTER);
     widget_set_prop_str(np.heart, "clickable", "true");
     widget_on(np.heart, EVT_CLICK, np_heart, 0);
-#if M1PLUS
-    back_button(page); /* Return closes the page */
-#endif
     np.seen = ~rd.serial;
+    void *rows[4] = { np.station, np.artist, np.song, np.info };
+    np.ipod = stream_ipod(art, rows, np.elapsed, 0, 0, np.heart);
+    if (np.ipod) {
+        widget_set_visible(name, 0, 0); /* the title bar names the page */
+        image_base_set_image(art, "classic_light_station");
+    }
     np.timer = timer_add(np_tick, 0, 500);
     np_refresh();
 }
@@ -492,7 +526,7 @@ void radio_search(void) {
     if (ui.view) ui.sel[ui.level] = widget_get_prop_int(ui.view, "_ringnav_index", 0);
     widget_destroy_children(ui.page), ui.view = 0; /* the box alone: the keyboard leaves no room for the rows */
     ui.edit = edit_create(ui.page, "text", 2, 26);
-    widget_set_prop_str(ui.edit, "tips", "Search stations");
+    t9_box(ui.page, ui.edit, "Search stations");
     widget_on(ui.edit, EVT_VALUE_CHANGED, searched, 0);
     widget_on(ui.edit, EVT_IM_ACTION, searched, 0);
     widget_on(ui.edit, EVT_BLUR, search_left, 0);
@@ -520,8 +554,9 @@ static void show(int level) {
     } else {
         const list_t *l = level == PICK ? &ui.pick : &ui.list;
         n = l->n;
-        ui.view = page_list(ui.page, ui.page, 0,
-                            level == PICK ? ui.genre ? "Genres" : "Countries" : ui.caption, n, 48);
+        const char *caption = level == PICK ? ui.genre ? "Genres" : "Countries" : ui.caption;
+        ui.view = page_list(ui.page, ui.page, 0, caption, n, 48);
+        if (!n && level == STATIONS) page_empty(ui.page, ui.favs ? "Favourites" : "Internet Radio");
         for (int i = 0; i < n; ++i)
             if (level == PICK)
                 page_row_into(ui.view, i, name_of(l, i), pick_click);
@@ -536,7 +571,7 @@ static void note(const char *caption) {
     if (ui.view && !ui.note) ui.sel[ui.level] = widget_get_prop_int(ui.view, "_ringnav_index", 0);
     ui.note = 1;
     ui.view = ui.edit = 0;
-    page_list(ui.page, ui.page, 0, caption, 0, 48);
+    page_list_or(ui.page, ui.page, "Internet Radio", caption, 0, 48);
 }
 
 static void fetch_cancel(void) {
@@ -546,10 +581,11 @@ static void fetch_cancel(void) {
     fx.body = 0;
 }
 
-/* RADIO_API path fetched on fx's pthread for level want, "Loading…" meanwhile. */
-static void fetch(const char *path, int want) {
+/* RADIO_API path fetched on fx's pthread for level want, A-Z when az, "Loading…" meanwhile. */
+static void fetch(const char *path, int want, int az) {
     fetch_cancel();
     ui.want = want;
+    ui.az = az;
     ui.sel[want] = 0;
     tk_snprintf(fx.url, sizeof fx.url, RADIO_API "%s", path);
     fx.n = 0;
@@ -602,6 +638,7 @@ static int tick(const void *unused) {
     if (fx.code == 200 && fx.n) {
         list_t *l = ui.want == PICK ? &ui.pick : &ui.list;
         list_set(l, fx.body, fx.n, ui.want == PICK, !ui.genre);
+        if (ui.az) list_sort(l);
         if (l->n)
             show(ui.want);
         else
@@ -632,15 +669,15 @@ static int go(const void *unused) {
     } else if (ui.next == A_SEARCH) {
         url_escape(ui.caption, key, sizeof key);
         tk_snprintf(path, sizeof path, "/m3u/stations/byname/%s" RADIO_QUERY, key);
-        fetch(path, STATIONS);
+        fetch(path, STATIONS, 0); /* Search and Top Stations stay by votes */
     } else if (ui.next == R_TOP) {
         tk_snprintf(ui.caption, sizeof ui.caption, "Top Stations");
-        fetch("/m3u/stations/topvote/100?hidebroken=true", STATIONS);
+        fetch("/m3u/stations/topvote/100?hidebroken=true", STATIONS, 0);
     } else if (ui.next != A_PICK) {
         ui.genre = ui.next == R_GENRE;
         fetch(ui.genre ? "/csv/tags?order=stationcount&reverse=true&limit=60"
                        : "/csv/countries?order=stationcount&reverse=true&limit=60",
-              PICK);
+              PICK, 1);
     } else {
         url_escape(url_of(&ui.pick, i), key, sizeof key);
         tk_snprintf(path, sizeof path,
@@ -648,7 +685,7 @@ static int go(const void *unused) {
                              : "/m3u/stations/bycountrycodeexact/%s" RADIO_QUERY,
                     key);
         tk_snprintf(ui.caption, sizeof ui.caption, "%s", name_of(&ui.pick, i));
-        fetch(path, STATIONS);
+        fetch(path, STATIONS, 1);
     }
     return 0;
 }
@@ -740,6 +777,10 @@ int radio_open(void *ctx, void *event) {
     show(MENU);
     return 0;
 }
+#if M1PLUS
+/* compact_now_playing's, while the radio owns playback (media_owner). */
+void radio_now_playing(void) { np_open(); }
+#endif
 int radio_status(void) { return rd.active ? (rd.pid ? 2 : 3) : 0; }
 unsigned radio_session(void) { return rd.serial; }
 void radio_set_playing(int playing) {

@@ -2949,17 +2949,2127 @@ bridge's encoder show them) and the Apps row passed. Open: scrub through Now Pla
 Centre press turns into a screen lock (Knob: Navigation on). The full table is in q2-soloify's
 `docs/step5.md`; the checks were driven through q2remote. No release was cut: the changelog entry waits for one.
 
+## 57. The M1 compiles the iPod path (Nov 2)
+
+Phase 1 of [m1plus-ipod-ui.md](m1plus-ipod-ui.md). The M1's payload and shared C compile with `IPOD=1`,
+the build is the iPod variant (`V158M`, dev tags `V001m`), and no iPod asset is patched yet. Q2 Legacy and
+iPod `update.tar` stay byte-identical to 1.5.8's (`q2compare.py`).
+
+**What the compile needed.** 46 errors from 26 names (the plan guessed 80): `patch/m1plus_offsets.inc` has
+Q2's timing values, square glass corners (`GLASS_R 0`), `M1_UNPORTED` for the confirm and drift values
+(inert), `M1_UNPORTED_ADDR` for the three addresses only unhooked routines read, and a permanently zero
+Return latch (`m1_return_latch`). `BOLD_RANGES` is empty, so Classic's bold never applies.
+
+**Stand-ins (`M1PLUS_SHIMS`, `patch/m1plus_nav.h`).** `navigation.c` is one section (the tests call its
+unhooked routines), so every name it uses needs a definition: `buzzeer_switch` (q2only),
+`playing_timer_start`/`clear` (4.6), `image_manager_unload_bitmap_by_name` (4.5, 4.6), `player_start` (native)
+and `tk_str_end_with`, which is real code. The Q2 wheel's `wheel_raw`, `wheel_travel` and `wheel_held` stay
+zero. `test/m1plus/build.py` checks that each shim is still called. `ports.py` reports them and each
+unhooked `IPOD_HOOKS` entry as `unported`, with its Phase 4 item.
+
+**An audit, not committed.** Building once with `M1_UNPORTED_ADDR` as an undefined symbol and the payload
+compiled with `-ffunction-sections` (so `--gc-sections` drops what no hook reaches) linked cleanly: no
+routine a hook reaches reads an unported address.
+
+**Decisions on the way.**
+- *Selection.* With `IPOD=1` the selection bar is drawn behind the rows by `widget_on_paint_background`.
+  Hooking it showed nothing, because V2.1's rows paint an opaque background (the iPod row styles, 4.1,
+  make them transparent). The hook was reverted, and `IPOD_BAR` (`navigation.c`) keeps Stock's outline and
+  Home card on the M1 until 4.1. Q2's bytes are unchanged.
+- *Knob: Navigation is the default* (`pod_default`), since the iPod UI has no wheel. `boot.py` seeds
+  `KNOB=0` so its walk still starts on V2.1's volume knob.
+
+**Tests.** `patch.py` drives Q2's iPod build, so most of it fails on the M1 for lack of its assets and hooks:
+127 top-level checks, from about 25 causes. On the M1 `test/m1plus/gaprun.py` runs them one at a time and
+`test/m1plus/patch_gaps.py` lists the expected failures under the Phase 4 item that ports each (a listed
+check that passes, or a failure not listed, fails the run). The harness enters the unhooked
+`IPOD_HOOKS` routines directly. `playback.py` and `headset_io.py` are unchanged.
+
+| Gap | Checks |
+|---|---|
+| selection bar and paint backbone (4.1) | 27 |
+| style, image and loader hooks (4.1) | 2 |
+| iPod UI assets (3) | 3 |
+| Library rows (4.4) | 79 |
+| pull to search (4.4), hold Return (4.4) | 4 |
+| Home and the Q2 Pod page, boot resume, Coverflow insets (4.5) | 5 |
+| Now Playing, big cover (4.6) | 6 |
+| Lock screen battery (4.2) | 1 |
+
+Most of Library rows is two cascades (Photos, Books). Two entries hide possible real faults on the device:
+the Home card's click handler (`patch.py` line 9519) and Now Playing's open (`ringnav_playing`, line 6799),
+which crashes the emulator on a jump to 0 in the iPod path. The device pass checks both.
+
+**Gates.** `build.py`, `patch.py`, `boot.py` (plain, `--home-menu`, `--media`), `playback.py`, `m4b`, `id3`,
+`headset_io`, `ldac`, `bluealsa`, `ports.py` and `q2compare.py` pass.
+
+**Device check:** passed; see [section 58](#58-device-pass-phase-1-on-the-m1-and-the-knob-scrub-nov-3).
+
+## 58. Device pass: Phase 1 on the M1, and the knob scrub (Nov 3)
+
+**The pass** (`V02Em`, dev 15, over q2remote, Screen Off set to Off and restored to 1 minute after): the demo
+stayed up throughout (one pid), with no crash on Home, Library, Settings, Now Playing, Quick Settings or the
+lyrics. Five findings:
+1. A single knob press on Now Playing turned the screen off at once.
+2. A double press woke the device to the lock screen.
+3. and 4. Quick Settings drew Now Playing's controls. Intended: V2.1 shares them, and there is nothing to
+   scroll on that page. No change.
+5. One odd Home knob step. A Wi-Fi blip. No change.
+
+**Findings 1 and 2.** Now Playing keeps the knob's volume (`knob_nav_active`), so the press stayed
+`KEY_POWER`, which V2.1's `on_wm_keyup_fun` answers by turning the screen off; the Q2's rule in `np_key`
+(single press sleeps, double press scrubs) was never reached on the M1. The user's call: a single press
+scrubs and a double press locks, as a double Centre does on every list.
+- `playing_timer_start` and `playing_timer_clear` are now aliases of V2.1's `player_timer_start` (0x53c210) and
+  `player_timer_clear` (0x53c758), the same routines under new names (500 ms interval, V1.32's is 250). The
+  scrub needs them: stock's timer would pull the slider back. The stand-ins in section 57 are gone.
+- `scrub_start` is out of `np_key` (`patch/navigation.c`) so the M1 can call it; the Q2 build is
+  byte-identical.
+- `patch/m1plus_nav_np.c`, called from `m1plus_nav_keyup.inc` before V2.1's key-up: in Knob: Navigation a
+  single press on the top Now Playing page starts the scrub `DOUBLE_CLICK_MS` on (`center_press`), a double
+  press is left to V2.1 (screen off), and scrubbing a press seeks and ends it. The turns move the target:
+  clockwise (volume up) forward, whichever way Knob Up sorts a list. A key that isn't the knob's ends the
+  scrub. Knob: Volume, a dark screen and the boot guard keep V2.1's press.
+
+**Tests.** The Q2's scrub checks sit in `patch.py`'s big `if variant=='ipod':` block at line 6046, which fails
+early on the M1 (the "selection bar" gap), so they never run there. The M1's own checks are a top-level
+block before `MAINSCHEDULING_CALL`'s. Not mutation-tested: their first assertion (a press returns `STOP`)
+can only hold with the new code.
+
+**Gates** (`work/ipod-p1/c6`): `build.py`, `patch.py` (127 expected-failure checks, as before), `boot.py` (three
+modes), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and `q2compare.py --suites` pass.
+
+**Device check (V02Gm, 1.5.8 dev 15, Nov 3): passed.** On Now Playing in Knob: Navigation:
+
+- A single press sets `st.scrub` and the slider stops following playback.
+- The turns move `scrub_to` by 5 s a detent, forward clockwise, and the volume stays put.
+- A press during the scrub seeks to the target (02:43 after `knob 6`) and clears `st.scrub`.
+- With no input the scrub ends `SCRUB_MS` on and commits its target (92 s, 01:34 on screen after).
+- A double press turns the screen off. It did so every time at 20 and 50 ms between events, one time
+  in three at 80, and never at 110 ms. At 110 ms the press-to-press time, with `q2remote`'s own overhead,
+  is over `DOUBLE_CLICK_MS`, so a real double press has to land inside 250 ms, as on the lists.
+- Unchanged: a list's turn and press, a list's double press (screen off), the volume bar, a press while it
+  is open (stock's screen-off, no scrub), and Knob: Volume (the press turns the screen off, no scrub).
+
+## 59. Merge step: sync to 1.5.9 on `feature/m1-ipod` (Nov 3)
+
+1.5.9 is upstream's first iPod-only tag: `4fee7d5` deletes Legacy (`unifdef -DIPOD=1`), `d89415f` its
+leftovers, and `IPOD_HOOKS` folds into `HOOKS`. The port's base moved to it ([m1plus-ipod-ui.md](m1plus-ipod-ui.md),
+Phase 1.5): `sync/1.5.9` from `feature/m1-ipod` (backup `refs/backup/pre-sync-1.5.9`), not `staging`, which still
+compiles Legacy and stays on 1.5.8. 83 commits, 1,770 surface lines.
+
+**Conflicts** (`5e1536b`), 12 files: upstream's side, the seams put back, each M1 seam in an `#if IPOD` site on its
+iPod side.
+- `navigation.c`: upstream deletes Stock's outline from `paint_selection`, which the M1 still draws over V2.1's
+  opaque rows until 4.1; it moved to `m1plus_nav_outline.c` (`outline_selection`, from `ringnav_paint` beside
+  `home_paint`), and `IPOD_BAR` went. The state and keyup includes, the radio search, `LYRIC_ROW_BUILDER`.
+- `coverflow.c`: `CF_ROW_X/W` fold into `CF_X/W` on `UI_W`; Split Home's `UI_W`/`BOTTOM` beside Carousel.
+- `netupdate.c` (Erase's `JOB_ERASE` with `IS_SPOT`), `radio.c`, `spotify.c`, `peq_ui.c`, `books.c`,
+  `lockscreen.c`, `contexts.inc`, `tools/build.py` (the hand-off without `ipod`), `docs/internals.md`, `README.md`.
+
+**Follow-ups.**
+- `b9d30be`: `m1plus.py` reads `HOOKS` alone and drops `-DIPOD=1`; `TAG` now carries the Q2's edition
+  (`V159I`), so the M1's is `M1_TAG` (`V159M`) and `m1_dev_tag` (`V02Hm`). `addon_library.c` joins the payload.
+  `BC_IDLE` is a payload byte nothing reads (the big cover is unported, 4.6); `library_scope_scan` a no-op beside
+  the stubbed markers. New hook `mclIsUtf8WithoutBOM` and site `M3U_DIR_CALL`: unported rows.
+- `9ca378f`: Erase Spotify Data moves from the App Store to Streaming's Configuration (`da50aec`), on the M1's
+  page too (`m1plus_nav_stream.c`): after the cache rows, before Soloify's.
+- `1cb094e`, `addon.c`: the card apps' library update (#149) stays off on M1 (`addon_poll` skips `library_poll`:
+  its import reads V1.32's class `0xf00b`), and the caps the apps read leave out `library`.
+- `356ee01`: 1.5.9's progress row named `s_scrlabel_white20r`, which V2.1's theme lacks; it takes
+  `STYLE_SCRLABEL_WHITE20R`. The Q2-size review missed it; `test/m1plus/patch.py`'s theme check found it.
+- `73ecc40`: 1.5.9's Remove deletes a card app's whole folder unless it is a `special[]` app (`9a47c87`).
+  Soloify gets a `special[]` row on M1 that keeps its relay's `remote` file and its Delay and Quality.
+- `1915a33`: `q2compare.py` builds the one iPod variant.
+- Ruled out (`q2only.py`, 63 lines): Display's Click With Headphones (Key Tone is Q2 only), the playlist row's
+  hold menu (the M1's hold opens the editor: an unported row), `list_row_core`'s compact rows (4.4), the Q2's own
+  Configuration and Streaming. Carousel can't be chosen on M1 (Display is `m1plus_nav_display.c`): a 4.5 row.
+  `np_art_poll` looks up `img_cover`, which V2.1's Now Playing lacks (`img_playcover`), so it is inert.
+
+**Suites** (`99a5b4d` and after). Upstream's `test/patch.py` dedents every iPod block; `suitemerge.py` placed
+that badly (170 lines lost, 572 duplicated), so the copy was merged by line text, each side's indentation shift
+carried over, and its 43 conflicts by hand. The copy keeps the M1's own cases where it differs (the outline,
+V2.1's Coverflow rows and row caption, the playlist editor, no marker walk, its caps, Erase's rows a row on).
+`patch_gaps.py` is keyed again: the dedent splits each old iPod block into its statements, 127 entries to 887
+in 14 gaps, each under its old ipod-ui item; 1.5.9's iPod cases join theirs (4.2 status bar, 4.3 Display, 4.5
+Carousel, 4.6 the art follow, 3 the stream pages' times: V2.1's `toolsTimeItoa` writes 00:10 until it is
+patched, 4.8 Games). `2b51872`: `test/peq.py`'s firmware-folder check leaves out Soloify's (`peq.h`).
+
+**The gate's ffmpeg bind.** On this host (Ubuntu, merged `/usr`) the runbook's `--tmpfs /usr/bin` hid `/bin/sh`,
+so mksquashfs's `F` entries wrote every swapped rootfs file empty (`release/bin/demo`, `usr/bin/bluealsa`), the
+base's build and this tree's alike: `update.tar` matched, and `bluealsa`, `ldac`, `build` and `patch` failed on
+the empty files. The runbook now overlays `/usr/bin` instead. R1 results on this host before Nov 3 may not
+have compared real images.
+
+**Gates** (from `work/gatetree`, `--zip` given): q2compare against 1.5.9 with a fresh base: `update.tar`
+byte-identical (`1e9c789e9bc6`), all 33 suite runs pass (the base's own failures shown apart: the `*_build`
+suites' release guards, `mp3_gapless`'s pkg-config, `peq`'s App Store install). M1, `--dev` V02Hm in
+`work/sync/1.5.9/`: `build.py --build`, `patch.py` (887 expected failures in 14 gaps, 35 not ported), `boot.py`
+plain, `--home-menu` and `--media` (one run missed `books_back` and the rerun passed: timing), `playback.py`,
+`m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`. Footprint +1,712/−345 over 32 files.
+
+**Function diff** against V02Gm's code (section 58's build, rebuilt from `refs/backup/pre-sync-1.5.9`): 201
+changed, 26 added, 5 removed of 1,270; `navigation.o` 145 (most the unifdef), `addon.c` 33, `coverflow.c` 20,
+`netupdate.c` 14. The device checklist, Screen Off set to Off for it:
+- Lists: the selection outline on the Q2 Pod page, Settings and Library lists, and the knob moving it.
+- Streaming's Configuration: Erase Spotify Data (two presses, Erasing…, Spotify Cache back to 2 GB); Soloify's
+  rows after it; Stop Streaming Services.
+- App Store: no Erase row, Subsonic listed; Remove of Soloify keeps `.soloify/remote`, `.delay`, `.quality`.
+- A card app's page (Deezer or Soulseek): lists, a progress row's bar under its caption, playback.
+- Library: Long Songs, Era, Books, Photos, Coverflow, Shuffle Songs.
+- Now Playing and lyrics: the cover, the knob scrub, a lyric page.
+
+**Device pass (Nov 3, over q2remote through `tools/wsl_relay.py`, the laptop's hotspot).** The user flashed
+V02Hm through the menu updater; About reads 1.5.9 dev 2 and the running `/release/bin/demo` matches the build's
+(`5474bd22…`). Before it, `config.ini`, the DB and the EQ files went to `.q2/backup-pre-V02Hm/` and the old image
+to `.q2/update-V02Gm.bin`. Screen Off was Off for the pass and is back to 1 minute (`LIGHTTIME=3`). demo kept one
+pid throughout, and kmsg had no fault (one `es9069q_hw_params` a track start). Passed:
+- The outline on the Q2 Pod page, System Setting and the native lists, following the knob (Knob Up is List Up:
+  the knob sits on the right side, so a clockwise turn goes up the list).
+- Long Songs, Era, Photos, Books, Coverflow (the cover, its reflection, a knob turn), Shuffle Songs.
+- Now Playing: the cover, the knob scrub (a press, six detents to 01:03, a press seeks); the lyric page of a
+  track with an `.lrc` follows the song.
+- Configuration: Erase Spotify Data's two presses ("Press again…", "Erasing…", back), `.spotify/cache` gone and
+  Spotify Cache at 2 GB, the cache put back from a copy after; Soloify's rows after it; Stop Streaming Services.
+- App Store: no Erase row, Subsonic listed. A card app (Podcasts): its page, a download, playback.
+
+Not checked on the device:
+- Soloify's Remove: Soloify has no release yet, so its row reads Update, never Installed, and Remove is offered
+  only on an installed row. The keep list is `special[]`'s row (`73ecc40`).
+- A progress row's bar: Podcasts sends none (its states are captions), and Deezer and Soulseek need accounts.
+  `patch.py`'s case (`3930462`) covers it.
+- Games: not reachable on the M1, the checklist's row was wrong (`m1plus-unported.md`'s Games note corrected).
+
+Seen, not the build's: the hotspot's DHCP gave the device no DNS server (`/tmp/resolv.conf` empty; the App
+Store said "Can't reach GitHub"); 1.1.1.1 was set for the pass and the file emptied after.
+
+**Landed** in `feature/m1-ipod` (`fd53846`, `--no-ff`). `drift.py` from there: 1.5.9 → 1.6.3 due (78
+commits, 2,007 surface lines), left for the iPod port's Phase 6.
+
+## 60. Phase 2: the screen's values as names (Nov 3)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 2, on `feature/m1-ipod` after 1.5.9.
+
+**The recount.** `navigation.c`, `coverflow.c` and `addon.c` (and what they include), preprocessed with each
+device's flags, keeping the lines that survive and hold 375, 320, 290 or 30 or a width derived from them.
+Compiled on the M1: `qr_open`'s default height (290), Split Home's `HOME_PW` and its eight 290s, `bc_fit`
+(374, 375, 320 twice), `ringnav_playlistsmore`'s Edit Playlist row (375, 335, 253) and `bar_sync`'s 30. The
+Q2-only sites (`#if !M1PLUS`: `logo_sync`, most of `qr_open`, `stream_config`, the Q2 `list_row_core`, the
+Shuffle note) keep their literals. The 30s of `1 << 30`, `SA_RETRY_MIN` and the time arithmetic aren't the
+status bar. A plain grep can't tell these apart: it reports the skipped `#if !M1PLUS` lines too.
+
+**Commits.**
+- `e8c1163` `refactor(seams)`: the sites above take `UI_W`, `UI_H`, `BOTTOM` and the new `STATUS_H` (30, in
+  both `.inc` files; `BOTTOM` stays a number there, since `test/m1plus/patch.py` reads only integer
+  `#define`s).
+- `f946c64` `refactor(ipod)`: the `PROFILE` seam in `tools/ipod.py` and the `tools/m1plus_ipod.py` stub.
+  The plan's "every layout name keeps the Q2's value, so the import can't fail" missed two import-time
+  checks: the derived Now Playing layout against `SPOT_*` and `NP_ART_TOP`. With the M1's screen they
+  can't agree until 4.3 lays out V2.1's stacked Now Playing (art 220 at x 50), so they run for the Q2 only.
+- `7809395` `test(m1plus)`: `test/m1plus/build.py` pins both screens (to `test/unit` at 1.6.2). It pins the
+  Q2 values the screen's names replaced literals in, not all 66 constants. A full snapshot before and
+  after `f946c64` matched (the three new names apart), and q2compare pins the Q2's output anyway.
+
+**Gates** (each commit): q2compare against 1.5.9, `update.tar` byte-identical, all 33 suite runs pass. M1
+(`work/phase2/c1`, V002m, and `c2`, V003m, which this checkout's `.build-number` numbers): `build.py --build`,
+`patch.py` (887 expected failures in 14 gaps, unchanged), `boot.py` plain, `--home-menu` and `--media`,
+`playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`. `--media` missed `books_back` once
+per build, both times while q2compare ran alongside it; each rerun passed (timing, as in section 59).
+Footprint +106/−56 over 8 files.
+
+**Function diff** against V02Hm (`work/sync/1.5.9`): after `e8c1163` it lists `qr_open`, `coverflow_home`,
+`coverflow_home_art`, `coverflow_home_clip`, `home_fit`, `home_tex`, `ringnav_paint_bg` (`bc_fit` is inlined)
+and `ringnav_playlistsmore`, plus `ringnav_about`'s version string. `bar_sync` isn't listed: its 30 stays 30.
+`f946c64` and `7809395` change only `ringnav_about` (the version again). The device checklist:
+- A playlist's More page: the Edit Playlist row (`ringnav_playlistsmore`), now 320 wide.
+- The QR page (Streaming's or an add-on's pairing page): its height.
+- Split Home and the full-screen art (`bc_fit`), where the M1 reaches them.
+
+**Device pass (Nov 3, over q2remote through `tools/wsl_relay.py`, the laptop's hotspot).** V003m
+(`update.bin` `b703f864…`) went to the card over q2remote and the user flashed it through the menu updater;
+the running `/release/bin/demo` is the build's (`2cadb324…`). Before it, `config.ini`, the DB and the EQ files
+went to `.q2/backup-pre-V003m/` and V02Hm's image to `.q2/update-V02Hm.bin`. Screen Off was Off for the pass and
+is back to 1 minute (`LIGHTTIME=3`). demo kept one pid (1099) throughout and kmsg had no fault. Screenshots are
+in `work/phase2/device/`. Checked:
+- **The QR page:** File Browser (Q2 Pod → File Browser) draws the title, the code, the address, the PIN and the
+  note inside 320x480, with nothing clipped; `qr_open` now takes its height from `BOTTOM` (450).
+- **Home, the Home editor and the library lists** paint as before (`ringnav_paint_bg`, with `bc_fit` inlined).
+
+Not reachable on the M1, so not checked:
+- **The Edit Playlist row (`ringnav_playlistsmore`):** V2.1 has no `playlistsmore_page`. A playlist row's hold
+  opens the editor itself (`m1plus_nav_playlist_hold.inc`), so the row is never built. The Playlist page
+  opens, with New, Import and Export rows and no playlists on this card.
+- **Split Home and the full-screen art:** the M1's Home is still V2.1's own grid; the iPod Home waits for
+  Phase 4.1.
+
+The Playlists card is hidden on this Home. The pass turned it on in the Home editor and then restored the
+layout: Reset gives V2.1's default cards, so Album, Artist and the rest were ticked back one by one until
+`HOMEMENU` read `1|2|5|6|10|11|16|17|12|` again, as in the backup.
+
+**For upstream** (roadmap section 6, "The seams"): `STATUS_H`, the named sites in `navigation.c`,
+`coverflow.c` and `addon.c`, and `tools/ipod.py`'s `PROFILE` overlay all leave the Q2's bytes unchanged.
+
+## 61. Phase 3: the V2.1 page inventory and the patch framework (Nov 3)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 3, on `feature/m1-ipod`. The plan's up-front audit of every key
+in `patch/ipod.json` moved into the Phase 4 items (decided Nov 3): 33 of the 39 settings icons and all 8
+quiet icons have other names in V2.1 (`pset_*`, `sset_*`), none of the 8 styles `default.bin` edits exist
+there, and V2.1's rows are their own structure, so the V1.32 row immediates have no counterparts to find
+before an item designs them. Phase 3 delivers the page inventory and the framework, and changes no M1 byte
+but the version string, so it has no device pass.
+
+**The inventory.** `patch/m1plus_ipod.json` maps each of the 54 pages of `ipod.json`'s `assets`,
+`navbar_only` and `slide_only` onto V2.1's. The rows are decided by role, not path: every V2.1 page has an
+exported `<dir>_<page>_init` in `.dynsym` (212 in V1.32, 222 in V2.1), and the `opener` field names the
+V2.1 one. Where the init could not decide, the widgets and the Settings list handler did (V1.32's
+`0x4cc134` opens `datetime_page` and `powermanager_page`; V2.1's `0x4ad7b0` opens `typedatetime_page` and
+`powermanager_page`).
+- 33 keep their path and role.
+- 5 `localmusic/X` become the top-level `X` (V2.1 has no `localmusic/` directory): `album`, `albuminfo`,
+  `allmusic`, `localclass`, `playlist`.
+- 10 are renamed or moved: `statusbar_dialog` to `dropdown_dialog`, `addplaylist_dialog` to
+  `kbaddplaylist_dialog`, `backlight` to `brightness`, `btadjustvol` to `btvolume`, `autotime` to
+  `autosynctime`, `screensaver_about` to `screensaverabout_page`, `playset/usbvol` and `playset/dsdoutput`
+  to `systemset/usbvolmode` and `systemset/dsdmode`, and two role swaps: V1.32's `datetime_page` (the
+  Date & Time list) is V2.1's `typedatetime_page`, and V1.32's `manualtime_page` (the selectors) is V2.1's
+  `datetime_page`.
+- 6 are null rows that name their Phase 4 item: `artistinfo_page`, `playlistsmore_page` and
+  `localmusic_page` (4.4; V2.1 has no init for any of them), `stream_page` (4.5), and `sleepshutdown_page`
+  and `standby_page` (4.3; V2.1 folds both into `powermanager_page`).
+Same-path pages are not always the same role (`datetime_page`, `powermanager_page`), which a path match alone
+would have missed. The code, icon and style sections are empty.
+
+**The framework.** `tools/m1plus_ipod.py` gains `patch_asset` (hash, round trip and root kind, then its
+`REWRITES` entry, else the stock bytes) and `patch_code` (the audit's `immediates` and `row_layout_calls`
+with the M1 copy of `ipod.py`'s values). `m1plus.build()` runs both: it swaps in only a page a rewrite
+changed, and the manifest's `compact_code` is `patch_code`'s list. `REWRITES` and the code sections are empty,
+so the output is unchanged. Each Phase 4 item adds its own audit, pins and rewrite.
+
+**Commits.**
+- `7e1ffbb` `docs(m1plus)`: Phase 3 slimmed; every Phase 4 item gains the audit step, Phase 3 is **M**.
+- `36e1df6` `feat(m1plus)`: the inventory, pinned in `test/m1plus/build.py` (module level: the 54 pages,
+  unique V2.1 paths, matching categories, a Phase 4 item in every null row; in `m1plus_checks`: each page's
+  stock hash, round trip and init symbol).
+- `9f2676d` `feat(m1plus)`: the framework, wired into `build()`; `m1plus_checks` pins that every page
+  no rewrite touches comes back as the stock bytes, `compact_code` and `changed_assets` hold only what the
+  audit holds, and that a changed page, trailing bytes and a wrong root kind each raise.
+
+**Gates** (commits 2 and 3, builds in `work/phase3/c2`, V02Hm, and `c3`, V02Im): `build.py --build`,
+and for `c3` `patch.py` (887 expected failures in 14 gaps, unchanged), `boot.py` plain, `--home-menu` and
+`--media`, `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`; q2compare 1.5.9 with
+`--suites`, `update.tar` byte-identical and all 33 suite runs passing. `fndiff.py c2 c3` lists only
+`ringnav_about` (the version string), and `c3`'s manifest has `compact_code == []` and only the TagLib
+library in `changed_assets`. Checks proved to fail: a wrong opener name and a wrong page hash each stop
+`--build`, and the framework's three refusals are asserted. No device pass: the demo changes only by that
+version string, and the rootfs by none of the pages.
+
+## 62. Phase 4.1: the paint backbone and themes (Nov 3)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4 item 1, on `feature/m1-ipod`. The M1 now paints through the iPod
+hooks: the selection bar behind the rows, the accents and Light Mode on every style colour and cached image, and
+each window's asset through the loader.
+
+**The audit** (V2.1's own code, pinned in `test/m1plus/build.py` `m1plus_checks`):
+- The four PIC routines resolve `M1PLUS_GP`: `widget_on_paint_background` `0x66b778`, `style_get_color` `0x659fcc`,
+  `image_manager_add` `0x655638`, `ui_loader_load_widget_with_parent` `0x663a74`. Their arguments are the Q2's:
+  the widget and canvas; the name and bitmap in `a1` and `a2`, the cache copying `bitmap_t`'s first `0x48` bytes;
+  the name and parent.
+- `style_get_gradient` `0x659f9c` is the Q2's leaf again: the same first three words (`beqz a0; nop; lw v0, 0(a0)`),
+  then the style vtable's `get_gradient` at `+0x18` tail-called. `style_get_color` calls it with a `bal` at `0x65a048`,
+  returning to `STYLE_COLOR_GRADIENT_RET` (`0x65a050`), and calls `get_color` at vtable `+0x14` when there is no
+  gradient. `gradient_t` is the Q2's: the stop count at `+8`, 8-byte `{color, offset}` stops from `+0xc`
+  (`gradient_get_first_color` and `_last_color`).
+- `bitmap_t` is the Q2's: w `@0`, h `@4`, line length `@8`, flags `u16 @0xc`, format `u16 @0xe`; formats 1 to 4 are the
+  4-byte ones (`bitmap_get_bpp_of_format`'s table reads `4 4 4 4 2 2 3 3 1`).
+- No new M1 offset names are needed except `STYLE_COLOR_GRADIENT_RET`, which was `M1_UNPORTED_ADDR`.
+
+**Styles** (`m1plus_ipod.json` `styles`, 7 same-size edits in `default.bin`). None of V1.32's eight styles exist in
+V2.1; its rows use these:
+- `list_item_style` (86 pages and dialogs; `131313` rows, a `362221` press) and `btn_tablerow_style` (the table rows
+  of All Music, the queue and Jump to): the four rest states turn transparent, the press turns `333333`.
+- `list_item_black_style` (the settings pages that Knob: Navigation walks): five states transparent.
+- `srlabel_item_gold18_style` and `_gold20_style` (the playing item's gold title, set from about 30 sites): `fe7e40` to
+  white, as the Q2's red titles.
+- Left alone, with the reason in the JSON: `list_item_notpress_style` (dialogs' input rows), `list_itemsort_style` (the
+  hold menu, 4.7), `list_item_cover_style` (its rest state is transparent already), `btn_tidal_more`.
+- A style edit replaces every state holding the old value, so a pressed state can be told apart only by its value.
+
+**Images.** The name rules in `ringnav_image_add` match almost nothing in V2.1: it has no `list_into`, `local_*`,
+`small_*`, `navbar_*` or `img_*`, and the prefixes it has (`drop_`, `tidal_`, `bt_`, `search*`, `playlist_`) are
+unrelated art. Light Mode's flip takes any plain-named image without colour that is mostly glyph, so it needs no
+name. No M1 image names were added; each item that rewrites a page gives its icons names (4.3's `pset_*`/`sset_*`,
+4.4's `icon_*`, 4.5's `home_*`).
+
+**Found, not fixed.** V2.1's own accent is orange (`fe7e40`, with a brown `362221` press), not the Q2's `ff1448`
+(`STOCK_RED`). `red_map` recolours only blends of `STOCK_RED`, so under a non-Crimson accent V2.1's orange text and
+icons keep their colour. That is a visual matter for the final pass.
+
+**Code.**
+- `M1PLUS_HOOKS` gains the four routines, `GRADIENT_LEAF_M1PLUS` the leaf; their `M1PLUS_PORTS` rows are gone, so
+  `ports.py` reports them ported.
+- `tools/m1plus_ipod.py` `patch_style`; `m1plus.build()` swaps the patched `default.bin` in and records it in
+  `changed_assets`.
+- Centred Now Playing stays off on the M1 (`st.np_centred = M1PLUS ? 0 : ...`): its `playing_page_stock` is 4.6's.
+  The settings read now makes ten config reads on the M1, not eleven.
+- Retired: `m1plus_nav_outline.c` (Stock's outline over the rows). The Home card's frame colours moved into
+  `m1plus_nav_home.c`.
+
+**Tests.**
+- The bar checks in `patch.py` that ran only as the M1's outline now run as the iPod's bar. Eight listed gaps pass
+  and left the list: the bar behind the rows, Minimal's card geometry, the bands, and the row clip.
+- The 529 others failed in set-ups of later items (V1.32's Home, Now Playing and scrub pages, the Display pages, the
+  wheel's Key Tone checks that exist only for the Q2), so they were re-keyed to their items with `GAPS_DUMP`:
+  Library rows 4.4 (259 with the Most Played and playlist-more ones), Now Playing 4.6 (202), Display settings 4.3
+  (149), Home 4.5 (100), the wheel and Key Tone 4.8 (74), the big cover 4.6 (37), dialogs 4.7 (3). None is a check of
+  pure `IPOD=1` behaviour that fails.
+- `boot.py` compared Home with stock's below the status bar. With the iPod hooks on, the M1's default theme is
+  Minimal, whose greys recolour the antialiased edges of Home's orange icons (140 pixels), so both runs now start
+  with `[IPOD] THEME=1 ACCENT=1` (Classic, Crimson: a stock colour is left as it was; Crimson is accent 1, not 0). The
+  walk's stock comparisons allow the style audit's own colours: a `131313` row pixel is black patched, `362221` is
+  `333333`, and an icon's soft edge over a row may be darker by at most `0x13`.
+- Proved to fail: a wrong `STYLE_COLOR_GRADIENT_RET` stops the build (`style_get_color: unexpected gradient call`);
+  a style edit with a wrong state count, and an unhashed style file, are refused in `m1plus_checks`.
+
+**Gates** (build `work/phase4/4.1/c3`, V02Mm): `build.py --build`; `patch.py` (879 expected failures in 14 gaps, none
+unlisted); `boot.py` plain, `--home-menu` and `--media`; `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`,
+`bluealsa`; `ports.py`; `q2compare.py 1.5.9 --suites` (update.tar byte-identical, 33 suite runs).
+
+**Commits.**
+- `39e90da` `feat(m1plus)`: the four hooks, the leaf and the audit pins; the outline retired.
+- `a33650c` `feat(m1plus)`: the style rewrite and its tests.
+- `0ad3cbe` `test(m1plus)`: the gaps re-keyed.
+
+**Device pass** (Nov 4, build `c3` flashed as V02Mm; `peek` accepted the payload hash; Screen Off was Off for the pass
+and is back at 1min, `LIGHTTIME=3`; the `[IPOD]` theme keys added for the Classic and Light runs are removed again;
+screenshots in `work/phase4/4.1/dev/`; demo never restarted outside the config reboots):
+- Minimal (the default), dark: Library lists (My Fav) take the light selection bar with dark text from the knob; a
+  held touch paints the `333333` press grey; the hold menu is a dialog with the same bar; System Setting, Display
+  setting, Screen Off, the Q2 Pod app and Configuration rows are black with white text; Now Playing's slider is as V2.1.
+- Classic with Crimson: the bar is crimson with white text (Library, and System Setting in Light Mode); Now Playing's
+  slider fill is crimson.
+- Light Mode: V2.1's pages flip to paper, with ink text.
+- Found, not fixed (planned after the pass):
+  1. Light Mode, hold menu: the selected row ("Play Next") is white on the paper dialog with no bar, so it can't be read.
+  2. Light Mode, held touch on a Library row: the grey press shows as a band over the lower part of the row only
+     (a screenshot taken 0.35 s into a 0.7 s hold).
+  3. Crimson leaves V2.1's orange (`fe7e40`) alone: format badges, Now Playing's transport buttons, the Screen Off
+     radio (already listed as the accent mapping gap).
+  4. Left-clipped long labels ("nosphere Lamp Settings", "ultiple Speed", Configuration's confirm text). The
+     Display setting page is walked against stock in `boot.py` and matches, so the clip is probably V2.1's own.
+- Wi-Fi dropped twice ("No route to host"); a shot before the next tap kept the walk on the right page.
+
+## 63. Phase 4.2: the status bar and the back chevron (Nov 4)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4 item 2, on `feature/m1-ipod`. V2.1's status bar is now the iPod's: the
+clock centred, the play state, Bluetooth, Wi-Fi and the payload's battery slot, and a back chevron at the far left. The
+chevron is the only back on the payload's own pages, and their title-bar buttons are gone.
+
+**The audit** (V2.1's own code, pinned in `test/m1plus/build.py` `m1plus_checks`):
+- **The 1 s tick.** V2.1 has no `systembar_showface`.
+  - `systembar_timer_start` (`0x5453c8`) arms a 1000 ms timer on `0x545394`, which calls `show_sysbar_face`
+    (`0x544b48`) with 0. The face reads the `system_bar` global, not its argument.
+  - It finds `img_playstate`, `img_volume`, `label_volume`, `img_digital`, `img_synclink`, `img_btclass`, `img_wifi`,
+    `img_battery` and `pgbar_battery` by name. Each second it sets their images, text, visibility and the volume's
+    size, but no position.
+  - The battery's level is `power_capacity`, and its icons are `bar_charge` and `bar_lowpower`.
+- **The bar** (`system_bar.bin`) holds `view_bar_left`, a `digit_clock` (`bar_dclock`), `view_bar_right`, and the
+  battery as a progress bar over its icon. A bar with other names is refused.
+- **Status icons:** the nine `bar_*` images the iPod redraws, hashed in `m1plus_ipod.json` `status_icons`.
+- **New names:**
+  - `STATUSW_*` (the bar's widgets by name, Q2 and M1);
+  - `STATUS_LOWCHARGE`;
+  - `BAR_BACK_W` (32);
+  - `STATUS_MARGIN` 6 and `BATT_ROOM` 115, as the 320 px bar fits.
+
+**Lost taps were a dropped flush.** `boot.py` plain failed about 9 runs in 10 on the first 4.2 builds, where 4.1
+passed 4 of 4. A tap seemed to do nothing: the shot still showed the step before, from the PEQ's tabs to the Lock
+screen switch.
+- **The taps weren't lost.** An instrumented copy of the walk (soft failures, both framebuffer pages, the pan
+  ioctls, late shots and each step's slice of the exec trace) showed what happened:
+  - the handler ran;
+  - the new page was drawn in page 1 (V2.1's offline buffer);
+  - page 0, the panel, kept the old one, and was still unchanged 8 s later;
+  - the next step's chevron went back from the screen the tap had opened.
+  - V2.1 pans once, at start: page 0 is always the screen.
+- **The cause.** The rewrite first moved the widgets the iPod doesn't draw to x −200, as the Q2's are. V2.1's face
+  resizes and sets them every second. On V2.1, an invalidate left of the screen loses the flush of the frame it joins
+  (the exact routine is not read; `soft_copy_image` has no bounds check, so the drop is earlier).
+- **What it wasn't:**
+  - not the tick hook: a build without it failed;
+  - not `bar_sync`'s paint-time relayouts: a build with them inert failed.
+  - The same widgets inside the bar at x 0 with `opacity 0` passed 3 of 3.
+- **The fix.** The six widgets stay at the bar's left, transparent (AWTK paints nothing at opacity 0). They are
+  pinned to stay inside the bar, with opacity 0, and the pin was proved to fail at x −200 and without the opacity.
+- **On the device** this would have been the same: a tap whose page never appears until something else repaints.
+
+**Code.**
+- `REWRITES['system_bar.bin']` (`tools/m1plus_ipod.py` `status_bar`):
+  - the bar black with a clear border;
+  - `img_back` (`bar_back`, a slim white chevron, `BAR_BACK_W` x `STATUS_H`, hidden at boot) ahead of the play state;
+  - Bluetooth, Wi-Fi and `view_battery` on the right;
+  - V2.1's `digit_clock` centred;
+  - the groups checked clear of the widest clock.
+- The tick: `M1PLUS_HOOKS` `systembar_showface` → `ringnav_showface`, which runs `bar_state_sync` on the
+  `system_bar` global.
+- `tools/ipod.py`: `status_bar`'s right edge is `UI_W`, not 375. The Q2's bytes are unchanged.
+- `bar_state_sync` finds the widgets through `STATUSW_*`. On the M1, `bar_sync` reads the level from
+  `power_capacity`.
+- The chevron (`m1plus_nav_back.c`):
+  - `chevron_input`, ahead of the long press in `ringnav_input`, owns a press that starts inside it until the
+    release, and runs `previous_back` on a timer when the finger lifts inside it;
+  - `chevron_sync` (in `bar_sync`) shows it unless Home is on top;
+  - `previous_back`, shared with Previous in Knob: Navigation, now gives a payload page a Return after V2.1's
+    button and the dialog cases;
+  - `peq_back` steps the PEQ back as its Return does.
+- Retired: `m1plus_coverflow_back.c` (`back_button`) and its calls in Coverflow, Photos, Books, the video player,
+  Radio, Spotify, the QR page and the PEQ. `BACK_W` stays the room at a payload page's top left until 4.4 and 4.5 lay
+  the pages out again.
+
+**Tests.**
+- `boot.py`:
+  - `CHEVRON` closes the payload's pages and the PEQ;
+  - Lock screen closes by the chevron (V2.1's own button, through `previous_back`);
+  - `knob_home` and `display_back` keep V2.1's button;
+  - `knob` checks that the patched bar draws no volume figure;
+  - `eq_previous`, dropped while the taps were lost, is back.
+- `patch.py`:
+  - **The M1 input block** (Previous, the knob, Return) was one 4.4 gap and hid three stale checks (Knob: Volume
+    as the default, and two that wanted a payload back button). It passes now, and it holds the chevron's case: the
+    tap's Return, a press that slides out (nothing), a press beside it (the page's), and Home (hidden).
+  - The codec and battery case names the bar's widgets through `STATUSW_*` and sets the level where each model's
+    stock does.
+  - Coverflow's, Spotify's and Radio's pages have no back button.
+- **Gaps** (`patch_gaps.py`, 895 in 14 gaps):
+  - 15 pass and are dropped, the `status bar (ipod-ui 4.2)` entry among them.
+  - The Q2-shaped status bar scenarios (375 px, `view_left`, `label_clock`, `label_idle`; 20 checks) are now
+    `status bar scenarios on the V2.1 bar (Phase 5)`.
+  - 29 more fail inside the big cover's set-up (4.6): `b` is now the battery loop's last value.
+  - `Lock screen battery (ipod-ui 4.2)` still failed here: the lock screen kept V2.1's icon and bar, and the Battery
+    setting didn't reach it. Ported in section 64.
+
+**Gates** (build `work/phase4/4.2/f3`, `V037m`):
+- `build.py --build` and `patch.py`;
+- `boot.py` plain 8 of 8 and `--home-menu` 3 of 3 on `f1` (the fix), then each once more on `f3`;
+- `--media` 3 of 3 on `f1`, then once more on `f3`;
+- `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports.py`;
+- `q2compare.py 1.5.9 --suites` (`update.tar` byte-identical, 33 suite runs).
+
+`fndiff.py` from 4.1's `c3`: 123 changed, 1 added (`peq_back`) and 3 removed, most of them from `st`'s two new
+fields.
+
+**Device pass:** not done yet. It follows the commits, with the 4.1 Light Mode fixes.
+
+## 64. The lock screen's battery and 4.1's device findings (Nov 4)
+
+On `feature/m1-ipod`, after section 63's commits.
+
+**Lock screen battery (ipod-ui 4.2).** The Q2's Large clock shows `label_battery`'s "88%" at the top line's right end
+when the Battery setting shows a percentage, and nothing in Icon. V2.1's lock window has no such label:
+- It has only `img_battery` (`screens_battery`, `screens_charge` or `screens_lowbattery`) with `pgbar_battery`
+  inside it.
+- Its refresh (`0x53f520`, from the lock window) sets both again as the level changes: the icon's image and the bar's
+  value, never their visibility.
+
+The port, on the M1's Large clock only (Standard stays V2.1's):
+- **Icon:** V2.1's icon and its level bar, as before.
+- **A percentage mode:** `lockscreen.c` hands the two widgets to `navigation.c`'s `ipod_lock_level`. That hides the
+  icon and clears the bar's fill. The bar, as wide as the status bar's Percent (`BATT_PCT_W`), ends where the icon did.
+- **The paint:** `ringnav_paint_bg` paints the percentage in the bar through `paint_battery`, as Percent paints it.
+  The level is `power_capacity`, green while the icon is `screens_charge`, red while it is `screens_lowbattery`.
+- **Repaints:** V2.1's own value changes repaint it. The widget is forgotten on its `EVT_DESTROY`.
+- **The Q2:** its branch is unchanged, and `update.tar` stays byte-identical.
+
+`patch.py`'s Battery loop now has an M1 branch, so the gap is gone (894 in 13 gaps):
+- Icon keeps both widgets and draws no text.
+- Each percentage mode hides the icon, places the bar, and paints "88%" white, charging "7%" green and low "5%" red.
+- After the window's destroy, the bar paints nothing.
+
+In qemu (`[SYSSET] SSAVERTIMESHOW=1` and `SCREENSAVERPATH=q2pod:aurora`, `[Q2POD] LOCKCLOCK=1`), Percent showed "70%" at
+the right end and Icon showed V2.1's icon. V2.1's key is `SSAVERTIMESHOW`, with the double S; with any other key, the
+lock window shows no clock at all.
+
+**4.1's device findings** (section 62, each reproduced in qemu first):
+1. **Light Mode, the hold menu's selected row** (fixed).
+   - **The cause:** the menu's rows are `list_itemsort_style`, which is opaque: black at rest, `362221` pressed. It
+     covered the selection bar painted behind it. Dark Classic showed no bar in qemu either, only white text on every
+     row. Light Mode turned the black to paper under the selected row's white text.
+   - **The fix:** two more same-size edits in `m1plus_ipod.json` `styles` (now nine): rest states clear, press
+     `333333`, as `list_item_style`'s.
+   - **The pin:** `build.py` now asserts that all four row styles (`list_item`, `list_item_black`, `list_itemsort`,
+     `btn_tablerow`) are clear at rest, with a `333333` or clear press. It fails on section 63's build, on exactly the
+     hold menu's five states.
+   - **In qemu:** in Light Mode the selected row now has the Crimson bar with white text.
+2. **Light Mode, the press band** (not reproduced; closed with a note). In qemu, a held touch on a Library row is grey
+   over the whole row at 0.2 and 0.35 s and gone by 0.6 s, as the menu opens. The device shot (0.35 s) probably read
+   the panel while a frame was being copied to it. The device pass looks again.
+3. **The orange accent:** stays on the final visual pass (the accent mapping gap).
+4. **Clipped labels:** none is a payload clip that needs a fix now.
+   - V2.1's own: "Atmosphere Lamp Settings" and Playback Setting's "Changed album art(10s wait)" show left-clipped
+     identically in stock qemu. "Multiple Speed" is a 60 px `hscroll_label` in V2.1's `playmore_dialog`.
+   - Configuration's "Press again to erase the login and cache" is the payload's own. It is longer than the M1 row's
+     240 px scrolling label, and the device shot caught it mid-scroll. It is left for the visual pass.
+
+**Gates** (build `work/phase4/4.2/g2`, `V039m`), run serially:
+- `build.py --build`; `patch.py` (894 in 13 gaps, none unlisted);
+- `boot.py` plain 3 of 3, `--home-menu` and `--media`;
+- `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports.py` (unchanged from section 63);
+- `q2compare.py 1.5.9 --suites` on the lock screen code (`update.tar` byte-identical, 33 suite runs). The style edit
+  and its pin are M1-only files.
+
+**Device pass** (Nov 4, build `g2` flashed as `V039m`; `peek` accepted the payload hash; config backed up to
+`/mnt/mmc/.q2/config-pass64.ini`; Screen Off was Off for the pass; the Battery, Large clock and Light keys were set in
+`config.ini` with a reboot each, and the backup is back, byte-identical, so Screen Off is 1min again; screenshots in
+`work/phase4/4.2/dev/`):
+- **The bar (4.2):** Home has the clock and no chevron. System Setting, Display setting, Album, Now Playing, the
+  Q2 Pod app and File Browser each show the chevron. The chevron went back one page from each; Previous (Knob:
+  Navigation) went back from Display setting and the Q2 Pod app; V2.1's own navbar back still left System Setting.
+- **The PEQ:** 20 taps (Preamp, chevron, Simple, Advanced, five times), a shot 1.5 s after each. Every tap changed the
+  screen, with no stale frame, and each step's screen was identical in all five cycles.
+- **Battery modes:** Percent ("100%"), Icon + Percent and Percent Inside in the bar. With the Large clock, Percent
+  and Icon + Percent show the percentage at the top right with the icon hidden; Icon keeps V2.1's icon. The battery
+  read Full on USB power, so the text was white; the charging and low colours are only covered by `patch.py`.
+- **Light Mode:** the bar's glyphs, chevron and Percent Inside turn to ink; Library's knob bar is ink with paper text.
+  - Finding 1 is fixed: the hold menu's selected row ("Play Next") has the ink bar with white text.
+  - Finding 2 is closed: a held touch, shot at 0.2 s, is grey (`c8c8c8`) over the whole row (y 260 to 314); the menu
+    is open by 0.6 s.
+- Found, not fixed (planned after the pass):
+  5. **Light Mode, the lock screen:** the Large clock, the date, the percentage and the `>>>` turn to ink on the
+     dark Graphite wallpaper, so they can hardly be read. The mini player flips to paper.
+  6. **The row arrow on the selection bar:** the `>` keeps its rest colour (white on dark Minimal's light bar, ink on
+     Light's ink bar). Cosmetic, for the visual pass.
+  7. **The PEQ's tabs:** after a tab tap, the other tab shows a grey box; after the chevron back from Preamp, neither
+     does. Not yet compared with qemu or the Q2.
+  8. **Previous as back is inconsistent** (the user, after the pass): with Knob: Navigation, Previous goes back on
+     some screens and not on others, and not every time: the user found it on Playback Setting's Channel Balance and
+     Crossfade pages. In the pass it went back from Display setting and the Q2 Pod app. With Knob: Volume, Previous
+     is a media key by design (the PEQ stays, `boot.py`'s `eq_previous`), so the Knob setting is checked first.
+  9. **Two back buttons, and a small one** (the user, for the visual pass): some pages show both the bar's chevron
+     and V2.1's bigger navbar back (Now Playing's `<` below the bar). The chevron is hard to hit, more so with a
+     case on. That is acceptable where Previous goes back (finding 8). Pages where the knob doesn't navigate, such
+     as Now Playing, need a prominent back button.
+- Wi-Fi dropped once ("No route to host"); the tap had landed, and a shot before the next tap confirmed the page.
+
+## 65. The V039m findings: Previous on slider pages, the lock screen in Light Mode, the PEQ's tab card (Nov 6)
+
+On `feature/m1-ipod`, before Phase 4.3. Section 64's device pass left findings 5, 7 and 8 unplanned; the user chose
+to clear all three first. Each was reproduced in qemu on `g2` (`V039m`) first.
+
+**8. Previous as back** (fixed).
+- **The cause:** Previous's Back sat inside `knob_nav_active`, which passes only on a context page (`contexts.inc`,
+  `m1plus_contexts.inc`). V2.1's slider pages are none: `balance_page`, `bootvol_page` (Startup Volume, and the
+  payload's Crossfade, built on it), `maxvol_page`, `brightness_page`, `btvolume_page` and
+  `screensaverabout_page`. There the knob keeps the volume by design, and Previous stayed Previous track. Display
+  setting and the Q2 Pod app are contexts, so the pass's checks there went back.
+- **In qemu:** with Knob: Navigation, Previous on Max Volume left the page as it was.
+- **The fix:** `knob_gate` holds the shared tests (Navigation, `usable()`, not Now Playing, not Bluetooth receiver
+  mode). `knob_nav_active` adds the context test, for the knob's turns and press. Previous's Back now asks
+  `knob_back_active`: a context, or a page with a back button (`back_of`), except Now Playing's enlarged art
+  (`bigcover_page`), which keeps Previous a media key, as Now Playing does. The knob's turns are unchanged: the
+  slider pages keep the volume.
+- **Tests:** `patch.py`: Previous clicks the back button on all six slider pages, where the knob still turns the
+  volume, and the volume dialog (no context, no back button) keeps it a media key. `boot.py`: with Knob:
+  Navigation, Previous leaves Max Volume and Default Vol (`maxvol_previous`, `bootvol_previous`); on `g2` the first
+  fails, "not back at slider_playset". Playback Setting reopens where its list was scrolled, so the step scrolls it
+  back to its start first. The walk's budget is 260 s, from 210.
+
+**5. The lock screen in Light Mode** (fixed).
+- **The cause:** Light Mode flips every neutral colour, the style hooks' and the payload's own (`ui_ink`), and the
+  image hook flips white glyphs. Nothing exempted the lock window, so its white clock, date and `>>>` turned to ink
+  over the wallpaper. The percentage is green or red only while charging or low.
+- **In qemu** (`[IPOD] LIGHT=1`, the Large clock, `q2pod:graphite`): the clock, the date and the `>>>` were ink.
+- **The fix (M1 only):** `lockscreen_init` hands the window to `ipod_lock_dark`, and `ipod_light()` reads 0 until
+  its `EVT_DESTROY`. The images cached in the other mode are dropped as it opens and, on a timer after the destroy,
+  as it closes, as Light Mode's Auto switch does (`light_apply`). `st.lock_win` is the last field of `scratch_t`,
+  so no other field moves. The Q2's code is shared and probably has the same fault; the Q2 build is unchanged.
+- **In qemu:** the lock screen is white on Graphite in Light Mode, and Home after the unlock is light again with its
+  icons flipped.
+- **Tests:** `patch.py`: in Light Mode the lock window reads dark, its percentage paints white, the image cache is
+  dropped once at the open and once after the destroy, and `ipod_light()` is 1 again; with Light off nothing is
+  dropped.
+
+**7. The PEQ's tab card** (fixed; the user's choice).
+- **The cause:** it is the Q2's focus card. `tab_to` puts the wheel on the tab bar after a tap as after Centre, and
+  `tabs_paint` marks the other tab, which Centre would open. On the M1 with Knob: Volume nothing can move that
+  focus.
+- **In qemu:** after the walk's `advanced` tap, Simple's card was `333333`.
+- **The fix:** `tabs_paint` draws it only where `peq_focus_shown()`: always on the Q2, and on the M1 while the knob
+  navigates (`ringnav_knob_nav`, Knob: Navigation). The tap's behaviour is unchanged.
+- **Tests:** `boot.py`: after `advanced` (Knob: Volume), Simple's card area is black.
+
+**Gates** (build `work/phase4/4.3/a2`, `V03Bm`), run serially:
+- `build.py --build`; `patch.py` (894 in 13 gaps, none unlisted);
+- `boot.py` plain 3 of 3, `--home-menu` and `--media`;
+- `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports.py`;
+- `q2compare.py 1.5.9 --suites`: `update.tar` byte-identical, 33 suite runs passed.
+
+`fndiff.py` against `g2`: 8 changed and 5 added, of 1276. The added are `knob_gate`, `ringnav_knob_nav`,
+`ipod_lock_dark`, `lock_images` and `lock_gone`. The changed are the intended `knob_nav_active`, `ringnav`,
+`ipod_light`, `lockscreen_init` and `peq_paint`. `draw_spaced`, `paint_battery` and `ringnav_about` keep their
+instruction bytes: only a constant-pool label's number (`$CPI305_0` to `$CPI309_0`) or a relocation record differs.
+
+## 66. Phase 4.3: the settings pages (Nov 6)
+
+On `feature/m1-ipod`, per the plan's Part B (the user's choices of Nov 6):
+- the title bar hidden, as on the Q2, with the chevron's tap wider;
+- six 72 px rows;
+- each sub-page row landing with the item that makes it work.
+
+**The audit** (pinned in `test/m1plus/build.py`):
+- **The layout slot:** V2.1's `list_view` layouter (`children_layouter_list_view_create`, 0x60b79c) uses the vtable at
+  0x9047a0, whose layout slot 0x9047a8 holds 0x60abb0.
+- **The rows:** V2.1's settings rows have no inner button. A `list_item_style` item holds its children, centred on a
+  60 px body in a 64 px row:
+  - a 40 px icon at 12,10;
+  - the label at 60,20 (12,20 without an icon);
+  - trailing images ending at x 308: a 57x28 switch at 251, `right_arrow` at 295, a 26 px tick at 282.
+
+  The builders make them 0 high (the list's default) or 64. The pins are the `li` words at six builders.
+- **The icons:** V2.1's 43 square 40 px `pset_`, `sset_`, `system_` and `playset_` icons, already `SET_ICON`, are
+  hashed in `m1plus_ipod.json`'s `settings_icons`. Several are red discs (System Update, Display).
+
+**The pages** (`tools/m1plus_ipod.py`):
+- **The rewrite:** `ipod.settings_page` is the Q2's `NAVBAR_ONLY` branch, factored out, and the Q2's pages come out
+  byte-identical. 32 of V2.1's 33 `navbar_only` pages lose their `navigationbar_view`: hidden and disabled, its
+  return button still enabled. A disabled bar takes no taps, so a tap at the top of the first row opens it.
+- **The lists:** each list sits `SET_TOP` under the bar in Minimal (flush in Classic) and holds `SET_ROWS` 6 of
+  `SET_ROW` 72. V2.1's scroll view and bar have fixed heights, so they take the list's (the Q2's follows, h=100%).
+- **The Lock Screen page** keeps its title bar, which holds its on/off switch.
+- **Date & Time and Power** are slide pages. Each slide is rewritten with its own bar, and the standby slide's list
+  stops above the slide indicator (five rows).
+
+**The code:**
+- **The layout slot:** `patch_code` points it at `ipod_list_layout`, the manifest's one `compact_code` change.
+- **The row mapping:** `set_button` takes a V2.1 row as its own button until a custom prop (`_set_row`) marks it
+  mapped. Only rows V2.1 made are taken (64 high, or 0 and laid out at 72), as the Q2 leaves another builder's rows
+  alone. `set_row` lines the trailing images up by their right edges.
+- **Back:** `back_of` searches a hidden `navigationbar_view`, so Previous and the chevron click the page's own back
+  (`on_back_onclick`). The chevron's tap is `BAR_BACK_HIT_W` (64) wide, and in Minimal it reaches `SET_TOP` into
+  the page. The image stays 32 px.
+- **Display:** the Q2's `ringnav_display` runs on the M1, with its icon and view names per model, and
+  `m1plus_nav_display.c` is retired. After V2.1's four rows come Appearance (Theme, Light Mode, Accent, Battery),
+  Coverflow (Artist Albums, Coverflow Sort, Refresh) and Controls (Smart Awake, the knob's two rows).
+- **Theme's preset on the M1:** it leaves Corners and Home alone, and skips `np_theme` (Now Playing is V2.1's until
+  4.6).
+- **The icons:** the image hook's `SETTINGS_ICON_NAMES` now lists V2.1's icons, which keep their category colours
+  under every accent.
+- **Kept:** `m1plus_nav_rows.c`, `m1plus_nav_audioset.c` and `m1plus_nav_sysset.c` (see ipod-ui 4.3).
+
+**Seen in qemu** (Classic, as `boot.py` runs it):
+- six complete rows, icons at 28 and text at 80;
+- the chevron and Previous going back from list pages, both slide pages and the slider pages;
+- the payload's Playback rows mapped like V2.1's;
+- Display's three sub-pages.
+
+For the visual pass: labels now run from 80 to 268, 32 px narrower than V2.1's. Long ones scroll, as V2.1's
+"Atmosphere Lamp Settings" already did ("Resume Songs: 30 min"). An iconless row's text starts at 22, not 20.
+
+**Tests:**
+- **`build.py`:** the slot, row and icon pins; the built pages' bars, back buttons and list geometry; the
+  `SET_*` fit; one proven failing pin.
+- **`patch.py`:**
+  - the chevron's tap edges in both themes;
+  - the M1's Display sub-pages and Theme's preset;
+  - the settings icons' colours under each model's names.
+
+  The 4.3 gap group is gone: the checks that pass left it, and the rest drive the Q2's row shape and wait for Phase 5
+  (`Display and settings scenarios on V2.1's rows`).
+- **`boot.py`:** past System Setting the walk is the patched demo's alone, on the 72 px rows, with the chevron (its
+  far edge once) as the settings pages' back, and the knob row through Controls.
+
+**Gates.** Every commit was built and checked by `build.py`, `patch.py` and the plain walk. The full set ran three
+times, serially: on `b1` (the audit), `b5` (through the chevron) and `b8` (`V03Jm`, the last code commit). Each run:
+- `q2compare.py 1.5.9 --suites`: `update.tar` byte-identical, 33 suite runs passed;
+- `build.py --build`; `patch.py` (870 in 13 gaps on `b8`, none unlisted);
+- `boot.py` plain 3 of 3, `--home-menu` and `--media`;
+- `playback.py`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa` and `ports.py`.
+
+`b1`'s `--media` failed once (`books_back`) while other qemu walks ran beside it, and passed when rerun alone: the
+walks share the CPU badly, so they run one at a time.
+
+`fndiff.py` against `a2` (`V03Bm`, on the device): 9 changed and 4 added, of 1280.
+- **Changed:** `back_of`, `ipod_list_layout`, `set_button`, `settings_list` (`SET_ROW`), `ringnav_display`, and
+  `ringnav_input` and `ringnav_dispatch`, which inline the chevron's tap and `back_of`.
+- **Added:** `setting_click`, `setting_text`, `display_open` and `keep_selected`, reachable on the M1 now.
+- **Unchanged in code:** `draw_spaced` and `ringnav_about` differ only in a constant-pool label, as in section 65.
+
+## 67. System Setting in the iPod order (Nov 7)
+
+On `feature/m1-ipod`, Part C of `.plan/phase4-3.md`, after the 4.3 device pass on dev 39 (`b8`, `V03Jm`) found no
+defects. The user's order (Nov 6): the Q2's rows by role, then V2.1's extras, then maintenance, with About last:
+
+1. Wireless Setting, Network Service, Display setting, Idle, Buttons lock, Date and time, Language, In-Vehicle mode;
+2. Boot to (only with Rockbox on the card), App Store;
+3. Double Tap to Turn On, Screen Rotation, Theme;
+4. System Update, Reset settings, Formatting Card, About.
+
+The M1 has no Key tone row.
+
+**The audit** (pinned in `test/m1plus/build.py`):
+- **The rows:** V2.1's builder (`systemset_sysset_page_init`) makes a row per `syssetMenu` entry, 0 to 14 (15 with
+  `sset_prove` when the language is 3). Each row draws the icon `get_systemset_showinfo` copies. That comes from one
+  of two tables, picked by a GPIO, which differ only in Double Tap's icon (`sset_tswake` or `sset_doublewake`).
+- **The names:** Buttons lock is `sset_keylock`, not `sset_screenlock`.
+- **The click:** each row is named by its menu index, and its click (`0x4ad7b0`) reads the name back with `atoi` and
+  indexes `syssetMenu`. A restacked row keeps its click, so no click depends on a row's place.
+
+**The code** (`patch/m1plus_nav_sysset.c`):
+- `sysset_ipod_order` replaces `apps_before_update`. It takes a role table of V2.1's icon names in the order above,
+  and restacks the list once, after the payload's rows are added.
+- **The payload's rows** are matched by pointer, not by icon: App Store draws `system_update` as Update does, and
+  Boot to draws `sset_powermanager` as Idle does. `ringnav_systemset` takes each as the list's last row right after
+  adding it, and hands both to the seam.
+- **Unknown rows:** a row matching no role (`sset_prove`, or a later firmware's) goes after Theme, so it is never
+  lost.
+- **The Q2:** the shared `reorder` still takes the Q2's row ids and returns at once on the M1. The Q2 build is
+  unchanged.
+
+**Tests:**
+- **`build.py`:** the two icon tables, `syssetMenu`, the click's `atoi`, and the role table's names against the
+  tables.
+- **`patch.py`:** `boot_row` builds V2.1's rows with their icons, `sset_prove` among them, and checks the order with
+  and without Rockbox. App Store's and Boot to's clicks still reach their handlers.
+- **`boot.py`:** Display is now the third row (`display` taps row 2), and the list's end is System Update, Reset,
+  Formatting Card and About.
+
+**Gates** (`c1`): `build.py --build`; `patch.py` (870 in 13 gaps, none unlisted); `boot.py` plain.
+
+`fndiff.py` against `b8`: 4 changed, 2 added and 1 removed, of 1281.
+- `ringnav_systemset` changed, `sysset_ipod_order` and `last_row` were added, and `apps_before_update` was removed.
+- `draws_image` is unchanged in source but inlined differently.
+- `draw_spaced` and `ringnav_about` differ only in a constant-pool label, as in section 65.
+
+## 68. Phase 4.4: compact Library, holds and search (Nov 7)
+
+The V2.1 library audit and 64 px stock lists landed in `27de9cd`, `0ea2b69` and `73fc9f3`.
+The remaining implementation extends that layout to the payload's pages:
+
+- **Rows:** shared page-row helpers replace `m1plus_coverflow_rows.c`; payload lists use 64 px pitch,
+  the shared white caption and grey metadata styles, and V2.1's small trailing chevron. The old
+  `PAGE_ROW_*` geometry is retired. `ROW_*` remains for settings rows and the Q2 Pod menu (Home, 4.5).
+- **Hold Return:** V2.1's AWTK key-long at 1000 ms opens Now Playing (or Home with Hold Return: Home).
+  Previous is Back only in Knob: Navigation; Home's grid and Now Playing keep stock's hold.
+  A latch consumes the hold's release. The status-bar chevron also supports a hold, in either knob mode;
+  moving beyond the pull threshold cancels its timer. Controls exposes Hold Return before Knob.
+- **Playlist hold:** numeric playlist rows open `QM_PLAYLIST`; More… opens the editor. New, Import and
+  the Add to Playlist picker are excluded.
+- **Search:** a pull on the payload Library or a V2.1 library list opens V2.1's `search_page` through
+  `stock_search` at `0x523304`. Internet Radio keeps its own search.
+- **Media:** tests enter Photos, Books, Videos, Podcasts and Audiobooks through `library_open`.
+  Photos and Books use the status-bar chevron rather than an overlay back button.
+
+**Remaining M1 branches in coverflow.c:** the one stock cover mutex, native touch path, Q2 Pod entry and
+back destination, and Home card binding preserve M1 features or ABI differences. The title's back-button
+clearance is retained until Home/title layout (4.5). The alternate row styles and album-caption exception
+are removed. Continuous carousel physics remains a separate unported feature.
+
+**Verification:** the Q2 comparison passes all 33 suites with a byte-identical `update.tar`. Playback, M4B,
+ID3, headset I/O, LDAC and Bluetooth silence/DROP checks pass. Moving the new chevron timer state to the end
+of navigation state keeps the function diff against `b8` to 18 changed, 4 added and 2 removed; these include
+System Setting's order, compact rows, holds and search. The port report classifies all 662 entries.
+
+The playlist-picker regression now checks that Add to Playlist returns before generic song hold handling.
+A stale boot-walk coordinate now taps Knob below the new Hold Return row. The expanded media walk adds the
+Library steps' settling time to its observation budget and explicitly exercises pull to search and Back.
+
+Two real input defects found in the emulator are fixed and covered by focused MIPS regressions:
+- The chevron consumes its press before stock dispatch, so AWTK never sets its pointer-pressed flag. Its
+  timer uses its own press state; moving or aborting cancels the timer.
+- A window switch can filter Previous's held release before the navigation hook. The low-level input hook
+  keeps the latch armed through stock dispatch, then clears it even if stock skipped the navigation hook.
+  The next short Previous still goes Back. Both orientations are covered.
+
+The final build, `work/phase4/4.4/final4` (`V041m`), passes the build audit and full MIPS run: 1,820 scenarios,
+with 783 expected failures in 12 later-phase groups and no unlisted failures, stale entries or passing gaps.
+Playback, M4B, ID3, headset I/O, LDAC, Bluetooth and the port report were rerun on this exact image and pass.
+All three emulator walks (plain, Home-menu and media) pass on this exact image. The media
+walk verifies both holds followed by normal Back, Playlists, Long Songs, Books, Photos, Coverflow, Streaming,
+pull to V2.1 search and Back, and Shuffle. QEMU validates Photos navigation but cannot decode the fixture
+images; actual PNG rendering was verified in the hardware pass below.
+
+Four fixtures using Q2 Return/window-manager or pointer dispatch ABI move to Phase 5, with 181 Games checks
+in 4.8. No 4.4 gap groups remain.
+
+`graphify update .` refreshed the AST graph.
+
+**Device pass (Nov 7, 1.5.9 dev 57 / V041m): passed, no defects observed.** The installed demo SHA-256
+matches `final4` exactly; the pre-update demo matched `b8`, the function-comparison baseline. The 17 System
+Setting roles are in order with About last; each moved row opens its own page or toggles its switch, and
+Boot to and App Store work. Reset/format were checked only up to their page or confirmation.
+
+All Songs, Albums, Artists and Folder show seven compact rows in Minimal and Classic. Previous release,
+Previous hold in Navigation, the following short Back, chevron tap/hold in both knob modes, and Hold Return:
+Home all work. Pull-to-search works on Artists and the payload Library and returns correctly. A temporary
+playlist's hold opens the queue menu; More opens its editor. The temporary playlist was removed afterward.
+Podcasts/Audiobooks open their folders; Photos decodes the existing PNGs and swipes correctly; the existing
+EPUB renders within the screen margins. Captures and the detailed checklist are in
+`work/phase4/4.4/device-pass/`.
+
+The temporary Home cards were removed, Controls and Minimal restored, and Screen Off returned to 1 minute.
+The original config and Rockbox boot-target files were restored byte-for-byte and synced; their hashes still
+matched after an idle cycle. Backups remain in `work/phase4/4.4/device-before/` and on the card as
+`.q2/config-pass-V041m.ini` and `.q2/boot-target-pass-V041m`. The previous card-root image is preserved as
+`.q2/update-pre-V041m.bin`.
+
+## 69. Phase 4.5: the portrait iPod Home (Nov 7)
+
+The plan is `.plan/phase4-5.md`; work paused once (`docs/m1plus-phase4-5-status.md`) and resumed the same day.
+
+**Entry pages** (`patch/m1plus_nav_library.c`). V2.1 has no Library or Streaming page: its Home grid held both
+as cards. `library_open` lists upstream's rows in upstream's order with V2.1's own categories bound to its Home
+card click (`m1_home_click`, `0x533b80`) by its Home ids, then Composers, the card's media, CD Ripper and Update
+Local Music. `streaming_open` lists native Tidal and HiFi Music, then Spotify, Soloify, the card apps, Internet
+Radio, AirPlay and Configuration, with the existing visibility keys. The ids come from V2.1's own table
+(`get_homemenu_showinfo`, `0x97c940`): the paused work had Genres and Composers swapped and bound Tidal to the
+CD ripper (id 15); the tests now read the table.
+
+**The asset** (`tools/m1plus_ipod.py` `home_page`). V2.1's `home_page.bin` is a gesture view holding the grid,
+its dots and the playing strip, then the serial-error label. The rewrite keeps the label (last, over everything)
+and puts the Q2's Home in the gesture view's place: the art (`img_homeart`, 320x200), the main and Settings lists
+(64 px rows, literal labels: V2.1 translates none of them), and a portrait carousel (290 px cards, 190 px art from
+V2.1's own Home icons, arrows drawn at build time).
+
+**V2.1's initializer and refresh** stay. Their returns with the grid gone are pinned (`m1plus_ipod.json` `home`):
+the grid builder (`0x534064`) finds no `home_sview`, the strip's title and cover refreshes find no labels, and the
+init's visit binds the grid's swipe only on `app_gesture`. Its pointer-up handler (`0x53439c`, Now Playing for a
+release below y 415) is not bound. Its boot resume is `ringnav_boot`'s: the queue starts paused through
+`start_player` (V2.1's `player_start`, now an alias) and Home stays; car mode keeps Now Playing.
+
+**Layouts** (`patch/coverflow.c`, M1 seams; the Q2's `update.tar` is unchanged). Split: the art across the top, the
+menu under it to the window's foot, scrolling; Full: the menu from the top; both full width (Full's chevron shift).
+Carousel: the cards and arrows, the menus hidden and insensitive. The payload binds every row, card and arrow
+through `home_click`. Settings opens Playback and System from every layout; the status bar's chevron shows while it
+is open, and the chevron or Previous (Knob: Navigation) goes back to the menu it came from, its row or card kept.
+On Home's own menu Previous stays a track key. Appearance has Home; Controls has Shortcut, which offers Favorites,
+Shuffle, Rated Albums, Artists and Albums (no Rockbox or Games on the M1; a stored one reads as Favorites, kept until
+changed). Shortcut paths are V2.1's (`LOCAL_UI`).
+
+**Art.** The shared pan at the M1's panel: `DRIFT_TEXELS` is four panels (256,000), the player cover table is
+V2.1's types (2 embedded, 3 and 5 the folder's or downloaded), `g_lastcover_url` is V2.1's `savecover_path` (its
+cover thread writes the track's path after the files, `0x4df1a0`), and `image_manager_unload_bitmap_by_name` is now
+V2.1's `image_manager_lookup` then `image_manager_unload_bitmap`. Missing art falls back to the Coverflow cache, then
+the placeholder (`default_album_home`, shipped at 320).
+
+**A V2.1 defect found in QEMU.** V2.1's `image_base_on_event` (`0x654444`) sets an image's press on pointer down and
+clears it only on an abort, not on the clicking release. After a row had opened its page, a fling starting on the
+art (which takes no touch, so nothing grabs) and released over that row opened it again. `home_click` ends the
+image's press with V2.1's own abort before going on; the media walk's `art_fling` step covers it.
+
+**Retired:** `m1plus_coverflow_home.c`, `m1plus_nav_home.c`, the grid's state, offsets and imports
+(`view_create`, `slide_indicator_set_max`, `slide_view_set_active_ex`, `pdeq_choicemenu`), the Q2 Pod card's icons,
+the Library's interim Coverflow and Streaming rows.
+
+**Tests.** `patch.py`: `m1_entry_pages`, `m1_home_init` (V2.1's Home routines on the asset; the bindings and their
+table; the abort), `m1_home_modes` (every layout in both themes, Settings and Back from each, knob and Centre,
+carousel turns and arrows), the shared art and pan scenarios at the M1's panel and cover types, boot resume at
+V2.1's addresses, and the M1 Display test with Home and Shortcut. No 4.5 gap group remains: the shared Home list
+checks pass; the Q2 Display page's Home rows move to Phase 5 (its fixture), and one wheel-timed confirm to 4.8.
+`boot.py`: stock is the startup control; Home is checked for itself (the accent bar on Now Playing, Split's art);
+the plain walk is Full and reaches every page through Home's rows and Settings list; the media walk is Split
+(Library, Folder, Coverflow, Streaming, Settings, the art fling); `--home-menu` compares the same build with and
+without saved V2.1 cards. The build audit pins the Home edits and refuses a damaged pin.
+
+**Verification:** the Q2 comparison passes all 33 suites with a byte-identical `update.tar`. The final build,
+`work/phase4/4.5/h6` (`V04Hm`, dev, with q2remote; update SHA-256 `dae62c65…4aa4403`), passes the build audit
+and the full MIPS run: 1,840 scenarios, with 691 expected failures in 10 later-phase groups and no unlisted
+failures, stale entries or passing gaps. All three emulator walks (plain, Home-menu and media) pass on this exact
+image, as do playback, M4B, ID3, headset I/O, LDAC, Bluetooth and the port report (661 entries, each classified).
+The function diff against dev 57 (`work/phase4/4.4/final4`) is 66 changed, 9 added and 6 removed. The removals are
+the grid (`home_card`, `home_card_again`, `home_slides`, `ink_canvas_fill_rounded_rect`), the Library's interim
+Coverflow row (`coverflow_row`) and the `player_start` shim, now an alias. The additions are Home's bindings and
+pages (`home_bind`, `home_click`, `home_page`, `home_playing`, `home_arrow`, `home_carousel_show`,
+`coverflow_home_sets`, `m1_native_row`, `streaming_open`).
+
+Three test faults surfaced on the final image; none was in the payload:
+- `test/coverflow.py`'s host build of `coverflow.c` lacked a prototype for `pointer_event_init`, which
+  `home_click` calls on the M1.
+- `m1_home_modes` built the carousel from the asset without what `slide_menu_create` sets: its index read
+  leftover memory (48) and stock's scroll-done commit found no child array. The fixture now sets both, as
+  `Machine.page` does, and mocks the animator's start and pause so the machine's slide animator moves the cards.
+- The media walk's `shuffle_again` compared against a capture with no selection, but the press that reopens
+  Shuffle selects its first row. The step now checks that a page opened; the Shuffle Songs step after it is
+  unchanged.
+
+Home review sheets (`test/m1plus/home_sheets.py`, a new capture tool; `work/phase4/4.5/h6-sheets/home-minimal.png`
+and `home-classic.png`) show each layout in both themes, from Home through the knob's walk, Settings, Playback, and the chevron back to the row or card it left.
+Two cosmetic points remain for the aesthetics pass: the Split knob walk leaves the top row clipped, and Classic's
+Settings card is grey where the other cards take the accent.
+
+**Device pass (Nov 7, `V04Hm` flashed by the user through the TF card update; the installed `release/bin/demo`
+matched `h6`'s manifest, `04f6b43b…`).** Over q2remote, with Screen Off set to Off for the pass. Screenshots:
+`work/phase4/4.5/device-pass/`. Passed, with the findings below. Nothing was fixed during the pass.
+- **Split, Minimal:** every Home row opened and came back to the row it left: Now Playing, Library (Albums
+  opens), Coverflow, Folder, Favorites, Streaming (all eight rows scroll; Podcasts, Internet Radio, AirPlay,
+  Configuration, File Browser and Soloify open; Tidal and HiFi Music open their login pages) and Settings (Playback
+  and System open). Back from Settings by the status bar's chevron and by Previous, and from Playback and System.
+  The art follows the track at the same cache filename (five tracks).
+- **Full, Minimal and Classic:** every row, touch and knob, with Back to the row it left. **Classic Split:**
+  Settings, Streaming and Back.
+- **Carousel, both themes:** seven cards (Now Playing, Library, Coverflow, Folder, Favorites, Streaming, Settings),
+  each opened with Centre and returned to its card by the chevron; Settings and its Back; a swipe and a card tap;
+  the knob wraps.
+- **Knob: Volume** (Carousel): a detent opens the volume bar, the next changes it, cards stay put; touch swipes and
+  taps; Centre locks the screen, as in stock. Knob: Navigation walks every list and the carousel. The Shortcut row
+  cycles Artists, Albums, Favorites, Shuffle and Rated Albums, and the Carousel card follows its label.
+- **Reboot** (`reboot` from the shell): Home returned in Split and Minimal with the art up. The art is the saved
+  resume track's, as a shell reboot is not a power-off.
+- **Restored:** Screen Off to 1 min through the UI (`LIGHTTIME=3`), the configuration byte for byte (`0c2eac84…`;
+  the pass had added `HOME=0` and `SHORTCUT=3`), the boot target to `rockbox` (`dca2f95b…`), and the volume to 21.
+  The card keeps `V04Hm` as `update.bin`, and `V041m` as `.q2/update-V041m.bin`.
+
+Findings for the fix plan (none blocks the phase):
+1. Back from the Tidal and HiFi Music login pages goes to Home, past Streaming. The other Streaming pages return
+   to it.
+2. The Settings list's first selection differs: System on the first open, Playback after a reboot, then the last
+   used.
+3. The Carousel's Shortcut card takes the Shortcut's label but keeps the Favorites heart.
+4. Three detents in one q2remote call moved the carousel one card (stock's tick filter); a real knob's rate is
+   untested.
+5. Cosmetics for the aesthetics pass: the Split knob walk clips the top row (seen on the device), Classic's
+   Settings card is grey, and Classic's settings icons take different colours.
+
+Not covered: Knob Up: List Down, car-mode boot resume (the emulator walks cover it) and a cover-less track.
+
+`graphify update .` refreshed the AST graph.
+
+## 70. Phase 4.5: the device-pass fixes and a second pass (Nov 8)
+
+The plan was `.plan/phase4-5-fixes.md`, one item per commit with its test.
+
+1. **Tidal and HiFi Music login Back** (`698976fd`, `a8ab1ec7`). Back from either login returns to Streaming on its
+   row, by the page's button, the status bar's chevron and Previous. HiFi's login opens under AWTK's input-method
+   keyboard, its own window, so the chevron and Previous had been a Return in the keyboard; `back_window()` now acts on
+   the page under it.
+2. **The Settings list's first selection:** no fix (`34dae142`, a test). The Q2 does the same: the list keeps its own
+   selection for the Home window's life (Playback on the first open, then the last used). The device's "System first"
+   came from the Screen Off change made through System before the pass. `m1_home_modes` pins it in all three layouts.
+3. **The Carousel's Shortcut card** (`b6f9945d`, `8ef0a607`). It no longer keeps the Favorites heart. It draws V2.1's
+   own Shortcut icon (the arrow-in-box glyph on the accent disc, grey in Minimal), whatever the Shortcut is; the
+   caption names the target.
+4. **q2remote `knob N [--step-ms MS]`** (`423e8bcd`). The plan took the old `knob` for zero-spaced; it already put
+   20 ms between a press and its release, about 45 ms a detent. The default is now 40 ms and a pace is a flag.
+5. **Cosmetics** went to the aesthetics queue (`m1plus-ipod-ui.md`).
+
+**Build `V04Om`** (`work/phase4/4.5f/a7`, update SHA-256 `45b7ffc2…`, from `423e8bcd`) passed every gate: the audit,
+the MIPS suite (691 expected failures in 10 later-phase groups), the boot, Home-menu and media walks (with the Tidal
+and HiFi Back steps), playback, M4B, ID3, headset, LDAC, Bluetooth, the port report and the Q2 comparison (all 33
+suites, `update.tar` byte-identical to 1.5.9's).
+
+**Device pass (Nov 8).** The user flashed `V04Om` through the TF card update; the installed `release/bin/demo`
+(`f27e607d…`) matches `a7`'s manifest. Over q2remote, Screen Off set to Off. Screenshots:
+`work/phase4/4.5f/device-pass/`.
+- **Login Back:** Tidal and HiFi Music, each by the page's button, the chevron and Previous, returned to Streaming.
+- **Settings' first selection:** fresh after a reboot, Playback in Split (touch), Full (knob) and the Carousel (knob).
+  Choosing System, Back and reopening gave System, by the other input; Back from Settings kept the Home row or card.
+- **The Shortcut card:** the new art in both themes across all five values (Favorites, Shuffle, Rated Albums,
+  Artists, Albums), the caption following. Minimal's card is grey, Classic's the accent blue.
+- **Knob pace** (5 detents a turn, `--step-ms` as shown; cards or rows moved):
+
+  | `--step-ms` | 0 | 20 | 40 | 80 | 150 | 200 | 250 | 400 | 600 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | Carousel (7 cards), two turns each | 5, 1 | 1, 1 | 1, 1 | 2, 2 | 3, 3 | 3, 3, 3 | 5, 5 | 5, 5 | 5, 5 |
+  | Full list, down and up | 5, 5 | 5, 5 | 5, 5 | 5, 5 | 5, 5 | | | | |
+
+  The list counts every detent, even in one write. The Carousel counts only those at least about 200-250 ms after the
+  last one that moved it; this is not an artifact of the tool. Whether it is stock's tick filter or the card animation
+  is not established. The user judged it not an issue: the physical knob does not turn that fast.
+- **Knob Up: List Down** flips the direction: on the Full list a detent that went up now goes down, and on the
+  carousel the cards reverse.
+- **A cover-less track** (a generated WAV on the card, since every album has art): Split's art shows the grey disc
+  placeholder, and Now Playing shows one of V2.1's default covers (a different one each play). The carousel's Now
+  Playing card is the generic note icon whatever plays.
+- **Vehicle mode** (confirmed by the user by hand, not driven over q2remote): with it on, unplugging the charging cable
+  starts a countdown and then shuts the player off, and plugging the cable back in boots it, and the boot resumes
+  into Now Playing.
+
+Seen, not changed:
+- Switching the theme to Classic and back to Minimal reset Minimal's accent from Ivory to Graphite (`MINIMAL_ACCENT`
+  7 to 0). Whether the Q2 does the same is unchecked.
+- After a single-track queue ended (the WAV, seeked to its end), playback went on to another track: Sample Track in
+  `ZZTest`, then the last Vergecast episode.
+- A mistaken tap opened Playback's EQ page and its taps landed on it (Off, 0 dB shown); `peq-active` was rewritten at
+  that moment and its earlier content was not saved.
+- The display page's clipped label is in the aesthetics queue.
+
+**Restored:** Screen Off to 1 min through the UI (`LIGHTTIME=3`), the configuration byte for byte (`f132ba43…`; the
+pass had added `HOME=0` and `SHORTCUT=3`, and Minimal's accent), the boot target to `rockbox` (`7c538425…`, switched to
+`q2pod` for three reboots), and the volume to 21. The test WAV was removed. The card keeps `V04Om` as `update.bin` and
+`V04Hm` as `.q2/update-V04Hm.bin`; the playing queue is now the Vergecast, paused.
+
+**Item 4's outcome:** closed by the user. The Carousel's loss is real in a burst, but the physical knob is slower than
+any pace that loses detents, so the current setting stays and no fix is planned.
+
+`graphify update .` refreshed the AST graph.
+
+## 71. Phase 4.6: Now Playing on V2.1's pages (Nov 8)
+
+The plan was `.plan/phase4-6.md`, on branch `feature/m1-ipod`, from the device-passed `V04Om`. Commits, one an item:
+`59dd3a93` (names), `2c3ff785` (the iPod page), `e9566167` (Centred), `5fd095ec` (the big cover), `1827e975` (the volume),
+`3dc1eb0c` (Spotify's page), then the tests and this record.
+
+**What changed:**
+
+1. **Name seams.** The shared hook looked up V1.32's names, so on the M1 it found no cover, big cover art, lyric page, dots,
+   More or volume bar, and V2.1's page ran alone. They are `VIEW_*`/`ICON_BIGCOVER` in the device includes.
+2. **The iPod page** (`tools/m1plus_ipod.py playing_page`). V2.1's tree stays (`app_gesture` > `view_local` + `view_dlna`) with its
+   transport row: a top row with a 48 px `btn_return`, the position, the HR badge, the heart and More; the art slide holding a
+   208 px art, title, artist and album; the dots, the bar at V2.1's x and width, and the times. The chevron hides on the page. The
+   Theme preset applies again (Minimal's album capitals and bar). The controls are `ipod.quiet_icon`'s treatment of V2.1's own `p_*`.
+3. **Centred Now Playing** opens V2.1's own page, emitted as `playing_page_stock.bin`, with the iPod's bar, marquee holds, the
+   page's black and lyrics across their column. Its column is already the screen's width, so full-screen lyrics only reach the dots.
+4. **The big cover.** `bigcover_page_init` is hooked (the port report's row is gone) and the page is the Q2's: full screen, a 320 px
+   square, a shade and title on its foot. `BC_IDLE` is V2.1's word (`0x97ccd0`), reset 20, through `BC_IDLE_T`.
+5. **The volume.** The dialog is full screen and clear, and `vol_paint` draws the band over Now Playing's bar and times and the panel
+   elsewhere. The band follows its widgets through their parents, since Centred's times sit above its bar in the column.
+6. **The Spotify page**, for Spotify and Soloify: Now Playing's positions (`SPOT_*`), its own back, V2.1's transport row (Previous,
+   Play and Next send the keys' commands; Queue and Mode open the browser's levels; Mode's icon is static), a touch on the bar that seeks
+   (an invisible slider, which grabs the drag itself), the knob's scrub, the band, and Previous a media key. Radio keeps its stack through
+   `RADIO_*`. Heart, More, lyrics, info, the visualizer and the big cover stay out: neither backend's contract has them.
+
+**What the audit of V2.1 found** (the plan's open questions):
+
+- **All 38 `widget_lookup`s of Now Playing's code recurse** (`playing.recursive_lookups`), and the heart, More and transport bind in a
+  `widget_foreach` visit, which recurses, so widgets can change parents.
+- **`getx_by_playtime`'s A-B dots** are 296 x position / length + 12, at y 364 (`playing.ab_dots`). The layout keeps them: no code edit.
+- **Cover types differ from the plan's "type 3":** on V2.1 3 is the folder's, and no cover is **4**, its own `random_cover%d`, which stays.
+- **V2.1 has no tap that opens the big cover**, only Enlarged Art's countdown. `np_art_click` binds the art (`clickable`), as the Q2's stock does.
+- **V2.1's big cover refresh shows the artist each time** (`0x52958c`), and the volume's refresh shows `img_vol` (`0x47d78c`), so these stay
+  transparent rather than hidden.
+- **The volume's openers:** the knob and keys pass context 1, the strip. `on_wm_tsup_fun` passes 2, `view_page2`, V2.1's full VOLUME page, for any
+  pointer-up in x 80..270 and the top 42 px, on every window: it is a window manager handler. A tap on the strip's top 30 px switches to it too. That page
+  stays V2.1's. **New code edit:** the 42 becomes 30 (`playing.status_tap`), or the top row's heart and position would open the page as well.
+- **The `y=360` move the plan feared is another dialog's** (`0x47e560`, bound at `0x47e7c0`). The volume init only moves to 0,0 (`playing.volume_init`).
+- **`view_tidalinfo` is never created:** `playing_choiceshowpage` only destroys it if found, so its Tidal branch is harmless on the rewrite.
+- **V2.1 draws an unknown style as the widget's default**, so `s_ipod_progress` kept the slider's `rounded_*` thumb until each state's icon was emptied.
+- **`btn_imgrandom_style` is only in `styles/playing_page.bin`,** which a payload page doesn't load (the suite's theme check caught it), so Spotify's Mode
+  draws `p_random` itself.
+- **`toolsTimeItoa` pads minutes on V2.1:** `-02:05`, not the Q2's `-2:05`.
+
+**Tests.** `test/m1plus/patch.py` moved onto V2.1's names and the knob: all 268 of Now Playing's and the big cover's gaps pass, and 5 others with them
+(4 of iPod UI assets, 1 of Display's). Known gaps went from 691 at the start of the phase to 418, with no new ones, and the scenarios from 1,842 to 1,894.
+
+- **The plan said lyric checks needing the wheel would move to the Q2-only group.** They pass instead: the shared code still reads the raw travel, which the
+  fixture sets, so they stay and pin the hold and glide that touch also reaches. The statements about wheel ticks were replaced by the M1's: a knob turn on the
+  lyrics page is V2.1's volume in both modes and moves no lyric, and a scrub begun there keeps the turns.
+- **New:** `boot.py --now-playing` (both themes, both layouts: no chevron, the back, the bar's row, the art, the band, the big cover and its close, Back),
+  `test/m1plus/np_sheets.py` (review sheets, with `--light`; `work/phase4/4.6/i6-sheets/`), and the Spotify scenarios on both backends. These cover the page in the
+  fake backend only: QEMU has no backend to show a track.
+- **A deliberately broken build** (chevron always on, `spot_knob_on` always 0, no `fullscreen`) failed the audit, the boot walk (`the chevron shows on Now Playing`)
+  and the suite (7 of the Spotify page's knob checks).
+- **Gate coverage per commit:** items 1 and 2 ran the full set (2 without `q2compare --suites`, only its byte compare). Item 3 ran audit, patch, boot and media. Items 4, 5 and 6 ran audit and boot (6 also media),
+  because `patch.py`'s gap list only agrees once all the sources are in. The full set, 14 gates with `--now-playing` and `q2compare --suites` (33 suite runs), passed on the final build `V053m`
+  (`work/phase4/4.6/i7`). The Q2's `update.tar` stayed byte-identical throughout.
+- **A later fix inside item 6:** the bar's seek first divided 64 bits, which calls libgcc's helper; it now uses `spot_paint`'s 32-bit form.
+
+**Device pass (Nov 8, `V053m`, over q2remote; shots and the findings list in `work/phase4/4.6/pass/`).** The user flashed it. Screen Off was set to Off for
+the pass, and the config, boot target, volume, theme, accent, Light Mode, knob mode and Play Mode were put back afterwards (the config differs by one
+`NPCENTRED=0` line, the default).
+
+- **Passed:** 1 Now Playing in Classic and Minimal (layout, labels, marquee, art for an embedded cover, a folder cover and no cover); 2 on-screen Previous, Play,
+  Next, Mode and Queue, and the hardware keys, and a bar tap seeks; 3 the heart, its 5-star hold and More; 4 the top-left Back returns to the opener, no chevron,
+  and the held chevron opens Now Playing from other pages; 5 the four slides, lyrics scrolling by touch and following; 6 the knob's band on all four slides in
+  both modes, the Navigation scrub (press, turn, press), and a double press turning the screen off; 7 the panel over Home and a list, and V2.1's VOLUME page
+  opening from the status bar and not from y 36; 8 the big cover by tap and by the countdown, a track change in it, and a tap closing it with the bar back;
+  9 Centred in Minimal, Classic dark and Classic light: V2.1's page, its transport, full-screen lyrics, off again; 11 Soloify's layout in both themes, hardware
+  Next, Previous (it restarts the track), the knob band, the knob scrub, and Back; 13 Internet Radio keeps its layout and panel.
+- **Not reached:** 10 only Tidal's login page (no account) and its Back; no DLNA source. 12 the Soloify menu's Now Playing row opens the paused session's track,
+  so the message view needs a Soloist with no session, and M1's Streaming has no separate Spotify row.
+- **Failed:** the Soloify page's touch controls. On-screen Pause, Play, Next, Mode, Queue and a bar tap do nothing, in both themes, while Back works and the
+  hardware keys and knob do. Everything that fails is built by `np_controls`.
+- **Findings for their own plan:** the VOLUME page's buttons and slider close it without changing the volume, and a knob detent closes it too; the top
+  counter lags a track change; Soloify's hardware Next leaves the page showing paused; Hold Return while Soloify is paused opens the local Now Playing;
+  smaller cosmetic and "is this stock?" notes in `work/phase4/4.6/pass/findings.md`.
+
+## 72. Phase 4.6's pass fixes: one Now Playing for local and streaming (Nov 8)
+
+The plan was `.plan/phase4-6-fixes.md`, from the device pass on `V053m` (section 71). That pass found one blocker (the Soloify page ignored touch) and a set of smaller
+findings, and showed why: `spot_np` built a second Now Playing in code, with its own labels, bar, scrub and entry point. Commits, one an item:
+`50f47f19`, `6487f0cc` (F0); `5455a9ca`, `86cc398b`, `1e5f4312` (F13); `5979d81c`, `ceb67b9f`, `a7f2184a` (the shared layer); `51e62b9a` (F1), `25926b22` (F5), `2ba9faf8` (F6); then these tests and this record.
+
+**What changed:**
+
+1. **F0, the Soloify page's taps.** `spot_refresh` hid its message view with `widget_set_visible` alone. V2.1's hit test skips insensitive children, not hidden ones, and tries the newest child first,
+   so the message view, made after the track's view and as large, took every tap on the bar and the transport row. Back is the page's own later child, so it worked. Both views now go through `view_show`.
+   `qp.msg` in `addon.c` has the same pattern and no touch child, so it stays.
+2. **F13, Hold Return's page.** `compact_now_playing` always opened `playing_page`. It now opens by `media_owner()`: Spotify's page for 2 (`spot_now_playing`), Radio's for 3 (`radio_now_playing`, since `radio.c` already had
+   an opener), and the local page otherwise. Home's row and every other caller go through it. **An addition to the plan:** a page opened this way has no browser under it, so its Queue and Mode would have gone dead. `np_browse` closes the page
+   and opens the browser at that level, and Back goes down the levels and then to where the hold began.
+3. **The shared layer, `patch/m1plus_np_view.{c,h}`.** `navigation.c` includes it where the Q2 has `np_sync`, under `M1PLUS`. Each page fills an `np_src_t` from its player and owns an `np_view_t`; `np_write` writes one from the other, `np_view_theme` applies the
+   Theme, `np_bar_fill` gives both bars their numbers and colours, and one state machine (`np_scrub_start`, `_drag`, `_end`, `_gone`, `settle_poll`) runs the scrub through an `np_page_t` of the page's operations. Changed from the plan: `np_src_t` has no cover or media callback, since nothing reads them, and the seek
+   moved to `np_page_t`. The M1 has no on-page `img_playstate` and no bold font, so of the Theme only Minimal's album capitals and marquee reach Spotify's page. The local page's scenarios stayed unchanged through all three commits. Three of Spotify's changed on purpose: its expiry runs on a timer, a second scrub
+   starts from the held target, and Minimal's bar sits at y 2 of its view.
+4. **F1, the counter.** A probe on `V053m` showed that only a Next **within one album** leaves the old count on screen: `MCL_POS` changes at once and `label_ipod_pos` about 200 ms later, but the screen stays old for 4 s and more. Across albums the new cover's repaint hides it, as ten changes in a mixed queue did. `np_sync` writes during a
+   paint, and AWTK drops what a paint invalidates, so `np_repaint` forces the counter and album once after the frame. The timer sits in `np_sync`, not `np_write` as the plan said: Spotify's page writes from its timer, not in a paint.
+5. **F5, the visualizer.** `showing()` accepts a top window named `volume_dialog` directly over the page, so the bars keep moving under the band. They also keep running under V2.1's opaque VOLUME page for its up to 3 s.
+6. **F6, the status bar's play icon.** While the icon shows, the chevron's tap inside the bar stops at x 36 (`BAR_BACK_PLAY_W`, the chevron and its gap). Minimal's strip below the bar stays 64 wide. **The plan's "stock has no handler there" was wrong:** a tap past the chevron is V2.1's `on_wm_tsup_fun`, which opens the VOLUME page. So a tap on the icon now opens VOLUME, as the rest of the bar does.
+
+**Findings that needed no code:** F7 and F8 are V2.1's own: its volume dialog closes 3 s after it opens, and each `q.sh` call came after that. F11 and F12 were a stale favourite and a stale framebuffer. F14 (Soloify's hardware Next showing paused) has no assumed state in the payload, so a fix would belong in `q2-soloify`; F2, F3, F4 and F10 are stock comparisons. These are the device pass's probes.
+
+**Tests.**
+
+- **`boot.py --soloify`, new: the first test of this page under QEMU with a track on it.** `FakeSoloify` plays the backend at the page's contract: the state file, the cover and the control socket, in a directory bound to `/tmp`. For both themes it checks the layout, the bar's rows and fill, Minimal's album row against Classic's; that Previous, Play and Next each send their one command and the
+  glyph follows the state; a bar tap and a drag each seek once; a paused seek holds the target and lets go once the player reports it; the knob's scrub (turns send nothing, the press sends `S65000`); the volume band; Mode and Queue; Back; Hold Return paused and playing, with no browser under it; and the message view with no session.
+- **It reproduces F0:** on `V053m` it fails at the first tap, `Previous sent [], not ['b']`. `patch.py` calls the handlers directly, which is why the suite passed that build.
+- **Its limit:** the fake has no browse socket, so Mode and Queue fall back to the browser's base (the old add-on's). Their real levels are the device pass's.
+- **`patch.py`:** a scenario for each fix. Each new check fails on the build before its fix. Known gaps stayed at 418 throughout.
+- **`build.py`:** pins the view file's seams (included under `M1PLUS` only, and guarded itself), the painters' symbols, the absence of the Q2's scrub, `SPOT_*` naming `NP_*`, and `BAR_BACK_PLAY_W`.
+- **`np_sheets.py`:** a `pages-<theme>.png` sheet with the local page and Spotify's side by side.
+- **The Q2's `update.tar` stayed byte-identical.** `q2compare` caught one slip on the way: a rewrite of `visualizer.c`'s `showing()` outside `#if M1PLUS`.
+
+**Device pass on `V054m` (Nov 8), Minimal and Classic, over q2remote.** The Soloify page's Prev, Play, Next, Mode, Queue (their real browser levels), bar tap and drag, Back, knob scrub, volume band and Previous key all work, so F0 is fixed. Hold Return and Home's row open the owner's page for Soloify (playing and paused), local music and Radio, so F13 is fixed; a second Hold on Radio's page goes back. The counter follows Next at once within one album, by button and hardware key (F1), and the visualizer's bars keep moving under the band (F5). A paused seek's hold ends once the player reports it. Minimal's album capitals and bar reach the Soloify page.
+
+What the pass found:
+- **F6 is half of what item 6 above says.** A tap on the status bar's play icon no longer goes Back, but it does nothing, on a list page (x 42) as on Now Playing. VOLUME opens only from further along the bar (x 160).
+- **F4, dropped.** A dot tap switches slides on Centred, V2.1's page, and does nothing on the iPod page. The dots are too small to be reasonable touch targets, so the user chose not to fix it.
+- **F14, intended behaviour (the user's explanation).** A Next soon after a track start, resume or seek can leave `state=paused` and the old title (`boundary op=n`, then `pause drop`, `pause bookmark valid=0`), by touch as by key; Play then starts the next track. Pausing stops the M1's audio at once, while Soloist has to rewind a few seconds so playback can resume at the same place, and at a track's border that can mean going back to the previous track. No fix is planned.
+- **The message view can't be reached from the menu.** With `state=none` the Soloify menu has no Now Playing row (`has_track`), so only a card without the browse socket or a direct call opens it. `patch.py` still covers it.
+- **A paused Soloify session stops after 30 s with the browser shut** (`SPOT_IDLE_MS`, as designed). Hold then opens the local page, and reopening Soloify resumes the session.
+- **A flash or a reboot returns to the last power-off's place.** `/mnt/data/memoryfile` kept its 07:10:58 record through the flash and a shell `reboot`, and both came back paused on that track and second. `A reboot keeping the place` in `docs/m1plus-unported.md` is the gap. Not prioritized.
+- **Switching Minimal to Classic with Ivory set turned Light Mode on** (`LIGHT` 0 to 1), and Classic to Minimal reset `MINIMAL_ACCENT` to 0, the latter already noted in section 70. Both are upstream's theme presets (`theme_preset`), left as they are.
+- **Other observations.** Four knob detents scrub 25 s on both pages, where 2 and 3 detents step 5 s each. Radio's third line can show raw stream metadata (`amgoArtistId="0"`). Queue's long label is a marquee (F2); a long-named local queue wasn't tried.
+
+## 73. The status bar: Back gets the corner, the play icon becomes a button (Nov 8)
+
+The plan was `.plan/status-bar-play-icon.md`, from F6 in the `V054m` pass (section 72): the chevron's tap stopped at x 36 beside the play icon, Back was still hard to hit, and a tap on the icon did nothing. This corrects section 72's item 6: `BAR_BACK_PLAY_W` is gone, and the icon's tap is no longer V2.1's.
+
+1. **The icon moves right, but not where the plan said.** The group is Bluetooth, the icon, Wi-Fi, the battery (`view_bar_right`). The plan had the icon left of Bluetooth, which doesn't fit: Bluetooth's images are 42 px canvases with their ink at the right edge, so that order measures 142 px against `BATT_ROOM`'s 115, with the icon in the clock. This order measures 110, and the icon stays put as a codec badge fades. `bar_sync` counts the icon toward the reach while it shows, so a badge that would crowd the clock falls back to the battery's icon. V2.1 never names the groups, and all its lookups of these widgets recurse (`show_sysbar_face`, `dropdown_showface`).
+2. **Back has the corner.** The chevron's tap and hold are `BAR_BACK_HIT_W` (64) wide on every page. Now Playing's local and Soloify pages hide the chevron for their own back, so the same width there runs from the screen's top to the foot of that row (`STATUS_H + NP_TOP_H`, 70), goes Back through the page's button and has the chevron's hold. Other pages keep their rows at that height, as Folder's first starts inside it. A dark screen's tap on those pages is not Back. Radio's page keeps the bar's chevron.
+3. **The icon is a button.** `BAR_PLAY_HIT_W` (45) round the icon's real position, the bar's height. A still tap is the Play key's press and release (`dispatch_key`), so it follows whichever player the key does. **V2.1 keeps the press and its moves:** its dropdown opens from a pull down at any x (`on_wm_tsmove_fun`), so owning the press as the chevron does would have lost that here. Only the lift's x changes, out of the x 80 to 270 where `on_wm_tsup_fun` opens the VOLUME page; that handler still resets the power timers. A drag does nothing. There is no button with no icon, on a dark or locked screen, or with a dialog, a video or a full-screen page on top. The bar past x 270 has never opened VOLUME; V2.1's range is unchanged.
+4. **The icon shows the action.** ❚❚ while playing, ▶ while paused, as the big transport button. V2.1's two faces and `bar_state_sync` pick `bar_play` while playing and no UI file names either image, so each ships the other's glyph (`STATUS_DRAWN`). Themes, Light Mode, Soloify, Radio and the dropdown's bar all follow.
+
+5. **Found by the sheets: a second battery.** One frame showed two battery bodies beside "30%". A level with another digit count (100% to 99%, or 10% to 9%) resizes the slot and moves the whole group, but `bar_sync` invalidated only the slot, in a paint, which AWTK drops (#116). The stale pixels stayed until something else repainted the bar. It predates this work, but the play icon now moves with the group too. `bar_sync` repaints the bar once after the frame, on the M1 only.
+
+**Tests.** `patch.py` covers the corner on a list page and Spotify's page (tap and hold at x 0, 40 and 63, not at 64), the button's edges, drag, abort, each state with no button, the reach, and the repaint when the width moves. `boot.py --now-playing` and `--soloify` tap the real UI: the corner from y 5, the icon's pause and resume, the glyph's shape in both states, Soloify's `p`, and a near miss opening VOLUME without pausing. `build.py` pins the group and the swap. `test/m1plus/bar_sheets.py` is new: the bar under QEMU with Bluetooth, Wi-Fi and percent showing, in both themes, dark and light.
+
+**Harness notes.** V2.1's VOLUME closes itself after about 3 s, so a check for it must look within that. The sandbox's battery level is garbage that V2.1 rewrites, which moves the slot between frames: poking it made a false overlap at "100%". A `voltage_now` file steadies it (`boot.BATTERY_UV`), though the sandbox reads as charging and its level isn't under test control, so the percent at 100 isn't measured. By the numbers, Bluetooth's ink starts at x 208 there, clear of the 195 where the widest clock text ends.
+
+**`V056m`** (`work/phase4/4.6b/k2`, `--dev`, `43e80c4c`, `update.bin` sha256 `0eef7375...`). All 15 gates exit 0 (`k2-gates`), and the Q2's `update.tar` is byte-identical. The "418 gaps, none unlisted" first written here was wrong: there were 419, one of them unlisted (section 74). `fndiff` against `V054m`, of 1331 functions: `bar_play_key` and `dispatch_key` added; `dispatch_key_return`, `ringnav_input` and `ringnav_paint_bg` changed for this work; `ringnav_about` by its version string and `draw_spaced` by a renumbered compiler label. Sheets in `k2-sheets`. `V055m` (`k1`) was built before the repaint fix and never flashed. The device pass is still to come.
+
+**Device pass on `V056m` (Nov 8), Classic and Minimal, over q2remote.** Local music, Soloify and Radio: the icon pauses and resumes the owner (Soloify's state file confirms it) and shows ❚❚ while playing, ▶ while paused; a near miss at x 200 opens VOLUME without pausing; Back's tap and hold work across x 0-63 on the pages tried, including y 55 on local and Soloify Now Playing, and x 64 is not Back. The bar clears the clock at a true 100% with Wi-Fi on, and a tap on a dark screen or the lock screen's icon doesn't pause.
+
+What the pass found, all fixed in section 74:
+- **Back goes dead on Radio's page after a tap in the bar just past the corner.** After a tap at x 64 or x 70 (y 8), Back ignores taps, at 5 s later and on repeats, until the page itself is tapped. Reproduced every time in Classic; not tried in Minimal, and not compared with `V054m`. Section 74 corrects the scope: any tap in the bar that doesn't open a page, on every page whose Back is a Return, and `V054m` has it too.
+- **The lock screen opens VOLUME.** A tap in the bar's x 80-270 range there opens V2.1's VOLUME over the lock screen (x 249 and x 120). The icon's own button stays off, but the plan's "no tap effect" isn't met. Not compared with `V054m`.
+- **A restored, paused Soloify session doesn't respond.** Opened from the menu's Now Playing row while its session isn't active, the page's Play does nothing, and the icon and Play key go to local music, so the bar and the page's button can disagree. Starting a track from Liked Songs clears it.
+
+Not run: Wi-Fi off (it would cut q2remote), Bluetooth showing, and a digit-count change of the percent (the battery stayed at 100%, so the repaint fix is still unproved).
+
+## 74. The V056m pass's fixes: keys after a bar tap, the lock screen, a paused session (Nov 9)
+
+The plan was `.plan/status-bar-pass-fixes.md`, from the three findings in section 73.
+
+1. **Back after a tap in the bar: the bar kept the key target.** At the window manager, a press gives AWTK's key target to whichever window is under it (`widget_on_pointer_down_children`), the bar's as well, and only another press moves it. A shim probe under QEMU logged `wm.key_target` (`+0x54`, now `W_KEY_TARGET`) at each step: after a tap in the bar it is `system_bar`, `return_key` doesn't run, and a tap on the page puts it back.
+   - **The scope was wider than section 73 said.** Radio and Coverflow at x 64, 70 and 300, and Radio after a tap on the play icon, whose press V2.1 also sees. On Radio, Previous in Knob: Navigation dies with Back. `V054m` has it too, so the corner work didn't cause it. The knob and its press still work, because ringnav handles them itself. V2.1's pages keep Back, which clicks their button, though the bar holds the target there too.
+   - **Why x 80-270 never showed it:** those taps open VOLUME, whose dialog takes the target and hands it back on closing.
+   - **The first miss that seemed to leave Back working was the harness.** The Return never reached the page on that tap either (`return_key` 0 times, Radio still on top). It drew ringnav's first-key highlight on the top row, and comparing the screen with the page read that as a Back. Later misses already had the highlight, so nothing changed. `--bar-keys` compares with where the control's Back landed.
+   - **The fix:** after V2.1's dispatch of a lift or an abort, if the bar holds the target it goes to the page, or to the page under a keyboard (`bar_key_target`, `back_window`). This fixes every key, not only Back.
+2. **No VOLUME on the lock screen.** `on_wm_tsup_fun`'s three guards are `standby_mode`, `boot_guidestep` and `carmode_startflag`, so nothing there checks the lock screen. While `lockscreen_pageflag` is set, a lift from a press in the bar moves to x 0, as the icon's does, and the handler still resets the power timers. A press or a lift below the bar is the lock screen's own gesture and isn't touched. The bar's height is V2.1's own limit here: this build already patches the handler's 42 to `STATUS_H`, which `patch.py` now pins. QEMU can't lock the screen, so the device pass checks the real page.
+3. **A paused Soloify session on its own page.** `spot_poll` sets `sp.local` once local music plays and only Soloify playing clears it, so the session stayed inactive. `boot.py --soloify` shows the symptom on `V056m`: the first press meant for the session sends nothing. On that page, while the session is paused and not active, a press can now claim it (`spot_claim`). The rule is that the glyph you press is right:
+
+   | On Soloify's page, session paused and inactive | Page's Play, Next, Previous | Icon and Play key |
+   |---|---|---|
+   | Local music paused or stopped | Soloify | Soloify |
+   | Local music playing | Soloify, and local stops | Pause local, as the bar's ❚❚ says |
+
+   So with local playing the icon and Play key pause local first, and the next press starts Soloify. `np_transport` stops local before its command (`spot_take`), or the next poll would set `sp.local` straight back. The browser (`spotbrowse_page`) and every other page keep today's routing. The fake backend can't show whether the relay answers `p` on a session that was only restored; the device pass decides that.
+
+**A gate that couldn't fail.** Phase 4.6's gate script ran `patch.py` with `GAPS_DUMP` set, and `gaprun` exits 0 with that set, whatever fails, because the flag is for rekeying `patch_gaps.py`. So `V056m`'s gate passed with one unlisted failure: the repaint fix (`43e80c4c`) left `bar_repaint` pending after `battery_checks()`'s first paint, its first assert failed, and the rest of that function stopped running. The code was right and the check was stale (`bc54e824`). `work/phase4/4.6c/gates.sh` no longer sets it. The `gaps.json` files of the three gates before it (`V053m`, `V054m`, `V055m`) list nothing unlisted; older ones can't be compared, because a check's key follows its text, which has changed since. Don't set `GAPS_DUMP` in a gate.
+
+**Tests.** `boot.py --bar-keys` is new: Coverflow, Radio and a V2.1 page, each with a control, Back after bar taps at x 64, 70 and 300 (and x 200's VOLUME on Radio), and Previous on Radio. It fails on `V056m`. `boot.py --soloify` now also runs `soloify_paused`: the table above with local music really played, what each press sends, the bar's glyph past a poll, and the browser unchanged. `patch.py` adds the key target at its seam (a lift, an abort, not a press, not while another window holds it, under a keyboard) and the lock screen's lifts, with V2.1's bytes pinned; both fail without their fix.
+
+**`V057m`** (`work/phase4/4.6c/l1`, `--dev`, `a7b19971`, `update.bin` sha256 `0cd7f9b6...`). All 16 gates pass (`l1-gates`, `l1-gates2`), with `patch.py` able to fail this time: 418 gaps, none unlisted, and the Q2's `update.tar` byte-identical. `fndiff` against `V056m`, of 1333 functions: `spot_claim` added; `np_transport`, `spot_media` and `ringnav_input` (which `bar_play_input` and `bar_key_target` inline into) changed for this work; `spot_take` now stands alone, having a second caller, which also changes `spot_poll`; `ringnav_about` by its version string.
+
+**Device pass on `V057m` (Nov 9), Classic and Minimal, over q2remote.** All three fixes pass.
+- **Back:** on Radio, Podcasts and Coverflow, a tap at x 64, 70, 300 and on the icon, then a tap on Back, reaches the parent, against a no-miss control on each page. After a miss, the hold opens Now Playing on Radio and Coverflow, and Previous in Knob: Navigation goes back. In Classic, a settings list keeps its Back and Previous. With no icon showing, x 249 opens VOLUME, as x 80-270 should.
+- **Lock screen:** on the real page, x 80, 120, 200 and 249 open nothing and don't pause. Its Play and unlock still work (Classic also tried Pause). With Screen Off at 1 min it darkens at 61 s untouched, and at 101 s after a bar tap at 41 s, so the tap resets the timer (Classic only).
+- **Soloify:** on the page, session paused and inactive (`sp.local` 1, `sp.active` 0 logged). With local playing, the page's Play and Next start Soloify and leave `sp.local` 0, and the icon and Play key pause local first, then start Soloify on the next press. With local paused, Previous claims the session. Classic also ran the page's Next with local paused and Previous with local playing. The bar and page agreed after each press. The browser's Play key stays local's. **The relay answers `p` on a restored session**, with local stopped (Classic) and playing (Classic): after the relay's idle stop and a reopen, the state comes back paused and Play resumes it. Audio wasn't listened to; these results come from the state file, `sp`, and the screen.
+- **Previous on a paused session** restarts the track and stays paused, while Next starts playing. No active-session control was run, so this isn't known to come from the claim.
+
+What the pass found, not fixed: **a paused session's page can say "Soloify isn't on the card".** After 30 s paused with no browser open (`SPOT_IDLE_MS`), `spot_poll` stops the backend, and an open Now Playing page then shows the missing note, because `spot_refresh` takes `installed` from `sp.launched`. The card still holds the binary. Reproduced twice in Classic, from Home's Now Playing row. Reopening Soloify restores the session. This code isn't new in `V057m`; older builds weren't compared.
+
+Not run: Wi-Fi off (it would cut q2remote), Bluetooth showing, and a digit-count change of the percent (the bar read 100%, on USB), so the repaint fix is still unproved. Local music's position isn't kept across a Soloify takeover (Now Playing showed 00:00, and it played from the start), which the plan's boundaries leave out. Settings and boot-target restored; the config differs from the backup only in `VOLUME`, 23 since before the pass began. A Wi-Fi drop of about a minute during the restore needed no reboot.
+
+## 75. Soloify: an open Now Playing page keeps the session (Nov 9)
+
+The `V057m` pass's finding (section 74). `spot_poll` held librespot past `SPOT_IDLE_MS` only for an open browser on a lit screen, so with just the Now Playing page open the session stopped under it, and `spot_refresh`, which takes `installed` from `sp.launched`, made the page say "Soloify isn't on the card". On the M1 the page (`ui.page`) now holds the idle timer while the screen is lit, as the browser does. Left open dark, it is closed unseen (`window_manager_close_window_force`, as `np_browse` does) when the timer runs out, before librespot stops. `spot_refresh` is unchanged: its note stays right for a card without the binary. The Q2 has the same logic (upstream 1.7.0 too); the change is `#if M1PLUS` for now and can be offered upstream.
+
+The new `patch.py` scenario, for Spotify and Soloify with no browser open: lit, paused 60 s, librespot runs on; dark, nothing at 29.5 s, then at 30 s the page closes and librespot stops. It fails on the previous build at the lit check.
+
+`V058m` (`work/before-4-7/a1`, `--dev`, update sha256 `cd0f38c3…`) passes all 16 gates (`work/before-4-7/a1-gates`, `a1-gates2`; `patch.py` without `GAPS_DUMP`: 418 gaps, none unlisted); the Q2's `update.tar` is byte-identical. Not flashed on its own: the next device pass checks it (paused 30 s or more on Soloify's page, lit, the track stays and Play resumes; with Screen Off at 1 min, the page closes after the dark idle).
+
+## 76. Merge step: sync to 1.6.3 on `feature/m1-ipod` (Nov 9-10)
+
+The catch-up before Phase 4.7, first step: `drift.py --fetch` planned 1.5.9 → 1.6.3 →
+1.6.4 → 1.6.7 (`link.ld`, flash) → 1.7.1 (`link.ld`, flash) → 1.7.3. `sync/1.6.3` from `feature/m1-ipod`
+(backup `refs/backup/pre-sync-1.6.3`). 78 commits, 63 files, +6,904/−642: Night Shift, Single Press Scrub, the
+watchdog and the state record, card-app games (Buddy), sleep timers and tags, the ratings' card copy, the
+restart ask, MQA sent at accept, and `test/unit` (pytest of `tools/`, mutmut weekly).
+
+**Conflicts** (`00bf79e`), 9 files:
+- `navigation.c`, 12 hunks. Display's comment and icons. The M1's controls stay `{4,7}`, because Single Press
+  Scrub (10) is the knob's own behaviour already. Key Tone's code goes in `m1plus_nav_sysset.c`, and sysset's
+  Key Tone rows are `#if !M1PLUS`. `ratings_copy_due` is in both `FAV_CLICK` branches. `hidden` takes
+  `GOTO_ALBUM_PAGE`/`GOTO_ARTIST_SHOWN`, `away` keeps the M1's `0x88`, and the np key keeps the M1 branch.
+- `addon.c`: the caps are `get goto sleep game`, without `library`. `sleep_check()` runs, then
+  `if (!M1PLUS) library_poll()`.
+- `crossfade.c`: Night Shift's title, with the M1's name. `xf.ctx = mode` and the `SW_ROW` refresh.
+- `playback.c`: `INITCONFIG_SPEED_RET`. `ringnav_mode` keeps the M1's `BOOT_MODE_RET` `peq_boot` and takes
+  upstream's `peq_chained` block. `mqa_sync` is gone. On V2.1, `set_equalizer_value` runs before
+  `mclSetPlayMode`, the same order as on V1.32.
+- `tools/build.py`, `internals.md`, `README.md`, `test/coverflow.py`.
+
+**Follow-ups.**
+- `80b31fe`, names and sources: `ALBUM_TRACK`, `musicNagvationTitle`, and `sort_flag` as a zero stub (V2.1 has
+  no sort-flag global). `nightshift.c` joins the payload, but Night Shift, the watchdog and the state record
+  return at once on M1 (unported rows). `ICON_KEYTONE`. btvol keeps its `volume_dialog` lookup.
+- `08a1ffa`:
+  - `MQA_ACCEPT` is V2.1's `mclWaitAccept` jalr at `0x5d0030`, so the saved mode reaches each connection, boot's
+    included.
+  - `GRID_COVER`'s folder row takes `coverflow_folder_cover`.
+- `cb9a2d7`: the M1's caps drop `game` (the M1 has no Games row; goto and sleep run).
+- `01ba89c`: the merge kept the Q2's old `scrub_start` beside upstream's moved one. That only breaks the Q2's
+  build, so q2compare found it last. The runbook now puts each merged `patch/*` file through
+  `unifdef -DM1PLUS=0` against the tag's own.
+- Checked and fine:
+  - `LOGO_HOOK`: V2.1's 27 zones are in the Q2's order.
+  - The `q2only` lines (105) are all Q2-only or stand-ins.
+  - The hex literals: USB DAC's `ao_init` is gc'd out of the M1 player.
+
+**Suites.**
+- `b84370b`, `64deacd`, `e2e18ae`, `338ac31`: upstream's cases merged, the card apps' goto and sleep
+  re-indented into `usbmode_page_init`'s block.
+- `b36acda`: gaprun keys `patch.py`'s statements in one pass (it took ~10 min before).
+- `patch.py`:
+  - The App Store list adds Podcasts, Live Music Archive and Buddy.
+  - `getAllMusic`'s sort argument is 0 (the stub).
+  - Single Press Scrub, Centre over Now Playing's volume dialog, and the watchdog are guarded and NOT PORTED.
+  - 24 gap entries rekeyed where upstream rewrote the statements; 9 stale ones dropped.
+  - 433 expected failures in 8 gaps, 62 checks not ported.
+- `playback.py`:
+  - The M1 expects no MQA send at `config_mplayer`.
+  - The accept-loop scenario now runs on the M1 too.
+  - The restart ask calls `change_music` and reads V2.1's M3U byte (`0xa0ab86`, `mclGetPlayM3uFlag`).
+- `test/unit` (the new gate): q2remote's Q2 path is upstream's again. One cached `is_m1()` picks the M1's
+  nodes, `state` sends upstream's script, and a Q2 tap takes two arguments. The conftest answers Q2, and
+  `test/remote.py` checks the M1's routing.
+
+**The host.** The first run was on a throttled host: every core at ~544 MHz, and one acpitz zone read 180 °C.
+`patch.py` took 70 min, q2compare 3,734 s, and the boot walk missed `knob` and `crossfade_back` on timing. Rerun
+Nov 10 at speed: `patch` 460 s, and all six boot walks pass.
+
+**Gates** (from `work/gatetree`): q2compare against 1.6.3 with `update.tar` byte-identical (`9eeb361df580`) and
+its suites passing. On the M1, `--dev` `V053m` in `work/sync/1.6.3/` (update sha256 `ec4d50ea…`) passes
+`build.py --build`, `patch.py` (no `GAPS_DUMP`), `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`,
+`--soloify`, `--bar-keys`), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and
+`pytest test/unit` (527). The function diff against `V057m` (`work/sync/1.6.3-gates/fndiff.txt`): 276 changed,
+51 added. Not flashed: 1.6.7 is the first flash. Footprint +2,608/−490 over 34 files.
+
+## 77. Merge step: sync to 1.6.4 on `feature/m1-ipod` (Nov 10)
+
+The catch-up's second step. `drift.py --fetch` kept the plan: 1.6.3 → 1.6.4 → 1.6.7 (`link.ld`, flash) → 1.7.1
+(`link.ld`, flash) → 1.7.3 → 1.7.6. `sync/1.6.4` from `feature/m1-ipod` (backup `refs/backup/pre-sync-1.6.4`).
+14 commits: the settings restacked by use, EQ per Output, an empty Library list that closes with a toast, Recently
+Added by the card's creation stamp, Wi-Fi off while Rockbox runs, and the Q2's stale press backstop with its queue
+leaf (#189).
+
+**Conflicts** (`5d875ea`), 4 files:
+- `navigation.c`, 17 hunks. The settings restack (Playback's Library & Folders, System's Controls row with Key
+  Tone and Buttons Lock, In-Vehicle Mode and Boot to on Power, Smart Awake on Display) is the Q2's. The M1 keeps
+  its pages, whose builders move out of `navigation.c`: `m1plus_nav_display.c` (Display and its sub-pages, on
+  upstream's new `setting_row`), `m1plus_nav_sysset.c` (`ringnav_systemset`: App Store, Boot to by `boot_row`,
+  the iPod's order) and `m1plus_nav_audioset.c` (`audioset_rows`). `setting_row` and `boot_row` name their icons
+  `ICON_*`. The pod rows take `POD_EQ_OUTPUT`, `POD_KEYTONE` and `POD_CARMODE` before the M1's knob rows.
+  `ringnav_input` keeps the M1's include after upstream's `type` and `key`; the M1's gates take `pointer_down()`.
+- `peq_ui.c`: the graph heads Advanced's list, with `UI_W`, `UI_H` and `STYLE_LISTITEM_BLACK`.
+- `tools/build.py` (`Q2_TAR_SHA` kept) and `internals.md` (the M1 sentences after Crossfade's).
+- unifdef: each merged file's Q2 side is 1.6.4's but for the seams' equivalents and formatting.
+
+**Follow-ups.**
+- `2184db5`: upstream's new static `library_open` (Library & Folders) clashed with the M1's Home Library page,
+  now `library_page_open`.
+- `b17ae81`:
+  - `toolsGetFileCreateTime` is hooked at V2.1's `0x5e4ac8` (`ringnav_file_created`). It's V1.32's: an access
+    check, then stat, with the field picked by the filesystem.
+  - `WINDOW_STAGE_OPENED` is 3 on V2.1 too (`window_base_on_event` sets it on `0x12b` at `0x676c24`).
+    `EVT_POINTER_FIRST` 0xff, `LOOP_POST` 0x18 (V2.1's `main_loop_queue_event` is the same leaf, not taken),
+    `EMPTY_POLL_MS`, `STALE_TOUCH_MS`; `LOOP_PRESSED` unported.
+  - `stale_heal` runs on the Q2 only. The M1's `ringnav_input` returns before it notes a finger, so on the M1 it
+    would lift every touch held 5 s.
+  - `Q2POD_DEV` in the M1's header. `g_carmode_state` is a stub (only Power's In-Vehicle row writes it).
+- Checked and fine: the `q2only` lines (113) are the restack, Wheel QS's leaf and `pointer_down()`; the hex
+  literals are the Q2's; no stand-in function changed; `quick_poll` matches only `statusbar_dialog`, inert on the
+  M1. `BOOT_HOOK`'s Wi-Fi off reaches the M1 as is: V2.1's rootfs has `wifi_connect.sh`, `udhcpc` and
+  `wpa_supplicant`. `WHEEL_LOG_HOOK` is the Q2's.
+- Unported rows: the settings restack, and the stale press backstop.
+
+**Suites.**
+- `test/m1plus/build.py` (`e6800895`): `boot_check` runs S90play under the PC's own sh, so it
+  replaces `WIFI_OFF` with a log line and asserts no `killall`, `ifconfig` or `wlan0` is left before it runs.
+  `usleep 200000`'s replace takes its newline, or it ate the start of `usleep 2000000`.
+- `patch.py`: Playback's checks keep the M1's flat rows. Boot to's `boot_row` stubs `stock_systemset` again
+  (suitemerge took upstream's `stock_power`, so V2.1's real builder ran and crashed). `stale_heal`'s cases are the
+  Q2's, with a `not_ported` line. 7 Display checks rekey into the Display gap, 8 stale entries dropped: 432
+  expected failures in 8 gaps. EQ per Output's cases run on the M1 and pass.
+- `playback.py`: the queue leaf's and Wheel QS's new cases are in its Q2-only section.
+
+**Gates** (from `work/gatetree`): q2compare against 1.6.4, `update.tar` byte-identical (`411831e08bff`), its
+suites passing. On the M1, `--dev` `V054m` in `work/sync/1.6.4/` (update sha256 `1341973b…`) passes
+`build.py --build`, `patch.py`, `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`, `--soloify`,
+`--bar-keys`), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and `pytest test/unit`
+(527). The function diff against `V057m` (`work/sync/1.6.4-gates/fndiff.txt`): 309 changed, 66 added, 4 removed.
+
+**For 1.6.7's device pass**, beside 1.6.3's list: EQ per Output (Advanced EQ's switch; 3.5 mm, 4.4 mm, Bluetooth
+and USB each keep their EQ), an empty Albums, Artists, Composers or Genres list closing with "No albums" (and the
+rest), Recently Added after Update Local Music, Wi-Fi off under Rockbox and back after it (Bluetooth kept), and
+the settings pages unchanged (Display, Controls, Playback, Power, System with Boot to).
+
+## 78. Merge step: sync to 1.6.7 on `feature/m1-ipod` (Nov 10)
+
+The catch-up's third step and its first flash: 1.6.7's `link.ld` moves the scratch page to `0xb90000`.
+`sync/1.6.7` from `feature/m1-ipod` (backup `refs/backup/pre-sync-1.6.7`). 148 commits: the theme engine
+(`assets/themes`, `tools/theme.py`, `tools/art.py`) with three built-ins, Minimal, Classic (1.6.5's Classic Light)
+and Modern (1.6.4's Classic); Theme as its own page; Playlists, Podcasts and Audiobooks as Shortcuts; Low Power
+removed; the press and natural-change timing; the player's DAC, stop, preload and FLAC fixes; lossy gapless; long
+genres; the genre scroller on Now Playing's info page; Cover Flow's new names.
+
+**Conflicts** (`488197c`): `navigation.c` (27 hunks), `coverflow.c`, `tools/ipod.py` (upstream's `Geometry` sets,
+the M1's screen re-applied as a `PROFILE` over `SET0`), `tools/build.py`, `test/coverflow.py` and three docs.
+unifdef: each merged file's Q2 side is 1.6.7's but for the seams' equivalents.
+
+**Follow-ups** (`895f290` to `334c26f`):
+- Themes: the M1 builds Minimal and Modern, the themes on `SET0` alone, from `theme.py` loaded over
+  `m1plus_ipod`'s screen and evaluated against `m1plus_offsets.inc` (Coverflow's shelf and caption and Home's rows
+  were the Q2's); no boot sites. Classic is unported: a stored `THEME` 1 is Modern, as 1.6.4's Classic was.
+  Classic's Home pane and Library on Home stay unbound (`m1plus_coverflow_unported.c` names their statics).
+- The M1's Display gets Theme's page (`DISPLAY_THEMES`); a pick relabelled options the M1 shows elsewhere or not at
+  all and faulted in `list_toggle`, so each Display page now keeps only its own labels.
+- Merge misses found by the suites: Modern's Now Playing album painted in capitals (`paint_caps`' M1 branch lost
+  1.6.4's theme check); the lock window's percentage in the old battery key (half the level); the lock screen
+  page's Clock row at 1.6.4's index (Artist Album Order); Rated Albums' Shortcut skipping Artists; `client_h()`
+  from the Q2's 320 (Coverflow cut to 290 of 450).
+- `tick_gate` runs on the Q2 only: it dropped every knob tick, which has no ring frame.
+- Unhooked Q2 routines' trampolines call V2.1's routine where it has one: 1.6.7's Resume seeks through
+  `stock_seek_time_trampoline`, which returned 0, so a saved place was never sought.
+- V2.1 values: the crossfade's skip and stop flags (`0xb10e50`, `0xb10e54`; the idle loop clears both at
+  `0x42d864`), the EQ gate's three `mpctx` loads (`0x42ce24`), `HSCROLL_TEXT_W` `0x90` (V1.32's `0x94`),
+  `MARQUEE_PASSES`, `WHEEL_FRESH_MS`; the genre scroller's style `STYLE_SCRLABEL_WHITE16C`.
+- The scratch move fits: 552 KB of text under 576 KB, 108 KB of scratch of 128 KB; V2.1's data ends at `0xa10fc8`.
+- Unported rows: Classic, the press and natural-change timing, the player's 1.6.5 to 1.6.7 fixes, long genres, and
+  the three new Shortcuts. The port report finds a site patched by a bare address (`SONG_UNKNOWN_CALL`).
+
+**Suites.**
+- `patch.py`: upstream's cases by suitemerge and 28 hunks by hand; `MODERN` is the M1's index; an immediates table
+  had reused `SITES` and sent every later site-guarded case to NOT PORTED. The harness now stops the emulation on
+  a hook's exception and refuses an odd call address: both had left unicorn to segfault at the machine's next
+  call. 652 expected failures in 11 gaps, a new one for Classic (204).
+- `playback.py`: the restart ask, picks and press stamps are Q2 only; `PLAY_STATUS` throughout.
+- `build.py`: the second EQ gate by its patched word.
+- `q2compare.py` runs `hci_ao`, `hci_natural` and `player_seam`; the gate puts ffmpeg, lame and flac on `PATH`.
+
+**Gates** (from `work/gatetree`): q2compare against 1.6.7, `update.tar` byte-identical (`e092a7c90372`), its 37
+suites passing. On the M1, `--dev` `V055m` in `work/sync/1.6.7/` (update sha256 `e13caa53…`) passes
+`build.py --build`, `patch.py`, `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`, `--soloify`,
+`--bar-keys`), `playback`, `m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py` and `pytest test/unit` (802).
+The function diff against `V057m` (`work/sync/1.6.7-gates/fndiff.txt`): 371 changed, 141 added, 11 removed.
+
+**For the device pass** (1.6.3's and 1.6.4's lists too): Theme's page (Minimal and Modern, a pick applied at once,
+Appearance relabelled), Modern's Now Playing album as a plain label, the Coverflow page's height and caption, Home's
+rows under both themes, Knob: Navigation turning lists (`tick_gate`), Resume's saved place on a book, the lock
+screen's percentage and its settings' Clock row, the Shortcut cycle, Now Playing's info page genre (scrolls when
+long), Cover Flow's renamed rows, Power without Low Power, crossfade at a natural end and on a skip.
+
+**The device pass** (`V055m`, Nov 10, over q2remote; shots in `work/sync/1.6.7-device/`, settings restored after):
+passed: Knob: Navigation, a theme pick applied at once with Appearance relabelled, the old `THEME=1` reading Modern,
+Modern's plain album label, Coverflow's height and caption (as the 1.6.4 gate's capture), Home's rows in both themes,
+Resume's place on a book (51:17), the Clock row and the Large clock's 100%, the Shortcut cycle (Rated Albums then
+Artists), Cover Flow's rows, Power (Idle's second page) without Low Power. Not judged on the device: crossfade by ear
+(the page changes track at 0:00, as the tail is mixed after the change), a long genre (no such track at hand).
+
+What the pass found (follow-up below):
+- **A. Theme page's mark.** The empty circle sits on the theme not in use; it was filled only right after picking
+  Modern in Light Mode.
+- **B. A theme pick changes Appearance's rows.** Picking Modern turned Light Mode on, twice; picking Minimal once
+  reset `MINIMAL_ACCENT` from 7 (Ivory) to 0 (Graphite). Likely the pick's touch reaching Appearance under it
+  (Modern's row at y 145 over Light Mode's at 137); not yet read in the code.
+- **C. Minimal's focus pill** has a flat-cut bottom edge (Theme page, Appearance).
+- **D. Home's Split art** shows the placeholder disc while a LibriVox book plays, which Now Playing shows with its
+  cover; albums show theirs. Older builds not compared.
+
+**Finding follow-up (Nov 10).**
+- **A fixed.** The Theme constructor used Q2's `select` asset; V2.1's filled mark is `selected`
+  (`CHOICE_CHECK`). The pick updater also descended through Q2's nested button, while V2.1's row owns its icon.
+  The M1 now finds that direct image and uses the correct mark on construction and selection. Minimal's radio
+  repaint recognizes the same name. The regression covers opening, switching both ways and reopening, including
+  stored `THEME=1` as Modern.
+- **B intentional.** `theme_select` explicitly applies `theme_preset`; the touch is not reaching Appearance.
+  Modern's preset enables Light Mode, selects Cobalt and Split, and disables Time in Title; Minimal disables
+  Light Mode, selects Graphite and Split, and enables Rounded Corners and Time in Title. Unchanged settings are
+  not written again. Presets are preserved. A real V2.1 touch pass records the exact config differences in
+  `work/item78/verified-renderer/config.json`; the roadmap records a follow-up if repeated resets become a
+  usability problem.
+- **C fixed.** V2.1's `list_item_style` has an opaque black four-pixel bottom border in every state. It painted
+  over the last four scanlines of the selection after the rounded fill. Changing the rounded drawing path
+  reproduced the same cutoff, ruling that path out. Mapped M1 settings rows now suppress that border, retaining
+  the 72 px pitch, selection inset, radius and native renderer. `test/m1plus/theme_page.py` captures and checks
+  both ends on Theme's rows and Appearance's first and last rows, using V2.1's renderer and input dispatch.
+- **D explained; cover resolution retained.** The card's `TheWonderfulWizardOfOZ.m4b` contains the LibriVox
+  collection, but no attached image (FFprobe evidence: `work/item78/device-book-artwork.json`). The running
+  player's parsed path and `savecover_path` both match this file; its cover type is 4, with no generated cover
+  file. Now Playing's blue/orange image is V2.1's random built-in fallback. Home intentionally keeps its disc
+  when artwork is absent. A temporary M4B with known embedded artwork displays that artwork in both places on
+  the original `V055m` too (`work/item78/covered-home-original.png`); this finding therefore does not justify a
+  cover-code change. Added harness cases cover embedded, folder and downloaded artwork, delayed parsing,
+  book-to-album changes, unchanged-cover caching and missing artwork, keeping the track identity guard.
+
+**Follow-up gates.** `--dev` **V05Xm**, `work/item78/verified/`, update SHA-256
+`659c6b1f787c254b4ef8d2cf1a0a9c3df8c48abf3cb8c80e2fc00faf68ae070f`. Passed: the M1 build audit,
+`patch.py` (2,099 scenarios; the existing 652 expected failures in 11 gaps), `boot.py --media` and
+`--now-playing`, playback, M4B extraction, the port report (729 classified entries), and 802 unit tests.
+The real-renderer `theme_page.py` pass checks marks, preset tap deltas, Theme and Appearance pills and an
+actually scrolled System list. Both the mark and pill regressions fail on the original `V055m`; cover tests
+pass because D did not require a code fix. Evidence and logs are in `work/item78/`.
+
+Q2's final-source build is byte-identical to 1.6.7 (`e092a7c90372…`). The 37-job comparison initially failed
+four player checks for missing `ffmpeg`/`lame`; all four pass when rerun with the installed audio tools on
+`PATH`. Its existing upstream host failures (`chapters`, `mp3_gapless`, `peq`, `flac_build`) are reported as
+`BASE` in `q2compare.log`, not hidden or counted as new port failures.
+
+**Device follow-up, same image.** Installed through the card updater, with the staged update hash and running
+payload hash checked. Theme's mark follows both picks and reopening; Minimal's Theme and Appearance pills
+have complete rounded bottoms, including the scrolled Display list. Actual preset writes are retained in
+`device-config-writes.json`: Modern changes only Theme, Light Mode, Rounded Corners and Time in Title in
+this customized config; Minimal also resets its customized accent to Graphite. The renderer pass separately
+checks the original Ivory (7) case. Embedded M4B artwork uses type 2 and `/tmp/coverpic.jpg`; folder artwork
+uses type 3 and `/tmp/externpic.jpg`. Both appear in Now Playing and Split Home. The original book remains
+type 4 with the disc on Home, its random fallback on Now Playing. Paired screenshots and identity/file traces
+are retained. Delayed parsing, downloaded covers and book-to-album identity changes are covered by the MIPS
+harness. Temporary device media was removed. After restoring settings and restarting, all saved IPOD values
+match the backup, and stored `THEME=1` opens with Modern marked (`device-saved-modern.png`).
+
+## 79. Catch-up to 1.7.0: paused before the M1 patch gate passes (Nov 10)
+
+**Checkpoint, not a completed sync.** The user selected one structural merge, 1.6.7 → 1.7.0,
+and requested a stopping point while its gates were still being reconciled. Work is committed
+on `sync/1.7.0`; `feature/m1-ipod` and `refs/backup/pre-sync-1.7.0` remain at `f7338bf9`.
+`UPSTREAM_BASE` stays 1.6.7. `staging` and `main` are unchanged. The fetch succeeded and sees
+tags through 1.8.0, but the user explicitly overrode the cadence recommendation with 1.7.0.
+No later merge, release or Phase 4.7 work belongs to this catch-up.
+
+**Implementation retained.** The conflict-only merge is `7f552cac`, followed by focused M1
+compatibility, suite and type-check commits. Scratch follows upstream to `0xbc0000`; M1 builds
+`xiph.c` and the new generated artwork constants. All 794 hook/site/alias report entries are
+classified, including the new unported hooks and call sites. V2.1's USB-mode alias and ID3
+converter dependencies are pinned by native-code checks. Classic-only stock functions remain
+unresolved and unreachable. M1 keeps its validated selected-row marquee, knob-step navigation,
+own Now Playing page, Soloify idle fix, theme marks/pills and Home artwork guards. New feature
+families are listed in [the unported register](m1plus-unported.md); suite guarding is unfinished.
+
+**Q2 verification.** The consolidated `q2compare.py 1.7.0 --suites` run completed all 37 jobs.
+Its image is byte-identical to upstream (`4aa066c0e9b2…`). Two suite failures were independently
+reproduced on upstream's own source and build and reported as `BASE`: `round_ring` invalid reads
+for radii 14 and 5, and the player-seam fixture packing an out-of-range unsigned duration.
+The root Q2 patch scenario text is unchanged. A narrowly scoped diagnostic continuation runs
+the later patch scenarios: adjusted accounting is 2,856 passing scenarios and the failed
+round-ring group; radius 0 completes. It does not turn that group into a pass.
+Evidence: `work/sync/1.7.0-review/q2compare-gated.log`, `upstream-patch-complete.log`,
+`upstream-round-ring-repro.log`, and the snapshot/builds in `work/sync/1.7.0-q2-gated/`.
+
+**M1 verification and current blocker.** Fresh dev **V05Ym** in `work/sync/1.7.0/` builds and
+passes the full build audit. Its update SHA-256 is
+`46f40c22fccbeb4fb801f7db69e85277e192adbf82f2612c12bc97b4be137d71`; payload text is 653,848 bytes.
+The final patch-gate attempt completes with exit 1: **337 unlisted failures, nine formerly
+expected checks passing and 27 stale expected-check keys**. It ran without `GAPS_DUMP`.
+Earlier attempts crashed in native emulation; the harness now refuses invalid code entries
+and prevents re-entry into a failed fixture, while continuing fresh fixtures and reporting
+dependent failures. No later M1 gates ran. Tools/unit type preflight passed 35 files, but that
+is not a substitute for the pending full gate sequence.
+
+Many failures are new Classic/Q2 layout fixtures or shifted duplicate check ordinals. They are
+not accepted as new expected failures. A diagnostic mapping matches 627 of the previous 652
+gap statements exactly, with 25 requiring review; the proposal has not been applied. Preserve
+existing M1 coverage while adding explicit guards for unported features. In particular, inspect
+the native tag-converter mock, paused-scrub touch input and Now Playing/folder information cases
+before deciding whether they reveal model errors or payload regressions. Detailed failure lists,
+the mapping proposal and gate logs are retained under `work/sync/1.7.0-review/` and
+`work/sync/1.7.0-gates/`.
+
+**Source changed after this build.** `c7f79313` separates compact payload-page row heights from
+native PEQ's 48 px rows. The M1 payload compiles, but the fix has not been exercised by a fresh
+firmware gate run. V05Ym therefore does not represent the checkpoint source and must not be
+staged. Preserve its evidence, seed the next build counter above 214 (next V05Zm), and rebuild
+before repeating every M1 gate. The main worktree's counter is still 213; do not overwrite the
+gate worktree's 214 with it. Repeat the final-source Q2 byte comparison too.
+
+**Resume and landing.** The retained runner is `work/sync/1.7.0-review/m1-gates.sh`; it stops on
+the first failure. Resolve the patch integration without dumping new gaps, then complete all six
+boot modes, playback, M4B, ID3, headset, LDAC, BlueALSA, ports, unit and `test/fw` tests, type
+checks and the real-renderer theme regressions. V05Ym's provisional function diff against the
+validated V05Xm reports 358 changed, 200 added and one removed function out of 1,662; regenerate
+it for the final build and retain the device checklist. Record final footprint, conflict audit
+and gate evidence, update `UPSTREAM_BASE`, then land with `--no-ff` into `feature/m1-ipod`, update
+graphify and report drift without another merge. The earlier validated image in
+`work/item78/verified/` remains untouched.
+
+**Device pass has not started.** The user reconnected the M1 at `192.168.1.210`; a read-only
+state request succeeded. No update was staged or flashed and no settings were changed. After
+all gates pass, save settings and boot target, stage the M1 `update.bin` through q2remote, and
+let the user flash. Verify installed identity, set Screen Off to Off for the structural checks,
+retain Soloify lit/dark idle, theme marks/presets/pills, Home artwork, Now Playing, navigation
+and status-bar regressions, then restore saved settings and boot target. Unavailable checks
+remain untested; device findings get a separate fix plan. Completion still requires that
+recorded device pass.
+
+## 80. Merge step: sync to 1.7.0 on `feature/m1-ipod` (Nov 11)
+
+Completes section 79. 1.7.0 (`85fe884`) is the endpoint the user chose; drift.py's later tags are not merged.
+`sync/1.7.0` from `feature/m1-ipod` at `f7338bf9` (backup `refs/backup/pre-sync-1.7.0`). 203 upstream commits:
+Classic's own pages (its iPod Now Playing, volume, bar times and scrub cue, Playlists, Search, QR and T9), the
+theme engine's configurable slide motion, Cover Flow's flip, thumb, cap and letters, USB Storage's OK to
+Disconnect, Chapters for any spoken file, `test/fw` (the firmware's C on the host), Ogg and FLAC tag reading in
+`xiph.c`, and the queue-delete and click-queue fixes.
+
+**Conflicts** (`7f552cac`, 16 files): resolved by the runbook's rules, upstream's side with the M1 lines back as
+seams. **Follow-ups** `89b1281a` to `c7f79313` are listed in section 79. Three more came from the patch gate,
+each a 1.7.0 path the M1 ran with the Q2's geometry:
+- `aecec6ba`: 1.7.0's theme default `page.rows.text_x` (36, the Q2's `CF_EDGE`) moved every M1 page row and
+  PEQ row's text from 16 to 36 px. `PAGE_X(T)` keeps `CF_EDGE` on the M1.
+- `9a20dc00`: the merge dropped `page_list`'s `view_show` seam. Its `widget_set_visible` left the tracks body
+  insensitive after Cover Flow's covers handed over, so the list took no touches.
+- `1117a662`: `np_beside` (1.7.0's fit of Classic's times beside the bar) ran on the M1's Now Playing open and set
+  the slider to x 0, w 375, the times to x −43 and 383. A touch at the bar's right end then landed on the slider,
+  and a paused seek's settle timer was cancelled. `np_beside` returns 0 on the M1.
+
+**Suites.** `patch.py` (`6e1276cc`, `e961fb03`): 1.7.0's slide motion and USB eject cases behind `not_ported`;
+Classic's level pushes, two-line progress rows, QR page, T9 box and Search behind `if not is_m1plus`; the volume
+dialog, glyph opacity and remain-text cases follow `MODERN` and the M1's `-02:04`; `home_after_hold` follows the
+M1's Previous latch, spent at dispatch. `patch_gaps.py` rekeyed last (`6017b02c`), with no `GAPS_DUMP`: **694
+expected failures in the same 11 gaps**, none new. The 42 added rows are shifted ordinals, Classic fixtures under
+the existing Classic gap, and dependents of a failed fixture (b5883083a6.22, the Q2 wheel keys). `gaprun.py`'s
+`GAPS_INSPECT` (`541732b7`) runs code after one statement in its globals, for debugging a check.
+
+**Gates** (from `work/gatetree` at `6017b02c`). The Q2 image on the final firmware sources (`1117a662`; later
+commits touch only M1 tests) is byte-identical to 1.7.0 (`4aa066c0e9b2`), as section 79's 37-job run found.
+On the M1, `--dev` **V061m** in `work/sync/1.7.0/` (update sha256 `5ddac9566849…`) passes the build audit,
+`patch.py`, `boot.py` (plain, `--home-menu`, `--media`, `--now-playing`, `--soloify`, `--bar-keys`), `playback`,
+`m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`, `pytest test/unit` (1,184), `pytest test/fw` (3,638),
+mypy on `tools`/`test/unit` and `test/fw`, and `theme_page.py`'s renderer checks. 1.7.0's unit tests link host
+`.so` files with `clang`, and the dev shell's clang is unwrapped (no `crti.o`). The gate puts nixpkgs'
+`clang-wrapper` on `PATH` alone; its `cc` would shadow gcc's, which `test/fw` needs. Logs:
+`work/sync/1.7.0-gates/`. The function diff against `V05Xm` (`work/sync/1.7.0-review/fndiff-V05Xm-V061m.txt`):
+358 changed, 200 added, 1 removed, of 1,662.
+
+**Unported rows:** configurable slide motion (the M1 keeps V2.1's 200/120 ms) and USB Storage's OK to Disconnect,
+beside section 79's rows (the scrolling-label pace, oversized Ogg artwork, Classic's forms, pages and Streaming
+pane, Cover Flow's raw wheel).
+
+**For the device pass** (section 78's list too, on `V05Xm`'s ground):
+- page rows' text inset (16 px, as `V05Xm`) on Settings pages and PEQ;
+- Cover Flow → an album's tracks: the list takes taps and scrolls;
+- Now Playing: the slider's ends and the times where `V05Xm` had them; a paused scrub, then a tap at the bar's
+  right end, settles at the new place;
+- the selected-row marquee, knob-step navigation, Theme's marks and pills, Home's Split art, the Soloify idle,
+  the status bar's play icon;
+- Hold Return to Home, from a page and from Now Playing;
+- Ogg and FLAC tags in the Library (album artist, long values; `xiph.c` is new in the payload);
+- slide motion as `V05Xm`.
+
+## 81. A paused drag on Now Playing's bar waits for Play (Nov 11)
+
+Section 80's device pass on `V061m` found one bug to fix: on local Now Playing, paused at 00:20, a drag along the
+bar left playback running at 01:17 (`work/sync/1.7.0-device/strip26.png`, s26–s30). The plan is
+`.plan/paused-drag.md`.
+
+**Cause.** `ringnav_touch` cancels any scrub and passes a touch on the bar to V2.1, "so a drag seeks the stock way".
+V2.1's Now Playing visitor (`0x53b350`–`0x53b384` in `build-m1/stock-demo`) binds the slider's value-changing
+(`0x11d`) to `0x53c834`, which resets `BC_IDLE` to 20 and, with the page's mode word (`0xa06f44`) at 0, clears
+the page's timer and sets the mode. Value-changed (`0x11c`) goes to `0x53c5d0`, which acts only in that mode: it
+calls `0x53c2d8`, which calls `seek_time` (V2.1's `player_seek_time`, which resumes a paused track), restarts the
+timer and sets the mode back to 0. A tap takes the same two events, so a paused tap resumed too. The knob's scrub
+and Soloify's bar already held a paused target through `np_scrub_end` → `seek_position` (`mclSetSeek` alone).
+
+**Fix** (M1 only). `ringnav_playing` binds `np_bar_touch` (`patch/m1plus_np_view.c`) on `slider_play`'s
+value-changing and value-changed after the trampoline's init, so it runs before V2.1's pair (AWTK's newest-first
+order). `st.np_drag` records whose a touch is, decided at its first value-changing: 0 undecided (`np_cancel`, which
+`ringnav_touch` calls on every touch-down on the bar, resets it), 1 the scrub's (paused), 2 V2.1's.
+- Paused, value-changing resets `BC_IDLE` as V2.1's handler did, goes to `np_scrub_drag` (Soloify's path) and
+  returns `STOP`. V2.1's mode stays 0, so its value-changed does nothing, and the release seeks once through
+  `seek_position`; `settle_poll` keeps the bar on the target until Play, as after a paused knob scrub.
+- Playing, both return 0 and the touch is V2.1's, even if playback pauses mid-drag.
+- A value-changed with no touch behind it (a value set) is V2.1's, which ignores it in mode 0. If the scrub has
+  already ended (`SCRUB_MS` with the finger held still), the release is V2.1's too.
+- A `busy` guard skips the value-changed the preview's own value write may send.
+
+No V2.1 address is written. On screen, a paused drag fills the bar white (the scrub's look, as on Soloify's page);
+a drag while playing keeps the accent.
+
+**Tests.** `patch.py` (five scenarios after the paused reopen checks): a paused drag previews and seeks once
+(`mclSetSeek` 150 + the CUE start, no `player_seek_time`, no `mclSetResume`), holds through `SCRUB_MS` + 5 s and
+gives the bar back `SETTLE_PLAY_MS` into playing; a paused tap at the right end seeks once; a playing touch stays
+V2.1's when paused mid-drag, and the next paused touch is the scrub's; a value set seeks nothing; and the preview's
+own value-changed (an `EchoQueue` machine echoes it) neither ends the drag nor seeks. Against `V061m` the block fails
+at its first check (no handler on the bar). `patch_gaps.py` is unchanged: still **694 expected failures in the same
+11 gaps**, 2,150 scenarios.
+
+**Gates** (from `work/gatetree` at `2556458f` plus the change). On the M1, `--dev` **V062m** (About: 1.7.0 dev 5)
+in `work/paused-drag/V062m/` (update sha256 `62dd2c95e5dd…`) passes the build audit, `patch.py`, `boot.py` (plain,
+`--home-menu`, `--media`, `--now-playing`, `--soloify` (its drag still sends one seek), `--bar-keys`), `playback`,
+`m4b`, `id3`, `headset_io`, `ldac`, `bluealsa`, `ports.py`, `pytest test/unit` (1,184) and `pytest test/fw`
+(3,638), the last two with nixpkgs' wrapped `clang` on `PATH` (section 80). The Q2 image is byte-identical to
+1.7.0's, and `q2compare --suites` passes all 37 runs. Logs:
+`work/paused-drag/gates/`. The main tree's `.build-number` had fallen behind the gate worktree's (it built a second
+`V05Ym`, not used); both now read 218.
+
+**For the device pass** (Screen Off set to Off, restored after):
+- paused: drag the bar; it stays paused, the bar holds the target, and Play starts from it;
+- paused: tap the bar's right end; the same;
+- paused: a knob scrub, then a tap; it settles at the new place;
+- playing: a drag and a tap seek as before;
+- Soloify, paused: a drag, unchanged.
+
+**Device pass on `V062m` (Nov 11), over q2remote, all pass.** Shots: `work/paused-drag/device/` (s00–s37).
+- Paused drag from 00:00 lands on 01:51 and stays paused. The bar holds 01:51 for 16 s, past `SCRUB_MS`,
+  and Play starts from it (01:53 two seconds later) (s02–s06).
+- Paused tap at the bar's right end lands on 03:20, holds it for 9 s, and Play starts from it (s07–s10).
+- Paused knob scrub: a Centre press and six detents back take the white bar to 02:34. A tap during the scrub
+  cancels it and settles at 00:43, still paused, for 9 s. Play starts from it (s11–s15).
+- Playing: a drag lands on 02:21 and a tap on 01:07, and playback keeps going both times (s15–s19).
+- Soloify (Motivation, Liked Songs), paused: a drag lands on 01:56, stays paused and holds it (s27–s30).
+
+After a drag's release, the bar shows the played colour. No shot was taken during a drag, so the white
+fill a drag should show wasn't seen; the knob scrub's white fill was (s12).
+Screen Off was set back to 1min through the UI (`LIGHTTIME=3`).
+
+## 82. Phase 4.7: Quick Settings, the confirm dialog and Add to Playlist (Nov 12)
+
+The plan is `.plan/phase4-7.md`; `docs/m1plus-ipod-ui.md` item 7 records what shipped. Upstream removed the wheel's
+Quick Settings in 1.6.5, so the M1's pull-down is V2.1's own, and the knob stays the volume while it is open.
+
+**Audit** (`99d5ef82`). `patch/m1plus_ipod.json` and `test/m1plus/build.py` pin V2.1's pull-down
+(`dialog_dropdown_dialog_init`, `0x475f04`, which takes the window alone; its visitor never moves widgets; states 0
+shut, 1 and 2 sliding, 3 open; the pull edge is y < 81), the confirm pop-up (260x180, centred, its prompts ending by
+y 106, Cancel and OK 128x48 at y 131) and the playlist page (the row builder `0x53e74c` takes any widget and uses
+`widget_get_window`; the page binds no key-up of its own; `PLAYLIST_ADD_MODE` `0xa06f50`).
+
+**Quick Settings** (`4680b1f4`, `6822f494`, `8d55ea55`, `9dbd7068`). `QUICK_NAME` names the window
+(`dropdown_dialog` on the M1) at navigation.c's eight sites; `g_dropdown_menu_state` and `g_pressdown_y` alias
+V2.1's. `QUICK_EDGE_PX` is 81, and pull-to-search now starts below it, since V2.1 opens its pull-down on any page.
+The payload hooks the init (`ringnav_quick_settings`) for the holds on Wi-Fi, Bluetooth and Playback and for
+`quick_cancel`; `quick_lock_text` does nothing on the M1 (V2.1 has no `img_lock`). `tools/m1plus_ipod.py`
+lays out `dropdown_dialog.bin` as the iPod's Quick Settings.
+
+**The confirm dialog** (`6e0a6001`, `beebec47`). `confirm_dialog` turns V2.1's pop-up into a full-width black
+sheet from the top, 208 px tall: its prompts above `CONFIRM_TOP` (112) at `CONFIRM_PROMPT_PX` (22), Cancel and OK
+as two full-width rows below them, keeping V2.1's names (`btn_cancel`, `btn_enter`), which V2.1 finds them by.
+`test/unit/test_m1plus_ipod.py` is the first unit test of an M1 layout.
+
+**Add to Playlist.** `playlist_rebuild` hooks V2.1's row builder (`0x53e74c`, also a private function), so
+`ringnav_playlist` runs on the M1: each playlist page keeps the add mode it opened with (stock's is one global,
+which a picker leaves set), and Now Playing's picker keeps its guarded pick on the rows New Playlist rebuilds. V2.1's
+New Playlist passes its row, not the window, so on the M1 the hook takes the row's window (`window_of`) and hands
+the trampoline the widget it got. `PLAYLIST_KEYUP` (Classic's `pl_keyup`) is `PLAYLIST_KEYUP_ADDR`, unported on
+the M1. The New Playlist keyboard needs no rewrite: V2.1's `add_edit` has no `sensitive` prop. Tests: nine
+scenarios run V2.1's builder for real (rows per mode, rebuilt in place, the per-page mode, New Playlist's rebuild
+from its row, and Now Playing's picker with a fresh and a stale queue); against the build before the hook they fail
+at the first add-mode check.
+
+**Gates** (the last build, before the docs): the build audit, `ports.py` (`playlist_rebuild` and the pull-down's
+init hooked; `PLAYLIST_KEYUP_ADDR` NOT PORTED), `patch.py` (2,172 scenarios, **689 expected failures in 10 gaps**,
+down from 694 in 11: the dialogs' gap closed) and `pytest test/unit` (1,192). The Q2 `update.tar` is byte-identical
+to 1.7.0's at each item, and `q2compare --suites` passes all 37 runs.
+
+**For the device pass** (one `--dev` flash; Screen Off set to Off, restored after): the checklist in
+`.plan/phase4-7.md` item 7. Two layout notes to look at: the pull-down keeps V2.1's battery, not the bar's, and
+Delete File's checkbox keeps V2.1's x 0 and 260 px width, so it sits left of centre on the 320 px screen;
+`CONFIRM_PROMPT_PX` 22 was not checked on a preview sheet first.
+
+**Device pass (Nov 12, `V063m`, over q2remote; shots in the session scratchpad).** All 18 final gates passed
+(`work/phase4/4.7/gates/summary.txt`). The user flashed it and set Screen Off to Off. Screen Off (1 min), the boot target
+(`rockbox`), Gain, brightness, volume, Light Mode and knob mode were put back afterwards. The test playlist and a test MP3
+were deleted, and `favourites.m3u` is unchanged.
+
+- **Passed:**
+  - **Pull-down:** opens from Home, a list page and Now Playing; a swipe up closes it.
+  - **Switches:** a tap toggles; a hold opens the switch's page (Playback Setting → EQ).
+  - **Brightness:** the slider's tap and drag both work.
+  - **Knob:** turns volume with Quick Settings open, in Navigation and Volume modes.
+  - **Return:** with Quick Settings open, Return restarts the track. The user wants this, for full playback control
+    in Knob: Navigation.
+  - **Light Mode:** the pull-down, confirm sheet and keyboard follow it.
+  - **Confirm sheet:** used by Confirm Shutdown?, Delete Song? and Delete Playlist?; Cancel and OK work, and the
+    22 px prompt reads well.
+  - **Add to Playlist:** works from Now Playing's More menu, including New Playlist name entry.
+  - **Regressions:** the volume bar, bigcover, the bar's play/pause icon and the paused drag all pass.
+- **Notes confirmed:**
+  - The pull-down keeps V2.1's battery.
+  - Delete Song's checkbox sits left of centre.
+  - The playlist picker is V2.1's stock page.
+- **Findings** (to /plan):
+  - **A.** With Quick Settings open, a single Centre turns the screen off and brings up the lock screen. Reproduced
+    twice; on a plain page Centre selects.
+  - **C.** Add to Playlist from a hold menu (All Songs, Folder) closes the menu and does nothing. Now Playing's route
+    works.
+  - **E.** In Light Mode the confirm sheet is the page colour and has no edge, so it runs into the rows below.
+  - **F.** In Light Mode the "Added To Playlist" toast is a black box with dark text.
+  - **D (minor).** The System Setting switch is drawn dimmed while you are inside System settings.
+  - **B (minor).** The Home row highlight hides while Quick Settings is open and comes back when it closes.
+
+## 83. Phase 4.7's device-pass fixes (Nov 12)
+
+The plan is `.plan/phase4-7-fixes.md`, for §82's six findings; `docs/m1plus-ipod-ui.md` item 7 records the outcome.
+Each item's new test fails on `V063m` and passes on the fix.
+
+- **A** (`5a0ca328`). In Knob: Navigation the knob's press arrives as `KEY_POWER` and becomes Centre only where
+  `knob_nav_active()` holds, which Quick Settings is kept out of so the turns stay the volume. So the press stayed
+  V2.1's power key. `quick_knob_key` (`patch/m1plus_nav_back.c`, called from `m1plus_nav_knob.inc`) sends the press
+  through `center_press` while `QUICK_NAME` is on top: a single press closes Quick Settings from a timer that checks
+  the same window is still on top and `usable()`; a double press stays the power key. Knob: Volume is unchanged.
+  `quick_cancel` stops the timer.
+- **C** (`e78cd602`). The hold menu and Home's shortcut opened `localmusic/playlist_page`, which V2.1 lacks; they now
+  use `LOCAL_UI "playlist_page"`. V2.1's `playlist_page_init` and row click take the held row's class and add its
+  songs through `batch_add_file`, as V1.32 does; `playlist.add_rows` pins those six words, and the build audit checks
+  their GOT slots. `patch.py`'s new `UI_PAGES` guard fails any `navigator_to` of a page the build doesn't ship.
+- **E** (`208a3c28`). V2.1's confirm init sets the dialog's `highlight` to "", so nothing under the sheet dims, in
+  either mode. `confirm_dialog` gives the sheet a 1 px bottom border (`CONFIRM_EDGE`, #666666): #666666 in Dark,
+  about #9c9c9c in Light (QEMU, y 207).
+- **F** (`4cfeeb34`). `msginfo_dialog.bin` drew its box from a black image. `msginfo_dialog` (checked against the
+  stock tree) drops the image for a styled box with a 1 px edge, so Light Mode flips box and text together; Dark is
+  unchanged. The new `m1_only` section of `m1plus_ipod.json` pins the stock file's digest. `rippercompleted_dialog`
+  has a different tree and is left alone (a row in `docs/m1plus-unported.md`).
+- **B** (`3c5560ed`). `paint_selection` hid the page's highlight whenever its window wasn't on top, except under a
+  sliding page. `quick_over` adds Quick Settings to that exception.
+- **D** (`4978200a`), by design. V2.1's dropdown visitor disables `img_sysset` and `img_playset`
+  (`widget_set_enable 0`) and binds no click while `syssetinto_flag` or `playsetinto_flag` is set, so the switch
+  dims inside its own settings. `quick.into` pins those words and the audit checks their GOT slots.
+
+**A new finding, not fixed.** The `UI_PAGES` guard found that View Queue in Now Playing's hold menu, with Shuffle
+off, opens `playerqueue_page`, which V2.1 lacks (its queue is `dialog/playqueue_dialog`), so it does nothing. It is
+gap `07753a9258` in `test/m1plus/patch_gaps.py` and a row in `docs/m1plus-unported.md`, to plan separately.
+
+**Gates** (`V064m`, `work/phase4/4.7b/gates/summary.txt`): all 19 pass. `patch.py` has **690 expected failures in 11
+gaps** (§82's 689 in 10, plus the View Queue gap), none unlisted; `pytest test/unit` 1,197; the Q2 `update.tar` is
+byte-identical to 1.7.0's and `q2compare --suites` passes all 37 runs. `fndiff.py` against `V063m`: six functions
+changed (`home_shortcut_open`, `qm_run`, `quick_cancel`, `ringnav`, `ringnav_about`, `ringnav_paint_bg`) and one added
+(`quick_knob_single`). QEMU shots of E and F, before and after in both modes, are in `work/phase4/4.7b/shots/`.
+
+**For the device pass** (one `--dev` flash; Screen Off set to Off, restored after): the checklist in
+`.plan/phase4-7-fixes.md`'s Device pass section.
+
+**Device pass** (Nov 12, `V064m` = "1.7.0 dev 7", over q2remote; shots in `work/phase4/4.7b/pass/`). All six items
+pass:
+
+- **A:** in Knob: Navigation a single press closes Quick Settings on Home, a list and Now Playing, with the screen
+  lit and nothing selected or paused; a double press turns the screen off; turns change the volume; in Knob: Volume
+  the press is the power key; Previous restarts the track.
+- **C:** Add to Playlist from the hold menu opens V2.1's playlist page from All Songs, Folder, an album and an
+  artist's All Songs, to an existing playlist and through New playlist; the database held each song in the right
+  playlist. Now Playing's More route still works. The test playlists were deleted (Delete Playlist? sheet too).
+- **E and F:** Confirm Shutdown? and Delete Song? have their edge, and the Added To Playlist toast flips, in Dark,
+  Light, and Light with Tangerine.
+- **B:** Home's row stays highlighted under Quick Settings in Modern and Minimal. **D:** System Setting is dimmed
+  inside System settings, as V2.1 does.
+- **Regressions:** the pull-down's open and close, the Wi-Fi tile's hold, the brightness slider (back to 68), the
+  bar's play icon, the back chevron and the paused drag all work.
+
+Findings, not fixed (to plan):
+
+1. With Quick Settings open, a knob turn's volume bar hides Home's highlight until the bar closes
+   (`B-finding-volbar.png`).
+2. After Add to Playlist from an album, the album page comes back with the placeholder cover
+   (`finding-album-cover.png`).
+3. In Light Mode, Delete Song?'s unticked checkbox is a filled grey circle that reads as ticked
+   (`E-light-delsong.png`).
+4. Switching Theme from Minimal to Modern turns Light Mode on (`LIGHT` 0 to 1, reproduced twice), and the first
+   switch to Minimal reset `MINIMAL_ACCENT` from 7 (Ivory) to 0.
+
+Restored afterwards: Screen Off 1 min, boot target `rockbox`, Light Mode Off, Theme Modern, both accents, Knob:
+Navigation, volume 11, DLNA (a stray tap switched it off; turned back on). `config.ini` matches the pre-pass
+backup byte for byte.
+
+## 84. V064m's device-pass fixes (Nov 12)
+
+The plan is `.plan/phase4-7-pass-fixes.md`, for §83's four findings and the View Queue gap; `docs/m1plus-ipod-ui.md`
+item 7 records the outcome. Each new test fails without its fix and passes with it.
+
+- **View Queue** (`d94b0331`). Off Shuffle, `qm_run`'s `QA_QUEUE` opened `playerqueue_page`, which V2.1 lacks. It now
+  does what Now Playing's More does (`0x53b14c`): `BC_IDLE = BC_IDLE_FULL`, so the big cover doesn't open over it,
+  then `navigator_to(STOCK_QUEUE_DIALOG)` (`dialog/playqueue_dialog`), whose init reads only the player's list. Gap
+  `07753a9258` is gone: `patch.py` expects 689 in 10 gaps.
+- **The album cover** (`68df709c`). `playlist_page_init` (`0x53eb24`) sets `cur_classtype` to `0xf00b`, so back on
+  the album, `albuminfo_page`'s foreground handler (`0x5266d4`) reloads and lays out its list again (`0x526564`),
+  recreating the header's `img_albumcover_m` with the placeholder. Its cover timer (`0x5261d8`) sets the art
+  (`0x525b00`) only when `albumcover_finishflag` is up, and the album's task raised it long before. When Add to
+  Playlist leaves an album page, `qm_cover_again` is bound once to its `EVT_WINDOW_FOREGROUND` and raises the flag
+  (`ALBUM_COVER_DONE`, `0xa05a5b`), so V2.1's own setter runs again and still checks the task and the file.
+  Restoring `cur_classtype` instead would leave the playlists in `pdeq_showlist`.
+- **The volume over Quick Settings** (`e1f228dd`). A knob turn stacks `volume_dialog` over the pull-down, so
+  `quick_over` saw the volume on top. With `volume_dialog` on top it now judges the window under it. The volume
+  directly over a page still hides its row, as on the Q2.
+- **Light Mode's unticked ring** (`6967c953`). V2.1's `unselect.png` is a white ring over a 50% black disc; the Q2's
+  is the ring alone. Light Mode keeps mostly-dark images as plates (`LIGHT_SURFACE`), so the ring vanished and the
+  disc read as ticked. The new audited `clear_icons` section of `m1plus_ipod.json` ships it un-composited
+  (`clear_icon`: alpha × luminance, colour white): mean alpha 0.2238 against the Q2's 0.2229. The build audit checks
+  the shipped file against `clear_icon(original)` pixel by pixel. The Theme picker's and the choice rows' rings use
+  the same file.
+- **Finding 4, by design.** Choosing a Theme applies its `theme.xml` preset (`theme_preset`), as on the Q2: Modern
+  sets `light="on"` and Cobalt, Minimal `light="off"` and Graphite (`MINIMAL_ACCENT` 0); Light Mode's Auto is kept.
+  The pass's `LIGHT` 0 to 1 and `MINIMAL_ACCENT` 7 to 0 are those presets. No change.
+
+**Gates** (`V068m`, `work/phase4/4.7c/gates/summary.txt`): all 19 pass. `patch.py` has **689 expected failures in 10
+gaps**, none unlisted; `pytest test/unit` 1,199; the Q2 `update.tar` is byte-identical to 1.7.0's and
+`q2compare --suites` passes all 37 runs. `fndiff.py` against `V064m` (`work/phase4/4.7c/fndiff-V064m-V068m.txt`):
+three functions changed (`qm_run`, `ringnav_about`, `ringnav_paint_bg`, the last two through the inlined
+`quick_over`) and one added (`qm_cover_again`).
+
+**For the device pass** (one `--dev` flash; Screen Off set to Off, restored after): the checklist in
+`.plan/phase4-7-pass-fixes.md`'s Device pass section.
+
+**Device pass** (Nov 12, `V068m`, over q2remote; shots in `work/phase4/4.7c/pass/`). All four fixes pass, with no
+new finding:
+
+- **View Queue** (Shuffle off, `PLAYMODE` 3): from Now Playing's hold menu (a Play/Pause hold) it opens V2.1's
+  queue. Enlarged Art stayed away for 25 s over it; Previous and a tap outside close it; a row plays (the queue stays
+  open, as V2.1's does). The plan's "from All Songs' hold menu" was wrong: View Queue is in Now Playing's menu only
+  (`QM_PLAYING`), as on the Q2.
+- **The cover:** on *After Laughter*, Add to Playlist from a track's hold menu through New playlist ("t"), then to
+  that existing playlist: the album's art came back both times, and the toast showed. The database held both songs
+  in "t"; the playlist was then deleted (Delete Playlist? sheet), leaving the table empty as before.
+- **The volume over Quick Settings:** a knob turn keeps Home's row highlighted under the pull-down, in Modern and
+  Minimal.
+- **The checkbox:** Delete Song?'s unticked box is a clear ring in Light and Dark, and ticked shows the accent dot
+  (then Cancel). The Theme picker's and Screen Off's rings are clear in Light.
+- **Regressions:** the knob's single press closes Quick Settings with the screen lit; the confirm sheet's edge; the
+  paused drag stays paused. Previous over Quick Settings on Home is the track key, as Home's Previous is by design.
+
+Restored afterwards: Screen Off 1 min, boot target `rockbox`, Theme Modern, Light Mode Off, both accents (Cobalt,
+Ivory), Shuffle, volume 11, Warm Blood paused at its start. `config.ini` matches the pre-pass backup byte for byte.
+
+## 85. Phase 4.8: the Q2-only rows (Nov 12)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 4.8 leaves the wheel's and the Return key's features on the Q2, and
+marks them `NOT PORTED` instead of listing them as gaps. The roadmap's
+[Q2-only list](m1plus-roadmap.md#already-q2-only-by-design) now names them, and Games left
+[m1plus-unported.md](m1plus-unported.md).
+
+- **`chord_gate`** (`navigation.c`). It ran on the M1: a knob press (Centre) that started within `CHORD_MS` while
+  Previous, Next or Play/Pause was held was dropped whole, and a side key within `CHORD_MS` of a knob press ended
+  its hold timer. That is a guard for a thumb on the Q2's rim. The M1's knob and side keys are apart, so it only
+  ate deliberate presses. `ringnav_input` now calls it under `!M1PLUS`, as `tick_gate`. Its Return part was inert
+  on the M1: the M1's Return is `dispatch_key`'s, which calls stock past the hook. The payload is 928 bytes
+  smaller, and the Q2's bytes don't change. `patch.py`'s chord checks (Return's ghost and stale latch, and the
+  edge buttons) are `NOT PORTED` on the M1. Its `home_after_hold` check still runs there.
+- **The gap groups.** `patch_gaps.py`'s `Games (ipod-ui 4.8, Q2 only)` (196 checks) and `Q2 wheel keys and Key
+  Tone (ipod-ui 4.8, Q2 only)` (82) are gone. The Q2 scenarios they covered are now `if is_m1plus: not_ported(...)`
+  branches in `patch.py`:
+  - Games;
+  - the wheel's ticks, Home's ends and list ends;
+  - Key Tone on the row change;
+  - a dropped wheel press on the idle clock.
+
+  The Q2 runs them unchanged. A BUTTONS dialog's knob steps passed on the M1, so they stay outside the
+  branches.
+- **Already done.** `buzzeer_switch`, `on_wm_keydown_before_fun` and `WHEEL_TS_READ` were already `q2only` in
+  `M1PLUS_PORTS`. The M1's Display has no Corners, wheel or Click With Headphones rows (4.3). Its Library and
+  Shortcut have no Games (4.5).
+
+**Gates** (`V069m`, `work/phase4/4.8/gates/summary.txt`): all 19 pass. `patch.py` has **411 expected failures in 8
+gaps**, none unlisted, and 108 `NOT PORTED` lines (6 new); `pytest test/unit` 1,199; the Q2 `update.tar` is byte-identical to 1.7.0's and
+`q2compare --suites` passes all 37 runs. `fndiff.py` against `V068m`
+(`work/phase4/4.8/fndiff-V068m-V069m.txt`): `ringnav_input` changed (`chord_gate` was inlined into it), and
+`ringnav_about` (the version).
+
+**For the device check** (one `--dev` flash): on a list in Knob: Navigation, press Play/Pause or Next and, while
+it is still down, press the knob: the knob's press opens the row (before, it was dropped). A plain knob press and
+Previous's hold (Hold Return) work as before.
+
+**Device check on `V069m` (Nov 12), over q2remote: passed, no findings.** In Knob: Navigation on Home, a knob press
+while Play/Pause was held opened Now Playing, and one while Next was held opened Library; each side key still
+acted on its release, as on stock (Play/Pause resumed, Next skipped). A plain knob press opened Artists, and
+Previous held on a list went to Now Playing without touching the track. Restored afterwards: Screen Off 1min,
+boot target Rockbox, playback paused; `config.ini` is byte-identical to the backup
+(`work/phase4/4.8/device-before/`). Shots are in `work/phase4/4.8/pass/`.
+
+## 86. Phase 5: tests, and one gate driver (Nov 13)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md) Phase 5 finishes the test coverage that Phase 4 deferred and replaces the
+hand-copied gate scripts. Tests and tooling only: no `patch/` source changed, so the M1 image and the Q2's bytes
+are the same, and there is no device flash. Phase 6's landing on staging brings the next device pass.
+
+- **`test/m1plus/gates.py`** (9136e1ef, 5ea41625, 9421f936). It runs all 19 gates in order on one `--dev` build and
+  stops at the first failure. Per-step logs and `summary.txt` go to `--out`. There is one tier on purpose:
+  - every run runs every gate;
+  - `--from STEP` reruns from a failed gate on the same build, and refuses a build whose `source_sha256` no longer
+    matches the sources;
+  - `--release` is `tools/release_m1.py` validate()'s subset (7c88d9a7).
+
+  It needs no hardcoded paths:
+  - `patch` always runs with `GAPS_DUMP` unset;
+  - q2compare's suites get an ffmpeg bound in with bwrap;
+  - unit/fw get nixpkgs' wrapped clang as a short directory of two links, because the devShell's clang can't link
+    a host `.so` and the wrapper's long store path breaks the build otherwise;
+  - from a git worktree it finds the main checkout's `work/sync/venv`.
+
+  The five written gate lists now point at it (60fafedc).
+- **The gap groups** (6008db4d, 428617a8, daf399a5, e7b1fb0f, d477f5e5). `patch_gaps.py` went from 411
+  expected failures in 8 gaps to **213 in 2**: Classic and the theme engine (203) and Shortcuts' Playlists,
+  Podcasts and Audiobooks (10). Both are unported 1.6.7 features ([m1plus-unported.md](m1plus-unported.md)).
+  - The status bar scenarios run on V2.1's bar.
+  - Display's checks run on the V2.1 rows; the Q2 Display page is `NOT PORTED`.
+  - Pointer dispatch has a V2.1 fixture.
+  - The asset checks are resolved.
+  - The V1.32-own checks (`config_playmode`, hscroll, the font) are `NOT PORTED`.
+
+  `NOT PORTED` went from 108 to 121.
+- **Unit tests** (f11509d1, 8259646b). `test_m1plus_ipod.py` builds a synthetic V2.1 tree for every `REWRITES`
+  entry, and `test_every_rewrite_is_tested` keeps that true. `test_ipod.py`'s fit invariants run on both profiles.
+  `pytest test/unit` went from 1,199 to 1,266 tests.
+- **Pins** (e3943c12). `test/m1plus/build.py --build` now pins `m1plus_ipod.json`'s `private_prologues` and
+  `event_abi_words`, the last two sections it didn't pin.
+- **`boot.py`** (94e593a5) walks the Quick Settings pull-down and the Carousel Home layout.
+- **`test/m1plus/sheets.py`** (1a8868bb) replaces the four review-sheet scripts, as
+  `sheets.py BUILD OUT [bar|home|np|theme|all]`. On one build it writes the same files they did.
+  `test/ui_preview.py` stays upstream's.
+
+**Gates** (`V06Am`, `work/phase5/final-gates/summary.txt`, one `gates.py` run on a fresh build): all 19 pass, in
+about 87 minutes.
+- `patch.py` has 213 expected failures in 2 gaps, none unlisted, and 121 `NOT PORTED`.
+- `pytest test/unit` passes 1,266 and `test/fw` 3,638.
+- The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
+
+## 87. The aesthetics pass (Nov 13)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md)'s Aesthetics queue was left until every M1 function was ported. This pass
+closes it, together with the visual notes scattered elsewhere: roadmap §7's list, §64's findings 6 and 9, the
+accent-mapping gap and Configuration's long confirm text. Each fix is its own commit, gated by `#if M1PLUS` or in
+an M1-only file, so the Q2's `update.tar` stays byte-identical.
+
+**The user's decisions:**
+- Brightness reuses `sset_display`.
+- Classic gives every settings icon and the Settings and Shortcut cards one disc in the live accent; Minimal stays
+  mono.
+- Split shows the whole cover, still, over a dimmed and blurred fill of itself that keeps panning.
+- V2.1's orange (`fe7e40`) follows the accent everywhere.
+
+**Review:**
+- Step 0 recorded the scattered notes in the queue (1baf3c57).
+- `sheets.py` gained a `settings` sheet: Display, System, Controls, the pickers, Configuration and Coverflow, in
+  both themes, dark and Light (f133e1b3).
+- Its baseline on V06Am (`work/aesthetics/base/`) showed Coverflow's back arrow already gone with the bar's chevron.
+- Every item has a sheet under `work/aesthetics/<item>/`.
+
+**The items:**
+1. **Display's four V2.1 rows** (6d9963fe). Brightness, Screen Off, Lock screen and Atmosphere Lamp Settings get an
+   icon at 12,10 (`DISPLAY_STOCK_ICONS`) and a label at 60, laid out as the payload's rows. The label rests at its
+   start, and only the selected row's marquee scrolls it, so "Atmosphere Lamp Settings" no longer shows clipped.
+2. **Classic's accent discs** (5e1b357e). `accent_disc` (`ringnav_image_add`) blends each pixel from white to the
+   accent's red tone by its distance from the icon's white point, against the disc's (the commonest distance).
+   - It covers the settings icons, `home_card_settings*` and `home_card_rockbox*`.
+   - The glyph stays white, edges stay smooth, and a `_down` image takes half brightness.
+   - Minimal's cards stay grey.
+3. **V2.1's orange follows the accent** (7a7c0451). `orange_red` turns a pixel in the orange's hue band (12-23
+   degrees), or the pressed rows' brown `362221`, into the same blend of `STOCK_RED`, which `red_map` then takes to
+   the accent.
+   - Images go through `orange_image`, and only if at least 95% of their solid coloured pixels are in the band.
+     V2.1's photographs reach 85% at most and keep their colours.
+   - Style colours go through `accent_map` and `ringnav_style_color`.
+   - Crimson shows the red itself.
+4. **Centred's cover** (a4fdeb67). `img_playcover` goes to x 33, its DLNA twin's, centring it.
+5. **Split's knob walk** (e20e47cf). `reveal` scrolls Home by whole `HOME_ROW`s in Split and Full, so no row sits
+   half under the art.
+6. **Split's whole cover** (6cb4bb52). `home_tex` builds the backdrop and the fitted cover:
+   - The backdrop is the cover zoomed to fill, box-filtered, dimmed toward black (or Light's paper) and magnified
+     by a B-spline as it pans.
+   - The cover is fitted whole inside the panel and stays still.
+
+   The placeholder art is drawn `scale_auto`, as V2.1 drew a fill image at its own size and overflowed the panel.
+   A frame costs 3.55M instructions, down from 5.68M.
+7. **The surviving notes:**
+   - a. The selected settings row's `>` takes the row's text colour (b25fb9b3).
+   - b. V2.1's four pickers (Theme, Screen Rotation, USB, Update Local Music) take the settings-page rewrite
+     (`m1_only`, `M1_SETTINGS`), which hides V2.1's navbar, so they show one back (1b3eff45).
+     - The "frame into the scroll bar" was V2.1's full-height `scroll_bar_m` showing after a knob step on a list
+       that doesn't scroll.
+     - `ringnav_style_color` now clears its colours when `list_bar` says the list doesn't scroll.
+   - c. Configuration's confirm reads "Press again to erase" on the M1, which fits its 240 px row (dad1a4db).
+   - d. A red speck at the lower left of Previous and Next in Minimal (d9b4c32f).
+     - The foot of V2.1's gradient there (`fa7332`) is deeper than the orange, so `orange_red` gave it a blend
+       past red (k down to -17), outside `red_map`'s tolerance of 8, and it stayed stock red.
+     - `orange_red` now clamps to red itself.
+     - Found on item 4's Now Playing sheet.
+
+**Tests:**
+- `patch.py` pins each item (M1 blocks, with Python mirrors of `orange_red` and the disc).
+- `test/m1plus/build.py` and `test_m1plus_ipod.py` cover the picker rewrites.
+- `patch.py` keeps its 213 expected failures in 2 gaps.
+
+**Gates** (`V06Bm`, `work/aesthetics/final-gates/summary.txt`, one `gates.py` run on a fresh build): all 19 pass,
+in about 86 minutes.
+- `patch.py` has 213 expected failures in 2 gaps, none unlisted, and 121 `NOT PORTED`.
+- `pytest test/unit` passes 1,270 and `test/fw` 3,638.
+- The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
+- `sheets.py … all settings` renders every review sheet (`work/aesthetics/final`).
+
+## 88. The aesthetics pass's fixes (Nov 13)
+
+**The device pass** on `V06Bm` (Nov 13, `work/aesthetics/device-pass/findings.md`) passed its checklist and found:
+- **A.** Icons and controls changed colour, which the user didn't want.
+  - Classic's settings icons all became accent discs, so every icon was one colour.
+  - V2.1's radios and the Gain switch took the accent, so on the selected accent row the checked radio nearly
+    vanished.
+- **B.** Appearance's "Centred Now Playing" rested mid-scroll ("entred Now Playing") and kept scrolling while
+  unselected, the problem §87's item 1 fixed for Display's V2.1 rows.
+- **C** (Graphite's light discs with white glyphs, low contrast) went with A's fix. **D** (Split's backdrop stays dark
+  until Home is rebuilt after Light Mode goes on) and **E** (Modern → Minimal → Modern resets Home to Split) are
+  observations, not in scope.
+
+**The fixes** (`.plan/aesthetics-fixes.md`), each M1-only, so the Q2's `update.tar` stays byte-identical:
+1. **The accent recolouring is reverted** (finding A), newest first, each a `Revert "…"` commit:
+   - ebba3240 reverts d9b4c32f (the gradient's foot follows the accent);
+   - e7504eea reverts 7a7c0451 (V2.1's orange follows the accent);
+   - c9251766 reverts 5e1b357e (Classic's accent discs).
+
+   The icons are back to V2.1's category colours and the controls to its orange, and the reverts take their
+   `patch.py` blocks (`disc_model`, the orange mirror, the gradient foot) with them. The queue entries those commits
+   closed are now Won't do ([m1plus-ipod-ui.md](m1plus-ipod-ui.md)).
+2. **Settings rows' labels rest on their start** (762c7ce0, finding B). `list_row_core` (`m1plus_nav_rows.c`), which
+   every payload row goes through, sets its `hscroll_label` to `only_focus` at offset 0, as Display's V2.1 rows do.
+   Stock's default left `only_focus` off, and `list_toggle` narrows a toggle's label to 183 px, so "Centred Now
+   Playing" overflowed and scrolled on its own; `marq_moved` takes only `HSCROLL_ONLY_FOCUS` labels, so it also missed
+   the selected row's marquee. A `patch.py` block opens Appearance and checks all six rows' labels.
+
+**Tests:** after each item, `patch.py` kept its 213 expected failures (Classic 203, Shortcuts 10), none unlisted and
+121 `NOT PORTED`; it runs 2,128 scenarios with item 2's. The unit gate passes and `q2compare` finds the Q2's
+`update.tar` byte-identical.
+
+**Gates** (`V06Cm`, `work/aesthetics-fixes/final-gates/summary.txt`, one `gates.py` run on a fresh build): all 19 pass,
+in about 87 minutes.
+- `patch.py` has 213 expected failures in 2 gaps, none unlisted, and 121 `NOT PORTED`.
+- `pytest test/unit` passes 1,270 and `test/fw` 3,638.
+- The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
+- `sheets.py … all settings` renders every review sheet (`work/aesthetics-fixes/final`).
+
+**The device pass** on `V06Cm` (Nov 14, `work/aesthetics-fixes/pass/findings.md`) passed its checklist:
+- System, Display, Playback and Controls keep their category colours under Cobalt and Crimson.
+- The Carousel's Settings card is V2.1's grey again, and the Shortcut card keeps its own blue.
+- The Screen Off and Theme pickers' checked radio and the Gain switch are orange and readable on the selected row.
+- Now Playing's transport, its gradient and the "Play all" badge are orange, with no red speck; Centred's cover is
+  centred.
+- Unselected long labels (Centred Now Playing, Atmosphere Lamp Settings) rest on their start.
+
+It found one thing, not a blocker: a selected long label scrolls two or three times, then stays on its end ("ntred Now
+Playing") rather than returning to its start. Orange on the Crimson bar reads, with low contrast; that is V2.1's own
+look. Screen Off, the accent, Home and Centred were restored afterwards, and the device stays on `V06Cm`.
+
 ## How to check a build now
 
 ```sh
-python3 tools/build.py 'M1 Plus Firmware V2.1.zip' --out build-m1   # refuses unknown inputs and V2.1 names
-python3 test/m1plus/build.py --build build-m1   # hook jumps, demo and rootfs diffs, updater rule, boot scripts
-python3 test/m1plus/boot.py build-m1            # V2.1's demo under QEMU, stock vs patched, touch and key walk
-python3 test/m1plus/boot.py build-m1 --home-menu  # the same with six Home cards: the Q2 Pod card on a page of its own
-python3 test/m1plus/boot.py build-m1 --media    # a card with long songs, a book and two photos: Long Songs, Books, Photos and Coverflow by touch, Streaming, Shuffle Songs
-python3 test/m1plus/patch.py build-m1           # payload under Unicorn, plus KNOWN GAP and NOT PORTED lines
-python3 test/m1plus/playback.py build-m1        # and test/m1plus/m4b, id3, headset_io; test/ldac, bluealsa
+python3 test/m1plus/gates.py build-m1   # every gate, in order: q2compare --suites, a fresh --dev build, its suites
+python3 test/m1plus/gates.py build-m1 --from boot  # after a test-only fix: the failed gate onward, same build
+python3 test/m1plus/gates.py --list     # the steps; gates.py's STEPS says what each checks
+python3 test/m1plus/sheets.py build-m1 sheets   # review sheets (bar, home, np, theme) under QEMU; checks nothing but theme's renderer
 ```
+
+`gates.py` stops at the first failure and writes each step's log, its command on the first line, with a
+`summary.txt` to `work/gates/<timestamp>/`. `--from` and `--only` refuse a build whose `source_sha256` no
+longer matches the tree: an edit to a hashed source needs a fresh build and every gate.
 
 On a `--dev` build, `python3 tools/q2remote.py` reaches the device over Wi-Fi: files, settings,
 screenshots and input, without a manual pass ([remote.md](remote.md)).

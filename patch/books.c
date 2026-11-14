@@ -330,7 +330,7 @@ unsigned book_xhtml(char *s) {
 int book_convert(const char *src, const char *out, volatile int *cancel) {
     zip_t z = { 0, 0, 0 };
     unsigned n, len, done = 0;
-    char *xml = 0, *opf = 0, path[512];
+    char *xml = 0, *opf = 0, path[512], folder[256];
     const char *v, *e, *p, *q, *qe, *id;
     void *f = 0;
     int ok = 0;
@@ -344,6 +344,7 @@ int book_convert(const char *src, const char *out, volatile int *cancel) {
     memcpy(path, v, len), path[len] = 0;
     unsigned dir = len;
     while (dir && path[dir - 1] != '/') --dir;
+    memcpy(folder, path, dir); /* a ../ href writes over path's copy */
     if (!(opf = zip_read(&z, path, &n)) || !(f = fopen(out, "wb"))) goto end;
     /* ponytail: each itemref scans the manifest; an id index if big books prepare slowly */
     for (p = opf; !*cancel && (p = tag(p, "itemref", &e)); p = e) {
@@ -354,6 +355,7 @@ int book_convert(const char *src, const char *out, volatile int *cancel) {
             !(q = attr(q, qe, "href", &len)))
             continue;      /* not in the manifest, or a picture (a cover) */
         unsigned at = dir; /* the OPF's folder, then the href, %XX decoded, up to any #fragment */
+        memcpy(path, folder, dir);
         for (const char *h = q, *end = q + len; h < end && *h != '#' && at < sizeof path - 1; ++h) {
             int seg = !at || path[at - 1] == '/'; /* at a segment's start */
             if (seg && end - h >= 2 && !memcmp(h, "./", 2)) {
@@ -454,8 +456,10 @@ unsigned book_back(const unsigned char *t, unsigned n, unsigned pos, int rows, i
                    int (*measure)(void *, unsigned), void *ctx) {
     unsigned s = pos > BOOK_BACK ? pos - BOOK_BACK : 0, e;
     while (s && s < pos && t[s - 1] != '\n') ++s;
-    if (s == pos && pos)
-        for (s = pos > BOOK_BACK ? pos - BOOK_BACK : 0; (t[s] & 0xc0) == 0x80; ++s) {}
+    if (s == pos && pos) { /* no line start: past a character's continuation bytes, 3 at most */
+        s = pos > BOOK_BACK ? pos - BOOK_BACK : 0;
+        for (e = s + 3; s < e && s < pos && (t[s] & 0xc0) == 0x80; ++s) {}
+    }
     while ((e = book_page(t, n, s, rows, width, measure, 0, ctx)) < pos && e > s) s = e;
     return s;
 }
@@ -470,11 +474,7 @@ unsigned book_back(const unsigned char *t, unsigned n, unsigned pos, int rows, i
 #ifndef BOOK_ROWS
 #define BOOK_ROWS 10
 #endif
-#if IPOD
 #define BOOK_TONE accent_tone(2)
-#else
-#define BOOK_TONE 0xaaaaaa
-#endif
 #define BOOKS_MAX 500 /* ponytail: ringnav navigates at most MAX_ENTRIES (512) rows */
 #define MARKS_N 64    /* books whose page is kept, the most recently read first */
 
@@ -798,6 +798,7 @@ int video_start(const char *file, int radio) {
     if (!out) dac_take(); /* without it the PCM takes the sound and the jack stays silent */
     int pid = fork();
     if (!pid) {
+        child_oom_first();
         const char *dev = out ? out : "plughw:0,0", *v = out ? vol : (char *)0;
         if (radio)
             execl(VIDEO_BIN, VIDEO_BIN, "-r", dev, file, v, (char *)0);
@@ -943,20 +944,17 @@ void books_open(const char *root) {
     if (!page) return;
     BLOB_IO(BOOK_MARKS, bk.marks, 0);
     void *f = widget_factory();
-    int h = widget_get_prop_int(page, "h", BOTTOM);
+    int h = widget_get_prop_int(page, "h", client_h());
     bk.list = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     bk.reader = widget_factory_create_widget(f, "view", page, 0, 0, UI_W, h);
     bk.sheet = widget_factory_create_widget(f, "view", bk.reader, 0, 0, UI_W, h);
     bk.info = bottom_caption(bk.reader, h);
-#if M1PLUS
-    back_button(bk.reader); /* over the page; Return goes back to the books */
-#endif
     view_show(bk.reader, 0);
     bk.buf = calloc(BOOK_WIN, 1);
     bk.path = calloc(BOOKS_MAX, sizeof *bk.path);
     if (bk.buf && bk.path) scan(root, 1);
     if (bk.n) qsort(bk.path, (unsigned)bk.n, sizeof *bk.path, by_string);
-    bk.view = page_list(page, bk.list, 0, bk.n ? "Books" : "No books", bk.n, 48);
+    bk.view = page_list_or(page, bk.list, "Books", "No books", bk.n, 48);
     char name[256];
     for (int k = 0; k < bk.n; ++k)
         page_row_detail_into(bk.view, k, title(bk.path[k], name), 0, open_book);

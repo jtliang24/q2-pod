@@ -5,3 +5,4 @@
 #include "library_scope.h"
 char *library_scope_query(const char *sql) { return sql ? strdup(sql) : 0; }
 int library_scope_hidden(const char *path) { (void)path; return 0; }
+void library_scope_scan(void) {} /* no markers to walk for (1.5.9) */

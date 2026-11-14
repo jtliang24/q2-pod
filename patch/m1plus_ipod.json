@@ -1,0 +1,1138 @@
+{
+  "pages": {
+    "audiosetting_page.bin": {
+      "v21": "audiosetting_page.bin",
+      "opener": "audiosetting_page_init",
+      "why": "same path and role"
+    },
+    "bigcover_page.bin": {
+      "v21": "bigcover_page.bin",
+      "opener": "bigcover_page_init",
+      "why": "same path and role"
+    },
+    "dialog/addplaylist_dialog.bin": {
+      "v21": "dialog/kbaddplaylist_dialog.bin",
+      "opener": "dialog_kbaddplaylist_dialog_init",
+      "why": "the add-to-playlist name entry, now a keyboard dialog (add_edit, return)"
+    },
+    "dialog/confirminfo_dialog.bin": {
+      "v21": "dialog/confirminfo_dialog.bin",
+      "opener": "dialog_confirminfo_dialog_init",
+      "why": "same path and role"
+    },
+    "dialog/statusbar_dialog.bin": {
+      "v21": "dialog/dropdown_dialog.bin",
+      "opener": "dialog_dropdown_dialog_init",
+      "why": "the pull-down status bar: V2.1 names it dropdown_dialog (sysbar views, volume, clock, battery)"
+    },
+    "dialog/volume_dialog.bin": {
+      "v21": "dialog/volume_dialog.bin",
+      "opener": "dialog_volume_dialog_init",
+      "why": "same path and role"
+    },
+    "folder_page.bin": {
+      "v21": "folder_page.bin",
+      "opener": "folder_page_init",
+      "why": "same path and role"
+    },
+    "home_page.bin": {
+      "v21": "home_page.bin",
+      "opener": "home_page_init",
+      "why": "same path and role"
+    },
+    "localmusic/album_page.bin": {
+      "v21": "album_page.bin",
+      "opener": "album_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/albuminfo_page.bin": {
+      "v21": "albuminfo_page.bin",
+      "opener": "albuminfo_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/allmusic_page.bin": {
+      "v21": "allmusic_page.bin",
+      "opener": "allmusic_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/artistinfo_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 has no artist page: an artist's albums load through loadLocalClassList(0xff01) (m1plus_nav_goto.c). Phase 4.4 (Library) decided it: they show on V2.1's localclass_page, laid out as the other library lists."
+    },
+    "localmusic/localclass_page.bin": {
+      "v21": "localclass_page.bin",
+      "opener": "localclass_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/playlist_page.bin": {
+      "v21": "playlist_page.bin",
+      "opener": "playlist_page_init",
+      "why": "V2.1 has no localmusic/ directory: the same page at the top level"
+    },
+    "localmusic/playlistsmore_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 has no playlist menu page (progress 60). Phase 4.4 (Library) decided it: a Playlists row's hold opens the hold menu's playlist rows (QM_PLAYLIST), whose More... is the playlist editor."
+    },
+    "localmusic_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 has no localmusic_page and no localmusic_page_init: the Library root is not a page of its own. Phase 4.4 (Library) decided it: the root is the payload's library_page_open page (m1plus_nav_library.c), on the Q2's page rows."
+    },
+    "playing_page.bin": {
+      "v21": "playing_page.bin",
+      "opener": "playing_page_init",
+      "why": "same path and role"
+    },
+    "playset/balance_page.bin": {
+      "v21": "playset/balance_page.bin",
+      "opener": "playset_balance_page_init",
+      "why": "same path and role"
+    },
+    "playset/bootvol_page.bin": {
+      "v21": "playset/bootvol_page.bin",
+      "opener": "playset_bootvol_page_init",
+      "why": "same path and role"
+    },
+    "playset/dsdoutput_page.bin": {
+      "v21": "systemset/dsdmode_page.bin",
+      "opener": "systemset_dsdmode_page_init",
+      "why": "the DSD output mode list; V2.1 keeps it under systemset/"
+    },
+    "playset/equalizer_page.bin": {
+      "v21": "playset/equalizer_page.bin",
+      "opener": "playset_equalizer_page_init",
+      "why": "same path and role"
+    },
+    "playset/filter_page.bin": {
+      "v21": "playset/filter_page.bin",
+      "opener": "playset_filter_page_init",
+      "why": "same path and role"
+    },
+    "playset/maxvol_page.bin": {
+      "v21": "playset/maxvol_page.bin",
+      "opener": "playset_maxvol_page_init",
+      "why": "same path and role"
+    },
+    "playset/memplay_page.bin": {
+      "v21": "playset/memplay_page.bin",
+      "opener": "playset_memplay_page_init",
+      "why": "same path and role"
+    },
+    "playset/playmode_page.bin": {
+      "v21": "playset/playmode_page.bin",
+      "opener": "playset_playmode_page_init",
+      "why": "same path and role"
+    },
+    "playset/playset_page.bin": {
+      "v21": "playset/playset_page.bin",
+      "opener": "playset_playset_page_init",
+      "why": "same path and role"
+    },
+    "playset/replaygain_page.bin": {
+      "v21": "playset/replaygain_page.bin",
+      "opener": "playset_replaygain_page_init",
+      "why": "same path and role"
+    },
+    "playset/usbvol_page.bin": {
+      "v21": "systemset/usbvolmode_page.bin",
+      "opener": "systemset_usbvolmode_page_init",
+      "why": "the USB volume mode list; V2.1 keeps it under systemset/"
+    },
+    "stream_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 has no stream_page: its Home lists the streaming apps (airplay, hifi, tidal) as pages of their own. Phase 4.5 (Home) decides the Streams row."
+    },
+    "system_bar.bin": {
+      "v21": "system_bar.bin",
+      "opener": "system_bar_init",
+      "why": "same path and role"
+    },
+    "systemset/about_page.bin": {
+      "v21": "systemset/about_page.bin",
+      "opener": "systemset_about_page_init",
+      "why": "same path and role"
+    },
+    "systemset/autotime_page.bin": {
+      "v21": "systemset/autosynctime_page.bin",
+      "opener": "systemset_autosynctime_page_init",
+      "why": "the auto-sync time zone list"
+    },
+    "systemset/backlight_page.bin": {
+      "v21": "systemset/brightness_page.bin",
+      "opener": "systemset_brightness_page_init",
+      "why": "the brightness slider with - and + buttons"
+    },
+    "systemset/bluetooth_page.bin": {
+      "v21": "systemset/bluetooth_page.bin",
+      "opener": "systemset_bluetooth_page_init",
+      "why": "same path and role"
+    },
+    "systemset/btadjustvol_page.bin": {
+      "v21": "systemset/btvolume_page.bin",
+      "opener": "systemset_btvolume_page_init",
+      "why": "the Bluetooth volume - and + buttons"
+    },
+    "systemset/btquality_page.bin": {
+      "v21": "systemset/btquality_page.bin",
+      "opener": "systemset_btquality_page_init",
+      "why": "same path and role"
+    },
+    "systemset/datetime_page.bin": {
+      "v21": "systemset/typedatetime_page.bin",
+      "opener": "systemset_typedatetime_page_init",
+      "why": "the Date & Time list (auto, manual, 24-hour): opened beside powermanager_page by the Settings handler, as V1.32 does with its datetime_page; V2.1 reuses the name datetime_page for the manual selectors"
+    },
+    "systemset/display_page.bin": {
+      "v21": "systemset/display_page.bin",
+      "opener": "systemset_display_page_init",
+      "why": "same path and role"
+    },
+    "systemset/fwupdate_page.bin": {
+      "v21": "systemset/fwupdate_page.bin",
+      "opener": "systemset_fwupdate_page_init",
+      "why": "same path and role"
+    },
+    "systemset/keylock_page.bin": {
+      "v21": "systemset/keylock_page.bin",
+      "opener": "systemset_keylock_page_init",
+      "why": "same path and role"
+    },
+    "systemset/language_page.bin": {
+      "v21": "systemset/language_page.bin",
+      "opener": "systemset_language_page_init",
+      "why": "same path and role"
+    },
+    "systemset/lighttime_page.bin": {
+      "v21": "systemset/lighttime_page.bin",
+      "opener": "systemset_lighttime_page_init",
+      "why": "same path and role"
+    },
+    "systemset/manualtime_page.bin": {
+      "v21": "systemset/datetime_page.bin",
+      "opener": "systemset_datetime_page_init",
+      "why": "the manual date and time selectors (tselector_*), which V2.1 puts in datetime_page"
+    },
+    "systemset/netservice_page.bin": {
+      "v21": "systemset/netservice_page.bin",
+      "opener": "systemset_netservice_page_init",
+      "why": "same path and role"
+    },
+    "systemset/powermanager_page.bin": {
+      "v21": "systemset/powermanager_page.bin",
+      "opener": "systemset_powermanager_page_init",
+      "why": "same path and role"
+    },
+    "systemset/reset_page.bin": {
+      "v21": "systemset/reset_page.bin",
+      "opener": "systemset_reset_page_init",
+      "why": "same path and role"
+    },
+    "systemset/screensaver_about.bin": {
+      "v21": "systemset/screensaverabout_page.bin",
+      "opener": "systemset_screensaverabout_page_init",
+      "why": "the three-line screen saver note (label_tip1..3 are label_info1..3)"
+    },
+    "systemset/screensaver_page.bin": {
+      "v21": "systemset/screensaver_page.bin",
+      "opener": "systemset_screensaver_page_init",
+      "why": "same path and role"
+    },
+    "systemset/sleepshutdown_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 folds the sleep timer into powermanager_page (view_sleep: switch, tselector_hour, tselector_min). Phase 4.3 (Settings pages) decides it."
+    },
+    "systemset/standby_page.bin": {
+      "v21": null,
+      "opener": null,
+      "why": "V2.1 folds the standby list into powermanager_page (view_standby). Phase 4.3 (Settings pages) decides it."
+    },
+    "systemset/synclink_page.bin": {
+      "v21": "systemset/synclink_page.bin",
+      "opener": "systemset_synclink_page_init",
+      "why": "same path and role"
+    },
+    "systemset/sysset_page.bin": {
+      "v21": "systemset/sysset_page.bin",
+      "opener": "systemset_sysset_page_init",
+      "why": "same path and role"
+    },
+    "systemset/wifi_page.bin": {
+      "v21": "systemset/wifi_page.bin",
+      "opener": "systemset_wifi_page_init",
+      "why": "same path and role"
+    },
+    "systemset/wifiset_page.bin": {
+      "v21": "systemset/wifiset_page.bin",
+      "opener": "systemset_wifiset_page_init",
+      "why": "same path and role"
+    }
+  },
+  "assets": {
+    "album_page.bin": "a1587af1fb71b824f2da34fa703f7c513c5f0d671625518b535741d6edc02e3e",
+    "albuminfo_page.bin": "da7754483748440f0814260f0923fe9ab2cae1caecd7c8b39d62a3bf078f6669",
+    "allmusic_page.bin": "d57fc32e3f91bad57e4d32a9a75c8cd1364af78bd2c09506036fd88bfd29e49a",
+    "bigcover_page.bin": "7771cae49963ca5e0f07ca8fc079ed263601eedbbe63e2e1daadd3bba30dc0c5",
+    "dialog/confirminfo_dialog.bin": "f671867ef75a5a9fd2308d7565d152f7ffe609c2b23168340f206b5fc49a7676",
+    "dialog/dropdown_dialog.bin": "28690f07438fe6a39286f60e2059cd07d9457037c811412621f93392362398f1",
+    "dialog/kbaddplaylist_dialog.bin": "81f45ee1be55ff967ee032eaf60c6835fee898ecddc85eed53f9a9d38e6c999e",
+    "dialog/volume_dialog.bin": "76552f59c8137b7fb60ae454fb22edaa1c2b00ad9401d8b2323c8fc20629baba",
+    "folder_page.bin": "6441f44f3f6d9aeda375aad0f339956a384ebe1d0a666dfa3d78041cee7bc729",
+    "home_page.bin": "875a8080991c56d6b7950ec76a529136b4b5a580d3c9ae27c8b34cb7005558a5",
+    "localclass_page.bin": "bb61cad15595f75d0643cc721750a9064e0243e97800cfa01a2f93a4a4a2575b",
+    "playing_page.bin": "1d640decac5deb505d4031b967feb59ca0a67c0cfbb116ae5cf2267ade28d353",
+    "playlist_page.bin": "4c01af954a2f43bd90be84729bda244eb2567f608ae7a369c4f341121cd95466",
+    "system_bar.bin": "c05f9c3c928984edc81e4f02a0905ecf84ff71a80908a4520afca5fbf7545d18"
+  },
+  "m1_only": {
+    "dialog/msginfo_dialog.bin": {
+      "sha256": "d7d2b3ae29e32d62e16fcc232e482e33876cf8affe4db97b0526fc2e81fa9e26",
+      "why": "V2.1's toast (no V1.32 page maps to it): its msginfo_bg art drawn in styles, so Light Mode flips the box with its text (Phase 4.7 fixes, F)"
+    },
+    "systemset/screenrotate_page.bin": {
+      "sha256": "90e171d8789911ec6540cd96dfcf541295b3f6619e3f780941197695ac74a68e",
+      "why": "V2.1's Screen Rotation picker (no V1.32 page maps to it): a settings list like dsdmode_page's, so M1_SETTINGS gives it the settings-page rewrite (aesthetics, 7b)"
+    },
+    "systemset/theme_page.bin": {
+      "sha256": "80ec57e66b2c8fce87d56d603fb52c6135f3806ed37897ce358d210c7729bd2a",
+      "why": "V2.1's Theme picker (no V1.32 page maps to it): a settings list like dsdmode_page's, so M1_SETTINGS gives it the settings-page rewrite (aesthetics, 7b)"
+    },
+    "systemset/updatemusic_page.bin": {
+      "sha256": "fffac06c4193dde0c832b0fbde9fcac81e24d8238f194cb54d4c2e1b852b15f7",
+      "why": "V2.1's Update Local Music page (no V1.32 page maps to it): a settings list like dsdmode_page's, so M1_SETTINGS gives it the settings-page rewrite (aesthetics, 7b)"
+    },
+    "systemset/usbset_page.bin": {
+      "sha256": "e4e9ae0835904543afc9b39f2061cb1df367cf8afd5e8e0ed85df4ea2f27ef8d",
+      "why": "V2.1's USB picker (no V1.32 page maps to it): a settings list like dsdmode_page's, so M1_SETTINGS gives it the settings-page rewrite (aesthetics, 7b)"
+    }
+  },
+  "navbar_only": {
+    "audiosetting_page.bin": "5ea8332e1a1514d1a5cf0df18229989c75c6899870ac870dd9bdf01252f31fc8",
+    "playset/balance_page.bin": "d2e59a8376b18b16055c199fc58030743a80cd9358b55e408fb0e52711c1f3a7",
+    "playset/bootvol_page.bin": "365141cb4dd5830d623ddb57bd422de5c25d380f0f874b8e65b73008033d56a4",
+    "playset/filter_page.bin": "8f9a56be17c83ca70726a173ce72e3bed7138cf602f305a6e01d675a26f4d285",
+    "playset/maxvol_page.bin": "7085dad723e737825d6dd274fd4f259286a1007e30b472cc5549f592e246798d",
+    "playset/memplay_page.bin": "b9cad3c8db582950852170400103cbd0b02fff00ae493ce2eaabfce3fb29b0eb",
+    "playset/playmode_page.bin": "5bd3b58becc64521d7727421f4b3a982efc07d555d98c6828fc8e88dbcf2a5f6",
+    "playset/playset_page.bin": "d2f00f98bb113c9420c38d9348eb96477545d51fd4ebbe5d2e57bd21524ec544",
+    "playset/replaygain_page.bin": "68e727bf834b12bd784264fa052cce76f1bb8a8293cfb449ef6156b7e2919683",
+    "systemset/about_page.bin": "7e2a0d3968e2ad10aa43f3c9aa549611b6c18fb929300a8280c89c7015940f03",
+    "systemset/autosynctime_page.bin": "6bae1b1e1e9d75538b0b56736b0f6a769d569d0d07db72e251d6e3bc3ba60ec8",
+    "systemset/bluetooth_page.bin": "80947223ac6191f1cac16e7d6f3540d0821f12fbb3cd78c8ad6e9c1d4a047e29",
+    "systemset/brightness_page.bin": "2bde5639a453db5a934307efc260400e47c3126804558d5115ae37d1bd14b609",
+    "systemset/btquality_page.bin": "380303370d1b3bfa218ede70e4de5ef33c50cf5258931810900fce3babbb6b64",
+    "systemset/btvolume_page.bin": "9c1c9a74473fb386a1e1e10b88d75b37676369e8113dd374fc20cb66233afaaa",
+    "systemset/datetime_page.bin": "f3a8b69aa1f16d6b15bf75dedf023da79d0405f28c87015377717c4591a25be6",
+    "systemset/display_page.bin": "e382af9b4d8419d7bcedde335285062f8f51d1c33711ad639b03b2c88f7282f3",
+    "systemset/dsdmode_page.bin": "8480b309b0652ea2d96a197ba55cd42ff7497555d6bc211a45e89deba5a7c73a",
+    "systemset/fwupdate_page.bin": "c9c7452f6e6294fac860485a645378006ced2d250dde506e185ed8f2dc155324",
+    "systemset/keylock_page.bin": "9f9af55a37e14485ff36a89d0a0a79589f3ec9a94dbe738dbbe7480985df0e35",
+    "systemset/language_page.bin": "dc538f2485a67a2e5706fcced50e8f0c303a72f2cf5fb8fa0e89098b81e5b1b9",
+    "systemset/lighttime_page.bin": "5a66ef0a95154b4c27616d257bd285c2c1d37935ff1879ef3695838c631c537f",
+    "systemset/netservice_page.bin": "8f0fe314f1b5c8d867561fcd4c9cb5891e7c9c92156703fbaabdb4dbbcbb9cb8",
+    "systemset/powermanager_page.bin": "65f8e24070d85af65c46fc329c738f63f288cd7bf54db975213b0b0bbe5a914a",
+    "systemset/reset_page.bin": "887ecb9bcf4bf3feeb75d60cb55dab26b026d9a8ca4c7c28081233ad03e6ad84",
+    "systemset/screensaver_page.bin": "e5dd65614219444ecc7a70ed97383ee62f97d4e61d9e8c9b9fd53e21eae6155e",
+    "systemset/screensaverabout_page.bin": "ba3f2d2990e33e1583bd1d2326011dc37234a8ee7a2e98ee303c1d2a8ae0365a",
+    "systemset/synclink_page.bin": "4898562f2b99526664dcfc3f6500a71f6cc6995a3d1cd2c57940110e3b05c0b4",
+    "systemset/sysset_page.bin": "26bdacc67fe5e1f4a61fbccd32cca4f0d7b1161b3f44e99f4d4dec07a494b4df",
+    "systemset/typedatetime_page.bin": "7cecc82a3848312da176dbeb6253ae9535eb10df78853fc48c7175b970853b9a",
+    "systemset/usbvolmode_page.bin": "8e44c30180259f50bec8830e1631899f4f5a768c205ff811c4f1347c9a0832e6",
+    "systemset/wifi_page.bin": "4aa68eef4c4ba6dcece6780d3785fda693d1c11c8e9dada1b7343a88033c61fa",
+    "systemset/wifiset_page.bin": "78c56276ed97434ff50d7a605d2689ccffc8d7417cca1def74247f8c1c046a8a"
+  },
+  "slide_only": {
+    "playset/equalizer_page.bin": "f69fb1129b81e2e4b402c0803a65891701d599127817afc2a7297b1b35016f8b"
+  },
+  "immediates": [
+    {
+      "value": "pitch",
+      "purpose": "library row height: V2.1's 60 px rows (All Songs, the class lists, Albums, an album's tracks)",
+      "sites": [
+        [
+          "0x528570",
+          "0x2402003c"
+        ],
+        [
+          "0x5368bc",
+          "0x2402003c"
+        ],
+        [
+          "0x5245f0",
+          "0x2402003c"
+        ],
+        [
+          "0x52667c",
+          "0x2402003c"
+        ]
+      ]
+    },
+    {
+      "value": "body",
+      "purpose": "library row body: the inner button and its children, V2.1's 56 px (All Songs, the class lists)",
+      "sites": [
+        [
+          "0x5285a0",
+          "0x24110038"
+        ],
+        [
+          "0x5368e8",
+          "0x24110038"
+        ]
+      ]
+    },
+    {
+      "value": 12,
+      "purpose": "title re-centred in the 60 px body (All Songs, Albums), font unchanged",
+      "sites": [
+        [
+          "0x528734",
+          "0x2406000a"
+        ],
+        [
+          "0x522918",
+          "0x2406000a"
+        ]
+      ]
+    },
+    {
+      "value": 32,
+      "purpose": "All Songs' artist line re-centred in the 60 px body",
+      "sites": [
+        [
+          "0x5287b8",
+          "0x2406001e"
+        ]
+      ]
+    },
+    {
+      "value": 34,
+      "purpose": "Albums' artist line re-centred in the 60 px body",
+      "sites": [
+        [
+          "0x5229c0",
+          "0x24060020"
+        ]
+      ]
+    }
+  ],
+  "row_layout_calls": {
+    "purpose": "fit ordinary row titles and their containers on every native relayout",
+    "sites": [
+      [
+        "0x528624",
+        "0x0320f809"
+      ],
+      [
+        "0x53696c",
+        "0x0320f809"
+      ],
+      [
+        "0x5332bc",
+        "0x0320f809"
+      ],
+      [
+        "0x524494",
+        "0x0320f809"
+      ],
+      [
+        "0x52651c",
+        "0x0320f809"
+      ],
+      [
+        "0x53e6ec",
+        "0x0320f809"
+      ]
+    ]
+  },
+  "private_prologues": {
+    "stock_search": "4e001c3ccc0b9c2721e09903",
+    "m1_home_click": "4d001c3c50039c2721e09903"
+  },
+  "event_abi_words": {
+    "0x534f70": "ff000524",
+    "0x534fbc": "13010524",
+    "0x534ff4": "02010524",
+    "0x535010": "00010524"
+  },
+  "settings_icons": {
+    "playset_foldercover.png": "95a2776f7511146c7005235f139452f9206b952a946e97a869f938cb52ecab46",
+    "pset_balance.png": "7bbe7bdcf861dac336a43194bbbf05df5b1daeb407269a6272eb852b2afd100a",
+    "pset_bootvol.png": "03ec478edf28276eb586f07d581862dd01e04cabbd55b674c995fac77050eaad",
+    "pset_covermode.png": "58780b0189987a8d5b6e8459fbe37dfb6d3b3d85015c06321bc5c7c7f8580970",
+    "pset_dac.png": "383dc3571427bb4658967dccce6925f775a5482ec6feaeb768becc4f70e9a0e5",
+    "pset_digital.png": "4753aa3ad8747d6b840b365f9a923b5f08dfdb1e93e317596e522d5bf4bbb3ab",
+    "pset_dsdoutput.png": "3ec104f3a5189c6d2ca0d910865b5042cf360276d438547e288ae08901f991f9",
+    "pset_eq.png": "096157c0c6d61c2aaf6f38fbdc3fc64750a2981a3f899dd15907309b50de2101",
+    "pset_filter.png": "5a86dd1c100a95cc253c696f7bbe7c01eee4abdd5c1df98a62fdce1f5c2fbaf7",
+    "pset_gain.png": "4c495d3fcbc7e8b1f96edcc903eeb671e3618877e66e022fd57ceec7fd28fcb0",
+    "pset_gapless.png": "f0602be2654418436723df2cbcd9458edafafbf20dce826dea8c594b34f3e973",
+    "pset_jumpfolder.png": "45898bce92a450675d65b89c526e3f0cde295041c21f59bbf3c107f38ea2f9ad",
+    "pset_maxvol.png": "d6caa10d675b6eef1558c7d73ca319b8f3ce19450635a028a2652add3bf6b696",
+    "pset_memplay.png": "d1057dd9308ab4cafe82f1cbbeac48eff3ca956b1e8f30f31ab8c9d27991da53",
+    "pset_playmode.png": "4e3137221cd7c13ba71a41d84f31d7fd2ad57f578719d119b35b191b04e6bfa5",
+    "pset_replaygain.png": "996b405550c034a4f220a12c3f9254a260a20f117d609fa24a769ab13da4a15f",
+    "pset_usbaudiovol.png": "b6f9a31f859338898259a3bd3d37b9b3bcbe6347b36652504c13d35a27f93ddb",
+    "sset_about.png": "cc091e1cd721b264f03e723417b7afee02324cff122dd75cb009ca797d54118e",
+    "sset_atmosphereled.png": "af6a291db4dcfc72df6c43e08326d1723f9340e5754f170357c3b8e86ef1fda3",
+    "sset_carmode.png": "db864f0c393712d8c8e63ba57f02ac659f7cea137c11092bf8b4e3220cc0015f",
+    "sset_covermode.png": "58780b0189987a8d5b6e8459fbe37dfb6d3b3d85015c06321bc5c7c7f8580970",
+    "sset_display.png": "396139ceace8128997a8ded0ab7007c7ece467d3cf3032c0d8165513dd48393e",
+    "sset_doublewake.png": "9a33b86f084a49ab10407ea0d467e4efb82f2937405332373f758b091852e217",
+    "sset_dsdoutput.png": "3ec104f3a5189c6d2ca0d910865b5042cf360276d438547e288ae08901f991f9",
+    "sset_keylock.png": "dd92bc084ecdfa030b767fbda826d24c30410a6bd3271a7a6ea5b4de18aeb687",
+    "sset_lighttime.png": "17ac8b6db639ff6b41e05e3b34f0a1db42d5bca678dcd342d5613dea91487e57",
+    "sset_netservice.png": "1928dca5b209068fd738fee0a2edcaa2895c21d5483f4b247b39286dadea0f56",
+    "sset_outputway.png": "7c47c1a8a704f6ffdd28404511d0f4ac01f786bceed5468230f0d3a223b6f9bb",
+    "sset_powermanager.png": "2e16cc4036b89ae8fa63d94ab5a91efeefbb8966d9daaf5de4010fd5cbab16e3",
+    "sset_prove.png": "f677c84e47ff4187db589217afa80753bae7f8fcc67329fa86502f2adec2259a",
+    "sset_screenlock.png": "8241b189b84584c50eff830879afd5df4fc12cc13f9eb017cebb572b2695b3a5",
+    "sset_system.png": "35c443cb8a9576403c6ef5cee2be13f52d36d7a761bb1aa2f69e6c6f444cc8c6",
+    "sset_theme.png": "e45bdfbcc430fe425af1ee7da71b70e6060fe1238de077004990ddf4f9010b45",
+    "sset_tswake.png": "9a33b86f084a49ab10407ea0d467e4efb82f2937405332373f758b091852e217",
+    "sset_usbaudiovol.png": "b6f9a31f859338898259a3bd3d37b9b3bcbe6347b36652504c13d35a27f93ddb",
+    "sset_usbmode.png": "cc8885b9831f07084fee4674182615e2abf82c3e4931cdbd2bddec3a1d6590cb",
+    "sset_wifiset.png": "af3a62b20130ba305c8c6f47b16227080a530151e314b2cf23118792b18e3277",
+    "system_formatcard.png": "ed467f1d8fe0a0fa0e4a3a7c85d6b9a73c4e74b3f954268d6881236f1c1072ef",
+    "system_language.png": "aa61f0bec17152f95bf31c9b031cc51d64859aec6da5a6507d60d4940f3b8c63",
+    "system_reset.png": "63d023692d31b6d0f52f99eb1a5f188d3dae4a17fc7c35f89570a5a1cf0c8d3a",
+    "system_scrotate.png": "0e2cd7cd499cb4b28f5e846377cfb14864e2d8a8400fa7108d537c416dc97627",
+    "system_time.png": "c1d67adaea5e33384a1fc998bfa094fd9a44adfb1ef94c8adec59f86e6a1f53b",
+    "system_update.png": "35c443cb8a9576403c6ef5cee2be13f52d36d7a761bb1aa2f69e6c6f444cc8c6"
+  },
+  "quiet_icons": {
+    "p_cycle.png": "c6ef968c4c218148eb8447c4c60c7eda4961ade831f44a760e4bf2cc8834c369",
+    "p_cycle1.png": "e1b71a2f984db58e82b2fc12e917d4a1665548b0e09f72891344cdb1ecb8f553",
+    "p_fav.png": "61abbf78e1102a316fc236771aa4f038fecc060fc05e84be8a54333115b57f3d",
+    "p_favdown.png": "9d786dd17697327a7bdf758b52af5a1a146e7d192c1080cd11d8a964e153a351",
+    "p_more.png": "252fca3298294b3c5eb8bcbd14161a4db82298a8ed5e8c90b6078c7760ae22a1",
+    "p_moredown.png": "68ea964dedb99e5afff6dc23acd9fd8210404488d1b6c0214c703dd23a7d2156",
+    "p_order.png": "142e690857a8fac68dac14b1f0c9b37ea173a3290ad0af75ecbc0db1e3b25db3",
+    "p_playqueue.png": "37b9774ebcaafa169ad6f46a5e530e8fabbf1bcbe68a06ad923bddbf2c94f409",
+    "p_playqueuedown.png": "1d2c4bd1b0205ccc9e4395087ea5e8f22f58d55f6f24cc830c614ed0bee7947a",
+    "p_random.png": "e4eeae87a8443b5b2dbd1778213417300e1e8f2e5b3ef84f43734e84a47ded20",
+    "p_unfav.png": "e9c9494962b570c4d5b571b48db472c9dbef7fd85074687a940134e021fdf9e8",
+    "p_unfavdown.png": "e109f2a535faf16cc1bd3061c76c1303fa94d219ddfd89e8d9270e0f4f3e64f2"
+  },
+  "clear_icons": {
+    "unselect.png": "16c5e78bfe82e4c06675e5d9e9a9e3594145dde512b82d4f7bda66bfa16f3462"
+  },
+  "status_icons": {
+    "bar_bt.png": "c14288c2d869c6f4d92e3a662b5a8ac3eed835c0c9a2f331c5c4da6aeb51fd9d",
+    "bar_btcon.png": "a00eb3eab090ba96c3ccff5f60a1d0db422dd74bf90c9b164886772b8eeea7de",
+    "bar_play.png": "9b65bea60768a6433eb5ebec7b2285290bd323ca826462126fce27ab73a9db65",
+    "bar_pause.png": "c88c59b79a6a1971883ad5aceb04c889891c74d4bf4b5ddc5bbd24ca636edfc7",
+    "bar_wifi0.png": "aefe45a64936dcc7ecd00349afd8ab9eb89d234c89573354cfdba77459bde123",
+    "bar_wifi1.png": "5db1e3c746b5a350b1b1721cdd8663beaa79452fbc94afb8412b3b02a6e5988f",
+    "bar_wifi2.png": "5faaaa65204ed5995acbb5b8afffa05a9f31c1b3450ed1954b48b56b6597451c",
+    "bar_wifi3.png": "e4b52af512a0d9a93d7773dbb91a74793c24dfce7e2b9d309765bf61072d193e",
+    "bar_wifi4.png": "4197d12d8f0972b4df801044ff03491b227243a82947f41f5e350b4fbd5073d8"
+  },
+  "styles": {
+    "default.bin": {
+      "sha256": "24a8f765f315d836afa85731ca923512a506138930398683242ffaaa831b00c9",
+      "why": "V2.1's list rows are opaque dark greys (131313, black) that hide the selection bar paint_bg draws behind them, and its pressed rows are a brown tint (362221); iPod rows are transparent with a grey press (333333). V2.1's accent text on rows (the gold of the playing item) turns white as the Q2's red does. The hold menu's list_itemsort_style rows (black, 362221 pressed) are clear too: opaque, they hid the bar, and Light Mode turned them to paper under the selected row's white text. Dialogs' notpress rows and Tidal's btn_tidal_more stay (4.7, 4.5).",
+      "edits": [
+        [
+          "list_item",
+          "list_item_style",
+          "bg_color",
+          "131313ff",
+          "00000000",
+          4
+        ],
+        [
+          "list_item",
+          "list_item_style",
+          "bg_color",
+          "362221ff",
+          "333333ff",
+          1
+        ],
+        [
+          "list_item",
+          "list_item_black_style",
+          "bg_color",
+          "000000ff",
+          "00000000",
+          5
+        ],
+        [
+          "list_item",
+          "list_itemsort_style",
+          "bg_color",
+          "000000ff",
+          "00000000",
+          4
+        ],
+        [
+          "list_item",
+          "list_itemsort_style",
+          "bg_color",
+          "362221ff",
+          "333333ff",
+          1
+        ],
+        [
+          "button",
+          "btn_tablerow_style",
+          "bg_color",
+          "131313ff",
+          "00000000",
+          4
+        ],
+        [
+          "button",
+          "btn_tablerow_style",
+          "bg_color",
+          "362221ff",
+          "333333ff",
+          1
+        ],
+        [
+          "hscroll_label",
+          "srlabel_item_gold18_style",
+          "text_color",
+          "fe7e40ff",
+          "ffffffff",
+          3
+        ],
+        [
+          "hscroll_label",
+          "srlabel_item_gold20_style",
+          "text_color",
+          "fe7e40ff",
+          "ffffffff",
+          3
+        ]
+      ]
+    }
+  },
+  "home": {
+    "safe_returns": [
+      [
+        "0x5340dc",
+        "1240003b",
+        "the grid builder (0x534064) returns with no home_sview"
+      ],
+      [
+        "0x5340e4",
+        "12200039",
+        "and with no home_sindicator"
+      ],
+      [
+        "0x534254",
+        "14400007",
+        "the playing strip's title refresh (0x5341f4) returns with no home_scrlabel_title"
+      ],
+      [
+        "0x534430",
+        "1040005a",
+        "the playing strip's cover refresh (0x5343e8) returns with no home_img_icon"
+      ],
+      [
+        "0x5346f8",
+        "14400007",
+        "init's visitor (0x53469c) binds the grid's swipe to the Home editor only on app_gesture"
+      ]
+    ],
+    "unbound": [
+      [
+        "0x534e2c",
+        "24050103",
+        "0x534e44",
+        "0320f809",
+        "home_page_init's pointer-up handler (0x53439c) opens Now Playing for a release below y 415, V2.1's playing strip, which the iPod Home replaces with its rows: the binding (widget_on, event 0x103) is skipped"
+      ]
+    ],
+    "boot_resume": [
+      "0x534f04",
+      "0320f809",
+      "home_page_init's memory-play resume, navigator_to_with_context(\"playing_page\", {queue, index, class, mode}) (mode 2 in car mode, else 3): ringnav_boot starts the queue paused and stays on Home outside car mode"
+    ],
+    "menu_names": "0x97c940"
+  },
+  "playing": {
+    "status_tap": [
+      [
+        "0x4cd938",
+        "0x2842002a",
+        "0x2842001e",
+        "the status bar's tap opens the VOLUME page within its own 30 px, not 42"
+      ],
+      [
+        "0x4cd94c",
+        "0x2842002a",
+        "0x2842001e",
+        "the status bar's tap opens the VOLUME page within its own 30 px, not 42"
+      ]
+    ],
+    "recursive_lookups": [
+      [
+        "0x539740",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x5397f4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53989c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539c54",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539c94",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539cb4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539cd4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x539cf4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53a254",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53a294",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53a66c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53a9e4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53aab8",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ab1c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ab9c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53abe0",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53aed0",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53aee8",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53b904",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53b92c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53bbc8",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53be14",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53bf24",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53bf38",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53bf58",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53c354",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53c6d4",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53c90c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53c93c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cb7c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cb94",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cd14",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cd3c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ce50",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ce7c",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53ceb0",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cef0",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ],
+      [
+        "0x53cf88",
+        "0x24060001",
+        "a widget_lookup of Now Playing's code searches the whole tree (the iPod page moves its widgets)"
+      ]
+    ],
+    "ab_dots": [
+      [
+        "0x53b8d4",
+        "0x24020128",
+        "getx_by_playtime: the bar's 296 px width"
+      ],
+      [
+        "0x53b8ec",
+        "0x2442000c",
+        "getx_by_playtime: the bar's x, 12"
+      ],
+      [
+        "0x53b9c4",
+        "0x2406016c",
+        "the A dot's row, 364"
+      ],
+      [
+        "0x53ba48",
+        "0x2406016c",
+        "the A dot's row, 364"
+      ],
+      [
+        "0x53ba64",
+        "0x2406016c",
+        "the B dot's row, 364"
+      ]
+    ],
+    "volume_init": [
+      [
+        "0x47e438",
+        "0x3025",
+        "dialog_volume_dialog_init moves the dialog to y 0"
+      ],
+      [
+        "0x47e458",
+        "0x2825",
+        "dialog_volume_dialog_init moves the dialog to x 0"
+      ]
+    ]
+  },
+  "quick": {
+    "init": [
+      "0x475f04",
+      "dialog_dropdown_dialog_init (win): its window alone; a null one returns, and no widget moves after its visit (0x473f30) and dropdown_showface"
+    ],
+    "edge": [
+      [
+        "0x4cd830",
+        "0x28820051",
+        "on_wm_tsmove_fun opens the pull-down for a touch from y < 81 (QUICK_EDGE_PX)"
+      ]
+    ],
+    "states": [
+      [
+        "0x4cd84c",
+        "0x24020001",
+        "on_wm_tsmove_fun opens the pull-down at dropdown_menu_state 1"
+      ],
+      [
+        "0x475664",
+        "0x24020001",
+        "its pointer move drags it (state 1, then 2) from its bottom 60 px"
+      ],
+      [
+        "0x475690",
+        "0x24020002",
+        "its pointer move drags it (state 1, then 2) from its bottom 60 px"
+      ],
+      [
+        "0x4754bc",
+        "0x24030003",
+        "its slide timer (timer_idex) leaves it open at state 3"
+      ],
+      [
+        "0x475118",
+        "0xac400000",
+        "its window close sets state 0"
+      ],
+      [
+        "0x475310",
+        "0x2442ffff",
+        "its pointer-up starts the slide timer at states 1 and 2, wherever the release is (quick_stuck)"
+      ],
+      [
+        "0x475314",
+        "0x2c420002",
+        "its pointer-up starts the slide timer at states 1 and 2, wherever the release is (quick_stuck)"
+      ]
+    ],
+    "events": [
+      [
+        "0x475f34",
+        "0x24050103",
+        "init binds its pointer-up (0x4752f0): the release that slides it"
+      ],
+      [
+        "0x475f54",
+        "0x240500ff",
+        "init binds its pointer-down (0x47514c)"
+      ],
+      [
+        "0x475f74",
+        "0x24050101",
+        "init binds its pointer move (0x4755e8)"
+      ],
+      [
+        "0x475f94",
+        "0x2405012e",
+        "init binds its window close (0x4750ec)"
+      ]
+    ],
+    "into": [
+      [
+        "0x4742e4",
+        "0x8f82a96c",
+        "dropdown_dialog's visit reads syssetinto_flag (GOT gp-0x5694) at img_sysset"
+      ],
+      [
+        "0x4742ec",
+        "0x1c40ffe1",
+        "inside System settings (flag > 0) it branches to 0x474274: no click bound"
+      ],
+      [
+        "0x474264",
+        "0x8f82a95c",
+        "and playsetinto_flag (GOT gp-0x56a4) at img_playset"
+      ],
+      [
+        "0x47426c",
+        "0x18400007",
+        "inside Playback settings the same branch"
+      ],
+      [
+        "0x474274",
+        "0x8f99a8b4",
+        "which disables the switch (widget_set_enable, 0): drawn dimmed, by design (Phase 4.7 fixes, D)"
+      ],
+      [
+        "0x4754f4",
+        "0x14400013",
+        "System's click handler does nothing while syssetinto_flag is set"
+      ],
+      [
+        "0x475584",
+        "0x14400013",
+        "nor Playback's while playsetinto_flag is"
+      ]
+    ]
+  },
+  "confirm": {
+    "prompt_rows": [
+      [
+        "0x472d74",
+        "0x24060038",
+        "0x472d6c",
+        "0x24020014",
+        "a one-line prompt (type 1) at y 56, 20 tall"
+      ],
+      [
+        "0x472e30",
+        "0x24060019",
+        "0x472e28",
+        "0x24020050",
+        "a wrapped prompt (type 5) at y 25, 80 tall"
+      ],
+      [
+        "0x472eb0",
+        "0x24060022",
+        "0x472ea8",
+        "0x24020014",
+        "Delete File's prompt (type 3) at y 34, 20 tall"
+      ],
+      [
+        "0x472f40",
+        "0x24060042",
+        "0x472f34",
+        "0x24020028",
+        "Delete File's msg_delcheckbutton at y 66, 40 tall"
+      ],
+      [
+        "0x473008",
+        "0x24060022",
+        "0x473000",
+        "0x24020014",
+        "a prompt with a check (type 6) at y 34, 20 tall"
+      ],
+      [
+        "0x473098",
+        "0x24060042",
+        "0x47308c",
+        "0x24020028",
+        "its check button at y 66, 40 tall"
+      ],
+      [
+        "0x4730f0",
+        "0x24060028",
+        "0x4730e8",
+        "0x24020014",
+        "the countdown's prompt (type 7) at y 40, 20 tall"
+      ],
+      [
+        "0x473198",
+        "0x2406004b",
+        "0x47318c",
+        "0x24020012",
+        "its countdown line at y 75, 18 tall"
+      ]
+    ]
+  },
+  "playlist": {
+    "rebuild": "0x53e74c",
+    "calls": [
+      [
+        "0x53ebbc",
+        "0x0411fee3",
+        "playlist_page_init rebuilds its rows (bal 0x53e74c) with its window"
+      ],
+      [
+        "0x53eae8",
+        "0x0411ff18",
+        "its to-foreground handler (0x53ea2c) rebuilds them with its window"
+      ],
+      [
+        "0x53ea1c",
+        "0x0411ff4b",
+        "New Playlist's click (0x53e8e4) rebuilds them with its row: the rebuild takes widget_get_window"
+      ]
+    ],
+    "events": [
+      [
+        "0x53eb58",
+        "0x2405012d",
+        "playlist_page_init binds only its to-foreground (0x53ea2c): no key-up of its own (PLAYLIST_KEYUP)"
+      ]
+    ],
+    "add_mode": [
+      "0x53eb9c",
+      "0xac506f50",
+      "playlist_page_init keeps its context >> 16 at PLAYLIST_ADD_MODE (0xa06f50)"
+    ],
+    "add_rows": [
+      [
+        "0x53eb90",
+        "0xac436f54",
+        "playlist_page_init keeps its context & 0xffff at 0xa06f54: the class its add mode adds as (qm_run's cls)"
+      ],
+      [
+        "0x53d470",
+        "0x8e226f50",
+        "a playlist row's click (0x53d300) reads the add mode: 0 opens the playlist, else it adds to it"
+      ],
+      [
+        "0x53d484",
+        "0x8c726f54",
+        "and the class, batch_add_file's first argument"
+      ],
+      [
+        "0x53d488",
+        "0x8f83ac50",
+        "the selection: pvec_selectrecord (GOT gp-0x53b0), which qm_select's batch_init_selectrecord and batch_set_selectitem set"
+      ],
+      [
+        "0x53d574",
+        "0x8f82ac08",
+        "mode 1's rows: pdeq_showlist (GOT gp-0x53f8), the hold menu's list (qm_list); mode 2's are mcl_pdeqplaylist"
+      ],
+      [
+        "0x53d4b8",
+        "0x3405f00b",
+        "batch_add_file's second argument: the playlist class 0xf00b"
+      ]
+    ]
+  }
+}

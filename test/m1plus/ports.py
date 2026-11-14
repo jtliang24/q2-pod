@@ -5,8 +5,8 @@ fail this until each is classified; a row the M1 no longer needs fails it too. -
 the unported rows, for the roadmap's U4."""
 import argparse, collections, re, sys
 sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first
-from build import ROOT, HOOKS, IPOD_HOOKS
-from m1plus import CALL_SITES, M1PLUS_HOOKS, M1PLUS_PORTS
+from build import ROOT, HOOKS
+from m1plus import CALL_SITES, M1PLUS_HOOKS, M1PLUS_PORTS, M1PLUS_SHIMS, M1PLUS_UNRESOLVED
 
 STATUSES = ('ported', 'native', 'q2only', 'unported')
 UNPORTED = ('M1_UNPORTED', 'M1_UNPORTED_ADDR')  # patch/m1plus_offsets.inc's values for an unported name
@@ -24,14 +24,13 @@ def report():
     for name, status_why in ports.items():
         if status_why[0] not in STATUSES: problems.append(f'{name}: status {status_why[0]!r} is not one of {STATUSES}')
     m1_symbols = {symbol: m1 for m1, (_, symbol, _) in M1PLUS_HOOKS.items()}
-    for name, (_, symbol, _) in (HOOKS | IPOD_HOOKS).items():
+    for name, (_, symbol, _) in HOOKS.items():
         same = name if name in M1PLUS_HOOKS else m1_symbols.get(symbol)
         row = ports.pop(name, None)
         if same:
             if row: problems.append(f'hook {name}: M1PLUS_PORTS says {row[0]}, but the M1 hooks it ({same}); drop the row')
             rows.append(('hook', name, 'ported', '' if same == name else f'as {same}'))
         elif row: rows.append(('hook', name, *row))
-        elif name in IPOD_HOOKS: rows.append(('hook', name, 'q2only', 'the iPod UI (roadmap 5)'))
         else: problems.append(f'hook {name} ({symbol}): not on M1 and not in M1PLUS_PORTS')
     for name in CALL_SITES['q2']:
         row = ports.pop(name, None)
@@ -41,6 +40,11 @@ def report():
         elif row: rows.append(('site', name, *row))
         else: problems.append(f'site {name}: not on M1 and not in M1PLUS_PORTS')
     problems += [f'{name}: M1PLUS_PORTS has a row, but the Q2 has no such hook or call site' for name in ports]
+    # Functions V2.1 has no twin of: a shim is the payload's own stand-in, an unresolved one is never reached.
+    rows += [('function', name, *status_why) for name, status_why in M1PLUS_SHIMS.items()]
+    rows += [('function', name, 'unported', why) for name, why in M1PLUS_UNRESOLVED.items()]
+    problems += [f'function {name}: status {status!r} is not one of {STATUSES}'
+                 for name, (status, _) in M1PLUS_SHIMS.items() if status not in STATUSES]
     # Names: the M1 compile fails on any name shared code the M1 builds uses without a value, so a Q2
     # name with none is used only by Q2 code.
     inc = (ROOT/'patch/offsets.inc').read_text()
@@ -49,7 +53,7 @@ def report():
     m1 = defines((ROOT/'patch/m1plus_offsets.inc').read_text())
     for name in q2:
         if name not in m1: rows.append(('name', name, 'q2only', 'used only by Q2 code'))
-        elif m1[name] in UNPORTED: rows.append(('name', name, 'unported', 'its code is unreachable on M1'))
+        elif m1[name] in UNPORTED: rows.append(('name', name, 'unported', 'its code is unreachable or inert on M1'))
         else: rows.append(('name', name, 'ported', ''))
     problems += [f'name {name}: M1_UNPORTED, but the Q2 has no such name'
                  for name, value in m1.items() if value in UNPORTED and name not in q2]
@@ -66,9 +70,9 @@ SITE_PARTS = {'ALBUM_ART_ROW': 'ALBUM_ART'}
 
 def build_sites():
     """The module constants tools/build.py's build() hands to patch_word, by name: `patch_word(patched,
-    *NAME` and `for ... in NAME:` before a patch_word."""
+    *NAME` (or a bare address's NAME) and `for ... in NAME:` before a patch_word."""
     text = (ROOT/'tools/build.py').read_text()
-    consts = set(re.findall(r'^([A-Z][A-Z0-9_]+) = \(', text, re.M))
+    consts = set(re.findall(r'^([A-Z][A-Z0-9_]+) = (?:\(|0x)', text, re.M))  # a tuple, or a bare address (1.6.7's SONG_UNKNOWN_CALL)
     used = set(re.findall(r'patch_word\(patched, \*?([A-Z][A-Z0-9_]+)\b', text))
     used |= set(re.findall(r'^\s+for [\w, ]+ in ([A-Z][A-Z0-9_]+):\n(?:\s+check\(.*\n.*\n)?\s+patch_word\(', text, re.M))
     return sorted(used & consts)
@@ -82,7 +86,7 @@ def main():
     if problems: sys.exit('Port report:\n' + '\n'.join(f'  {p}' for p in problems))
     if not args.unported:
         counts = collections.Counter((kind, status) for kind, _, status, _ in rows)
-        for kind in ('hook', 'site', 'name'):
+        for kind in ('hook', 'site', 'function', 'name'):
             total = sum(n for (k, _), n in counts.items() if k == kind)
             print(f'{kind}s: {total} ({", ".join(f"{counts[kind, s]} {s}" for s in STATUSES if counts[kind, s])})')
         print()
@@ -91,7 +95,7 @@ def main():
                 if s == status and why and why != 'used only by Q2 code':
                     print(f'{status:8} {kind} {name}: {why}')
         print()
-        m1_only = sorted(set(M1PLUS_HOOKS) - set(HOOKS | IPOD_HOOKS) -
+        m1_only = sorted(set(M1PLUS_HOOKS) - set(HOOKS) -
                          {why[3:] for _, _, s, why in rows if why.startswith('as ')})
         print(f'M1-only hooks: {", ".join(m1_only)}')
         print(f'Names used only by Q2 code: {", ".join(n for k, n, s, _ in rows if k == "name" and s == "q2only")}')

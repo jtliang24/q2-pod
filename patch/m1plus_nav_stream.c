@@ -20,11 +20,22 @@ int stream_cache(int spotify) {
     return 2;
 }
 
+/* Row i's caption: a cache row's size, or Erase Spotify Data's state. */
 static void sc_text(int i) {
     static const char *const sizes[] = { "512 MB", "1 GB", "2 GB", "4 GB", "8 GB" };
     char s[40];
-    tk_snprintf(s, sizeof s, "%s Cache: %s", i ? "Spotify" : "Tidal", sizes[stream_cache(i)]);
-    widget_set_text_utf8(widget_get_child(st.sc_row[i], 0), s);
+    if (i < 2)
+        tk_snprintf(s, sizeof s, "%s Cache: %s", i ? "Spotify" : "Tidal", sizes[stream_cache(i)]);
+    widget_set_text_utf8(widget_get_child(st.sc_row[i], 0),
+                         i < 2            ? s
+                         : shelf_erase(0) ? "Erasing…"
+                         : st.sc_armed    ? "Press again to erase"
+                                          : "Erase Spotify Data");
+}
+
+/* netupdate.c's erase ended: .cache-size went with it, so Spotify's row reads 2 GB again. */
+void stream_erased(void) {
+    if (st.sc_page) sc_text(1), sc_text(2);
 }
 
 static const unsigned sc_delays[] = { 0, 1000, 2000, 4000, 8000 }; /* ms; 0 is Auto: 1 s on the LAN, 4 s beyond */
@@ -109,7 +120,7 @@ static int svc_toggle(int i) {
     }
     toolsWriteConfig("/mnt/data/config.ini", "Q2POD", "STREAMHIDE", hide);
     list_toggle(st.sc_check[i], svc(i, 1), !hidden);
-    void *view = st.lib_page ? widget_lookup(st.lib_page, "scroll_view", 1) : 0;
+    void *view = st.stream_page ? widget_lookup(st.stream_page, "scroll_view", 1) : 0;
     for (unsigned c = 0, rows = view ? widget_count_children(view) : 0; c < rows; ++c)
         if (widget_get_prop_int(widget_get_child(view, c), SVC_PROP, 0) == i + 1)
             widget_set_visible(widget_get_child(view, c), !hidden, 0);
@@ -118,14 +129,20 @@ static int svc_toggle(int i) {
 }
 
 /* A cache row steps to the next size and saves it: Tidal's applies at the next download's trim,
- * Spotify's when librespot next starts. Stop Streaming Services ends librespot and its restart
- * loop, a radio station, the card apps (addon.c) and a stock stream (Tidal's) queue, so the keys
- * and the output are local music's again; local music already stopped is left as it is. */
+ * Spotify's when librespot next starts. Erase Spotify Data wants a second press in a row, as the
+ * App Store's Remove: any other row's press or leaving the page drops the first. Stop Streaming
+ * Services ends librespot and its restart loop, a radio station, the card apps (addon.c) and a
+ * stock stream (Tidal's) queue, so the keys and the output are local music's again; local music
+ * already stopped is left as it is. */
 static int sc_click(void *ctx, void *event) {
-    int i = (int)(long)ctx, x = svc_soloify ? 2 : 0; /* x: Soloify's two rows after the cache's */
-    if (i > 3 + x) return svc_toggle(i - 4 - x);
-    if (x && (i == 2 || i == 3)) return sc_soloify_click(i - 2), 0;
-    if (i == 2 + x) {
+    int i = (int)(long)ctx, x = svc_soloify ? 2 : 0; /* x: Soloify's two rows after Erase */
+    st.sc_armed = i == 2 && !st.sc_armed && !shelf_erase(0); /* erasing: says to wait */
+    if (i == 2 && !st.sc_armed) shelf_erase(1);
+    sc_text(2);
+    if (i > 4 + x) return svc_toggle(i - 5 - x);
+    if (i == 2) return 0;
+    if (x && (i == 3 || i == 4)) return sc_soloify_click(i - 3), 0;
+    if (i == 3 + x) {
         unsigned type = (unsigned)MCL(MCL_TYPE);
         spot_stop();
         radio_stop();
@@ -134,6 +151,7 @@ static int sc_click(void *ctx, void *event) {
         toast("Streaming stopped");
         return 0;
     }
+    if (i == 1 && shelf_erase(0)) return toast("Wait for the one in progress"), 0; /* it rm -rfs */
     char path[48], tmp[52], s[8];
     int n = tk_snprintf(s, sizeof s, "%uM", 512u << (stream_cache(i) + 1) % 5);
     tk_snprintf(path, sizeof path, "%s/.cache-size", sc_dirs[i]);
@@ -148,19 +166,19 @@ static int stream_config(void *ctx, void *event) {
     if (st.sc_page || !(st.sc_page = page_open("streamconf_page", page_closed, page_keyup)))
         return 0;
     int n = 3 + st.svc_n, x = svc_soloify ? 2 : 0;
-    void *view = page_list(st.sc_page, st.sc_page, 0, "Configuration", 4 + n + x, PAGE_ROW_H);
-    for (int i = 0; i < 2; ++i)
+    void *view = page_list(st.sc_page, st.sc_page, 0, "Configuration", 5 + n + x, LIB_PITCH);
+    for (int i = 0; i < 3; ++i)
         st.sc_row[i] = page_row_detail(view, i, "", 0, sc_click), sc_text(i);
     for (int i = 0; i < x; ++i) /* Soloify's Delay and Quality, while it is on the card */
-        sc_soloify[i] = page_row_detail(view, 2 + i, "", 0, sc_click), sc_soloify_text(i);
-    page_row_detail(view, 2 + x, "Stop Streaming Services", 0, sc_click);
-    void *gap = list_item_create(view, 0, (3 + x) * PAGE_ROW_H, UI_W, PAGE_ROW_H); /* a gap before the toggles */
+        sc_soloify[i] = page_row_detail(view, 3 + i, "", 0, sc_click), sc_soloify_text(i);
+    page_row_detail(view, 3 + x, "Stop Streaming Services", 0, sc_click);
+    void *gap = list_item_create(view, 0, (4 + x) * LIB_PITCH, UI_W, LIB_PITCH); /* a gap before the toggles */
     widget_use_style(gap, ROW_STYLE);
     widget_set_prop_int(gap, "style:normal:bg_color", (int)0xff000000u);
     char hide[SVC_HIDE];
     svc_hidden(hide);
     for (int i = 0; i < n; ++i) {
-        st.sc_check[i] = widget_get_child(page_row_detail(view, 4 + x + i, "", 0, sc_click), 0);
+        st.sc_check[i] = widget_get_child(page_row_detail(view, 5 + x + i, "", 0, sc_click), 0);
         list_toggle(st.sc_check[i], svc(i, 1), !svc_find(hide, i));
     }
     return 0;

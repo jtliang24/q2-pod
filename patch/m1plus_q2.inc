@@ -8,6 +8,7 @@
 #define CHOICE_CHECK "select" /* a CHOICE picker's checked option's image */
 #define UI_H 320
 #define BOTTOM 290
+#define STATUS_H 30 /* the status bar: BOTTOM is UI_H - STATUS_H */
 #define CORNER_R 80
 #define STATUS_MARGIN 52
 #define BAR_CORNER_R 76
@@ -34,6 +35,7 @@
 #define ICON_KEYLOCK "system_keylock"
 #define ICON_DISPLAY "system_display"
 #define ICON_COVERMODE "playset_covermode"
+#define ICON_KEYTONE "system_keytone" /* Click With Headphones' row (System settings, 1.6.3) */
 #define ICON_FOLDERJUMP "playset_folderjump"
 #define ICON_MEMPLAY "playset_memplay" /* Resume Songs' row */
 #define ICON_BALANCE "playset_balance" /* Mono Audio's row */
@@ -47,6 +49,7 @@
 #define STYLE_LABEL_WHITE18C "s_label_white18c"
 #define STYLE_LABEL_WHITE20C "s_label_white20c"
 #define STYLE_LABEL_WHITE20L "s_label_white20l"
+#define STYLE_SCRLABEL_WHITE16C "s_scrlabel_white16c" /* Now Playing's genre scroller (navigation.c genre_fill, 1.6.7) */
 #define STYLE_SCRLABEL_WHITE20C "s_scrlabel_white20c"
 #define STYLE_SCRLABEL_WHITE20L "s_scrlabel_white20l"
 #define STYLE_SCRLABEL_WHITE20R "s_scrlabel_white20r"
@@ -56,23 +59,64 @@
 #define SPOT_ARTIST_Y (SPOT_ART_Y + 75)
 #define SPOT_ALBUM_Y (SPOT_ART_Y + 103)
 #define SPOT_TAG_X 16
-#define SPOT_HEART_X (UI_W - (IPOD ? 72 : 55)) /* local Now Playing's heart (tools/ipod.py img_fav) */
-#define SPOT_HEART_Y (IPOD ? SPOT_ART_Y + SPOT_ART_PX - 50 + NP_ICON_PAD : 176)
+#define SPOT_HEART_X (UI_W - 72) /* local Now Playing's heart (tools/ipod.py img_fav) */
+#define SPOT_HEART_Y (SPOT_ART_Y + SPOT_ART_PX - 50 + NP_ICON_PAD)
 /* Now Playing's heart and its stock click, which toggles My Fav for the playing track (manage_myfav)
  * and the heart with it; playing_page_init binds it with the window. */
 #define VIEW_FAV "img_fav"
+/* Now Playing's, the big cover's and the volume dialog's other widgets, by the names the shared code looks up. */
+#define NP_COLUMN_X 80 /* stock's column: its x and width, and its slide_view's height (Centred Now Playing's np_full) */
+#define NP_COLUMN_W 225
+#define NP_COLUMN_SLIDE_H 198
+#define BC_IDLE_T signed char /* BC_IDLE's type */
+/* Internet Radio's Now Playing is Spotify's layout here; the M1's has its own (patch/m1plus_offsets.inc) */
+#define RADIO_TAG_X SPOT_TAG_X
+#define RADIO_ART_X SPOT_ART_X
+#define RADIO_ART_Y SPOT_ART_Y
+#define RADIO_ART_PX SPOT_ART_PX
+#define RADIO_TEXT_X SPOT_TEXT_X
+#define RADIO_TEXT_W SPOT_TEXT_W
+#define RADIO_TITLE_Y SPOT_TITLE_Y
+#define RADIO_ARTIST_Y SPOT_ARTIST_Y
+#define RADIO_ALBUM_Y SPOT_ALBUM_Y
+#define RADIO_TIME_X SPOT_TIME_X
+#define RADIO_TIMES_Y SPOT_TIMES_Y
+#define RADIO_HEART_X SPOT_HEART_X
+#define RADIO_HEART_Y SPOT_HEART_Y
+#define VIEW_COVER "img_cover"
+#define VIEW_BIGCOVER "img_bigcover"
+#define VIEW_LYRIC "view_lyric"
+#define VIEW_DOTS "slide_indicator1"
+#define VIEW_MORE "img_more"
+#define VIEW_VOL "slider_vol"
+#define ICON_BIGCOVER "default_bigcover"
 #define FAV_CLICK_ADDR 0x52b154
 #define ICON_FAV "play_fav"
 #define ICON_UNFAV "play_unfav"
 /* The playlist page's row click, which in add mode 2 (Now Playing's hold) adds the queue's selected
  * record, with the row as context. */
 #define PLAYLIST_PICK_ADDR 0x4b1d24
+/* playlist_page's Return (bound with its window as context, 0x4b3304), which Classic's Playlists wraps (pl_keyup) */
+#define PLAYLIST_KEYUP_ADDR 0x4b1310
+/* Quick Settings' window (dialog_statusbar_dialog_init's), which navigation.c tells by name */
+#define QUICK_NAME "statusbar_dialog"
 /* Lock screen (lockscreen.c): the lock window's clock and battery, which Large lays out again. */
 #define VIEW_LOCK_TIME "clock_time"
 #define VIEW_LOCK_DATE "clock_date"
 #define VIEW_LOCK_LEVEL "label_battery"
 #define LOCK_CLOCK_Y 14
 #define VIEW_LOCK_BATTERY "img_battery"
+/* The status bar's widgets by name, which navigation.c finds in system_bar (bar_state_sync) and whose layout tools/ipod.py
+ * status_bar sets. No VIEW_ prefix: the M1's label_idle, label_eq and view_battery are added by its rewrite. */
+#define STATUSW_BT "img_bt"
+#define STATUSW_WIFI "img_wifi"
+#define STATUSW_PCT "label_battery"
+#define STATUSW_SLOT "view_battery"
+#define STATUSW_ICON "img_battery"
+#define STATUSW_IDLE "label_idle"
+#define STATUSW_STATE "img_state"
+#define STATUSW_EQ "label_eq"
+#define STATUS_LOWCHARGE "bar_lowcharge" /* the battery icon's low image */
 /* M1 Plus: a press held still this long on a library row opens its hold menu (ringnav_input). */
 #define LONG_PRESS_MS 500
 #define KEY_VOLUMEDOWN 221
@@ -132,3 +176,9 @@
 
 /* The CUE parser's in-place charset converter, native to this firmware. */
 #define CUE_CONVERT_ADDR 0x5bccac
+/* playback.c's return addresses (1.6.7): View Queue's row, past its bounds checks (ringnav_start_queue), and
+ * on_wm_timer_dialog's skip past a file it can't play (ringnav_change) */
+#define VIEW_QUEUE_RET 0x529944
+#define UNPLAYABLE_NEXT_RET 0x4ea848
+
+#define M1_BACK_W 48 /* M1-only page title clearance, unused on Q2 */

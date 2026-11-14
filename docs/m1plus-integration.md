@@ -26,8 +26,9 @@ The dispatch works, and `test/q2compare.py` proves the Q2 output is `UPSTREAM_BA
 
 ## Requirements
 
-- **R1. Q2 output is upstream's.** For Legacy and iPod, `update.tar` is byte-identical to the baseline's
-  build with the same toolchain: `UPSTREAM_BASE`'s (`main`'s before U2).
+- **R1. Q2 output is upstream's.** `update.tar` is byte-identical to the baseline's build with the same
+  toolchain: `UPSTREAM_BASE`'s (`main`'s before U2). Up to 1.5.8 this held for Legacy and iPod; 1.5.9 deleted
+  Legacy, so it is the one iPod build.
 - **R2. Q2 tests are upstream's.**
   - Every Q2 suite and case that the baseline has runs and passes on the branch's Q2 builds.
   - None is dropped, skipped or turned into an M1-only check. New Q2 cases are welcome.
@@ -214,8 +215,8 @@ syncing needs, are done too: 11 as roadmap U1 (2026-10-22), 12 as U2's `test/q2c
 From now on, no change on this branch may break Q2 support. That holds for M1 features, refactors, tooling
 and tests alike.
 
-- **Q2 output stays upstream's.** Q2 Legacy and iPod `update.tar` stay byte-identical to the baseline's
-  build: `UPSTREAM_BASE`'s, checked by `test/q2compare.py`.
+- **Q2 output stays upstream's.** The Q2's `update.tar` (Legacy and iPod up to 1.5.8) stays byte-identical
+  to the baseline's build: `UPSTREAM_BASE`'s, checked by `test/q2compare.py`.
   - A change that alters Q2 bytes on purpose says so in its commit message, with the reason and the Q2 test
     that covers it.
   - Such a change belongs upstream: send it there, and let a sync bring it in. A Q2 change made only in
@@ -248,12 +249,8 @@ takes: it takes `stock/Q2 Firmware V1.32.zip`, or `--zip`.
 # peq, mp3, remote, coverflow, release once). The base's builds are kept in work/q2compare/<commit>/.
 python3 test/q2compare.py --suites
 
-# R4: a fresh M1 build and its gates
-python3 tools/build.py 'stock/M1 Plus Firmware V2.1/update.bin' --out <scratch>/m1
-python3 test/m1plus/build.py --build <scratch>/m1
-python3 test/m1plus/patch.py <scratch>/m1
-python3 test/m1plus/boot.py <scratch>/m1
-python3 test/m1plus/ports.py
+# R4: a fresh M1 build and its gates, every one in order (R1-R3's q2compare run included)
+python3 test/m1plus/gates.py <scratch>/m1
 
 # Before a Q2 release
 python3 tools/release.py package 'stock/Q2 Firmware V1.32/update.tar' --out <scratch>/release

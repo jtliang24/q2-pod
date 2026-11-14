@@ -7,14 +7,23 @@
         if (key == KEY_VOLUMEUP) key = up, I(event, EVENT_KEY) = up;
         else if (key == KEY_VOLUMEDOWN) key = down, I(event, EVENT_KEY) = down;
         else if (key == KEY_POWER && !boot_guard) key = KEY_CENTER, I(event, EVENT_KEY) = KEY_CENTER;
-        /* Previous is Back: the page's back button, pressed (Home has nothing to go back to: there
-         * it stays Previous track). It is the button stock takes as Previous: V2.1 swaps the two
-         * on a rotated screen (on_wm_keyup_fun, rotate_mode 1). knob_nav_active() already leaves a
-         * dark screen and the key lock to stock. */
-        else if (key == (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) &&
-                 !home_menu(window_manager_get_top_window(window_manager()))) {
-            timer_add(previous_back, 0, 0);
-            return STOP;
-        }
+    }
+    /* Quick Settings keeps the knob's volume; its press closes it (quick_knob_key) */
+    if (quick_knob_key(key, boot_guard)) return STOP;
+    /* Previous is Back: the page's back button, pressed (Home has nothing to go back to: there
+     * it stays Previous track, but for its Settings list's back), also on a slider page, where the knob keeps the volume
+     * (knob_back_active). It is the button stock takes as Previous: V2.1 swaps the two on a
+     * rotated screen (on_wm_keyup_fun, rotate_mode 1). knob_gate() already leaves a dark screen
+     * and the key lock to stock. */
+    /* Its hold opened Now Playing (hold_previous): the release is spent, wherever it lands. */
+    if (key == (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) && m1_return_latch) {
+        m1_return_latch = 0;
+        return STOP;
+    }
+    if (key == (g_rotate_mode == 1 ? KEY_FWD_BTN : KEY_BACK_BTN) && knob_back_active() &&
+        (!home_menu(window_manager_get_top_window(window_manager())) ||
+         coverflow_home_sets(window_manager_get_top_window(window_manager())))) {
+        timer_add(previous_back, 0, 0);
+        return STOP;
     }
 #endif

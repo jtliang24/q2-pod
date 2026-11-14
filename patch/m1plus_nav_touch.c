@@ -1,16 +1,17 @@
 /* M1 Plus: Return synthesis, and the touch long-press that opens a row's hold menu. patch/navigation.c includes this where it stood (docs/m1plus-roadmap.md U1c). */
 #if M1PLUS
-/* A Return press and release, as the input thread queues a key's (the window manager drops a
+/* A key's press and release, as the input thread queues a key's (the window manager drops a
  * release whose press it never saw: input_device_status). */
-void dispatch_key_return(void) {
+static void dispatch_key(unsigned key) {
     unsigned ev[12] = { 0 };
     ev[1] = sizeof ev; /* event_t's size */
-    ev[EVENT_KEY / 4] = KEY_RETURN;
+    ev[EVENT_KEY / 4] = key;
     ev[EVENT_TYPE / 4] = EVT_KEY_DOWN;
     stock_input_trampoline(window_manager(), (void *)ev);
     ev[EVENT_TYPE / 4] = EVT_KEY_UP;
     stock_input_trampoline(window_manager(), (void *)ev);
 }
+void dispatch_key_return(void) { dispatch_key(KEY_RETURN); }
 
 /* Touch long-press: a press held still LONG_PRESS_MS on a row or tile of a library page opens
  * that row's hold menu, as Play/Pause held on a highlighted row does (qm_hold takes the row under

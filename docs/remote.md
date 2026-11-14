@@ -40,7 +40,7 @@ Each connection rereads `/mnt/mmc/q2remote.key` while the card is mounted, so re
 | `wake`                       | Lights the screen with Centre (twice with **Wake: Double Press**) only if it is off, and checks it came on.                                                                                                                                |
 | `key NAME [MS]`              | Presses a button for `MS` ms (default 80).                                                                                                                                                                                                 |
 | `wheel N [--step-ms MS]`     | Turns the wheel `N` ticks: positive is down/next, negative up/back. A sample every `MS` ms (default 20); 0 sends the whole turn in one write.                                                                                              |
-| `tap X Y [MS]`               | Taps the screen at upright screenshot coordinates (0-374, 0-319), holding `MS` ms (default 20).                                                                                                                                            |
+| `tap X Y`                    | Taps the screen at upright screenshot coordinates (0-374, 0-319).                                                                                                                                                                          |
 | `swipe X1 Y1 X2 Y2 [MS]`     | Drags from one point to the other over `MS` ms (default 300).                                                                                                                                                                              |
 | `peek NAME...`               | Prints payload or `demo` variables by name from the running `demo`, field by field ([below](#reading-variables)). Needs `Q2_BUILD`.                                                                                                        |
 | `push LOCAL REMOTE`          | Copies a file to the Q2 through `REMOTE.part`, synced, and checks its MD5. Refuses `/mnt/mmc` while USB storage has the card.                                                                                                              |
@@ -78,7 +78,7 @@ framebuffer's size:
 | `state` | Reads the same bytes at V2.1's addresses (`M1_GLOBALS`), so `wake` and `shot`'s screen-off warning work too. |
 | `log` | Nothing yet: the M1's `S90play` doesn't send demo's output to `/tmp/q2-demo.log` (1.4.5's `LOG_HOOK` is unported). |
 | `key NAME [MS]` | `centre` (the knob's press, KEY_POWER 116), `play` (KEY_PLAYPAUSE 164), `next` 163, `prev` 165, on `md-gpio-keys`. There is no Return button. With Knob: Navigation a single `centre` is a select, and turning the screen off needs a double press within 250 ms, which two client calls are too slow for. With Knob: Volume (the default) a single `centre` wakes or sleeps the screen, as stock; a wake shows V2.1's lock screen, which `swipe 40 458 300 458 500` unlocks. |
-| `knob N` | Turns the knob `N` detents on `md-rotary-knob`: positive is clockwise (KEY_VOLUMEUP 115), negative anticlockwise (114). It is the volume, or moves the selection with Knob: Navigation. With the volume bar closed, stock's first detent only opens it, so `knob 1` from a closed bar changes nothing; the bar closes again after a few seconds. |
+| `knob N [--step-ms MS]` | Turns the knob `N` detents on `md-rotary-knob`: positive is clockwise (KEY_VOLUMEUP 115), negative anticlockwise (114). A detent every `MS` ms (default 40, 0..1000), its release half way; 0 sends the whole turn in one write. It is the volume, or moves the selection with Knob: Navigation. With the volume bar closed, stock's first detent only opens it, so `knob 1` from a closed bar changes nothing; the bar closes again after a few seconds. |
 | `tap X Y [MS]` | Upright screen pixels (0-319, 0-479) on `Goodix-CTP`, sent as the panel sends a real tap (see [m1plus.md](m1plus.md), the input table). `MS` holds the finger down that long, 100 ms by default: `tap X Y 1000` is a long press. The screen times out between commands and touch still works on a dark panel, but the hold menu refuses a dark screen's press: `state` (backlight=1 is lit) or `wake` before a touch check. |
 | `swipe X0 Y0 X1 Y1 [MS]` | A drag from one point to the other over `MS` (300 ms by default; 50-5000). It sends a move frame every 12 ms, as the panel does, carrying only the axes that changed. A short one flings a list or turns Home's page (`swipe 280 250 40 250`); a long one (`800` and up) drags with little fling. |
 
@@ -147,6 +147,13 @@ Plus (dev 11). The Q2's payload is built and linked the same way, but `peek` has
   export Q2_KEY="$(cat q2remote.key)"
   python3 tools/q2remote.py sh id
   ```
+  Through the relay, a command that runs for more than a few seconds can lose its reply (`the Q2 closed the
+  connection`, or `push failed:` with nothing after it) while the command itself finishes: check the result
+  with a second command (`md5sum` of a pushed file), or background a long job and read its output after.
+- **No internet on a Windows Mobile Hotspot:** the hotspot's DHCP can leave the player without a DNS server
+  (`/tmp/resolv.conf` empty, the App Store saying `Can't reach GitHub`), and the hotspot's own address may
+  not answer DNS. For a session, `q2remote.py sh 'echo nameserver 1.1.1.1 >/tmp/resolv.conf'`; the file is in
+  RAM and goes at a reboot.
 - **`no md-gpio-keys input device`:** run `devices`; the firmware may name its devices differently.
 - **`no Goodix-CTP input device` on the M1 Plus:** its `P: Phys=` line in `/proc/bus/input/devices` can hold junk, blank lines too; `parse_devices` drops a Phys value up to the next field, so check `devices` lists the touch panel.
 

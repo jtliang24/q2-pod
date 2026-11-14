@@ -17,9 +17,9 @@ for bad in ('1.2.2', '1.2.2-m1.0', '1.2.2-m1.10', '1.2.2-m2.1', '1.2.22-m1.1', '
     except ValueError: pass
     else: raise AssertionError(f'Accepted {bad}')
 tags = {r.m1_tag(f'{x}.{y}.{z}-m1.{n}') for x in range(10) for y in range(10) for z in range(10) for n in range(1, 10)}
-dev = {build.dev_tag(n, e) for n in range(1, 36**3) for e in 'SI'}
+dev = {t for n in range(1, 36**3) for t in (build.dev_tag(n), m1plus.m1_dev_tag(n))}
 assert len(tags) == 9000 and all(len(t) == 5 for t in tags)
-assert not tags & dev and not tags & {f'V{x}{y}{z}{e}' for x in range(10) for y in range(10) for z in range(10) for e in 'SI'}
+assert not tags & dev and not tags & {f'V{x}{y}{z}{e}' for x in range(10) for y in range(10) for z in range(10) for e in 'SIM'}
 
 with tempfile.TemporaryDirectory() as tmp:
     root = pathlib.Path(tmp)
@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert r.notes(name) == f'**{name}**\n- A.\n  - B.'
 
     # validate(): the release's identity, then the stock's, then the splash; then the files (absent here).
-    good = dict(model=r.MODEL, release=name, version=r.m1_tag(name), variant='stock', dev=False,
+    good = dict(model=r.MODEL, release=name, version=r.m1_tag(name), dev=False,
                 input_sha256=m1plus.M1PLUS_BIN_SHA, stock_demo_sha256=m1plus.M1PLUS_DEMO_SHA, logo_source='stock')
     d = root/'build'
     d.mkdir()

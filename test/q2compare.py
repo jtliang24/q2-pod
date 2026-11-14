@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Q2 output against the upstream base: build UPSTREAM_BASE (from git archive) and this tree, Legacy and
-iPod, from the vendor ZIP, and require byte-identical update.tar. On a difference, print the manifest
+"""Q2 output against the upstream base: build UPSTREAM_BASE (from git archive) and this tree from the
+vendor ZIP, and require byte-identical update.tar. On a difference, print the manifest
 components that differ. --suites then runs the base's Q2 suites, as this tree has them, on its builds."""
 import argparse, concurrent.futures, io, json, os, pathlib, shutil, subprocess, sys, tarfile, tempfile
 sys.path.insert(0, sys.path[0] + '/../tools')  # tools/ first
 from build import ROOT, ZIP_SHA, sha
 
-VARIANTS = {'legacy': [], 'ipod': ['--ipod']}
+# 1.5.9 deleted Legacy (4fee7d5): the iPod build is the Q2's only one, with no flag.
+VARIANTS = {'ipod': []}
 # Every upstream tree's tools/build.py takes only the audited ZIP, so both sides build from it.
 ZIPS = [ROOT/'stock/Q2 Firmware V1.32.zip']
 CACHE = ROOT/'work/q2compare'  # the base's builds, by commit: a base never changes
@@ -21,6 +22,9 @@ SUITES = {
     'headset_io': 'each', 'ldac': 'each', 'bluealsa': 'each',
     'bt_resample': 'each', 'library_scope': 'host',
     'hci_wait': 'each', 'mp3_gapless_player': 'each', 'mp3_gapless': 'host',
+    'xfade_player': 'each',  # 1.6.x: crossfade in the built player
+    'hci_ao': 'each', 'hci_natural': 'each', 'player_seam': 'each',  # 1.6.7: natural changes in the real player
+    'hci_emu': None,  # 1.6.7: the emulator hci_natural and player_seam run on, no suite of its own
     'peq': 'host', 'mp3': 'host', 'remote': 'host', 'coverflow': 'host', 'release': 'host',
     'chapters': 'host',  # 1.3.8; --stock-root and --qemu add its bundled-FFmpeg checks
     'alsa': None,  # takes a qemu-mipsel binary as well as a build
@@ -158,18 +162,18 @@ def suites(commit, src, builds, out):
     (out/'logs').mkdir(exist_ok=True)
     def run(job):
         n, v, args = job
-        def suite(tree, log):
+        def suite(tree, log, suite_args=args):
             with open(log, 'w') as f:
-                return subprocess.run([sys.executable, f'test/{n}.py', *map(str, args)], cwd=tree, stdout=f,
+                return subprocess.run([sys.executable, f'test/{n}.py', *map(str, suite_args)], cwd=tree, stdout=f,
                                       stderr=subprocess.STDOUT, env={**os.environ, **ENVS.get(n, {})}).returncode
         log = out/'logs'/f'{v or "host"}-{n}.log'
         rc = suite(src, log)
         last = (log.read_text().strip().splitlines() or [''])[-1][:100]
-        # A suite that runs once, failing here, runs again in the base's own tree: failing there too, it is
-        # the base's (1.5.0's chapters on host -Werror; aic_build, pwm_build, rotator_build and flac_build,
-        # whose release guards predate the options on by default, 69a9cbf), shown and not counted.
-        if rc and v is None and suite(CACHE/commit/'src', out/'logs'/f'base-{n}.log'):
-            return 0, f'BASE   host {n}: fails on the base\'s own tree too: {last}'
+        # Reproduce a failure with the tag's own source and, for a build suite, its own build.
+        # A byte-identical Q2 image can still expose an upstream fixture/toolchain failure.
+        baseline_args = args if v is None else ['--build', CACHE/commit/v] if n == 'build' else [CACHE/commit/v]
+        if rc and suite(CACHE/commit/'src', out/'logs'/f'base-{v or "host"}-{n}.log', baseline_args):
+            return 0, f'BASE   {v or "host"} {n}: fails on the base\'s own tree too: {last}'
         return rc, f'{"ok    " if rc == 0 else "FAILED"} {v or "host"} {n}: {last}'
     with concurrent.futures.ThreadPoolExecutor(max(1, (os.cpu_count() or 2) // 2)) as pool:
         results = list(pool.map(run, jobs))
@@ -219,7 +223,7 @@ def main():
             print(f'{v}: update.tar DIFFERS from {name}\'s', *differences(m, tree[v]), sep='\n')
     if differ: sys.exit(1)
     if args.suites: suites(commit, src, {v: out/v for v in VARIANTS}, out)
-    print(f'Q2 Legacy and iPod update.tar are byte-identical to {name}\'s build.')
+    print(f'Q2 update.tar is byte-identical to {name}\'s build.')
 
 
 if __name__ == '__main__':

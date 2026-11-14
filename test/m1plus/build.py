@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """JPEG and boot script checks; --build BUILD audits a build (Q2 or M1 Plus), and a stock firmware ZIP
 also tests packaging with a custom logo and quoted paths."""
-import io, sys; sys.path[1:1] = [sys.path[0] + '/..']; sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first: test/m1plus/build.py must import tools/build.py
-from build import jal, j, CAROUSEL, ICONS, LABELS, relabel, ROOT, STOCK_EQ, VERSIONS, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web, DEFAULT_CONFIG, COVERMODE
+import io, math, re, sys; sys.path[1:1] = [sys.path[0] + '/..']; sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first: test/m1plus/build.py must import tools/build.py
+from build import TAG, jal, j, ICONS, LABELS, relabel, ROOT, STOCK_EQ, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web, DEFAULT_CONFIG, COVERMODE
 
 logo = (ROOT/'assets/boot-logo.jpg').read_bytes()
 assert jpeg_size(logo) == (320, 375)
@@ -29,17 +29,73 @@ for data in (b'', b'not a JPEG', frame, frame + bytes(8),
 print('JPEG header regression checks passed.')
 
 # --dev tags: five characters, one per build number, never a release's.
-tags = [dev_tag(n, 'I') for n in range(1, 36**3)]
+tags = [dev_tag(n) for n in range(1, 36**3)]
 assert tags[:2] == ['V001i', 'V002i'] and tags[35] == 'V010i' and tags[-1] == 'VZZZi'
-assert len(set(tags)) == len(tags) and all(len(t) == 5 for t in tags) and VERSIONS['ipod'] not in tags
-assert dev_tag(36**3, 'S') == 'V001s'
+assert len(set(tags)) == len(tags) and all(len(t) == 5 for t in tags) and TAG not in tags
+assert dev_tag(36**3) == 'V001i'
+from m1plus import M1_TAG, m1_dev_tag
+assert m1_dev_tag(1) == 'V001m' and M1_TAG not in [m1_dev_tag(n) for n in range(1, 36**3)]
 print('Dev build tag checks passed.')
+
+# tools/ipod.py's screen (docs/m1plus-ipod-ui.md Phase 2): the Q2's by default, as patch/m1plus_q2.inc gives
+# the payload, and tools/m1plus_ipod.py's second copy with the M1's, every other name still the Q2's.
+import re, ipod, m1plus_ipod
+def defines(name):
+    text = (ROOT/'patch'/name).read_text()
+    found = {m[1]: int(m[2], 0) for m in re.finditer(r'^#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+)\b', text, re.M)}
+    # SPOT_* name Now Playing's (m1plus_offsets.inc)
+    return {**found, **{m[1]: found[m[2]] for m in re.finditer(r'^#define\s+(SPOT_\w+)\s+(NP_\w+)\b', text, re.M)}}
+q2, m1 = defines('m1plus_q2.inc'), defines('m1plus_offsets.inc')
+SCREEN = ('UI_W', 'UI_H', 'STATUS_H', 'BOTTOM')
+assert [getattr(ipod, n) for n in SCREEN] == [q2[n] for n in SCREEN] == [375, 320, 30, 290]
+assert all(d['BOTTOM'] == d['UI_H'] - d['STATUS_H'] for d in (q2, m1))
+# The Q2 values the screen's names replaced literals in: its update.tar is byte-identical (test/q2compare.py).
+assert [ipod.CORNER_R, ipod.BC_ART, ipod.HOME_LIST_W, ipod.STATUS_MARGIN, ipod.NP_POS_X, ipod.NP_ICONS_END,
+        ipod.NP_ART, ipod.NP_BAR, ipod.NP_TIME_X] == [80, 292, 375, 54, 22, 353, 166, [21, 253, 333, 4], 46]
+m1ipod = m1plus_ipod.ipod
+assert [getattr(m1ipod, n) for n in SCREEN] == [m1[n] for n in SCREEN] == [320, 480, 30, 450]
+assert m1ipod.CORNER_R == m1['GLASS_R'] == 0 and m1ipod.HOME_LIST_W == 320
+# ... and the layout names a Phase 4 item has given V2.1's (4.2: the bar's battery room, which the 320 px bar fits; 4.5:
+# Home's rows and their labels' insets; 4.7: the confirm pop-up's rows).
+assert {k for k in m1ipod.O if m1ipod.O[k] != ipod.O.get(k)} == {'UI_W', 'UI_H', 'GLASS_R', 'BATT_ROOM', 'SET_ROW', 'SET_ROWS',
+                                                                'SET_STOCK_ROW', 'LIB_PITCH', 'LIB_BODY', 'LIB_ART', 'HOME_ROW',
+                                                                'HOME_DOT_X', 'HOME_LABEL_END', 'CONFIRM_TOP'} == set(m1plus_ipod.PROFILE) - {'STATUS_H', 'SET_TOP'}
+assert (m1ipod.HOME_ROW, m1ipod.HOME_TEXT_X, ipod.HOME_ROW, ipod.HOME_TEXT_X) == (64, 26, 39, 39)  # the Q2's unchanged
+# 4.4: LIB_ROWS complete library rows from the top of the screen under the bar, on a body inside each row, the art inside
+# the body; ipod.py's names take the M1's (the Q2's stay 72, 68 and 52).
+assert (m1ipod.PITCH, m1ipod.BODY, m1ipod.ART, m1ipod.ART_INSET) == (m1['LIB_PITCH'], m1['LIB_BODY'], m1['LIB_ART'], m1['LIB_ART_INSET']) == (64, 60, 40, 10)
+assert m1['LIB_ROWS'] * m1ipod.PITCH <= m1ipod.BOTTOM < (m1['LIB_ROWS'] + 1) * m1ipod.PITCH and m1ipod.ART + 2 * m1ipod.ART_INSET == m1ipod.BODY < m1ipod.PITCH
+assert (ipod.PITCH, ipod.BODY, ipod.ART) == (72, 68, 52) and 'LIB_PITCH' not in ipod.O
+# 4.3: six complete settings rows fit under the bar, each row's 60 px body inside it.
+assert m1ipod.SET_TOP + m1ipod.SET_ROWS * m1ipod.SET_ROW <= m1ipod.BOTTOM and m1['SET_STOCK_BODY'] <= m1ipod.SET_ROW
+assert (m1ipod.SET_ROW, m1ipod.SET_ROWS, m1ipod.SET_TOP, m1ipod.SET_STOCK_ROW) == (72, 6, 8, 64)
+assert m1ipod.BATT_ROOM == m1['BATT_ROOM'] == 115 and m1['STATUS_MARGIN'] == m1ipod.STATUS_MARGIN == 6 and m1['BAR_BACK_W'] == m1plus_ipod.BACK_W
+# 4.6's fixes: the chevron's tap, beside the play state's icon, is the chevron and its gap; Spotify's page has Now Playing's places.
+assert m1['BAR_BACK_W'] == 32 and m1['BAR_BACK_HIT_W'] == 64
+assert all(m1[f'SPOT_{n}'] == m1[f'NP_{n}'] for n in ('TEXT_X', 'TEXT_W', 'TITLE_Y', 'ARTIST_Y', 'ALBUM_Y', 'BAR_X', 'BAR_W', 'TIMES_Y', 'ART_X', 'ART_Y'))
+assert sys.modules['ipod'] is ipod and m1ipod is not ipod
+print('iPod screen profile checks passed.')
+
+# patch/m1plus_ipod.json (Phase 3): each of V1.32's 54 audited iPod pages is mapped onto V2.1's, or is a null row
+# that names the Phase 4 item deciding it. A sync that adds a page to patch/ipod.json fails here until it is mapped.
+import json
+AUDIT, M1_AUDIT = (json.loads((ROOT/'patch'/f).read_text()) for f in ('ipod.json', 'm1plus_ipod.json'))
+SECTIONS = ('assets', 'navbar_only', 'slide_only')
+assert set(M1_AUDIT['pages']) == {p for s in SECTIONS for p in AUDIT[s]} and len(M1_AUDIT['pages']) == 54
+MAPPED = {p: r for p, r in M1_AUDIT['pages'].items() if r['v21']}
+assert len({r['v21'] for r in MAPPED.values()}) == len(MAPPED), 'two V1.32 pages map to one V2.1 page'
+for section in SECTIONS:  # each V2.1 page sits in the section of the V1.32 page it replaces
+    assert set(M1_AUDIT[section]) == {r['v21'] for p, r in MAPPED.items() if p in AUDIT[section]}, section
+for p, r in M1_AUDIT['pages'].items():
+    assert bool(r['v21']) == bool(r['opener']) and r['why'], p
+    assert r['v21'] or re.search(r'Phase 4\.\d ', r['why']), f'{p}: a null row names its Phase 4 item'
+print('V2.1 iPod page inventory checks passed.')
 
 def boot_check(s90play=None):
     """S90play's dual boot under the host sh, with stand-in programs: build.py's BOOT_HOOK, or a
     built rootfs's whole S90play (its dbus start stubbed), run as init runs it."""
     import subprocess, tempfile, pathlib
-    from build import BOOT_HOOK, ROCKBOX_FLAG
+    from build import BOOT_HOOK, ROCKBOX_FLAG, WIFI_OFF
     with tempfile.TemporaryDirectory(prefix='q2-boot-') as tmp:
         r = pathlib.Path(tmp)
         script = (s90play or BOOT_HOOK[1]).decode().replace(' &\n', '\n')
@@ -48,24 +104,39 @@ def boot_check(s90play=None):
             assert script.count(stubs[0]) == 1, 'S90play: no dbus start'
             for stub in stubs: script = script.replace(stub, ':')
             script = script.replace('/bin/mkdir', 'mkdir').replace('/var/run/', f'{r}/var/run/')
-        for old in ('/mnt/', '/tmp/mmc_add', ROCKBOX_FLAG, '/usr/bin/q2boot', '/release/bin/demo'):
+        for old in ('/mnt/', '/tmp/mmc_add', ROCKBOX_FLAG, '/usr/bin/q2boot', '/release/bin/demo', '/proc/mounts', '/tmp/q2-demo.log',
+                    '/tmp/q2-scan-file', '/tmp/q2-scan.log', '/tmp/q2-art-file', '/tmp/q2-art.log'):
             script = script.replace(old, f'{r}{old}')
-        script = script.replace('usleep 200000', ':')
-        for d in ('mnt/data', 'mnt/mmc/.rockbox', 'tmp', 'usr/bin', 'release/bin'): (r/d).mkdir(parents=True)
+        script = script.replace('usleep 200000\n', ':\n').replace('usleep 500000', ':')
+        # This script runs under the PC's own sh: the real killall -9 and ifconfig would take down the PC's network,
+        # not a Q2's. So they never run here: a log line stands in, and the text must be gone before anything starts.
+        assert script.count(WIFI_OFF) == 2  # before Rockbox, and the hand-over's late pass
+        script = script.replace(WIFI_OFF, f'echo wifi >> {r}/order')
+        assert 'usleep 300000' in script  # Home's hand-over pauses before Rockbox: logged, its place is the point
+        script = script.replace('usleep 300000', f'echo settle >> {r}/order')
+        assert 'usleep 2000000' in script and '\n            rockbox\n            kill $! 2>/dev/null\n' in script  # called off once Rockbox is gone
+        script = script.replace('usleep 2000000', f'echo late >> {r}/order')  # runs in line here: & is stripped above
+        for real in ('killall -9', 'ifconfig', 'wlan0', 'wpa_supplicant', 'udhcpc', 'wifi_connect'): assert real not in script, real
+        for d in ('proc', 'mnt/data', 'mnt/mmc/.rockbox', 'tmp', 'usr/bin', 'release/bin'): (r/d).mkdir(parents=True)
         def exe(path, body): (r/path).write_text('#!/bin/sh\n' + body + '\n'); (r/path).chmod(0o755)
         # demo takes Home's Rockbox row (leaves the flag) as many times as the shortcuts file says
         flag, shortcuts = f'{r}{ROCKBOX_FLAG}', r/'shortcuts'
-        exe('release/bin/demo', f'echo demo >> {r}/ran; n=$(cat {shortcuts}); '
-            f'[ "$n" -gt 0 ] && echo $((n - 1)) > {shortcuts} && : > {flag}; exit 137')
+        # a demo that leaves q2-state (r/keep): it ended without ringnav_clean_end
+        exe('release/bin/demo', f'echo demo >> {r}/ran; echo demo >> {r}/order; n=$(cat {shortcuts}); '
+            f'[ -f {r}/keep ] && echo running > {r}/mnt/data/q2-state; '
+            f'[ "$n" -gt 0 ] && echo $((n - 1)) > {shortcuts} && : > {flag}; '
+            f's=$(head -n1 {r}/code); [ $(wc -l < {r}/code) -gt 1 ] && sed -i 1d {r}/code; exit $s')  # one status per run, the last repeats
         rb, target = r/'mnt/mmc/.rockbox/rockbox', r/'mnt/data/boot-target'
-        def boot(held, card, code=81, shortcut=0):
+        def boot(held, card, code=81, shortcut=0, status=137):
             shortcuts.write_text(f'{shortcut}\n')
+            (r/'code').write_text(''.join(f'{c}\n' for c in (status if isinstance(status, (list, tuple)) else [status])))
             exe('usr/bin/q2boot', 'exit ' + ('0' if held else '1'))
-            if card: exe('mnt/mmc/.rockbox/rockbox', f'pwd >> {r}/ran; exit {code}')
+            if card: exe('mnt/mmc/.rockbox/rockbox', f'pwd >> {r}/ran; echo rockbox >> {r}/order; exit {code}')
             else: rb.unlink(missing_ok=True)
-            (r/'ran').write_text('')
+            (r/'ran').write_text(''); (r/'order').write_text('')
             subprocess.run(['sh', '-c', script, 'S90play', 'start'], check=True)
             return (r/'ran').read_text().split(), target.exists() and target.read_text().strip()
+        (r/'proc/mounts').write_text('')
         rockbox = [str(rb.parent), 'demo']
         assert boot(False, False) == (['demo'], False)          # no Rockbox on the card: Q2 Pod
         assert boot(False, True, 1) == (rockbox, False)         # Rockbox by default; a crash starts Q2 Pod
@@ -89,14 +160,79 @@ def boot_check(s90play=None):
         assert boot(True, True, 81, 1) == (['demo', *rockbox], False)
         assert boot(False, True, 81, 2) == (rockbox * 3, False) and not pathlib.Path(flag).exists()
         assert boot(True, False, 81, 1) == (['demo', 'demo'], False)  # no Rockbox on the card: Q2 Pod again
-    print(f'Dual boot ({"built S90play" if s90play else "BOOT_HOOK"}): Rockbox by default, one-session Q2 Pod, stale choice ignored, card fallback and Home Rockbox row passed.')
+        # Wi-Fi goes off before every start of Rockbox and at no other time; demo follows Rockbox whatever its status
+        def order(*args): boot(*args); return (r/'order').read_text().split()
+        session = ['wifi', 'rockbox', 'demo']
+        for code in (0, 1, 81, 137, 255): assert order(False, True, code) == session
+        handover = ['settle', 'late', 'wifi']
+        assert order(True, True, 81, 1) == ['demo', *handover, *session]  # Home's Rockbox row waits for what demo launched
+        assert order(False, True, 81, 2) == session + [*handover, *session] * 2  # power-on doesn't wait, the row twice does
+        assert order(False, False) == ['demo']                  # no Rockbox on the card
+        assert order(True, False, 81, 1) == ['demo', *handover, 'demo']  # nor when the row is taken
+        assert order(True, True) == ['demo']                    # Play/Pause held
+        target.write_text('q2pod'); assert order(False, True) == ['demo']; target.unlink()
+        # an abnormal end of demo leaves its status on /mnt/data, which the next boot copies to a mounted card;
+        # 0, 143 and the Rockbox hand-over leave nothing
+        crash, copy, mounts = r/'mnt/data/q2-crash.log', r/'mnt/mmc/q2-crash.log', r/'proc/mounts'
+        def logged(status, card, shortcut=0):
+            for f in (crash, copy): f.unlink(missing_ok=True)
+            mounts.write_text(f'tmpfs /tmp tmpfs rw 0 0\n/dev/mmcblk0p1 {r}/mnt/mmc vfat rw 0 0\n' if card else '')
+            boot(True, False, shortcut=shortcut, status=status)
+            return crash.exists() and crash.read_text(), copy.exists() and copy.read_text()
+        out, cp = logged(137, True)
+        assert 'demo exit 137' in out and '== dmesg' in out and '== meminfo' in out and '== ps' in out and cp is False  # no card write while dying
+        assert not crash.with_name('q2-crash.log.tmp').exists()  # written whole, then renamed
+        mounts.write_text(''); boot(True, False, status=0); assert not copy.exists() and crash.exists()  # no card: kept for a later boot
+        mounts.write_text(f'/dev/mmcblk0p1 {r}/mnt/mmc vfat rw 0 0\n'); boot(True, False, status=0)
+        assert copy.read_text() == out and not crash.exists()  # the next boot with a card moves it there
+        copy.write_text('kept'); boot(True, False, status=0); assert copy.read_text() == 'kept'  # and never brings it back
+        out, cp = logged(139, False)
+        assert 'demo exit 139' in out and cp is False
+        assert logged(0, True) == (False, False) and logged(143, True) == (False, False)
+        assert logged([137, 0], True, 1) == (False, False)  # the Rockbox hand-over's kill, then a clean demo
+        # 0 or 143 with q2-state still there was no clean end (ringnav_clean_end removes it first): logged as a crash
+        keep, state = r/'keep', r/'mnt/data/q2-state'
+        keep.write_text('')
+        for status in (0, 143):
+            out, cp = logged(status, False)
+            assert f'== demo exit {status}\n' in out and '== dmesg' in out and cp is False and state.exists()
+        keep.unlink(); state.unlink()
+        # a library scan's and Coverflow's art build's records (navigation.c crash_note): the file in progress and
+        # the last 60 memory lines
+        for name, last, every in (('scan', 'last scanned', 500), ('art', 'last art', 50)):
+            note_file, note_log = r/f'tmp/q2-{name}-file', r/f'tmp/q2-{name}.log'
+            note_file.write_text('/mnt/mmc/Music/a.opus\n')
+            note_log.write_text(''.join(f'{n * every} {91000 + n} /mnt/mmc/{n}.opus\n' for n in range(1, 71)))
+            out, cp = logged(137, False)
+            assert f'== {last}\n/mnt/mmc/Music/a.opus\n' in out
+            lines = out.split(f'== {name}\n')[1].split('== ')[0].splitlines()
+            assert len(lines) == 60 and lines[0].startswith(f'{11 * every} 91011 ') and lines[-1] == f'{70 * every} 91070 /mnt/mmc/70.opus'
+            note_file.unlink(); note_log.unlink()
+            out, cp = logged(137, False)
+            assert f'== {last}' not in out and f'== {name}\n' not in out
+        # /mnt/data/q2-state (navigation.c state_poll) still there at boot: the last session ended in a forced
+        # restart, or the battery. It goes into q2-crash.log, a new one that says so or the crash's, and goes.
+        state, line = r/'mnt/data/q2-state', 'screen:off power:suspending cable:out battery:57 play:paused out:jack\n'
+        state.write_text(line); out, cp = logged(0, False)
+        assert 'did not end' in out and '== last state' in out and line in out and not state.exists() and cp is False
+        # a Coverflow open that never finished (coverflow.c cf_trace) goes in after the state, and goes
+        trace = r/'mnt/data/q2-cf-trace'
+        state.write_text(line); trace.write_text('start albums=0 0 ms\nstaged albums=20000 900 ms\n'); out, cp = logged(0, False)
+        assert '== last state' in out and out.endswith('== cover flow\nstart albums=0 0 ms\nstaged albums=20000 900 ms\n') and not trace.exists()
+        trace.write_text('stale\n'); out, cp = logged(0, False)
+        assert out is False and not trace.exists()  # no forced restart: dropped, not reported
+        for f in (crash, copy): f.unlink(missing_ok=True)
+        crash.write_text('== demo exit 137\n'); state.write_text(line); boot(True, False, status=0)
+        assert crash.read_text().startswith('== demo exit 137\n== last state\n') and line in crash.read_text() and not state.exists()
+        for f in (crash, copy): f.unlink(missing_ok=True)
+    print(f'Dual boot ({"built S90play" if s90play else "BOOT_HOOK"}): Rockbox by default, one-session Q2 Pod, stale choice ignored, card fallback, Home Rockbox row and Wi-Fi off before Rockbox passed.')
 boot_check()
 
 def logo_check(s11logo=None):
     """S11logo_display_shell's splash choice under the host sh: build.py's LOGO_HOOK, or a built
     rootfs's whole script (its /dev/fb0 wait and ROTATEMODE choice included)."""
     import subprocess, tempfile, pathlib
-    from build import LOGO_HOOK, LOGO, LOGO_LIGHT
+    from build import LOGO_HOOK, LOGO, LOGO_LIGHT, TIMEZONES
     with tempfile.TemporaryDirectory(prefix='q2-logo-') as tmp:
         tmp = pathlib.Path(tmp)
         user, config, dark, light = tmp/'boot-logo.jpg', tmp/'config.ini', tmp/'logo.jpg', tmp/'logo-light.jpg'
@@ -110,7 +246,7 @@ def logo_check(s11logo=None):
             config.write_text(f'ROTATEMODE={rotate}\n' + ipod)
             return subprocess.run(['sh', '-c', script, 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip()
         assert shown() == str(dark)  # no card logo, no config: the built-in splash
-        assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(dark)  # Light Mode, but no light twin (Legacy, custom --logo)
+        assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(dark)  # Light Mode, but no light twin (custom --logo)
         light.write_bytes(b'')
         assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(light)
         assert shown(ipod='[IPOD]\nLIGHT=0\nBACKLIGHT=1\n') == str(dark)
@@ -119,8 +255,19 @@ def logo_check(s11logo=None):
         assert shown(ipod='[IPOD]\nLIGHT=1\n') == str(user)  # the card's logo wins in either mode
         user.unlink()
         config.write_text('[IPOD]\nLIGHT=2\n')
-        def at(hour): return subprocess.run(['sh', '-c', script.replace('$(date +%H)', hour), 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip()
+        def at(hour): return subprocess.run(['sh', '-c', script.replace('$(TZ=$z date +%H)', hour), 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip()
         assert at('06') == str(dark) and at('07') == str(light) and at('18') == str(light) and at('19') == str(dark)
+        # Auto reads the hour in the saved zone: only the zone's own TZ gets a light hour. V2.1's 27 stock zones
+        # are the Q2's first 27, in order (its select_timezone table at 0x97c810).
+        for i, (_, zone) in enumerate(TIMEZONES):
+            config.write_text(f'[SYSSET]\nTIMEZONE={i}\n[IPOD]\nLIGHT=2\n')
+            fake = f'''date() {{ [ "$TZ" = '{zone}' ] && echo 12 || echo 22; }}; '''
+            assert subprocess.run(['sh', '-c', fake + script, 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip() == str(light), zone
+        # No saved zone, or one past the list: stock's default, as the player reads it (config_init)
+        for text in ('[IPOD]\nLIGHT=2\n', f'[SYSSET]\nTIMEZONE={len(TIMEZONES)}\n[IPOD]\nLIGHT=2\n'):
+            config.write_text(text)
+            fake = f'''date() {{ [ "$TZ" = '{TIMEZONES[22][1]}' ] && echo 12 || echo 22; }}; '''
+            assert subprocess.run(['sh', '-c', fake + script, 'S11logo', 'start'], check=True, capture_output=True, text=True).stdout.strip() == str(light)
         user.write_bytes(b'')
         if 'logo180.jpg' in script:  # M1 Plus: a flipped screen keeps the stock flipped splash
             assert shown(1) == '/release/assets/default/raw/images/xx/logo180.jpg'
@@ -246,7 +393,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     id3_gain = symbols(directory/'peq'/'peq.elf')['id3_gain']
     assert {struct.unpack_from('<I', new, fileoff(old, a))[0] for a in profile['id3_calls']} == {0x0c000000 | id3_gain >> 2}
     if m1plus:  # the second gate branches to the EQ's insert (a jal), as peq.py's 0x42fd84, not past scaletempo's
-        insert, _, _ = profile['eq_rate_gates'][1]
+        insert, _, _ = next(g for g in profile['eq_rate_gates'] if g[2])  # the loads and first gate are nops
         target = insert + 4 + (struct.unpack_from('<h', old, fileoff(old, insert))[0] << 2)
         assert struct.unpack_from('<I', old, fileoff(old, target))[0] >> 26 == 3, hex(target)
     if m1plus:  # the filter's decoded() calls written_audio_pts(sh, ds) on every block: a leaf, as V1.32's 0x44641c
@@ -291,18 +438,210 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     import filecmp, os, pathlib, re, struct, subprocess, tarfile, tempfile
     from build import (sha, run, fileoff, segments, symbols, BASE, RTC_WRITE, WIFI_LPS, LOCK_CLOCK_12H, TAG_C, ICONS, STOCK_EQ,
                        OBSOLETE, HELPER, BOOT, REMOTE, SCROBBLE_CA, BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO)
-    from m1plus import (pic_gp, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS, PDR_M1PLUS, RTC_READ_M1PLUS,
-                        call_site_words, M1PLUS_PRIVATE_FUNCTIONS)
+    from m1plus import (pic_gp, M1PLUS_HOOKS, M1PLUS_GP, WM_PAINT_LEAF_M1PLUS, GRADIENT_LEAF_M1PLUS, PDR_M1PLUS, RTC_READ_M1PLUS,
+                        call_site_words, M1PLUS_PRIVATE_FUNCTIONS, M1PLUS_SHIMS, M1PLUS_UNRESOLVED, m1plus_inc)
     ps = symbols(directory/'patch.elf')
+    # One Now Playing for the local page and Spotify's (m1plus_np_view.c): navigation.c takes the file under M1PLUS where the Q2 has its
+    # np_sync, and the file guards itself, so the Q2 never compiles it. Both pages' painters and the one scrub are in the payload, and the
+    # Q2's scrub isn't.
+    assert '#if M1PLUS\n#include "m1plus_np_view.c"\n#else\n' in (ROOT/'patch/navigation.c').read_text()
+    view_c = (ROOT/'patch/m1plus_np_view.c').read_text()
+    assert re.fullmatch(r'/\*.*?\*/\n#if M1PLUS\n.*\n#endif\n', view_c, re.S) and view_c.count('#endif') == view_c.count('#if ')
+    assert {'np_write', 'np_view_theme', 'np_bar_fill', 'np_scrub_start', 'np_scrub_drag', 'np_scrub_end', 'np_scrub_gone', 'np_scrubbing',
+            'np_scrub_shown', 'np_repaint', 'settle_poll', 'spot_np_page', 'spot_now_playing', 'radio_now_playing'} <= set(ps)
+    assert not {'scrub_start', 'scrub_end', 'scrub_commit'} & set(ps)
+    # A shim is a stand-in some payload source calls (a row nothing uses is dropped), and the stand-in is defined once.
+    nav = (ROOT/'patch/m1plus_nav.h').read_text()
+    users = ''.join(f.read_text() for f in (ROOT/'patch').glob('*.[ch]') if f.name != 'm1plus_nav.h')
+    for name in M1PLUS_SHIMS:
+        assert len(re.findall(rf'^\w[\w *]* {name}\(', nav, re.M)) == 1, f'{name}: no stand-in in m1plus_nav.h'
+        assert re.search(rf'\b{name}\(', users), f'{name}: no payload source calls it; drop its M1PLUS_SHIMS row'
+    assert not any(name in ps for name in M1PLUS_UNRESOLVED)
     payload = (directory/'patch.bin').read_bytes()
     assert (sha(stock), sha(demo), sha(payload)) == (manifest['stock_demo_sha256'], manifest['demo_sha256'], manifest['patch_sha256'])
-    # Only the Stock UI exists for M1 Plus so far.
-    assert manifest['variant'] == 'stock' and manifest['compact_code'] == []
-    assert set(manifest['changed_assets']) == {TAG_C}
+    # The iPod UI is the only UI. Its code edits and page rewrites (tools/m1plus_ipod.py) are what each Phase 4
+    # item has audited so far: the TagLib cover library, the style files (4.1) and the pages in REWRITES.
+    import m1plus_ipod
+    # 4.3's one code edit: V2.1's list_view layout slot is ipod_list_layout.
+    slot = dict(address=hex(0x9047a8), original=hex(0x60abb0), patched=hex(ps['ipod_list_layout']),
+                purpose='settings lists stack SET_ROW rows and map their children')
+    # 4.4's: the library rows' immediates (pitch and body, the text re-centred by half the body's growth), each row
+    # constructor's layout call made compact_set_row_layout, and the two rebinds' resizes gone (pinned below).
+    edits = [dict(address=a, original=hex(int(w, 16)), patched=hex(int(w, 16) & 0xffff0000 | {'pitch': m1ipod.PITCH, 'body': m1ipod.BODY}.get(g['value'], g['value'])),
+                  purpose=g['purpose']) for g in M1_AUDIT['immediates'] for a, w in g['sites']]
+    grown = (m1ipod.BODY - m1plus_ipod.M1['LIB_STOCK_BODY']) // 2
+    assert [g['value'] for g in M1_AUDIT['immediates']] == ['pitch', 'body', 10 + grown, 30 + grown, 32 + grown]
+    edits += [dict(address=a, original='0x320f809', patched=hex(m1ipod.jal(ps['compact_set_row_layout'])), purpose=M1_AUDIT['row_layout_calls']['purpose'])
+              for a, _ in M1_AUDIT['row_layout_calls']['sites']]
+    edits += [dict(address=hex(a), original='0x320f809', patched='0x0', purpose='library rebind retains the width owned by its row layouter')
+              for a in (0x532f6c, 0x527918)]
+    # The private entries the payload calls (M1PLUS_PRIVATE_FUNCTIONS) and the event ids V2.1's code loads where the
+    # payload relies on them (li a1,<event>), pinned as audited: V2.1's own bytes, which the build leaves as they are.
+    assert M1_AUDIT['private_prologues'] == {'stock_search': '4e001c3ccc0b9c2721e09903', 'm1_home_click': '4d001c3c50039c2721e09903'}
+    events = {'0x534f70': 'EVT_INPUT_POINTER_DOWN', '0x534fbc': 'EVT_KEY_UP', '0x534ff4': 'EVT_POINTER_MOVE_BEFORE', '0x535010': 'EVT_POINTER_DOWN'}
+    assert M1_AUDIT['event_abi_words'] == {a: struct.pack('<I', 0x24050000 | m1plus_inc(e)).hex() for a, e in events.items()}
+    assert [m1plus_inc(e) for e in events.values()] == [0xff, 0x113, 0x102, 0x100]
+    pinned = [(M1PLUS_PRIVATE_FUNCTIONS[n], h) for n, h in M1_AUDIT['private_prologues'].items()]
+    pinned += [(int(a, 16), h) for a, h in M1_AUDIT['event_abi_words'].items()]
+    for address, original in pinned:
+        for image in (stock, demo):
+            assert image[fileoff(stock, address):][:len(original) // 2].hex() == original, hex(address)
+    # 4.5's: Home's playing strip's tap is not bound, and its boot resume is ringnav_boot's; the init and refresh's
+    # returns with the grid's widgets gone are pinned as they are (m1plus_ipod.json home).
+    home = M1_AUDIT['home']
+    home_edits = [dict(address=a, original=hex(int(w, 16)), patched='0x0', purpose=why) for _, _, a, w, why in home['unbound']]
+    a, w, why = home['boot_resume']
+    home_edits.append(dict(address=a, original=hex(int(w, 16)), patched=hex(m1ipod.jal(ps['ringnav_boot'])), purpose=why))
+    # 4.6's: the status bar's tap opens the VOLUME page within the bar's 30 px, not 42 (the top row's first 12 px); V2.1's
+    # Now Playing lookups all recurse, and the A-B dots' arithmetic is the bar's x, width and row, pinned as they are.
+    playing = M1_AUDIT['playing']
+    np_edits = [dict(address=a, original=w, patched=n, purpose=why) for a, w, n, why in playing['status_tap']]
+    assert 'variant' not in manifest and manifest['compact_code'] == edits + [slot] + np_edits + home_edits, manifest['compact_code']
+    assert len(playing['recursive_lookups']) == 38 and all(w == '0x24060001' for _, w, _ in playing['recursive_lookups'])
+    assert [int(w, 16) & 0xffff for _, w, _ in playing['ab_dots']] == [
+        m1plus_ipod.M1['NP_BAR_W'], m1plus_ipod.M1['NP_BAR_X'], *[m1plus_ipod.M1['NP_AB_Y']] * 3]
+    for a, w, why in playing['recursive_lookups'] + playing['ab_dots']:
+        assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
+    for a, w, why in home['safe_returns'] + [r[:2] + ['the pointer-up event id'] for r in home['unbound']]:
+        assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
+    # 4.7's: V2.1's pull-down (dropdown_dialog) keeps V1.32's states (1 and 2 dragged or sliding, 3 open, 0 shut) and
+    # opens from QUICK_EDGE_PX; the confirm's prompts and checks end above CONFIRM_TOP; the playlist page's rows are one
+    # rebuild, called with any widget of its window, and it binds no key-up of its own.
+    quick, confirm, playlist = M1_AUDIT['quick'], M1_AUDIT['confirm'], M1_AUDIT['playlist']
+    def word_at(a): return struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0]
+    assert symbols(directory/'stock-demo')['dialog_dropdown_dialog_init'] == int(quick['init'][0], 16)
+    assert [word_at(a) & 0xffff for a, _, _ in quick['edge']] == [m1plus_ipod.M1['QUICK_EDGE_PX']]
+    assert [word_at(a) & 0xffff for a, _, _ in quick['events']] == [0x103, 0xff, 0x101, m1plus_ipod.M1['EVT_WINDOW_CLOSE']]
+    rows = [(word_at(y) & 0xffff, word_at(h) & 0xffff) for y, _, h, _, _ in confirm['prompt_rows']]
+    assert max(y + h for y, h in rows) == m1plus_ipod.CONFIRM_PROMPTS_END < m1plus_ipod.M1['CONFIRM_TOP'], rows
+    demo_syms = symbols(directory/'stock-demo')
+    rebuild = int(playlist['rebuild'], 16)
+    assert all(word_at(a) == 0x04110000 | ((rebuild - int(a, 16) - 4) >> 2) & 0xffff for a, _, _ in playlist['calls'])
+    assert word_at(playlist['add_mode'][0]) & 0xffff == m1plus_ipod.M1['PLAYLIST_ADD_MODE'] & 0xffff
+    # Add to Playlist from a hold menu (qm_run) opens V2.1's playlist_page in add mode 1, whose row click adds
+    # the batch selection from pdeq_showlist as the context's class, as V1.32's does (the payload's names).
+    import m1plus
+    got = lambda a: word_at(hex(m1plus.M1PLUS_GP - (0x10000 - (word_at(a) & 0xffff))))
+    assert [got(a) for a, _, _ in playlist['add_rows'][3:5]] == [demo_syms[m1plus.M1PLUS_CONTEXT_ALIASES.get(n, n)] for n in
+                                                                ('p_vector_select_record', 'p_deque_showlist')]
+    # V2.1 has no localmusic/ pages: the payload names none (V063m's hold menu opened a localmusic/playlist_page).
+    assert b'localmusic/' not in payload, 'patch.bin names a localmusic/ page'
+    # Inside System or Playback settings V2.1 disables that switch and binds it no click: dimmed by design.
+    assert [got(quick['into'][i][0]) for i in (0, 2, 4)] == [demo_syms[n] for n in
+                                                             ('syssetinto_flag', 'playsetinto_flag', 'widget_set_enable')]
+    for a, w, why in (quick['edge'] + quick['states'] + quick['events'] + quick['into'] + playlist['calls'] + playlist['events'] +
+                      playlist['add_rows'] + [playlist['add_mode']] + [r[:2] + [r[4]] for r in confirm['prompt_rows']] +
+                      [r[2:] for r in confirm['prompt_rows']]):
+        assert word_at(a) == int(w, 16), why
+    raw_styles = 'release/assets/default/raw/styles/'
+    assert set(manifest['changed_assets']) == {TAG_C} | {'release/assets/default/raw/ui/' + p for p in m1plus_ipod.REWRITES} | {
+        raw_styles + p for p in M1_AUDIT['styles']} | {
+        'release/assets/default/raw/images/xx/' + p for p in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons'], **M1_AUDIT['clear_icons']}}
     stock_syms = symbols(directory/'stock-demo')
+    # Each V2.1 iPod page is the stock page the inventory hashed, decodes and re-encodes exactly, and its init
+    # function is in V2.1's demo.
+    from ipod import decode, encode, walk
+    m1_only = {p: r['sha256'] for p, r in M1_AUDIT['m1_only'].items()}  # V2.1 pages no V1.32 page maps to
+    assert all(r['why'] for r in M1_AUDIT['m1_only'].values()) and not set(m1_only) & {r['v21'] for r in MAPPED.values()}
+    for section in (*SECTIONS, 'm1_only'):
+        for page, digest in (m1_only if section == 'm1_only' else M1_AUDIT[section]).items():
+            data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
+            assert sha(data) == digest and encode(decode(data)) == data, page
+    for page, row in MAPPED.items():
+        assert row['opener'] in stock_syms, f"{page}: no {row['opener']} in V2.1"
+    # patch_asset returns every page no rewrite touches as the stock bytes, and refuses what the audit didn't hash,
+    # bytes the codec rejects, and a page of the wrong kind (every page's round trip is checked above).
+    for page in m1plus_ipod.UI_ASSETS:
+        data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
+        assert page in m1plus_ipod.REWRITES or m1plus_ipod.patch_asset(page, data) == data, page
+    # 4.7: Quick Settings, the built pull-down: each switch and its label on the 320 px screen and clear of the others,
+    # the label under its icon; the brightness row exactly under the volume panel (vol_paint), inside the dialog; the
+    # sysbar's unused widgets transparent in place, never off screen (docs/m1plus-progress.md section 63).
+    qs = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.QUICK))
+    qs_named = {n[2].get('name'): n for n in walk(qs)}
+    boxes = [qs_named[f'{k}_{v}'][1] for i, l in zip(m1plus_ipod.QS_ICONS, m1plus_ipod.QS_LABELS) for k, v in (('img', i), ('label', l))]
+    assert all(x >= 0 and x + w <= m1plus_ipod.M1['UI_W'] for x, _, w, _ in boxes)
+    assert not any(a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+                   for i, a in enumerate(boxes) for b in boxes[i + 1:]), boxes
+    menu, light = qs_named['view_switchs'][1], qs_named['view_backlight'][1]
+    assert light[1::2] == [m1plus_ipod.M1['VOL_PANEL_Y'], m1plus_ipod.M1['VOL_PANEL_H']] and light[1] + light[3] <= qs[1][3] and menu[1] + menu[3] < light[1]
+    assert all(qs_named[k][2].get('opacity') == '0' and qs_named[k][1][0] >= 0 for k in ('img_volume', 'label_volume', 'img_digital', 'img_synclink'))
+    assert qs_named['slider_backlight'][2]['style'] == 's_ipod_progress' and qs_named['label_wifi'][2]['style:normal:font_size'] == '16'
+    # 4.7: the confirm pop-up, the built sheet: full width from the top, Cancel and OK rows from CONFIRM_TOP to its foot,
+    # under every prompt V2.1 adds; stock's names, which its init binds.
+    cf = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.CONFIRM))
+    top, row = m1plus_ipod.M1['CONFIRM_TOP'], 48
+    assert cf[1] == [0, 0, m1plus_ipod.M1['UI_W'], top + 2 * row] and cf[2]['self_layout'] == f'default(x=0,y=0,w=100%,h={top + 2 * row})'
+    assert [(n[2]['name'], n[2]['text'], n[1]) for n in cf[3]] == [
+        ('btn_cancel', 'Cancel', [0, top, m1plus_ipod.M1['UI_W'], row]), ('btn_enter', 'OK', [0, top + row, m1plus_ipod.M1['UI_W'], row])]
+    assert not any(k.endswith(('bg_image', 'round_radius')) for k in cf[2])
+    # ipod-ui 4.1, the styles: V2.1's default.bin is the file the audit hashed, each edit's old value is in exactly its
+    # audited number of states, and the build's file differs from it in those states and nowhere else. Each edited style
+    # is one a V2.1 page or its code names (a style nothing uses would edit nothing that paints).
+    from ipod import style_props
+    with tempfile.TemporaryDirectory(prefix='m1-ui-') as tmp:
+        run('unsquashfs', '-q', '-no-xattrs', '-d', f'{tmp}/ui', directory/'stock.squashfs', 'release/assets/default/raw/ui')
+        used = {n[2].get('style') for q in pathlib.Path(tmp, 'ui').rglob('*.bin') for n in walk(decode(q.read_bytes()))}
+    for rel, audit in M1_AUDIT['styles'].items():
+        raw = read('stock.squashfs', raw_styles + rel)
+        done = m1plus_ipod.patch_style(rel, raw)
+        assert sha(raw) == audit['sha256'] and len(done) == len(raw) and done != raw
+        assert sha(done) == manifest['changed_assets'][raw_styles + rel]['sha256'] == sha(read('rootfs.squashfs', raw_styles + rel))
+        sites, props = set(), list(style_props(raw))
+        for widget, style, prop, old, new, n in audit['edits']:
+            at = [a for w, st, _, p, a, v in props if (w, st, p, v) == (widget, style, prop, bytes.fromhex(old))]
+            assert len(at) == n and all(done[a:a + 4] == bytes.fromhex(new) for a in at), (style, prop)
+            assert style in used or b'\0' + style.encode() + b'\0' in stock, f'{style}: no page or code of V2.1 names it'
+            sites.update(i for a in at for i in range(a, a + 4))
+        assert {i for i in range(len(raw)) if raw[i] != done[i]} <= sites
+        # Every row style of V2.1's lists, settings pages, tables and the hold menu is clear at rest, its press 333333
+        # or clear: an opaque row hides the selection bar behind it, and Light Mode turns it to paper (the hold menu's,
+        # 4.1's device pass).
+        rows = [(st, state, v.hex()) for _, st, state, p, _, v in style_props(done) if p == 'bg_color' and st in (
+            'list_item_style', 'list_item_black_style', 'list_itemsort_style', 'btn_tablerow_style')]
+        assert len(rows) == 20 and all(v == '00000000' or state == 'pressed' and v == '333333ff' for _, state, v in rows), rows
+        # a wrong state count and an unaudited file are refused (patch_style's own checks)
+        for bad, why in (({**audit, 'edits': [[*audit['edits'][0][:5], audit['edits'][0][5] + 1], *audit['edits'][1:]]}, 'expected'),
+                         ({**audit, 'sha256': '0' * 64}, 'Unaudited')):
+            try:
+                m1plus_ipod.ipod.patch_style(raw, bad)
+            except ValueError as e:
+                assert why in str(e), e
+            else:
+                raise AssertionError(f'{rel}: patch_style took {why!r}')
+    page = next(iter(M1_AUDIT['assets']))
+    data = read('stock.squashfs', f'release/assets/default/raw/ui/{page}')
+    def refuses(path, bad, message):
+        try:
+            m1plus_ipod.patch_asset(path, bad)
+        except ValueError as e:
+            assert message in str(e), e
+        else:
+            raise AssertionError(f'{path}: patch_asset took {message!r}')
+    refuses(page, bytes([data[0] ^ 1]) + data[1:], 'unaudited')
+    hashed = dict(m1plus_ipod.UI_ASSETS)
+    try:  # audited, but not a UI page the codec takes (trailing bytes), or not the kind the path names
+        m1plus_ipod.UI_ASSETS[page] = sha(data + bytes(4))
+        refuses(page, data + bytes(4), 'Trailing UI data')
+        dialog = read('stock.squashfs', 'release/assets/default/raw/ui/dialog/confirminfo_dialog.bin')
+        m1plus_ipod.UI_ASSETS[page] = sha(dialog)
+        refuses(page, dialog, 'expected a window')
+    finally:
+        m1plus_ipod.UI_ASSETS.clear(); m1plus_ipod.UI_ASSETS.update(hashed)
+    assert m1plus_ipod.patch_code(bytearray(stock), ps) == edits + [slot] + np_edits + home_edits
+    # the slot as audited, or nothing; and Home's pinned returns (4.5) and its edits' words likewise
+    for at, what in ((0x9047a8, 'a changed layout slot'), (0x4cd938, "a changed status bar tap's limit"),
+                     (0x53b8d4, "a changed A-B dots' width"), (0x53cd14, "a changed Now Playing lookup"), (0x5340dc, "a changed Home builder's return"),
+                     (0x534e2c, "a changed Home pointer-up binding"), (0x534f04, 'a changed boot resume call')):
+        try:
+            damaged = bytearray(stock); damaged[fileoff(stock, at)] ^= 1
+            m1plus_ipod.patch_code(damaged, ps)
+        except ValueError as e:
+            assert 'unexpected instruction' in str(e), e
+        else:
+            raise AssertionError(f'patch_code took {what}')
     # Native evidence for this batch: options are asset rows, not V1.32's kind table;
     # Tidal creates its URL worker on demand, and check_cpumem does only drop_caches work.
-    from ipod import decode, walk
     more = list(walk(decode(read('stock.squashfs', 'release/assets/default/raw/ui/dialog/playmore_dialog.bin'))))
     assert [n[2]['name'] for n in more if n[0] == 'list_item'] == [f'listitem{i}' for i in range(7)]
     assert next(n for n in more if n[2].get('name') == 'image3')[2]['image'] == 'p_onlinesearch'
@@ -340,9 +679,9 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     for _, address, _, _ in call_site_words(True, ps):
         off = fileoff(stock, address)
         allowed.update(range(off, off+4))
-    name, address, replacement, words = WM_PAINT_LEAF_M1PLUS
-    assert stock_syms[name] == address and struct.unpack_from('<III', stock, fileoff(stock, address)) == words
-    jumped(address, replacement)
+    for name, address, replacement, words in (WM_PAINT_LEAF_M1PLUS, GRADIENT_LEAF_M1PLUS):
+        assert stock_syms[name] == address and struct.unpack_from('<III', stock, fileoff(stock, address)) == words
+        jumped(address, replacement)
     # The one version literal takes the 5-character tag; the byte past V2.1's NUL is padding.
     at, n = stock.index(b'V2.1\0'), len(manifest['version']) + 1
     assert stock.count(b'V2.1\0') == 1 and stock[at+5:at+n] == bytes(n-5) and demo[at:at+n] == manifest['version'].encode()+b'\0'
@@ -369,6 +708,329 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # 220/221 (key - 220 < 2). V2.1 has no Key Tone (no buzzer command) to port.
     def got(lw): return struct.unpack_from('<I', stock, fileoff(stock, M1PLUS_GP + struct.unpack_from('<h', stock, fileoff(stock, lw))[0]))[0]
     def words(address, n): return struct.unpack_from(f'<{n}I', stock, fileoff(stock, address))
+    # ipod-ui 4.1, the paint backbone: V2.1's own code for what the four hooks and the gradient leaf read.
+    # style_get_gradient is a leaf: a null style, vtable or slot returns 0, else it tail-calls the style
+    # vtable's get_gradient (+0x18), as the Q2's does. style_get_color asks it first (a bal, which returns to
+    # STYLE_COLOR_GRADIENT_RET) and takes a gradient's first stop; with none it calls the vtable's get_color (+0x14).
+    from ipod import branch
+    gradient, color = stock_syms['style_get_gradient'], stock_syms['style_get_color']
+    assert words(gradient, 11) == (0x10800009, 0, 0x8c820000, 0x10400006, 0, 0x8c590018, 0x13200003, 0, 0x03200008, 0,
+                                   0x03e00008), 'style_get_gradient: not the audited leaf'  # ... lw t9, 0x18(v0); jr t9
+    assert words(gradient + 0x2c, 1) == (0x00001025,)  # the null paths return 0
+    assert words(color + 0x34, 2) == (0x8ca20000, 0x10400004) and words(color + 0x40, 1) == (0x8c420014,)  # the slot @0x14
+    assert words(color + 0xb4, 2) == (0x8c590014, 0x0320f809), 'style_get_color: get_color slot'
+    ret = m1plus_inc('STYLE_COLOR_GRADIENT_RET')
+    assert ret == color + 0x84 and words(ret - 8, 1) == (branch(0x04110000, ret - 8, gradient),), 'style_get_color: gradient call'
+    # gradient_t: the stop count at +8, then 8-byte {color, offset} stops from +0xc (the first stop's color is +0xc,
+    # the last's is 8 * nr + 4)
+    first, last = stock_syms['gradient_get_first_color'], stock_syms['gradient_get_last_color']
+    assert words(first + 0x14, 2) == (0x8ca30008, 0x14600011) and words(first + 0x60, 1) == (0x8ca3000c,)
+    assert words(last + 0x14, 2) == (0x8ca30008, 0x14600011) and words(last + 0x60, 2) == (0x00a32821, 0x8ca30004)
+    # bitmap_t: w @0, h @4, line length @8, flags u16 @0xc, format u16 @0xe (bitmap_init); formats 1 to 4 are the
+    # 4-byte ones (bitmap_get_bpp_of_format's table, whose address is a GOT page plus an addiu).
+    init = stock_syms['bitmap_init']
+    assert (words(init + 0x7c, 1), words(init + 0x84, 1), words(init + 0x90, 1), words(init + 0xa0, 1)) == (
+        (0xae130000,), (0xae140004,), (0xa611000e,), (0xa602000c,)), 'bitmap_init: bitmap_t layout'
+    assert words(stock_syms['bitmap_get_line_length'] + 0x18, 1) == (0x8c820008,)
+    table = got(0x63fefc) + struct.unpack_from('<h', stock, fileoff(stock, 0x63ff00))[0]
+    assert words(0x63fefc, 1) == (0x8f828054,) and stock[fileoff(stock, table):][:9] == bytes((4, 4, 4, 4, 2, 2, 3, 3, 1)), 'bpp table'
+    # image_manager_add(manager, name, bitmap_t *): the name in a1, copied by the cache, and the bitmap in a2, whose
+    # first 0x48 bytes it copies
+    add = stock_syms['image_manager_add']
+    assert words(add + 0x20, 1) == (0x00a09825,) and words(add + 0x40, 1) == (0x00c09025,)  # move s3, a1; move s2, a2
+    assert words(add + 0x74, 2) == (0x24060048, 0x02402825) and words(add + 0x98, 1) == (0x02602025,)
+    # widget_on_paint_background(widget, canvas): the widget's vtable @0x70, whose on_paint_background (+0x58) it tail-calls
+    paint_bg = stock_syms['widget_on_paint_background']
+    assert words(paint_bg + 0x30, 1) == (0x8c820070,) and words(paint_bg + 0x3c, 1) == (0x8c590058,)
+    # ui_loader_load_widget_with_parent(name, parent): both kept in registers for the load
+    load = stock_syms['ui_loader_load_widget_with_parent']
+    assert words(load + 0x24, 1) == (0x00808825,) and words(load + 0x30, 1) == (0x00a0a025,)
+    # ipod-ui 4.2, the status bar. systembar_timer_start (0x5453c8) arms a 1000 ms timer (addiu a2, zero, 0x3e8) on the
+    # callback at 0x545394: `bal show_sysbar_face; move a0, zero`. The face (systembar_showface, the payload's hook)
+    # reads the system_bar global, not its argument, and finds each widget by name; the battery's level is power_capacity
+    # and its icon names are bar_charge and bar_lowpower.
+    face = stock_syms['show_sysbar_face']
+    assert M1PLUS_PRIVATE_FUNCTIONS['systembar_showface'] == face == M1PLUS_HOOKS['systembar_showface'][0]
+    assert words(0x545414, 1) == (0x240603e8,) and words(0x5453b0, 2) == (branch(0x04110000, 0x5453b0, face), 0x00002025)
+    assert got(0x544b98) == stock_syms['system_bar'] and got(0x545120) == stock_syms['power_capacity']
+    for addiu, name in ((0x544bd8, b'img_playstate'), (0x544c98, b'img_btclass'), (0x544cb8, b'img_wifi'), (0x544cd8, b'img_battery'),
+                        (0x544cf8, b'pgbar_battery')):
+        assert compared(addiu - 0xc, addiu)[1] == name, name
+    assert compared(0x54535c, 0x545360)[1] == b'bar_charge' and compared(0x545160, 0x545168)[1] == b'bar_lowpower'
+    # V2.1's system_bar.bin as the rewrite takes it (its names are the audit's) and as the build ships it: the payload's
+    # names are in it (label_eq and label_idle are not: V2.1 has neither, and a null lookup is tolerated), the chevron is
+    # a hidden BAR_BACK_W x STATUS_H image at the far left, the clock stays centred, the groups clear it, and what the
+    # iPod doesn't draw is off-screen. A bar whose widgets differ is refused.
+    bar_path = 'release/assets/default/raw/ui/system_bar.bin'
+    bar_raw = read('stock.squashfs', bar_path)
+    bar_new = m1plus_ipod.patch_asset('system_bar.bin', bar_raw)
+    assert bar_new == read('rootfs.squashfs', bar_path) != bar_raw
+    named = {n[2].get('name'): n for n in walk(decode(bar_new))}
+    want = dict(re.findall(r'^#define STATUSW_(\w+) "([^"]+)"', (ROOT/'patch/m1plus_offsets.inc').read_text(), re.M))
+    assert {n for k, n in want.items() if k not in ('IDLE', 'EQ')} <= set(named) and not {want['IDLE'], want['EQ']} & set(named)
+    assert named['img_back'][1] == [0, 0, 32, 30] and named['img_back'][2]['visible'] == 'false' and named['img_back'][2]['image'] == 'bar_back'
+    # The chevron has the left group to itself; the play state sits right of Bluetooth's canvas, whose ink is at its right edge.
+    assert named['view_bar_left'][3] == [named['img_back']]
+    assert named['view_bar_right'][3] == [named[n] for n in ('img_btclass', 'img_playstate', 'img_wifi', 'view_battery')]
+    assert [n for n in m1plus_ipod.STATUS_SHOWN if n != 'img_back'] == [n[2]['name'] for n in named['view_bar_right'][3]]
+    clock = named['bar_dclock'][1]
+    assert clock[0] + clock[2] // 2 == 160
+    # The widgets the iPod doesn't draw stay inside the bar, transparent: on V2.1 an invalidate off the screen's left
+    # loses the frame's flush (boot.py's walk saw the page stay as it was after a tap, about 9 runs in 10).
+    assert all(named[n][1][0] >= 0 and named[n][1][0] + named[n][1][2] <= 320 and named[n][2].get('opacity') == '0'
+               for n in m1plus_ipod.STATUS_HIDDEN)
+    left, right = named['view_bar_left'][1], named['view_bar_right'][1]
+    assert left[0] == 0 and left[0] + left[2] <= clock[0] and clock[0] + clock[2] <= right[0] and right[0] + right[2] == 320
+    broken = decode(bar_raw); broken[3][0][2]['name'] = 'view_left'
+    try:
+        m1plus_ipod.status_bar(broken)
+    except ValueError as e:
+        assert 'Unexpected status bar' in str(e)
+    else:
+        raise AssertionError('status_bar took a bar with other names')
+    # The status images: V2.1's own (hashed), as the iPod's slim glyphs, at the Q2's sizes (Wi-Fi 14, Bluetooth 42, 12).
+    from ipod import png_header
+    for icon, digest in M1_AUDIT['status_icons'].items():
+        path = 'release/assets/default/raw/images/xx/' + icon
+        shipped = read('rootfs.squashfs', path)
+        assert sha(read('stock.squashfs', path)) == digest and sha(shipped) == manifest['changed_assets'][path]['sha256']
+        assert png_header(shipped) == (14 if icon.startswith('bar_wifi') else 42 if icon.startswith('bar_bt') else 12, 16, 8, 6), icon
+    assert png_header(read('rootfs.squashfs', 'release/assets/default/raw/images/xx/bar_back.png')) == (32, 30, 8, 6)
+    # The play state shows the tap's action: V2.1 picks bar_play while playing (status 2, its faces' only users; no UI file names them), which ships pause's glyph.
+    xx = 'release/assets/default/raw/images/xx/'
+    m1ipod.STATUS_ICONS = M1_AUDIT['status_icons']
+    pause_glyph, play_glyph = (m1ipod.status_icon(n, read('stock.squashfs', xx + n)) for n in ('bar_pause.png', 'bar_play.png'))
+    assert play_glyph != pause_glyph and read('rootfs.squashfs', xx + 'bar_play.png') == pause_glyph and read('rootfs.squashfs', xx + 'bar_pause.png') == play_glyph
+    for addiu, name in ((0x47589c, b'bar_play'), (0x475934, b'bar_pause'), (0x544d54, b'bar_play'), (0x544dec, b'bar_pause')):
+        assert stock[fileoff(stock, 0x744678 if name == b'bar_play' else 0x744684):][:len(name) + 1] == name + b'\0'
+        assert struct.unpack_from('<h', stock, fileoff(stock, addiu))[0] == (0x4678 if name == b'bar_play' else 0x4684)
+    # ipod-ui 4.6, Now Playing's controls: V2.1's own (hashed), as the iPod's quiet glyphs, 28 px.
+    assert set(M1_AUDIT['quiet_icons']) == {f'p_{n}.png' for n in ('fav', 'unfav', 'favdown', 'unfavdown', 'cycle', 'cycle1', 'order', 'random',
+                                                                   'more', 'moredown', 'playqueue', 'playqueuedown')}
+    for icon, digest in M1_AUDIT['quiet_icons'].items():
+        path = 'release/assets/default/raw/images/xx/' + icon
+        shipped = read('rootfs.squashfs', path)
+        assert sha(read('stock.squashfs', path)) == digest and sha(shipped) == manifest['changed_assets'][path]['sha256']
+        assert png_header(shipped) == (28, 28, 8, 6), icon
+    # The unticked ring (V064m pass): V2.1's (hashed) without its black disc, as the Q2's, so Light Mode flips it.
+    assert set(M1_AUDIT['clear_icons']) == {'unselect.png'}
+    for icon, digest in M1_AUDIT['clear_icons'].items():
+        path = 'release/assets/default/raw/images/xx/' + icon
+        original, shipped = read('stock.squashfs', path), read('rootfs.squashfs', path)
+        assert sha(original) == digest and shipped == m1plus_ipod.clear_icon(icon, original) and sha(shipped) == manifest['changed_assets'][path]['sha256']
+        assert png_header(shipped) == png_header(original)[:2] + (8, 6), icon
+        def rgba(d):  # each pixel's (r, g, b, a)
+            return [tuple(map(int, l.split('(', 1)[1].split(')')[0].split(',')))
+                    for l in m1ipod.imagemagick('png:-', '-depth', '8', 'txt:-', data=d).decode().splitlines()[1:]]
+        before, after = rgba(original), rgba(shipped)
+        assert all(p[:3] == (255, 255, 255) for p in after)  # white alone: the ring's coverage, no disc
+        assert all(abs(b[3] * b[0] / 255 - a[3]) <= 1 for b, a in zip(before, after))
+        side = png_header(original)[0]
+        assert before[side * (side // 2) + side // 2][3] >= 120 and after[side * (side // 2) + side // 2][3] == 0  # the disc's middle
+    # ... and its page: V2.1's tree with the top row, the art slide's text, the dots, the bar, the times and the transport
+    # at the layout's places. view_buttons and view_dlna are V2.1's inside.
+    np_stock, np_page = (decode(read(i, 'release/assets/default/raw/ui/playing_page.bin')) for i in ('stock.squashfs', 'rootfs.squashfs'))
+    np = {n[2].get('name'): n for n in walk(np_page)}
+    L = m1plus_ipod.M1
+    assert [n[2]['name'] for n in np['view_local'][3]] == ['slide_view_view', 'label_ipod_pos', 'img_hr', 'btn_fav', 'btn_more', 'btn_return', 'slider_play',
+                                                           'img_repeata', 'img_repeatb', 'label_playtime', 'label_ipod_remain', 'view_buttons']
+    for name, box in {'app_gesture': [0, 0, 320, 450], 'view_local': [0, 0, 320, 450], 'view_dlna': [0, 0, 320, 450],
+                      'slide_view_view': [0, L['NP_SLIDE_Y'], 320, L['NP_DOTS_Y'] - L['NP_SLIDE_Y'] + 10],
+                      'btn_return': [0, 0, L['NP_BACK_W'], L['NP_TOP_H']], 'btn_more': [320 - L['NP_ICON_W'], 0, L['NP_ICON_W'], L['NP_TOP_H']],
+                      'btn_fav': [320 - 2 * L['NP_ICON_W'], 0, L['NP_ICON_W'], L['NP_TOP_H']],
+                      'img_playcover': [L['NP_ART_X'], L['NP_ART_Y'] - L['NP_SLIDE_Y'], L['NP_ART'], L['NP_ART']],
+                      'scrlabel_title': [L['NP_TEXT_X'], L['NP_TITLE_Y'] - L['NP_SLIDE_Y'], L['NP_TEXT_W'], 28],
+                      'scrlabel_artist': [L['NP_TEXT_X'], L['NP_ARTIST_Y'] - L['NP_SLIDE_Y'], L['NP_TEXT_W'], 22],
+                      'label_ipod_album': [L['NP_TEXT_X'], L['NP_ALBUM_Y'] - L['NP_SLIDE_Y'], L['NP_TEXT_W'], 22],
+                      'slider_play': [L['NP_BAR_X'], L['NP_BAR_CY'] - L['NP_BAR_TOUCH'] // 2, L['NP_BAR_W'], L['NP_BAR_TOUCH']],
+                      'label_playtime': [L['NP_BAR_X'], L['NP_TIMES_Y'], 80, 16], 'label_ipod_remain': [320 - L['NP_BAR_X'] - 80, L['NP_TIMES_Y'], 80, 16],
+                      'view_buttons': [0, L['NP_BUTTONS_Y'], 320, 66]}.items():
+        assert np[name][1] == box, (name, np[name][1])
+    assert np[name][1][1] + np[name][1][3] == m1ipod.BOTTOM and L['NP_TOP_H'] <= L['NP_SLIDE_Y'] and L['NP_TIMES_Y'] + 16 == L['NP_BUTTONS_Y']
+    assert [n[2]['name'] for n in np['view'][3]] == ['img_playcover', 'scrlabel_title', 'scrlabel_artist', 'label_ipod_album']
+    assert np['label_index'][2]['visible'] == np['label_playlen'][2]['visible'] == 'false'
+    assert np['slider_play'][2]['style'] == 's_ipod_progress' and all(np['slider_play'][2][f'style:{st}:icon'] == '' for st in ('normal', 'pressed', 'over', 'disable', 'focused'))
+    np_old = {n[2].get('name'): n for n in walk(np_stock)}
+    assert np['view_buttons'][3] == np_old['view_buttons'][3] and np['view_dlna'][3] == np_old['view_dlna'][3]
+    # Centred Now Playing's page: V2.1's, named playing_page, its layout and transport, the iPod's bar and lyrics across their column.
+    centred_page = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK))
+    assert centred_page[2]['name'] == 'playing_page' and centred_page[3][0][1] == np_stock[3][0][1]
+    centred = {n[2].get('name'): n for n in walk(centred_page)}
+    assert centred['img_playcover'][1] == [(320 - 254) // 2] + np_old['img_playcover'][1][1:] == [33, 0, 254, 254]
+    assert centred['img_playcover'][1][0] == np_old['img_playcover1'][1][0]  # the centre line, as the DLNA twin
+    for name in ('slide_view_view', 'btn_return', 'scrlabel_title', 'label_playtime', 'view_buttons', 'btn_fav', 'btn_more'):
+        assert centred[name][1] == np_old[name][1], name
+    assert centred['slider_play'][1] == np_old['slider_play'][1] and centred['slider_play'][2]['style'] == 's_ipod_progress'
+    assert centred['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=100%,h=-20)' and centred['label_lyricmsg'][2]['self_layout'] == 'default(x=0,y=100,w=100%,h=28)'
+    assert m1plus_ipod.playing_stock(read('stock.squashfs', 'release/assets/default/raw/ui/playing_page.bin')) == read('rootfs.squashfs', 'release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK)
+    # Spotify's page shares Now Playing's layout, and Radio keeps its stack.
+    S = defines('m1plus_offsets.inc')
+    assert [S[f'SPOT_{n}'] for n in 'ART_X ART_Y ART_PX TEXT_X TEXT_W TITLE_Y ARTIST_Y ALBUM_Y BAR_X BAR_W TIMES_Y TIME_X TAG_X'.split()] == [
+        L[f'NP_{n}'] for n in 'ART_X ART_Y ART TEXT_X TEXT_W TITLE_Y ARTIST_Y ALBUM_Y BAR_X BAR_W TIMES_Y BAR_X'.split()] + [L['NP_BACK_W'] + 8]
+    assert S['SPOT_BAR_Y'] == L['NP_BAR_CY'] - S['SPOT_BAR_H'] // 2 and S['SPOT_BAR_H'] == L['NP_BAR_CLASSIC']
+    assert [L[f'RADIO_{n}'] for n in 'ART_X ART_Y ART_PX TITLE_Y TIMES_Y'.split()] == [50, 50, 220, 280, 392]
+    # ipod-ui 4.6, the big cover: V2.1's page, full screen, the art a centred square with the shade and title on its foot; the
+    # artist transparent, as its refresh (0x52958c) shows it. V2.1 opens it only from Enlarged Art's countdown, whose word and reset
+    # are BC_IDLE and BC_IDLE_FULL, and its image names are the ones the payload reads.
+    big = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/bigcover_page.bin'))
+    assert big[2]['fullscreen'] == 'true' and [n[2]['name'] for n in big[3]] == ['img_playcover', 'view_shade', 'scrlabel_title', 'scrlabel_artist']
+    art_y = (m1ipod.UI_H - m1plus_ipod.BC_ART) // 2
+    foot = art_y + m1plus_ipod.BC_ART - m1plus_ipod.BC_SHADE_H
+    assert big[3][0][1] == [0, art_y, 320, 320] and big[3][1][1] == [0, foot, 320, m1plus_ipod.BC_SHADE_H] and foot <= big[3][2][1][1] < art_y + 320
+    assert big[3][3][2]['opacity'] == '0' and m1plus_ipod.BC_ART == m1ipod.UI_W
+    assert words(0x53d0f4, 1) == (0x24020014,) and words(0x53d0fc, 1) == (0xae22ccd0,) and L['BC_IDLE'] == 0x97ccd0 and L['BC_IDLE_FULL'] == 20
+    # ... and the volume dialog: clear and full screen for vol_paint, the strip's children hidden; view_page2, V2.1's VOLUME page, as V2.1 has it.
+    vol_old, vol = (decode(read(i, 'release/assets/default/raw/ui/dialog/volume_dialog.bin')) for i in ('stock.squashfs', 'rootfs.squashfs'))
+    assert 'highlight' not in vol[2] and vol[1] == [0, 0, m1ipod.UI_W, m1ipod.UI_H] and vol[3][1] == vol_old[3][1]
+    assert all(vol[2][f'style:{st}:bg_color'] == vol[3][0][2][f'style:{st}:bg_color'] == '#00000000' for st in ('normal', 'disable', 'focused'))
+    assert vol[3][0][2]['self_layout'] == 'default(x=0,y=0,w=100%,h=100%)'
+    assert [(n[2].get('visible'), n[2].get('opacity')) for n in vol[3][0][3]] == [(None, '0'), ('false', None), ('false', None)]
+    for a, w, why in playing['volume_init']:
+        assert struct.unpack_from('<I', demo, fileoff(demo, int(a, 16)))[0] == int(w, 16), why
+    try:
+        m1plus_ipod.playing_page(['window', [0, 0, 0, 0], {'name': 'playing_page'}, []])
+    except ValueError as e:
+        assert 'Unexpected Now Playing' in str(e)
+    else:
+        raise AssertionError('playing_page took a page with other names')
+    # ipod-ui 4.3, the settings pages. V2.1's list_view layouter (children_layouter_list_view_create) uses the vtable at
+    # 0x9047a0: its type name, then the layout slot ipod_list_layout takes (LIST_VIEW_LAYOUT_SLOT) holding
+    # LIST_VIEW_LAYOUT.
+    assert stock_syms['children_layouter_list_view_create'] == 0x60b79c and words(0x9047a8, 1) == (0x60abb0,)
+    vtable_name = words(0x9047a0, 1)[0]
+    assert stock[fileoff(stock, vtable_name):fileoff(stock, vtable_name) + 10] == b'list_view\0'
+    # V2.1's settings rows have no inner button: a list_item_style list_item holds its children directly, centred on a
+    # 60 px body in a 64 px row: a 40 px icon at 12,10, the label at 60,20 (at 12 without an icon), and trailing
+    # images that end at x 308 (a 57x28 switch at 251,16, right_arrow 13 px at 295, a 26 px tick at 282,17). Each
+    # pinned word is an `li` of one argument (a1 x, a2 y, a3 w) at System Setting's, Playback Setting's, Display's,
+    # Bluetooth's, Time zone's and Language's builders.
+    def li(reg, value): return 0x24000000 | reg << 16 | value
+    shape = {0x4adbcc: li(5, 12), 0x4adbc4: li(6, 10), 0x4adbc0: li(7, 40),  # sysset icon
+             0x4adc10: li(5, 60), 0x4adc00: li(6, 20),  # sysset label
+             0x4adcdc: li(5, 251), 0x4adcd4: li(6, 16), 0x4adcd0: li(7, 57),  # sysset switch
+             0x4a0680: li(5, 12), 0x4a0678: li(6, 10), 0x4a0674: li(7, 40),  # playset icon
+             0x4a0778: li(5, 251), 0x4a0770: li(6, 16), 0x4a076c: li(7, 57),  # playset switch
+             0x4a5d88: li(5, 12), 0x4a5d80: li(6, 20),  # display's label, no icon
+             0x4a30e4: li(5, 295), 0x4a30d8: li(7, 13),  # bluetooth quality's right_arrow
+             0x4a2310: li(5, 282), 0x4a2308: li(6, 17), 0x4a2304: li(7, 26),  # time zone's tick
+             0x4a7fa0: li(5, 282), 0x4a7f98: li(6, 17), 0x4a7f94: li(7, 26)}  # language's tick
+    assert all(words(a, 1) == (w,) for a, w in shape.items()), [hex(a) for a, w in shape.items() if words(a, 1) != (w,)]
+    # Its row icons (settings_icons): every 40 px pset_, sset_, system_ and playset_ image, hashed; already SET_ICON
+    # square RGBA, so the build ships them as they are, and the image hook leaves their category colours alone.
+    import fnmatch
+    images = [p for p in re.findall(r'squashfs-root/release/assets/default/raw/images/xx/(\S+\.png)',
+                                    subprocess.run(['unsquashfs', '-l', str(directory/'stock.squashfs')], capture_output=True, text=True).stdout)
+              if any(fnmatch.fnmatch(p, f'{k}_*') for k in ('pset', 'sset', 'system', 'playset'))]
+    square = {p for p in images if png_header(read('stock.squashfs', 'release/assets/default/raw/images/xx/' + p))[:2] == (40, 40)}
+    assert set(M1_AUDIT['settings_icons']) == square and len(square) == 43
+    for icon, digest in M1_AUDIT['settings_icons'].items():
+        path = 'release/assets/default/raw/images/xx/' + icon
+        assert sha(read('stock.squashfs', path)) == digest and png_header(read('stock.squashfs', path)) == (40, 40, 8, 6), icon
+    # The settings pages as built: each navigationbar_view hidden and disabled, its return button still enabled (back_of
+    # and previous_back click it); each list SET_TOP from the bar, its rows SET_ROW, as many complete ones as fit (the
+    # Power page's standby slide stops at 434, over its slide indicator). The Lock Screen page keeps its toolbar.
+    m1 = m1plus_ipod.M1
+    assert set(m1plus_ipod.M1_SETTINGS) <= set(M1_AUDIT['m1_only'])
+    for page in (*M1_AUDIT['navbar_only'], *m1plus_ipod.M1_SETTINGS):
+        built = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + page))
+        navs = [n for n in walk(built) if n[2].get('name', '').startswith('navigationbar_view')]
+        lists = [n for n in walk(built) if n[0] == 'list_view']
+        if page in m1plus_ipod.SETTINGS_TOOLBAR_SWITCHES:
+            assert page not in m1plus_ipod.REWRITES and all(n[2].get('visible') != 'false' for n in navs), page
+            continue
+        assert navs and all(n[2]['visible'] == n[2]['enable'] == 'false' for n in navs), page
+        backs = [b for n in navs for b in n[3] if b[2].get('style') == 'navbar_btnreturn_style']
+        assert len(backs) == len(navs) and all(b[2].get('enable') == 'true' for b in backs), page
+        for n in lists:
+            rows = 5 if n[2]['name'] == 'standby_listview' else m1['SET_ROWS']
+            assert n[1][1] == m1['SET_TOP'] and n[1][3] == rows * m1['SET_ROW'] and n[2]['default_item_height'] == str(m1['SET_ROW']), page
+            assert [c[1][3] for c in n[3]] == [n[1][3]] * 2, page  # its scroll view and bar, as tall
+    assert sum(1 for p in M1_AUDIT['navbar_only'] if p in m1plus_ipod.REWRITES) == 32 and all(p in m1plus_ipod.REWRITES for p in m1plus_ipod.M1_SETTINGS)
+    # 4.4: the library pages as built: the title bar hidden and disabled (Playlists keeps its own, as the Q2's does), the
+    # list from the top to BOTTOM (Playlists' under its bar), its children as tall (or following it, h=100%), rows
+    # LIB_PITCH (an album's 154 px header default aside) and the table clients the screen's width.
+    for page in m1plus_ipod.LIBRARY_PAGES:
+        built = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + page))
+        nav, = [n for n in built[3] if n[2].get('name') == 'navigationbar_view']
+        lst, = [n for n in built[3] if n[0] in ('list_view', 'table_view')]
+        top = 50 if page == 'playlist_page.bin' else 0
+        assert (nav[2].get('visible') == nav[2].get('enable') == 'false') == (page != 'playlist_page.bin'), page
+        assert lst[1][1] == top and lst[1][3] == m1ipod.BOTTOM - top, page
+        assert lst[2].get('self_layout') in (None, f'default(x=0,y={top},w=100%,h={m1ipod.BOTTOM - top})'), page  # Folders' places itself
+        assert all(c[1][3] == lst[1][3] or 'h=100%' in c[2].get('self_layout', '') for c in lst[3]), page
+        assert {n[2][k] for n in walk(built) for k in ('row_height', 'default_item_height') if k in n[2]} <= {str(m1ipod.PITCH), '154'}, page
+        assert all(n[1][2] == m1ipod.UI_W for n in walk(built) if n[0] == 'table_client'), page
+        assert all(n[1][3] == m1ipod.PITCH and n[2].get('self_layout') == f'default(w=100%,h={m1ipod.PITCH})'
+                   for n in walk(built) if n[0] == 'table_row'), page
+    # System Setting in the iPod order (m1plus_nav_sysset.c sysset_ipod_order). V2.1's builder makes a row per
+    # syssetMenu entry (0..14, or 15 with sset_prove), names it by its index and draws get_systemset_showinfo's icon:
+    # one of two tables, memcpy'd by a GPIO, which differ only in Double Tap's. The rows' click
+    # (on_syssetback_onclick) reads the name back with atoi and indexes syssetMenu, so a restacked row keeps its click.
+    def cstr(a): return stock[fileoff(stock, a):stock.index(b'\0', fileoff(stock, a))].decode()
+    tables = [[cstr(p) for p in words(t, 16)] for t in (0x97c988, 0x97c9c8)]
+    assert words(stock_syms['syssetMenu'], 16) == tuple(range(16))
+    assert tables[0] == ['system_language', 'sset_wifiset', 'sset_netservice', 'sset_display', 'sset_powermanager', 'system_time',
+                         'sset_carmode', 'sset_tswake', 'sset_keylock', 'system_scrotate', 'sset_theme', 'system_update',
+                         'system_formatcard', 'system_reset', 'sset_about', 'sset_prove']
+    assert tables[1] == tables[0][:7] + ['sset_doublewake'] + tables[0][8:]
+    showinfo = stock_syms['get_systemset_showinfo']
+    assert words(showinfo + 0x70, 1)[0] & 0xffff == 0x10000 - 0x3678 and words(showinfo + 0xb4, 1)[0] & 0xffff == 0x10000 - 0x3638
+    assert got(showinfo + 0x80) == 0x743570  # strcpy(buf, table[id])
+    click = stock_syms['on_syssetback_onclick'] + 0x260  # the row click (0x4ad7b0), bound at 0x4adde0
+    assert click == 0x4ad7b0 and words(0x4adde8, 1)[0] & 0xffff == 0x10000 - 0x2850 and got(0x4adddc) == 0x4b0000
+    assert got(0x4ad7c0) == 0x7435b0 and words(0x4ad7e0, 1) == (0x8c840010,) and got(0x4ad7f0) == stock_syms['syssetMenu']  # atoi(name)
+    sysset_c = (ROOT/'patch/m1plus_nav_sysset.c').read_text()
+    roles = re.findall(r'"(\w+)"', sysset_c[sysset_c.index('sysset_roles[]'):sysset_c.index('#define SYSSET_ROLES')])
+    assert set(roles) == set(tables[0] + tables[1]) - {'sset_prove'} and len(roles) == 16, roles
+    # ipod-ui 4.4, the Library. V2.1's library rows: each builder's own constructor makes a row 60 high (Folders' 64), and
+    # All Songs' and the class lists' an inner button 56 high (Folders' 60) that holds the row's children. Each row's
+    # children are laid out by its own default(r=1,c=0,...) layouter (one row, every child its height), set by a jalr
+    # widget_set_children_layout with the params a GOT page plus an addiu: All Songs (music_create_tablerow), the class
+    # lists (localclass_create_tablerow), Folders (folder_create_tablerow), Albums (album_listitem_layout, x=0, the cover
+    # flush left), an album's tracks (albumdeinfo_listitem_layout) and Playlists (playlist_listitem_layout). All Songs'
+    # title and its artist line, and Albums' two lines, sit in a text view at fixed y: 10 and 30, and 10 and 32.
+    def li(reg, value): return 0x24000000 | reg << 16 | value
+    library = {'music_create_tablerow': {0x528570: li(2, 60), 0x5285a0: li(17, 56), 0x528734: li(6, 10), 0x5287b8: li(6, 30)},
+               'localclass_create_tablerow': {0x5368bc: li(2, 60), 0x5368e8: li(17, 56)},
+               'folder_create_tablerow': {0x53320c: li(2, 64), 0x533238: li(17, 60)},
+               'album_listitem_layout': {0x5245f0: li(2, 60)},  # list_item_create's h, for album_listitem_layout's row
+               'airplay_page_init': {0x522918: li(6, 10), 0x5229c0: li(6, 32)},  # Albums' text view (0x52289c)
+               'albumdeinfo_listitem_layout': {0x52667c: li(2, 60)}}
+    for fn, sites in library.items():
+        start = stock_syms[fn]
+        for a, w in sites.items():
+            assert start < a < start + 0x1000 and words(a, 1) == (w,), (fn, hex(a))
+    layouts = {0x528624: 'default(r=1,c=0,x=12,s=8)', 0x53696c: 'default(r=1,c=0,x=12,s=8)', 0x5332bc: 'default(r=1,c=0,x=12,s=8)',
+               0x524494: 'default(r=1,c=0,x=0,s=8)', 0x52651c: 'default(r=1,c=0,x=12,s=8)', 0x53e6ec: 'default(r=1,c=0,x=12,s=8)'}
+    for call, params in layouts.items():
+        assert words(call, 1) == (0x0320f809,) and got(call - 4) == stock_syms['widget_set_children_layout'] and \
+            compared(call - 8, call + 4)[1] == params.encode(), hex(call)
+    # V2.1's default children layouter: a 0x1c-byte children_layouter_default_t whose children_layouter_t holds a 12-byte
+    # str_t, so the vtable (0x904924, "default", its layout at [2]) is at 0xc, rows and cols at 0x10 and 0x12, and the x,
+    # y and spacing bytes at 0x14, 0x15 and 0x16 (set_param's switch on the key's letter, its jump table at 0x75c420).
+    create = stock_syms['children_layouter_default_create']
+    assert words(create + 0x1c, 1) == (0x2405001c,) and words(create + 0x6c, 2) == (0x24424924, 0xae02000c)  # calloc 0x1c; vt @0xc
+    assert m1plus_inc('DEFAULT_LAYOUT_VTABLE') == 0x904924 and cstr(words(0x904924, 1)[0]) == 'default' and words(0x904924 + 8, 1) == (0x63a444,)
+    assert m1plus_inc('CHILDREN_LAYOUT_VTABLE') == 0xc and m1plus_inc('DEFAULT_LAYOUT_X_MARGIN') == 0x14 and m1plus_inc('DEFAULT_LAYOUT_SPACING') == 0x16
+    params = {chr(97 + i): (w + M1PLUS_GP) & 0xffffffff for i, w in enumerate(struct.unpack_from('<25i', stock, fileoff(stock, 0x75c420)))}
+    assert words(params['x'], 2) == (0x1000fff0, 0xa2020014) and words(params['y'], 2) == (0x1000ffec, 0xa2020015)
+    assert words(params['s'], 2) == (0x1000ffea, 0xa2020016)  # b out; sb v0, 0x14/0x15/0x16(s0)
+    # The rows' rebinds: Folders' (0x532f6c) and an album's tracks' (0x527918) resize the row's label each time (200 or
+    # 220, and 200 or 250, by multi-select), as the Q2's folder rebind does (0x522410).
+    for call in (0x532f6c, 0x527918):
+        assert words(call, 1) == (0x0320f809,) and got(call - 8) == stock_syms['widget_resize'], hex(call)
+    # Search: the library title bar's Search button (search_style, at 183) opens V2.1's search_page; its click
+    # (0x523304) is navigator_to("search_page"), which pull to search calls (stock_search).
+    assert M1PLUS_PRIVATE_FUNCTIONS['stock_search'] == 0x523304 and got(0x523318) == stock_syms['navigator_to'] and compared(0x523314, 0x523328)[1] == b'search_page'
+    assert compared(0x52307c, 0x523088)[1] == b'search_style' and got(0x5230a0) == stock_syms['widget_on'] and \
+        words(0x52308c, 1) == (0x2405010c,) and words(0x5230a8, 1)[0] & 0xffff == 0x3304 and got(0x52309c) == 0x520000
+    # Hold: AWTK's key-down arms a 1000 ms timer (0x6a48a0) for every key; it sends EVT_KEY_LONG (0x110) for a key held
+    # 1000 ms or more. on_wm_keylong_fun (ringnav_keylong) acts on the power key's (0xd2) alone, so Previous's
+    # (KEY_BACK_BTN, or KEY_FWD_BTN rotated) does nothing in stock.
+    assert words(0x6a4778, 1) == (0x240603e8,) and got(0x6a4780) == stock_syms['timer_add'] and words(0x6a4964, 1) == (0x2c4203e8,)
+    assert words(0x6a497c, 1) == (0x24050110,) and m1plus_inc('EVT_KEY_LONG') == 0x110
+    keylong = stock_syms['on_wm_keylong_fun']
+    assert [w & 0xffff for w in words(keylong, 0x10c // 4) if w >> 16 == 0x2403] == [2, 0xd2, 1, 10]  # standby and car mode 2, the key 0xd2
     assert words(0x534fbc, 1) == (0x24050113,) and got(0x534fc0) == stock_syms['widget_on'] and got(0x534fc4) == stock_syms['on_wm_keyup_fun']
     bound = {w & 0xffff for w in words(stock_syms['home_page_init'], 984 // 4) if w >> 16 == 0x2405}  # li $a1, event
     assert {0x10f, 0x111, 0x113} & bound == {0x113}, 'home_page_init binds a key-down handler'
@@ -397,8 +1059,25 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # twin: folder_back's bal clear_foldervariate (folder_reset_variable) and delete_playqueue_file's
     # bal start_playqueue (player_start_queue).
     def bal(site, name): return words(site, 1)[0] == 0x04110000 | ((stock_syms[name] - site - 4) >> 2) & 0xffff
+    # 1.7.0's oversized-Ogg tag path uses V2.1's own converter. Its six native tag reads
+    # load the same GOT entry before passing the Latin-1 flag, both strings, output and field kind.
+    assert stock_syms['toolsFixId3ErrorCode'] == 0x5ec460
+    for site in (0x5ec8c0, 0x5ec958, 0x5ec9f0, 0x5eca88, 0x5ecb20, 0x5ecbb8):
+        assert words(site, 1) == (0x8f99c770,) and got(site) == stock_syms['toolsFixId3ErrorCode']
+    # usbmode_page_init branches to DAC handling on usb_mode == 1 (lb; li 1; bne).
+    assert got(0x545e64) == stock_syms['usb_mode'] == 0xa05aa8
+    assert words(0x545e68, 3) == (0x80430000, 0x24020001, 0x14620067)
     assert bal(0x4dbf0c, 'clear_foldervariate') and stock_syms['folder_back'] < 0x4dbf0c
     assert bal(0x4e4a80, 'start_playqueue') and stock_syms['delete_playqueue_file'] < 0x4e4a80
+    # Library -> Songs (songs_load, 1.6.3): loadLocalClassList's default branch calls getAllMusic, then
+    # musicNagvationTitle (music_nagvation_title) with 0xf001 (ori $a0); V2.1's getAllMusic reads sort_flag
+    # (g_sort_flag) itself, so the payload's argument is ignored.
+    assert bal(0x4ee5c0, 'getAllMusic') and bal(0x4ee5d4, 'musicNagvationTitle') and words(0x4ee5c8, 1) == (0x3404f001,)
+    assert stock_syms['loadLocalClassList'] < 0x4ee5c0 and got(0x4ea374) == stock_syms['sort_flag']
+    # MQA_ACCEPT (1.6.3): mclWaitAccept's jalr is accept's, and a positive descriptor goes to MCL_FD's
+    # word (sw $v0, -0x5414($s4)) after it, as V1.32's does.
+    assert got(0x5d0020) == stock_syms['accept@GLIBC_2.0'] and stock_syms['mclWaitAccept'] < 0x5d0030
+    assert words(0x5d0038, 3) == (0x18400002, 0x8fbc0010, 0xae82abec)
     # online_lyricthd: the hooked search (kugou_obtainlyric), NetEase's com163_obtainlyric on a miss and
     # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
     assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')
@@ -468,7 +1147,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert words(0x5d4cf4, 1) == (0x3c05c004,) and words(0x5d4d04, 1) == (0x24a54d00,)
     assert compared(0x5d4d48, 0x5d4d54)[1] == b'{mcl-setvol\\%d}'
     assert got(0x4d6d40) == got(0x4d6e8c) == got(0x5d50bc) == stock_syms['mclSetVol']
-    # The Q2 Pod Home card (coverflow.c home_card) copies V2.1's Home grid. Its builder (0x534064)
+    # V2.1's Home grid, which the iPod Home (ipod-ui 4.5) replaces: its pages are gone, but its init and refresh still
+    # run its builder (pinned in m1plus_ipod.json home.safe_returns, returning with no home_sview). Its builder (0x534064)
     # lays pdeq_choicemenu's ids six to a page (li $s0, 6), each page a view_create(home_sview, 0, 0,
     # 320, 364) and home_sindicator's max set to the pages; each card (0x533d8c) a 154x118 view, two
     # columns from x 6, rows 0, 118 and 236, holding a 66 px image at 44, 20 and a 154x36 label at 0,
@@ -487,8 +1167,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert words(0x533f60, 1) == (0x2405010c,) and got(0x533b90) == stock_syms['atoi@GLIBC_2.0'] and words(0x533ba8, 1) == (0x2c430012,)
     # The grid is rebuilt only from home_page_init and from Home's refresh (0x534858, when
     # homemenu_changeflag is 2), which its to-foreground handler (0x534b88, bound to 0x12d) runs:
-    # the card comes back from its own to-foreground handler. Nothing loaded points to the builder
-    # (.pdr, which isn't loaded, describes it).
+    # Nothing loaded points to the builder (.pdr, which isn't loaded, describes it).
     def bal(i):
         x = struct.unpack_from('<I', stock, text[1] + i)[0]
         return x >> 16 == 0x0411 and text[2] + i + 4 + 4 * struct.unpack_from('<h', stock, text[1] + i)[0] == 0x534064
@@ -534,6 +1213,13 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     assert demo[off:off+size] == bytes(size) and any(stock[off:off+size])
     assert all(p[1]+p[4] <= off for _, p in segments(stock) if p[0] == 1)
     allowed.update(range(off, off+size))
+    off = fileoff(stock, 0x9047a8)  # the list_view layout slot (patch_code)
+    assert demo[off:off+4] == struct.pack('<I', ps['ipod_list_layout'])
+    allowed.update(range(off, off+4))
+    for edit in manifest['compact_code']:  # 4.4's library words (patch_code), each as the manifest lists it
+        off = fileoff(stock, int(edit['address'], 16))
+        assert struct.unpack_from('<I', stock, off)[0] == int(edit['original'], 16) and struct.unpack_from('<I', demo, off)[0] == int(edit['patched'], 16)
+        allowed.update(range(off, off+4))
     # The payload: stock's final PT_NULL header becomes its LOAD segment, R/W/X at BASE, after stock's bytes.
     old_segs, new_segs = segments(stock), segments(demo)
     assert [h for h, _ in old_segs] == [h for h, _ in new_segs] and [p for _, p in old_segs[:-1]] == [p for _, p in new_segs[:-1]]
@@ -560,11 +1246,17 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     added = {xx+n for n in ICONS} | {xx+f'local_{n}.png' for n in ('shuffle', 'scrobble', 'podcasts', 'audiobooks', 'photos',
                                                                     'books', 'videos', 'longsongs', 'era')} | {
              xx+f'stream_{n}.png' for n in ('spotify', 'radio', 'airplay')} | {HELPER, SCROBBLE_CA, BOOT} | ({REMOTE} if manifest['dev'] else set())
+    added |= {xx+'bar_back.png'}  # the status bar's back chevron (ipod-ui 4.2)
     added |= {xx+f'row_{n}.png' for n in ('spotify', 'radio', 'stream_config')}  # the Q2 Pod page's Streaming rows, at 40 px
     added |= {xx+'stream_app.png'}  # its card apps' rows (addon.c), at 40 px too
-    # The Q2 Pod Home card's pair, and the Q2 Pod page's Coverflow, Ratings and Most Played row icons.
-    added |= {xx+f'{n}.png' for n in ('home_q2pod', 'home_q2pod_down', 'local_coverflow', 'local_fav', 'local_frequentplay')}
-    replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C}
+    # The Library's Ratings and Most Played row icons; the iPod Home's (ipod-ui 4.5) Carousel card art, pressed too, its
+    # arrows, and Split's placeholder.
+    added |= {xx+f'{n}.png' for n in ('local_fav', 'local_frequentplay', 'home_left', 'home_right', 'default_album_home')}
+    added |= {xx+f'home_card_{row}{s}.png' for row in m1ipod.HOME_ROWS for s in ('', '_down')}
+    added.add('release/assets/default/raw/ui/' + m1plus_ipod.PLAYING_STOCK)  # Centred Now Playing (4.6)
+    replaced = {'release/bin/demo', 'usr/bin/hciplayer', BLUEALSA, BLUEALSA2, WATCHDOG, S90PLAY, S11LOGO, TAG_C} | {
+        'release/assets/default/raw/' + p for p in [*('ui/' + q for q in m1plus_ipod.REWRITES), *('styles/' + q for q in M1_AUDIT['styles']),
+                                                                      *('images/xx/' + q for q in {**M1_AUDIT['status_icons'], **M1_AUDIT['quiet_icons'], **M1_AUDIT['clear_icons']})]}
     logo = xx+'logo.jpg'
     with tempfile.TemporaryDirectory(prefix='m1-rootfs-') as tmp:
         trees = {}
@@ -586,6 +1278,17 @@ def m1plus_checks(directory, manifest, stock, demo, read):
         differ = {p for p in set(old) & set(new) if os.path.isfile(old[p]) and not os.path.islink(old[p])
                   and not filecmp.cmp(old[p], new[p], shallow=False)}
         assert differ - {logo} == replaced, differ ^ replaced
+        # The Carousel's card art (ipod-ui 4.5): each role's V2.1 Home card art at CARD_ART, pressed too; the Shortcut's
+        # its own (Phase 4.5 fixes, item 3: not Favorites' heart, whatever the Shortcut's target).
+        card = lambda n: pathlib.Path(new[xx+f'home_card_{n}.png']).read_bytes()
+        art_of = lambda n: m1ipod.sized_art(pathlib.Path(old[xx+n]).read_bytes(), m1plus_ipod.CARD_ART)
+        assert set(m1ipod.HOME_ROWS) == {*m1plus_ipod.HOME_CARD_ART, 'rockbox'}
+        for s in ('', '_down'):
+            for row, art in m1plus_ipod.HOME_CARD_ART.items():
+                assert card(row+s) == art_of(f'{art}{s}.png'), row+s
+            assert card('rockbox'+s) == m1plus_ipod.home_card_shortcut(down=bool(s))
+            assert all(m1ipod.png_header(card(row+s)) == (m1plus_ipod.CARD_ART,)*2 + (8, 6) for row in m1ipod.HOME_ROWS)
+        assert card('rockbox') != card('rockbox_down') and card('rockbox') != art_of('fav.png')
         logo_new = pathlib.Path(new[logo]).read_bytes()
         assert sha(logo_new) == manifest['logo_sha256'] and (logo not in differ) == (manifest['logo_source'] == 'stock')
         # The boot hook's assumptions about V2.1: the card script announces a mounted card, and
@@ -599,16 +1302,15 @@ def m1plus_checks(directory, manifest, stock, demo, read):
 
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
-    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, IPOD_HOOKS, IPOD_LEAF, WM_PAINT_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, LOGO_LIGHT, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLL_CALLS, DARK_POLLS, WHEEL_TS_READ, PDR
+    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, GRADIENT_LEAF, WM_PAINT_LEAF, QUEUE_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, WHEEL_LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, LOGO_LIGHT, BLUEALSA2, BT_KEEPALIVE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLL_CALLS, DARK_POLLS, WHEEL_TS_READ, PDR
     from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, BIGCOVER, BC_ART, BC_TITLE_PAD, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_PAGE, HOME_ROW, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_TOUCH, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
                       STATUS_ICONS, status_icon, QUIET_ICONS, quiet_icon, SET_ICON, SET_STOCK_ICON, SETTINGS_ICONS, SETTINGS_SLIDERS, decode, slider_plain, imagemagick, inc, png_header, settings_icon, walk,
-                      patch_asset, patch_code, patch_style, style_props, SLIDE)
+                      patch_asset, patch_code, patch_style, style_props, SLIDE, SET0, status_metrics, CLASSIC_LIGHT_FONT_SRC, NP_IPOD_TIME_WS)
     from build import source_sha256
     manifest = json.loads((directory/'manifest.json').read_text())
     assert manifest['source_sha256'] == source_sha256(), f'{directory} was built from other sources; rebuild into a fresh directory'
-    ipod = manifest['variant'] == 'ipod'
     stock = (directory/'stock-demo').read_bytes()
     demo = (directory/'demo').read_bytes()
     def read(image, rel):
@@ -616,35 +1318,26 @@ def validate_assets(directory):
     shared_checks(directory, manifest, stock, demo, read)
     if manifest.get('model') == 'Shanling M1 Plus':
         m1plus_checks(directory, manifest, stock, demo, read)
-        print(f'M1 Plus {manifest["variant"]}: hook jumps, demo diff, rootfs file parity and boot scripts passed.')
+        print(f'M1 Plus: hook jumps, demo diff, rootfs file parity and boot scripts passed.')
         return
-    # All original executable bytes outside the reviewed hooks, version and compact sites
-    # must remain stock; the payload and ELF mapping are independently hashed by the runner.
-    if not ipod:
-        for group in [*AUDIT['immediates'], AUDIT['row_layout_calls'],
-                      {'sites': [('0x522410', '0x0320f809'), ('0x523de0', '0x0320f809')]}]:
-            for address, _ in group['sites']:
-                off = fileoff(stock, int(address, 16))
-                assert demo[off:off+4] == stock[off:off+4]
+    # A widget's style, as stock's widget_update_style passes it to the style's notify: lw $4, W_ASTYLE($16).
+    astyle = int(re.search(r'#define W_ASTYLE (0x[0-9a-f]+)', (ROOT/'patch/offsets.inc').read_text())[1], 16)
+    off = fileoff(stock, 0x65e268)
+    assert int.from_bytes(stock[off:off+4], 'little') == 0x8e040000 | astyle
     # .pdr (build.py PDR), past every LOAD segment, ships zeroed.
     assert demo[PDR[0]:PDR[0]+PDR[1]] == bytes(PDR[1]) and any(stock[PDR[0]:PDR[0]+PDR[1]])
     # The slide hint names a stock animator and gives it a duration (a missing one means stock's 500 ms).
     assert re.fullmatch(r'htranslate\(duration=\d+\)', SLIDE) and b'\0htranslate\0' in stock
-    # Only iPod's animated lookup pages need synchronous unwind; Stock keeps its Back calls.
+    # The animated lookup pages need synchronous unwind.
     for address, slot in ((0x4a6250, 0x468), (0x4ad458, 0x468), (0x526e70, 0x420)):
         off = fileoff(stock, address)
-        want = struct.pack('<III', 0x8f99a8f8, 0x0320f809, 0x8fa40000 | slot) if ipod else stock[off:off+12]
+        want = struct.pack('<III', 0x8f99a8f8, 0x0320f809, 0x8fa40000 | slot)
         assert demo[off:off+12] == want
-    # iPod alone jumps from these entry points to its payload (build.py pins the leaf's words);
-    # Stock keeps all of them stock.
-    for address, name in [*(h[:2] for h in IPOD_HOOKS.values()), IPOD_LEAF[1:3]]:
+    # Every hook and leaf jumps to its payload function (build.py pins the leaves' words): the
+    # leaves are window_manager_paint (Videos), style_get_gradient and main_loop_queue_event.
+    for address, name in [*(h[:2] for h in HOOKS.values()), WM_PAINT_LEAF[1:3], GRADIENT_LEAF[1:3], QUEUE_LEAF[1:3]]:
         off = fileoff(stock, address)
-        want = stock[off:off+8]
-        if ipod: want = j(symbols(directory/'patch.elf')[name]).to_bytes(4, 'little') + bytes(4)
-        assert demo[off:off+8] == want
-    # Both jump from window_manager_paint (Videos).
-    off = fileoff(stock, WM_PAINT_LEAF[1])
-    assert demo[off:off+8] == j(symbols(directory/'patch.elf')[WM_PAINT_LEAF[2]]).to_bytes(4, 'little') + bytes(4)
+        assert demo[off:off+8] == j(symbols(directory/'patch.elf')[name]).to_bytes(4, 'little') + bytes(4)
     changed = manifest['changed_assets']
     xx = 'release/assets/default/raw/images/xx/'
     # Every stock UI asset with Chinese text is given in English (english_ui), the edited ones after their edit.
@@ -654,34 +1347,34 @@ def validate_assets(directory):
                if l.startswith('squashfs-root/'+ui) and l.endswith('.bin') and l.removeprefix('squashfs-root/') not in STOCK_EQ}
     chinese = {rel for rel in chinese if CJK.search(read('stock.squashfs', ui+rel).decode('utf-8', 'replace'))}
     assert chinese and {'testmode/test_key.bin', 'kb_default_t9.bin', 'dialog/search_dialog.bin'} <= chinese
-    patched_ui = set(UI_ASSETS if ipod else [ARTIST_PAGE, HOME_PAGE])
+    patched_ui = set(UI_ASSETS)
     assert set(changed) == {ui+p for p in patched_ui | chinese} | {
-        'release/assets/default/raw/styles/'+p for p in (AUDIT['styles'] if ipod else [])} | {
-        xx+n for n in (SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS | ART_PLACEHOLDERS if ipod else [])} | {'release/assets/default/raw/strings/en_US.bin', FONT, TAG_C}
+        'release/assets/default/raw/styles/'+p for p in AUDIT['styles']} | {
+        xx+n for n in SETTINGS_ICONS | QUIET_ICONS | STATUS_ICONS | ART_PLACEHOLDERS} | {'release/assets/default/raw/strings/en_US.bin', FONT, TAG_C}
     master = (ROOT/'assets/icons/default_album_home.png').read_bytes()
     for name, size in ART_PLACEHOLDERS.items():
         old, new = read('stock.squashfs', xx+name), read('rootfs.squashfs', xx+name)
-        if ipod: assert png_header(new)[:2] == (size if isinstance(size, tuple) else (size, size)), name
-        assert new == (sized_art(master, size) if ipod else old), name
-        if ipod:
-            assert changed[xx+name] == dict(original_sha256=sha(old), sha256=sha(new))
-            if not isinstance(size, tuple):  # transparent corners, not black, over a selected row
-                assert imagemagick('png:-', '-format', '%[fx:p{0,0}.a]', 'info:', data=new) == b'0', name
-    if ipod:
-        games = read('rootfs.squashfs', xx+'local_games.png')
-        assert games == (ROOT/'assets/icons/local_games.png').read_bytes()
-        assert png_header(games) == (52, 52, 8, 6)
-        assert imagemagick('png:-', '-format', '%[fx:p{0,0}.a]', 'info:', data=games) == b'0'
-        flow = read('rootfs.squashfs', xx+'default_album_flow.png')
-        assert flow == sized_art(master, 160) and png_header(flow) == (160, 160, 8, 6)
-        assert read('rootfs.squashfs', xx+'default_album_home.png') == master
-    if ipod:
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.ttf') as font:
-            font.write(read('stock.squashfs','release/assets/default/raw/fonts/default.ttf')); font.flush()
-            for text,size,room in [('Q2',16,28),('12:59 PM',16,CLOCK_TEXT),('100%',inc('BATT_PCT_PX'),inc('BATT_PCT_W'))]:
-                rendered=imagemagick('-font',font.name,'-pointsize',str(size),'label:'+text,'png:-',data=b'')
-                assert png_header(rendered)[0]-1<=room,(text,size,room,png_header(rendered))
+        assert png_header(new)[:2] == (size if isinstance(size, tuple) else (size, size)), name
+        assert new == sized_art(master, size), name
+        assert changed[xx+name] == dict(original_sha256=sha(old), sha256=sha(new))
+        if not isinstance(size, tuple):  # transparent corners, not black, over a selected row
+            assert imagemagick('png:-', '-format', '%[fx:p{0,0}.a]', 'info:', data=new) == b'0', name
+    games = read('rootfs.squashfs', xx+'local_games.png')
+    assert games == (ROOT/'assets/icons/local_games.png').read_bytes()
+    assert png_header(games) == (52, 52, 8, 6)
+    assert imagemagick('png:-', '-format', '%[fx:p{0,0}.a]', 'info:', data=games) == b'0'
+    flow = read('rootfs.squashfs', xx+'default_album_flow.png')
+    assert flow == sized_art(master, 160) and png_header(flow) == (160, 160, 8, 6)
+    assert read('rootfs.squashfs', xx+'default_album_home.png') == master
+    # Home: Carousel's cards in their own colours, stock's untouched, Coverflow's and the Shortcut's added.
+    for name in ICONS:
+        assert read('rootfs.squashfs', xx+name) == (ROOT/'assets/icons'/name).read_bytes(), name
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix='.ttf') as font:
+        font.write(read('stock.squashfs','release/assets/default/raw/fonts/default.ttf')); font.flush()
+        for text,size,room in [('Q2',16,28),('12:59 PM',16,CLOCK_TEXT),('100%',inc('BATT_PCT_PX'),inc('BATT_PCT_W'))]:
+            rendered=imagemagick('-font',font.name,'-pointsize',str(size),'label:'+text,'png:-',data=b'')
+            assert png_header(rendered)[0]-1<=room,(text,size,room,png_header(rendered))
     # Now Playing's queue reads "Queue", Idle "Power" and standby/shutdown "Standby" (LABELS); the table's later offsets move with them and nothing else changes.
     strings = 'release/assets/default/raw/strings/en_US.bin'
     old, new = read('stock.squashfs', strings), read('rootfs.squashfs', strings)
@@ -689,8 +1382,8 @@ def validate_assets(directory):
     n = 2 * struct.unpack_from('<H', new, 2)[0]
     table = dict(zip(*[iter(new[o:new.index(b'\0', o)] for o in struct.unpack_from(f'<{n}I', new, 4))] * 2))
     assert [table[k] for k, _, _ in LABELS] == [v for _, _, v in LABELS] and table[b'powerm_sleep'] == b'Sleep Timer'
-    # iPod settings icons: the audited 52px artwork, packaged as SET_ICON RGBA with the same transparency
-    # and, on a plain background, the same average colour; Stock keeps them stock. Minimal greys them
+    # Settings icons: the audited 52px artwork, packaged as SET_ICON RGBA with the same transparency
+    # and, on a plain background, the same average colour. Minimal greys them
     # as they load (navigation.c ringnav_image_add: every disc MINIMAL_CHEVRON, glyphs white).
     def mean(png, bg):
         cmd = ['png:-', '-background', bg, '-flatten', '-format', '%[fx:mean.r],%[fx:mean.g],%[fx:mean.b]', 'info:']
@@ -698,9 +1391,6 @@ def validate_assets(directory):
     for name, digest in SETTINGS_ICONS.items():
         old, new = read('stock.squashfs', xx+name), read('rootfs.squashfs', xx+name)
         assert sha(old) == digest and png_header(old) == (SET_STOCK_ICON, SET_STOCK_ICON, 8, 6), name
-        if not ipod:
-            assert new == old, name
-            continue
         assert changed[xx+name] == dict(original_sha256=digest, sha256=sha(new)) and new == settings_icon(name, old), name
         assert png_header(new) == (SET_ICON, SET_ICON, 8, 6), name
         try: settings_icon(name, old[:-1] + b'x')
@@ -716,14 +1406,21 @@ def validate_assets(directory):
         runtime = imagemagick('-size', f'{SET_ICON}x{SET_ICON}', '-depth', '8', 'rgba:-', '-define', 'png:color-type=6', 'png:-', data=bytes(px))
         values = mean(runtime, '#000000')  # Minimal's black list: neutral grey
         assert max(values) - min(values) < 0.001, name
-    if ipod:  # Classic's bold ships, cut to what BOLD_RANGES lists
-        from build import BOLD_TTF, bold_font
-        assert read('rootfs.squashfs', BOLD_TTF) == bold_font()[0]
-        # Centred Now Playing's page is English, as the iPod page is (english_ui)
-        from build import CJK
-        from ipod import PLAYING_STOCK
-        stock_page = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + PLAYING_STOCK))
-        assert not any(CJK.search(n[2].get('text', '')) for n in walk(stock_page))
+    # Classic's bold ships, cut to what BOLD_RANGES lists
+    from build import BOLD_TTF, CLASSIC_LIGHT_TTF, CLASSIC_LIGHT_NOTICE, FONT_NOTICES, bold_font, subset_font
+    assert read('rootfs.squashfs', BOLD_TTF) == bold_font()[0]
+    assert read('rootfs.squashfs', CLASSIC_LIGHT_TTF) == subset_font(ROOT/'assets/fonts/texgyreheros-bold.otf', 'Q2 Pod Classic Light', 'CLASSIC_LIGHT_RANGES', CLASSIC_LIGHT_NOTICE)[0]
+    for name in FONT_NOTICES:
+        assert read('rootfs.squashfs', 'release/assets/default/raw/fonts/' + name) == (ROOT/'assets/fonts'/name).read_bytes()
+    # Centred Now Playing's page is English, as the iPod page is (english_ui)
+    from build import CJK
+    from ipod import PLAYING_STOCK
+    stock_page = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + PLAYING_STOCK))
+    assert not any(CJK.search(n[2].get('text', '')) for n in walk(stock_page))
+    # its lyrics page follows the page's size, for full-screen lyrics (navigation.c np_full)
+    named = {n[2].get('name'): n[2] for n in walk(stock_page)}
+    assert named['view_lrc']['self_layout'] == 'default(x=0,y=0,w=100%,h=-20)'
+    assert named['label_lyricmsg']['self_layout'] == 'default(x=0,y=73,w=100%,h=28)'
     # Curly quotes draw the straight glyphs and ♡ takes ♥'s box and advance; other tables keep their
     # stock bytes (head: its checksum).
     from build import QUOTES
@@ -740,14 +1437,12 @@ def validate_assets(directory):
     paths = [l.removeprefix('squashfs-root/') for l in run('unsquashfs', '-l', directory/'stock.squashfs').splitlines()
              if ('/raw/ui/' in l or '/raw/styles/' in l) and l.endswith('.bin') or l.endswith('/config.ini')]
     names = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').splitlines())
-    # Light Mode's splash ships with the default logo in iPod builds only (build.py LOGO_HOOK)
+    # Light Mode's splash ships with the default logo only (build.py LOGO_HOOK)
     light = (ROOT/'assets/boot-logo-light.jpg').read_bytes()
-    default = ipod and manifest['logo_sha256'] == sha((ROOT/'assets/boot-logo.jpg').read_bytes())
+    default = manifest['logo_sha256'] == sha((ROOT/'assets/boot-logo.jpg').read_bytes())
     assert ('squashfs-root/'+LOGO_LIGHT in names) == default and (not default or read('rootfs.squashfs', LOGO_LIGHT) == light)
-    # iPod drops the carousel images and adds no Coverflow icons; Stock keeps both.
-    icons = {'squashfs-root/release/assets/default/raw/images/xx/'+n for n in ICONS}
-    carousel = {'squashfs-root/'+rel for rel in CAROUSEL}
-    assert (carousel & names == (set() if ipod else carousel)) and (icons & names == (set() if ipod else icons))
+    # The carousel's images stay (and its arrows); the Coverflow and Shortcut cards' are added.
+    assert {'squashfs-root/release/assets/default/raw/images/xx/'+n for n in ICONS + ['menu_music.png', 'menu_left.png', 'menu_right.png']} <= names
     # Colours the firmware will paint (inline style props, else the theme entry for the widget's style):
     # no screen may gain a light background or border, or dark text, that stock did not already paint.
     def palette(path):
@@ -819,8 +1514,8 @@ def validate_assets(directory):
             now = painted(decode(new), themes[1])
             bad = [c for c in now - painted(decode(original), themes[0]) if jarring(c)
                    and (c[2] != 'text_color' or c[0] in ('label', 'hscroll_label', 'button', 'edit', 'tab_button'))]
-            # iPod rows are transparent, so a light list container stock hid behind them would show.
-            bad += [c for c in now if ipod and c[2] == 'bg_color' and jarring(c)
+            # The rows are transparent, so a light list container stock hid behind them would show.
+            bad += [c for c in now if c[2] == 'bg_color' and jarring(c)
                     and c[0] in ('list_view', 'list_item', 'scroll_view', 'table_view', 'table_client', 'view')]
             assert not bad, (rel, bad)
         if rel not in changed:
@@ -848,7 +1543,7 @@ def validate_assets(directory):
             else: assert name in SETTINGS_ICONS and new==settings_icon(name,original)
             continue
         short = rel.split('/raw/ui/')[1]
-        edited = patch_asset(short, original, ipod) if short in patched_ui else original
+        edited = patch_asset(short, original) if short in patched_ui else original
         assert new == (english_ui(short, edited) if short in chinese else edited), short
         if short not in patched_ui:
             continue
@@ -860,7 +1555,7 @@ def validate_assets(directory):
             assert decode(new) == expected
             continue
         root = decode(new)
-        if ipod and short in SETTINGS_SLIDERS:
+        if short in SETTINGS_SLIDERS:
             before = {n[2].get('name'): n for n in walk(decode(original))}
             assert not [n for n in walk(root) if n[0] == 'image' and n[2].get('image')]  # no endpoint glyphs
             gone = [n for n in walk(root) if n[2].get('name') in before and before[n[2]['name']][2].get('image')]
@@ -887,13 +1582,13 @@ def validate_assets(directory):
             for child in plain[3]: child[2]['visible'] = 'false'
             assert root == plain
             continue
-        # iPod: browsing, settings and the PEQ editor slide; Home, Now Playing, the bar and dialogs don't.
-        slides = ipod and short not in (HOME_PAGE, STATUS_BAR, PLAYING_PAGE, QUICK_SETTINGS, CONFIRM, BIGCOVER)
+        # Browsing, settings and the PEQ editor slide; Home, Now Playing, the bar and dialogs don't.
+        slides = short not in (HOME_PAGE, STATUS_BAR, PLAYING_PAGE, QUICK_SETTINGS, CONFIRM, BIGCOVER)
         assert root[2].get('anim_hint') == (SLIDE if slides else None), short
-        if ipod:  # screen coordinates: the bar, full-screen dialogs (quick settings slides down from -320), windows
-            origin, window = {STATUS_BAR: (0, (0, 30)), QUICK_SETTINGS: (320, (0, 320)), CONFIRM: (0, (0, 320)),
-                              BIGCOVER: (0, (0, 320))}.get(short, (30, (30, 320)))
-            corners(short, root, 0, origin, window)
+        # screen coordinates: the bar, full-screen dialogs (quick settings slides down from -320), windows
+        origin, window = {STATUS_BAR: (0, (0, SET0.bar)), QUICK_SETTINGS: (320, (0, 320)), CONFIRM: (0, (0, 320)),
+                          BIGCOVER: (0, (0, 320))}.get(short, (SET0.bar, (SET0.bar, 320)))
+        corners(short, root, 0, origin, window)
         if short == QUICK_SETTINGS:  # iPod only: the stock 4x2 grid, even label areas, a slim brightness track
             menu, light = root[3]
             icons = [n for n in menu[3] if n[0] == 'image']; labels = [n for n in menu[3] if n[0] == 'label']
@@ -930,13 +1625,8 @@ def validate_assets(directory):
             assert shade[1] == [x, y + BC_ART - 50, BC_ART, 50] and shade[2] == decode(original)[3][1][2]
             assert title[1] == [x + BC_TITLE_PAD, y + BC_ART - 50 + 11, BC_ART - 2 * BC_TITLE_PAD, 28] and title[2] == decode(original)[3][2][2]
             continue
-        if short == HOME_PAGE and not ipod:  # only the Coverflow card is added
-            cards = [n[2]['name'] for n in root[3][0][3]]
-            assert cards[:3] == ['btn_playing', 'btn_localmusic', 'btn_coverflow'] and len(cards) == 7, cards
-            assert root[3][0][3][1][3][1][2]['text'] == 'Library'  # literal: stock skips label_library
-            continue
         if short == HOME_PAGE:  # seven rows with the stock names, beside the art; bytes equal patch_asset above
-            art, (lv, lg, _, [sv]), (sl, sg, sp, [ss]) = root[3]
+            art, (lv, lg, _, [sv]), (sl, sg, sp, [ss]), *carousel = root[3]
             assert lv == 'list_view' and sv[0] == 'scroll_view' and art[2]['name'] == 'img_homeart'
             # The Settings list: stock's Playback and System setting rows (stock binds them; their
             # labels are literal), hidden in the list's place until Home's Settings row slides it in.
@@ -944,7 +1634,7 @@ def validate_assets(directory):
             assert sg == [0, HOME_TOP, HOME_LIST_W, 2*HOME_ROW] and [r[2]['name'] for r in ss[3]] == ['btn_playset', 'btn_sysset']
             assert [r[3][1][2]['name'] for r in ss[3]] == ['img_playset', 'img_sysset'] and [r[3][0][2]['text'] for r in ss[3]] == ['Playback', 'System']
             # The art fills the right panel below the status bar; the payload fits and crops it.
-            assert art[0] == 'image' and art[1] == [0, 0, 375, 290] and art[2]['draw_type'] == 'fill' and HOME_LIST_W == 375
+            assert art[0] == 'image' and art[1] == [0, 0, 375, BOTTOM] and art[2]['draw_type'] == 'fill' and HOME_LIST_W == 375
             assert all(v == '#00000000' for k,v in root[3][1][2].items() if k.startswith('style:'))
             assert [r[2]['name'] for r in sv[3]] == ['btn_'+n for n in HOME_ROWS] and HOME_ROWS[2] == 'coverflow'
             for name, (_, _, _, (label, image)) in zip(HOME_ROWS, sv[3]):
@@ -953,26 +1643,35 @@ def validate_assets(directory):
                 # Labels end before the chevron's glyph; longer ones scroll (only_focus) or end in an ellipsis.
                 assert label[1][0] + label[1][2] == image[1][2] - HOME_LABEL_END and label[1][2] >= 100
                 assert label[2]['only_focus'] == 'true' and label[2]['ellipses'] == 'true'
-            assert [r[3][0][2].get('text') for r in sv[3]] == [None, 'Library', 'Coverflow', None, 'Rockbox', None, 'Settings']
+            assert [r[3][0][2].get('text') for r in sv[3]] == [None, 'Library', 'Cover Flow', None, 'Rockbox', None, 'Settings']
             assert lg == [0, HOME_TOP, HOME_LIST_W, 7*HOME_ROW] and HOME_TOP + 7*HOME_ROW <= BOTTOM - HOME_TOP
-            assert b'menu_' not in new and b'slide_menu' not in new
+            # Home: Carousel's: stock's carousel and arrows after the lists, hidden and taking no taps
+            # until chosen (coverflow_home_layout); its cards stock's in their places, Library's label
+            # literal, Coverflow's after it and the Shortcut's after Folder on their own images.
+            stock_root = decode(original)
+            assert [n[2]['name'] for n in carousel] == ['slide_menu', 'img_left', 'img_right']
+            for n, old in zip(carousel, stock_root[3]):
+                assert n[:2] == old[:2] and n[2] == {**old[2], 'visible': 'false', 'sensitive': 'false'}
+            slide = carousel[0]
+            assert [c[2]['name'] for c in slide[3]] == ['btn_'+n for n in ('playing', 'localmusic', 'coverflow', 'folder', 'rockbox', 'stream', 'playset', 'sysset')]
+            assert [c[3][1][2].get('text') for c in slide[3]] == [stock_root[3][0][3][0][3][1][2]['text'], 'Library', 'Cover Flow', None, 'Rockbox', None, None, None]
+            for card in slide[3]:
+                image = card[3][0][2]
+                assert {v for k, v in image.items() if k.endswith(':bg_image')} == {'menu_' + image['name'][4:].replace('localmusic', 'music'),
+                                                                                  'menu_' + image['name'][4:].replace('localmusic', 'music') + 'down'}
             dot = inc('HOME_DOT_X'), inc('HOME_DOT')
             assert HOME_TEXT_X == sum(dot) + inc('HOME_DOT_GAP')
             # The dot and the labels clear the bottom row's corner.
-            assert dot[0] >= corner_x(30 + HOME_TOP + 6*HOME_ROW + (HOME_ROW - dot[1])//2, dot[1])
-            assert HOME_TEXT_X >= corner_x(30 + HOME_TOP + 6*HOME_ROW + 9, 20)
-            # Split (coverflow_home_layout) gives Minimal's menu 45% of the screen, Classic's half, the art the rest;
-            # Full's rows end at HOME_CLASSIC_ROW, so the chevron's glyph (x 20 to 31, y 16 to 34 of
-            # list_into, centred on the row) mirrors the labels' margin and, on the last row, clears
-            # the bottom-right corner as the label clears the bottom-left.
+            assert dot[0] >= corner_x(SET0.bar + HOME_TOP + 6*HOME_ROW + (HOME_ROW - dot[1])//2, dot[1])
+            assert HOME_TEXT_X >= corner_x(SET0.bar + HOME_TOP + 6*HOME_ROW + 9, 20)
+            # Split (coverflow_home_layout) gives the menu half the screen, the art the rest;
+            # Split's glyph ends 13px before the art, as in the Home concept.
             assert inc('HOME_SPLIT_W') == 375 // 2
-            glyph_end = inc('HOME_CLASSIC_ROW') - inc('CHEVRON_W') + 31
-            glyph_y = 30 + HOME_TOP + 6*HOME_ROW + (HOME_ROW - 50) // 2 + 16
-            assert 375 - glyph_end == inc('HOME_CLASSIC_TEXT_X') >= corner_x(glyph_y, 34 - 16)
-            assert inc('HOME_CLASSIC_TEXT_X') >= corner_x(30 + HOME_TOP + 6*HOME_ROW + 9, 20)
-            # Classic's labels stop short of Split's glyph (x 20 to 30 of list_into) and Full's.
-            for row, shift in ((inc('HOME_SPLIT_W'), inc('HOME_CHEVRON_SHIFT')), (inc('HOME_CLASSIC_ROW'), inc('HOME_FULL_CHEVRON_SHIFT'))):
-                assert row - inc('HOME_CLASSIC_LABEL_END') + 5 <= row - inc('CHEVRON_W') + shift + 20
+            assert inc('CHEVRON_W') - 30 - inc('HOME_CHEVRON_SHIFT') == 13
+            assert inc('HOME_MODERN_TEXT_X') >= corner_x(SET0.bar + HOME_TOP + 6*HOME_ROW + 9, 20)
+            # Modern's labels stop short of Split's glyph (x 20 to 30 of list_into) and Full's.
+            for row, shift in ((inc('HOME_SPLIT_W'), inc('HOME_CHEVRON_SHIFT')), (inc('HOME_MODERN_ROW'), inc('HOME_FULL_CHEVRON_SHIFT'))):
+                assert row - inc('HOME_MODERN_LABEL_END') + 5 <= row - inc('CHEVRON_W') + shift + 20
             continue
         if short == STATUS_BAR:  # iPod only: play state left, title between, four icons right
             left, right, *rest = root[3]
@@ -982,11 +1681,11 @@ def validate_assets(directory):
             assert title[0] == 'hscroll_label' and title[2]['name'] == 'label_clock'
             x, _, w, _ = title[1]
             assert x + w/2 == 375/2 and w >= CLOCK_MIN  # centred on the screen, clear of both groups (corners below)
-            assert inc('CLOCK_EDGE') >= corner_x((30 - 20) // 2, 20) and x >= inc('CLOCK_EDGE')
+            assert inc('CLOCK_EDGE') >= corner_x((SET0.bar - 20) // 2, 20) and x >= inc('CLOCK_EDGE')
             assert title[2]['style:normal:font_size'] == '16'
             assert all(v[2]['children_layout'].endswith(f'xm={STATUS_MARGIN},s={inc("STATUS_GAP")})') for v in (left, right))
             idle = rest.pop()
-            assert idle[1] == [STATUS_MARGIN, 0, 28, 30] and idle[2]['text'] == 'Q2' and idle[2]['visible'] == 'false'
+            assert idle[1] == [STATUS_MARGIN, 0, 28, SET0.bar] and idle[2]['text'] == 'Q2' and idle[2]['visible'] == 'false'
             assert idle[2]['style:normal:font_size'] == '18' and STATUS_MARGIN >= corner_x(6, 18)
             assert STATUS_MARGIN + 28 < x
             assert [n[2]['name'] for n in rest] == STATUS_HIDDEN and all(n[1][0] + n[1][2] < 0 for n in rest)
@@ -995,7 +1694,7 @@ def validate_assets(directory):
             assert pct[1][2] == inc('BATT_PCT_W') and pct[2]['visible'] == 'false' and pct[2]['style:normal:text_align_h'] == 'right' and pct[2]['style:normal:font_size'] == str(inc('BATT_PCT_PX'))
             assert slot == ['view', [0, 0, inc('BATT_BODY_W') + inc('BATT_NUB_W') + inc('BATT_GAP') + inc('BATT_PCT_W'), 0], {'name': 'view_battery', 'visible': 'false'}, []]
             continue
-        if short == PLAYING_PAGE:  # iPod only: see the sketch in docs/ipod.md
+        if short == PLAYING_PAGE:  # see the sketch in docs/ipod.md
             named = {n[2].get('name'): n for n in walk(root)}
             assert {n[2].get('name') for n in walk(decode(original))} < set(named)  # stock names kept
             assert [n[2].get('name') for n in root[3]] == ['view_buttons', 'label_playtime', 'label_playlen', 'label_ipod_remain',
@@ -1031,7 +1730,7 @@ def validate_assets(directory):
             lrc, slot = named['view_lrc'][3][0][2], inc('LYRIC_SLOT')
             assert named['view_lrc'][2]['self_layout'] == 'default(x=0,y=0,w=375,h=178)' and 3 * slot <= 178 < 4 * slot
             assert lrc['self_layout'] == 'default(x=0,y=0,w=100%,h=100%)' and lrc['children_layout'] == f'list_view(x=0,y={slot},s=0)'
-            assert inc('LYRIC_X') == NP_MARGIN >= corner_x(30 + NP_TOP, 178)
+            assert inc('LYRIC_X') == NP_MARGIN >= corner_x(SET0.bar + NP_TOP, 178)
             slider = named['slider_play']
             assert slider[1] == [NP_BAR[0], 233, NP_BAR[2], NP_TOUCH] and NP_TOUCH >= 44
             assert slider[2]['bar_size'] == '4' and slider[2]['slide_with_bar'] == 'true'
@@ -1072,19 +1771,19 @@ def validate_assets(directory):
         if short == 'localmusic/playlist_page.bin':
             old_nav = next(n for n in decode(original)[3] if n[2].get('name') == 'view_navbar')
             gif, old = (next(n for n in p[3] if n[2].get('name') == 'gif_returnplay') for p in (nav, old_nav))
-            assert gif[1] == [375 - corner_x(30, old[1][3]) - old[1][2], *old[1][1:]]
+            assert gif[1] == [375 - corner_x(SET0.bar, old[1][3]) - old[1][2], *old[1][1:]]
             assert nav[2].get('visible') != 'false' and nav[2].get('enable') != 'false'
             gif[1][0] = old[1][0]
             assert nav == old_nav, 'only the right button keeps clear of the glass'
         else:
-            assert not ipod or nav[2]['visible'] == 'false' and nav[2]['enable'] == 'false'
-        assert not ipod or not [v for n in walk(root) if n[0] in ('button', 'list_item', 'table_row')
-                                for k, v in n[2].items() if k.endswith(':bg_color') and v == '#000000'], 'Opaque inline row background'
+            assert nav[2]['visible'] == 'false' and nav[2]['enable'] == 'false'
+        assert not [v for n in walk(root) if n[0] in ('button', 'list_item', 'table_row')
+                    for k, v in n[2].items() if k.endswith(':bg_color') and v == '#000000'], 'Opaque inline row background'
         old_nodes, new_nodes = list(walk(decode(original))), list(walk(root))
         assert len(old_nodes) == len(new_nodes)
         for old, node in zip(old_nodes, new_nodes):
             for key, value in old[2].items():
-                if ipod and short in SETTINGS_SLIDERS and node[0] == 'slider' and key == 'style':
+                if short in SETTINGS_SLIDERS and node[0] == 'slider' and key == 'style':
                     value = 's_ipod_progress'
                 if 'font' in key or key == 'style': assert node[2][key] == value
         if short in ('folder_page.bin', 'localmusic_page.bin', 'localmusic/localclass_page.bin', 'localmusic/playlist_page.bin'):
@@ -1093,19 +1792,141 @@ def validate_assets(directory):
             assert surface[1][1:] == [top, 375, BOTTOM-top], 'Lists must fill the client area'
             assert 4*PITCH <= BOTTOM, 'Four complete rows must fit'
         # Corrupt inputs must be rejected, never silently patched.
-        try: patch_asset(short, original[:-1]+b'x', ipod)
+        try: patch_asset(short, original[:-1]+b'x')
         except ValueError: pass
         else: raise AssertionError('Accepted a changed asset')
-    if ipod:
-        payload_symbols = symbols(directory/'patch.elf')
-        for address in [AUDIT['immediates'][0]['sites'][0][0], '0x522410', '0x523de0', '0x4b3130', AUDIT['row_layout_calls']['sites'][0][0],
-                        hex(inc('LIST_VIEW_LAYOUT_SLOT'))]:
-            damaged = bytearray(stock)
-            damaged[fileoff(stock, int(address, 16))] ^= 1
-            try: patch_code(damaged, payload_symbols)
-            except ValueError: pass
-            else: raise AssertionError(f'Accepted a changed instruction at {address}')
-    print(f'{manifest["variant"]}: asset geometry, exclusion parity and mismatch rejection passed.')
+    # Every geometry set's built list windows take the row height of the page's pitch
+    # immediates (art pages take art_pitch), and its rows fit.
+    from theme import builtins, geometry_sets, SCHEMA
+    from ipod import CLASSIC_LIGHT_FONT_SRC, PAGE_KIND as page_kind, page_rows
+    built = set(run('unsquashfs', '-l', directory/'rootfs.squashfs').split())
+    # Classic's Playlists rows (pl_row) are the theme's page_detail high in a list pitched at song_pitch: one height.
+    for t in builtins():
+        for g in geometry_sets([t]):
+            if not g.toolbar: assert g.song_pitch == t['page_detail'], (t['name'], g.name)
+    for g in geometry_sets(builtins()):
+        assert g.body <= g.pitch and g.art_body <= g.art_pitch and g.song_body <= g.song_pitch, g.name
+        assert g.art + 2*g.art_inset <= g.art_body, g.name
+        assert g.text_art + 2*g.text_art_inset <= g.body or not g.text_art, g.name   # text rows' artwork fits, or none
+        for y, h, body in ((g.title24_y, 24, g.body), (g.title_y, 20, g.body), (g.meta_y, 16, g.body), (g.count_y, 16, g.body),
+                           (g.art_title24_y, 24, g.art_body), (g.art_meta_y, 16, g.art_body),
+                           (g.song_title24_y, 24, g.song_body), (g.song_meta_y, 16, g.song_body)):
+            assert 0 <= y and y + h <= body, (g.name, y, h, body)                    # every stock row label inside its body
+        checked = set()
+        for short, kind in page_kind.items():
+            folder, _, base = short.rpartition('/')
+            mine = ui + (folder and folder + '/') + f'{g.name}_{base}'
+            new = decode(read('rootfs.squashfs', mine if 'squashfs-root/' + mine in built else ui + short))
+            old = {n[2].get('name'): n[2] for n in walk(decode(read('stock.squashfs', ui + short)))}
+            for n in walk(new):
+                for prop in ('row_height', 'default_item_height'):
+                    if old.get(n[2].get('name'), {}).get(prop) == '78':
+                        assert n[2][prop] == str(page_rows(g, kind)[0]), (g.name, short, prop)
+                        checked.add(short)
+        assert checked == set(page_kind) - {'localmusic/album_page.bin'}, checked  # album_page's grid keeps 160
+        # A set without toolbars: Playlists' toolbar hides, stock's widgets alive for its rows' clicks, its list takes the
+        # bar's room with rows of their own heights (no item_height forces them); More's rows start at the top.
+        if not g.toolbar:
+            for short in ('localmusic/playlist_page.bin', 'localmusic/playlistsmore_page.bin'):
+                folder, _, base = short.rpartition('/')
+                new = decode(read('rootfs.squashfs', ui + f'{folder}/{g.name}_{base}'))
+                nav = next(n for n in new[3] if n[2].get('name') == 'view_navbar')
+                assert nav[2]['visible'] == 'false' and nav[2]['enable'] == 'false', short
+                if short == 'localmusic/playlist_page.bin':
+                    surface = next(n for n in new[3] if n[0] == 'list_view')
+                    assert surface[1][1] == 0 and surface[2]['default_item_height'] == str(g.song_pitch) and 'item_height' not in surface[2]
+                else:
+                    assert [n[1][1] for n in new[3] if n[0] == 'list_item'] == [0, g.pitch]
+        assert g.set_top + g.set_rows*g.set_row <= 320 - g.bar, g.name
+        # Home's rows are the set's and fit; a theme with Home's chevron ends its labels short of the
+        # glyph (x 20 of list_into) in both widths, as Classic's below.
+        mine = ui + f'{g.name}_{HOME_PAGE}'
+        listed = {n[2].get('name'): n for n in walk(decode(read('rootfs.squashfs', mine if 'squashfs-root/' + mine in built else ui + HOME_PAGE)))}['list_view_home']
+        assert listed[2]['item_height'] == str(g.home_row) and HOME_TOP + 7*g.home_row <= 320 - g.bar, g.name
+        for t in builtins():
+            if g in geometry_sets([t]) and t['chevron_home']:
+                # a theme's own chevron in Split: the label ends at it
+                assert t['home_label_end[0]'] >= (inc('HOME_SPLIT_W') - t['home_chevron_x'] if t['home_chevron_x']
+                                                  else inc('CHEVRON_W') - inc('HOME_CHEVRON_SHIFT') - 15), t['id']
+                assert t['home_label_end[1]'] >= inc('CHEVRON_W') - inc('HOME_FULL_CHEVRON_SHIFT') - 15, t['id']
+        for rel in UI_ASSETS:
+            folder, _, base = rel.rpartition('/')
+            mine = ui + (folder and folder + '/') + f'{g.name}_{base}'
+            if 'squashfs-root/' + mine not in built: continue
+            for n in walk(decode(read('rootfs.squashfs', mine))):
+                if n[0] != 'list_view' or n[2].get('default_item_height') != str(g.set_row): continue
+                if rel in NAVBAR_ONLY:  # settings lists: the set's rows from its top
+                    h = 320 - g.bar - g.set_top if g.list_end else g.set_rows*g.set_row
+                    assert n[1] == [0, g.set_top, 375, h] and 'item_height' not in n[2], (g.name, rel)
+                else:                   # any other list with that row height is not one (settings_list)
+                    assert n[2].get('item_height') == str(g.set_row), (g.name, rel)
+        if g.text_x:  # text from text_x clears the glass at the first row and at list_end's last; the lists take the window
+            assert g.text_x >= corner_x(g.bar + 6, g.pitch - 12) and g.list_end % g.pitch == 0, g.name
+            assert corner_x(g.bar + g.list_end - g.pitch + 6, g.pitch - 12) <= g.text_x < corner_x(g.bar + g.list_end + 6, g.pitch - 12), g.name
+            ends = {}
+            for rel in UI_ASSETS:  # every list box the transform resizes ends at the window's end
+                folder, _, base = rel.rpartition('/')
+                mine = ui + (folder and folder + '/') + f'{g.name}_{base}'
+                if 'squashfs-root/' + mine not in built or rel in NAVBAR_ONLY: continue
+                was = {n[2].get('name'): n[1] for n in decode(read('stock.squashfs', ui + rel))[3]}
+                for n in decode(read('rootfs.squashfs', mine))[3]:
+                    old = was.get(n[2].get('name'))
+                    if n[0] in ('list_view', 'table_view') and old and old[1] in (50, 100) and n[1] != old:
+                        ends[rel] = n[1][1] + n[1][3]
+            assert ends and set(ends.values()) == {320 - g.bar}, (g.name, ends)
+        if g.bar_px:  # Classic's bar: one cap centre, the title clear of the glass, the clock centred, no idle mark
+            m = status_metrics(g, CLASSIC_LIGHT_FONT_SRC)
+            bar = {n[2].get('name'): n for n in walk(decode(read('rootfs.squashfs', ui + f'{g.name}_system_bar.bin')))}
+            assert bar['label_title'][1] == m['title'] and bar['label_title'][2]['ellipses'] == 'true' and bar['label_clock'][1] == m['clock'] and 'label_idle' not in bar, g.name
+            assert 2 * m['cap_top'] + m['cap'] in (g.bar - 3, g.bar - 2) and m['inset'] >= corner_inset(m['cap_top']), g.name
+            assert 2 * m['clock'][0] + m['clock'][2] == 375, g.name
+            # the battery's nub ends clear of the glass, at its top row, above the bar's two lines
+            xm = g.bar_right
+            assert xm >= corner_inset((g.bar - 2 - g.batt_h) // 2) and g.batt_h <= g.bar - 1 and bar['view_right'][2]['children_layout'].endswith(f'xm={xm},s={inc("STATUS_GAP")})'), g.name
+            size = SCHEMA['bar.title.font_size'].field
+            assert {t[size] for t in builtins() if g in geometry_sets([t])} == {g.bar_px}, g.name  # the theme's bar text is the set's
+        if g.np_ipod:  # Classic's Now Playing: its text fits, in status_metrics' model (stb scales ascent - descent to the size)
+            from fontTools.ttLib import TTFont
+            face = TTFont(CLASSIC_LIGHT_FONT_SRC, lazy=True)
+            cmap = face.getBestCmap()
+            ink = lambda text, px: math.ceil(sum(face['hmtx'][cmap[ord(c)]][0] for c in text) * px / (face['hhea'].ascent - face['hhea'].descent))
+            page = {n[2].get('name'): n for n in walk(decode(read('rootfs.squashfs', ui + f'{g.name}_{PLAYING_PAGE}')))}
+            # the times beside the bar in "-9:59"'s boxes (the build's class, the widest bar) hold their font's line, their outer
+            # edges and the bar's ends clear of the glass; so in every length class navigation.c ipod_times fits them to: each class's longest times, any digit, the outer
+            # edges where the build put them, the gap kept, the bar between
+            for name in ('label_playtime', 'label_ipod_remain'):
+                x, y, w, h = page[name][1]
+                assert w == NP_IPOD_TIME_WS[0] and inc('NP_IPOD_TIME_PX') <= h, (g.name, name)
+                assert min(x, 375 - x - w) >= corner_x(g.bar + y, h), (g.name, name)
+            (ex, ey, _, eh), (sx, sy, _, sh) = page['label_playtime'][1], page['slider_play'][1]
+            for tw, longest in zip(NP_IPOD_TIME_WS, ('9:59', '59:59', '9:59:59')):
+                bx = ex + tw + inc('NP_IPOD_TIME_GAP')
+                for d in '0123456789':
+                    assert ink('-' + re.sub(r'\d', d, longest), inc('NP_IPOD_TIME_PX')) <= tw, (g.name, tw, d)
+                top = sy + (sh - inc('NP_BAR_IPOD')) // 2
+                assert bx - inc('NP_IPOD_TIME_GAP') - tw == ex and bx >= corner_x(g.bar + top, inc('NP_BAR_IPOD') + inc('SCRUB_REFLECT_ROWS')), (g.name, tw)
+                assert 375 - 2 * bx < page['slider_play'][1][2] or tw == NP_IPOD_TIME_WS[0], (g.name, tw)
+            # the info page's rows (navigation.c ringnav_np_info): each holds the info role's size, its name fits, the rows end above
+            # the dots and both columns clear the glass
+            px = {t['font_px[ROLE_INFO]'] for t in builtins() if g in geometry_sets([t])}
+            assert len(px) == 1, g.name
+            px = px.pop()
+            info = page['view_info'][3]
+            dy = g.bar + page['slide_view_view'][1][1]
+            for key, n in zip((b'album', b'genre', b'player_filesize', b'player_era', b'player_encoding', b'player_bitdepth', b'player_bitrate', b'player_samplerate', b'player_location'), info):
+                value = page[n[2]['name'] + '_value']
+                assert n[1][3] == value[1][3] >= px and ink(table[key].decode(), px) <= n[1][2] and value[1][0] == n[1][0] + n[1][2], (g.name, table[key])
+                assert min(n[1][0], 375 - value[1][0] - value[1][2]) >= corner_x(dy + n[1][1], n[1][3]), (g.name, table[key])
+            assert len(info) == 18 and info[8][1][1] + info[8][1][3] <= page['slide_indicator1'][1][1], g.name
+    payload_symbols = symbols(directory/'patch.elf')
+    for address in [AUDIT['immediates'][0]['sites'][0][0], '0x522410', '0x523de0', '0x4b3130', AUDIT['row_layout_calls']['sites'][0][0],
+                    hex(inc('LIST_VIEW_LAYOUT_SLOT'))]:
+        damaged = bytearray(stock)
+        damaged[fileoff(stock, int(address, 16))] ^= 1
+        try: patch_code(damaged, payload_symbols)
+        except ValueError: pass
+        else: raise AssertionError(f'Accepted a changed instruction at {address}')
+    print('Asset geometry, exclusion parity and mismatch rejection passed.')
 
 if __name__ == '__main__':
     import argparse, json, pathlib, subprocess, tempfile
@@ -1127,25 +1948,21 @@ if __name__ == '__main__':
             from ipod import imagemagick
             card_logo = imagemagick('-size', '320x480', 'gradient:#335-#c96', '-type', 'TrueColor', '-strip', 'jpg:-', data=b'')
             assert jpeg_size(card_logo) == (320, 480)
-        for ipod in (False,) if m1plus else (False, True):
-          with tempfile.TemporaryDirectory(prefix='q2-package-') as tmp:
-              root=pathlib.Path(tmp)
-              custom=root/"custom ' logo.jpg"
-              custom.write_bytes(card_logo)
-              def change_source(*command):
-                  if command[0]=='mksquashfs': custom.write_bytes(b'edited during compression')
-                  return run(*command)
-              a=root/"build ' a"
-              with patch('build.run',side_effect=change_source), patch('m1plus.run',side_effect=change_source):
-                  build(args.zip,a,custom,ipod)
-              validate_assets(a)
-              manifest=json.loads((a/'manifest.json').read_text())
-              assert manifest['logo_sha256']==sha(card_logo) and manifest.get('logo_source', 'custom')=='custom'
-              for rel,expected in [('release/assets/default/raw/images/xx/logo.jpg',card_logo),
-                                   ('release/bin/demo',(a/'demo').read_bytes())]:
-                  assert subprocess.check_output(['unsquashfs','-cat',str(a/'rootfs.squashfs'),rel])==expected
-              if m1plus:  # no iPod UI for M1 Plus yet, so no build may claim one
-                  try: build(args.zip, root/'ipod', custom, True)
-                  except ValueError as e: assert 'no iPod build' in str(e), e
-                  else: raise AssertionError('Built an M1 Plus iPod variant')
-              print('Packaging, mutable logo and quoted paths checks passed.')
+        with tempfile.TemporaryDirectory(prefix='q2-package-') as tmp:
+            root=pathlib.Path(tmp)
+            custom=root/"custom ' logo.jpg"
+            custom.write_bytes(card_logo)
+            def change_source(*command):
+                if command[0]=='mksquashfs': custom.write_bytes(b'edited during compression')
+                return run(*command)
+            a=root/"build ' a"
+            with patch('build.run',side_effect=change_source), patch('m1plus.run',side_effect=change_source):
+                build(args.zip,a,custom)
+            validate_assets(a)
+            manifest=json.loads((a/'manifest.json').read_text())
+            assert manifest['logo_sha256']==sha(card_logo) and manifest.get('logo_source', 'custom')=='custom'
+            for rel,expected in [('release/assets/default/raw/images/xx/logo.jpg',card_logo),
+                                 ('release/bin/demo',(a/'demo').read_bytes())]:
+                assert subprocess.check_output(['unsquashfs','-cat',str(a/'rootfs.squashfs'),rel])==expected
+            if m1plus: assert manifest['version'] == M1_TAG, manifest['version']
+            print('Packaging, mutable logo and quoted paths checks passed.')

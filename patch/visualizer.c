@@ -3,7 +3,6 @@
  * plugins; a tap moves to the next style. */
 #include "peq.h"
 #include "offsets.inc"
-#if IPOD
 
 #define VIS_N 1024           /* frames each frame analyses */
 #define VIS_HALO 64          /* log-spaced bands, 40 Hz to 16 kHz: the Halo's bars, pairs the spectrum's */
@@ -161,9 +160,17 @@ static int on_page(void) {
     return vz.page && widget_get_prop_int(vz.slide, "value", 0) == (int)widget_count_children(vz.slide) - 1;
 }
 
-/* Now Playing is on top, on this page, with the screen on. */
+/* Now Playing is on top, on this page, with the screen on. On the M1 the volume's band leaves it showing: a transparent
+ * dialog over the page (vol_paint). */
 static int showing(void) {
+#if M1PLUS
+    void *wm = window_manager(), *top = window_manager_get_top_window(wm);
+    if (top && !tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog") && widget_count_children(wm) > 1)
+        top = widget_get_child(wm, widget_count_children(wm) - 2);
+    return on_page() && g_backlight_status && top == vz.win;
+#else
     return on_page() && g_backlight_status && window_manager_get_top_window(window_manager()) == vz.win;
+#endif
 }
 
 /* Showing and still: no window sliding, and the page last painted at the slide area's left edge, so
@@ -505,18 +512,22 @@ static int gone(void *win, void *event) {
 
 /* ringnav_playing: the page joins the slide_view's art, lyrics and info pages, and its dots. */
 void visualizer_attach(void *win) {
-    void *slide = widget_lookup(win, "slide_view", 1), *dots = widget_lookup(win, "slide_indicator1", 1);
+    void *slide = widget_lookup(win, "slide_view", 1), *dots = widget_lookup(win, VIEW_DOTS, 1);
     if (!slide) return;
     vz.style = config_value("IPOD", "VIS", STYLES, 0);
     vz.win = win;
     vz.slide = slide;
-    vz.cover = widget_lookup(win, "img_cover", 1);
+    vz.cover = widget_lookup(win, VIEW_COVER, 1);
     vz.w = I(slide, W_W) > 0 && I(slide, W_W) <= UI_W ? I(slide, W_W) : UI_W;
-    vz.page = list_item_create(slide, 0, 0, vz.w, VIS_H);
+    /* Classic's slide starts higher, its lyrics down it as far (tools/ipod.py NP_IPOD_LIFT): the
+     * page starts where they do, so it stays where the others have it on screen */
+    void *lrc = widget_lookup(slide, "view_lrc", 1);
+    int top = lrc ? I(lrc, W_Y) : 0;
+    vz.page = list_item_create(slide, 0, top, vz.w, VIS_H);
     widget_use_style(vz.page, STYLE_LISTITEM_BLACK);
     widget_on(vz.page, EVT_CLICK, next_style, 0);
     /* The art is the window's child, over the slide area's centre, for the same reason as the drawing. */
-    vz.ox = vz.oy = 0;
+    vz.ox = 0, vz.oy = top;
     for (void *p = slide; p && p != win; p = P(p, W_PARENT)) vz.ox += I(p, W_X), vz.oy += I(p, W_Y);
     vz.art = image_create(win, vz.ox + (vz.w - VIS_ART) / 2, vz.oy + (VIS_H - VIS_ART) / 2, VIS_ART, VIS_ART);
     widget_set_sensitive(vz.art, 0);
@@ -525,5 +536,4 @@ void visualizer_attach(void *win) {
     widget_on(slide, EVT_VALUE_CHANGED, slid, 0);
     widget_on(win, EVT_DESTROY, gone, win);
 }
-#endif
 #endif

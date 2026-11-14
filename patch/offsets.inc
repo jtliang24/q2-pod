@@ -18,6 +18,8 @@
 #define IM_KEYBOARD                                                                                \
     0x0c /* the default input method's open keyboard window, 0 once it closes (@0x68bbec) */
 #define W_EMITTER 0x60
+#define W_ASTYLE 0x64 /* widget_update_style reads it at 0x65e230; 0x74 is the vtable */
+#define ALIGN_H_LEFT 2 /* stock's align_h_t, in a style's text_align_h */
 #define W_CHILDREN_LAYOUT 0x68
 #define CHILDREN_LAYOUT_VTABLE 0x10
 #define DEFAULT_LAYOUT_X_MARGIN 0x18
@@ -34,6 +36,7 @@
 #define VIEW_CONTENT_H 0x7c     /* scroll_view content height (same slot) */
 #define SCROLL_X 0x80           /* scroll_view horizontal offset */
 #define TABLE_TOP 0x80          /* table_client viewport top (same slot) */
+#define TABLE_LOAD_DATA 0xe4    /* table_client on_load_data, its ctx at 0xe0 (table_client_set_on_load_data) */
 #define SCROLL_Y 0x84           /* scroll_view viewport top */
 #define VIEW_HORIZONTAL 0x90    /* scroll_view xslidable */
 #define VIEW_VERTICAL 0x91      /* scroll_view yslidable */
@@ -46,6 +49,7 @@
 #define EVENT_TARGET 0x10
 #define EVENT_X 0x18           /* pointer_event_init @0x640298 */
 #define EVENT_Y 0x1c
+#define EVT_POINTER_FIRST 0xff /* the pointer events the wm dispatches: down 0xff, move 0x101, up 0x103 */
 #define EVT_POINTER_DOWN 0x100 /* wm registers on_wm_tsdown_before_fun for this type @0x523ef0 */
 #define EVT_POINTER_MOVE_BEFORE 0x102 /* wm move-before forwards this type to the down hook @0x523ed4 */
 #define EVT_POINTER_UP_BEFORE 0x104
@@ -56,6 +60,7 @@
 #define EVT_KEY_UP 0x114          /* wm keyup dispatch @0x523eb8 */
 #define EVT_KEY_UP_BEFORE 0x115   /* wm keyup-before dispatch @0x523e80 */
 #define EVT_WINDOW_BACKGROUND 0x12a
+#define EVT_WINDOW_FOREGROUND 0x12b
 #define EVT_WINDOW_CLOSE 0x12c
 #define PULL_SEARCH_PX 48       /* device tuning: release distance from the initial touch */
 #define PULL_CLAIM_PX 8
@@ -73,20 +78,20 @@
 #define LCD_FILL_COLOR 0xbc
 #define LCD_STROKE_COLOR 0xc0
 #define LCD_TEXT_COLOR 0xb8     /* lcd_set_text_color @0x6474c4 */
+/* Night Shift (nightshift.c): the screen's lcd_mem, BGRA8888 (lcd_mem create @0x6922c0) */
+#define LCD_END_FRAME 0x7c   /* lcd_end_frame @0x647958 calls it */
+#define LCD_W 0xb0
+#define LCD_H 0xb4
+#define LCD_DRAW_MODE 0xcc   /* lcd_begin_frame @0x6472a8 */
+#define LCD_DRAW_NORMAL 0    /* 1 a window animation's */
+#define LCD_DIRTY 0xf8       /* the frame's rect, x y w h; lcd_begin_frame sets it */
+#define LCD_OFFLINE_FB 0x110 /* the buffer drawn into */
+#define LCD_LINE_LENGTH 0x124
+#define LCD_FORMAT 0x128
+#define LCD_BGRA8888 3
 #define CANVAS_ALIGN_V 0x30     /* canvas_set_text_align @0x63419c; middle = 1 */
 #define CANVAS_ALIGN_H 0x34     /* center = 1 */
-/* Selection outline tuning. RADIUS > 2 or the stock rounded path squares off; tests read these.
- * The shade uses the same stock dark surface as the fill at an alpha that keeps the outline
- * above 3:1 on pure white art (0x99 is the floor); on dark rows it matches the stock background
- * exactly and disappears. The line is translucent white at OUTLINE_ALPHA, so it reads as a soft
- * grey on the dark theme instead of a hard white edge; lower OUTLINE_ALPHA or SHADE_ALPHA
- * together and the contrast margin over bright art erodes. */
-#define RADIUS 9
-#define FILL_RGB 0x2b2b2b
-#define FILL_ALPHA 0x40
-#define SHADE_ALPHA 0xb3
-#define OUTLINE_RGB 0xffffff
-#define OUTLINE_ALPHA 0xb3
+#define FILL_RGB 0x2b2b2b /* the stock dark surface, under the letter and volume overlays */
 /* iPod accents, in the order of the Accent setting (IPOD/ACCENT in config.ini; 0 is the default):
  * { selection top, bottom, light tone, red tone, highlight }, 0xRRGGBB. Equal stops keep
  * selection flat on the Q2 panel; retain the fine top highlight. White text holds
@@ -132,7 +137,7 @@
 #define STYLE_COLOR_GRADIENT_RET 0x649ff0 /* style_get_color's bal style_get_gradient (0x649fe8) returns here */
 #define STOCK_RED 0xff1448
 #define RED_TOLERANCE 8 /* per channel, 0-255: how far a color may sit from a red/neutral blend */
-/* iPod black status chrome, in both Themes; TRACK_COLOR is Now Playing's progress track. */
+/* iPod black status chrome, in every theme; TRACK_COLOR is Now Playing's progress track. */
 #define BAR_COLOR 0x000000
 #define TRACK_COLOR 0x1c1c1c
 /* iPod: the confirm pop-up's Cancel row (tools/ipod.py confirm_dialog); its prompt is centred above
@@ -141,13 +146,51 @@
 #define CONFIRM_PROMPT_PX 24
 #define NP_TIMES_PX 14 /* Now Playing's times, and the volume text in their place */
 #define NP_ART_RADIUS 12 /* Now Playing's art corners (paint_cover), as stock's play_defaultcover scaled to the art */
+/* Classic's Now Playing, an iPod classic's (coverflow.c slant_render, navigation.c paint_scrubber),
+ * fitted to Apple's own 320 x 240 capture: the art's far edge SLANT_FAR/256 of its near one (118 of
+ * 135 px); its reflection from SLANT_REFLECT_A/256 fading out over SLANT_REFLECT_PCT of the
+ * column's height; the progress bar NP_BAR_IPOD high, mirrored under it from
+ * SCRUB_REFLECT_A/256 over SCRUB_REFLECT_ROWS; the times beside it NP_IPOD_TIME_PX, the largest
+ * whose line fits their NP_IPOD_TIME_H box, NP_IPOD_TIME_GAP from the bar, in
+ * boxes fitted to the track (navigation.c ipod_times): NP_IPOD_TIME_W1 holds "-9:59", the build's
+ * layout, NP_IPOD_TIME_W2 "-59:59" and NP_IPOD_TIME_W "-9:59:59" (tools/ipod.py measures them).
+ * The boxes' outer edges stay; the bar takes what they leave. */
+#define SLANT_FAR 224
+#define SLANT_REFLECT_A 84
+#define SLANT_REFLECT_PCT 22
+#define NP_BAR_IPOD 20
+#define SCRUB_REFLECT_A 38
+#define SCRUB_REFLECT_ROWS 6
+#define NP_IPOD_TIME_PX 21
+#define NP_IPOD_TIME_H 21 /* the times' box over the bar's rows, as near centred as an odd box goes */
+#define NP_IPOD_TIME_W1 35
+#define NP_IPOD_TIME_W2 43
+#define NP_IPOD_TIME_W 56
+#define NP_IPOD_TIME_GAP 8
+#define NP_SCRUB_MARK 8 /* the scrub's diamond: 17 rows, one in from the bar's top line, two from its foot */
+/* Classic's Spotify and Internet Radio Now Playing take the local page's np_ipod places, in the
+ * window (navigation.c stream_ipod; tools/ipod.py playing_page checks them): the art NP_IPOD_ART
+ * square at SPOT_ART_X, NP_IPOD_ART_Y, its box its reflection's room taller; the title's row at
+ * NP_IPOD_TEXT_X, NP_IPOD_TEXT_Y, the artist's, album's and "3 of 12"'s 34, 62 and 90 under it; the
+ * heart at NP_IPOD_FAV_X, _Y; the bar from NP_IPOD_BAR_X to the mirrored edge (the "-9:59" boxes';
+ * ipod_times fits them to the track), its rows from NP_IPOD_BAR_Y, the times' NP_IPOD_TIME_H boxes
+ * beside it, centred on its rows. */
+#define NP_IPOD_ART 178
+#define NP_IPOD_ART_Y 22
+#define NP_IPOD_ART_DROP 10 /* the local page's art this far under the first row clear of the glass */
+#define NP_IPOD_TEXT_X 206
+#define NP_IPOD_TEXT_Y 38
+#define NP_IPOD_FAV_X 300
+#define NP_IPOD_FAV_Y 165
+#define NP_IPOD_BAR_X 66
+#define NP_IPOD_BAR_Y 245
 /* A radius-r corner's arc at row y (0 the outermost): how far in it starts, in 1/16 pixels. */
 static inline int arc_out(int r, int y) {
     int d = 2 * (r - y) - 1, v = (4 * r * r - d * d) * 64, s = 0;
     while ((s + 1) * (s + 1) <= v) ++s;
     return 16 * r - s;
 }
-#define PLACEHOLDER (IPOD ? "default_album_flow" : "default_album_big") /* Cover Flow's and Spotify's missing art */
+#define PLACEHOLDER "default_album_flow" /* Cover Flow's and Spotify's missing art */
 #define VOL_POLL_MS 50 /* how often the volume indicator checks for a change */
 /* The volume panel off Now Playing (vol_paint): exactly over Quick Settings' brightness row
  * (tools/ipod.py checks it), its rounded corners clear of the 80px glass corners. */
@@ -193,6 +236,12 @@ static inline int arc_out(int r, int y) {
 /* iPod: the full-screen art (stock's bigcover_page) shows the song name BC_MS, then it and its shade
  * fade out in BC_STEPS steps, BC_STEP_MS apart. The art takes the cover's shape (bc_fit). */
 #define BC_MS 3000
+#define QS_SWIPE_STOCK 295 /* stock's handler (0x4a0cc0): Quick Settings' swipe up starts from here down, */
+#define QS_SWIPE_Y 250     /* and Classic Light's from here, its slider above stock's line */
+/* No symbol: Enlarged Album Art's countdown. Now Playing's timer (0x52bffc) counts it down while a
+ * song plays there and opens bigcover_page at 0, then sets it back to BC_IDLE_FULL (10 s). */
+#define BC_IDLE 0x99f660
+#define BC_IDLE_FULL 40
 #define BC_TITLE_PAD 12 /* the song name's inset from the art's sides */
 /* The screen glass's rounded corners and how far content keeps clear of them (tools/ipod.py). */
 #define GLASS_R 80
@@ -202,7 +251,7 @@ static inline int arc_out(int r, int y) {
 /* iPod drill rows: the stock list_into image sits where stock rows put their own img_into, its left
  * edge CHEVRON_W from the row's right edge (8 px margin + 50 px image), so every `>` lines up. */
 #define CHEVRON_W 58
-/* iPod Home: Split gives the menu half the screen (HOME_SPLIT_W) in both themes, the art the rest right of it;
+/* iPod Home: Split gives the menu half the screen (HOME_SPLIT_W) in every theme, the art the rest right of it;
  * Minimal's Full rows are full width. Labels end HOME_LABEL_END from the row's edge. The selection
  * dot (HOME_DOT px) sits at HOME_DOT_X, clear of the bottom row's corner, HOME_DOT_GAP before the
  * labels (HOME_TEXT_X in tools/ipod.py). */
@@ -212,14 +261,11 @@ static inline int arc_out(int r, int y) {
 #define HOME_DOT_X 25
 #define HOME_DOT 6
 #define HOME_DOT_GAP 8
-/* iPod Theme: Classic (IPOD/THEME 1, docs/ipod.md#display-settings) puts the pre-1.0.1 look back
- * over the Minimal assets at runtime. In Home's Full the rows end at HOME_CLASSIC_ROW, so the
- * chevron's glyph (x 20 to 30 of list_into) sits close to the panel edge without touching the
- * glass on the bottom row. Labels start at HOME_CLASSIC_TEXT_X and leave room for the glyph.
- * The progress bar is an NP_BAR_CLASSIC capsule
- * (Minimal's NP_BAR_MINIMAL line). Minimal's settings icons are grey and list_into
+/* Modern's Now Playing progress bar is an NP_BAR_CLASSIC capsule (Minimal's NP_BAR_MINIMAL line, Classic's NP_BAR_IPOD). Minimal's settings icons are grey and list_into
  * MINIMAL_CHEVRON under every accent; its own accent (MINIMAL_ACCENT) fills with MINIMAL_FILL. */
 #define HOME_SPLIT_W 187
+#define LOCALMUSIC_BG 0x524090 /* the Library page's EVT_WINDOW_BACKGROUND: stops its play gif's timer */
+#define STREAM_BG 0x52ec40 /* Streaming's, the same */
 /* Split's cover pans (docs/ipod.md#home): zoomed DRIFT_ZOOM_PCT, each axis a linear ping-pong of
  * its own period across the zoom's margin (about 1.5 px/s on a square cover, as iPod.js's), drawn
  * at sub-pixel positions every DRIFT_TICK_MS, a step at most DRIFT_MAX_STEP_MS. A cover whose zoomed
@@ -230,15 +276,17 @@ static inline int arc_out(int r, int y) {
 #define DRIFT_Y_MS 26000
 #define DRIFT_TICK_MS 200
 #define DRIFT_MAX_STEP_MS 500 /* 2.5 ticks: a late tick keeps its time */
-#define DRIFT_TEXELS 218080 /* four panels: 4 x 188 x 290 */
-#define HOME_CLASSIC_ROW 369
-#define HOME_TOP 8 /* Minimal's decorative inset; Classic starts below the status bar. */
+#define DRIFT_TEXELS 221088 /* four panels: 4 x 188 x 294, the tallest set's client */
+#define HOME_TOP 8 /* Minimal's decorative inset; Modern starts below the status bar. */
 #define HOME_CHEVRON_SHIFT 15
 #define HOME_FULL_CHEVRON_SHIFT 10
-#define HOME_CLASSIC_TEXT_X 33
-/* Labels end 10 px before Split's chevron glyph (x 20 of list_into, HOME_CHEVRON_SHIFT in), 5 px
- * before Full's, so Liberation Sans Bold's "Now Playing" (119 px) fits Split's row. */
-#define HOME_CLASSIC_LABEL_END 33
+/* Modern's Home: Full's rows end at HOME_MODERN_ROW, so the chevron's glyph (x 20 to 30 of list_into)
+ * sits close to the panel edge without touching the glass on the bottom row. Labels start at
+ * HOME_MODERN_TEXT_X and end 10 px before Split's glyph (HOME_CHEVRON_SHIFT in), 5 px before Full's,
+ * so Liberation Sans Bold's "Now Playing" (119 px) fits Split's row. */
+#define HOME_MODERN_ROW 369
+#define HOME_MODERN_TEXT_X 33
+#define HOME_MODERN_LABEL_END 33
 #define NP_BAR_CLASSIC 8
 #define NP_BAR_MINIMAL 4
 #define MINIMAL_FILL 0xeeeeec
@@ -255,7 +303,7 @@ static inline int arc_out(int r, int y) {
 #define LIGHT_CHROMA 40
 #define LIGHT_GLYPH 0xa0
 #define LIGHT_SURFACE 4
-#define LIGHT_BAR 0xdedede      /* Classic's status bar in Light Mode, as an iPod's, flat */
+#define LIGHT_BAR 0xdedede      /* Modern's flat bar in Light Mode, as an iPod's (scheme bar_light); Classic's gloss bar ignores it */
 /* Minimal's small capitals are SUDO_TRACK px apart (draw_spaced); secondary text is SUDO_MUTED. */
 #define SUDO_TRACK 2
 #define SUDO_MUTED 0x8c8c8c
@@ -272,15 +320,32 @@ static inline int arc_out(int r, int y) {
 #define NP_CAPS_PX 15
 #define NP_CAPS_INSET 2
 #define PAGE_SLIDE_MS 120
+#define GLIDE_MS 300 /* a remembered row's recall glide */
+#define HOME_SLIDE_MS 200 /* Cover Flow's and the carousel's wheel step */
+#define HOME_FAST_SLIDE_MS 120 /* ... and within HOME_FAST_WINDOW_MS of the last */
 #define NP_ARTIST_RGB 0xcccccc
 /* Now Playing's text (local, Spotify and Radio): the title over the artist and album, the album
  * lighter than the other grey text so it reads at a glance. */
 #define NP_TITLE_PX 22
 #define NP_META_PX 18
 #define NP_ALBUM_RGB 0xbbbbbb
-/* A line too long to fit holds MARQUEE_HOLD_MS at its start: the Minimal album marquee
- * (navigation.c) and the stock title and artist labels' delay and lull (tools/ipod.py). */
+/* A line too long to fit holds MARQUEE_HOLD_MS at its start and its end: the Minimal album marquee
+ * (navigation.c) and every stock hscroll_label's delay and lull (ringnav_hscroll_start,
+ * ringnav_hscroll_lull). */
 #define MARQUEE_HOLD_MS 1500
+#define MARQUEE_PASSES 3        /* the selected row's title: navigation.c marq_moved */
+#define HSCROLL_ONLY_FOCUS 0x78 /* hscroll_label_t, a char: hscroll_label_set_only_focus */
+#define HSCROLL_LOOP 0x7a       /* a char: a pass ends on its lull and starts again (0x5e8a20) */
+#define HSCROLL_YOYO 0x7b       /* a char: it scrolls back instead of snapping (0x5e8a44) */
+#define HSCROLL_DELAY 0x88      /* ms its start waits before the first step (hscroll_label_start) */
+#define HSCROLL_SPEED 0x8c      /* a float, px per ms; 0 runs a pass in its duration (0x5e8564) */
+#define HSCROLL_TEXT_W 0x94     /* its measured text width: hscroll_label_get_range */
+#define HSCROLL_TIMER 0xa4      /* its running timer's id; 0 stopped (stock paints the ellipsis) */
+/* Every pass's fastest pace, 0.05f px per ms: stock Now Playing's title and artist (0x52b8d4); its
+ * set_hscroll_label_attribute sets 0.1, some pages 0.2. As float bits, which order as their values
+ * for any positive float. */
+#define HSCROLL_PACE 0x3d4ccccd
+#define TIMER_CTX 0x20          /* timer_info_t.ctx: stock's hscroll lull reads its label there */
 /* iPod Now Playing's lyrics (lyrics.c, docs/ipod.md#lyrics): a line of one row is LYRIC_SLOT high,
  * its text and the gap to the next, a longer one more; the first after a blank LYRIC_SLOT
  * (tools/ipod.py's list layout) so it can sit in the middle as the playing line does; text LYRIC_X
@@ -297,7 +362,7 @@ static inline int arc_out(int r, int y) {
 #define SPOT_ART_X 16
 /* iPod: Now Playing's art top, clear of the page dots (tools/ipod.py NP_ART_Y) */
 #define NP_ART_TOP 42
-#define SPOT_ART_Y (IPOD ? NP_ART_TOP : 50)
+#define SPOT_ART_Y NP_ART_TOP
 #define SPOT_ART_PX 166
 /* iPod: the 50px heart/play-mode frame sits this far below the art's bottom edge, so the centred
  * 28px glyph (4px clear at its foot) ends level with the art (tools/ipod.py NP_ICON_PAD) */
@@ -307,7 +372,7 @@ static inline int arc_out(int r, int y) {
 #define SPOT_BAR_X 21
 #define SPOT_BAR_Y 251
 #define SPOT_BAR_W 333
-#define SPOT_BAR_H 8 /* the bar's view; iPod's Minimal paints its 4px line at the top (np_bar_h) */
+#define SPOT_BAR_H 8 /* the bar's view; Minimal paints its 4px line at the top (theme_t.np_bar) */
 #define SPOT_TIMES_Y 265
 #define SPOT_TIME_X 46
 /* iPod settings rows (docs/ipod.md#settings): Minimal starts SET_TOP below the status bar, Classic
@@ -335,8 +400,11 @@ static inline int arc_out(int r, int y) {
 #define LIST_DEFAULT_ITEM_HEIGHT 0x7c  /* list_view default_item_height */
 #define LIST_VIEW_LAYOUT 0x5e9eb4      /* children_layouter_list_view's layout */
 #define LIST_VIEW_LAYOUT_SLOT 0x926930 /* its vtable slot (vtable 0x926928 + 8) */
+#define LIBRARY_ROW_BODY 0x524820      /* localmusic_page_init's row body immediate (ipod.json) */
+#define LIBRARY_ROW_ICON_X 0x524944    /* its icon x (art_inset) */
 #define IMAGE_DRAW_SCALE_DOWN 5        /* "scale_down" in the stock draw type table @0x9272c0 */
 #define IMAGE_DRAW_CENTER 1            /* "center", the same table */
+#define IMAGE_DRAW_FILL 8              /* "fill", the same table: stretched to the box */
 /* iPod fast-scroll letter: the selected row's first character in white, LETTER_PX high, on a
  * LETTER_BOX square of the stock dark surface at LETTER_ALPHA, centred over the list. */
 #define LETTER_BOX 80
@@ -377,6 +445,13 @@ static inline int arc_out(int r, int y) {
 #define CHARGE_STOP 80
 #define CHARGE_RESUME 75
 #define CHARGE_POLL_MS 5000
+/* Hardware watchdog (docs/internals.md#watchdog): the UI loop feeds it every pass, so a loop or a
+ * kernel stalled WDT_MS reboots. Well above any ordinary pass (a 65k-song list, a cover decode:
+ * seconds). The known long ones on the UI thread, an import's tag reads and a folder add's directory
+ * loads (a minute or more on a big card), get WDT_LONG_MS (ringnav_wdt_long), well under the
+ * driver's limit of about 23 minutes. */
+#define WDT_MS 60000
+#define WDT_LONG_MS 900000
 /* Standby limit (docs/internals.md#standby-limit): its three choices after Off, in hours of one
  * Standby, after which the Q2 powers off. */
 #define STANDBY_LIMIT_1 1
@@ -419,6 +494,7 @@ static inline int arc_out(int r, int y) {
 #define LYRIC_PUSH_DETENTS 2
 #define LYRIC_PUSH_MS 1000
 #define BAR_VALUE 0x7c /* scroll_bar native value, maintained by list/table scroll callbacks */
+#define BAR_MAX 0x78 /* scroll_bar_set_params: the whole content, at least the bar's own h */
 #define KEY_CENTER 218
 #define KEY_PREV 172
 #define KEY_NEXT 173
@@ -450,12 +526,32 @@ static inline int arc_out(int r, int y) {
  */
 #define WHEEL_INFO_LOOP 0x10
 #define LOOP_QUEUE 0x38
+#define LOOP_POST 0x18 /* main_loop_t's queue_event slot (playback.c ringnav_queue_event) */
 #define WHEEL_QUEUE_FREE 8
+/* main_loop_simple's pressed byte: the touch thread sets it as it posts a down and clears it as it
+ * posts the release (input_dispatch_to_main_loop), whether or not the queue kept them. */
+#define LOOP_PRESSED 0x44
+/* A pointer press the window manager keeps this long with no pointer event is no finger
+ * (navigation.c stale_heal): a release it never got would otherwise hold the wheel and Centre. */
+#define STALE_TOUCH_MS 5000
+/* An empty Library list's page (navigation.c empty_toast) closes once the window manager marks it
+ * opened ("stage" WINDOW_STAGE_OPENED, after the open animation): polled every EMPTY_POLL_MS.
+ * The close path reads the same property @0x689c68 (3 or 5, suspended). */
+#define WINDOW_STAGE_OPENED 3
+#define EMPTY_POLL_MS 50
 /* With the screen off (the wheel is the volume), WHEEL_DARK_GUARD units of one touch's travel one
  * way (100, half a turn, whatever the sensitivity) tick nothing; the wheel then ticks until it has
  * been still WHEEL_DARK_IDLE_MS, which also restarts an unfinished guard. Calibration knobs. */
 #define WHEEL_DARK_GUARD 100
 #define WHEEL_DARK_IDLE_MS 1500
+/* A tick needs a ring frame with pressure this recent (tick_gate, navigation.c), and the same gap in
+ * frames ends Return's stop. Return's stop (ringnav_queue_event, playback.c): a second Return with
+ * WHEEL_STOP_TICKS ticks since the first, the last within WHEEL_ESCAPE_TICK_MS, and the first within
+ * WHEEL_ARM_MS. Calibration knobs. */
+#define WHEEL_FRESH_MS 1000
+#define WHEEL_ARM_MS 2000
+#define WHEEL_ESCAPE_TICK_MS 300
+#define WHEEL_STOP_TICKS 3
 #define BOOT_KEY_GUARD 0xa37c8a /* no symbol: set after a Standby resume, on_wm_keyup_fun drops the next centre release */
 #define RETURN_RELEASE_LATCH 0xa37c8b /* stock long Return arms it; the key-up filter consumes it */
 
@@ -471,6 +567,7 @@ static inline int arc_out(int r, int y) {
 #define SLIDE_EASING 8          /* stock scroll_to easing */
 #define ANIM_EASING 0x38 /* widget_animator_init (0x665eb4) stores easing_get(type) here */
 #define EASE_CUBIC_OUT 5 /* AWTK easing_type_t: starts at 3x the mean speed, then decelerates */
+#define EASE_FOLLOW 24 /* past AWTK's 24: coverflow.c's follow, never handed to easing_get */
 #define EVT_ANIM_END 0x125
 
 /* Play/Pause hold queue menu (docs/internals.md). AWTK input_device_status lives at
@@ -506,12 +603,28 @@ static inline int arc_out(int r, int y) {
 /* localmusic/playlist_page's add mode (g_play_info + 0x7894): non-zero while it is Add to Playlist;
  * 0 when browsing the Playlists list, whose rows' trailing dots open playlistsmore_page. */
 #define PLAYLIST_ADD_MODE 0xa27894
+#define PL_RENAME_ROW 0xa278a0 /* the playlist row playlistsmore_page_init saved (0x4b3980) */
+/* The artist page's navbar title (g_play_info + 0x7680, 512 bytes): localmusic_artistinfo_page_init
+ * copies g_local_classinfo_save + 0x10d into it, which load_artistinfo_list wrote as "%s" of the
+ * record's REC_ARTIST: "(null)" for an artist with no name. Each tab's navbar build (0x4aad10)
+ * reads it after load_localartist_list. */
+#define ARTIST_TITLE 0xa27680
+/* g_allselect_flag: playlist_page's Select All (0x4b1b88) toggles on it; a row's mark sets it to
+ * whether every row is now marked (0x4b1e38). */
+#define G_ALLSELECT_FLAG 0xa38ac0
 /* Marked folders stay indexed for playlists; the wrappers expand this before grouping. */
 #include "library_scope.h"
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b' and " LIBRARY_SCOPE_TOKEN
 /* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */
 #define ALBUM_YEAR "max(case when cast(year as text) glob '[1-9][0-9][0-9][0-9]*' then cast(substr(year,1,4) as integer) else 0 end)"
 /* One row per album, as album_cmp tells them apart (coverflow.c; navigation.c's Era). */
+/* An album group's art track: its lowest disc then track then path, as Coverflow lists it. A bare
+ * fileurl would be whichever row SQLite saw last, so an album whose tracks carry different covers
+ * showed a random one. Each number is clamped to 0-9999 so its prefix stays four digits (a date as
+ * the track, or -1, would cut the path). */
+#define ALBUM_TRACK \
+    "substr(min(substr(10000+min(max(ifnull(cd_num,0),0),9999),2)||" \
+    "substr(10000+min(max(ifnull(track,0),0),9999),2)||fileurl),9)"
 #define ALBUM_GROUP " group by album COLLATE NOCASE," \
     "ifnull(albumsonger,'') COLLATE NOCASE,case ifnull(albumsonger,'') when '' then rtrim(fileurl,replace(fileurl,'/','')) end"
 #define CLASS_ARTIST_ALBUMS 0xff01 /* an artist's albums (load_localclass_list 0xff11) */
@@ -530,10 +643,14 @@ static inline int arc_out(int r, int y) {
 #define TAGLIB_PROPERTY_FREE 0xb700
 /* Now Playing's ⋯ page (playermore_page_init @0x528c14): its 8 rows' kinds by position, which the
  * row click (0x528a70) reads at the button name's atoi, and Download Cover & Lyrics' kind
- * (get_playmore_showinfo @0x501208: player_onlinesearch). */
+ * (get_playmore_showinfo @0x501208: player_onlinesearch). Kinds 2 to 6 open a screen (Queue, Add to
+ * Playlist, Download Cover & Lyrics, Album and Artist info); 0 A-B Repeat, 1 Speed and 7 Delete's
+ * confirm don't. */
 #define PLAYMORE_ROWS 0x7728a0
 #define PLAYMORE_COUNT 8
 #define PLAYMORE_SEARCH 4
+#define PLAYMORE_INTO_FIRST 2
+#define PLAYMORE_INTO_LAST 6
 #define MCL_LASTPOS 0xa3be90    /* shuffle "previous" index, -1 none */
 #define MCL_PREPOS 0xa3be94
 #define MCL_PRELOAD 0xa3be98    /* 1 preloaded, 0 none, -1 closed for this track */
@@ -566,9 +683,12 @@ static inline int arc_out(int r, int y) {
 #define BOOTVOL_CHANGING 0x4b48f4 /* slider_bootvol's EVT_VALUE_CHANGING */
 #define BOOTVOL_CHANGED 0x4b4300  /* slider_bootvol's EVT_VALUE_CHANGED */
 #define SCAN_THREAD 0xa271d8
+/* byte, 1 for the whole library's scan, 0 for a folder's (the same init): our reading of stock's
+ * code, not checked on a device */
+#define SCAN_WHOLE 0xa271d0
 #define SCAN_DONE 0xa271d4
-/* Coverflow text: iPod keeps every label CF_EDGE from the sides, where the lowest track row's text
- * clears the bottom corners; both builds keep the captions there. Album names and artists scroll
+/* Coverflow text: every label, captions included, sits CF_EDGE from the sides, where the lowest
+ * track row's text clears the bottom corners. Album names and artists scroll
  * within that. Under the covers (CF_TEXT_Y), the album name is CF_NAME_PX white and the artist
  * CF_ARTIST_PX in CF_GREY (stock secondary text) right under it. */
 #define CF_EDGE 36
@@ -577,16 +697,18 @@ static inline int arc_out(int r, int y) {
 #define CF_ARTIST_PX 20
 #define CF_ARTIST_H 28
 #define CF_GREY 0xffaaaaaa /* color_t #AAAAAA */
+#define CF_GREY_BOLD 0xff8a8a8a /* Classic Light's dark half */
 /* Coverflow depth (docs/internals.md#coverflow-depth): the covers are drawn in software into one
  * CF_VIEW_W x CF_VIEW_H frame, the top of the client area. The selected cover is ART_SIZE (160)
  * square with its top CF_TOP from the frame's; side covers turn CF_ANGLE (60) degrees inward (the
  * sine table in coverflow.c), sit CF_X1 px from the centre, then CF_XS apart, CF_Z1 px and then
  * CF_ZS more behind it, seen from CF_EYE px. Brightness (of 256) is 256 at the centre, CF_BRIGHT1
- * one cover out and CF_BRIGHT2 two out, reaching 0 three out. Each cover's reflection is
- * CF_REFLECT px high at native size, from CF_REFLECT_TOP (of 256) of its brightness down to black.
- * The wheel moves one album every CF_STRIDE px. Starting values, to be tuned together on the Q2. */
+ * one cover out and CF_BRIGHT2 two and three out, reaching 0 half a step past the third, as the row
+ * draws it while the wheel holds the covers. Each cover's reflection is CF_REFLECT px high at native
+ * size, from CF_REFLECT_TOP (of 256) of its brightness down to black: Classic's, so the frame runs
+ * to its end, under the caption. The wheel moves one album every CF_STRIDE px. */
 #define CF_VIEW_W 375
-#define CF_VIEW_H 210
+#define CF_VIEW_H 220 /* CF_TOP + 160 + CF_REFLECT, and a row to spare */
 #define CF_CX 187 /* the centre line lies between screen columns 186 and 187 */
 #define CF_TOP 13
 #define CF_EYE 300
@@ -596,9 +718,13 @@ static inline int arc_out(int r, int y) {
 #define CF_ZS 20
 #define CF_BRIGHT1 192
 #define CF_BRIGHT2 128
-#define CF_REFLECT 24
-#define CF_REFLECT_TOP (IPOD ? 48 : 64)
+#define CF_REFLECT 46
+#define CF_REFLECT_TOP 90
 #define CF_STRIDE 110
+#define CF_BOUNCE 5 /* an artist's last album: a step past kicks it 1/5 of a stride, then back */
+#define CF_ANGLE 60   /* a side cover's turn, degrees */
+#define CF_HORIZON 50 /* % down the cover its centre sits on the shared horizon */
+#define CF_THIRD 1    /* 1: the third out stays, gone half a step past it */
 #define CF_TEXT_Y 212 /* the album caption's top, under the frame; the artist follows */
 /* Touch on the covers (coverflow.c, docs/internals.md#coverflow-touch) */
 #define CF_DRAG_PX 90      /* finger travel per album: about the centre cover's own on screen */
@@ -611,7 +737,8 @@ static inline int arc_out(int r, int y) {
 #define CF_SETTLE_MS 280   /* a release with no flick settles on the nearest cover */
 #define CF_TAP_MS 320      /* a tapped side cover's glide to the centre */
 /* Photos (patch/photos.c, docs/internals.md#photos): under a 48px title, PH_COLS columns of
- * PH_TILE_W x PH_TILE_H tiles from x PH_GRID_X, three whole rows in the 240px below it, each a
+ * PH_TILE_W x PH_TILE_H tiles from x PH_GRID_X, three whole rows in the 240px below it (with the
+ * title in the bar, the view runs to the page's foot), each a
  * thumbnail of at most PH_THUMB_W x PH_THUMB_H centred in its tile, so the selection shows round
  * it. The viewer's screen-size copy fits PH_SHOT_W x PH_SHOT_H (the client area). PH_GREY marks a
  * thumbnail not made yet or a file that will not open. */
@@ -625,9 +752,10 @@ static inline int arc_out(int r, int y) {
 #define PH_SHOT_H 290
 #define PH_GREY 0xff333333 /* color_t #333333 */
 #define PHOTOS_MAX 500 /* ponytail: ringnav navigates at most MAX_ENTRIES (512) rows; page beyond */
-/* PEQ editor (patch/peq_ui.c): on the main and band screens a PEQ_GRAPH_H view under the title
- * holds the response from PEQ_GRAPH_X to 375 - PEQ_GRAPH_X (20 Hz to 20 kHz, log), +-PEQ_GRAPH_DB at
- * its plot's top and bottom (rows PEQ_PLOT_TOP to PEQ_PLOT_BOTTOM), frequency labels under it. */
+/* PEQ editor (patch/peq_ui.c): on the main and band screens a PEQ_GRAPH_H view heads the Advanced
+ * list and holds the response from PEQ_GRAPH_X to 375 - PEQ_GRAPH_X (20 Hz to 20 kHz, log),
+ * +-PEQ_GRAPH_DB at its plot's top and bottom (rows PEQ_PLOT_TOP to PEQ_PLOT_BOTTOM), frequency
+ * labels under it. */
 #define PEQ_GRAPH_H 96
 #define PEQ_GRAPH_X 16
 #define PEQ_GRAPH_DB 15
