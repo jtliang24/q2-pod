@@ -12201,7 +12201,7 @@ if is_m1plus:
 def orange_red(c):
     r,g,b=c>>16,c>>8&255,c&255
     if not (r>=g>=b and r-b>=8 and 5*(g-b)>=r-b and 60*(g-b)<=23*(r-b)) and c!=0x362221: return c
-    t=(r-b)*4096//190; k=b-t*64//4096
+    t=min((r-b)*4096//190,4096); k=max(b-t*64//4096,0)
     return sum(max(0,min(255,t*x//4096+k))<<s for x,s in ((0xff,16),(0x14,8),(0x48,0)))
 # The M1: V2.1's orange controls (prev, play_down, ...) follow the accent as stock red does, in dark and Light Mode and
 # under Crimson (red itself): each pixel maps as its red blend would, alpha kept, transparent and grey pixels left. A
@@ -12209,13 +12209,16 @@ def orange_red(c):
 # and the pressed rows' brown its red blend's.
 if is_m1plus:
     assert orange_red(0xfe7e40)==0xff1448 and orange_red(0x2050ff)==0x2050ff
-    px=[(0xfe7e40,255)]*8+[(0xfda580,255),(0x7f3f20,255),(0xfe7e40,0),(0x333333,255)]
+    # fa7332, the foot of prev's and next's gradient, is deeper than the orange: it's red itself, or red_map's
+    # blend (k >= -RED_TOLERANCE) misses it and a red speck stays under every accent
+    assert orange_red(0xfa7332)==0xff1448
+    px=[(0xfe7e40,255)]*8+[(0xfda580,255),(0x7f3f20,255),(0xfe7e40,0),(0x333333,255),(0xfa7332,255)]
     red_px=[(orange_red(c) if a else c,a) for c,a in px]  # transparent pixels are left
     for preset,config in [(p,{'ACCENT':str(p),'THEME':MODERN,'LIGHT':l}) for p in (O['CRIMSON'],2) for l in '01']+[(0,{})]:
         for name in ('prev','play_down'):
             got=rgba(config,name,px)
             assert got==rgba(config,name,red_px),(config,name,[(hex(c),a) for c,a in got])
-            assert got[0][0]!=0xfe7e40 and got[10][1]==0 and got[11]==(0x333333,255),(config,name)
+            assert got[0][0]!=0xfe7e40 and got[10][1]==0 and got[11]==(0x333333,255) and got[12]==got[0],(config,name)
             if config.get('LIGHT')=='0':
                 assert got[0]==((0xff1448 if preset==O['CRIMSON'] else ACCENTS[preset][3]),255),(config,name,hex(got[0][0]))
         photo=[(0xfe7e40,255)]*8+[(0x2050ff,255)]*8
