@@ -5117,7 +5117,17 @@ to 1.7.0's and `q2compare --suites` passes all 37 runs.
   watchdog running came back in 25 s and stayed up (its crash log is expected).
 
 The M1 shows no Restart (only the unported Classic asks for one), so `device_reboot` was not reached; the card
-update's hook first runs on the next flash. Standby and power-off are still to be checked by hand.
+update's hook first runs on the next flash.
+
+Standby and power-off, by the user: after more than 5 minutes in Standby the M1 woke on the same track ("R1 Emoji
+Lyrics", 5 of 7, paused). A power-off and power-on came back to that track at 00:00, as Resume Songs keeps a place
+only for tracks of 30 minutes or more (the test track is 30 s). Neither left a `q2-crash.log`, and demo held the
+watchdog again after the power-on. That completes the watchdog's device pass. Turning it on for release builds is a
+separate change.
+
+Restored after the pass: Screen Off at 1 min, shuffle (PLAYMODE 2) and boot-target "rockbox". The config is
+byte-identical to the backup. The test folders (`MusicLibrary/R1Test`, `_explaylist_data`) were
+removed and the library rescanned. Recently Played and Most Played still list the seven test tracks.
 
 **Finding G3** ([unported doc](m1plus-unported.md#known-issues-on-the-m1)): when the track before it ends on its own,
 the cut FLAC sits on Now Playing at 00:00, playing, until Next (45 s and more; the CPU idle). It goes to a fix round.

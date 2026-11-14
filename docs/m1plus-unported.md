@@ -57,7 +57,7 @@ to its [progress](m1plus-progress.md) section.
 | [Card apps' library update](#card-apps-library-update) | 1.5.9 | `addon_library.c` (`library_poll`), the caps' `library` | Planned (`M3U_DIR_CALL` ported, progress 90) |
 | [A playlist row's hold menu](#a-playlist-rows-hold-menu) | 1.5.9 | `qm_hold`'s `QM_PLAYLIST` | Ported; dev 57 device pass |
 | [Night Shift](#night-shift) | 1.6.0 | `nightshift.c`, `night_row`, `LCD_*` (`offsets.inc`) | Planned |
-| [The watchdog and the crash log](#the-watchdog-and-the-crash-log) | 1.6.1, 1.6.2 | `wdt_poll`, `state_poll`, `WDT_MS`, `WDT_LONG_MS` (`navigation.c`) | Ported (the watchdog on `--dev` builds only); device check in progress (progress 90) |
+| [The watchdog and the crash log](#the-watchdog-and-the-crash-log) | 1.6.1, 1.6.2 | `wdt_poll`, `state_poll`, `WDT_MS`, `WDT_LONG_MS` (`navigation.c`) | Ported and device-checked (progress 90); the watchdog runs on `--dev` builds only until release builds turn it on |
 | [A USB DAC across a gapless change](#a-usb-dac-across-a-gapless-change) | 1.6.1 | `ao_init` (`peq_player.c`), `AO_INIT_SLOT`, `USB_BUFFER` (`tools/peq.py`) | Planned |
 | [The settings restack](#the-settings-restack) | 1.6.4 | `library_open`, `playset_sub`, `library_order`, `keylock_open`, `boot_row` on Power, `POD_KEYTONE`, `POD_CARMODE` (`navigation.c`) | Planned |
 | [Classic](#classic) | 1.6.5, 1.6.7 | `assets/themes/classic-light`, its geometry sets and `theme_boot`'s `boot_sites`, `home_pane_read`, `home_library` (`HOMELIB`, `ROWPREVIEW`, `ROWART`), `CLASSIC_LIGHT_RANGES`, `SONG_UNKNOWN_CALL`, `tools/art.py` | Planned |
@@ -400,7 +400,8 @@ at once on M1, and Display's row is the Q2's only: V2.1's `lcd_mem` layout is to
 restart. Both return at once on M1 (`if (M1PLUS || ...)`): a watchdog that misfires on V2.1 would
 reboot in a loop. Ported in round 1 (progress 90): `state_poll` runs on every M1 build, `wdt_poll` on `--dev`
 builds only until its device pass is complete. On `V06Mm` a stopped demo rebooted after 64 s and left the crash
-log; Standby and power-off are still to be checked.
+log, and Standby and a power-off came back with none, so the device pass is complete. Turning the watchdog on for
+release builds is what's left.
 
 ### A USB DAC across a gapless change
 
