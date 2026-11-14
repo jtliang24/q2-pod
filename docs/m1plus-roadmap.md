@@ -446,9 +446,9 @@ info pages' unwind (`navigator_close`). Both are in `test/m1plus/patch_gaps.py` 
 
 **Done (Oct 25,** [m1plus-progress.md](m1plus-progress.md) **section 46),** with the knob on Home: the
 `page_list` pages' rows, the Streaming icons and Now Playing's info lines. Coverflow's touch works as
-designed on the device; its feel is the user's call. Left:
-- **Coverflow's back arrow** overlaps the left cover at the top left.
-- **The selection frame on V2.1's pickers** (Theme, Screen Rotation) reaches into the scroll bar.
+designed on the device; its feel is the user's call. The aesthetics pass (Nov 13, progress section 87) closed the
+rest of the visual list: Coverflow's back arrow over the left cover went with the bar's chevron, and the frame on
+V2.1's pickers was their stray full-height scroll bar, now cleared. Kept for later:
 - **Theme preset resets.** Theme picks intentionally apply presets: Modern enables Light Mode and Minimal
   resets its accent to Graphite (progress section 78). If repeated resets become troublesome, consider keeping
   customized values when returning to a theme. Keep the present presets until that usability change is needed.

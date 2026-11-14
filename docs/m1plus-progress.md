@@ -4934,6 +4934,79 @@ about 87 minutes.
 - `pytest test/unit` passes 1,266 and `test/fw` 3,638.
 - The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
 
+## 87. The aesthetics pass (Nov 13)
+
+[m1plus-ipod-ui.md](m1plus-ipod-ui.md)'s Aesthetics queue was left until every M1 function was ported. This pass
+closes it, together with the visual notes scattered elsewhere: roadmap §7's list, §64's findings 6 and 9, the
+accent-mapping gap and Configuration's long confirm text. Each fix is its own commit, gated by `#if M1PLUS` or in
+an M1-only file, so the Q2's `update.tar` stays byte-identical.
+
+**The user's decisions:**
+- Brightness reuses `sset_display`.
+- Classic gives every settings icon and the Settings and Shortcut cards one disc in the live accent; Minimal stays
+  mono.
+- Split shows the whole cover, still, over a dimmed and blurred fill of itself that keeps panning.
+- V2.1's orange (`fe7e40`) follows the accent everywhere.
+
+**Review:**
+- Step 0 recorded the scattered notes in the queue (1baf3c57).
+- `sheets.py` gained a `settings` sheet: Display, System, Controls, the pickers, Configuration and Coverflow, in
+  both themes, dark and Light (f133e1b3).
+- Its baseline on V06Am (`work/aesthetics/base/`) showed Coverflow's back arrow already gone with the bar's chevron.
+- Every item has a sheet under `work/aesthetics/<item>/`.
+
+**The items:**
+1. **Display's four V2.1 rows** (6d9963fe). Brightness, Screen Off, Lock screen and Atmosphere Lamp Settings get an
+   icon at 12,10 (`DISPLAY_STOCK_ICONS`) and a label at 60, laid out as the payload's rows. The label rests at its
+   start, and only the selected row's marquee scrolls it, so "Atmosphere Lamp Settings" no longer shows clipped.
+2. **Classic's accent discs** (5e1b357e). `accent_disc` (`ringnav_image_add`) blends each pixel from white to the
+   accent's red tone by its distance from the icon's white point, against the disc's (the commonest distance).
+   - It covers the settings icons, `home_card_settings*` and `home_card_rockbox*`.
+   - The glyph stays white, edges stay smooth, and a `_down` image takes half brightness.
+   - Minimal's cards stay grey.
+3. **V2.1's orange follows the accent** (7a7c0451). `orange_red` turns a pixel in the orange's hue band (12-23
+   degrees), or the pressed rows' brown `362221`, into the same blend of `STOCK_RED`, which `red_map` then takes to
+   the accent.
+   - Images go through `orange_image`, and only if at least 95% of their solid coloured pixels are in the band.
+     V2.1's photographs reach 85% at most and keep their colours.
+   - Style colours go through `accent_map` and `ringnav_style_color`.
+   - Crimson shows the red itself.
+4. **Centred's cover** (a4fdeb67). `img_playcover` goes to x 33, its DLNA twin's, centring it.
+5. **Split's knob walk** (e20e47cf). `reveal` scrolls Home by whole `HOME_ROW`s in Split and Full, so no row sits
+   half under the art.
+6. **Split's whole cover** (6cb4bb52). `home_tex` builds the backdrop and the fitted cover:
+   - The backdrop is the cover zoomed to fill, box-filtered, dimmed toward black (or Light's paper) and magnified
+     by a B-spline as it pans.
+   - The cover is fitted whole inside the panel and stays still.
+
+   The placeholder art is drawn `scale_auto`, as V2.1 drew a fill image at its own size and overflowed the panel.
+   A frame costs 3.55M instructions, down from 5.68M.
+7. **The surviving notes:**
+   - a. The selected settings row's `>` takes the row's text colour (b25fb9b3).
+   - b. V2.1's four pickers (Theme, Screen Rotation, USB, Update Local Music) take the settings-page rewrite
+     (`m1_only`, `M1_SETTINGS`), which hides V2.1's navbar, so they show one back (1b3eff45).
+     - The "frame into the scroll bar" was V2.1's full-height `scroll_bar_m` showing after a knob step on a list
+       that doesn't scroll.
+     - `ringnav_style_color` now clears its colours when `list_bar` says the list doesn't scroll.
+   - c. Configuration's confirm reads "Press again to erase" on the M1, which fits its 240 px row (dad1a4db).
+   - d. A red speck at the lower left of Previous and Next in Minimal (d9b4c32f).
+     - The foot of V2.1's gradient there (`fa7332`) is deeper than the orange, so `orange_red` gave it a blend
+       past red (k down to -17), outside `red_map`'s tolerance of 8, and it stayed stock red.
+     - `orange_red` now clamps to red itself.
+     - Found on item 4's Now Playing sheet.
+
+**Tests:**
+- `patch.py` pins each item (M1 blocks, with Python mirrors of `orange_red` and the disc).
+- `test/m1plus/build.py` and `test_m1plus_ipod.py` cover the picker rewrites.
+- `patch.py` keeps its 213 expected failures in 2 gaps.
+
+**Gates** (`V06Bm`, `work/aesthetics/final-gates/summary.txt`, one `gates.py` run on a fresh build): all 19 pass,
+in about 86 minutes.
+- `patch.py` has 213 expected failures in 2 gaps, none unlisted, and 121 `NOT PORTED`.
+- `pytest test/unit` passes 1,270 and `test/fw` 3,638.
+- The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
+- `sheets.py … all settings` renders every review sheet (`work/aesthetics/final`).
+
 ## How to check a build now
 
 ```sh
