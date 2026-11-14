@@ -5058,6 +5058,25 @@ It found one thing, not a blocker: a selected long label scrolls two or three ti
 Playing") rather than returning to its start. Orange on the Crimson bar reads, with low contrast; that is V2.1's own
 look. Screen Off, the accent, Home and Centred were restored afterwards, and the device stays on `V06Cm`.
 
+## 89. Phase 6: 1.7.0-m1.1, the iPod UI's first release (Nov 14)
+
+**The plan changed** (the user, Nov 14): `feature/m1-ipod` already carried upstream 1.7.0 (§80), so Phase 6 released
+**1.7.0-m1.1**, not 1.5.9-m1.N ([m1plus-ipod-ui.md](m1plus-ipod-ui.md#phase-6-back-to-syncing)).
+- ff8d08b1 planned it and wrote the changelog entry; the roadmap's §5 and the port report mark the iPod UI ported.
+- 6c2d9f86 landed `feature/m1-ipod` on `staging` (`--no-ff`; `staging` had nothing the branch lacked).
+
+**Package** (`tools/release_m1.py package`, `work/release/1.7.0-m1.1`): `V1701`, built twice with byte-identical
+`update.bin` (`8002650c…`) and ZIP (`91abde4a…`); the release gates (peq, audit, patch, boot, playback, m4b, ldac) and
+`test/release_m1.py` pass.
+
+**Against the device's `V06Cm`** (§88's device pass): the source differs only in docs, and the unpacked rootfs only in
+the dev flag's three parts: no `q2remote`, no line starting it in `S90play`, and `demo` built without the dev strings
+and stale-press log (the patch is 624 bytes smaller). On that match the user skipped the device checklist this once.
+
+**Released:** the draft's first upload was refused (`HTTP 422`, `target_commitish` invalid) until `staging` was on
+GitHub; the user pushed `staging` and `feature/m1-ipod`, the draft verified, and it was published on Nov 14. `main`
+moved from 1.5.8-m1.1 (f855ff08) to 6c2d9f86. Next: the upstream sync resumes from 1.7.0 ([m1plus-sync.md](m1plus-sync.md)).
+
 ## How to check a build now
 
 ```sh
