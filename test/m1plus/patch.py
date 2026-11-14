@@ -21712,7 +21712,7 @@ def conf_open(m):
     m.click(conf); m.page=m.top
 m=ShelfMachine({SCAP:bytearray(b'4096M')}); conf_open(m)
 assert m.labels()[2:5]==['Spotify Cache: 4 GB','Erase Spotify Data','Stop Streaming Services']
-m.row(2); assert m.labels()[3]=='Press again to erase the login and cache' and not m.threads
+m.row(2); assert m.labels()[3]==('Press again to erase' if is_m1plus else 'Press again to erase the login and cache') and not m.threads  # the M1's row is 240 px
 m.row(0); assert m.labels()[3]=='Erase Spotify Data'  # another row's press drops it
 m.row(2); m.destroy(m.page); conf_open(m); assert m.labels()[3]=='Erase Spotify Data'  # so does leaving
 m.row(2); m.row(2); assert m.labels()[3]=='Erasing…' and len(m.threads)==1 and KILL in m.systems[-1]

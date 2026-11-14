@@ -29,7 +29,7 @@ static void sc_text(int i) {
     widget_set_text_utf8(widget_get_child(st.sc_row[i], 0),
                          i < 2            ? s
                          : shelf_erase(0) ? "Erasing…"
-                         : st.sc_armed    ? "Press again to erase the login and cache"
+                         : st.sc_armed    ? "Press again to erase"
                                           : "Erase Spotify Data");
 }
 
