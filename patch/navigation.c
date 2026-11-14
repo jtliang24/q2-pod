@@ -2195,8 +2195,7 @@ static unsigned red_map(unsigned c, unsigned tone, unsigned glyph, int light) {
  * A color_t (bytes r, g, b, a) in the orange's hue band, r >= g >= b with (g - b) / (r - b) in
  * 1/5..23/60 (12-23 degrees; the orange's own is 20, an orange accent's tones 26 and left alone),
  * becomes the same blend of STOCK_RED: t, its saturation over the orange's (190), of red plus the
- * rest (k) in grey, alpha kept, a pixel deeper than the orange clamped to red itself (t at most 1,
- * k at least 0). The brown becomes its blend too (t 0.11). red_map then takes
+ * rest (k) in grey, alpha kept. The brown becomes its blend too (t 0.11). red_map then takes
  * either to the accent, as it does stock red, and Crimson (the identity) shows the red itself.
  * Anything else returns unchanged. Linear, so a premultiplied pixel maps as its straight colour
  * would. */
@@ -2208,10 +2207,7 @@ static unsigned orange_red(unsigned c) {
     if (!orange_hue(ch[0], ch[1], ch[2]) && !(ch[0] == 0x36 && ch[1] == 0x22 && ch[2] == 0x21))
         return c;
     static const int red[3] = { STOCK_RED >> 16, STOCK_RED >> 8 & 255, STOCK_RED & 255 };
-    int t = (ch[0] - ch[2]) * 4096 / (0xfe - 0x40);
-    if (t > 4096) t = 4096; /* deeper than the orange (the foot of prev's and next's gradient) */
-    int k = ch[2] - t * 0x40 / 4096;
-    if (k < 0) k = 0; /* is the orange's red: red_map takes no blend past red, so it stayed red */
+    int t = (ch[0] - ch[2]) * 4096 / (0xfe - 0x40), k = ch[2] - t * 0x40 / 4096;
     unsigned out = c & 0xff000000u;
     for (int i = 0; i < 3; ++i) {
         int v = t * red[i] / 4096 + k;
