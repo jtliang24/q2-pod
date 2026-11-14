@@ -1500,35 +1500,34 @@ m.pressed=1
 assert m.confirm()==11 and not m.dispatched()
 assert m.call()==11 and m.selected(w)==2
 m.pressed=0; passed()
-if not is_m1plus:  # stale_heal runs on the Q2 only (the M1's ringnav_input notes no finger)
-    # A press with no pointer event for STALE_TOUCH_MS is healed once per pass of ringnav_sleep: an abort to the
-    # top window's targets, so a row can't click, then the release stock never got, at the touch's last place. Only
-    # events that reach the window manager count, pointer events only: a key is no finger, and a move is. A --dev
-    # build also notes it in q2-wheel.log; a release build opens no file.
-    m.handlers[payload_syms['stock_input_trampoline']]='stock_input'
-    m.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
-    m.mock('widget_dispatch_event_to_target_recursive')
-    def wm_event(kind): return m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=kind,gap=0)
-    def heal():
-        m.calls=[]; m.call(address=HOOKS['main_loop_sleep_default'][0],args=(0x1234,0,0,0),gap=0)
-        return [c for c in m.calls if c[0] in ('widget_dispatch_event_to_target_recursive','stock_input')]
-    def opens(): return [c for c in m.calls if c[0]=='fopen@GLIBC_2.2' and m.text(c[1])=='/mnt/data/q2-wheel.log']
-    m.word(m.event+O['EVENT_Y'],44); m.call(33,address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=O['EVT_POINTER_FIRST'],gap=0); m.pressed=1  # the event's x is its key's word
-    assert not heal(); m.now+=O['STALE_TOUCH_MS']-1; assert not heal() and not opens()
-    m.now+=1; steps=heal()
-    assert [c[0] for c in steps]==['widget_dispatch_event_to_target_recursive','stock_input']
-    assert steps[0][1]==m.top and m.get(steps[0][2])==O['EVT_POINTER_ABORT']
-    assert steps[1][1]==m.wm and m.get(steps[1][2])==O['EVT_POINTER_UP_BEFORE']-1 and (m.get(steps[1][2]+O['EVENT_X']),m.get(steps[1][2]+O['EVENT_Y']))==(33,44)
-    assert len(opens())==(1 if manifest['dev'] else 0)
-    if manifest['dev']: assert m.text(opens()[0][2])=='ab'
-    assert not heal()  # still pressed (stock's flag not what it reads): one try per STALE_TOUCH_MS, not every pass
-    m.now+=O['STALE_TOUCH_MS']; assert len(heal())==2
-    m.pressed=0; m.now+=O['STALE_TOUCH_MS']; assert not heal()  # nothing pressed: nothing to do
-    assert m.call()==11 and m.selected(w)==3; m.paint(w); assert m.drawn()
-    wm_event(O['EVT_POINTER_FIRST']); m.pressed=1; m.now+=O['STALE_TOUCH_MS']-1; wm_event(O['EVT_POINTER_FIRST']+2); m.now+=1; assert not heal()  # a move
-    wm_event(O['EVT_KEY_DOWN']); m.now+=O['STALE_TOUCH_MS']; assert len(heal())==2  # a key is no finger
-    m.pressed=0; passed()
-else: not_ported('The stale press backstop (stale_heal, 1.6.4): the M1 notes no finger in ringnav_input')
+# A press with no pointer event for STALE_TOUCH_MS is healed once per pass of ringnav_sleep: an abort to the
+# top window's targets, so a row can't click, then the release stock never got, at the touch's last place. Only
+# events that reach the window manager count, pointer events only: a key is no finger, and a move is. A Q2
+# --dev build also notes it in q2-wheel.log; a release build, and the M1's, opens no file.
+m.handlers[payload_syms['stock_input_trampoline']]='stock_input'
+m.handlers[HOOKS['main_loop_sleep_default'][0]+12]='stock_sleep'
+m.mock('widget_dispatch_event_to_target_recursive')
+def wm_event(kind): return m.call(address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=kind,gap=0)
+def heal():
+    m.calls=[]; m.call(address=HOOKS['main_loop_sleep_default'][0],args=(0x1234,0,0,0),gap=0)
+    return [c for c in m.calls if c[0] in ('widget_dispatch_event_to_target_recursive','stock_input')]
+def opens(): return [c for c in m.calls if c[0]=='fopen@GLIBC_2.2' and m.text(c[1])=='/mnt/data/q2-wheel.log']
+m.word(m.event+O['EVENT_Y'],44); m.call(33,address=HOOKS['window_manager_dispatch_input_event'][0],args=(m.wm,m.event,0,0),event_type=O['EVT_POINTER_FIRST'],gap=0); m.pressed=1  # the event's x is its key's word
+assert not heal(); m.now+=O['STALE_TOUCH_MS']-1; assert not heal() and not opens()
+m.now+=1; steps=heal()
+assert [c[0] for c in steps]==['widget_dispatch_event_to_target_recursive','stock_input']
+assert steps[0][1]==m.top and m.get(steps[0][2])==O['EVT_POINTER_ABORT']
+assert steps[1][1]==m.wm and m.get(steps[1][2])==O['EVT_POINTER_UP_BEFORE']-1 and (m.get(steps[1][2]+O['EVENT_X']),m.get(steps[1][2]+O['EVENT_Y']))==(33,44)
+logs=manifest['dev'] and not is_m1plus
+assert len(opens())==(1 if logs else 0)
+if logs: assert m.text(opens()[0][2])=='ab'
+assert not heal()  # still pressed (stock's flag not what it reads): one try per STALE_TOUCH_MS, not every pass
+m.now+=O['STALE_TOUCH_MS']; assert len(heal())==2
+m.pressed=0; m.now+=O['STALE_TOUCH_MS']; assert not heal()  # nothing pressed: nothing to do
+assert m.call()==11 and m.selected(w)==3; m.paint(w); assert m.drawn()
+wm_event(O['EVT_POINTER_FIRST']); m.pressed=1; m.now+=O['STALE_TOUCH_MS']-1; wm_event(O['EVT_POINTER_FIRST']+2); m.now+=1; assert not heal()  # a move
+wm_event(O['EVT_KEY_DOWN']); m.now+=O['STALE_TOUCH_MS']; assert len(heal())==2  # a key is no finger
+m.pressed=0; passed()
 # With three rows in view the difference shows: the middle one wins, not the top edge.
 m=Machine(); w,es=m.page_list(8,height=192,extent=1000)
 m.paint(w); m.touch(); m.word(w+O['SCROLL_Y'],200); m.word(w+O['VIEW_ANIMATOR'],0x1234)

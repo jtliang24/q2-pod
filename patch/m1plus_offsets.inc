@@ -611,8 +611,11 @@ static inline int arc_out(int r, int y) {
 /* main_loop_queue_event (0x658f18) is V2.1's leaf too, its queue_event slot at +0x18; the M1 doesn't take
  * upstream's QUEUE_LEAF (1.6.4: Wheel QS's lift flooded the queue with the touch thread's empty events). */
 #define LOOP_POST 0x18
-/* The stale press backstop (navigation.c stale_heal, 1.6.4) runs only on the Q2 (unported: the M1's
- * ringnav_input returns before it notes a finger), so its --dev note's main_loop_simple byte is unread. */
+/* The stale press backstop (navigation.c stale_heal, 1.6.4) runs on the M1 too: m1plus_nav_input.inc notes
+ * each finger that reaches the window manager. Its --dev note (stale_note, q2-wheel.log) is the Q2's alone,
+ * so main_loop_simple's pressed byte is unread here. V2.1's is 0x44 as V1.32's: input_dispatch_to_main_loop
+ * (0x637070) sets it on a press and clears it on the release. stale_heal reads the window manager's own flag
+ * (window_manager_get_pointer_pressed 0x6780f0: vtable +0x88, slot +0x44, wm+0x104). */
 #define LOOP_PRESSED M1_UNPORTED
 #define STALE_TOUCH_MS 5000
 /* An empty Library list's page (navigation.c empty_toast): V2.1's window_base_on_event (0x676b5c) sets the

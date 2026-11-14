@@ -14178,7 +14178,7 @@ static void stale_heal(void) {
     void *wm = window_manager(), *top = window_manager_get_top_window(wm);
     unsigned now = (unsigned)time_now_ms(), age = now - st.touch_at, abort_event[12], up[12];
     if (age < STALE_TOUCH_MS || !window_manager_get_pointer_pressed(wm)) return;
-    if (Q2POD_DEV) stale_note(age);
+    if (Q2POD_DEV && !M1PLUS) stale_note(age); /* the log is the Q2's wheel log */
     st.touch_at = now;
     if (top)
         widget_dispatch_event_to_target_recursive(
@@ -15255,7 +15255,7 @@ static void thumb_poll(void) {
 }
 
 int ringnav_sleep(void *loop) {
-    if (!M1PLUS) stale_heal(); /* the M1 notes no finger (ringnav_input), so it is unported */
+    stale_heal(); /* the M1 notes its fingers in m1plus_nav_input.inc */
     quick_poll();
     headset_poll();
     headset_eq_poll();

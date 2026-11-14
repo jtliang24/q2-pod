@@ -1242,7 +1242,7 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     release = m1_release[0] if m1_release else VERSION
     header += [f'#define STOCK_VERSION "{stock_version}"', f'#define Q2POD_VERSION "{release}{f" dev {dev_count}" if dev else ""}"',
                f'#define Q2POD_TAG "{"" if dev else release}"',  # netupdate.c (unported on M1): the release tag, none when --dev
-               f'#define Q2POD_DEV {1 if dev else 0}',  # navigation.c stale_note (Q2 only: stale_heal is unported)
+               f'#define Q2POD_DEV {1 if dev else 0}',  # navigation.c stale_note (Q2 only: the M1's stale_heal logs nothing)
                '#define Q2POD_REPO "jtliang24/q2-pod"',  # netupdate.c (unported on M1): the repo of its releases
                f'#define Q2POD_UA "Q2Pod/{release} (https://github.com/jtliang24/q2-pod)"']  # onlinematch.c, as MusicBrainz asks
     themes, theme = m1_themes()
