@@ -2190,37 +2190,8 @@ static unsigned red_map(unsigned c, unsigned tone, unsigned glyph, int light) {
     }
     return out;
 }
-#if M1PLUS
-/* V2.1's accent is an orange (fe7e40) where the Q2's is red, and its pressed rows a brown (362221).
- * A color_t (bytes r, g, b, a) in the orange's hue band, r >= g >= b with (g - b) / (r - b) in
- * 1/5..23/60 (12-23 degrees; the orange's own is 20, an orange accent's tones 26 and left alone),
- * becomes the same blend of STOCK_RED: t, its saturation over the orange's (190), of red plus the
- * rest (k) in grey, alpha kept. The brown becomes its blend too (t 0.11). red_map then takes
- * either to the accent, as it does stock red, and Crimson (the identity) shows the red itself.
- * Anything else returns unchanged. Linear, so a premultiplied pixel maps as its straight colour
- * would. */
-static int orange_hue(int r, int g, int b) {
-    return r >= g && g >= b && r - b >= 8 && 5 * (g - b) >= r - b && 60 * (g - b) <= 23 * (r - b);
-}
-static unsigned orange_red(unsigned c) {
-    int ch[3] = { c & 255, c >> 8 & 255, c >> 16 & 255 };
-    if (!orange_hue(ch[0], ch[1], ch[2]) && !(ch[0] == 0x36 && ch[1] == 0x22 && ch[2] == 0x21))
-        return c;
-    static const int red[3] = { STOCK_RED >> 16, STOCK_RED >> 8 & 255, STOCK_RED & 255 };
-    int t = (ch[0] - ch[2]) * 4096 / (0xfe - 0x40), k = ch[2] - t * 0x40 / 4096;
-    unsigned out = c & 0xff000000u;
-    for (int i = 0; i < 3; ++i) {
-        int v = t * red[i] / 4096 + k;
-        out |= (unsigned)(v < 0 ? 0 : v > 255 ? 255 : v) << 8 * i;
-    }
-    return out;
-}
-#endif
 unsigned accent_map(unsigned c, int preset, int tone) {
     const unsigned *a = tones_of(preset);
-#if M1PLUS
-    c = orange_red(c);
-#endif
     if (ipod_light())
         return !(c >> 24) || neutral(c) ? ui_ink(c)
                                         : red_map(c, flip(tone_of(a, tone)), 0xffffff, 1);
@@ -8407,9 +8378,6 @@ unsigned *ringnav_style_color(unsigned *color, void *style, const char *name, un
         if (S->muted && !selected && (*color & 0xffffff) == 0xaaaaaa)
             *color = (*color & 0xff000000u) | S->muted;
     }
-#if M1PLUS
-    *color = orange_red(*color); /* V2.1's orange, as red: Crimson's below too */
-#endif
     int a = accent();
     if (S->flags & SCHEME_RAW_RED && !ipod_light()) return color;
     unsigned c = accent_map(*color, a, TONE_LIGHT);
@@ -8544,42 +8512,6 @@ static void shrink_centred(void *bitmap, int to, int a) {
     bitmap_unlock_buffer(bitmap);
 }
 
-#if M1PLUS
-/* V2.1's orange controls (transport, radios, badges, sliders) turn to the same blends of stock red
- * (orange_red), which the red pass below then takes to the accent. Only an image that is the
- * orange's: at least 95% of its solid coloured pixels (alpha >= 128, max - min > 24) in the hue
- * band. V2.1's photographs (artist and radio art, wallpapers, the guide) reach 85% at most, its
- * orange icons 98%; its genre icons, a yellower brown, stay. Returns 1 if any pixel changed. */
-static int orange_image(void *bitmap, const unsigned char *o) {
-    int w = I(bitmap, 0), h = I(bitmap, 4), stride = bitmap_get_line_length(bitmap);
-    if (w <= 0 || h <= 0 || w > 4096 || h > 4096 || stride < 4 * w) return 0;
-    unsigned char *px = bitmap_lock_buffer_for_write(bitmap);
-    if (!px) return 0;
-    int hued = 0, orange = 0, changed = 0;
-    for (int y = 0; y < h; ++y)
-        for (unsigned char *p = px + y * stride, *end = p + 4 * w; p < end; p += 4) {
-            int r = p[o[0]], g = p[o[1]], b = p[o[2]];
-            int hi = r > g ? (r > b ? r : b) : (g > b ? g : b),
-                lo = r < g ? (r < b ? r : b) : (g < b ? g : b);
-            if (p[o[3]] < 128 || hi - lo <= 24) continue;
-            ++hued;
-            orange += orange_hue(r, g, b);
-        }
-    if (hued >= 8 && orange * 20 >= hued * 19)
-        for (int y = 0; y < h; ++y)
-            for (unsigned char *p = px + y * stride, *end = p + 4 * w; p < end; p += 4) {
-                if (!p[o[3]]) continue;
-                unsigned c0 = p[o[0]] | p[o[1]] << 8 | p[o[2]] << 16, c = orange_red(c0);
-                if (c == c0) continue;
-                changed = 1;
-                p[o[0]] = c;
-                p[o[1]] = c >> 8;
-                p[o[2]] = c >> 16;
-            }
-    bitmap_unlock_buffer(bitmap);
-    return changed;
-}
-#endif
 #if M1PLUS
 /* Classic (a theme without icons_mono): the settings rows' category icons and Home's Settings and
  * Shortcut cards take the accent, one disc colour where V2.1 gave each category its own. A pixel's
@@ -8719,9 +8651,6 @@ int ringnav_image_add(void *manager, const char *name, void *bitmap) {
             }
         bitmap_unlock_buffer(bitmap);
     }
-#if M1PLUS
-    if (format < 4 && s && !*s && !settings_icon(name)) orange_image(bitmap, at[format]);
-#endif
     unsigned char *px = (icon || into) && format < 4 && T->icons_mono
                             ? bitmap_lock_buffer_for_write(bitmap)
                             : (void *)0;
