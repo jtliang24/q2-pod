@@ -21,14 +21,14 @@ to its [progress](m1plus-progress.md) section.
 
 | Feature | Since | Q2 Pod's pieces | Status |
 |---|---|---|---|
-| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8); Carousel, Click With Headphones, the art following the player's cover (1.5.9); Single Press Scrub (1.6.0) | In progress |
+| [The iPod UI](#the-ipod-ui) | 1.2.2 or earlier | `playlist_rebuild`, `widget_on_paint_background`, `bigcover_page_init`, `style_get_color`, `image_manager_add`, `list_get_img_pic`, `systembar_showface` (1.4.5); Light Mode, Corners and the new accents (1.5.0); `ui_loader_load_widget_with_parent`, Centred Now Playing, Smart Awake, bold font, Home art pan (1.5.8); Carousel, Click With Headphones, the art following the player's cover (1.5.9); Single Press Scrub (1.6.0) | Ported (ipod-ui Phases 1 to 5; released in 1.7.0-m1.1) |
 | [The extra time zones](#the-extra-time-zones) | 1.2.9 | `select_timezone`; `timezone_row`, `TIMEZONES` (1.5.0) | Planned |
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
 | [Battery: the MQA side chain](#battery-fixes) | 1.2.9 | `MQA_GATE`, `MQA_PROBE` (`tools/peq.py`) | Planned |
 | [Battery: Tidal's stream thread parked](#battery-fixes) | 1.4.5 | `STREAM_POLL_CALLS` and `get_tidal_trackurl` (1.5.0; 1.4.5's `STREAM_POLLS`) | Native; live validation pending |
 | [Battery: the kernel modules' idle clocks](#battery-fixes) | 1.5.0 | `tools/aic.py`, `rotator.py`, `pwm.py`, `mcu_park.py` (`--aic-idle-wait`, `--rotator-lazy-clock`, `--pwm-idle-clock`, `--mcu-idle-sleep`) | Planned |
 | [FLAC fast paths](#flac-fast-paths) | 1.5.0 | `tools/flac.py`, `patch/flac_*.c` (`tools/peq.py`, `--flac-experiments`) | Planned |
-| [Display's sub-pages](#displays-sub-pages) | 1.5.0 | `ringnav_display`'s Appearance, Coverflow and Controls, `display_sub` | In progress |
+| [Display's sub-pages](#displays-sub-pages) | 1.5.0 | `ringnav_display`'s Appearance, Coverflow and Controls, `display_sub` | Ported (ipod-ui 4.3, 4.5, 4.6) |
 | [Videos in Folder view](#videos-in-folder-view) | 1.5.0 | `folder_click`, `books_video`, `LOAD_DIRECTORY_RET` (1.5.5) | Planned |
 | [A reboot keeping the place](#a-reboot-keeping-the-place) | 1.5.0 | `device_reboot`, `dialog_checkfw_dialog_init` | Planned |
 | [SyncLink's keys past the Buttons lock](#synclinks-keys) | 1.5.0 | `main_loop_post_key_event` | Planned |
@@ -113,7 +113,8 @@ These features run on the M1, but a few of their suite cases can't run there:
 
 ### The iPod UI
 
-In progress on `feature/m1-ipod` (the user's choice, Nov 2), per [m1plus-ipod-ui.md](m1plus-ipod-ui.md).
+Ported on `feature/m1-ipod` (the user's choice, Nov 2), per [m1plus-ipod-ui.md](m1plus-ipod-ui.md), and first
+released in 1.7.0-m1.1 (Phase 6). Its looks left open are in that plan's Aesthetics queue.
 This replaces the Oct 26 decision to keep V2.1's own look. Upstream 1.5.9 deleted the Legacy path the
 M1 compiles, and the M1's mix of V2.1 pages and Q2 Pod pages is clunky (roadmap section 5). The iPod
 UI is built for the Q2's 375x320 landscape screen and touch wheel, and patches V1.32's UI assets,

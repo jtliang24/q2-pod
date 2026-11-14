@@ -350,11 +350,15 @@ Q2's bytes are unchanged, so there was no device flash.
 
 ## Phase 6: Back to syncing
 
-Once the branch reaches parity (Phases 1 to 4.7 pass on the device):
-- land it on `staging` and release `1.5.9-m1.N`;
-- restart the sync from 1.5.9 through the upstream-sync runbook ([m1plus-sync.md](m1plus-sync.md));
-  `drift.py` then plans 1.6.0 and 1.6.3. The saved `work/sync/1.6.0-wip/` resolutions are reference only.
-- The 1.6.x iPod features then arrive as ordinary port rows.
+Revised Nov 14 (the user): the Nov 9 decision brought the syncs forward, so `feature/m1-ipod` already carries
+upstream 1.7.0 (progress §80), and the release is **1.7.0-m1.1**, not 1.5.9-m1.N. With Phases 1 to 4.8 passed on the
+device and Phase 5's gates in place:
+- land `feature/m1-ipod` on `staging` (`--no-ff`; `staging` has nothing the branch lacks);
+- release `1.7.0-m1.1` from `staging` by [m1plus-releasing.md](m1plus-releasing.md): the changelog entry, `package`,
+  the device checklist on the release build, then a draft and `--publish`; `main` then moves to the release;
+- resume the sync from 1.7.0 through the upstream-sync runbook ([m1plus-sync.md](m1plus-sync.md)), on `staging`
+  again. `drift.py` plans the steps from 1.7.0. The saved `work/sync/1.6.0-wip/` resolutions are reference only.
+- The 1.7.x iPod features then arrive as ordinary port rows.
 
 ## Aesthetics queue
 

@@ -353,10 +353,10 @@ Not ported, because V2.1 has them (ground rules: prefer V2.1's own UI):
 Now Playing's info lines (`NP_INFO_CALL`) only change how the lines read, so they are in section 7.
 Their V2.1 site is the fill's one call, `0x53bebc` (`0x0411f760`, the fill at `0x539c40`).
 
-## 5. The iPod UI on M1: in progress
+## 5. The iPod UI on M1: ported
 
-In progress on `feature/m1-ipod` (the user's choice, Nov 2): the iPod UI becomes the M1's only UI, as on
-the Q2, ported on the 1.5.8 base before the next sync. The plan, its phases and its design decisions are
+Ported on `feature/m1-ipod` (the user's choice, Nov 2), and released from `staging` as 1.7.0-m1.1 (Phase 6): the
+iPod UI is the M1's only UI, as on the Q2. The plan, its phases and its design decisions are
 in [m1plus-ipod-ui.md](m1plus-ipod-ui.md). Two things changed the Oct 26 decision, which kept V2.1's own
 look:
 - upstream 1.5.9 (`4fee7d5`) deleted the Legacy path the M1 compiles (`-DIPOD=0`);
