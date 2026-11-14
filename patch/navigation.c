@@ -13117,6 +13117,8 @@ static int confirm_over(void *prompt, const char *verb) {
     st.confirm_win = (void *)0;
     return answer;
 }
+#include "m1plus_nav_playlist_delete.inc"
+#if !M1PLUS
 int ringnav_playlist_delete(void *win, void *event) {
     void *list = P(p_deque_playlist, 0), *db = 0;
     int row = widget_get_prop_int(win, "_playlist", -1), ok = 0;
@@ -13149,6 +13151,7 @@ done:
     toast(ok ? "Playlist deleted" : "Could not delete playlist");
     return 0;
 }
+#endif
 
 int ringnav_playlistsmore(void *win, void *ctx) {
     int result = stock_playlistsmore_trampoline(win, ctx);

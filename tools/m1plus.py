@@ -50,6 +50,11 @@ M1PLUS_FUNCTIONS = {
  'volume_refresh': ('void', 'void *'),  # the volume dialog shows the output's level
  'text_edit_set_select': ('int', 'void *, unsigned, unsigned'),  # the M1 Plus's edit_set_select (patch/m1plus_peq.h)
  'navigator_replace': ('int', 'const char *'),  # Tidal's login in its main page's place (m1_tidal_login)
+ # Delete Playlist's ticked rows (m1plus_nav_playlist_delete.inc): pvec_selectrecord, a libcstl vector of int
+ # (1 ticked), as V2.1's own select_recordempty (1 when none is) and batch_delete_file walk it
+ 'select_recordempty': ('int', 'void'),
+ 'vector_size': ('unsigned', 'void *'),
+ 'vector_at': ('void *', 'void *, unsigned'),
 }
 WM_PAINT_LEAF_M1PLUS = ('window_manager_paint', 0x677b44, 'ringnav_wm_paint', (0x10800009, 0, 0x8c820088))
 # style_get_gradient (docs/m1plus-ipod-ui.md 4.1) is the Q2's leaf again: beqz a0; nop; lw v0, 0(a0), then the
@@ -411,7 +416,6 @@ M1PLUS_PORTS = {
     'TABLE_LOAD_CALL': ('unported', '1.7.0: Classic pooled-row faces; Classic is unported'),
 
     # Hooks
-    'playlist_delete_click': ('unported', 'transactional playlist deletion (1.5.5); V2.1 delete callback not yet pinned'),
     'on_wm_keydown_before_fun': ('q2only', "Key Tone's click on the wheel's press; V2.1 has no buzzer command (progress 15)"),
     'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
     'localmusic_page_init': ('ported', "the Library's rows are the Q2 Pod page's Library page (progress 17)"),
@@ -567,6 +571,7 @@ M1PLUS_RAW_GLOBALS = {'g_power_longkey': 0xa041b8}
 # Local V2.1 routines, each checked to be a PIC entry with V2.1's GOT base.
 M1PLUS_PRIVATE_FUNCTIONS = {
     'm1_home_click': 0x533b80,  # V2.1 Home destination dispatcher; widget name is the native menu id
+    'playlist_delete_click': 0x53dbcc,  # playlist_page's Delete button click (widget_on at 0x53d78c), hooked
 
     # The status bar's 1 s tick (docs/m1plus-ipod-ui.md 4.2): systembar_timer_start (0x5453c8) arms a 1000 ms timer on
     # 0x545394, which calls this with 0. It finds the bar's widgets by name from the system_bar global, as the Q2's
@@ -747,6 +752,10 @@ M1PLUS_HOOKS = {
     # index (0x4eed5c), so the name-ordered list (ringnav_library_query) gives it an occupied id, and it returns
     # that id although addPlayList ignored the failed insert. The Q2's allocator reads the ids under BEGIN IMMEDIATE.
     'createPlayListItem': (0x4eeca8, 'ringnav_playlist_create', None),
+    # Delete Playlist (1.5.5): playlist_page's Delete button click, V2.1's own multi-select (no playlistsmore_page);
+    # every ticked playlist in one transaction (m1plus_nav_playlist_delete.inc), where stock's batch_delete_file
+    # (0x4e1408) deletes each header and its entries apart and says success whatever happened.
+    'playlist_delete_click': (0x53dbcc, 'ringnav_playlist_delete', None),
 }
 
 def m1plus_symbols(syms, symbol_table):

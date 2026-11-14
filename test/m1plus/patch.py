@@ -22536,9 +22536,9 @@ if is_m1plus:
     exec(compile((ROOT/"test/m1plus/feature_batch.py").read_text(), str(ROOT/"test/m1plus/feature_batch.py"), "exec"))
 
 if is_m1plus:
-    # M1 Plus: V2.1's createPlayListItem (0x4eeca8), run as stock V2.1 (patched=False) and as the port, against real
-    # SQLite at the import boundary. Library -> Playlists lists the headers by name (ringnav_library_query), so the
-    # ids aren't in the list's order.
+    # M1 Plus: V2.1's createPlayListItem (0x4eeca8) and playlist_page's Delete click (0x53dbcc), each run as stock
+    # V2.1 (patched=False) and as the port, against real SQLite at the import boundary. Library -> Playlists lists
+    # the headers by name (ringnav_library_query), so the ids aren't in the list's order.
     class PlaylistLifecycleMachine(PlaylistEditMachine):
         MALLOC=0x1000018  # stock malloc's GOT slot (0xa03184) is 0 until lazy binding, as free's
         def __init__(self,patched=True):
@@ -22553,18 +22553,37 @@ if is_m1plus:
                 r=self.song(name,4); self.word(r+O['REC_ID'],ident); self.word(r+O['REC_DISC'],ident)
                 self.word(r+O['REC_TITLE'],self.string(name)); records.append(r)
             self.word(syms['p_deque_playlist'],self.deque(records))
+            self.word(syms['g_class_type'],0xf00b)
+            self.ticked=self.alloc(4*len(records)); self.rows=len(records); self.tick()
+            self.word(syms['p_vector_select_record'],self.alloc(0x20))
             self.word(0xa03184,self.MALLOC); self.handlers[self.MALLOC]='life:malloc'
-            self.handlers[syms['sqlite3_free']]='life:sqlite3_free'
-            self.mock('strcpy@GLIBC_2.0')
+            for n in ('vector_size','vector_at','sqlite3_free','navigator_back'): self.handlers[syms[n]]='life:'+n
+            self.handlers.pop(syms['select_recordempty'],None)  # V2.1's own, on the vector above
+            self.mock('getFormatString','strcpy@GLIBC_2.0')
+            self.answer=10; self.asked=[]; self.backs=0; self.word(syms['g_delete_flag'],0)
+        def tick(self,*rows):  # the selection, by row of the name-ordered list
+            for i in range(self.rows): self.word(self.ticked+4*i,int(i in rows))
         def hook(self,u,address,size,unused):
             name=self.handlers.get(address,'')
             if name.startswith('life:'):
-                a=u.reg_read(REGS[0]); ret=0
+                a,b=u.reg_read(REGS[0]),u.reg_read(REGS[1]); ret=0
                 if name=='life:malloc': ret=self.alloc((a+3)&~3)
+                elif name=='life:vector_size': assert a==self.get(syms['p_vector_select_record']); ret=self.rows
+                elif name=='life:vector_at': assert b<self.rows; ret=self.ticked+4*b
+                elif name=='life:navigator_back': self.backs+=1
                 self.returns(ret); return
+            if name in ('c:navigator_to_with_context','q:navigator_to_with_context') and self.text(u.reg_read(REGS[0]))=='dialog/confirminfo_dialog':
+                self.asked.append(self.text(u.reg_read(REGS[1])+8)); self.returns(self.answer); return
             super().hook(u,address,size,unused)
         def create(self,name):
             return signed(self.call(address=HOOKS['createPlayListItem'][0],args=(self.get(syms['p_deque_playlist']),self.string(name),0,0),gap=0))
+        def delete(self,*rows):
+            self.tick(*rows)
+            return self.call(address=HOOKS['playlist_delete_click'][0],args=(0,self.event,0,0),gap=0)
+        def headers(self): return [r[0] for r in self.db.execute('select id from playlist where id<=100 order by id')]
+        def entries(self): return [r[0] for r in self.db.execute('select id from playlist where id>100 order by id')]
+        def said(self): return [t[3] for t in self.toasts]
+    ENTRIES={True:'delete from playlist where id>100',False:'delete from playlist where id > 100'}  # the port's, stock's
 
     # The id race: the list in name order starts Alpha (1), so stock's first row whose id isn't its index is 0,
     # Zulu's. Its insert fails on the key and stock returns 0 anyway, as if it had made the playlist, and an
@@ -22582,6 +22601,34 @@ if is_m1plus:
         assert m.db.execute('select * from playlist').fetchall()==before and not m.db.in_transaction; passed()
     m=PlaylistLifecycleMachine(); m.db.executemany('insert into playlist(id) values(?)',[(i,) for i in range(6,100)])
     assert m.create('Full')==-1; passed()
+
+    # Delete: rows 0 and 2 of the name-ordered list are Alpha (1) and Charlie (5); Alpha's entry is 102.
+    for patched in (False,True):
+        m=PlaylistLifecycleMachine(patched=patched); m.delete(0,2)
+        assert m.asked==['msg_delplaylist'] and m.headers()==[0,2,3,4] and m.entries()==[101,103]
+        assert m.said()==['msg_delplaylistsuccess'] and m.get(syms['g_delete_flag'])&255==1 and not m.backs
+        assert not m.db.in_transaction; passed()
+    # The entries' delete fails: stock has already deleted the header, leaves its songs filed under a free id
+    # (the next playlist made there gets them) and says it deleted the playlist. The port keeps both, says it
+    # couldn't, and leaves delete_flag clear.
+    s=PlaylistLifecycleMachine(patched=False); s.fail=ENTRIES[False]; s.delete(0)
+    assert s.headers()==[0,2,3,4,5] and s.entries()==[101,102,103] and s.said()==['msg_delplaylistsuccess']  # stock V2.1's fault
+    for failure in ('open','begin',ENTRIES[True],'delete from playlist where id=','commit'):
+        m=PlaylistLifecycleMachine(); before=m.db.execute('select * from playlist').fetchall(); m.fail=failure; m.delete(0,2)
+        assert m.db.execute('select * from playlist').fetchall()==before and m.said()==['Could not delete playlist']
+        assert m.get(syms['g_delete_flag'])&255==0 and not m.db.in_transaction,failure; passed()
+    # The second playlist's header is already gone (deleted elsewhere): changes() is 0, so the first's delete
+    # rolls back too.
+    m=PlaylistLifecycleMachine(); m.db.execute('delete from playlist where id=5'); before=m.db.execute('select * from playlist').fetchall()
+    m.delete(0,2); assert m.db.execute('select * from playlist').fetchall()==before and m.said()==['Could not delete playlist']; passed()
+    # Stock's own paths stay: nothing ticked says msg_delplaylistfailed and asks nothing; No at the confirm deletes nothing.
+    for patched in (False,True):
+        m=PlaylistLifecycleMachine(patched=patched); before=m.db.execute('select * from playlist').fetchall(); m.delete()
+        assert not m.asked and m.said()==['msg_delplaylistfailed'] and m.db.execute('select * from playlist').fetchall()==before
+        m.answer=0; m.toasts.clear(); m.delete(1)
+        assert m.asked==['msg_delplaylist'] and not m.said() and m.db.execute('select * from playlist').fetchall()==before; passed()
+    # After a delete, New Playlist reuses the freed id.
+    m=PlaylistLifecycleMachine(); m.delete(5); assert m.headers()==[1,2,3,4,5] and m.create('Replacement')==0; passed()
 
 elif 'createPlayListItem' in HOOKS and 'playlist_delete_click' in HOOKS:
     # Header creation uses the database IDs even when the displayed list is alphabetized.
@@ -22653,9 +22700,6 @@ elif 'createPlayListItem' in HOOKS and 'playlist_delete_click' in HOOKS:
     assert m.db.execute('select id from playlist where id=101').fetchall()==[(101,)] and m.toasts[-1][3]=='Could not delete playlist'; passed()
     m=PlaylistLifecycleMachine(); m.answer=0; before=m.db.execute('select * from playlist').fetchall(); m.delete()
     assert m.db.execute('select * from playlist').fetchall()==before and not m.backs and not m.reload_pending(); passed()
-
-else:
-    not_ported('playlist allocation and transactional deletion (1.5.5)')
 
 # A Videos folder's listed videos never join a queue (#128): stock loads a copy without them, its start
 # on the same song, or the next after a video; the caller's list stays whole. Videos alone leave an empty queue.
