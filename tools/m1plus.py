@@ -843,6 +843,10 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     # 0x42c030 less 0x9c; the reply at 0x42c3c0 sends "{media-info\no-playing-status}", 0x8864e0)
     'media_info_null': ((0x42bfcc, 0x10600008, 0x106000fc),   # beqz $v1, 0x42bff0 -> 0x42c3c0 (Q2 0x42c068)
                         (0x42c4ec, 0x8fa21b20, 0x1060ffb4)),  # lw $v0 (dead) -> beqz $v1, 0x42c3c0 (Q2 0x42c588)
+    # peq.py's FLAC_META_EOF: demux_audio_open's FLAC metadata walk ends on a length read past the file's end (V1.32's
+    # walk less 0x540; 0x490704 follows the last block's branch, as V1.32's 0x490c44)
+    'flac_meta_eof': ((0x490660, 0x06000163, 0x06000028),   # bltz $s0, 0x490bf0 -> 0x490704 (Q2 0x490ba0)
+                      (0x492464, 0x1000f9e2, 0x1000f8a7)),  # b 0x490bf0 -> b 0x490704 (Q2 0x4929a4)
     'seek_slot': 0x89f76c,
     'stock_seek': 0x48cc6c,
     'id3_calls': (0x48ee74, 0x492028, 0x492ab4),
@@ -1000,6 +1004,8 @@ def patch_player(raw, out):
     patch_word(data, pause_addr, pause_old, pause_new, 'pause loop sleep')
     for address, stock, patched in prof['media_info_null']:
         patch_word(data, address, stock, patched, 'Music info with no stream')
+    for address, stock, patched in prof['flac_meta_eof']:
+        patch_word(data, address, stock, patched, 'FLAC metadata at EOF')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')

@@ -371,9 +371,9 @@ def shared_checks(directory, manifest, stock, demo, read):
     start, size = int(text[1], 16), int(text[2], 16)
     off = fileoff(old, profile['vbr_scan'])
     # the M1's audited words, checked as the EQ gates: the pause sleep, get-music-info's NULL branches
-    # (MEDIA_INFO_NULL)
+    # (MEDIA_INFO_NULL) and the FLAC metadata walk's exits (FLAC_META_EOF)
     if m1plus: profile = dict(profile, eq_rate_gates=(*profile['eq_rate_gates'], profile['pause_sleep'],
-                                                      *profile['media_info_null']))
+                                                      *profile['media_info_null'], *profile['flac_meta_eof']))
     gates = [fileoff(old, a) for a in (*(a for a, _, _ in profile['eq_rate_gates']), *profile['id3_calls'])]
     if not m1plus:
         from peq import IDLE_WAIT, PAUSE_WAIT, CMD_DONE, MP3_ALLOC, MP3_FILTER, MP3_CLOSE, MP3_READ

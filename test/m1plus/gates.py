@@ -123,7 +123,7 @@ STEPS = {
     'playback': (suite('m1plus/playback'), True),
     'm4b': (suite('m1plus/m4b'), True),
     'id3': (suite('m1plus/id3'), False),
-    # the real hciplayer under Unicorn: get-music-info with no stream
+    # the real hciplayer under Unicorn: get-music-info with no stream, a FLAC cut inside its metadata
     'faults': (suite('m1plus/player_faults'), True),
     'headset': (suite('m1plus/headset_io'), False),
     'ldac': (suite('ldac'), True),

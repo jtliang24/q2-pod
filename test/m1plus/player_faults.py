@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""V2.1's hciplayer faults that tools/peq.py fixes on the Q2 (MEDIA_INFO_NULL), in the real player:
+"""V2.1's hciplayer faults that tools/peq.py fixes on the Q2 (MEDIA_INFO_NULL, FLAC_META_EOF), in the real player:
 test/hci_emu.py runs it, its threads, demuxers and decoders on Unicorn with ALSA modelled and a virtual clock, driven
-over its socket as demo drives it. test/hci_natural.py's music_info_no_stream, at V2.1's addresses
-(m1plus.PLAYER_PROFILE's media_info_null).
+over its socket as demo drives it. test/hci_natural.py's music_info_no_stream and metadata_cut, at V2.1's addresses
+(m1plus.PLAYER_PROFILE's media_info_null and flac_meta_eof).
 
 A get-music-info with no sh_audio gets the no-stream reply, and playback carries on; stock reads through NULL and the
-player dies. The FLAC is written here (verbatim subframes), so the suite needs no encoder.
+player dies. A FLAC cut inside its metadata ends the walk; stock reads the same blocks forever. The FLACs are written
+here (verbatim subframes), so the suite needs no encoder.
 Usage: test/m1plus/player_faults.py BUILD_DIR [PLAYER]  (PLAYER: another V2.1 hciplayer, e.g. BUILD_DIR/peq/stock-hciplayer,
 to see stock fail)"""
 import pathlib, random, shutil, struct, subprocess, sys
@@ -21,6 +22,7 @@ player = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else build/'pe
 work, root, aud = build/'player_faults', build/'player_faults'/'root', build/'player_faults'/'aud'
 AUTH = 0x43050c        # the licence check, called from 0x420ee8 as V1.32's 0x43084c
 LENGTH = 0xb10e68      # the length get-music-info reads (V1.32's 0xb10e84); 0 takes the length call's path
+WALK = PLAYER_PROFILE['flac_meta_eof'][0][0]  # the walk's length check, once per metadata block
 RATE, FRAMES = 44100, 54   # 54 blocks of 4096: 5 s
 failures = []
 
@@ -67,7 +69,10 @@ def setup():
     aud.mkdir(parents=True)
     subprocess.run(['unsquashfs', '-no-progress', '-d', root, '-f', build/'stock.squashfs', 'lib', 'usr/lib'], check=True,
                    stdout=subprocess.DEVNULL)
-    (aud/'a.flac').write_bytes(flac(1))
+    a = flac(1)
+    (aud/'a.flac').write_bytes(a)
+    (aud/'cutinfo.flac').write_bytes(a[:30])                                    # cut inside STREAMINFO
+    (aud/'cutblock.flac').write_bytes(a[:4] + bytes([a[4] & 0x7f]) + a[5:42])   # cut where the next block's header should be
 
 
 class Player:
@@ -86,6 +91,18 @@ class Player:
         return len(self.pcm) // 4
     def song(self, name):
         self.e.send_cmd('{set-songurl\\/mnt/mmc/%s|ss=0|0|0|1|0|90}' % name)
+
+
+def exits(p, seconds):
+    """Virtual times of the exits hciplayer sends in the next `seconds`, asking as demo does."""
+    at = []
+    end = p.now() + seconds
+    while p.now() < end and p.e.exited is None:
+        p.run(0.01)
+        at.extend(p.now() for r in p.e.replies if b'exit' in r for _ in range(r.count(b'exit')))
+        p.e.replies.clear()
+        p.e.send_cmd('{player-status\\request}')
+    return at
 
 
 def music_info_no_stream():
@@ -111,12 +128,29 @@ def music_info_no_stream():
             check(False, f'music info, no {name}: the player faulted: {x}')
 
 
+def metadata_cut():
+    """A FLAC that ends where a metadata header should be: the walk ends, not the same blocks forever. The walk is
+    bounded here: past 1000 length checks it is stopped and counted a hang."""
+    for name in 'cutinfo.flac', 'cutblock.flac':
+        p = Player()
+        walked = [0]
+        def step(e):
+            walked[0] += 1
+            if walked[0] > 1000: e.exited = 'hang'; e.u.emu_stop()
+        p.e.watch_fn(WALK, step)
+        p.song(name)
+        at = exits(p, 2)
+        check(p.e.exited is None, f'{name}: the walk ends ({walked[0]} length checks)')
+        check(len(at) >= 1 and p.frames() == 0, f'{name}: exits {at}, {p.frames()} frames')
+
+
 if __name__ == '__main__':
     stock = sha((build/'peq'/'stock-hciplayer').read_bytes())
     assert stock == M1PLUS_PLAYER_SHA, f'not an M1 Plus build: {stock}'
     print(f'player: {player}')
     setup()
     music_info_no_stream()
+    metadata_cut()
     assert not failures, f'{len(failures)} failed: {failures}'
     shutil.rmtree(work)
     print('player_faults: all passed')
