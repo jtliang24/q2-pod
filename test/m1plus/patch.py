@@ -3974,8 +3974,8 @@ else:
 # mclLoadPlayList, mclNextSong and key filters run for real.
 from build import fileoff
 class QueueMachine(Machine):
-    def __init__(self,page='allmusic_page',rows=20,queue=3,pos=0,mode=0,cls=0xf001):
-        super().__init__()
+    def __init__(self,page='allmusic_page',rows=20,queue=3,pos=0,mode=0,cls=0xf001,patched=True):
+        super().__init__(patched)
         self.deqs={}; self.toasts=[]; self.sent=[]; self.picks=[]; self.airplay=0
         self.imports=[]; self.import_ret=1; self.m3u_files=[]; self.uncreated=set(); self.on_toast=None; self.on_open=None
         for n in ('_create_deque','deque_init','deque_init_copy','deque_size','deque_at','_deque_push_back',
@@ -7012,8 +7012,8 @@ def finger(m,view,points,ms=400,kinds=None):
 if 'localmusic_playlistsmore_page_init' in HOOKS or is_m1plus:  # M1 Plus: no playlistsmore_page; the hold menu's More… opens the editor
     # Local playlist editor: real MIPS UI/control code and real SQLite transactions at its ABI boundary.
     class PlaylistEditMachine(CoverflowMachine):
-        def __init__(self,count=3):
-            super().__init__()
+        def __init__(self,count=3,patched=True):
+            super().__init__(patched=patched)
             self.db=sqlite3.connect(':memory:',isolation_level=None)
             self.db.execute('create table playlist(id integer primary key,cd_num,fileurl,time,time_end,filename)')
             self.db.execute("insert into playlist values(0,0,'',0,0,'Mix')")
@@ -22535,7 +22535,55 @@ elif not is_m1plus:
 if is_m1plus:
     exec(compile((ROOT/"test/m1plus/feature_batch.py").read_text(), str(ROOT/"test/m1plus/feature_batch.py"), "exec"))
 
-if 'createPlayListItem' in HOOKS and 'playlist_delete_click' in HOOKS:
+if is_m1plus:
+    # M1 Plus: V2.1's createPlayListItem (0x4eeca8), run as stock V2.1 (patched=False) and as the port, against real
+    # SQLite at the import boundary. Library -> Playlists lists the headers by name (ringnav_library_query), so the
+    # ids aren't in the list's order.
+    class PlaylistLifecycleMachine(PlaylistEditMachine):
+        MALLOC=0x1000018  # stock malloc's GOT slot (0xa03184) is 0 until lazy binding, as free's
+        def __init__(self,patched=True):
+            super().__init__(patched=patched)
+            self.db.execute('drop table playlist')
+            self.db.execute('create table playlist(id integer primary key,filename,fileurl,album,songer,style,name,composer,albumsonger,year,track,cd_num,time,time_end,time_create,Initial,bitdepth,samprate)')
+            for ident,name in enumerate(('Zulu','Alpha','Echo','Bravo','Delta','Charlie')):
+                self.db.execute('insert into playlist(id,filename,name,cd_num) values(?,?,?,?)',(ident,name,name,ident))
+            self.db.execute("insert into playlist(id,filename,cd_num) values(101,'song',0),(102,'other',1),(103,'third',3)")
+            records=[]
+            for ident,name in self.db.execute('select id,name from playlist where id<=100 order by name'):
+                r=self.song(name,4); self.word(r+O['REC_ID'],ident); self.word(r+O['REC_DISC'],ident)
+                self.word(r+O['REC_TITLE'],self.string(name)); records.append(r)
+            self.word(syms['p_deque_playlist'],self.deque(records))
+            self.word(0xa03184,self.MALLOC); self.handlers[self.MALLOC]='life:malloc'
+            self.handlers[syms['sqlite3_free']]='life:sqlite3_free'
+            self.mock('strcpy@GLIBC_2.0')
+        def hook(self,u,address,size,unused):
+            name=self.handlers.get(address,'')
+            if name.startswith('life:'):
+                a=u.reg_read(REGS[0]); ret=0
+                if name=='life:malloc': ret=self.alloc((a+3)&~3)
+                self.returns(ret); return
+            super().hook(u,address,size,unused)
+        def create(self,name):
+            return signed(self.call(address=HOOKS['createPlayListItem'][0],args=(self.get(syms['p_deque_playlist']),self.string(name),0,0),gap=0))
+
+    # The id race: the list in name order starts Alpha (1), so stock's first row whose id isn't its index is 0,
+    # Zulu's. Its insert fails on the key and stock returns 0 anyway, as if it had made the playlist, and an
+    # import or New Playlist then files songs under Zulu. The port takes the first free id under BEGIN IMMEDIATE.
+    s=PlaylistLifecycleMachine(patched=False); before=s.db.execute('select * from playlist').fetchall()
+    assert s.create('New')==0 and s.db.execute('select * from playlist').fetchall()==before  # stock V2.1's fault
+    m=PlaylistLifecycleMachine(); assert m.create("O'Brien")==6
+    assert m.db.execute('select id,filename,name,cd_num from playlist where id=6').fetchone()==(6,"O'Brien","O'Brien",6)
+    assert m.create("O'Brien")==-2 and not m.db.in_transaction; passed()
+    # A name stored cut to 63 bytes never matches the whole one, as in stock
+    m=PlaylistLifecycleMachine(); assert m.create('L'*70)==6 and m.create('L'*70)==7; passed()
+    for failure in ('open','begin','insert','commit'):
+        m=PlaylistLifecycleMachine(); before=m.db.execute('select * from playlist').fetchall(); m.fail=failure
+        assert m.create('New')==-1
+        assert m.db.execute('select * from playlist').fetchall()==before and not m.db.in_transaction; passed()
+    m=PlaylistLifecycleMachine(); m.db.executemany('insert into playlist(id) values(?)',[(i,) for i in range(6,100)])
+    assert m.create('Full')==-1; passed()
+
+elif 'createPlayListItem' in HOOKS and 'playlist_delete_click' in HOOKS:
     # Header creation uses the database IDs even when the displayed list is alphabetized.
     class PlaylistLifecycleMachine(PlaylistEditMachine):
         def __init__(self):

@@ -411,7 +411,6 @@ M1PLUS_PORTS = {
     'TABLE_LOAD_CALL': ('unported', '1.7.0: Classic pooled-row faces; Classic is unported'),
 
     # Hooks
-    'createPlayListItem': ('unported', 'playlist ID allocation (1.5.5); V2.1 allocator not yet pinned'),
     'playlist_delete_click': ('unported', 'transactional playlist deletion (1.5.5); V2.1 delete callback not yet pinned'),
     'on_wm_keydown_before_fun': ('q2only', "Key Tone's click on the wheel's press; V2.1 has no buzzer command (progress 15)"),
     'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
@@ -744,6 +743,10 @@ M1PLUS_HOOKS = {
     # Add to Playlist (ipod-ui 4.7): each playlist_page keeps the add mode it opened with, and Now Playing's picker
     # keeps its guarded pick on the rows New Playlist rebuilds
     'playlist_rebuild': (0x53e74c, 'ringnav_playlist', 'playlist'),
+    # New Playlist and importPlayList's create (1.5.5): V2.1's allocator takes the first row whose id isn't its
+    # index (0x4eed5c), so the name-ordered list (ringnav_library_query) gives it an occupied id, and it returns
+    # that id although addPlayList ignored the failed insert. The Q2's allocator reads the ids under BEGIN IMMEDIATE.
+    'createPlayListItem': (0x4eeca8, 'ringnav_playlist_create', None),
 }
 
 def m1plus_symbols(syms, symbol_table):
