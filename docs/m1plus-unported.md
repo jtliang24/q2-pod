@@ -25,8 +25,8 @@ to its [progress](m1plus-progress.md) section.
 | [Network Update](#network-update) | 1.3.8 | `systemset_fwupdate_page_init`, `netupdate.c`, `fwupdate_tf` | Planned |
 | [Battery: the MQA side chain](#battery-fixes) | 1.2.9 | `MQA_GATE`, `MQA_PROBE` (`tools/peq.py`) | Planned |
 | [Battery: Tidal's stream thread parked](#battery-fixes) | 1.4.5 | `STREAM_POLL_CALLS` and `get_tidal_trackurl` (1.5.0; 1.4.5's `STREAM_POLLS`) | Native; live validation pending |
-| [Battery: the kernel modules' idle clocks](#battery-fixes) | 1.5.0 | `tools/aic.py`, `rotator.py`, `pwm.py`, `mcu_park.py` (`--aic-idle-wait`, `--rotator-lazy-clock`, `--pwm-idle-clock`, `--mcu-idle-sleep`) | Planned |
-| [FLAC fast paths](#flac-fast-paths) | 1.5.0 | `tools/flac.py`, `patch/flac_*.c` (`tools/peq.py`, `--flac-experiments`) | Planned |
+| [Battery: the kernel modules' idle clocks](#battery-fixes) | 1.5.0 | `tools/aic.py`, `rotator.py`, `pwm.py`, `mcu_park.py` (`--aic-idle-wait`, `--rotator-lazy-clock`, `--pwm-idle-clock`, `--mcu-idle-sleep`) | Unplanned: experiments on the Q2 too, off by default and `--dev` only |
+| [FLAC fast paths](#flac-fast-paths) | 1.5.0 | `tools/flac.py`, `patch/flac_*.c` (`tools/peq.py`, `--flac-experiments`) | Planned (measure V2.1's decoder first) |
 | [Videos in Folder view](#videos-in-folder-view) | 1.5.0 | `folder_click`, `books_video`, `LOAD_DIRECTORY_RET` (1.5.5) | Planned |
 | [A reboot keeping the place](#a-reboot-keeping-the-place) | 1.5.0 | `device_reboot`, `dialog_checkfw_dialog_init` (V2.1's `dialog_cardupdate_dialog_init`) | Ported; device check pending (progress 90) |
 | [SyncLink's keys past the Buttons lock](#synclinks-keys) | 1.5.0 | `main_loop_post_key_event` | Planned |
@@ -35,7 +35,7 @@ to its [progress](m1plus-progress.md) section.
 | [Battery: paced player scheduling and command waits](#battery-fixes) | 1.5.5 | `MAINSCHEDULING_CALL`, `PAUSE_WAIT`, `IDLE_WAIT`, `CMD_DONE` | Planned |
 | [MP3 encoder delay and padding](#mp3-encoder-delay-and-padding) | 1.5.5 | `mp3_gapless.c`, `MP3_ALLOC`, `MP3_FILTER`, `MP3_CLOSE`, `MP3_READ` | Planned |
 | [Bluetooth resampler continuity](#bluetooth-resampler-continuity) | 1.5.6 | `RS_OPEN_SLOT`, `rs_open` (`tools/peq.py`, `peq_player.c`) | Planned |
-| [Coverflow flick gestures](#coverflow-flick-gestures) | 1.5.7 | `touch`, `carousel_glide`, `CF_DRAG_*` and `CF_*` gesture tunables | Planned |
+| [Coverflow flick gestures](#coverflow-flick-gestures) | 1.5.7 | `touch`, `carousel_glide`, `CF_DRAG_*` and `CF_*` gesture tunables | Unplanned until feedback asks for it |
 | [Directory markers](#directory-markers) | 1.5.8 | `library_scope.c`, `MUSIC_WHERE`, `music_records`, Era SQL | Planned |
 | [Automatic scrobble uploads](#automatic-scrobble-uploads) | 1.5.8 | `scrobble_auto`, `[SCROBBLE] AUTO` | Planned |
 | [Simple EQ's Presets shortcut](#simple-eqs-presets-shortcut) | 1.5.7 | `E3_PRESETS`, three-button Simple EQ layout | Planned |
@@ -64,7 +64,6 @@ to its [progress](m1plus-progress.md) section.
 | Classic Search, sleep timer and date/time forms | 1.6.8–1.7.0 | `dialog_search_dialog_init`, `systemset_sleepshutdown_page_init`, `systemset_manualtime_page_init` | NOT PORTED; Classic remains unavailable |
 | Classic's painters for Quick Settings, the dialogs, Playlists and the lock screen | 1.6.8–1.7.0 | Classic painters; `AB_X_CALLS`, `TABLE_LOAD_CALL`, `batch_get_selectitem`, `ab_x`, `PLAYLIST_KEYUP_ADDR` (`pl_dress`) | NOT PORTED; Classic remains unavailable (Phase 4.7 ported the Modern ones) |
 | Classic Home Streaming pane | 1.6.8–1.7.0 | `home_streaming`, `stream_rows`, `on_home_stream_onclick`, `STREAM_BG` | NOT PORTED; M1 Streaming keeps its existing page |
-| Cover Flow raw-wheel thumb and follower | 1.6.8–1.7.0 | `coverflow_wheel_*`, `cf.thumb`, `EASE_FOLLOW`; M1 has a volume knob | NOT PORTED; validated knob-step and touch behavior retained |
 | Configurable slide motion (a theme's step and fast-step ms and easing, ms 0 an immediate move) | 1.6.8–1.7.0 | the theme's motion rows (`THEME_MOTION_OFF`, `MOTION_WIDGET`); the M1's slide_menu keeps V2.1's 200/120 ms and easing | NOT PORTED |
 | USB Storage eject: OK to Disconnect | 1.6.8–1.7.0 | `usb_poll` (`navigation.c`), the Q2 gadget's `USB_LUN` configfs path; V2.1's gadget layout not checked | NOT PORTED |
 
@@ -182,7 +181,8 @@ row's click.
   PCM notifier sleeps), `soc_rotator.ko` (its clock taken at first use) and the PWM driver and MCU
   image (idle clocks gated; MCU sleep, dev only). Each pins the stock module's SHA-256. V2.1's
   modules are to be compared with V1.32's first: the M1's pipeline swaps none. Since 1.6.x (`0405c29`)
-  all four are experiments, off by default and `--dev` only, on the Q2 too.
+  all four are experiments, off by default and `--dev` only, on the Q2 too, so they are Unplanned on the M1
+  (the user's choice, Nov 14).
 
 - **Paced player scheduling and command waits** (1.5.5). `MAINSCHEDULING_CALL` needs V2.1's UI
   scheduler call site; `PAUSE_WAIT`, `IDLE_WAIT` and `CMD_DONE` need its command state and player
@@ -192,7 +192,8 @@ row's click.
 
 1.5.0 patches the Q2's `hciplayer` FLAC decoder (frame sync, LPC and output, on by default) through
 `tools/flac.py`. V2.1's `hciplayer` is another build: `PLAYER_PROFILE` takes none of its words, and its
-decoder's routines are to be found by the same callers.
+decoder's routines are to be found by the same callers. The port starts with a measurement: profile V2.1's
+decoder on the device, and port only if the gain is like the Q2's (the user's choice, Nov 14).
 
 ### Videos in Folder view
 
@@ -285,8 +286,8 @@ after the last. V2.1 has the threads (`0x516b9c`, `0x5178cc`, `0x51b2d4`) and pa
 Nothing in the M1's hardware blocks either. The way in:
 1. Read both callers and the URL thread for where the id is and how long it stays valid.
 2. Find the id's offset in V2.1's queue row for `REC_TIDAL_ID`.
-3. Port [Streaming's Configuration](#streamings-configuration) first, since its cache size caps
-   `trim`.
+3. Size the cache by Streaming's Configuration, whose cache size caps `trim`. It is already on the M1
+   ([progress section 50](m1plus-progress.md#50-five-feature-batch-on-150-oct-28)).
 4. Put the Downloads row on the Q2 Pod page, as V2.1 has no Streaming page.
 
 Steps 1 and 2 can be done from the code. The device check needs a signed-in Tidal account.
@@ -310,7 +311,8 @@ M1 retains `m1plus_coverflow_touch.c` and the existing native `slide_swipe` path
 continuous drag, velocity, rubber band and catch-a-glide handler are Q2-only until adapted to V2.1's
 portrait touch events and vertical `slide_menu` layout. Shared caption updates and the insensitive
 hidden-covers fix are inherited. The shared wheel animator uses V2.1's easing callback field at
-`0x44`, pinned in the build audit; this alone does not enable the new touch handler.
+`0x44`, pinned in the build audit; this alone does not enable the new touch handler. Unplanned until
+feedback says the M1's flick feels worse than the Q2's (the user's choice, Nov 14).
 
 ### Directory markers
 

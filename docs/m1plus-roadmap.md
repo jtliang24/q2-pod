@@ -491,6 +491,8 @@ These are skipped on M1 on purpose (marked `Q2 only` in the tests), not gaps:
     apart, and its Return is synthetic, past `ringnav_input`;
   - the wheel's own Display rows: Corners (the glass is square), Wheel QS, Wheel Sensitivity, and Click
     With Headphones (no buzzer).
+- Cover Flow's raw-wheel thumb and follower (`coverflow_wheel_*`, `cf.thumb`, `EASE_FOLLOW`; 1.6.8 to 1.7.0):
+  the M1 has no wheel, and keeps its knob steps and touch.
 
 The Rockbox dual boot stays: there is no Rockbox for the M1 Plus yet, but the hook serves as a boot-time
 diagnostic.
