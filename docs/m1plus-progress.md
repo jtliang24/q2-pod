@@ -5046,6 +5046,18 @@ in about 87 minutes.
 - The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
 - `sheets.py … all settings` renders every review sheet (`work/aesthetics-fixes/final`).
 
+**The device pass** on `V06Cm` (Nov 14, `work/aesthetics-fixes/pass/findings.md`) passed its checklist:
+- System, Display, Playback and Controls keep their category colours under Cobalt and Crimson.
+- The Carousel's Settings card is V2.1's grey again, and the Shortcut card keeps its own blue.
+- The Screen Off and Theme pickers' checked radio and the Gain switch are orange and readable on the selected row.
+- Now Playing's transport, its gradient and the "Play all" badge are orange, with no red speck; Centred's cover is
+  centred.
+- Unselected long labels (Centred Now Playing, Atmosphere Lamp Settings) rest on their start.
+
+It found one thing, not a blocker: a selected long label scrolls two or three times, then stays on its end ("ntred Now
+Playing") rather than returning to its start. Orange on the Crimson bar reads, with low contrast; that is V2.1's own
+look. Screen Off, the accent, Home and Centred were restored afterwards, and the device stays on `V06Cm`.
+
 ## How to check a build now
 
 ```sh

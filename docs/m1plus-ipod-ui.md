@@ -420,6 +420,9 @@ shows them; its baseline on V06Am is `work/aesthetics/base/`:
   Playing", a toggle row whose label is narrowed to 183 px, rested mid-scroll and kept scrolling.
   Closed (762c7ce0): every payload row's label is `only_focus` at offset 0, as Display's V2.1 rows, so it rests on its
   start and only the selected row's marquee scrolls it.
+- **A selected long label comes to rest on its end** (the V06Cm pass, progress §88): after selection, Centred Now
+  Playing and Atmosphere Lamp Settings scroll two or three times, then stop showing the label's end ("ntred Now
+  Playing") instead of returning to the start. Not a blocker. Open.
 
 ## Files
 
