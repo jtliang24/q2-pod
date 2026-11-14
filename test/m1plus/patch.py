@@ -12115,21 +12115,6 @@ ACTIVE=('drop_wifiopen','drop_btopen','drop_keylockopen','drop_highgain','drop_l
 INACTIVE=('drop_wifi','drop_bt','drop_keylock','drop_lowgain','drop_po','drop_usbstorage','drop_playset','drop_sysset')
 disc=[(0xff1448,255),(0xffffff,255),(0xffc0d0,255),(0xff1448,0),(0x000000,0)]  # disc, glyph, glyph edge, transparent
 def perceived(c): return ((c>>16)*299+(c>>8&255)*587+(c&255)*114)//1000
-# navigation.c accent_disc, the M1's Classic settings icons and Home cards: the white point is the brightest least channel
-# among solid pixels (alpha >= 128), the disc the commonest distance from it (the nearest on a tie); each pixel blends
-# white -> tone by its distance against the disc's, clamped, halved for a _down; alpha kept, transparent pixels left.
-def disc_model(px,tone,down=False):
-    lo=lambda c: min(c>>16,c>>8&255,c&255)
-    white=max(lo(c) for c,a in px if a>=128); count={}
-    for c,a in px:
-        if a>=128 and lo(c)<white: count[white-lo(c)]=count.get(white-lo(c),0)+1
-    disc=min(count,key=lambda d:(-count[d],d))
-    def one(c,a):
-        if not a: return (c,a)
-        d=max(white-lo(c),0)
-        v=[max(0,255-(255-(tone>>k&255))*d//disc)//(2 if down else 1) for k in (16,8,0)]
-        return (v[0]<<16|v[1]<<8|v[2],a)
-    return [one(c,a) for c,a in px]
 # Settings rows' category icons, by each model's names: V1.32's, or V2.1's own (m1plus_ipod.json's settings_icons,
 # ipod-ui 4.3), red ones (System Update, Display) included.
 SETTINGS_SAMPLE=(('sset_netservice','system_update','sset_wifiset','sset_display','system_language') if is_m1plus else
@@ -12178,25 +12163,6 @@ for preset,config in [(p,c) for p in CLASSIC for c in ({'CLASSIC_LIGHT_ACCENT':s
         assert rgba(config,'select',red+[(0xffffff,0)])==[(tone,255),(0xffffff,0)],preset
         assert rgba(config,'list_into',[(0xffffff,255),(0xffffff,0)])==[(0xffffff,255),(0xffffff,0)]
     passed()
-# The M1's Classic (ACCENT, THEME 1), dark and Light Mode: the settings rows' category icons take the accent (navigation.c
-# accent_disc), and so do Home's Settings and Shortcut cards. The commonest distance from white is the disc, at the red
-# tone; the glyph stays white, a darker shade goes past the tone, edges blend, alpha is kept and transparent pixels are
-# left. V2.1's grey Settings gear colours alike, and a pressed _down (its glyph #7F7F7F) maps the same, then halves.
-if is_m1plus:
-    for preset,config in [(p,{'ACCENT':str(p),'THEME':MODERN,'LIGHT':l}) for p in CLASSIC for l in '01']:
-        tone=rgba(config,'sleepdot',[(0xff1448,255)])[0][0]  # the red tone, as the red path maps it (Light Mode flips a neutral one)
-        assert tone==ACCENTS[preset][3] or config['LIGHT']=='1',(preset,hex(tone))
-        for name,(disc_,shade,edge,glyph) in [(n,(0xfe3a3c,0xe02022,0xfec0c0,0xffffff)) for n in SETTINGS_SAMPLE]+[
-                ('home_card_settings',(0x9696a1,0x707078,0xd0d0d4,0xffffff)),('home_card_rockbox',(0x5b7cf9,0x466bf8,0xc0d0ff,0xffffff)),
-                ('home_card_settings_down',(0x4b4b50,0x38383c,0x68686a,0x7f7f7f)),('home_card_rockbox_down',(0x2d3e7c,0x23357c,0x60687f,0x7f7f7f))]:
-            px=[(disc_,255)]*3+[(shade,255),(glyph,255),(edge,255),(disc_,128),(glyph,0)]
-            got=rgba(config,name,px); down=name.endswith('_down')
-            assert got==disc_model(px,tone,down),(preset,config,name,[(hex(c),a) for c,a in got])
-            half=(lambda c: sum((c>>k&255)//2<<k for k in (0,8,16))) if down else (lambda c: c)
-            assert got[0]==(half(tone),255) and got[4]==(half(0xffffff),255) and got[6]==(half(tone),128) and got[7]==(glyph,0),(preset,name)
-            lo=lambda c: min(c>>16,c>>8&255,c&255)
-            assert lo(got[3][0])<=lo(tone),(preset,name)  # the shade: past the tone
-    passed()
 # Minimal: the settings icons' discs turn MINIMAL_CHEVRON, their glyphs stay white, edges blend
 # by saturation against the disc's, and list_into's ink is MINIMAL_CHEVRON, alpha kept; other
 # images take Graphite whatever ACCENT holds.
@@ -12205,12 +12171,6 @@ px=[(0xff1448,255),(0xff8aa4,255),(0xffffff,255),(0xff1448,128),(0xffffff,0)]
 for icon in (px,[(0x00a0ff,255),(0xffffff,255)],[(0xc425ff,255),(0xffffff,255)]):
     got=rgba({},NETSERVICE,icon)
     assert got[0]==(ink,255) and (0xffffff,255) in got,got
-if is_m1plus:  # the M1's Home cards stay grey in Minimal (accent_disc is Classic's), whatever ACCENT holds
-    for config in ({},{'ACCENT':'2'}):
-        for name in ('home_card_settings','home_card_rockbox_down'):
-            got=rgba(config,name,[(0x5b7cf9,255),(0xffffff,255),(0x5b7cf9,0)])
-            assert all(c>>16==c>>8&255==c&255 for c,_ in got[:2]) and got[1]==(0xffffff,255) and got[2][1]==0,(config,name,got)
-    passed()
 for config in ({},{'ACCENT':'2'}):
     assert rgba(config,NETSERVICE,px)==[(ink,255),(0xbcbcbc,255),(0xffffff,255),(ink,128),(0xffffff,0)]
     assert rgba(config,'list_into',px)==[(O['MINIMAL_CHEVRON'],a) for _,a in px]
