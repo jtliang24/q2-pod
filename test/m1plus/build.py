@@ -1082,6 +1082,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # again after either; LYRIC_SOURCES branches a find to the thread's end (li $v1, 1), past both.
     assert bal(0x50a1b8, 'kugou_obtainlyric') and bal(0x50a1d0, 'com163_obtainlyric') and bal(0x50a1e4, 'com163_obtainlyric')
     assert stock_syms['online_lyricthd'] < 0x50a1b8 and words(0x50a1ec, 1) == (0x24030001,)
+    # mclIsUtf8WithoutBOM (hooked, its entry jumped to ringnav_lrc_utf8): the local .lrc loader's bal, and
+    # online_loadexlyric's (the lyrics match page) call through its GOT slot, both with the path in $a0 (move $a0, $s0).
+    assert bal(0x5d3d34, 'mclIsUtf8WithoutBOM') and words(0x5d3d38, 1) == (0x02002025,)
+    assert got(0x508da0) == stock_syms['mclIsUtf8WithoutBOM'] and words(0x508da4, 1) == (0x0320f809,) and words(0x508da8, 1) == (0x02002025,)
     # ringnav_localclass takes an artist's albums by CLASS_ARTIST_ALBUMS (artist_tab): V2.1's loadAlbumList
     # stores 0xff01 in classinfo_save (ori $v0, 0xff01; sw $v0, 0($s0)) and branches to loadLocalClassList.
     assert words(0x4ee930, 1) == (0x3402ff01,) and words(0x4ee93c, 1) == (0xae020000,)

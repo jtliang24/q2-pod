@@ -440,8 +440,6 @@ M1PLUS_PORTS = {
     # unhooked until its item ports it
     'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
                          "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
-    'mclIsUtf8WithoutBOM': ('unported', "an .lrc's UTF-8 test that reads 4-byte characters (1.5.9); V2.1's "
-                            'mclIsUtf8WithoutBOM is 0x5d1824, not yet checked'),
     # 1.6.7's audio timing and Previous's resume ask, V1.32's player routines (docs/m1plus-unported.md)
     'player_seek_time': ('unported', "a user's seek stamps a press (1.6.7, playback.c press_stamp); V2.1's seek_time not pinned"),
     'player_seek_start': ('unported', "Previous's restart past 10 s asks too (1.6.7 restart_refused); V2.1's not pinned"),
@@ -690,6 +688,9 @@ M1PLUS_HOOKS = {
     'start_playqueue': (0x4e47d0, 'ringnav_start_queue', 'start_queue'),
     # A track's LYRICS tag without a .lrc; stock's loader runs first, from every caller's GOT call
     'mclLoadExLyric': (0x5d41e4, 'ringnav_lyric', 'lyric'),
+    # An .lrc's UTF-8 test (1.5.9), the local loader's (bal at 0x5d3d34) and the match page's (online_loadexlyric,
+    # GOT call at 0x508da0): V2.1's reads 6 bytes from the first non-ASCII one and no 4-byte character, as V1.32's did
+    'mclIsUtf8WithoutBOM': (0x5d1824, 'ringnav_lrc_utf8', None),
     # Online lyric and cover search: LRCLIB, then MusicBrainz and iTunes, before stock's Kugou. Both,
     # online_getkeyword_info and online_setkeyword_info are V1.32's but for their data addresses.
     'kugou_obtainlyric': (0x509ee4, 'ringnav_lyric_search', None),  # LRCLIB alone (1.5.0): no stock trampoline

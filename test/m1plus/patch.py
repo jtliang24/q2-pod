@@ -9366,14 +9366,11 @@ if 'mclLoadExLyric' in HOOKS:
         # Stock's test of whether a .lrc is UTF-8 before it converts it from GB18030 (mclIsUtf8WithoutBOM) is
         # ringnav_lrc_utf8's, over the file: stock's read 6 bytes from the first non-ASCII one and no 4-byte
         # character, so an emoji, or a character starting 4 or 5 bytes on (Korean's one-syllable words), failed it.
-        if 'mclIsUtf8WithoutBOM' in HOOKS:
-            m=LrcMachine(files={'/e':'[00:01.00]Hi 🎵\n'.encode(),'/q':'[00:01.00]Café da’s\n'.encode(),
-                                '/k':'[00:01.00]나 는\n'.encode(),'/a':b'[00:01.00]plain\n',
-                                '/g':'[00:01.00]你好\n'.encode('gb18030'),'/l':'[00:01.00]Café\n'.encode('latin-1')})
-            def is_utf8(path): return m.call(address=HOOKS['mclIsUtf8WithoutBOM'][0],args=(m.string(path),0,0,0),gap=0)
-            assert [is_utf8(p) for p in ('/e','/q','/k','/a','/g','/l','/none')]==[1,1,1,1,0,0,0]; passed()
-        else:
-            not_ported("an .lrc's UTF-8 test reads 4-byte characters (mclIsUtf8WithoutBOM not hooked on V2.1)")
+        m=LrcMachine(files={'/e':'[00:01.00]Hi 🎵\n'.encode(),'/q':'[00:01.00]Café da’s\n'.encode(),
+                            '/k':'[00:01.00]나 는\n'.encode(),'/a':b'[00:01.00]plain\n',
+                            '/g':'[00:01.00]你好\n'.encode('gb18030'),'/l':'[00:01.00]Café\n'.encode('latin-1')})
+        def is_utf8(path): return m.call(address=HOOKS['mclIsUtf8WithoutBOM'][0],args=(m.string(path),0,0,0),gap=0)
+        assert [is_utf8(p) for p in ('/e','/q','/k','/a','/g','/l','/none')]==[1,1,1,1,0,0,0]; passed()
 
 
         # The lyrics page (lyrics.c, iPod). Each load sends its lines, milliseconds
