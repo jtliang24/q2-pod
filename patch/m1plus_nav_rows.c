@@ -35,6 +35,11 @@ static void *list_row_core(void *view, const char *icon, int (*click)(void *, vo
     if (icon) image_base_set_image(image_create(item, 12, 10, 40, 40), icon);
     void *label = hscroll_label_create(item, icon ? 60 : 12, 20, into ? 220 : 240, 21);
     widget_use_style(label, ROW_LABEL_STYLE);
+    /* The label rests on its start (only_focus, at offset 0), as Display's V2.1 rows (m1plus_nav_display.c): a
+     * toggle's narrowed label or any long one stays put until its row is selected, and the selected row's marquee
+     * (marq_moved) scrolls it. */
+    hscroll_label_set_only_focus(label, 1);
+    hscroll_label_set_xoffset(label, 0);
     if (into) image_base_set_image(image_create(item, 295, 21, 13, 22), ROW_CHEVRON);
     return label;
 }

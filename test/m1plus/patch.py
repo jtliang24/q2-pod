@@ -19591,8 +19591,8 @@ if True:  # M1 Plus: V2.1's pull-down, dropdown_dialog (QUICK_NAME, ipod-ui 4.7)
 # Settings rows (docs/internals.md#charge-limit, #album-artists): Power management gains
 # Charge limit, Audio settings gains Artists, after the stock rows in the same widgets
 # and styles; Centre or tap toggles and saves each. Artists is stock's own PLAYSET ARTISTTYPE.
-def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False,via_row=False,cls=QueueMachine,sub=0):
-    m=cls(); m.config.update(config); m.restack=True
+def settings_page(hook,view_name,config={},stock_rows=2,bt=1,boot=False,via_row=False,cls=QueueMachine,sub=0,mock=()):
+    m=cls(); m.config.update(config); m.restack=True; m.mock(*mock)
     if hook=='display' and sub: m.word(payload_syms['display_sub'],sub)  # 3: Display's Controls page (Q2 only)
     if boot:
         m.handlers[payload_syms['peq_boot']]='stock_peq_boot'  # FP64 storage checked by test/peq.py
@@ -20134,6 +20134,15 @@ else:  # M1 Plus (ipod-ui 4.3): after V2.1's four rows, Appearance, Coverflow an
             assert m.nodes[label]['hscroll_label_set_only_focus']==1 and m.nodes[label]['hscroll_label_set_xoffset']==0
         assert [m.nodes[l]['text'] for _,l in v21][3]=='Atmosphere Lamp Settings'
         passed()
+    # Every payload row's label rests on its start too (list_row_core), the Centred Now Playing toggle's narrowed one
+    # included: stock left it scrolling while unselected (finding B of the V06Bm pass).
+    m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=1,
+                                           mock=('hscroll_label_set_only_focus','hscroll_label_set_xoffset'))
+    labels=[next(c for c in m.nodes[row_button(m,r)]['children'] if m.nodes[c]['type']=='hscroll_label') for r in rows]
+    assert texts()[5].startswith('Centred Now Playing') and switch_image(m,rows[5]) in ('switch_on','switch_off')
+    assert all(m.nodes[l].get('hscroll_label_set_only_focus')==1 and m.nodes[l].get('hscroll_label_set_xoffset')==0
+               for l in labels),[(m.nodes[l]['text'],m.nodes[l].get('hscroll_label_set_only_focus'),m.nodes[l].get('hscroll_label_set_xoffset')) for l in labels]
+    passed()
     m,rows,texts,icons,click=settings_page('display',NAMES['VIEW_DISPLAY'],stock_rows=4,sub=2)
     assert texts()==['Artist View: Cover Flow','Cover Flow Sort: Album','Refresh Cover Flow']  # 1.6.7's names
     assert icons==['pset_covermode','pset_covermode','system_update'] and m.nodes[m.settings_view]['children']==rows
