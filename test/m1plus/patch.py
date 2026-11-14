@@ -9672,8 +9672,8 @@ else:
 # the 256-byte field.
 TAG_TEXT, CUE_TEXT, SCAN_DIRS = (SITES[n] for n in ('TAG_TEXT', 'CUE_TEXT', 'SCAN_DIRS'))
 class TagTextMachine(Machine):
-    def __init__(self):
-        super().__init__()
+    def __init__(self,patched=True):
+        super().__init__(patched)
         self.word((0xa03ed0-0xd4c) if is_m1plus else (0xa26cc0-0xabc),0x1000014); self.handlers[0x1000014]='t:malloc'  # lazy-bound, as RolloverMachine's
         self.word((0xa03ed0-0xbdc) if is_m1plus else 0xa2638c,0x1000010); self.handlers[0x1000010]='t:free'
         self.handlers[syms['strcpy@GLIBC_2.0']]='t:strcpy'; self.handlers[syms['toolsIconvConvert']]='t:iconv'
@@ -9731,6 +9731,36 @@ if 'GENRE_COPY' in SITES:
     out = m.alloc(0x100); m.u.mem_write(out, b'\xa5' * 0x100)
     assert m.call(address=payload_syms['ringnav_genre_copy'], args=(out, bad, 0, 0), gap=0) == out and m.raw(out) == b''
     passed()
+    if is_m1plus:
+        # V2.1's own toolsGetMusicInfo TagLib branch, stock and patched (entered past the hook, at its trampoline),
+        # libtag_c mocked: its title is copied first, so stock's genre strcpy of 200 bytes ran on into it.
+        class GenreInfoMachine(TagTextMachine):
+            FIELDS = {'title': 'Born Dead Buried Alive', 'artist': 'Hypocrisy', 'album': 'The Arrival',
+                      'genre': 'x' * 200, 'composer': 'Peter Tagtgren', 'abmartist': 'Hypocrisy'}
+            def __init__(self, patched):
+                super().__init__(patched); self.patched = patched; self.opened = []
+                self.handlers.pop(syms['toolsGetMusicInfo'], None)  # run stock's body itself
+                for n in ['taglib_file_new', 'taglib_file_tag', 'taglib_file_free', 'taglib_tag_islatin1', 'taglib_tag_year',
+                          'taglib_tag_track', 'taglib_tag_mqaflag', 'taglib_tag_free_strings'] + ['taglib_tag_' + f for f in self.FIELDS]:
+                    self.handlers[syms[n]] = 'g:' + n
+            def hook(self, u, address, size, unused):
+                name = self.handlers.get(address, '')
+                if not name.startswith('g:'): return super().hook(u, address, size, unused)
+                name = name[2:]; a = u.reg_read(UC_MIPS_REG_A0); ret = 0
+                if name == 'taglib_file_new': self.opened.append(self.text(a)); ret = 0x1170000
+                elif name == 'taglib_file_tag': assert a == 0x1170000; ret = 0x1170100
+                elif name.removeprefix('taglib_tag_') in self.FIELDS: ret = self.string(self.FIELDS[name.removeprefix('taglib_tag_')])
+                self.returns(ret, clobber=True)
+            def info(self, path):
+                info = self.alloc(0x6a0); self.u.mem_write(info, bytes(0x6a0))
+                entry = int(manifest['patch_symbols']['stock_music_info_trampoline'], 16) if self.patched else syms['toolsGetMusicInfo']
+                assert self.call(address=entry, args=(0, info, self.string(path), 0), gap=0) == 1 and self.opened == [path]
+                return [self.raw(info + o).decode() for o in (0x280, 0x100, 0, 0x200, 0x480, 0x580)]
+        f = GenreInfoMachine.FIELDS
+        want = [f['title'], f['artist'], f['album'], 'x' * 127, f['composer'], f['abmartist']]
+        stock = GenreInfoMachine(False).info('/mnt/mmc/a.mp3')
+        assert stock == ['x' * 72, f['artist'], f['album'], 'x' * 200, f['composer'], f['abmartist']], stock  # the title overrun
+        assert GenreInfoMachine(True).info('/mnt/mmc/a.mp3') == want; passed()
 else:
     not_ported('Long multi-value genres kept out of the title (GENRE_COPY, 1.6.7)')
 if 'CUE_TEXT' in SITES:

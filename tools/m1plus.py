@@ -222,6 +222,9 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
         'MQA_ACCEPT': ((0x5d0030, 0x0320f809, 'mqa_accept'),),
         # V2.1 toolsFixId3ErrorCode's round-trip strcmp, with the Latin-1 source in a1.
         'TAG_TEXT': ((0x5ec5e4, 0x0320f809, 'ringnav_gbk_tag'),),
+        # V2.1 toolsGetMusicInfo's genre strcpy (dst info+0x200, the 0x80-byte style field before the title at
+        # +0x280; its delay slot moves the joined genre into a1), its lw $t9 strcpy pinned (1.6.7).
+        'GENRE_COPY': ((0x5ecaa0, 0x0320f809, 'ringnav_genre_copy'), (0x5eca9c, 0x8f99f324, None)),
         # V2.1's CUE parser has seven bal conversions plus a shared jalr for track titles.
         # The jalr can call toolsIconvConvert or toolsIconvConvertNew (UTF-8 <- GBK).
         'CUE_TEXT': ((0x5e72dc, 0x0411f1b4, 'ringnav_cue_text'),
@@ -370,6 +373,7 @@ CALL_SITE_PURPOSES = {
     'HOLD_KEYS': 'Play/Pause and Return hold time',
     'MAINSCHEDULING_CALL': 'pace player scheduling',
     'TAG_TEXT': 'tag text GBK only when it reads as GBK',
+    'GENRE_COPY': 'long genre tags stay inside the style field',
     'CUE_TEXT': 'CUE text read as UTF-8, GBK or Windows-1252',
     'SCAN_DIRS': 'the library scan skips hidden folders',
     'STREAM_POLL_CALLS': 'stream threads park while idle',
@@ -447,7 +451,6 @@ M1PLUS_PORTS = {
     # Call sites
     'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's mclStartPlayer not pinned"),
     'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's mclStartPlayer not pinned"),
-    'GENRE_COPY': ('unported', "long multi-value genres kept out of titles (1.6.7); V2.1's tag reader's copy not pinned"),
     'SONG_UNKNOWN_CALL': ('q2only', "a song row's empty artist line under a set without text-row artwork: Classic's only (1.6.7)"),
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
