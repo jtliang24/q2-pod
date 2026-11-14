@@ -363,18 +363,20 @@ The screenshots are under `work/phase4/4.5/device-pass/` (Phase 4.5's pass on `V
 The Nov 4 finding that Now Playing needs a prominent back is closed by Phase 4.6's large top-row button.
 
 **Done on Nov 13 (progress §87):** every entry below is closed, each by its own M1-gated commit, and the Q2's
-`update.tar` stays byte-identical. Each entry ends with its outcome.
+`update.tar` stays byte-identical. Each entry ends with its outcome. The V06Bm device pass then reverted the accent
+recolouring (progress §88): the entries it had closed are Won't do, since the user wants V2.1's category colours and
+its orange kept.
 - **Split's knob walk clips the top row.** Walking down Split's menu with the knob scrolls the list so that the row
   above the selection sits half under the art (`53-fav-sel.png`: Library cut at the top, Favorites selected).
   Closed (e20e47cf): Split's and Full's knob walk scrolls Home by whole rows.
 - **Classic's Settings card is grey.** In Classic the Carousel's other cards keep V2.1's colours; Settings keeps its
   grey gear (`131-card.png`).
-  Closed (5e1b357e): with the next entry, by accent discs.
+  Won't do (progress §88): the accent discs (5e1b357e) were reverted (c9251766); the card keeps its grey gear.
 - **Classic's settings icons take different colours.** V2.1's rows keep their own colours (System: purple, teal,
   orange, green, red), and the payload's rows take theirs (Display: Appearance red, Coverflow blue; Controls: orange),
   with no common scheme (`141-system.png`, `143-controls.png`, `180-display.png`).
-  Closed (5e1b357e): in Classic every settings icon and the Settings and Shortcut cards take one disc in the live
-  accent, the glyph kept white. Minimal stays mono.
+  Won't do (progress §88): the accent discs (5e1b357e) made every icon one colour, and were reverted (c9251766); the
+  icons keep V2.1's category colours.
 - **Split's cover is zoomed in too much.** The art panel is 320x200, so a square cover fills the width and its top and
   bottom are cropped (the Vergecast cover on `V04Om`: `work/phase4/4.5f/device-pass/301-home.png`). The user would
   rather see the whole cover in the same 200 px of height.
@@ -382,8 +384,8 @@ The Nov 4 finding that Now Playing needs a prominent back is closed by Phase 4.6
 - **Now Playing's transport glyphs keep V2.1's colours.** Previous, Play and Next are its orange in both themes, on the
   iPod page, Centred and Spotify's (Phase 4.6; `work/phase4/4.6/i6-sheets/`). The accent or the theme's ink would suit
   them. Centred's art also sits 3 px right of centre, as V2.1 has it (`img_playcover` x 36, its DLNA twin 33).
-  Closed: the glyphs follow the accent (7a7c0451, with the entry on V2.1's orange below), and the foot of Previous's
-  and Next's gradient, a red speck in Minimal, follows it too (d9b4c32f). Centred's art is at x 33 (a4fdeb67).
+  Won't do for the glyphs (progress §88): they followed the accent (7a7c0451, and the gradient's foot d9b4c32f) until
+  both were reverted (e7504eea, ebba3240); they keep V2.1's orange. Closed for Centred's art, at x 33 (a4fdeb67).
 - **Display's first rows are shifted and clipped.** The rows without icons (Brightness, Screen Off, Lock screen,
   Atmosphere Lamp Settings) start at the left edge, and "Atmosphere Lamp Settings" loses its first letters in both
   themes (`112-display.png`; again on `V04Om`, `work/phase4/4.5f/device-pass/008-display.png`). It may be a marquee
@@ -412,8 +414,12 @@ shows them; its baseline on V06Am is `work/aesthetics/base/`:
   Closed (dad1a4db): the M1 asks "Press again to erase", which fits; the Q2 keeps its text.
 - **V2.1's orange** (`fe7e40`, with its `362221` press) keeps its colour under every accent: `red_map` maps only blends
   of `STOCK_RED` (progress §64 finding 3, and the accent-mapping gap in Phase 4.3's notes).
-  Closed (7a7c0451): V2.1's orange images and style colours become the same blends of stock red, which then follow
-  the accent; Crimson shows the red itself.
+  Won't do (progress §88): 7a7c0451 mapped it to the accent, and the checked radio and the Gain switch nearly vanished
+  on the selected accent row; it was reverted (e7504eea), so V2.1's orange stays.
+- **A settings row's label scrolls while unselected** (the V06Bm pass, progress §88): Appearance's "Centred Now
+  Playing", a toggle row whose label is narrowed to 183 px, rested mid-scroll and kept scrolling.
+  Closed (762c7ce0): every payload row's label is `only_focus` at offset 0, as Display's V2.1 rows, so it rests on its
+  start and only the selected row's marquee scrolls it.
 
 ## Files
 

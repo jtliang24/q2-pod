@@ -5007,6 +5007,40 @@ in about 86 minutes.
 - The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
 - `sheets.py … all settings` renders every review sheet (`work/aesthetics/final`).
 
+## 88. The aesthetics pass's fixes (Nov 13)
+
+**The device pass** on `V06Bm` (Nov 13, `work/aesthetics/device-pass/findings.md`) passed its checklist and found:
+- **A.** Icons and controls changed colour, which the user didn't want.
+  - Classic's settings icons all became accent discs, so every icon was one colour.
+  - V2.1's radios and the Gain switch took the accent, so on the selected accent row the checked radio nearly
+    vanished.
+- **B.** Appearance's "Centred Now Playing" rested mid-scroll ("entred Now Playing") and kept scrolling while
+  unselected, the problem §87's item 1 fixed for Display's V2.1 rows.
+- **C** (Graphite's light discs with white glyphs, low contrast) went with A's fix. **D** (Split's backdrop stays dark
+  until Home is rebuilt after Light Mode goes on) and **E** (Modern → Minimal → Modern resets Home to Split) are
+  observations, not in scope.
+
+**The fixes** (`.plan/aesthetics-fixes.md`), each M1-only, so the Q2's `update.tar` stays byte-identical:
+1. **The accent recolouring is reverted** (finding A), newest first, each a `Revert "…"` commit:
+   - ebba3240 reverts d9b4c32f (the gradient's foot follows the accent);
+   - e7504eea reverts 7a7c0451 (V2.1's orange follows the accent);
+   - c9251766 reverts 5e1b357e (Classic's accent discs).
+
+   The icons are back to V2.1's category colours and the controls to its orange, and the reverts take their
+   `patch.py` blocks (`disc_model`, the orange mirror, the gradient foot) with them. The queue entries those commits
+   closed are now Won't do ([m1plus-ipod-ui.md](m1plus-ipod-ui.md)).
+2. **Settings rows' labels rest on their start** (762c7ce0, finding B). `list_row_core` (`m1plus_nav_rows.c`), which
+   every payload row goes through, sets its `hscroll_label` to `only_focus` at offset 0, as Display's V2.1 rows do.
+   Stock's default left `only_focus` off, and `list_toggle` narrows a toggle's label to 183 px, so "Centred Now
+   Playing" overflowed and scrolled on its own; `marq_moved` takes only `HSCROLL_ONLY_FOCUS` labels, so it also missed
+   the selected row's marquee. A `patch.py` block opens Appearance and checks all six rows' labels.
+
+**Tests:** after each item, `patch.py` kept its 213 expected failures (Classic 203, Shortcuts 10), none unlisted and
+121 `NOT PORTED`; it runs 2,128 scenarios with item 2's. The unit gate passes and `q2compare` finds the Q2's
+`update.tar` byte-identical.
+
+**Gates:** to follow the final 19-gate run.
+
 ## How to check a build now
 
 ```sh
