@@ -2,7 +2,8 @@
 
 <p align="center">
   An unofficial port of <a href="https://github.com/DiamondBond/q2-pod">Q2 Pod</a>, the firmware mod for the Shanling Q2, to the <b>Shanling M1 Plus</b>.<br>
-  PEQ, Coverflow, ratings, lyrics, Spotify and more, built on top of the M1 Plus's stock firmware V2.1.
+  Q2 Pod's iPod UI, PEQ, Cover Flow, ratings, lyrics, Spotify and more, laid out for the M1 Plus's portrait screen and knob
+  on top of its stock firmware V2.1.
 </p>
 
 <p align="center">
@@ -30,29 +31,33 @@
 The M1 Plus runs software from the same family (the same CPU, GUI toolkit, audio daemon and library database),
 so this fork builds Q2 Pod's features into the M1 Plus's stock firmware V2.1.
 
-The M1 Plus keeps **V2.1's own look**: its Home grid, settings and Now Playing. Q2 Pod's features are added to it,
-most of them behind a **Q2 Pod** card on Home. Q2 Pod's iPod interface isn't planned for the M1 Plus: it is built
-for the Q2's landscape screen and touch wheel, and the M1 Plus's portrait touchscreen and knob would need a redesign.
+Since 1.7.0-m1.1 the M1 Plus runs **Q2 Pod's iPod UI** as its only UI, as the Q2 does, reflowed for the M1 Plus's
+portrait touchscreen and its knob. The port came first, then the fork went back to following upstream release by
+release. Releases up to 1.5.8-m1.1 kept V2.1's own look, with Q2 Pod's features behind a **Q2 Pod** card on Home.
 
 Each release carries an upstream Q2 Pod release and an M1 revision: `1.4.2-m1.1` is Q2 Pod 1.4.2's first M1 Plus build.
 The fork follows upstream by merging each of its release tags.
 
 ## Features
 
-- **The Q2 Pod card on Home:** Shuffle, Ratings, Most Played, Long Songs, Podcasts, Audiobooks, Photos, Books,
-  Videos, Coverflow, Spotify, Internet Radio and AirPlay. Podcasts, Audiobooks, Photos, Books and Videos only show when their folder is on the card.
-- **EQ:** the 30-band parametric EQ with a live curve, and Auto preamp for each sample rate.
+- **The iPod UI:** Home as **Split** (the playing album's cover over the menu), **Full** or **Carousel**; a status bar
+  with a back chevron on every page; the iPod's rows in Settings and the Library; its Now Playing, or V2.1's with
+  **Centred Now Playing**; Quick Settings and confirm sheets; the **Minimal** and **Modern** themes, in Light Mode or
+  dark, with your accent; and **Knob: Navigation**, the knob moving through the rows.
+- **Library:** Shuffle, Ratings, Most Played, Long Songs, Recently Added, Podcasts, Audiobooks, Photos, Books, Videos
+  and Cover Flow. Podcasts, Audiobooks, Photos, Books and Videos only show when their folder is on the card.
+- **EQ:** the 30-band parametric EQ with a live curve, Auto preamp for each sample rate, and **EQ per Output**.
 - **Playback:** Crossfade, ReplayGain, gapless Shuffle Albums and Folders, a queue that survives a reboot, and View Queue.
 - **Ratings:** rate songs and albums 0–5 hearts, then browse Top Rated, Loved and rated albums.
 - **Playlists:** hold a playlist's row to add songs (with a search), move them and remove them.
 - **Lyrics and covers:** lyrics from a track's tags, and lyrics and covers found online.
 - **Podcasts and audiobooks:** `.m4b` audiobooks with chapters (including ones split by a CUE sheet), and podcasts resume where you stopped.
-- **Streaming:** Spotify (Premium), Internet Radio and AirPlay. **System settings → Apps** installs Spotify, Deezer, Soulseek and File Browser over Wi-Fi.
+- **Streaming:** Spotify (Premium), Soloify, Internet Radio and AirPlay. **System settings → Apps** installs Spotify, Deezer, Soulseek and File Browser over Wi-Fi.
 - **Lock screen:** a large clock and wallpapers, built-in or your own.
 - **Bluetooth:** LDAC HQ at 990 kbps, and Resume on Connect.
 - **Battery:** Standby Limit powers the player off after a long Standby.
 
-Not on the M1 Plus yet: Network Update, Streaming's Configuration and the extra time zones. The iPod UI and its Games
+Not on the M1 Plus yet: Theme: Classic, Night Shift, the extra time zones and Network Update. Games need the wheel and
 aren't planned. [m1plus-unported.md](docs/m1plus-unported.md) lists each one and why.
 
 ## Install

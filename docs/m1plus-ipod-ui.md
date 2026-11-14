@@ -360,6 +360,9 @@ device and Phase 5's gates in place:
   again. `drift.py` plans the steps from 1.7.0. The saved `work/sync/1.6.0-wip/` resolutions are reference only.
 - The 1.7.x iPod features then arrive as ordinary port rows.
 
+Done Nov 14 (progress §89): `1.7.0-m1.1` is published from `staging` and `main` is the release. The ports from
+1.7.0 are next.
+
 ## Aesthetics queue
 
 Looks left for the visual pass once the M1's functions are all ported. None is a fault; each was seen on the device.

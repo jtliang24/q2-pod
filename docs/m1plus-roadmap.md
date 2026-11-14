@@ -18,21 +18,18 @@ gap can't be left marked.
 
 Sizes are rough: **S** is a day or less, **M** a few days, **L** a week or more.
 
-**Next:** U5, the later syncs: merge upstream by the drift and release weekly
-([the cadence](m1plus-sync.md#cadence)). The first merge, to 1.4.5, landed on Oct 26 (progress
-section 48); from there no merge is due until upstream drifts again, and the next release is due about
-Nov 1. U3, the first full sync to 1.4.2, is done: its five merge steps (sections 40 to 44), its batch of
-ports (section 45), the look and feel (section 46) and the catch-up (section 47), then `1.4.2-m1.1`,
-published on Oct 25 from dev 10's code. Done so far:
-U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is
-now the base), the M1 release tool (section 6; its 1.2.2-m1.1 passed its device
-check and is not published, since upstream is past 1.2.2, so the first published M1 release is
-U3's `<tag>-m1.1`), and U1 (the M1 code beside upstream's: +1,417/−279 lines over upstream's files,
-from +6,417/−2,036). The M1 feature work waits until U3 lands: Spotify on the
-device (section 3) and the final pass (section 7); the iPod UI (section 5) is in progress on
-`feature/m1-ipod` ([m1plus-ipod-ui.md](m1plus-ipod-ui.md)). Section 4 is done for 1.2.2;
-one device check waits for a library that needs it (section 4, "Later validation"). Functionality comes
-first: items that only change how something looks wait for the final pass (section 7).
+**The iPod UI came first.** It was ported on `feature/m1-ipod` (section 5, [m1plus-ipod-ui.md](m1plus-ipod-ui.md)),
+which also took upstream through 1.7.0, and released as `1.7.0-m1.1` on Nov 14 (progress section 89).
+
+**Next:** U5, the upstream ports from 1.7.0: merge upstream by the drift and release weekly
+([the cadence](m1plus-sync.md#cadence)), on `staging` again; upstream's newest tag is 1.8.0, and `drift.py` plans
+the steps. The 1.7.x iPod features arrive as ordinary port rows. Done before the iPod UI: U3, the first full sync to
+1.4.2 (sections 40 to 47, `1.4.2-m1.1` on Oct 25), the first U5 merges (to 1.4.5 in section 48, then 1.5.8-m1.1),
+U0 (the Q2 builds are `main`'s again), U2 (the sync tooling, and a pilot sync to the 1.2.2 tag, which is now the
+base), the M1 release tool (section 6) and U1 (the M1 code beside upstream's). Still to come: Spotify on the device
+(section 3) and the final pass (section 7). Section 4 is done for 1.2.2; one device check waits for a library that
+needs it (section 4, "Later validation"). Functionality comes first: items that only change how something looks wait
+for the final pass (section 7).
 
 ## Ground rules
 
