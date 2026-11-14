@@ -435,6 +435,18 @@ def test_settings_page():
     assert g.set_top + g.set_rows * g.set_row <= ipod.BOTTOM
 
 
+@pytest.mark.parametrize('page', m1plus_ipod.M1_SETTINGS)
+def test_m1_settings_pickers(page):
+    """V2.1's own pickers (aesthetics 7b) take the settings rewrite: no toolbar, and the scroll bar (Update Local
+    Music's is 372 high) as tall as the list."""
+    g = m1plus_ipod.ipod.SET0
+    root = settings()
+    root[3][1][3][1][1][3] = 372
+    nav, lst = m1plus_ipod.REWRITES[page](root)[3]
+    assert nav[2]['visible'] == nav[2]['enable'] == 'false' and page in m1plus_ipod.AUDIT['m1_only']
+    assert lst[2]['default_item_height'] == str(g.set_row) and [c[1][3] for c in lst[3]] == [g.set_rows * g.set_row] * 2
+
+
 @pytest.mark.parametrize('change,message', [
     (lambda r: r[3][0][1].__setitem__(2, 300), 'audiosetting_page.bin: unexpected toolbar'),
     (lambda r: r[3][0][2].update(name=m1plus_ipod.NAVBAR + '_x'), 'audiosetting_page.bin: unexpected toolbar'),
@@ -497,4 +509,5 @@ def test_every_rewrite_is_tested():
               m1plus_ipod.volume_dialog, m1plus_ipod.quick_settings, m1plus_ipod.confirm_dialog, m1plus_ipod.msginfo_dialog}
     pages = set(m1plus_ipod.REWRITES)
     factories = pages - {p for p, f in m1plus_ipod.REWRITES.items() if f in tested}
-    assert factories == {p for p in m1plus_ipod.AUDIT['navbar_only'] if p not in m1plus_ipod.SETTINGS_TOOLBAR_SWITCHES} | set(m1plus_ipod.LIBRARY_PAGES)
+    assert factories == {p for p in m1plus_ipod.AUDIT['navbar_only'] if p not in m1plus_ipod.SETTINGS_TOOLBAR_SWITCHES} | set(
+        m1plus_ipod.M1_SETTINGS) | set(m1plus_ipod.LIBRARY_PAGES)

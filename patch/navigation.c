@@ -8353,6 +8353,19 @@ unsigned *ringnav_style_color(unsigned *color, void *style, const char *name, un
         *color &= 0xffffff; /* paint_scrollbar draws it */
         return color;
     }
+#if M1PLUS
+    /* V2.1's pickers (Theme, Screen Rotation, USB, Update Local Music) fit their list, so a knob step
+     * shows V2.1's mobile bar as a full-length thumb beside the selection: a list that doesn't
+     * scroll draws no bar. */
+    void *bar_list = st.paint_w ? P(st.paint_w, W_PARENT) : (void *)0;
+    int no_table;
+    if (bar_list && name && (tk_str_end_with(name, "fg_color") || tk_str_end_with(name, "bg_color")) &&
+        !tk_strcmp(widget_get_type(st.paint_w), "scroll_bar_m") &&
+        !tk_strcmp(widget_get_type(bar_list), "list_view") && !list_bar(bar_list, &no_table)) {
+        *color &= 0xffffff;
+        return color;
+    }
+#endif
     if (st.paint_w && name && tk_str_end_with(name, "text_color")) {
         if (kb_key(st.paint_w)) { /* kb_paint_key draws it */
             *color &= 0xffffff;

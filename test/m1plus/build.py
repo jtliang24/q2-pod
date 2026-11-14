@@ -930,7 +930,8 @@ def m1plus_checks(directory, manifest, stock, demo, read):
     # and previous_back click it); each list SET_TOP from the bar, its rows SET_ROW, as many complete ones as fit (the
     # Power page's standby slide stops at 434, over its slide indicator). The Lock Screen page keeps its toolbar.
     m1 = m1plus_ipod.M1
-    for page in M1_AUDIT['navbar_only']:
+    assert set(m1plus_ipod.M1_SETTINGS) <= set(M1_AUDIT['m1_only'])
+    for page in (*M1_AUDIT['navbar_only'], *m1plus_ipod.M1_SETTINGS):
         built = decode(read('rootfs.squashfs', 'release/assets/default/raw/ui/' + page))
         navs = [n for n in walk(built) if n[2].get('name', '').startswith('navigationbar_view')]
         lists = [n for n in walk(built) if n[0] == 'list_view']
@@ -944,7 +945,7 @@ def m1plus_checks(directory, manifest, stock, demo, read):
             rows = 5 if n[2]['name'] == 'standby_listview' else m1['SET_ROWS']
             assert n[1][1] == m1['SET_TOP'] and n[1][3] == rows * m1['SET_ROW'] and n[2]['default_item_height'] == str(m1['SET_ROW']), page
             assert [c[1][3] for c in n[3]] == [n[1][3]] * 2, page  # its scroll view and bar, as tall
-    assert sum(1 for p in M1_AUDIT['navbar_only'] if p in m1plus_ipod.REWRITES) == 32
+    assert sum(1 for p in M1_AUDIT['navbar_only'] if p in m1plus_ipod.REWRITES) == 32 and all(p in m1plus_ipod.REWRITES for p in m1plus_ipod.M1_SETTINGS)
     # 4.4: the library pages as built: the title bar hidden and disabled (Playlists keeps its own, as the Q2's does), the
     # list from the top to BOTTOM (Playlists' under its bar), its children as tall (or following it, h=100%), rows
     # LIB_PITCH (an album's 154 px header default aside) and the table clients the screen's width.

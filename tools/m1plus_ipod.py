@@ -137,6 +137,10 @@ NAVBAR = 'navigationbar_view'
 SETTINGS_TOOLBAR_SWITCHES = ('systemset/screensaver_page.bin',)
 SETTINGS_SLIDES = ('systemset/datetime_page.bin', 'systemset/powermanager_page.bin')
 SETTINGS_STOCK_ROWS = (ipod.SET_STOCK_ROW, 60)
+# V2.1's own pickers (m1_only), built as dsdmode_page is: they take the same rewrite, so they lose the navigationbar_view
+# whose back button doubled the Q2's, and V2.1's scroll bar no longer runs down the list's right edge (aesthetics, 7b).
+M1_SETTINGS = ('systemset/screenrotate_page.bin', 'systemset/theme_page.bin', 'systemset/updatemusic_page.bin',
+               'systemset/usbset_page.bin')
 
 
 def settings_page(path):
@@ -678,7 +682,7 @@ def quiet_icon(name, data):
 # V2.1 page path -> function(root) that edits the decoded page in place. A Phase 4 item adds its pages here.
 REWRITES = {STATUS_BAR: status_bar, HOME_PAGE: home_page, PLAYING_PAGE: playing_page, BIGCOVER: bigcover_page, VOLUME: volume_dialog,
             QUICK: quick_settings, CONFIRM: confirm_dialog, MSGINFO: msginfo_dialog} | {
-    p: settings_page(p) for p in AUDIT['navbar_only'] if p not in SETTINGS_TOOLBAR_SWITCHES} | {
+    p: settings_page(p) for p in (*AUDIT['navbar_only'], *M1_SETTINGS) if p not in SETTINGS_TOOLBAR_SWITCHES} | {
     p: library_page(p) for p in LIBRARY_PAGES}
 
 

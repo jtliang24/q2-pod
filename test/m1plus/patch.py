@@ -22731,6 +22731,27 @@ if not is_m1plus:  # Classic is unported
     assert um.call(address=payload_syms['ui_ink'],args=(0xff000000|face*0x010101,0,0,0),gap=0)&0xffffffff==0xfff2f2f2
 um=Machine(); um.config.update(THEME='0',LIGHT='0'); assert um.call(address=payload_syms['unflip'],args=(0x40,0,0,0),gap=0)==0x40; passed()
 if is_m1plus: not_ported('1.7.0 Classic scrollbar')
+if is_m1plus:
+    # Aesthetics 7b: V2.1's mobile bar on a list that doesn't scroll (its pickers' two to four rows, under a 432 px list)
+    # is clear, in Minimal and Classic, dark and Light: a knob step no longer shows a full-length thumb beside the
+    # selection. A list that scrolls keeps V2.1's grey, as does a scroll_bar_m outside a list.
+    def fit_bar(theme,light,content,h=432,kind='list_view'):
+        m=Machine(); m.config.update(THEME=theme,LIGHT=light)
+        if theme=='1' and light=='1': classic_light_on(m)
+        w,_=m.page_list(4,height=h,extent=content)
+        bar=m.node('scroll_bar_m'); m.word(bar+O['W_H'],h)
+        parent=m.node(kind,children=[w,bar]); m.word(parent+O['W_W'],320); m.word(parent+O['W_H'],h)
+        m.word(w+O['W_PARENT'],parent); m.word(bar+O['W_PARENT'],parent); m.nodes[m.top]['children']=[parent]
+        out={}
+        for name in ('fg_color','bg_color'):
+            begin(m,bar); m.handlers[int(manifest['patch_symbols']['stock_color_trampoline'],16)]='stock_color'
+            o=m.alloc(4); m.word(o,0xff808080); m.call(address=HOOKS['style_get_color'][0],args=(o,0x1234,m.string(name),0),gap=0)
+            out[name]=m.get(o)>>24
+        return out
+    for theme,light in (('0','0'),('0','1'),('1','0'),('1','1')):
+        assert fit_bar(theme,light,144)=={'fg_color':0,'bg_color':0},(theme,light)
+        assert fit_bar(theme,light,960)=={'fg_color':0xff,'bg_color':0xff},(theme,light)
+    assert fit_bar('0','0',144,kind='view')=={'fg_color':0xff,'bg_color':0xff}; passed()
 if not is_m1plus:
     # Classic's scrollbar: a thumb alone, no track, 4 px wide and 2 px in from the list's right edge, its ends round
     # (their corner pixels at a radius 2 corner's coverage); in proportion to the page and at its place, clear of the glass

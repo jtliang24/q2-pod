@@ -291,6 +291,22 @@
     "dialog/msginfo_dialog.bin": {
       "sha256": "d7d2b3ae29e32d62e16fcc232e482e33876cf8affe4db97b0526fc2e81fa9e26",
       "why": "V2.1's toast (no V1.32 page maps to it): its msginfo_bg art drawn in styles, so Light Mode flips the box with its text (Phase 4.7 fixes, F)"
+    },
+    "systemset/screenrotate_page.bin": {
+      "sha256": "90e171d8789911ec6540cd96dfcf541295b3f6619e3f780941197695ac74a68e",
+      "why": "V2.1's Screen Rotation picker (no V1.32 page maps to it): a settings list like dsdmode_page's, so M1_SETTINGS gives it the settings-page rewrite (aesthetics, 7b)"
+    },
+    "systemset/theme_page.bin": {
+      "sha256": "80ec57e66b2c8fce87d56d603fb52c6135f3806ed37897ce358d210c7729bd2a",
+      "why": "V2.1's Theme picker (no V1.32 page maps to it): a settings list like dsdmode_page's, so M1_SETTINGS gives it the settings-page rewrite (aesthetics, 7b)"
+    },
+    "systemset/updatemusic_page.bin": {
+      "sha256": "fffac06c4193dde0c832b0fbde9fcac81e24d8238f194cb54d4c2e1b852b15f7",
+      "why": "V2.1's Update Local Music page (no V1.32 page maps to it): a settings list like dsdmode_page's, so M1_SETTINGS gives it the settings-page rewrite (aesthetics, 7b)"
+    },
+    "systemset/usbset_page.bin": {
+      "sha256": "e4e9ae0835904543afc9b39f2061cb1df367cf8afd5e8e0ed85df4ea2f27ef8d",
+      "why": "V2.1's USB picker (no V1.32 page maps to it): a settings list like dsdmode_page's, so M1_SETTINGS gives it the settings-page rewrite (aesthetics, 7b)"
     }
   },
   "navbar_only": {
