@@ -5039,7 +5039,12 @@ in about 86 minutes.
 121 `NOT PORTED`; it runs 2,128 scenarios with item 2's. The unit gate passes and `q2compare` finds the Q2's
 `update.tar` byte-identical.
 
-**Gates:** to follow the final 19-gate run.
+**Gates** (`V06Cm`, `work/aesthetics-fixes/final-gates/summary.txt`, one `gates.py` run on a fresh build): all 19 pass,
+in about 87 minutes.
+- `patch.py` has 213 expected failures in 2 gaps, none unlisted, and 121 `NOT PORTED`.
+- `pytest test/unit` passes 1,270 and `test/fw` 3,638.
+- The Q2 `update.tar` is byte-identical to 1.7.0's, and `q2compare --suites` passes all 37 runs.
+- `sheets.py … all settings` renders every review sheet (`work/aesthetics-fixes/final`).
 
 ## How to check a build now
 
