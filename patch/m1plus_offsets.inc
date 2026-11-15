@@ -966,8 +966,8 @@ extern unsigned char m1_return_latch;
 #define LCD_FORMAT M1_UNPORTED
 #define LCD_BGRA8888 M1_UNPORTED
 /* The state record and S90play's crash log (1.6.1) run on M1: /mnt/data is V2.1's writable UBIFS. The hardware
- * watchdog (1.6.2) runs in --dev builds only until its first device pass (navigation.c wdt_poll): V2.1 ships the
- * Q2's soc_watchdog.ko and libhardware2.so byte for byte, and nothing of its own opens /dev/jz_watchdog. */
+ * watchdog (1.6.2) runs on every M1 build (2.9; navigation.c wdt_poll): V2.1 ships the Q2's soc_watchdog.ko and
+ * libhardware2.so byte for byte, and nothing of its own opens /dev/jz_watchdog. */
 #define WDT_MS 60000
 #define WDT_LONG_MS 900000
 

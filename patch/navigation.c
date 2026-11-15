@@ -14586,9 +14586,7 @@ void ringnav_wdt_long(void) {
     wdt_span(WDT_LONG_MS);
 }
 static void wdt_poll(void) {
-    /* M1 Plus: --dev builds only until its first device pass, since a misfire is a reboot loop
-     * (m1plus_offsets.inc WDT_MS) */
-    if ((M1PLUS && !Q2POD_DEV) || st.ended || st.wdt < 0) return;
+    if (st.ended || st.wdt < 0) return;
     if (st.wdt && st.wdt_long) {
         st.wdt_long = 0;
         wdt_span(WDT_MS);
