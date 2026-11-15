@@ -22392,7 +22392,7 @@ if 'MAINSCHEDULING_CALL' in SITES:
     assert scheduled()==0; passed()
 
 else:
-    not_ported('paced player scheduling (MAINSCHEDULING_CALL, 1.5.5)')
+    not_ported("demo's paced player scheduling (MAINSCHEDULING_CALL, 1.5.5): left V2.1's by decision; V2.1 inlines it in on_wm_idle_status")
 
 # Chapter subprocess syscalls use Linux o32 and pass the filename through argv.
 for name,number,args,error in (('chapter_pipe2',4328,(0x1001000,0x80000,0,0),False),
@@ -22770,7 +22770,7 @@ assert m.get(buf+8)==7 and m.get(buf+4)==30; passed()
 
 
 if is_m1plus:
-    not_ported('Command-driven player waits (1.5.5)')
+    not_ported("Command-driven player waits (1.5.5): demo's half only, left V2.1's by decision; the player's run in test/m1plus/hci_wait.py")
 
 if is_m1plus:
     not_ported("Bluetooth gapless resampler continuity (RS_OPEN_SLOT, 1.5.6)")

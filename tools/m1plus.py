@@ -469,7 +469,9 @@ M1PLUS_PORTS = {
                     '(ipod-ui 4.4)'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
-    'MAINSCHEDULING_CALL': ('unported', 'paced player scheduling (1.5.5); V2.1 call site not yet pinned'),
+    'MAINSCHEDULING_CALL': ('native', "demo's paced player scheduling (1.5.5), left V2.1's by decision (Nov 14): V2.1 inlines "
+                            "player_mainscheduling in on_wm_idle_status, its round trip mclAutoChange's call at 0x4ce834; "
+                            "the player's command-driven waits are ported (PLAYER_PROFILE's pause_wait, cmd_done, idle_wait)"),
     'HOLD_KEYS': ('unported', "Play/Pause's hold at 700 ms (1.4.5); V2.1's input_device_status is unnamed, and the "
                   'M1 opens the hold menu with a touch long-press too'),
     'STREAM_POLL_CALLS': ('native', "V2.1 creates a Tidal URL worker per request (get_tidal_trackurl, 0x512ed0); "
@@ -857,8 +859,6 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'eq_rate_gates': ((0x42ce24, 0x8c429e30, 0), (0x42ce28, 0x8c42002c, 0), (0x42ce2c, 0x8c42003c, 0),
                       (0x42ce34, 0x10400098, 0),
                       (0x42fa78, 0x14400052, 0x10000052)),  # bnez $v0 to the insert -> b
-    # MPlayer pause loop: usec_sleep(20000) in its command/event loop, 50 ms as upstream.
-    'pause_sleep': (0x42ff2c, 0x24044e20, 0x3404c350),
     # peq.py's MEDIA_INFO_NULL: get-music-info's NULL sh_audio branch answers as with no stream (the block is V1.32's
     # 0x42c030 less 0x9c; the reply at 0x42c3c0 sends "{media-info\no-playing-status}", 0x8864e0)
     'media_info_null': ((0x42bfcc, 0x10600008, 0x106000fc),   # beqz $v1, 0x42bff0 -> 0x42c3c0 (Q2 0x42c068)
@@ -948,6 +948,14 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'ogg_format': 0xafc250,
     'av_dict_get': 0x6ea068,
     'ds_get_next_pts': 0x485968,
+    # peq.py's PAUSE_WAIT, CMD_DONE and IDLE_WAIT (patch/peq_player.c's hci_*): the paused loop's usec_sleep(20000), the
+    # command thread's handler call (its $a0 set in the blez's slot before it, its own slot a nop) and the stopped
+    # loop's usleep(10000), V1.32's less 0x308, 0xcc and 0x190. V2.1's command thread has no heartbeat to keep
+    'pause_wait': (0x42ff28, 0x0c1291cc, 'hci_pause_wait'),  # jal 0x4a4730, usec_sleep
+    'cmd_done': (0x42d6f8, 0x0c10af61, 'hci_command'),       # jal cmd_handler
+    'idle_wait': (0x42d838, 0x0c2b6a14, 'hci_idle_wait'),    # jal 0xada850, usleep's PLT stub
+    'play_flag': 0xb10e1c,    # V1.32's 0xb10e34: the idle loop waits on it, the handler sets it
+    'cmd_handler': 0x42bd84,  # V1.32's 0x42be20
     # Stock words that pin them (address, word): patch_player checks each
     'player_words': ((0x423308, 0x8ea39e30),  # forced EOF's lw $v1, -0x61d0($s5): mpctx, 0xb00000 - 0x61d0
                      (0x409144, 0xaca40e44),  # sw $a0, 0xe44($a1): the DSD flag, V1.32's 0xe5c at the same address
@@ -966,7 +974,12 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
                      (0x48be78, 0x8c425294), (0x48be90, 0xac405294),  # the fill reads and clears the seek flag
                      (0x48d2b4, 0xac445294),  # the seek sets it
                      (0x4ae5cc, 0x0c1ba81a),  # lavf_check_file's jal av_dict_get (V1.32's 0x4aeb0c)
-                     (0x492e54, 0x0c12165a)), # jal ds_get_next_pts (V1.32's 0x493394)
+                     (0x492e54, 0x0c12165a),  # jal ds_get_next_pts (V1.32's 0x493394)
+                     (0x42d82c, 0x8e020e1c), (0x42d840, 0x8e020e1c),  # the idle loop's lw $v0, 0xe1c($s0): the play flag
+                     (0x42d2e0, 0xaca60e1c), (0x42d51c, 0xaca60e1c),  # the handler's two sw $a2, 0xe1c($a1) (V1.32's less 0x9c)
+                     (0x42fd80, 0x8e029e30), (0x42fd88, 0x8c450004),  # the pause loop's mpctx, then its state (MPCTX_STATE)
+                     (0x42ff2c, 0x24044e20),  # the pause wait's slot: a0 = 20000, which hci_pause_wait ignores
+                     (0x42d6f4, 0x27a40020), (0x42d6fc, 0x00000000)), # the handler's buffer in the slot before; its own slot
 }
 # peq_player.c's address macros (V1.32's values by default) and the PLAYER_PROFILE keys the M1 sets them from.
 # patch_player checks that the code it links reads no other (player_coverage).
@@ -986,7 +999,7 @@ PLAYER_MACROS = (
     ('STOCK_MP3_FILL_ADDR', 'stock_mp3_fill'), ('STOCK_MP3_CLOSE_ADDR', 'stock_mp3_close'),
     ('MP3_SEEK_FILL_ADDR', 'mp3_seek_fill'), ('LAVF_PREF_DESC', 'lavf_pref_desc'), ('LAVF_DESC', 'lavf_desc'),
     ('MOV_FORMAT_ADDR', 'mov_format'), ('OGG_FORMAT_ADDR', 'ogg_format'), ('AV_DICT_GET_ADDR', 'av_dict_get'),
-    ('DS_GET_NEXT_PTS_ADDR', 'ds_get_next_pts'))
+    ('DS_GET_NEXT_PTS_ADDR', 'ds_get_next_pts'), ('PLAY_FLAG', 'play_flag'), ('STOCK_CMD_HANDLER_ADDR', 'cmd_handler'))
 # libc/libcstl imports only the M1 payload uses, placed after peq.py's deque_pop_back.
 M1PLUS_LIBC = {
     # V2.1 imports no deque_pop_back; navigation.c erases the last element through these
@@ -1147,6 +1160,8 @@ def patch_player(raw, out):
     check([prof[k][0] - prof['audio_demuxer'] for k in ('mp3_fill', 'mp3_close')] == [0x20, 0x28] and
           (prof['mp3_fill'][1], prof['mp3_close'][1]) == (prof['stock_mp3_fill'], prof['stock_mp3_close']), 'MP3 gapless slots')
     check(prof['mp3_seek_fill'] - prof['player_globals'] == 0x5294, 'MP3 seek fill flag')
+    check(prof['pause_wait'][1] == jal(0x4a4730) and prof['cmd_done'][1] == jal(prof['cmd_handler']) and
+          prof['idle_wait'][1] == jal(0xada850) and prof['play_flag'] - prof['player_globals'] == 0xe1c, 'Player waits')
     def text(address):
         at = fileoff(raw, address)
         return raw[at:raw.index(0, at)].decode()
@@ -1158,10 +1173,12 @@ def patch_player(raw, out):
                       '.data : { *(.data*) *(.sdata*) } .bss : { *(.bss*) *(.sbss*) } '
                       '__end = .; /DISCARD/ : { *(.comment) *(.note*) *(.pdr) *(.mdebug*) '
                       '*(.MIPS.abiflags) *(.reginfo) } }')
-    # peq.py's bad-next, exit and preload hooks, its FLAC seek's and its MP3 trim's (each (address, stock word, symbol))
+    # peq.py's bad-next, exit and preload hooks, its FLAC seek's, its MP3 trim's and its player waits (each (address,
+    # stock word, symbol))
     hooks = (*prof['probe_stop'], *prof['stop_sites'], prof['stop_fill'], *prof['preload_close'], prof['forced_eof'],
              prof['exit_hold'], prof['preload_publish'], prof['preload_failed'], prof['cold_clear'], prof['flac_gate'],
-             prof['seek_nosync'], *(prof[k] for k in ('mp3_alloc', 'mp3_filter', 'mp3_read', 'mp3_fill', 'mp3_close')))
+             prof['seek_nosync'], *(prof[k] for k in ('mp3_alloc', 'mp3_filter', 'mp3_read', 'mp3_fill', 'mp3_close')),
+             prof['pause_wait'], prof['cmd_done'], prof['idle_wait'])
     def link(where, defines=()):
         """Compile and link the payload in where; its bytes."""
         where.mkdir(exist_ok=True)
@@ -1179,8 +1196,9 @@ def patch_player(raw, out):
     patch_word(data, prof['vbr_scan'], 0x144008a8, 0, 'VBR scan')  # bnez $v0, ... -> nop
     for address, stock, patched in prof['eq_rate_gates']:
         patch_word(data, address, stock, patched, 'Equalizer rate gate')
-    pause_addr, pause_old, pause_new = prof['pause_sleep']
-    patch_word(data, pause_addr, pause_old, pause_new, 'pause loop sleep')
+    patch_word(data, *prof['pause_wait'][:2], jal(ps['hci_pause_wait']), 'pause loop waits for a command')
+    patch_word(data, *prof['cmd_done'][:2], jal(ps['hci_command']), 'a command wakes the idle and pause loops')
+    patch_word(data, *prof['idle_wait'][:2], jal(ps['hci_idle_wait']), 'idle loop waits on the play flag')
     for address, stock, patched in prof['media_info_null']:
         patch_word(data, address, stock, patched, 'Music info with no stream')
     for address, stock, patched in prof['flac_meta_eof']:

@@ -360,7 +360,7 @@ def shared_checks(directory, manifest, stock, demo, read):
     old, new = read('stock.squashfs', WATCHDOG), read('rootfs.squashfs', WATCHDOG)
     assert new == old.replace(*WATCHDOG_SLEEP) and new != old
     # hciplayer's code (.text) differs from stock only in the VBR scan branch, now a nop, the 48 kHz EQ gates,
-    # the ID3v2 walker calls, now id3_gain (MP3 ReplayGain), and the pause loop's sleep (PAUSE_SLEEP);
+    # the ID3v2 walker calls, now id3_gain (MP3 ReplayGain), and the player's waits (PAUSE_WAIT, CMD_DONE, IDLE_WAIT);
     # each model's at its own addresses.
     old, new = read('stock.squashfs', 'usr/bin/hciplayer'), read('rootfs.squashfs', 'usr/bin/hciplayer')
     profile = m1.PLAYER_PROFILE if m1plus else dict(vbr_scan=peq.VBR_SCAN, eq_rate_gates=peq.EQ_RATE_GATES,
@@ -370,22 +370,23 @@ def shared_checks(directory, manifest, stock, demo, read):
     text = re.search(r'\.text +PROGBITS +[0-9a-f]+ ([0-9a-f]+) ([0-9a-f]+) ', run('readelf', '-SW', directory/'peq'/'stock-hciplayer'))
     start, size = int(text[1], 16), int(text[2], 16)
     off = fileoff(old, profile['vbr_scan'])
-    # the M1's audited words, checked as the EQ gates: the pause sleep, get-music-info's NULL branches
-    # (MEDIA_INFO_NULL) and the FLAC metadata walk's exits (FLAC_META_EOF)
-    if m1plus: profile = dict(profile, eq_rate_gates=(*profile['eq_rate_gates'], profile['pause_sleep'],
+    # the M1's audited words, checked as the EQ gates: get-music-info's NULL branches (MEDIA_INFO_NULL) and the
+    # FLAC metadata walk's exits (FLAC_META_EOF). The pause loop's sleep is stock's: PAUSE_WAIT replaces it
+    if m1plus: profile = dict(profile, eq_rate_gates=(*profile['eq_rate_gates'],
                                                       *profile['media_info_null'], *profile['flac_meta_eof']))
     gates = [fileoff(old, a) for a in (*(a for a, _, _ in profile['eq_rate_gates']), *profile['id3_calls'])]
     if m1plus:  # peq.py's bad-next, exit, preload, FLAC seek and gapless fixes at V2.1's sites: a j or jal to the payload's hook,
-        # or the word peq.py writes (PLAYER_PROFILE's probe_stop .. seek_words, mp3_alloc .. mov_edits)
+        # or the word peq.py writes (PLAYER_PROFILE's probe_stop .. seek_words, mp3_alloc .. mov_edits, pause_wait .. idle_wait)
         ps = symbols(directory/'peq'/'peq.elf')
         hooks = [(a, j(ps[n])) for a, _, n in (*profile['probe_stop'], profile['stop_fill'], *profile['preload_close'],
                                                profile['preload_publish'], profile['flac_gate'], profile['seek_nosync'])]
         hooks += [(a, jal(ps[n])) for a, _, n in (*profile['stop_sites'], profile['forced_eof'], profile['exit_hold'],
                                                  profile['preload_failed'], profile['cold_clear'],
-                                                 profile['mp3_alloc'], profile['mp3_filter'], profile['mp3_read'])]
+                                                 profile['mp3_alloc'], profile['mp3_filter'], profile['mp3_read'],
+                                                 profile['pause_wait'], profile['cmd_done'], profile['idle_wait'])]
         hooks += [(a, w) for a, _, w in (*profile['stop_nops'], *profile['preload_fail_stores'], *profile['seek_words'],
                                          profile['lavf_priv'], profile['mov_edits'])]
-        assert len({a for a, _ in hooks}) == len(hooks) == 32
+        assert len({a for a, _ in hooks}) == len(hooks) == 35
         assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _ in hooks] == [w for _, w in hooks]
         # the MP3 trim's fill and close slots, in the audio demuxer's descriptor (rodata, outside .text)
         assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in (profile['mp3_fill'], profile['mp3_close'])] == \
