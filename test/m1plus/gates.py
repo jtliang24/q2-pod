@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The M1 Plus gates, in order, on one --dev build: every step every run, stopping at the first failure.
 
-    python3 test/m1plus/gates.py BUILD            # all 23: q2compare --suites, a fresh build in BUILD, its gates
+    python3 test/m1plus/gates.py BUILD            # all 24: q2compare --suites, a fresh build in BUILD, its gates
     python3 test/m1plus/gates.py BUILD --base TAG  # at a sync: q2compare against the tag merged
     python3 test/m1plus/gates.py BUILD --from boot  # after a test-only fix: the failed gate onward, same build
     python3 test/m1plus/gates.py BUILD --release  # tools/release_m1.py validate()'s subset, on a release build
@@ -136,6 +136,9 @@ STEPS = {
     'natural': (lambda ctx: ['env', f'PATH={encoders()}', *suite('m1plus/natural')(ctx)], False),
     # test/hci_wait.py's futex waits on V2.1's player, and its wakeups a second stopped and paused
     'wait': (suite('m1plus/hci_wait'), False),
+    # test/hci_ao.py's output cases on V2.1's player: reopens, a kept PCM, the jack's resume and release, USB's buffer and
+    # held request
+    'ao': (lambda ctx: ['env', f'PATH={encoders()}', *suite('m1plus/ao')(ctx)], False),
     'headset': (suite('m1plus/headset_io'), False),
     'ldac': (suite('ldac'), True),
     'bluealsa': (suite('bluealsa'), False),
