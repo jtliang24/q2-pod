@@ -308,7 +308,7 @@ and name the M1 doesn't take, and why (V2.1 has it already, Q2 only, or not port
 2. **Hi-res rate gates.** The two branches that skip the filter above 48 kHz become unconditional, as upstream's: `0x42ce34` (to "setequalizer off") a `nop`, `0x42fa78` (a `bnez` to the insert at `0x42fbc4`) a `b`, so PEQ, ReplayGain, crossfade and the visualizer run on hi-res tracks. The like-looking gate at `0x42e6fc` is scaletempo's (speed modes, "only files below 48khz") and stays stock.
 3. **MP3 seek.** The full-file VBR scan on open (`0x48f5fc`) is skipped, and the audio demuxer's seek slot (`0x89f76c`) goes to `mp3_seek`.
 4. **MP3 ReplayGain.** The three calls to V2.1's ID3v2 walker (`0x48b760`, from `0x48ee74`, `0x492028`, `0x492ab4`) go to [`id3_gain`](../patch/m1plus_peq_player_id3.c), which reads `TXXX` `replaygain_*` tags (V2.1's walker takes its arguments swapped).
-5. **The rest** is upstream's code at V2.1's addresses: [`dsd()`](../patch/peq_player.c) leaves native DSD unfiltered, and [`decoded()`](../patch/peq_player.c) reads `written_audio_pts` (`0x44600c`, a leaf; `0x4300f4` is `playing_audio_pts`, which also needs the output) and the track length (`0xb10e5c`) for crossfade and the visualizer.
+5. **The rest** is upstream's code at V2.1's addresses: [`dsd()`](../patch/peq_player.c) leaves native DSD unfiltered, and [`decoded()`](../patch/peq_player.c) reads `written_audio_pts` (`0x44600c`, a leaf; `0x4300f4` is `playing_audio_pts`, which also needs the output) and the track length (`0xb10e68`, V1.32's `0xb10e84`) for crossfade and the EQ's carry across a track change.
 
 The payload is mapped through the player's final `PT_NULL` header, as the demo's is.
 
