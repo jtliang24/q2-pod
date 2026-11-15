@@ -947,8 +947,8 @@ def compile_common(out, binary, player=False):
                 'lw $t9, 0($t8)', 'jr $t9', 'nop']
         if name in ('memcpy', 'memset', '__udivdi3'):
             asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
-    if player:  # peq_player.c's stock addresses, V1.32's by default
-        header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}u' for macro, key in (
+    if player:  # peq_player.c's stock addresses, V1.32's by default; unsuffixed, as asm text takes some
+        header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}' for macro, key in (
             ('WRITTEN_AUDIO_PTS', 'written_audio_pts'), ('LENGTH_ADDR', 'length_addr'), ('STOCK_ID3_ADDR', 'stock_id3'),
             ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
             ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'),

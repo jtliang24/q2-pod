@@ -1,5 +1,11 @@
 #include "peq.h"
 
+/* V1.32's hciplayer addresses, each a name under #ifndef: an M1 Plus build's peq_platform.h (tools/m1plus.py
+ * compile_common, from PLAYER_PROFILE) gives a name V2.1's value when its feature is ported. Unsuffixed, as
+ * some reach asm text through ASM_STR. */
+#define ASM_STR_(x) #x
+#define ASM_STR(x) ASM_STR_(x)
+
 _Static_assert(sizeof(af_data) == 24, "audio ABI");
 _Static_assert(__builtin_offsetof(af_instance, setup) == 16, "setup ABI");
 _Static_assert(__builtin_offsetof(af_instance, mul) == 40, "multiplier ABI");
@@ -12,7 +18,10 @@ _Static_assert(__builtin_offsetof(af_instance, mul) == 40, "multiplier ABI");
 extern char *peq_mpctx;
 #define MPCTX peq_mpctx
 #else
-#define MPCTX (*(char *volatile *)0xaf9e30u)
+#ifndef MPCTX_ADDR
+#define MPCTX_ADDR 0xaf9e30
+#endif
+#define MPCTX (*(char *volatile *)MPCTX_ADDR)
 #endif
 static int dsd(void) {
     char *mp = MPCTX, *sh = mp ? *(char **)(mp + 0x2c) : 0, *codec = sh ? *(char **)(sh + 4) : 0;
@@ -149,16 +158,28 @@ static double decoded(void) { return peq_pts; }
 #define NEXT_FLAG peq_next_flag
 #define STOP_FLAG peq_next_flag
 #else
+#ifndef WRITTEN_AUDIO_PTS
+#define WRITTEN_AUDIO_PTS 0x44641c
+#endif
+#ifndef LENGTH_ADDR
+#define LENGTH_ADDR 0xb10e84
+#endif
+#ifndef NEXT_FLAG_ADDR
+#define NEXT_FLAG_ADDR 0xb10e6c
+#endif
+#ifndef STOP_FLAG_ADDR
+#define STOP_FLAG_ADDR 0xb10e70
+#endif
 #if !M1PLUS
 /* written_audio_pts (0x44641c, a leaf): seconds decoded so far, NOPTS (-2^63) without a stream;
  * the length is {media-info}'s whole seconds (0xb10e84, demo's mclGetPlayTime). */
 static double decoded(void) {
     char *mp = MPCTX, *sh = mp ? *(char **)(mp + 0x2c) : 0, *ds = mp ? *(char **)(mp + 0x34) : 0;
-    return sh && ds ? ((double (*)(void *, void *))0x44641cu)(sh, ds) : -1;
+    return sh && ds ? ((double (*)(void *, void *))WRITTEN_AUDIO_PTS)(sh, ds) : -1;
 }
-#define LENGTH (*(volatile int *)0xb10e84u)
-#define NEXT_FLAG (*(volatile int *)0xb10e6cu)
-#define STOP_FLAG (*(volatile int *)0xb10e70u)
+#define LENGTH (*(volatile int *)LENGTH_ADDR)
+#define NEXT_FLAG (*(volatile int *)NEXT_FLAG_ADDR)
+#define STOP_FLAG (*(volatile int *)STOP_FLAG_ADDR)
 #endif
 #include "m1plus_peq_player_pts.c"
 #endif
@@ -375,7 +396,19 @@ typedef struct {
     char ctx[32]; /* ctx_out_rate, ctx_in_rate, filter size, phase shift, linear (+pad), ctx_cutoff */
 } lavc_resample;
 _Static_assert(sizeof(lavc_resample) == 0x48 && __builtin_offsetof(lavc_resample, ctx) == 0x28, "lavcresample ABI");
-#define SWR_FREE ((void (*)(void **))0x41e2d0u)
+#ifndef SWR_FREE_ADDR
+#define SWR_FREE_ADDR 0x41e2d0
+#endif
+#ifndef STOCK_RS_OPEN_ADDR
+#define STOCK_RS_OPEN_ADDR 0x4ac2c0 /* lavcresample's open, play and uninit */
+#endif
+#ifndef STOCK_RS_PLAY_ADDR
+#define STOCK_RS_PLAY_ADDR 0x4ac35c
+#endif
+#ifndef STOCK_RS_UNINIT_ADDR
+#define STOCK_RS_UNINIT_ADDR 0x4ac534
+#endif
+#define SWR_FREE ((void (*)(void **))SWR_FREE_ADDR)
 static struct { void *swr; char ctx[32]; int nch; long long at; } rs;
 static lavc_resample *rs_last; /* the instance that resampled the last block */
 static long long rs_end;       /* now_ns of that block if near its track's end, else 0 */
@@ -393,7 +426,7 @@ static af_data *rs_play(af_instance *af, af_data *data) {
     }
     double pts = decoded();
     rs_end = LENGTH > 0 && pts >= 0 && pts > LENGTH - XF_LEAD_S ? now_ns() : 0;
-    return ((af_data * (*)(af_instance *, af_data *))0x4ac35cu)(af, data);
+    return ((af_data * (*)(af_instance *, af_data *))STOCK_RS_PLAY_ADDR)(af, data);
 }
 static void rs_uninit(af_instance *af) {
     lavc_resample *s = af->setup;
@@ -405,10 +438,10 @@ static void rs_uninit(af_instance *af) {
             memcpy(rs.ctx, s->ctx, sizeof rs.ctx);
         }
     }
-    ((void (*)(af_instance *))0x4ac534u)(af);
+    ((void (*)(af_instance *))STOCK_RS_UNINIT_ADDR)(af);
 }
 int rs_open(af_instance *af) {
-    int r = ((int (*)(af_instance *))0x4ac2c0u)(af);
+    int r = ((int (*)(af_instance *))STOCK_RS_OPEN_ADDR)(af);
     af->play = rs_play, af->uninit = rs_uninit;
     return r;
 }
@@ -435,17 +468,56 @@ int rs_open(af_instance *af) {
  * every change; on a USB DAC or the jack a dry PCM is caught below: at init it reopens, and by the first write ao_write
  * moves past it; a server that closed the FIFO under a PCM with nothing yet underrun stays the hole stock AAC has:
  * the first write finds it (docs/internals.md#usb-output-buffer). */
-#define OUTPUT_WAY (*(volatile int *)0xb10e54u)
-#define ALSA_PCM (*(void *volatile *)0xb115a8u)
-#define AO_RATE (*(volatile int *)0xafa1a0u)
-#define AO_FORMAT (*(volatile int *)0xafa1a8u)
+#ifndef OUTPUT_WAY_ADDR
+#define OUTPUT_WAY_ADDR 0xb10e54
+#endif
+#ifndef ALSA_PCM_ADDR
+#define ALSA_PCM_ADDR 0xb115a8
+#endif
+#ifndef AO_RATE_ADDR
+#define AO_RATE_ADDR 0xafa1a0 /* ao_data */
+#endif
+#ifndef AO_CHANNELS_ADDR
+#define AO_CHANNELS_ADDR 0xafa1a4
+#endif
+#ifndef AO_FORMAT_ADDR
+#define AO_FORMAT_ADDR 0xafa1a8
+#endif
+#ifndef AO_OUTBURST_ADDR
+#define AO_OUTBURST_ADDR 0xafa1b0
+#endif
+#ifndef AO_BUFFERSIZE_ADDR
+#define AO_BUFFERSIZE_ADDR 0xafa1b4
+#endif
+#ifndef STOCK_GET_SPACE_ADDR
+#define STOCK_GET_SPACE_ADDR 0x43815c
+#endif
+#ifndef PCM_STATE_ADDR
+#define PCM_STATE_ADDR 0xadb680 /* the PLT stubs: snd_pcm_state, _status, _status_get_avail, _drain, _drop */
+#endif
+#ifndef PCM_STATUS_ADDR
+#define PCM_STATUS_ADDR 0xadabd0
+#endif
+#ifndef PCM_STATUS_AVAIL_ADDR
+#define PCM_STATUS_AVAIL_ADDR 0xadb7b0
+#endif
+#ifndef PCM_DRAIN_ADDR
+#define PCM_DRAIN_ADDR 0xadb6a0
+#endif
+#ifndef PCM_DROP_ADDR
+#define PCM_DROP_ADDR 0xadaf60
+#endif
+#define OUTPUT_WAY (*(volatile int *)OUTPUT_WAY_ADDR)
+#define ALSA_PCM (*(void *volatile *)ALSA_PCM_ADDR)
+#define AO_RATE (*(volatile int *)AO_RATE_ADDR)
+#define AO_FORMAT (*(volatile int *)AO_FORMAT_ADDR)
 #define PCM_PREPARED 2 /* SND_PCM_STATE_*, from snd_pcm_state (0xadb680) */
 #define PCM_RUNNING 3
 static int ao_asked[2], ao_got[2], ao_way; /* the last request the output changed, what it got, and on which way */
 static int ao_free;                        /* get_space's last answer, in bytes */
 static int ao_playing(void) {
-    ao_free = ((int (*)(void))0x43815cu)(); /* stock's get_space: snd_pcm_status brings the ioplug's state up to date */
-    int state = ((int (*)(void *))0xadb680u)(ALSA_PCM);
+    ao_free = ((int (*)(void))STOCK_GET_SPACE_ADDR)(); /* stock's get_space: snd_pcm_status brings the ioplug's state up to date */
+    int state = ((int (*)(void *))PCM_STATE_ADDR)(ALSA_PCM);
     return state == PCM_RUNNING || state == PCM_PREPARED;
 }
 /* The old track's end at a natural change that reopens the PCM (docs/internals.md#usb-output-buffer). Init's reopen
@@ -482,35 +554,74 @@ static int ao_playing(void) {
  * drain. ponytail: a USB stream hung during this drain runs to the kernel's 10 s, past the heartbeat's 6 ticks
  * (0x42d95c), and hciplayer exits; stock's 0x438768 has the same exposure. A close always stays under stock's mute, and the PCM only stops unmuted once drained. */
 #if !M1PLUS /* the M1's: m1plus_peq_player_pts.c */
-#define NEXT_FLAG (*(volatile int *)0xb10e6cu)
-#define STOP_FLAG (*(volatile int *)0xb10e70u)
+#define NEXT_FLAG (*(volatile int *)NEXT_FLAG_ADDR)
+#define STOP_FLAG (*(volatile int *)STOP_FLAG_ADDR)
 #endif
-#define DSD_FILE (*(volatile int *)0xb10e5cu)
-#define KEEP_GAPLESS (*(volatile int *)0xb10e58u)
-#define PREV_FORMAT (*(volatile int *)0xafa164u) /* stock's triple, compared at 0x438cc0, 0x439598, 0x43972c */
-#define PREV_RATE (*(volatile int *)0xafa168u)
-#define PREV_CHANNELS (*(volatile int *)0xafa16cu)
-#define AO_CHANNELS (*(volatile int *)0xafa1a4u)
-#define AO_OUTBURST (*(volatile unsigned *)0xafa1b0u)
-#define AO_BUFFERSIZE (*(volatile unsigned *)0xafa1b4u) /* the ring, in bytes */
-#define AO_BYTES (*(volatile unsigned *)0xb11598u)
+#ifndef DSD_FILE_ADDR
+#define DSD_FILE_ADDR 0xb10e5c
+#endif
+#ifndef KEEP_GAPLESS_ADDR
+#define KEEP_GAPLESS_ADDR 0xb10e58
+#endif
+#ifndef PREV_FORMAT_ADDR
+#define PREV_FORMAT_ADDR 0xafa164
+#endif
+#ifndef PREV_RATE_ADDR
+#define PREV_RATE_ADDR 0xafa168
+#endif
+#ifndef PREV_CHANNELS_ADDR
+#define PREV_CHANNELS_ADDR 0xafa16c
+#endif
+#ifndef AO_BYTES_ADDR
+#define AO_BYTES_ADDR 0xb11598
+#endif
+#ifndef STOCK_AO_UNINIT_ADDR
+#define STOCK_AO_UNINIT_ADDR 0x43868c /* ao_alsa's uninit and init */
+#endif
+#ifndef STOCK_AO_INIT_ADDR
+#define STOCK_AO_INIT_ADDR 0x438988
+#endif
+#ifndef MQA_MODE_ADDR
+#define MQA_MODE_ADDR 0xb10c54 /* isMQA, and the MQA width bt_margin reads */
+#endif
+#ifndef MQA_WIDTH_ADDR
+#define MQA_WIDTH_ADDR 0xb10b6c
+#endif
+#define DSD_FILE (*(volatile int *)DSD_FILE_ADDR)
+#define KEEP_GAPLESS (*(volatile int *)KEEP_GAPLESS_ADDR)
+#define PREV_FORMAT (*(volatile int *)PREV_FORMAT_ADDR) /* stock's triple, compared at 0x438cc0, 0x439598, 0x43972c */
+#define PREV_RATE (*(volatile int *)PREV_RATE_ADDR)
+#define PREV_CHANNELS (*(volatile int *)PREV_CHANNELS_ADDR)
+#define AO_CHANNELS (*(volatile int *)AO_CHANNELS_ADDR)
+#define AO_OUTBURST (*(volatile unsigned *)AO_OUTBURST_ADDR)
+#define AO_BUFFERSIZE (*(volatile unsigned *)AO_BUFFERSIZE_ADDR) /* the ring, in bytes */
+#define AO_BYTES (*(volatile unsigned *)AO_BYTES_ADDR)
 static volatile int ao_natural, ao_draining; /* ao_natural: the way a natural end was on, plus 1 */
 static int ao_wait;   /* the reopen under way is a natural one, by ao_init's branch or a DSD end in ao_uninit: dac_ioctl waits for the line */
 static int ao_stayed; /* a natural change kept the PCM open: ao_write looks at the first write */
 static int ao_pcm[3]; /* what the open PCM is: reinit_audio_chain overwrites ao_data with the request before init */
 static int dac_word(int pressed);
+#ifndef DAC_FD_ADDR
+#define DAC_FD_ADDR 0xb1158c
+#endif
+#ifndef DAC_MUTED_ADDR
+#define DAC_MUTED_ADDR 0xb11584
+#endif
+#ifndef DAC_HELPER_ADDR
+#define DAC_HELPER_ADDR 0x43b280 /* stock's DAC mute helper */
+#endif
 /* Frames free, hw_ptr past appl_ptr making it more than the ring. Not stock's get_space, which caps MQA's below it.
  * ~0u if the status fails: ao_init takes that as dry, and reopens; ao_write forwards nothing. */
 static unsigned ao_avail(void *pcm) {
     char status[256] __attribute__((aligned(8)));
-    if (((int (*)(void *, void *))0xadabd0u)(pcm, status) < 0) return ~0u;
-    return ((unsigned (*)(void *))0xadb7b0u)(status);
+    if (((int (*)(void *, void *))PCM_STATUS_ADDR)(pcm, status) < 0) return ~0u;
+    return ((unsigned (*)(void *))PCM_STATUS_AVAIL_ADDR)(status);
 }
 void ao_uninit(int immed) {
     ao_natural = !immed && !NEXT_FLAG && !DSD_FILE ? OUTPUT_WAY + 1 : 0;
     if (ao_natural) ao_pcm[0] = AO_RATE, ao_pcm[1] = AO_CHANNELS, ao_pcm[2] = AO_FORMAT;
     ao_wait = !immed && !NEXT_FLAG && DSD_FILE;
-    ((void (*)(int))0x43868cu)(immed);
+    ((void (*)(int))STOCK_AO_UNINIT_ADDR)(immed);
 }
 /* Bluetooth's cold route keeps the PCM only with this much of the ring still to play. A kept PCM gets no Drain, so
  * bluealsa's silence fill (tools/bt_silence.S) doesn't start: a first write later than the ring sends no packet for
@@ -521,7 +632,7 @@ void ao_uninit(int immed) {
 #define BT_STAY_MS 200 /* derived, not measured: the fill's 100 ms poll twice over, under the ~440 ms a natural end leaves */
 static int bt_margin(int rate) {
     if (OUTPUT_WAY != 1) return 1;
-    if (*(volatile int *)0xb10c54u == 2 && *(volatile int *)0xb10b6cu == 0x18) return 0;
+    if (*(volatile int *)MQA_MODE_ADDR == 2 && *(volatile int *)MQA_WIDTH_ADDR == 0x18) return 0;
     return AO_BUFFERSIZE - ao_free >= (unsigned)rate * BT_STAY_MS / 1000 * AO_BYTES;
 }
 int ao_init(int rate, int channels, int format, int flags) {
@@ -546,13 +657,13 @@ int ao_init(int rate, int channels, int format, int flags) {
             if (reopens) {
                 int was;
                 __atomic_store_n(&ao_draining, 1, __ATOMIC_SEQ_CST); /* before the flags: hci_command sets them, then looks */
-                if (!NEXT_FLAG && !STOP_FLAG) ((int (*)(void *))0xadb6a0u)(ALSA_PCM); /* snd_pcm_drain; an error leaves it to stock's own */
+                if (!NEXT_FLAG && !STOP_FLAG) ((int (*)(void *))PCM_DRAIN_ADDR)(ALSA_PCM); /* snd_pcm_drain; an error leaves it to stock's own */
                 while ((was = __sync_val_compare_and_swap(&ao_draining, 1, 0)) == 2) usleep(1000);
                 ao_wait = was == 1 && !NEXT_FLAG && !STOP_FLAG && (told || preloaded);
             }
         }
     }
-    int r = ((int (*)(int, int, int, int))0x438988u)(rate, channels, format, flags);
+    int r = ((int (*)(int, int, int, int))STOCK_AO_INIT_ADDR)(rate, channels, format, flags);
     ao_wait = 0;
     if (r > 0 && ALSA_PCM) {
         int got[2] = { AO_RATE, AO_FORMAT };
@@ -564,8 +675,8 @@ int ao_init(int rate, int channels, int format, int flags) {
 static void ao_cut(void) { /* a press during ao_init's drain, on the command thread */
     if (__sync_val_compare_and_swap(&ao_draining, 1, 2) != 1) return;
     void *pcm = ALSA_PCM; /* mcl-orderstop's close may have run */
-    if (OUTPUT_WAY != 2) ((void (*)(int))0x43b280u)(1);
-    else if (pcm) ((int (*)(void *))0xadaf60u)(pcm); /* snd_pcm_drop */
+    if (OUTPUT_WAY != 2) ((void (*)(int))DAC_HELPER_ADDR)(1);
+    else if (pcm) ((int (*)(void *))PCM_DROP_ADDR)(pcm); /* snd_pcm_drop */
     __atomic_store_n(&ao_draining, 0, __ATOMIC_SEQ_CST);
 }
 
@@ -584,9 +695,9 @@ static void ao_cut(void) { /* a press during ao_init's drain, on the command thr
  * Spotify's aplay and q2video keep the cut. */
 #define DAC_RELEASE_MS 130 /* derived, not measured: the mute line's 90-100 ms and the ramp at top volume */
 #define DAC_PRESS_MS 5000  /* demo's mute, its sleep and a slow card's open, from the press to init's end */
-#define DAC_FD (*(volatile int *)0xb1158cu)
-#define DAC_MUTED (*(volatile int *)0xb11584u)
-#define DAC_HELPER ((void (*)(int))0x43b280u) /* stock's: checks the way and the fd, clears the flag */
+#define DAC_FD (*(volatile int *)DAC_FD_ADDR)
+#define DAC_MUTED (*(volatile int *)DAC_MUTED_ADDR)
+#define DAC_HELPER ((void (*)(int))DAC_HELPER_ADDR) /* stock's: checks the way and the fd, clears the flag */
 /* Whether PRESS_FILE holds a fresh stamp, each used once, so a short track's natural change after the press's
  * own start doesn't wait. Stale, from the future, 0 or no file: no. Read only at these sites, never per block. */
 static int stamp_read(const char *path) { /* demo's word in a /tmp file; 0 without one */
@@ -635,13 +746,25 @@ void dac_unmute(int value) {
 #define PS_FRESH_MS 1000    /* a stamp older than this at the pause is not this pause's, so nothing goes back */
 #define PS_TRIM_MS (-29)    /* the stamp to mute(2)'s second volume write: the join (docs/internals.md#unpause) */
 #define PS_FADE_MS 4        /* the first frames rise from 0: the line is open, and they'd step from silence */
-#define PCM_WRITEI ((long (*)(void *, const void *, unsigned long))0xadb220u)
-#define PCM_PAUSE ((int (*)(void *, int))0xadacf0u)
-#define PCM_DROP ((int (*)(void *))0xadaf60u)
-#define PCM_PREPARE ((int (*)(void *))0xadb2b0u)
-#define PCM_STATUS ((int (*)(void *, void *))0xadabd0u)
+#ifndef PCM_WRITEI_ADDR
+#define PCM_WRITEI_ADDR 0xadb220 /* the PLT stubs: snd_pcm_writei, _pause, _prepare */
+#endif
+#ifndef PCM_PAUSE_ADDR
+#define PCM_PAUSE_ADDR 0xadacf0
+#endif
+#ifndef PCM_PREPARE_ADDR
+#define PCM_PREPARE_ADDR 0xadb2b0
+#endif
+#ifndef SEEK_PENDING_ADDR
+#define SEEK_PENDING_ADDR 0xb10c38
+#endif
+#define PCM_WRITEI ((long (*)(void *, const void *, unsigned long))PCM_WRITEI_ADDR)
+#define PCM_PAUSE ((int (*)(void *, int))PCM_PAUSE_ADDR)
+#define PCM_DROP ((int (*)(void *))PCM_DROP_ADDR)
+#define PCM_PREPARE ((int (*)(void *))PCM_PREPARE_ADDR)
+#define PCM_STATUS ((int (*)(void *, void *))PCM_STATUS_ADDR)
 #define PCM_PAUSED 6
-#define SEEK_PENDING (*(volatile int *)0xb10c38u)   /* mcl-seek's, set before the mcl-play demo sends after it */
+#define SEEK_PENDING (*(volatile int *)SEEK_PENDING_ADDR)   /* mcl-seek's, set before the mcl-play demo sends after it */
 /* snd_pcm_status_t, 0x6c bytes (snd_pcm_status_sizeof): the library's getters read these same words. */
 typedef struct { int state, trigger_s, trigger_ns, tstamp[2]; unsigned appl, hw; int rest[20]; } pcm_status;
 _Static_assert(sizeof(pcm_status) == 0x6c, "snd_pcm_status_t ABI");
@@ -825,10 +948,22 @@ unsigned id3_txxx(const unsigned char *f, unsigned n, char *out, unsigned cap) {
  * runs it, then walks the whole tag again through the stream's fd, as mp3_seek reads, puts each TXXX
  * into a dictionary and gives it to stock's ff_replaygain_export, as the walker does. That stores
  * the gains only when it finds one, for the replaygain filter's next setup. */
-#define STOCK_ID3 ((void (*)(void *, int))0x48e6b0u)
-#define AV_DICT_SET ((int (*)(void **, const char *, const char *, int))0x6ea744u)
-#define AV_DICT_FREE ((void (*)(void **))0x6eabfcu)
-#define RG_EXPORT ((int (*)(void *, void *))0x538764u)
+#ifndef STOCK_ID3_ADDR
+#define STOCK_ID3_ADDR 0x48e6b0
+#endif
+#ifndef AV_DICT_SET_ADDR
+#define AV_DICT_SET_ADDR 0x6ea744
+#endif
+#ifndef AV_DICT_FREE_ADDR
+#define AV_DICT_FREE_ADDR 0x6eabfc
+#endif
+#ifndef RG_EXPORT_ADDR
+#define RG_EXPORT_ADDR 0x538764
+#endif
+#define STOCK_ID3 ((void (*)(void *, int))STOCK_ID3_ADDR)
+#define AV_DICT_SET ((int (*)(void **, const char *, const char *, int))AV_DICT_SET_ADDR)
+#define AV_DICT_FREE ((void (*)(void **))AV_DICT_FREE_ADDR)
+#define RG_EXPORT ((int (*)(void *, void *))RG_EXPORT_ADDR)
 #define AT(p, o, type) (*(type *)((char *)(p) + (o)))
 unsigned id3_int(const unsigned char *p, int syncsafe) {
     return syncsafe ? (p[0] & 127u) << 21 | (p[1] & 127u) << 14 | (p[2] & 127u) << 7 | (p[3] & 127u)
@@ -872,8 +1007,14 @@ void id3_gain(void *s, int size) {
  * first frame through the stream's fd (stream_t +0x14) and puts its offset back, since stock's
  * stream_seek may reuse its buffer without seeking. STOCK_SEEK is SEEK_SLOT's pinned stock value
  * in tools/peq.py. */
-#define STOCK_SEEK ((void (*)(void *, float, float, int))0x48d1acu)
-#define HR_MP3_SEEK (*(volatile int *)0xb152b8u)
+#ifndef STOCK_SEEK_ADDR
+#define STOCK_SEEK_ADDR 0x48d1ac
+#endif
+#ifndef HR_MP3_SEEK_ADDR
+#define HR_MP3_SEEK_ADDR 0xb152b8
+#endif
+#define STOCK_SEEK ((void (*)(void *, float, float, int))STOCK_SEEK_ADDR)
+#define HR_MP3_SEEK (*(volatile int *)HR_MP3_SEEK_ADDR)
 #include "m1plus_peq_player_seek.h"
 void mp3_gapless_seek(void *demuxer, int at_start);
 void mp3_seek(void *demuxer, float rel, float delay, int flags) {
@@ -913,7 +1054,9 @@ void mp3_seek(void *demuxer, float rel, float delay, int flags) {
  * a header says where the audio ends. Elapsed runs ahead of the total meanwhile. A count over 27 hours isn't trusted.
  * A joined file's own big tag, or a sample rate change, past the count + 1 s ends it there, as stock. Junk after a
  * joined file can end it a little early: the chain is read ahead of what's playing. */
-#define AUDIO_DEMUXER 0x89fd90u
+#ifndef AUDIO_DEMUXER
+#define AUDIO_DEMUXER 0x89fd90 /* demux_audio's demuxer_desc */
+#endif
 /* Two frames in a row at the cursor, the second's header where the first's length says and both of the first frame's
  * kind: an MP3's longest frame is 1441 bytes, so one starts in the first 1441. False syncs don't chain. With under a
  * buffer left, it's the file's end: a tag's or the last frames, and what's left is too little to be noise. */
@@ -990,7 +1133,12 @@ __asm__(".set push\n.set noreorder\n.set noat\n.globl forced_eof\nforced_eof:\na
  * thread clears it each second and exits hciplayer after 6 checks find it clear (0x42d95c).
  * docs/internals.md#battery. ponytail: anything else the loops watch waits for WAIT_S. */
 #ifndef PEQ_HOST
-#define PLAY_FLAG 0xb10e34u
+#ifndef PLAY_FLAG
+#define PLAY_FLAG 0xb10e34
+#endif
+#ifndef STOCK_CMD_HANDLER_ADDR
+#define STOCK_CMD_HANDLER_ADDR 0x42be20 /* the command thread's handler */
+#endif
 #define MPCTX_STATE 4 /* mpctx's word: 1 playing (the pause loop returns), 2 paused */
 #define WAIT_S 1
 _Static_assert(WAIT_S <= 2, "stock watchdog: exit after 6 s without 0xb10e68");
@@ -1016,7 +1164,7 @@ int hci_pause_wait(unsigned us) {
 }
 /* What the two loops read that a command sets: the play flag (first: hci_command wakes the stopped loop on
  * it), the next and stop flags; then the context's state. The context (MPCTX) is always the static 0xaf9e38. */
-static const unsigned cmd_words[] = { PLAY_FLAG, 0xb10e6c, 0xb10e70 };
+static const unsigned cmd_words[] = { PLAY_FLAG, NEXT_FLAG_ADDR, STOP_FLAG_ADDR };
 #define CMD_WORDS (sizeof cmd_words / sizeof *cmd_words)
 static void cmd_state(int *v) {
     for (unsigned i = 0; i < CMD_WORDS; ++i) v[i] = *(volatile int *)cmd_words[i];
@@ -1025,7 +1173,7 @@ static void cmd_state(int *v) {
 void hci_command(void *buf) {
     int before[CMD_WORDS + 1], after[CMD_WORDS + 1], changed = 0;
     cmd_state(before);
-    ((void (*)(void *))0x42be20u)(buf);
+    ((void (*)(void *))STOCK_CMD_HANDLER_ADDR)(buf);
     cmd_state(after);
     for (unsigned i = 0; i < CMD_WORDS + 1; ++i) changed |= before[i] != after[i];
     if (!changed) return;
@@ -1050,15 +1198,23 @@ void hci_command(void *buf) {
  * thread and the FLAC check (flac_sync.c) could read it between. docs/internals.md#a-bad-file-next.
  * ponytail: stores deep in the decoders (0x4ee61c, 0x508370, 0x52f584, 0x5b6260) aren't covered; a preload
  * thread's decode of a next file reaching one still stops the song. */
-#define PROBE_LOOP_RA 0x4859a4u /* after the unsafe pass's jalr; the forced path comes back elsewhere */
+#ifndef PROBE_LOOP_RA
+#define PROBE_LOOP_RA 0x4859a4 /* after the unsafe pass's jalr; the forced path comes back elsewhere */
+#endif
+#ifndef STOP_CODE_ADDR
+#define STOP_CODE_ADDR 0xb10e74 /* the global stop's code, beside STOP_FLAG_ADDR */
+#endif
+#ifndef PLAYER_GLOBALS
+#define PLAYER_GLOBALS 0xb10000 /* the lui 0xb1 base stock's code reads these words from */
+#endif
 extern int hci_id(int number);
 __asm__(".globl hci_id\nhci_id:\nmove $v0, $a0\nsyscall\njr $ra\nnop\n");
 static const int probe_stopped = 1;
 void *probe_stop_c(unsigned ra) {
     if (hci_id(4222) != hci_id(4020)) /* gettid != getpid: not the main thread */
-        return ra == PROBE_LOOP_RA ? (char *)&probe_stopped - 0xe70 : 0;
-    *(volatile int *)0xb10e74u = 2;
-    *(volatile int *)0xb10e70u = 1;
+        return ra == PROBE_LOOP_RA ? (char *)&probe_stopped - (STOP_FLAG_ADDR - PLAYER_GLOBALS) : 0;
+    *(volatile int *)STOP_CODE_ADDR = 2;
+    *(volatile int *)STOP_FLAG_ADDR = 1;
     return 0;
 }
 __asm__(".set push\n.set noreorder\n"
@@ -1075,12 +1231,14 @@ __asm__(".set push\n.set noreorder\n"
  * the saved $18 of the frame the probe loop's call made pointed at probe_stopped so the loop still gives up.
  * The ISO's fill (0x46c184, no track data after its retries) has no loop to stop if the thread's first read of the
  * image lands there. 0x42a47c is exit_sighandler, the process's own crash: left. */
-#define PROBE_OPEN_RA 0x4859f0u
+#ifndef PROBE_OPEN_RA
+#define PROBE_OPEN_RA 0x4859f0
+#endif
 static int stop_sink[2];
 char *stop_base(unsigned ra, void **saved18) {
-    if (hci_id(4222) == hci_id(4020)) return (char *)0xb10000u;
-    if (ra == PROBE_LOOP_RA || ra == PROBE_OPEN_RA) *saved18 = (char *)&probe_stopped - 0xe70;
-    return (char *)stop_sink - 0xe70;
+    if (hci_id(4222) == hci_id(4020)) return (char *)PLAYER_GLOBALS;
+    if (ra == PROBE_LOOP_RA || ra == PROBE_OPEN_RA) *saved18 = (char *)&probe_stopped - (STOP_FLAG_ADDR - PLAYER_GLOBALS);
+    return (char *)stop_sink - (STOP_FLAG_ADDR - PLAYER_GLOBALS);
 }
 /* ra, s2: the slots of the return address and $18 the probe loop's call saved, from this function's $sp. */
 #define STOP_SITE(name, ra, s2) \
@@ -1092,7 +1250,8 @@ __asm__(".set push\n.set noreorder\n"
         STOP_SITE("stop_asf", 0xb0 + 0x2c, 0xb0 + 0x28)
         /* From 0x46c184 by j, $v1 2, epilogue done but for the $sp in the jr's delay slot. */
         ".globl stop_fill\nstop_fill:\nli $v0, 4222\nsyscall\nmove $t0, $v0\nli $v0, 4020\nsyscall\nbne $v0, $t0, 1f\nnop\n"
-        "lui $v0, 0xb1\nli $t0, 2\nsw $t0, 0xe74($v0)\nli $t0, 1\nsw $t0, 0xe70($v0)\n"
+        "lui $v0, " ASM_STR(PLAYER_GLOBALS) " >> 16\nli $t0, 2\nsw $t0, " ASM_STR(STOP_CODE_ADDR) " - " ASM_STR(PLAYER_GLOBALS) "($v0)\n"
+        "li $t0, 1\nsw $t0, " ASM_STR(STOP_FLAG_ADDR) " - " ASM_STR(PLAYER_GLOBALS) "($v0)\n"
         "1:\nmove $v0, $zero\njr $ra\naddiu $sp, $sp, 0x50\n.set pop\n");
 
 /* demo learns of a track's end only from the newest player-status it reads (0x5a8688, 0x5a7e88): one value, cleared by
@@ -1120,7 +1279,8 @@ void exit_hold_c(void) {
     }
     last = now;
 }
-/* From 0x4226d4, in the main loop's exit send: every register as it was, $a0 stock's lui. */
+/* From 0x4226d4, in the main loop's exit send: every register as it was, $a0 stock's lui. V1.32's: V2.1's site
+ * differs (lui $a1, $a0 kept), so the M1 gets its own variant. */
 __asm__(".set push\n.set noreorder\n.set noat\n.globl exit_hold\nexit_hold:\naddiu $sp, $sp, -80\n"
         "sw $ra, 76($sp)\nsw $v0, 16($sp)\nsw $v1, 20($sp)\nsw $a1, 24($sp)\nsw $a2, 28($sp)\nsw $a3, 32($sp)\n"
         "sw $t0, 36($sp)\nsw $t1, 40($sp)\nsw $t2, 44($sp)\nsw $t3, 48($sp)\nsw $t4, 52($sp)\nsw $t5, 56($sp)\n"
@@ -1141,36 +1301,53 @@ __asm__(".set push\n.set noreorder\n.set noat\n.globl exit_hold\nexit_hold:\nadd
  * docs/internals.md#a-preload-too-late. ponytail: a thread that publishes just before the cold path's
  * clear leaves its context unfreed till the next preload zeroes it, as stock's mcl-closegapless does (a
  * file handle); under MQA decode (0xb10c54 == 2) a stale thread's decoder isn't uninitialised either. */
+#ifndef PRELOAD_STATE_ADDR
+#define PRELOAD_STATE_ADDR 0xb10de8 /* the preload word */
+#endif
+#ifndef PRELOAD_FREE_ADDR
+#define PRELOAD_FREE_ADDR 0x42a9ac /* stock's context free */
+#endif
+#ifndef PRELOAD_PUBLISH_RET
+#define PRELOAD_PUBLISH_RET 0x42bb1c /* the thread's next instruction after its store */
+#endif
+#ifndef PRELOAD_CLOSE_RET
+#define PRELOAD_CLOSE_RET 0x42c26c /* mcl-closegapless's, and the direct stop's, test of the word */
+#endif
+#ifndef PRELOAD_STOP_RET
+#define PRELOAD_STOP_RET 0x42c99c
+#endif
+#define PRELOAD_LO ASM_STR(PRELOAD_STATE_ADDR) " - " ASM_STR(PLAYER_GLOBALS) /* off $v0, 0xb10000 */
 void preload_stale(void) {
     int three = 3;
-    ((void (*)(void))0x42a9acu)();
-    __atomic_compare_exchange_n((volatile int *)0xb10de8u, &three, 0, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+    ((void (*)(void))PRELOAD_FREE_ADDR)();
+    __atomic_compare_exchange_n((volatile int *)PRELOAD_STATE_ADDR, &three, 0, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 /* The failure exits' store of -1, moved after the context is freed; returns the thread's 0. */
 int preload_failed(void) {
     int one = 1, three = 3;
-    if (!__atomic_compare_exchange_n((volatile int *)0xb10de8u, &one, -1, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
-        __atomic_compare_exchange_n((volatile int *)0xb10de8u, &three, 0, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+    if (!__atomic_compare_exchange_n((volatile int *)PRELOAD_STATE_ADDR, &one, -1, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+        __atomic_compare_exchange_n((volatile int *)PRELOAD_STATE_ADDR, &three, 0, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
     return 0;
 }
 __asm__(".set push\n.set noreorder\n.set noat\n"
         /* From 0x42bb18: $v0 0xb10000, $v1 the thread's 0xb15df0, $a0 2, its saved registers restored. */
         ".globl preload_publish\npreload_publish:\nli $a2, 1\n"
-        "1:\nll $a1, 0xde8($v0)\nbne $a1, $a2, 2f\nmove $a1, $a0\nsc $a1, 0xde8($v0)\nbeqz $a1, 1b\nnop\n"
-        "j 0x42bb1c\nnop\n"
+        "1:\nll $a1, " PRELOAD_LO "($v0)\nbne $a1, $a2, 2f\nmove $a1, $a0\nsc $a1, " PRELOAD_LO "($v0)\nbeqz $a1, 1b\nnop\n"
+        "j " ASM_STR(PRELOAD_PUBLISH_RET) "\nnop\n"
         "2:\njal preload_stale\nnop\nlw $ra, 0x65c($sp)\njr $ra\naddiu $sp, $sp, 0x660\n"
-        /* From 0x421a3c, in the main loop, between stock's uses of $v0 and $v1: touches only $t8, $t9. */
+        /* From 0x421a3c, in the main loop, between stock's uses of $v0 and $v1: touches only $t8, $t9. V1.32's word
+         * and base register: V2.1's base differs, so the M1 gets its own variant. */
         ".globl cold_clear\ncold_clear:\n"
         "1:\nll $t8, 0xde8($v1)\naddiu $t8, $t8, -1\nins $t8, $zero, 1, 1\nli $t9, 3\nmovn $t9, $zero, $t8\n"
         "sc $t9, 0xde8($v1)\nbeqz $t9, 1b\nnop\njr $ra\nnop\n"
         /* mcl-closegapless and the direct stop, from the stock li $v1, 2 before their read of the word ($v0 0xb10000):
          * a running thread is stale now, so 1 becomes 3. $a0 is the value stock's next instruction tests, not 2 for a 1. */
         ".globl preload_close\npreload_close:\nli $v1, 2\n"
-        "1:\nll $a0, 0xde8($v0)\nli $at, 1\nbne $a0, $at, 2f\nli $at, 3\nsc $at, 0xde8($v0)\nbeqz $at, 1b\nnop\n"
-        "2:\nj 0x42c26c\nnop\n"
+        "1:\nll $a0, " PRELOAD_LO "($v0)\nli $at, 1\nbne $a0, $at, 2f\nli $at, 3\nsc $at, " PRELOAD_LO "($v0)\nbeqz $at, 1b\nnop\n"
+        "2:\nj " ASM_STR(PRELOAD_CLOSE_RET) "\nnop\n"
         ".globl preload_stop\npreload_stop:\nli $v1, 2\n"
-        "1:\nll $a0, 0xde8($v0)\nli $at, 1\nbne $a0, $at, 2f\nli $at, 3\nsc $at, 0xde8($v0)\nbeqz $at, 1b\nnop\n"
-        "2:\nj 0x42c99c\nnop\n.set pop\n");
+        "1:\nll $a0, " PRELOAD_LO "($v0)\nli $at, 1\nbne $a0, $at, 2f\nli $at, 3\nsc $at, " PRELOAD_LO "($v0)\nbeqz $at, 1b\nnop\n"
+        "2:\nj " ASM_STR(PRELOAD_STOP_RET) "\nnop\n.set pop\n");
 
 /* A FLAC seek (demux_audio 0x48d1ac) ends with a gate in the decoder (0x5b6aac): a frame whose time is before the
  * target (0xb152b0, until the file closes) failed, unplayed. Two things went wrong with that.
@@ -1195,13 +1372,25 @@ __asm__(".set push\n.set noreorder\n.set noat\n"
  * ponytail: that estimate isn't checked against the target, so on a file of very uneven bitrate a seek into the
  * last 64 KB can start after it, by however far the estimate is off; a total of zero leaves only the maximum's test, so a
  * stream of blocks below its maximum can land early. Nothing past the landing is lost. */
+#ifndef FLAC_TARGET_ADDR
+#define FLAC_TARGET_ADDR 0xb152b0 /* the seek's target, a float */
+#endif
+#ifndef FLAC_PASS_RET
+#define FLAC_PASS_RET 0x5b6ab8 /* the gate's pass, and the decoder's epilogue */
+#endif
+#ifndef FLAC_EPILOGUE_RET
+#define FLAC_EPILOGUE_RET 0x5b7128
+#endif
+#ifndef SEEK_NOSYNC_RET
+#define SEEK_NOSYNC_RET 0x48d5f4 /* the scan's subtraction after 0x48d5ec */
+#endif
 int flac_last(const char *c, const char *st) {
     int own = AT(st, 0xac, int), max = AT(c, 0x14, int), rate = AT(st, 0xa0, int);
     long long frame = AT(st, 0xb8, long long), total = AT(c, 0x20, long long);
     if (own >= max || rate <= 0) return 0;
     if (frame >> 31) return 1; /* no real file's, and 32-bit keeps this out of libgcc */
     int f = (int)frame;
-    if ((float)(f * max + own) / rate < *(volatile float *)0xb152b0u) return 0;
+    if ((float)(f * max + own) / rate < *(volatile float *)FLAC_TARGET_ADDR) return 0;
     long long rest = total - own;
     if (!total || !f || rest <= 0 || rest >> 31) return 1;
     return (int)rest % f == 0 && (int)rest / f >= own;
@@ -1210,11 +1399,11 @@ __asm__(".set push\n.set noreorder\n.set noat\n"
         /* From 0x5b7dc4, the gate's failure, with $v1 stock's; the frame's fields are on stock's stack. */
         ".globl flac_gate\nflac_gate:\nlw $a1, 0xc0($sp)\nbnez $a1, 1f\nnop\naddiu $sp, $sp, -24\nsw $v1, 16($sp)\n"
         "move $a0, $s0\njal flac_last\naddiu $a1, $sp, 24\nlw $v1, 16($sp)\naddiu $sp, $sp, 24\n"
-        "beqz $v0, 1f\nnop\nj 0x5b6ab8\nnop\n"
+        "beqz $v0, 1f\nnop\nj " ASM_STR(FLAC_PASS_RET) "\nnop\n"
         /* $s4 is still the packet's size: stock's epilogue returns it. */
-        "1:\nj 0x5b7128\nnop\n"
+        "1:\nj " ASM_STR(FLAC_EPILOGUE_RET) "\nnop\n"
         /* From 0x48d5ec: $a0 at $a3 is the scan's end, no sync found; a found one is below it. */
         ".globl seek_nosync\nseek_nosync:\nlw $v0, 0x30($sp)\nbne $a0, $a3, 1f\nnop\n"
         "lui $a1, 1\naddiu $a1, $a1, -1\nsubu $a0, $v0, $a1\n"
-        "1:\nj 0x48d5f4\nsubu $a0, $a0, $v0\n.set pop\n");
+        "1:\nj " ASM_STR(SEEK_NOSYNC_RET) "\nsubu $a0, $a0, $v0\n.set pop\n");
 #endif
