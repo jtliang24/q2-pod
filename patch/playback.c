@@ -1136,10 +1136,8 @@ void playback_np(void) {
     navigator_switch_to_with_context("playing_page", context, 0);
     if (mclGetPlayStatus() == 3) player_play_pause();
 }
-/* Picks of the playing file reach player_start from each of these; none reads its result. */
-#define PAGE_PICK_RET 0x52cc1c  /* playing_page_init, which opens Now Playing itself */
-#define ALBUM_PLAY_RET 0x4a5d6c /* the album page's play (0x4a5c6c), which stays on its page */
-#define ALBUMINFO_PLAY_RET 0x4a9c48
+/* Picks of the playing file reach player_start from PAGE_PICK_RET, ALBUM_PLAY_RET and ALBUMINFO_PLAY_RET
+ * (m1plus_q2.inc, m1plus_offsets.inc); none reads its result. */
 /* The same row of the same list: nothing starts. SyncLink's (0x51b73c, 0x51b90c), off the UI thread, stays
  * silent, the track playing on. From another list stock loads it, and the poll goes back to the place. Not a
  * press: an app's .play (press_natural), Shuffle Albums' load, DLNA and online. */

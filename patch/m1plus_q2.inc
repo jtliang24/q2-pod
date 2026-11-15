@@ -180,5 +180,9 @@
  * on_wm_timer_dialog's skip past a file it can't play (ringnav_change) */
 #define VIEW_QUEUE_RET 0x529944
 #define UNPLAYABLE_NEXT_RET 0x4ea848
+/* ringnav_player_start's (1.6.7): picks of the playing file from these play on, or open Now Playing */
+#define PAGE_PICK_RET 0x52cc1c  /* playing_page_init, which opens Now Playing itself */
+#define ALBUM_PLAY_RET 0x4a5d6c /* the album page's play (0x4a5c6c), which stays on its page */
+#define ALBUMINFO_PLAY_RET 0x4a9c48
 
 #define M1_BACK_W 48 /* M1-only page title clearance, unused on Q2 */

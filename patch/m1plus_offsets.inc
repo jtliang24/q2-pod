@@ -900,6 +900,10 @@ static inline int arc_out(int r, int y) {
  * aren't pinned, so on M1 neither matches and both act as in 1.6.4 (docs/m1plus-unported.md). */
 #define VIEW_QUEUE_RET M1_UNPORTED
 #define UNPLAYABLE_NEXT_RET M1_UNPORTED
+/* ringnav_player_start's callers (1.6.7): its hook, player_start, is unported on M1 */
+#define PAGE_PICK_RET M1_UNPORTED
+#define ALBUM_PLAY_RET M1_UNPORTED
+#define ALBUMINFO_PLAY_RET M1_UNPORTED
 #define LYRIC_PUSH_DETENTS 2
 #define LYRIC_PUSH_MS 1000
 #define DRIFT_ZOOM_PCT 110
