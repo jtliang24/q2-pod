@@ -396,6 +396,8 @@ def shared_checks(directory, manifest, stock, demo, read):
         # ao_alsa's init and uninit slots (rodata): ao_init, ao_uninit
         assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in (profile['ao_init_slot'], profile['ao_uninit_slot'])] == \
             [ps['ao_init'], ps['ao_uninit']]
+        # lavcresample's open slot (rodata): rs_open
+        assert struct.unpack_from('<I', new, fileoff(old, profile['rs_open_slot'][0]))[0] == ps['rs_open']
         gates += [fileoff(old, a) for a, _ in hooks]
     if not m1plus:
         from peq import IDLE_WAIT, PAUSE_WAIT, CMD_DONE, MP3_ALLOC, MP3_FILTER, MP3_CLOSE, MP3_READ

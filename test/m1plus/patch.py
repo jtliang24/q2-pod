@@ -22773,7 +22773,6 @@ if is_m1plus:
     not_ported("Command-driven player waits (1.5.5): demo's half only, left V2.1's by decision; the player's run in test/m1plus/hci_wait.py")
 
 if is_m1plus:
-    not_ported("Bluetooth gapless resampler continuity (RS_OPEN_SLOT, 1.5.6)")
     not_ported("Coverflow continuous flick/drag physics (existing M1 touch path retained, 1.5.7)")
     not_ported("Simple EQ Presets shortcut (two-button M1 layout retained, 1.5.7)")
     not_ported("Enlarged art reset default (V2.1 config asset not changed, 1.5.6)")

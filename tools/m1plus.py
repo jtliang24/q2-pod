@@ -980,6 +980,10 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     # peq.py's USB_BUFFER: one site on V2.1, hw:2,0's and hw:1,0's blocks merged; the bne's delay slot after
     # lui/ori 100000 (V1.32's 0x43977c and 0x439a60)
     'usb_buffer': ((0x439580, 0xafc4017c, 0),),  # sw $a0, 0x17c($fp) -> nop
+    # peq.py's RS_OPEN_SLOT: lavcresample's af_info (0x8a3ef0, V1.32's 0x8a4540), its open at + 0x14; rs_open sets the
+    # instance's play and uninit to rs_play and rs_uninit, which call stock's (the addresses open stores) and swr_free
+    'rs_open_slot': (0x8a3f04, 0x4abd80, 'rs_open'),
+    'stock_rs_open': 0x4abd80, 'stock_rs_play': 0x4abe1c, 'stock_rs_uninit': 0x4abff4, 'swr_free': 0x41e2d0,
     # The addresses the output hooks read, as their macros (PLAYER_MACROS). ao_data and the MQA words are V1.32's
     'output_way': 0xb10e3c,   # V1.32's 0xb10e54 (V2.1's stop flag there)
     'alsa_pcm': 0xb11588,     # V1.32's 0xb115a8
@@ -1030,7 +1034,11 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
                      (0x43ab24, 0x8c42a1b0),  # play's lw -0x5e50: ao_data's outburst
                      (0x439574, 0x3c040001), (0x439578, 0x348486a0),  # USB's 100000 us, stored in usb_buffer's slot
                      (0x43908c, 0x27c6017c), (0x439098, 0x0c2b6c8c),  # &0x17c($fp) to set_buffer_time_near (0xadb230)
-                     (0x88f17c, 0x437e1c))  # the descriptor's get_space
+                     (0x88f17c, 0x437e1c),  # the descriptor's get_space
+                     (0x4abd84, 0x24050048),  # lavcresample's open: calloc(1, 0x48), the lavc_resample peq_player.c asserts
+                     (0x4abdc0, 0x2463bff4), (0x4abdc8, 0xae030008),  # addiu $v1, -0x400c: uninit, stored at af + 8
+                     (0x4abdd0, 0x2463be1c), (0x4abddc, 0xae03000c),  # addiu $v1, -0x41e4: play, stored at af + 0xc
+                     (0x4ac030, 0x0c1078b4))  # uninit's jal swr_free
 }
 # peq_player.c's address macros (V1.32's values by default) and the PLAYER_PROFILE keys the M1 sets them from.
 # patch_player checks that the code it links reads no other (player_coverage).
@@ -1057,7 +1065,9 @@ PLAYER_MACROS = (
     ('AO_RATE_ADDR', 'ao_rate'), ('AO_CHANNELS_ADDR', 'ao_channels'), ('AO_FORMAT_ADDR', 'ao_format'),
     ('AO_OUTBURST_ADDR', 'ao_outburst'), ('AO_BUFFERSIZE_ADDR', 'ao_buffersize'), ('PREV_FORMAT_ADDR', 'prev_format'),
     ('PREV_RATE_ADDR', 'prev_rate'), ('PREV_CHANNELS_ADDR', 'prev_channels'), ('MQA_MODE_ADDR', 'mqa_mode'),
-    ('MQA_WIDTH_ADDR', 'mqa_width'), ('SEEK_PENDING_ADDR', 'seek_pending'))
+    ('MQA_WIDTH_ADDR', 'mqa_width'), ('SEEK_PENDING_ADDR', 'seek_pending'),
+    ('STOCK_RS_OPEN_ADDR', 'stock_rs_open'), ('STOCK_RS_PLAY_ADDR', 'stock_rs_play'),
+    ('STOCK_RS_UNINIT_ADDR', 'stock_rs_uninit'), ('SWR_FREE_ADDR', 'swr_free'))
 # peq_player.c's PLT stub macros and the symbols PLAYER_PROFILE['plt'] holds them by
 PLAYER_PLT_MACROS = (('PCM_STATE_ADDR', 'snd_pcm_state'), ('PCM_STATUS_ADDR', 'snd_pcm_status'),
                      ('PCM_STATUS_AVAIL_ADDR', 'snd_pcm_status_get_avail'), ('PCM_DRAIN_ADDR', 'snd_pcm_drain'),
@@ -1246,6 +1256,12 @@ def patch_player(raw, out):
     word = lambda address: struct.unpack_from('<I', raw, fileoff(raw, address))[0]
     check([text(word(prof[k] + 4)) for k in ('lavf_pref_desc', 'lavf_desc')] == ['lavfpref', 'lavf'] and
           [text(word(prof[k])) for k in ('mov_format', 'ogg_format')] == ['mov,mp4,m4a,3gp,3g2,mj2', 'ogg'], 'lavf demuxers')
+    # lavcresample: the slot's af_info names it, and its open stores the play and uninit the profile names (lui $v1, 0x4b)
+    rs_slot, rs_stock, _ = prof['rs_open_slot']
+    low = lambda address: ((word(address) & 0xffff) ^ 0x8000) - 0x8000
+    check(text(word(rs_slot - 0x10)) == 'lavcresample' and rs_stock == prof['stock_rs_open'] and
+          [0x4b0000 + low(rs_stock + d) for d in (0x40, 0x50)] == [prof['stock_rs_uninit'], prof['stock_rs_play']] and
+          word(prof['stock_rs_uninit'] + 0x3c) == jal(prof['swr_free']), 'lavcresample')
     script = out/'link.ld'
     script.write_text('SECTIONS { . = 0xe10000; .text : { *(.text*) } .rodata : { *(.rodata*) } '
                       '.data : { *(.data*) *(.sdata*) } .bss : { *(.bss*) *(.sbss*) } '
@@ -1257,7 +1273,7 @@ def patch_player(raw, out):
              prof['exit_hold'], prof['preload_publish'], prof['preload_failed'], prof['cold_clear'], prof['flac_gate'],
              prof['seek_nosync'], *(prof[k] for k in ('mp3_alloc', 'mp3_filter', 'mp3_read', 'mp3_fill', 'mp3_close')),
              prof['pause_wait'], prof['cmd_done'], prof['idle_wait'], *prof['dac_release'], prof['ao_init_slot'],
-             prof['ao_uninit_slot'])
+             prof['ao_uninit_slot'], prof['rs_open_slot'])
     def link(where, defines=()):
         """Compile and link the payload in where; its bytes."""
         where.mkdir(exist_ok=True)
@@ -1284,6 +1300,7 @@ def patch_player(raw, out):
         patch_word(data, address, stock, jal(ps[name]), 'DAC release wait')
     patch_word(data, *prof['ao_init_slot'][:2], ps['ao_init'], 'Output init slot')
     patch_word(data, *prof['ao_uninit_slot'][:2], ps['ao_uninit'], 'Output uninit slot')
+    patch_word(data, *prof['rs_open_slot'][:2], ps['rs_open'], 'Resampler open slot')
     for address, stock, patched in prof['media_info_null']:
         patch_word(data, address, stock, patched, 'Music info with no stream')
     for address, stock, patched in prof['flac_meta_eof']:
