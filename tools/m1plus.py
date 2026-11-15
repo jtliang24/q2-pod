@@ -883,7 +883,18 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'av_dict_free': 0x6ea65c,
     'rg_export': 0x5381c4,
     'hr_mp3_seek': 0xb15298,
+    'mpctx': 0xaf9e30,  # MPlayer's context, as V1.32's (PLAYER_MACROS' MPCTX_ADDR)
+    # Stock words that pin the addresses above (address, word): patch_player checks each
+    'player_words': ((0x423308, 0x8ea39e30),),  # forced EOF's lw $v1, -0x61d0($s5): mpctx, 0xb00000 - 0x61d0
 }
+# peq_player.c's address macros (V1.32's values by default) and the PLAYER_PROFILE keys the M1 sets them from.
+# patch_player checks that the code it links reads no other (player_coverage).
+PLAYER_MACROS = (
+    ('WRITTEN_AUDIO_PTS', 'written_audio_pts'), ('LENGTH_ADDR', 'length_addr'), ('STOCK_ID3_ADDR', 'stock_id3'),
+    ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
+    ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'),
+    ('NEXT_FLAG_ADDR', 'next_flag'), ('STOP_FLAG_ADDR', 'stop_flag'),
+    ('MPCTX_ADDR', 'mpctx'))
 # libc/libcstl imports only the M1 payload uses, placed after peq.py's deque_pop_back.
 M1PLUS_LIBC = {
     # V2.1 imports no deque_pop_back; navigation.c erases the last element through these
@@ -900,8 +911,8 @@ def m1plus_libc(libc):
         if name == 'deque_pop_back': out.update(M1PLUS_LIBC)
     return out
 
-def compile_common(out, binary, player=False):
-    """peq.compile_common for V2.1: its imports, V2.1's symbols, and the player's addresses."""
+def compile_common(out, binary, player=False, defines=()):
+    """peq.compile_common for V2.1: its imports, V2.1's symbols, and the player's addresses. defines: more -D flags."""
     from peq import LIBC
     got = {}
     for line in run('readelf', '-AW', binary).splitlines():
@@ -948,11 +959,7 @@ def compile_common(out, binary, player=False):
         if name in ('memcpy', 'memset', '__udivdi3'):
             asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
     if player:  # peq_player.c's stock addresses, V1.32's by default; unsuffixed, as asm text takes some
-        header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}' for macro, key in (
-            ('WRITTEN_AUDIO_PTS', 'written_audio_pts'), ('LENGTH_ADDR', 'length_addr'), ('STOCK_ID3_ADDR', 'stock_id3'),
-            ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
-            ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'),
-            ('NEXT_FLAG_ADDR', 'next_flag'), ('STOP_FLAG_ADDR', 'stop_flag'))]
+        header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}' for macro, key in PLAYER_MACROS]
     if not player:
         # V1.32's private routines are V1.32 code: never merged into V2.1's table
         syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
@@ -977,7 +984,7 @@ def compile_common(out, binary, player=False):
                 header.append(f'#define {name} (*(volatile unsigned char *)0x{syms[name]:x}u)')
     (out/'peq_platform.h').write_text('\n'.join(header)+'\n')
     (out/'peq_imports.S').write_text('\n'.join(asm)+'\n')
-    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1']
+    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1', *defines]
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
     for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
@@ -993,6 +1000,27 @@ def compile_common(out, binary, player=False):
         objects.append(out/'m1stubs.o')
     return objects
 
+def player_defaults():
+    """The address macros the player's C defaults to V1.32's values (#ifndef NAME / #define NAME 0x...), by name."""
+    found = {}
+    for path in (ROOT/'patch').glob('*.c'):
+        if path.name in ('peq.c', 'peq_player.c') or path.name.startswith('m1plus_peq_player_'):
+            for name, value in re.findall(r'^#ifndef (\w+)\n#define \1 (0x[0-9a-fA-F]+)\b', path.read_text(), re.M):
+                found[name] = int(value, 16)
+    return found
+
+
+def player_coverage(where, payload, link):
+    """Every address macro the linked player code reads comes from PLAYER_PROFILE (PLAYER_MACROS): with every other
+    one moved by 4, the payload links to the same bytes. Without this a name the profile lacks keeps V1.32's value on
+    the M1, silently. A difference is narrowed to the names that make it."""
+    others = {n: v for n, v in player_defaults().items() if n not in dict(PLAYER_MACROS)}
+    moved = lambda names: [f'-D{n}=0x{others[n] + 4:x}' for n in names]
+    if link(where, moved(others)) == payload: return
+    culprits = [n for n in others if link(where, moved([n])) != payload]
+    check(False, f'The M1 player payload reads V1.32 addresses PLAYER_PROFILE does not set: {", ".join(culprits)}')
+
+
 def patch_player(raw, out):
     """peq.patch_player for V2.1's hciplayer, at PLAYER_PROFILE's addresses."""
     from ipod import jal, patch_word
@@ -1005,17 +1033,24 @@ def patch_player(raw, out):
     prof = PLAYER_PROFILE
     check(raw[fileoff(raw, prof['desc']):fileoff(raw, prof['desc'])+24].hex() ==
           prof['desc_bytes'], 'EQ descriptor mismatch')
-    objects = compile_common(out, binary, True)
+    for address, word in prof['player_words']:
+        check(struct.unpack_from('<I', raw, fileoff(raw, address))[0] == word, f'hciplayer 0x{address:x}: not 0x{word:08x}')
     script = out/'link.ld'
     script.write_text('SECTIONS { . = 0xe10000; .text : { *(.text*) } .rodata : { *(.rodata*) } '
                       '.data : { *(.data*) *(.sdata*) } .bss : { *(.bss*) *(.sbss*) } '
                       '__end = .; /DISCARD/ : { *(.comment) *(.note*) *(.pdr) *(.mdebug*) '
                       '*(.MIPS.abiflags) *(.reginfo) } }')
-    run('ld.lld', '-m', 'elf32ltsmip', '--gc-sections', '-T', script, '-e', 'peq_open', '--undefined=mp3_seek', '--undefined=id3_gain',
-        *objects, '-o', out/'peq.elf')
-    run('llvm-objcopy', '-O', 'binary', out/'peq.elf', out/'peq.bin')
+    def link(where, defines=()):
+        """Compile and link the payload in where; its bytes."""
+        where.mkdir(exist_ok=True)
+        objects = compile_common(where, binary, True, defines)
+        run('ld.lld', '-m', 'elf32ltsmip', '--gc-sections', '-T', script, '-e', 'peq_open', '--undefined=mp3_seek', '--undefined=id3_gain',
+            *objects, '-o', where/'peq.elf')
+        run('llvm-objcopy', '-O', 'binary', where/'peq.elf', where/'peq.bin')
+        return (where/'peq.bin').read_bytes()
+    payload = link(out)
+    player_coverage(out/'coverage', payload, link)
     ps = symbols(out/'peq.elf')
-    payload = (out/'peq.bin').read_bytes()
     data = bytearray(raw)
     off = fileoff(raw, prof['open_slot'])
     data[off:off+4] = struct.pack('<I', ps['peq_open'])
