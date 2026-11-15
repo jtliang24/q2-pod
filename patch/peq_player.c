@@ -672,7 +672,6 @@ int ao_init(int rate, int channels, int format, int flags) {
     }
     return r;
 }
-#if !M1PLUS /* the M1 links no ao_init yet, so nothing drains: hci_command's output side is the Q2's alone */
 static void ao_cut(void) { /* a press during ao_init's drain, on the command thread */
     if (__sync_val_compare_and_swap(&ao_draining, 1, 2) != 1) return;
     void *pcm = ALSA_PCM; /* mcl-orderstop's close may have run */
@@ -680,7 +679,6 @@ static void ao_cut(void) { /* a press during ao_init's drain, on the command thr
     else if (pcm) ((int (*)(void *))PCM_DROP_ADDR)(pcm); /* snd_pcm_drop */
     __atomic_store_n(&ao_draining, 0, __ATOMIC_SEQ_CST);
 }
-#endif
 
 /* The wired outputs' cut start (docs/internals.md#wired-start). ioctl DAC_MUTE 0 returns with the driver's
  * mute line still held for 90-100 ms, and after a pause or seek the volume is still ramping, so what played
@@ -1182,7 +1180,6 @@ void hci_command(void *buf) {
     cmd_state(after);
     for (unsigned i = 0; i < CMD_WORDS + 1; ++i) changed |= before[i] != after[i];
     if (!changed) return;
-#if !M1PLUS /* the M1's ao_* hooks and DAC release are unported: its output and mute stay stock's */
     if (after[1] == 1 || after[2] == 1) ao_natural = 0; /* a skip or stop before init: not natural (ao_uninit) */
     if (after[1] == 1 || after[2] == 1 || (!before[0] && after[0])) ao_cut();
     /* A Pause undone before the main thread reached it, a double tap or both inside dac_resume's write: no PCM pause,
@@ -1190,7 +1187,6 @@ void hci_command(void *buf) {
      * if the main thread is just getting there, it mutes after this and its resume releases as ever. A DAC not
      * muted takes this as a no-op: user_mute(0) sets the volume it has. */
     if (before[CMD_WORDS] == 2 && after[CMD_WORDS] == 1 && !DAC_MUTED) DAC_HELPER(0);
-#endif
     __atomic_add_fetch(&cmd_gen, 1, __ATOMIC_SEQ_CST);
     hci_futex(&cmd_gen, 129, 1, 0); /* FUTEX_WAKE_PRIVATE */
     if (before[0] != after[0]) hci_futex((volatile int *)PLAY_FLAG, 129, 1, 0);

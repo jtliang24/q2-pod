@@ -4,9 +4,8 @@ cmd_done and idle_wait), then the whole player's wakeups in test/hci_emu.py.
 
 The hooks, as on the Q2: the command handler's wrapper wakes the stopped loop when a command set the play flag
 (set-songurl) and the paused loop when one changed its state (mcl-play's resume), and wakes nothing for a status query;
-the stopped loop waits on the flag while 0, the paused loop on cmd_gen only while no command moved it. The M1 links no
-ao_* hooks yet, so the wrapper's output side (ao_cut, and the release of a Pause undone before the PCM paused) is off:
-nothing reaches V2.1's DAC helper.
+the stopped loop waits on the flag while 0, the paused loop on cmd_gen only while no command moved it. A Pause undone
+before the PCM paused releases demo's mute once, through V2.1's DAC helper, on the jack with its DAC open only.
 
 The whole player: stock V2.1's stopped loop sleeps 10 ms a pass and its paused loop 20 ms (the M1 before this, 50 ms)
 after its own 20 ms select, so the main thread blocks 100 and 50 times a second (25 paused passes; the M1's, 14). With
@@ -30,8 +29,9 @@ build, player = pf.build, pf.player
 work = build/'hci_wait'
 FLAG, HANDLER, NEXT, STOP = P['play_flag'], P['cmd_handler'], P['next_flag'], P['stop_flag']
 STACK, DONE, MPCTX = 0x2008000, 0x2000000, 0x2001000
-IOCTL, DAC_HELPERS = 0xadb430, (0x43ae74, 0x43b280)  # V2.1's ioctl PLT stub; its DAC helper, and V1.32's
-WAY, MUTED, DAC_FD = 0xb10e3c, 0xb11564, 0xb1156c     # V2.1's output way, DAC mute flag and fd (V1.32's 0xb10e54, 0xb11584, 0xb1158c)
+IOCTL = P['plt']['ioctl']  # V2.1's ioctl PLT stub, which its DAC helper calls
+WAY, MUTED, DAC_FD = P['output_way'], P['dac_muted'], P['dac_fd']  # V1.32's 0xb10e54, 0xb11584, 0xb1158c
+DAC_RELEASE_MS = 130  # peq_player.c's: a resume on the jack waits this long for the DAC's mute line
 IDLE_DONE = P['idle_wait'][0] + 0x14  # past the stopped loop: the flag was seen set (0x42d84c)
 failures = []
 
@@ -51,7 +51,7 @@ def hooks():
     check(struct.unpack_from('<I', raw, fileoff(raw, 0x42ff2c))[0] == 0x24044e20, "the pause wait's slot is stock's 20000")
     if got != [w for _, w in sites]: return  # stock: nothing of the payload's to call
     gen = ps['cmd_gen']
-    check(not {'ao_cut', 'ao_init', 'ao_uninit'} & set(ps), 'no ao_* in the M1 payload: the output side is off')
+    check({'ao_init', 'ao_uninit', 'dac_resume'} <= set(ps), 'the output side is linked: ao_init, ao_uninit, dac_resume')
 
     def machine_with(handler=lambda u: None):
         u = machine(raw, DONE)
@@ -95,15 +95,26 @@ def hooks():
     call(u, 'hci_pause_wait')
     word(u, gen, 6); call(u, 'hci_pause_wait')
     check(seen == [(4238, gen, 128, 5)], f'the paused loop waits only while cmd_gen is as last seen: {seen}')
-    # A Pause undone before the PCM paused: the Q2 releases demo's mute here (DAC_RELEASE's, 2.1); the M1 doesn't yet
-    for muted in (0, 1):
-        u, seen = machine_with(lambda u: word(u, MPCTX + 4, 1))
-        word(u, WAY, 0), word(u, MUTED, muted), word(u, DAC_FD, 5)  # the jack, its DAC open
-        reached = []
-        for a in (IOCTL, *DAC_HELPERS):
-            u.hook_add(UC_HOOK_CODE, lambda u, address, size, unused: reached.append(hex(address)), begin=a, end=a)
+    # A Pause undone with no PCM pause (test/hci_wait.py's): no resume will come, so demo's mute(2) is released here,
+    # once, through V2.1's helper (0x43ae74) and its ioctl. After a real pause, or Pause alone, resume's to do.
+    def tap(state, muted=0, way=0, fd=5, then=2):
+        u, seen = machine_with(lambda u: word(u, MPCTX + 4, then))
+        word(u, MPCTX + 4, state), word(u, MUTED, muted), word(u, WAY, way), word(u, DAC_FD, fd)
+        released = []
+        def ioctl(u, address, size, unused):
+            released.append((u.reg_read(UC_MIPS_REG_4), u.reg_read(UC_MIPS_REG_5), read(u, u.reg_read(UC_MIPS_REG_6))))
+            u.reg_write(UC_MIPS_REG_PC, u.reg_read(UC_MIPS_REG_RA))
+        u.hook_add(UC_HOOK_CODE, ioctl, begin=IOCTL, end=IOCTL)
         call(u, 'hci_command')
-        check(not reached and seen == [(4238, gen, 129, 1)], f'a Pause undone, muted {muted}: no DAC call ({reached}), only the wake')
+        return released, read(u, MUTED)
+    for kw, want, what in ((dict(state=2, then=1), ([(5, 0xc0044d1f, 0)], 0), 'a Pause undone: the mute released once'),
+                           (dict(state=2, muted=1, then=1), ([], 1), 'a real pause: resume releases it'),
+                           (dict(state=1, then=2), ([], 0), 'Pause alone: nothing'),
+                           (dict(state=2, then=2), ([], 0), 'a status query while paused: nothing'),
+                           (dict(state=2, way=1, then=1), ([], 0), "Bluetooth: demo's mute isn't this DAC's to hold"),
+                           (dict(state=2, fd=0, then=1), ([], 0), 'no DAC open: nothing')):
+        got = tap(**kw)
+        check(got == want, f'{what}: {got}')
 
 
 class Counted(hci_emu.Emu):
@@ -147,10 +158,10 @@ def until(p, ok, seconds, step=0.001):
     return p.now() - start
 
 
-def command(p, text, handled, back, done, what):
+def command(p, text, handled, back, done, what, release=0):
     """Send text; once the command thread calls the handler (handled: the times it does; the emulator's read may come a
     loop, 10 ms, after the select), the main thread's wait returns at once (back), and done() follows within 50 ms of
-    the command."""
+    the command, plus release: the jack's DAC_RELEASE_MS, which a resume (dac_resume) waits before audio flows."""
     sent, n, m = p.now(), len(handled), len(back)
     p.e.send_cmd(text)
     took = until(p, done, 1)
@@ -159,7 +170,7 @@ def command(p, text, handled, back, done, what):
     woke = after[0] if after else None
     print(f'  {what}: the wait returned {woke} s after the handler, done after {took} s', flush=True)
     check(woke is not None and woke <= 0.002, f'{what}: the main thread is up within 2 ms of the handler ({woke} s)')
-    check(took is not None and took <= 0.05, f'{what}: done within 50 ms ({took} s)')
+    check(took is not None and release <= took <= release + 0.05, f'{what}: done within {release * 1000 + 50:g} ms, after {release * 1000:g} ({took} s)')
 
 
 def whole_player():
@@ -189,7 +200,7 @@ def whole_player():
     print(f'  paused: {passes} loop passes a second; blocking calls a second by thread: {blocks}', flush=True)
     check(passes <= 1.1, f'paused: the pause loop passes {passes} times a second')
     check(sum(blocks.values()) <= 4.1, f'paused: the player blocks {sum(blocks.values())} times a second ({blocks})')
-    command(p, '{mcl-play\\null}', handled, pause_back, lambda: pcm.state == 3, 'paused, mcl-play')
+    command(p, '{mcl-play\\null}', handled, pause_back, lambda: pcm.state == 3, 'paused, mcl-play', DAC_RELEASE_MS / 1000)
     p.run(0.5)
     p.e.send_cmd('{mcl-pause\\null}')
     until(p, lambda: pcm.state == 6, 1)

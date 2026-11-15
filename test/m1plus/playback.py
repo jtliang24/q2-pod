@@ -2068,11 +2068,9 @@ print('Press: Next, Previous, a list pick and a user\'s seek stamp; a natural ch
 class StartMachine(PressMachine):
     def __init__(self):
         super().__init__(); self.quiet=[]
-        if is_m1plus:  # pinned, stock's words in this build until DAC_RELEASE (round 2 step 6): the switch's words are put here
-            from m1plus import START_SITES_M1PLUS
-            assert [w[:2] for words in START_SITES_M1PLUS.values() for w in words]==[(MUTE_AT,0x0411ff2b),(SLEEP_AT,0x0320f809)]
-            assert (self.get(MUTE_AT),self.get(SLEEP_AT))==(0x0411ff2b,0x0320f809)
-            self.word(MUTE_AT,jal(ps['start_mute'])); self.word(SLEEP_AT,jal(ps['start_sleep']))
+        if is_m1plus:  # V2.1's twins, in CALL_SITES['m1plus'] since DAC_RELEASE (round 2 step 6): the build's own words
+            from m1plus import CALL_SITES
+            assert [w[:2] for k in ('START_MUTE_CALL','START_SLEEP_CALL') for w in CALL_SITES['m1plus'][k]]==[(MUTE_AT,0x0411ff2b),(SLEEP_AT,0x0320f809)]
         self.handlers[syms['mclSetMute']]='xf:mute'; self.handlers[syms['usleep@GLIBC_2.0']]='xf:usleep'
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,'')

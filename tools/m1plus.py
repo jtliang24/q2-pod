@@ -344,20 +344,17 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
         # instead. Tidal's is a bal with its $t9, HiFi's a jalr; login success and logout keep their Home.
         'LOGIN_BACK': ((0x4c704c, 0x8f99ade4, 0x8f99aad8), (0x4c7058, 0x04112c11, 0x04112c20),
                        (0x49aa7c, 0x8f99ade4, 0x8f99aad8)),
+        # 1.6.7's natural start (crossfade.c start_mute, start_sleep) at V2.1's twins of the Q2's, in the static start
+        # routine (0x5d4e00) that mclStartPlayer and mcl_tidalStartPlayer bal: the idle branch's bal mclSetMute (a0=1
+        # in its slot) and its jalr usleep (100000), which the 0xf/0x12 branch's 150000 also reaches. Skipping demo's
+        # mute leans on ao_init's after the drain and dac_ioctl's wait (PLAYER_PROFILE's ao_init_slot, dac_release).
+        'START_MUTE_CALL': ((0x5d50fc, 0x0411ff2b, 'start_mute'),),
+        'START_SLEEP_CALL': ((0x5d5114, 0x0320f809, 'start_sleep'),),
     },
 }
-# 1.6.7's natural start (crossfade.c start_mute, start_sleep) at V2.1's twins of the Q2's START_MUTE_CALL and
-# START_SLEEP_CALL, in the static start routine (0x5d4e00) that mclStartPlayer and mcl_tidalStartPlayer bal: the
-# idle branch's bal mclSetMute (a0=1 in its slot) and its jalr usleep (100000), which the 0xf/0x12 branch's
-# 150000 also reaches. Pinned and linked, not patched: skipping demo's mute needs ao_init's mute after the
-# drain, so they move into CALL_SITES['m1plus'] with DAC_RELEASE (round 2 step 6).
-START_SITES_M1PLUS = {
-    'START_MUTE_CALL': ((0x5d50fc, 0x0411ff2b, 'start_mute'),),
-    'START_SLEEP_CALL': ((0x5d5114, 0x0320f809, 'start_sleep'),),
-}
 CALL_SITE_PURPOSES = {
-    'START_MUTE_CALL': 'natural start: no mute before the end (pinned until DAC_RELEASE)',
-    'START_SLEEP_CALL': 'natural start: no sleep before the end (pinned until DAC_RELEASE)',
+    'START_MUTE_CALL': 'natural start: no mute before the end',
+    'START_SLEEP_CALL': 'natural start: no sleep before the end',
     'BOOT_MODE_CALL': 'config_init preserves the saved queue when applying the boot play mode',
     'ARTIST_ALBUMS': 'artist detail opens on Albums',
     'SHUFFLE_CALL': 'shuffle honours Play next',
@@ -463,10 +460,6 @@ M1PLUS_PORTS = {
     'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
                          "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
     # Call sites
-    'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's 0x5d50fc pinned and tested "
-                        "(START_SITES_M1PLUS), switched on with DAC_RELEASE (round 2 step 6)"),
-    'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's 0x5d5114 pinned and "
-                         "tested (START_SITES_M1PLUS), switched on with DAC_RELEASE (round 2 step 6)"),
     'SONG_UNKNOWN_CALL': ('q2only', "a song row's empty artist line under a set without text-row artwork: Classic's only (1.6.7)"),
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -976,6 +969,33 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'idle_wait': (0x42d838, 0x0c2b6a14, 'hci_idle_wait'),    # jal 0xada850, usleep's PLT stub
     'play_flag': 0xb10e1c,    # V1.32's 0xb10e34: the idle loop waits on it, the handler sets it
     'cmd_handler': 0x42bd84,  # V1.32's 0x42be20
+    # peq.py's DAC_RELEASE (the wired outputs' release wait): init's end jal ioctl (its DAC_MUTE 0 after the sw $zero to
+    # the mute flag), seek's jal to the DAC helper, resume's jal snd_pcm_pause and play's jal snd_pcm_writei (V1.32's
+    # 0x4391b0, 0x42b164, 0x43881c, 0x43afa4)
+    'dac_release': ((0x438e64, 0x0c2b6d0c, 'dac_ioctl'), (0x42b184, 0x0c10eb9d, 'dac_unmute'),
+                    (0x4384dc, 0x0c2b695c, 'dac_resume'), (0x43ab98, 0x0c2b6aa8, 'ao_write')),
+    # peq.py's AO_INIT_SLOT and AO_UNINIT_SLOT: ao_alsa's descriptor (0x88f168, V1.32's 0x88f758), init and uninit
+    'ao_init_slot': (0x88f170, 0x438648, 'ao_init'),
+    'ao_uninit_slot': (0x88f174, 0x43834c, 'ao_uninit'),
+    # peq.py's USB_BUFFER: one site on V2.1, hw:2,0's and hw:1,0's blocks merged; the bne's delay slot after
+    # lui/ori 100000 (V1.32's 0x43977c and 0x439a60)
+    'usb_buffer': ((0x439580, 0xafc4017c, 0),),  # sw $a0, 0x17c($fp) -> nop
+    # The addresses the output hooks read, as their macros (PLAYER_MACROS). ao_data and the MQA words are V1.32's
+    'output_way': 0xb10e3c,   # V1.32's 0xb10e54 (V2.1's stop flag there)
+    'alsa_pcm': 0xb11588,     # V1.32's 0xb115a8
+    'ao_bytes': 0xb11578,     # V1.32's 0xb11598
+    'dac_fd': 0xb1156c,       # V1.32's 0xb1158c
+    'dac_muted': 0xb11564,    # V1.32's 0xb11584
+    'keep_gapless': 0xb10e40, # V1.32's 0xb10e58 (V2.1's stop code there)
+    'dac_helper': 0x43ae74,   # V1.32's 0x43b280
+    'stock_ao_init': 0x438648, 'stock_ao_uninit': 0x43834c, 'ao_get_space': 0x437e1c,
+    'ao_rate': 0xafa1a0, 'ao_channels': 0xafa1a4, 'ao_format': 0xafa1a8, 'ao_outburst': 0xafa1b0, 'ao_buffersize': 0xafa1b4,
+    'prev_format': 0xafa164, 'prev_rate': 0xafa168, 'prev_channels': 0xafa16c,
+    'mqa_mode': 0xb10c54, 'mqa_width': 0xb10b6c, 'seek_pending': 0xb10c38,
+    # the PLT stubs, checked by their JUMP_SLOT symbols
+    'plt': {'snd_pcm_state': 0xadaf00, 'snd_pcm_status': 0xada450, 'snd_pcm_status_get_avail': 0xadb030,
+            'snd_pcm_drain': 0xadaf20, 'snd_pcm_drop': 0xada7e0, 'snd_pcm_writei': 0xadaaa0, 'snd_pcm_pause': 0xada570,
+            'snd_pcm_prepare': 0xadab30, 'ioctl': 0xadb430},
     # Stock words that pin them (address, word): patch_player checks each
     'player_words': ((0x423308, 0x8ea39e30),  # forced EOF's lw $v1, -0x61d0($s5): mpctx, 0xb00000 - 0x61d0
                      (0x409144, 0xaca40e44),  # sw $a0, 0xe44($a1): the DSD flag, V1.32's 0xe5c at the same address
@@ -999,7 +1019,18 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
                      (0x42d2e0, 0xaca60e1c), (0x42d51c, 0xaca60e1c),  # the handler's two sw $a2, 0xe1c($a1) (V1.32's less 0x9c)
                      (0x42fd80, 0x8e029e30), (0x42fd88, 0x8c450004),  # the pause loop's mpctx, then its state (MPCTX_STATE)
                      (0x42ff2c, 0x24044e20),  # the pause wait's slot: a0 = 20000, which hci_pause_wait ignores
-                     (0x42d6f4, 0x27a40020), (0x42d6fc, 0x00000000)), # the handler's buffer in the slot before; its own slot
+                     (0x42d6f4, 0x27a40020), (0x42d6fc, 0x00000000),  # the handler's buffer in the slot before; its own slot
+                     (0x438928, 0x8e820e3c), (0x438964, 0x8e820e3c),  # init's lw $v0, 0xe3c($s4): the output way
+                     (0x4389a0, 0x8ea41588), (0x437e68, 0x8c441588),  # init's and get_space's lw $a0, 0x1588: the PCM
+                     (0x439094, 0xae021578), (0x437ea8, 0x8c631578),  # init's sw $v0, 0x1578($s0): bytes a frame; get_space's lw
+                     (0x438950, 0x8c420e40), (0x43920c, 0x8c420e40),  # init's lw $v0, 0xe40($v0): Gapless kept
+                     (0x438988, 0x8c64156c), (0x43ae7c, 0x8c64156c),  # init's and the DAC helper's lw $a0, 0x156c($v1): the fd
+                     (0x438e58, 0xae001564), (0x438a30, 0x8e121564),  # sw $zero, 0x1564($s0) before init's unmute; the mute flag
+                     (0x439614, 0xaee2a1a0), (0x4393a4, 0x8c63a164),  # ao_data's rate store; the triple's lw -0x5e9c: PREV_FORMAT
+                     (0x43ab24, 0x8c42a1b0),  # play's lw -0x5e50: ao_data's outburst
+                     (0x439574, 0x3c040001), (0x439578, 0x348486a0),  # USB's 100000 us, stored in usb_buffer's slot
+                     (0x43908c, 0x27c6017c), (0x439098, 0x0c2b6c8c),  # &0x17c($fp) to set_buffer_time_near (0xadb230)
+                     (0x88f17c, 0x437e1c))  # the descriptor's get_space
 }
 # peq_player.c's address macros (V1.32's values by default) and the PLAYER_PROFILE keys the M1 sets them from.
 # patch_player checks that the code it links reads no other (player_coverage).
@@ -1019,7 +1050,19 @@ PLAYER_MACROS = (
     ('STOCK_MP3_FILL_ADDR', 'stock_mp3_fill'), ('STOCK_MP3_CLOSE_ADDR', 'stock_mp3_close'),
     ('MP3_SEEK_FILL_ADDR', 'mp3_seek_fill'), ('LAVF_PREF_DESC', 'lavf_pref_desc'), ('LAVF_DESC', 'lavf_desc'),
     ('MOV_FORMAT_ADDR', 'mov_format'), ('OGG_FORMAT_ADDR', 'ogg_format'), ('AV_DICT_GET_ADDR', 'av_dict_get'),
-    ('DS_GET_NEXT_PTS_ADDR', 'ds_get_next_pts'), ('PLAY_FLAG', 'play_flag'), ('STOCK_CMD_HANDLER_ADDR', 'cmd_handler'))
+    ('DS_GET_NEXT_PTS_ADDR', 'ds_get_next_pts'), ('PLAY_FLAG', 'play_flag'), ('STOCK_CMD_HANDLER_ADDR', 'cmd_handler'),
+    ('OUTPUT_WAY_ADDR', 'output_way'), ('ALSA_PCM_ADDR', 'alsa_pcm'), ('AO_BYTES_ADDR', 'ao_bytes'), ('DAC_FD_ADDR', 'dac_fd'),
+    ('DAC_MUTED_ADDR', 'dac_muted'), ('KEEP_GAPLESS_ADDR', 'keep_gapless'), ('DAC_HELPER_ADDR', 'dac_helper'),
+    ('STOCK_AO_INIT_ADDR', 'stock_ao_init'), ('STOCK_AO_UNINIT_ADDR', 'stock_ao_uninit'), ('STOCK_GET_SPACE_ADDR', 'ao_get_space'),
+    ('AO_RATE_ADDR', 'ao_rate'), ('AO_CHANNELS_ADDR', 'ao_channels'), ('AO_FORMAT_ADDR', 'ao_format'),
+    ('AO_OUTBURST_ADDR', 'ao_outburst'), ('AO_BUFFERSIZE_ADDR', 'ao_buffersize'), ('PREV_FORMAT_ADDR', 'prev_format'),
+    ('PREV_RATE_ADDR', 'prev_rate'), ('PREV_CHANNELS_ADDR', 'prev_channels'), ('MQA_MODE_ADDR', 'mqa_mode'),
+    ('MQA_WIDTH_ADDR', 'mqa_width'), ('SEEK_PENDING_ADDR', 'seek_pending'))
+# peq_player.c's PLT stub macros and the symbols PLAYER_PROFILE['plt'] holds them by
+PLAYER_PLT_MACROS = (('PCM_STATE_ADDR', 'snd_pcm_state'), ('PCM_STATUS_ADDR', 'snd_pcm_status'),
+                     ('PCM_STATUS_AVAIL_ADDR', 'snd_pcm_status_get_avail'), ('PCM_DRAIN_ADDR', 'snd_pcm_drain'),
+                     ('PCM_DROP_ADDR', 'snd_pcm_drop'), ('PCM_WRITEI_ADDR', 'snd_pcm_writei'), ('PCM_PAUSE_ADDR', 'snd_pcm_pause'),
+                     ('PCM_PREPARE_ADDR', 'snd_pcm_prepare'))
 # libc/libcstl imports only the M1 payload uses, placed after peq.py's deque_pop_back.
 M1PLUS_LIBC = {
     # V2.1 imports no deque_pop_back; navigation.c erases the last element through these
@@ -1085,6 +1128,7 @@ def compile_common(out, binary, player=False, defines=()):
             asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
     if player:  # peq_player.c's stock addresses, V1.32's by default; unsuffixed, as asm text takes some
         header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}' for macro, key in PLAYER_MACROS]
+        header += [f'#define {macro} 0x{PLAYER_PROFILE["plt"][key]:x}' for macro, key in PLAYER_PLT_MACROS]
         # filter_n_bytes keeps sh_audio in $fp; af_play's two arguments stay intact (peq.py's)
         asm += ['.section .text.mp3_filter_entry,"ax",@progbits', '.globl mp3_filter_entry',
                 'mp3_filter_entry:', 'move $a2, $fp', 'j mp3_filter', 'nop']
@@ -1142,7 +1186,7 @@ def player_coverage(where, payload, link):
     """Every address macro the linked player code reads comes from PLAYER_PROFILE (PLAYER_MACROS): with every other
     one moved by 4, the payload links to the same bytes. Without this a name the profile lacks keeps V1.32's value on
     the M1, silently. A difference is narrowed to the names that make it."""
-    others = {n: v for n, v in player_defaults().items() if n not in dict(PLAYER_MACROS)}
+    others = {n: v for n, v in player_defaults().items() if n not in dict(PLAYER_MACROS) | dict(PLAYER_PLT_MACROS)}
     moved = lambda names: [f'-D{n}=0x{others[n] + 4:x}' for n in names]
     if link(where, moved(others)) == payload: return
     culprits = [n for n in others if link(where, moved([n])) != payload]
@@ -1182,6 +1226,20 @@ def patch_player(raw, out):
     check(prof['mp3_seek_fill'] - prof['player_globals'] == 0x5294, 'MP3 seek fill flag')
     check(prof['pause_wait'][1] == jal(0x4a4730) and prof['cmd_done'][1] == jal(prof['cmd_handler']) and
           prof['idle_wait'][1] == jal(0xada850) and prof['play_flag'] - prof['player_globals'] == 0xe1c, 'Player waits')
+    # each PLT stub the output hooks call, by the JUMP_SLOT symbol its .got.plt slot (lui $t7; lw $t9) holds
+    slots = dict((int(m[1], 16), m[2].split('@')[0]) for m in
+                 re.finditer(r'^([0-9a-f]{8})\s+\S+\s+R_MIPS_JUMP_SLOT\s+\S+\s+(\S+)', run('readelf', '-rW', binary), re.M))
+    for name, stub in prof['plt'].items():
+        hi, lo = struct.unpack_from('<II', raw, fileoff(raw, stub))
+        check(hi >> 16 == 0x3c0f and lo >> 16 == 0x8df9 and slots.get(((hi & 0xffff) << 16) + ((lo & 0xffff) ^ 0x8000) - 0x8000) == name,
+              f'hciplayer 0x{stub:x}: not the {name} PLT stub')
+    ao_slot, ao_init_stock, _ = prof['ao_init_slot']
+    check(prof['ao_uninit_slot'][0] == ao_slot + 4 and (ao_init_stock, prof['ao_uninit_slot'][1]) == (prof['stock_ao_init'], prof['stock_ao_uninit']),
+          'ao_alsa descriptor')
+    check([w for _, w, _ in prof['dac_release']] == [jal(prof['plt']['ioctl']), jal(prof['dac_helper']), jal(prof['plt']['snd_pcm_pause']),
+                                                    jal(prof['plt']['snd_pcm_writei'])], 'DAC release calls')
+    check([prof[k] - prof['player_globals'] for k in ('output_way', 'keep_gapless', 'dac_muted', 'dac_fd', 'ao_bytes', 'alsa_pcm')] ==
+          [0xe3c, 0xe40, 0x1564, 0x156c, 0x1578, 0x1588] and prof['usb_buffer'][0][1] == 0xafc4017c, 'Output globals')
     def text(address):
         at = fileoff(raw, address)
         return raw[at:raw.index(0, at)].decode()
@@ -1198,7 +1256,8 @@ def patch_player(raw, out):
     hooks = (*prof['probe_stop'], *prof['stop_sites'], prof['stop_fill'], *prof['preload_close'], prof['forced_eof'],
              prof['exit_hold'], prof['preload_publish'], prof['preload_failed'], prof['cold_clear'], prof['flac_gate'],
              prof['seek_nosync'], *(prof[k] for k in ('mp3_alloc', 'mp3_filter', 'mp3_read', 'mp3_fill', 'mp3_close')),
-             prof['pause_wait'], prof['cmd_done'], prof['idle_wait'])
+             prof['pause_wait'], prof['cmd_done'], prof['idle_wait'], *prof['dac_release'], prof['ao_init_slot'],
+             prof['ao_uninit_slot'])
     def link(where, defines=()):
         """Compile and link the payload in where; its bytes."""
         where.mkdir(exist_ok=True)
@@ -1219,6 +1278,12 @@ def patch_player(raw, out):
     patch_word(data, *prof['pause_wait'][:2], jal(ps['hci_pause_wait']), 'pause loop waits for a command')
     patch_word(data, *prof['cmd_done'][:2], jal(ps['hci_command']), 'a command wakes the idle and pause loops')
     patch_word(data, *prof['idle_wait'][:2], jal(ps['hci_idle_wait']), 'idle loop waits on the play flag')
+    for address, stock, patched in prof['usb_buffer']:
+        patch_word(data, address, stock, patched, 'USB DAC buffer')
+    for address, stock, name in prof['dac_release']:
+        patch_word(data, address, stock, jal(ps[name]), 'DAC release wait')
+    patch_word(data, *prof['ao_init_slot'][:2], ps['ao_init'], 'Output init slot')
+    patch_word(data, *prof['ao_uninit_slot'][:2], ps['ao_uninit'], 'Output uninit slot')
     for address, stock, patched in prof['media_info_null']:
         patch_word(data, address, stock, patched, 'Music info with no stream')
     for address, stock, patched in prof['flac_meta_eof']:
@@ -1344,7 +1409,6 @@ def compile_payload(out):
     # every call site's payload routine: a jal from stock code is no reference the linker sees
     undefined += [f'--undefined={new}' for words in CALL_SITES['m1plus'].values() for _, _, new in words if isinstance(new, str)]
     # and each pinned site's, which nothing reaches until its word is switched on: test/m1plus/playback.py runs it in V2.1's code
-    undefined += [f'--undefined={new}' for words in START_SITES_M1PLUS.values() for _, _, new in words]
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
@@ -1549,9 +1613,6 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     (out/'watchdog').write_bytes(cat(WATCHDOG).replace(*WATCHDOG_SLEEP))
     for name, address, old, new in call_site_words(True, ps):
         patch_word(patched, address, old, new, CALL_SITE_PURPOSES[name])
-    for name, words in START_SITES_M1PLUS.items():  # pinned, left stock's
-        for address, old, _ in words:
-            patch_word(patched, address, old, old, CALL_SITE_PURPOSES[name])
     # The iPod UI's private entries and the event ids its code reads (m1plus_ipod.json), as V2.1 has them.
     for name, original in m1plus_ipod.AUDIT['private_prologues'].items():
         check(M1PLUS_PRIVATE_FUNCTIONS[name] == syms[name] and
