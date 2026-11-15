@@ -346,7 +346,18 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
                        (0x49aa7c, 0x8f99ade4, 0x8f99aad8)),
     },
 }
+# 1.6.7's natural start (crossfade.c start_mute, start_sleep) at V2.1's twins of the Q2's START_MUTE_CALL and
+# START_SLEEP_CALL, in the static start routine (0x5d4e00) that mclStartPlayer and mcl_tidalStartPlayer bal: the
+# idle branch's bal mclSetMute (a0=1 in its slot) and its jalr usleep (100000), which the 0xf/0x12 branch's
+# 150000 also reaches. Pinned and linked, not patched: skipping demo's mute needs ao_init's mute after the
+# drain, so they move into CALL_SITES['m1plus'] with DAC_RELEASE (round 2 step 6).
+START_SITES_M1PLUS = {
+    'START_MUTE_CALL': ((0x5d50fc, 0x0411ff2b, 'start_mute'),),
+    'START_SLEEP_CALL': ((0x5d5114, 0x0320f809, 'start_sleep'),),
+}
 CALL_SITE_PURPOSES = {
+    'START_MUTE_CALL': 'natural start: no mute before the end (pinned until DAC_RELEASE)',
+    'START_SLEEP_CALL': 'natural start: no sleep before the end (pinned until DAC_RELEASE)',
     'BOOT_MODE_CALL': 'config_init preserves the saved queue when applying the boot play mode',
     'ARTIST_ALBUMS': 'artist detail opens on Albums',
     'SHUFFLE_CALL': 'shuffle honours Play next',
@@ -452,8 +463,10 @@ M1PLUS_PORTS = {
     'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
                          "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
     # Call sites
-    'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's mclStartPlayer not pinned"),
-    'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's mclStartPlayer not pinned"),
+    'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's 0x5d50fc pinned and tested "
+                        "(START_SITES_M1PLUS), switched on with DAC_RELEASE (round 2 step 6)"),
+    'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's 0x5d5114 pinned and "
+                         "tested (START_SITES_M1PLUS), switched on with DAC_RELEASE (round 2 step 6)"),
     'SONG_UNKNOWN_CALL': ('q2only', "a song row's empty artist line under a set without text-row artwork: Classic's only (1.6.7)"),
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -1330,6 +1343,8 @@ def compile_payload(out):
                   '--undefined=ringnav_boot']
     # every call site's payload routine: a jal from stock code is no reference the linker sees
     undefined += [f'--undefined={new}' for words in CALL_SITES['m1plus'].values() for _, _, new in words if isinstance(new, str)]
+    # and each pinned site's, which nothing reaches until its word is switched on: test/m1plus/playback.py runs it in V2.1's code
+    undefined += [f'--undefined={new}' for words in START_SITES_M1PLUS.values() for _, _, new in words]
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
@@ -1534,6 +1549,9 @@ def build(target_path, out, logo, dev=False, m1_release=None):
     (out/'watchdog').write_bytes(cat(WATCHDOG).replace(*WATCHDOG_SLEEP))
     for name, address, old, new in call_site_words(True, ps):
         patch_word(patched, address, old, new, CALL_SITE_PURPOSES[name])
+    for name, words in START_SITES_M1PLUS.items():  # pinned, left stock's
+        for address, old, _ in words:
+            patch_word(patched, address, old, old, CALL_SITE_PURPOSES[name])
     # The iPod UI's private entries and the event ids its code reads (m1plus_ipod.json), as V2.1 has them.
     for name, original in m1plus_ipod.AUDIT['private_prologues'].items():
         check(M1PLUS_PRIVATE_FUNCTIONS[name] == syms[name] and
