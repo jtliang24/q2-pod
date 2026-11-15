@@ -451,10 +451,6 @@ M1PLUS_PORTS = {
     # unhooked until its item ports it
     'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
                          "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
-    # 1.6.7's audio timing and Previous's resume ask, V1.32's player routines (docs/m1plus-unported.md)
-    'player_seek_time': ('unported', "a user's seek stamps a press (1.6.7, playback.c press_stamp); V2.1's seek_time not pinned"),
-    'player_seek_start': ('unported', "Previous's restart past 10 s asks too (1.6.7 restart_refused); V2.1's not pinned"),
-    'player_start': ('unported', 'a press waits for the DAC, a natural change keeps stock timing (1.6.7); V2.1 start_player not pinned'),
     # Call sites
     'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's mclStartPlayer not pinned"),
     'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's mclStartPlayer not pinned"),
@@ -609,7 +605,6 @@ M1PLUS_UNRESOLVED = {
     # Home's Library list in Split (coverflow.c home_library, 1.6.7): bound only where Home's asset has
     # list_view_homelib, a geometry set's home_lib, which only Classic's has (unported on M1)
     'on_home_music_onclick': "Classic's Home Library list (coverflow.c home_library): Classic is unported",
-    'player_playtime': "Previous's restart ask (playback.c ringnav_seek_start, 1.6.7): player_seek_start unported",
 }
 # V1.32 routines V2.1 has no twin of that navigation.c names, which is one section (the tests call its unhooked
 # routines, so --gc-sections cannot drop any): a stand-in in patch/m1plus_nav.h under the same name, as (status, why).
@@ -634,6 +629,11 @@ M1PLUS_FUNCTION_ALIASES = {
     'folder_reload_data': 'folder_reload',
     'player_playtime_and_length': 'get_playtimeandlength',
     'player_seek_time': 'seek_time',
+    # Previous's restart ask (playback.c ringnav_seek_start, 1.6.7): prev_music's bal seek_starttime (0x4e4320),
+    # whose own bal get_playtime (0x4e0430) is V1.32's player_playtime but for its end: V2.1 returns the raw
+    # difference, no clamp at 0, which "> 10" reads alike
+    'player_seek_start': 'seek_starttime',
+    'player_playtime': 'get_playtime',
     'switch_charge_enable': 'toolsSetChargeSwitch',
     'taglib_file_open': 'taglib_file_new',
     # Now Playing's position timer, which the scrub stops and restarts: V2.1's playing_page_init starts
@@ -700,6 +700,13 @@ M1PLUS_HOOKS = {
     # A queue row's pick (View Queue, stock's View Queue dialog, a queue delete) in a shuffle's play
     # order: V1.32's player_start_queue. The payload's player_start_queue calls reach it by alias.
     'start_playqueue': (0x4e47d0, 'ringnav_start_queue', 'start_queue'),
+    # 1.6.7's press timing and restart ask: a pick of the playing file keeps it playing (its callers' return
+    # addresses, m1plus_offsets.inc PAGE_PICK_RET and ALBUM_PLAY_RET), Previous past 10 s asks before it
+    # restarts a held place (prev_music's only call), and a user's seek stamps a press (the slider's two
+    # GOT calls, 0x53c5bc and 0x53c70c). V1.32's player_start, player_seek_start and player_seek_time.
+    'start_player': (0x4e4648, 'ringnav_player_start', 'player_start'),
+    'seek_starttime': (0x4e03cc, 'ringnav_seek_start', 'seek_start'),
+    'seek_time': (0x4e0544, 'ringnav_seek_time', 'seek_time'),
     # A track's LYRICS tag without a .lrc; stock's loader runs first, from every caller's GOT call
     'mclLoadExLyric': (0x5d41e4, 'ringnav_lyric', 'lyric'),
     # An .lrc's UTF-8 test (1.5.9), the local loader's (bal at 0x5d3d34) and the match page's (online_loadexlyric,
@@ -1500,16 +1507,21 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         check(pic_gp(raw_demo, address) == M1PLUS_GP, f'{name}: not a V2.1 PIC entry')
     # ringnav_speed and ringnav_mode tell config_mplayer's re-applying calls, and config_init's
     # boot one, from a choice by their return addresses: each a jalr $t9 after lw $t9, <callee's
-    # GOT slot>($gp).
+    # GOT slot>($gp). So do ringnav_player_start and ringnav_start_queue their picks (1.6.7).
+    def got_word(load): return struct.unpack_from('<I', raw_demo, fileoff(raw_demo, M1PLUS_GP + (load & 0xffff) - (0x10000 if load & 0x8000 else 0)))[0]
     for ret, callee in (('INITCONFIG_SPEED_RET', 'mclSetPlaySpeed'), ('INITCONFIG_MODE_RET', 'mclSetPlayMode'),
-                        ('BOOT_MODE_RET', 'mclSetPlayMode')):
+                        ('BOOT_MODE_RET', 'mclSetPlayMode'), ('PAGE_PICK_RET', 'start_player'),
+                        ('ALBUM_PLAY_RET', 'start_player'), ('VIEW_QUEUE_RET', 'start_playqueue')):
         ret = m1plus_inc(ret)
         words = struct.unpack_from('<5I', raw_demo, fileoff(raw_demo, ret - 24))
         load = next((w for w in reversed(words[:4]) if w >> 16 == 0x8f99), 0)
-        slot = M1PLUS_GP + (load & 0xffff) - (0x10000 if load & 0x8000 else 0)
-        check(load and words[4] == 0x0320f809 and
-              struct.unpack_from('<I', raw_demo, fileoff(raw_demo, slot))[0] == syms[callee],
-              f'config_mplayer: unexpected {callee} call')
+        check(load and words[4] == 0x0320f809 and got_word(load) == syms[callee], f'{ret:#x}: unexpected {callee} call')
+    # The unplayable skip's entry branches to the toast's jalr with next_music's slot in its delay slot (1.6.7).
+    ret = m1plus_inc('UNPLAYABLE_NEXT_RET')
+    entry = struct.unpack_from('<2I', raw_demo, fileoff(raw_demo, 0x4cfd3c))
+    check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, ret - 8))[0] == 0x0320f809 and
+          entry[0] == 0x10000000 | ((ret - 8 - 0x4cfd40) >> 2) & 0xffff and entry[1] >> 16 == 0x8f99 and
+          got_word(entry[1]) == syms['next_music'], 'on_wm_timer_dialogresponse: unexpected unplayable skip')
     raw_player = cat('usr/bin/hciplayer')
     audio = patch_player(raw_player, out/'peq')
     check(sha(cat(BLUEALSA)) == BLUEALSA_SHA, 'Unexpected bluealsa')
