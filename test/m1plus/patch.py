@@ -21209,12 +21209,11 @@ if 'toolsIntoStandby' in HOOKS:
     # and starts it again, and a clean end stops it and removes the record; nothing is fed or written
     # after. No device, or a refused start: tried once, and the record is kept all the same. The record
     # is rewritten only when it changes, and as suspending just before Standby's suspend.
-    # M1 Plus: the watchdog in --dev builds only until its first device pass (navigation.c wdt_poll); the
-    # record and the clean end in every build.
+    # M1 Plus: the same in every build, release ones too (2.9).
     WDT_START,WDT_STOP,WDT_FEED=0x8004570d,0x2000570e,0x2000570f
     class WatchdogMachine(StandbyMachine):
         def __init__(self,config={},fd=3,refuse_start=False,**k):
-            super().__init__(config,**k); self.fd,self.refuse_start,self.ioctls,self.wdt_opens=fd,refuse_start,[],0
+            super().__init__(config,**k); self.fd,self.refuse_start,self.ioctls,self.wdt_opens,self.added=fd,refuse_start,[],0,[]
             self.handlers[syms['ioctl@GLIBC_2.0']]='d:ioctl'; self.listed=[]
             self.byte(syms['g_backlight_status'],1); self.byte(syms['g_usbdet_value'],0)
         def hook(self,u,address,size,unused):
@@ -21226,65 +21225,64 @@ if 'toolsIntoStandby' in HOOKS:
                 if b!=WDT_FEED: self.events.append(('wdt',b))
                 self.returns(0xffffffff if b==WDT_START and self.refuse_start else 0); return
             if name=='m3u_dir': self.listed.append((self.text(a),b,list(self.ioctls))); self.returns(7); return
+            if name=='batchadd':  # its five arguments, the fifth on the stack
+                d,e=u.reg_read(REGS[3]),self.get(u.reg_read(UC_MIPS_REG_SP)+16)
+                self.added.append(((a,b,c,d,e),list(self.ioctls))); self.returns(5); return
             return super().hook(u,address,size,unused)
         def record(self): return self.files.get(RECORD)
-    if not is_m1plus or manifest['dev']:
-        m=WatchdogMachine(key=600); m.pass_(1)
-        assert m.wdt_opens==1 and m.ioctls==[(3,WDT_START,O['WDT_MS'])],(m.ioctls)
-        assert m.record()==b'screen:on power:running cable:out battery:0 play:paused out:jack\n',m.record()
-        m.pass_(1); m.pass_(1); assert m.ioctls[1:]==[(3,WDT_FEED)]*2 and m.wdt_opens==1 and len(m.records)==1; passed()
-        level(m,57,0); m.pass_(1); assert m.records[-1]==(RECORD,b'screen:on power:running cable:out battery:57 play:paused out:jack\n')
-        n=len(m.records); m.pass_(1); assert len(m.records)==n  # unchanged: not rewritten
-        m.byte(syms['g_backlight_status'],0); m.byte(syms['g_usbdet_value'],1); m.pass_(1)
-        assert m.records[-1][1]==b'screen:off power:running cable:in battery:57 play:paused out:jack\n'; passed()
-        m.ioctls=[]; assert m.standby()==[('wdt',WDT_STOP),'suspend',('wdt',WDT_START)],m.events
-        assert m.records[-1][1]==b'screen:off power:suspending cable:in battery:57 play:paused out:jack\n'
-        m.pass_(1); assert m.records[-1][1].startswith(b'screen:off power:running') and m.ioctls[-1]==(3,WDT_FEED); passed()
-        m=WatchdogMachine({'STANDBYLIMIT':'1'}); m.pass_(1)
-        assert m.standby()==[('alarm',0),('alarm',start+3600),('wdt',WDT_STOP),'suspend',('wdt',WDT_START),('alarm',0)],m.events; passed()
-        # a known long pass (an import, a folder add) counts WDT_LONG_MS; the next pass, after it, WDT_MS again
-        m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
-        for _ in range(2): m.call(address=payload_syms['ringnav_wdt_long'],args=(0,0,0,0),gap=0)  # once while it runs
-        assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])],m.ioctls; m.ioctls=[]
-        m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; m.ioctls=[]
-        m.pass_(1); assert m.ioctls==[(3,WDT_FEED)] and O['WDT_LONG_MS']>O['WDT_MS']==60000; passed()
-        if is_m1plus:  # V2.1's importPlayList listing (M3U_DIR_CALL): the long count first, then stock's listing as called
-            site_patched('M3U_DIR_CALL'); site=SITES['M3U_DIR_CALL'][0][0]
-            m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]; m.handlers[syms['toolsGetDirectoryM3u8']]='m3u_dir'
-            m.u.hook_add(UC_HOOK_CODE,lambda u,a,s,x: u.reg_write(UC_MIPS_REG_PC,0x1000000),begin=site+8,end=site+8)
-            m.call(address=site,args=(m.string('/mnt/mmc/_explaylist_data')+0x3aa0,0x4321,0,0),gap=0)  # the delay slot's addiu
-            assert m.listed==[('/mnt/mmc/_explaylist_data',0x4321,[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])])],m.listed
-            assert m.u.reg_read(UC_MIPS_REG_V0)==7; m.ioctls=[]
-            m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; passed()
-        # a clean end: the watchdog stops, the record goes, and nothing is fed or written after it
-        m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
-        m.call(address=payload_syms['ringnav_clean_end'],args=(0,0,0,0),gap=0)
-        assert m.ioctls==[(3,WDT_STOP)] and RECORD not in m.files; n=len(m.records); m.ioctls=[]
-        level(m,5,0); m.pass_(1); assert not m.ioctls and len(m.records)==n and RECORD not in m.files; passed()
-        if 'device_reboot' in HOOKS:  # Restart and the firmware update's dialog are clean ends (playback.c reboot_save)
-            for entry,stock in REBOOTS:
-                m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]; m.handlers[payload_syms[f'stock_{stock}_trampoline']]='stock_'+stock
-                m.call(address=HOOKS[entry][0],args=(0x1234,0x5678,0,0),gap=0)
-                assert m.ioctls==[(3,WDT_STOP)] and RECORD not in m.files and m.calls[-1][0]=='stock_'+stock,(entry,m.ioctls,m.calls[-3:])
-                m.ioctls=[]; n=len(m.records); level(m,5,0); m.pass_(1); assert not m.ioctls and len(m.records)==n and RECORD not in m.files
-            passed()
-        m=WatchdogMachine(key=600,fd=-1); m.pass_(1); m.pass_(1)
-        assert m.wdt_opens==1 and not m.ioctls and m.record() and m.standby()==['suspend']; passed()
-        m=WatchdogMachine(key=600,refuse_start=True); m.pass_(1); m.pass_(1)
-        assert m.ioctls==[(3,WDT_START,O['WDT_MS'])] and m.record() and m.standby()==['suspend']; passed()
-    else:  # an M1 Plus release build: the device is never opened; the record, Standby's and the clean end are the Q2's
-        m=WatchdogMachine(key=600); m.pass_(1); m.pass_(1)
-        assert m.wdt_opens==0 and not m.ioctls and len(m.records)==1
-        assert m.record()==b'screen:on power:running cable:out battery:0 play:paused out:jack\n',m.record()
-        m.call(address=payload_syms['ringnav_wdt_long'],args=(0,0,0,0),gap=0); assert m.standby()==['suspend'] and not m.ioctls
-        assert m.records[-1][1]==b'screen:on power:suspending cable:out battery:0 play:paused out:jack\n'; passed()
-        for entry,stock in REBOOTS+((None,None),):
-            m=WatchdogMachine(key=600); m.pass_(1)
-            if entry: m.handlers[payload_syms[f'stock_{stock}_trampoline']]='stock_'+stock
-            m.call(address=HOOKS[entry][0] if entry else payload_syms['ringnav_clean_end'],args=(0x1234,0x5678,0,0),gap=0)
-            n=len(m.records); level(m,5,0); m.pass_(1)
-            assert m.wdt_opens==0 and not m.ioctls and len(m.records)==n and RECORD not in m.files,entry
+    m=WatchdogMachine(key=600); m.pass_(1)
+    assert m.wdt_opens==1 and m.ioctls==[(3,WDT_START,O['WDT_MS'])],(m.ioctls)
+    assert m.record()==b'screen:on power:running cable:out battery:0 play:paused out:jack\n',m.record()
+    m.pass_(1); m.pass_(1); assert m.ioctls[1:]==[(3,WDT_FEED)]*2 and m.wdt_opens==1 and len(m.records)==1; passed()
+    level(m,57,0); m.pass_(1); assert m.records[-1]==(RECORD,b'screen:on power:running cable:out battery:57 play:paused out:jack\n')
+    n=len(m.records); m.pass_(1); assert len(m.records)==n  # unchanged: not rewritten
+    m.byte(syms['g_backlight_status'],0); m.byte(syms['g_usbdet_value'],1); m.pass_(1)
+    assert m.records[-1][1]==b'screen:off power:running cable:in battery:57 play:paused out:jack\n'; passed()
+    m.ioctls=[]; assert m.standby()==[('wdt',WDT_STOP),'suspend',('wdt',WDT_START)],m.events
+    assert m.records[-1][1]==b'screen:off power:suspending cable:in battery:57 play:paused out:jack\n'
+    m.pass_(1); assert m.records[-1][1].startswith(b'screen:off power:running') and m.ioctls[-1]==(3,WDT_FEED); passed()
+    m=WatchdogMachine({'STANDBYLIMIT':'1'}); m.pass_(1)
+    assert m.standby()==[('alarm',0),('alarm',start+3600),('wdt',WDT_STOP),'suspend',('wdt',WDT_START),('alarm',0)],m.events; passed()
+    # a known long pass (an import, a folder add) counts WDT_LONG_MS; the next pass, after it, WDT_MS again
+    m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
+    for _ in range(2): m.call(address=payload_syms['ringnav_wdt_long'],args=(0,0,0,0),gap=0)  # once while it runs
+    assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])],m.ioctls; m.ioctls=[]
+    m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; m.ioctls=[]
+    m.pass_(1); assert m.ioctls==[(3,WDT_FEED)] and O['WDT_LONG_MS']>O['WDT_MS']==60000; passed()
+    if is_m1plus:  # V2.1's importPlayList listing (M3U_DIR_CALL): the long count first, then stock's listing as called
+        site_patched('M3U_DIR_CALL'); site=SITES['M3U_DIR_CALL'][0][0]
+        m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]; m.handlers[syms['toolsGetDirectoryM3u8']]='m3u_dir'
+        m.u.hook_add(UC_HOOK_CODE,lambda u,a,s,x: u.reg_write(UC_MIPS_REG_PC,0x1000000),begin=site+8,end=site+8)
+        m.call(address=site,args=(m.string('/mnt/mmc/_explaylist_data')+0x3aa0,0x4321,0,0),gap=0)  # the delay slot's addiu
+        assert m.listed==[('/mnt/mmc/_explaylist_data',0x4321,[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])])],m.listed
+        assert m.u.reg_read(UC_MIPS_REG_V0)==7; m.ioctls=[]
+        m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; passed()
+        # Add to Playlist and Add to My Fav (2.9): V2.1's batch_add_file commits one song at a time on the UI
+        # thread, so the long count starts before stock's add, which gets its five arguments. The stock pages'
+        # Add and the payload's own adds (the hold menu, the playlist editor) all reach it at V2.1's address:
+        # the batch_add_file cases above record the payload's there.
+        m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]; m.handlers.pop(syms['batch_add_file'])
+        m.handlers[payload_syms['stock_batchadd_trampoline']]='batchadd'
+        m.call(address=HOOKS['batch_add_file'][0],args=(0xf004,0xf00a,0x1234,0x5678),stack=(9,),gap=0)
+        assert m.added==[((0xf004,0xf00a,0x1234,0x5678,9),[(3,WDT_STOP),(3,WDT_START,O['WDT_LONG_MS'])])],m.added
+        assert m.u.reg_read(UC_MIPS_REG_V0)==5; m.ioctls=[]
+        m.pass_(1); assert m.ioctls==[(3,WDT_STOP),(3,WDT_START,O['WDT_MS'])],m.ioctls; passed()
+    # a clean end: the watchdog stops, the record goes, and nothing is fed or written after it
+    m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]
+    m.call(address=payload_syms['ringnav_clean_end'],args=(0,0,0,0),gap=0)
+    assert m.ioctls==[(3,WDT_STOP)] and RECORD not in m.files; n=len(m.records); m.ioctls=[]
+    level(m,5,0); m.pass_(1); assert not m.ioctls and len(m.records)==n and RECORD not in m.files; passed()
+    if 'device_reboot' in HOOKS:  # Restart and the firmware update's dialog are clean ends (playback.c reboot_save)
+        for entry,stock in REBOOTS:
+            m=WatchdogMachine(key=600); m.pass_(1); m.ioctls=[]; m.handlers[payload_syms[f'stock_{stock}_trampoline']]='stock_'+stock
+            m.call(address=HOOKS[entry][0],args=(0x1234,0x5678,0,0),gap=0)
+            assert m.ioctls==[(3,WDT_STOP)] and RECORD not in m.files and m.calls[-1][0]=='stock_'+stock,(entry,m.ioctls,m.calls[-3:])
+            m.ioctls=[]; n=len(m.records); level(m,5,0); m.pass_(1); assert not m.ioctls and len(m.records)==n and RECORD not in m.files
         passed()
+    m=WatchdogMachine(key=600,fd=-1); m.pass_(1); m.pass_(1)
+    assert m.wdt_opens==1 and not m.ioctls and m.record() and m.standby()==['suspend']; passed()
+    m=WatchdogMachine(key=600,refuse_start=True); m.pass_(1); m.pass_(1)
+    assert m.ioctls==[(3,WDT_START,O['WDT_MS'])] and m.record() and m.standby()==['suspend']; passed()
 
 else:
     not_ported("Standby Limit (toolsIntoStandby not hooked on M1 Plus)")
@@ -22392,7 +22390,7 @@ if 'MAINSCHEDULING_CALL' in SITES:
     assert scheduled()==0; passed()
 
 else:
-    not_ported('paced player scheduling (MAINSCHEDULING_CALL, 1.5.5)')
+    not_ported("demo's paced player scheduling (MAINSCHEDULING_CALL, 1.5.5): left V2.1's by decision; V2.1 inlines it in on_wm_idle_status")
 
 # Chapter subprocess syscalls use Linux o32 and pass the filename through argv.
 for name,number,args,error in (('chapter_pipe2',4328,(0x1001000,0x80000,0,0),False),
@@ -22770,10 +22768,9 @@ assert m.get(buf+8)==7 and m.get(buf+4)==30; passed()
 
 
 if is_m1plus:
-    not_ported('MP3 encoder delay/padding trim and command-driven player waits (1.5.5)')
+    not_ported("Command-driven player waits (1.5.5): demo's half only, left V2.1's by decision; the player's run in test/m1plus/hci_wait.py")
 
 if is_m1plus:
-    not_ported("Bluetooth gapless resampler continuity (RS_OPEN_SLOT, 1.5.6)")
     not_ported("Coverflow continuous flick/drag physics (existing M1 touch path retained, 1.5.7)")
     not_ported("Simple EQ Presets shortcut (two-button M1 layout retained, 1.5.7)")
     not_ported("Enlarged art reset default (V2.1 config asset not changed, 1.5.6)")

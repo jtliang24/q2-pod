@@ -32,9 +32,6 @@ to its [progress](m1plus-progress.md) section.
 | [SyncLink's keys past the Buttons lock](#synclinks-keys) | 1.5.0 | `main_loop_post_key_event` | Planned |
 | [A card app's own Streaming icon](#a-card-apps-own-icon) | 1.5.0 | `addon_icon` (#88) | Planned |
 | [Play/Pause's hold at 700 ms](#playpauses-hold) | 1.4.5 | `HOLD_KEYS` (replaces `PLAY_HOLD` in 1.5.5) | Planned |
-| [Battery: paced player scheduling and command waits](#battery-fixes) | 1.5.5 | `MAINSCHEDULING_CALL`, `PAUSE_WAIT`, `IDLE_WAIT`, `CMD_DONE` | Planned |
-| [MP3 encoder delay and padding](#mp3-encoder-delay-and-padding) | 1.5.5 | `mp3_gapless.c`, `MP3_ALLOC`, `MP3_FILTER`, `MP3_CLOSE`, `MP3_READ` | Planned |
-| [Bluetooth resampler continuity](#bluetooth-resampler-continuity) | 1.5.6 | `RS_OPEN_SLOT`, `rs_open` (`tools/peq.py`, `peq_player.c`) | Planned |
 | [Coverflow flick gestures](#coverflow-flick-gestures) | 1.5.7 | `touch`, `carousel_glide`, `CF_DRAG_*` and `CF_*` gesture tunables | Unplanned until feedback asks for it |
 | [Directory markers](#directory-markers) | 1.5.8 | `library_scope.c`, `MUSIC_WHERE`, `music_records`, Era SQL | Planned |
 | [Automatic scrobble uploads](#automatic-scrobble-uploads) | 1.5.8 | `scrobble_auto`, `[SCROBBLE] AUTO` | Planned |
@@ -52,12 +49,8 @@ to its [progress](m1plus-progress.md) section.
 | [Knob: Navigation on the Tidal and HiFi store pages](#tidal) | the M1's own | `m1plus_contexts.inc` rows | Planned |
 | [Card apps' library update](#card-apps-library-update) | 1.5.9 | `addon_library.c` (`library_poll`), the caps' `library` | Planned (`M3U_DIR_CALL` ported, progress 90) |
 | [Night Shift](#night-shift) | 1.6.0 | `nightshift.c`, `night_row`, `LCD_*` (`offsets.inc`) | Planned |
-| [The watchdog and the crash log](#the-watchdog-and-the-crash-log) | 1.6.1, 1.6.2 | `wdt_poll`, `state_poll`, `WDT_MS`, `WDT_LONG_MS` (`navigation.c`) | Ported and device-checked (progress 90); the watchdog runs on `--dev` builds only until release builds turn it on |
-| [A USB DAC across a gapless change](#a-usb-dac-across-a-gapless-change) | 1.6.1 | `ao_init` (`peq_player.c`), `AO_INIT_SLOT`, `USB_BUFFER` (`tools/peq.py`) | Planned |
 | [The settings restack](#the-settings-restack) | 1.6.4 | `library_open`, `playset_sub`, `library_order`, `keylock_open`, `boot_row` on Power, `POD_KEYTONE`, `POD_CARMODE` (`navigation.c`) | Planned |
 | [Classic](#classic) | 1.6.5, 1.6.7 | `assets/themes/classic-light`, its geometry sets and `theme_boot`'s `boot_sites`, `home_pane_read`, `home_library` (`HOMELIB`, `ROWPREVIEW`, `ROWART`), `CLASSIC_LIGHT_RANGES`, `SONG_UNKNOWN_CALL`, `tools/art.py` | Planned |
-| [The press and natural-change timing](#the-press-and-natural-change-timing) | 1.6.5 to 1.6.7 | `player_seek_time`, `player_seek_start` (`player_playtime`), `player_start`, `START_MUTE_CALL`, `START_SLEEP_CALL`, `VIEW_QUEUE_RET`, `UNPLAYABLE_NEXT_RET` | Planned |
-| [The player's 1.6.5 to 1.6.7 fixes](#the-players-165-to-167-fixes) | 1.6.5 to 1.6.7 | `tools/peq.py`'s `DAC_RELEASE`, `PROBE_STOP`, `STOP_SITES`, `STOP_FILL`, `PRELOAD_*`, `COLD_CLEAR`, `FORCED_EOF`, `EXIT_HOLD`, `AO_UNINIT_SLOT`, `FLAC_GATE`, `SEEK_NOSYNC`, `SEEK_WORDS`, `MP3_FILL`, `LAVF_PRIV`, `MOV_EDITS` (`lavf_gapless.c`) | Planned |
 | [Playlists, Podcasts and Audiobooks as Shortcuts](#playlists-podcasts-and-audiobooks-as-shortcuts) | 1.6.5, 1.6.7 | `ipod_home_shortcut`'s values 7 to 9, `home_shortcut_open` | Planned |
 | Global scrolling-label delay, pace and end holds | 1.6.8–1.7.0 | `hscroll_label_start`, `HSCROLL_LULL`, `HSCROLL_ONCE`; V2.1 has a different timer layout | NOT PORTED; existing M1 selected-row marquee retained |
 | Oversized Ogg embedded artwork | 1.6.8–1.7.0 | `toolsGetAlbumCover` (`ringnav_album_cover`); `xiph.c` builds, V2.1 hook not pinned | NOT PORTED |
@@ -66,6 +59,14 @@ to its [progress](m1plus-progress.md) section.
 | Classic Home Streaming pane | 1.6.8–1.7.0 | `home_streaming`, `stream_rows`, `on_home_stream_onclick`, `STREAM_BG` | NOT PORTED; M1 Streaming keeps its existing page |
 | Configurable slide motion (a theme's step and fast-step ms and easing, ms 0 an immediate move) | 1.6.8–1.7.0 | the theme's motion rows (`THEME_MOTION_OFF`, `MOTION_WIDGET`); the M1's slide_menu keeps V2.1's 200/120 ms and easing | NOT PORTED |
 | USB Storage eject: OK to Disconnect | 1.6.8–1.7.0 | `usb_poll` (`navigation.c`), the Q2 gadget's `USB_LUN` configfs path; V2.1's gadget layout not checked | NOT PORTED |
+
+Ported in round 2 and passed on the device ([progress section 91](m1plus-progress.md#91-unported-round-2-nov-15)):
+the player's 1.6.5 to 1.6.7 fixes (stop, preload, seek, DSD/ISO probes, forced end, the DAC release wait), the MP3
+and lossy gapless trims (`mp3_gapless.c`, `lavf_gapless.c`), the command-driven player waits (`PAUSE_WAIT`,
+`IDLE_WAIT`, `CMD_DONE`; demo's paced scheduling, `MAINSCHEDULING_CALL`, stays V2.1's by the user's decision), the
+press and natural-change timing with Previous's restart ask, a USB DAC across a gapless change (`ao_init`,
+`USB_BUFFER`), the Bluetooth resampler's carry (`rs_open`), and the watchdog on release builds with Add to Playlist's
+long count.
 
 Ported in round 1 and passed on the device ([progress section 90](m1plus-progress.md#90-unported-round-1-nov-14)):
 playlist allocation and deletion, an .lrc's UTF-8 test, the stale press backstop (`stale_heal`; `stale_note`,
@@ -96,10 +97,22 @@ Found on the device and not fixed yet. Each goes to a fix round of its own:
 - **G2. Now Playing shows a refused track.** After the player refuses a file (the oversized copy in
   section 54), Now Playing's position and the album list's highlight move to it while the previous
   track keeps playing. Cosmetic.
-- **G3. A natural change onto a FLAC cut after STREAMINFO stalls.** The file is skipped at once when picked
-  or reached by Next, but when the track before it ends on its own, Now Playing sits on it at 00:00, playing,
-  until Next (45 s and more on `V06Mm`; the CPU stays idle). Found in round 1's pass
-  ([progress section 90](m1plus-progress.md#90-unported-round-1-nov-14)).
+- **G4. Play Next leaks the preload it replaces.** A Play Next while the next track is already preloaded plays the
+  edited-in song, as it should, but `hciplayer` keeps the abandoned preload's file open for good, and its memory
+  grows (13.2 to 14.9 MB after two). A plain new pick closes a preload. Found in round 2's pass
+  ([progress section 91](m1plus-progress.md#91-unported-round-2-nov-15)).
+- **G5. View Queue's playing row restarts the song.** Now Playing's queue ("List Play"), a tap on the playing row:
+  the PCM reopens at 00:00 and the dialog stays on top, where 1.6.7 keeps it playing (`VIEW_QUEUE_RET`'s branch in
+  `ringnav_start_queue` doesn't take). Round 2's pass.
+- **G6. Paused, the player's command thread wakes about 20 times a second.** Round 2 brought the main thread from
+  20 to 1 a second, but the command thread rose from 11 to 18 (jack) or 21 (USB), in step with demo's 20/s polls.
+  Stopped, the whole player wakes 3 times a second. Round 2's pass.
+- **Known gap: a DSDIFF at a rate V2.1 doesn't take, next.** On V2.1 the probe list reaches lavf, whose decoder
+  stores the stop (`0x507dd0`), so in the emulator the song before it is cut about 5 s short (`natural.py`'s
+  `rate_dff`, the user's decision Nov 15: no M1-only cover). On the device (FS 44100) the song played whole.
+
+G3 (a natural change onto a FLAC cut after STREAMINFO stalled) is fixed: `EXIT_HOLD`, round 2; skipped in 0.37 s on
+the device.
 
 ## Ported, not yet checked on the device
 
@@ -184,9 +197,6 @@ row's click.
   all four are experiments, off by default and `--dev` only, on the Q2 too, so they are Unplanned on the M1
   (the user's choice, Nov 14).
 
-- **Paced player scheduling and command waits** (1.5.5). `MAINSCHEDULING_CALL` needs V2.1's UI
-  scheduler call site; `PAUSE_WAIT`, `IDLE_WAIT` and `CMD_DONE` need its command state and player
-  sites. The M1 keeps its existing pause sleep and native scheduler.
 
 ### FLAC fast paths
 
@@ -292,19 +302,6 @@ Nothing in the M1's hardware blocks either. The way in:
 
 Steps 1 and 2 can be done from the code. The device check needs a signed-in Tidal account.
 
-### MP3 encoder delay and padding
-
-1.5.5 trims an MP3 encoder's delay and padding through four hciplayer sites. V2.1's sites and
-private decoder state need to be established before adding the source and hooks to its player
-pipeline. The shared seek notification is inert on M1 until then.
-
-### Bluetooth resampler continuity
-
-1.5.6 replaces V1.32's lavcresample open slot (`0x8a4554`, stock `0x4ac2c0`) to retain its
-state across gapless changes. The M1 player's profile does not patch that slot; `rs_open` and its
-V1.32-only callees are discarded by the linker. Find and pin V2.1's descriptor and callbacks before
-porting. Q2's `test/bt_resample.py` covers the actual resampler; it cannot run on this M1 build.
-
 ### Coverflow flick gestures
 
 M1 retains `m1plus_coverflow_touch.c` and the existing native `slide_swipe` path. Upstream's new
@@ -349,24 +346,6 @@ replaced by `night_end`, which warms the frame's dirty rect in V1.32's `lcd_mem`
 at once on M1, and Display's row is the Q2's only: V2.1's `lcd_mem` layout is to be read first (its
 `lcd_mem` create and `lcd_end_frame`), and its 320x480 panel is portrait where the Q2's buffer is 375 x 320.
 
-### The watchdog and the crash log
-
-1.6.2 starts `/dev/jz_watchdog` on the UI loop's first pass and feeds it each pass (`wdt_poll`,
-`WDT_MS` 60 s, `WDT_LONG_MS` for an import), so a frozen UI restarts the Q2; 1.6.1 keeps
-`/mnt/data/q2-state` (`state_poll`) and turns it into `q2-crash.log` on the card after an unchosen
-restart. Both return at once on M1 (`if (M1PLUS || ...)`): a watchdog that misfires on V2.1 would
-reboot in a loop. Ported in round 1 (progress 90): `state_poll` runs on every M1 build, `wdt_poll` on `--dev`
-builds only until its device pass is complete. On `V06Mm` a stopped demo rebooted after 64 s and left the crash
-log, and Standby and a power-off came back with none, so the device pass is complete. Turning the watchdog on for
-release builds is what's left.
-
-### A USB DAC across a gapless change
-
-1.6.1 replaces ao_alsa's init slot in V1.32's `hciplayer` (`AO_INIT_SLOT`, `ao_init` in
-`peq_player.c`) so a USB DAC's PCM stays open across a gapless change, and keeps its 500 ms buffer
-(`USB_BUFFER`). The M1 player's profile patches neither; the M1 payload's `--gc-sections` drops
-`ao_init`. V2.1's `hciplayer` ao_alsa init and its USB output way are to be found first.
-
 ### Enlarged art's reset default
 
 1.5.6's Q2 build changes its default `COVERMODE` from 1 to 0 in the reset config. The M1 build does
@@ -395,28 +374,6 @@ on Home (`home_library`, stock's `on_home_music_onclick`), Row Preview, Row Art 
 (`SONG_UNKNOWN_CALL`). The M1 builds Minimal and Modern only (`tools/m1plus.py` `m1_themes`, the themes on SET0
 alone) with no boot sites, and a stored `THEME` 1 is Modern there, as 1.6.4's Classic was. Porting it needs V2.1's
 row immediates for each set, its pages' copies at the M1's sizes, and the pane and Library on Home in portrait.
-
-### The press and natural-change timing
-
-1.6.5 to 1.6.7 time each start by what began it: a press (a scrub or chapter seek, Previous's restart, a pick of
-the playing file) waits for the DAC, and a natural change plays out before demo's mute and skips its 100 ms sleep
-(`START_MUTE_CALL`, `START_SLEEP_CALL`). Previous past 10 s asks before it restarts a held place
-(`player_seek_start`, `player_playtime`); a pick of the playing file keeps it playing (`player_start`, and
-`VIEW_QUEUE_RET`'s View Queue row); the skip past an unplayable file is no press (`UNPLAYABLE_NEXT_RET`). The M1
-runs the two hooks it already had (`start_playqueue`, `change_music`) with both return addresses at
-`M1_UNPORTED`, so they act as in 1.6.4. Resume's own seek reaches V2.1's `player_seek_time` through its trampoline.
-Port with V2.1's `mclStartPlayer` and the callers' return addresses pinned.
-
-### The player's 1.6.5 to 1.6.7 fixes
-
-`tools/peq.py` patches V1.32's hciplayer at new sites: the DAC release wait (`DAC_RELEASE`, `ao_uninit`), the DSD
-and ISO probes' stop stores, the stop and preload paths, a forced end of file, FLAC seeks (no sync scan, the gate
-exit, a cut inside metadata no longer hangs) and a status request mid-change that killed the player
-(`MEDIA_INFO_NULL`), with gapless lossy audio (`lavf_gapless.c`, `LAVF_PRIV`, `MOV_EDITS`, `MP3_FILL`). The M1's
-hciplayer takes `m1plus.PLAYER_PROFILE`'s words only. Of 1.6.7's player changes it takes the EQ gate's three loads
-(`eq_rate_gates`, V2.1's same words at `0x42ce24`) and the crossfade's skip and stop flags (`next_flag`,
-`stop_flag`). Each site needs its V2.1 word found. The two crash fixes, `MEDIA_INFO_NULL` and `FLAC_META_EOF`,
-are ported (round 1, progress 90).
 
 ### Playlists, Podcasts and Audiobooks as Shortcuts
 

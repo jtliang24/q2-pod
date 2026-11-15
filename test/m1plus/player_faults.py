@@ -5,8 +5,9 @@ over its socket as demo drives it. test/hci_natural.py's music_info_no_stream an
 (m1plus.PLAYER_PROFILE's media_info_null and flac_meta_eof).
 
 A get-music-info with no sh_audio gets the no-stream reply, and playback carries on; stock reads through NULL and the
-player dies. A FLAC cut inside its metadata ends the walk; stock reads the same blocks forever. The FLACs are written
-here (verbatim subframes), so the suite needs no encoder.
+player dies. A FLAC cut inside its metadata ends the walk; stock reads the same blocks forever. While a file plays,
+PLAYER_PROFILE's length_addr holds its length. The FLACs are written here (verbatim subframes), so the suite needs no
+encoder.
 Usage: test/m1plus/player_faults.py BUILD_DIR [PLAYER]  (PLAYER: another V2.1 hciplayer, e.g. BUILD_DIR/peq/stock-hciplayer,
 to see stock fail)"""
 import pathlib, random, shutil, struct, subprocess, sys
@@ -21,7 +22,7 @@ build = pathlib.Path(sys.argv[1]).resolve()
 player = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else build/'peq'/'hciplayer'
 work, root, aud = build/'player_faults', build/'player_faults'/'root', build/'player_faults'/'aud'
 AUTH = 0x43050c        # the licence check, called from 0x420ee8 as V1.32's 0x43084c
-LENGTH = 0xb10e68      # the length get-music-info reads (V1.32's 0xb10e84); 0 takes the length call's path
+LENGTH = PLAYER_PROFILE['length_addr']  # the length get-music-info reads (V1.32's 0xb10e84); 0 takes the length call's path
 WALK = PLAYER_PROFILE['flac_meta_eof'][0][0]  # the walk's length check, once per metadata block
 RATE, FRAMES = 44100, 54   # 54 blocks of 4096: 5 s
 failures = []
@@ -128,6 +129,23 @@ def music_info_no_stream():
             check(False, f'music info, no {name}: the player faulted: {x}')
 
 
+def length_word():
+    """While a file plays, PLAYER_PROFILE's length_addr (the payload's LENGTH: Crossfade's and the EQ carry's
+    near-end test) holds its whole seconds, the third field of get-music-info's reply. V2.1 stores the length there
+    at 0x421d74 (trunc of demuxer_get_time_length) and the bitrate, the reply's first field, at 0xb10e5c."""
+    p = Player()
+    p.song('a.flac')
+    p.run(1)
+    p.e.replies.clear()
+    p.e.send_cmd('{media-info\\get-music-info}')
+    p.run(0.2)
+    said = b''.join(p.e.replies)
+    info = said[said.find(b'{media-info\\') + 12:].split(b'}')[0].split(b'|')
+    seconds, word = FRAMES * 4096 // RATE, p.e.r32(PLAYER_PROFILE['length_addr'])
+    check(p.frames() > 0 and len(info) > 2 and info[2] == b'%d' % seconds, f'length: get-music-info says {info}')
+    check(word == seconds, f'length: 0x{PLAYER_PROFILE["length_addr"]:x} holds {word} while a {seconds} s file plays')
+
+
 def metadata_cut():
     """A FLAC that ends where a metadata header should be: the walk ends, not the same blocks forever. The walk is
     bounded here: past 1000 length checks it is stopped and counted a hang."""
@@ -150,6 +168,7 @@ if __name__ == '__main__':
     print(f'player: {player}')
     setup()
     music_info_no_stream()
+    length_word()
     metadata_cut()
     assert not failures, f'{len(failures)} failed: {failures}'
     shutil.rmtree(work)

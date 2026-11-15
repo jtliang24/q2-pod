@@ -16,6 +16,7 @@ build = pathlib.Path(sys.argv[1]).resolve()
 player = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else build/'peq'/'hciplayer'
 work, root, aud = build/'hci_ao', build/'hci_ao'/'root', build/'hci_ao'/'aud'
 AUTH, WAY = 0x43084c, 0xb10e54
+NEXT_FLAG, STOCK_UNINIT = 0xb10e6c, 0x43868c  # set-nexturl's skip flag; ao_alsa's uninit, which ao_uninit calls
 ps = symbols(build/'peq'/'peq.elf')
 TONE, SECONDS = 660, 1.5
 FILES = {'a44.flac': (44100, 2, 's16', 'flac'), 'b44.flac': (44100, 2, 's16', 'flac'), 'b48.flac': (48000, 2, 's16', 'flac'),
@@ -285,61 +286,61 @@ def replayed_right(p, held, reference):
     return n, left, back, since
 
 
-signal.alarm(1500)  # a spinning player fails the run
 # Reopens, with demo's mark: each at what its file is, the tone right and the level clean.
-setup()
-for second, rate, width in (('b48.flac', 48000, 2), ('c96.flac', 96000, 4), ('d44.flac', 44100, 2)):
+def reopens():
+    for second, rate, width in (('b48.flac', 48000, 2), ('c96.flac', 96000, 4), ('d44.flac', 44100, 2)):
+        p = Player()
+        p.cold('a44.flac', second)
+        assert len(p.e.streams) == 2 and p.looks == 0, (second, len(p.e.streams), p.looks)
+        pcm = p.e.pcm
+        if second == 'd44.flac':
+            assert pcm.ch == 1, pcm.ch
+        else:
+            assert pcm.rate == rate and pcm.bytes() // pcm.ch == width, (second, pcm.rate, pcm.fmt)
+        s = pcm.samples()
+        f, rms, peak = tone(s[len(s) // 4:], pcm.rate)
+        assert abs(f - TONE) < 2 and abs(rms / peak - 0.707) < 0.02 and peak < 0.75, (second, f, rms, peak)  # noise would crest and reach 1
+    # The same format stays open and whole: one PCM, the tone at its pitch all through, no frame lost.
+    for first, second in (('a44.flac', 'b44.flac'), ('a192.flac', 'b192.flac')):
+        p = Player()
+        p.cold(first, second)
+        pcm = p.e.pcm
+        assert len(p.e.streams) == 1 and pcm.lost == 0 and not pcm.forwards and p.looks == 1, (first, len(p.e.streams), pcm.lost, pcm.forwards, p.looks)
+        f, rms, peak = tone(pcm.samples(), pcm.rate)
+        assert abs(f - TONE) < 2 and abs(rms / peak - 0.707) < 0.03, (first, f, rms, peak)
+    # No mark: demo muted as stock, so stock's reopen.
     p = Player()
-    p.cold('a44.flac', second)
-    assert len(p.e.streams) == 2 and p.looks == 0, (second, len(p.e.streams), p.looks)
-    pcm = p.e.pcm
-    if second == 'd44.flac':
-        assert pcm.ch == 1, pcm.ch
-    else:
-        assert pcm.rate == rate and pcm.bytes() // pcm.ch == width, (second, pcm.rate, pcm.fmt)
-    s = pcm.samples()
-    f, rms, peak = tone(s[len(s) // 4:], pcm.rate)
-    assert abs(f - TONE) < 2 and abs(rms / peak - 0.707) < 0.02 and peak < 0.75, (second, f, rms, peak)  # noise would crest and reach 1
-# The same format stays open and whole: one PCM, the tone at its pitch all through, no frame lost.
-for first, second in (('a44.flac', 'b44.flac'), ('a192.flac', 'b192.flac')):
-    p = Player()
-    p.cold(first, second)
-    pcm = p.e.pcm
-    assert len(p.e.streams) == 1 and pcm.lost == 0 and not pcm.forwards and p.looks == 1, (first, len(p.e.streams), pcm.lost, pcm.forwards, p.looks)
-    f, rms, peak = tone(pcm.samples(), pcm.rate)
-    assert abs(f - TONE) < 2 and abs(rms / peak - 0.707) < 0.03, (first, f, rms, peak)
-# No mark: demo muted as stock, so stock's reopen.
-p = Player()
-p.cold('a44.flac', 'b44.flac', marked=False)
-assert len(p.e.streams) == 2
-print('Natural reopen: 44.1/16 to 48/16, 96/24 and mono each open a PCM at what the file is, the tone right; the same format stays open and whole.')
+    p.cold('a44.flac', 'b44.flac', marked=False)
+    assert len(p.e.streams) == 2
+    print('Natural reopen: 44.1/16 to 48/16, 96/24 and mono each open a PCM at what the file is, the tone right; the same format stays open and whole.')
 
 # The first write finds hw_ptr past appl_ptr by this many ms: the review's left values, with T the first block's decode.
 period = lambda pcm: pcm.buffer_frames // 16
-for way, route in ((0, 'cold'), (2, 'preload'), (2, 'cold')):
-    for first, second, excess_ms in (('a44.mp3', 'b44.mp3', 4.0), ('a44.mp3', 'b44.mp3', 19.0), ('a44.flac', 'b44.flac', 1.93), ('a192.flac', 'b192.flac', 0.78),
-                                     ('a192.flac', 'b192.flac', 40.0), ('a44.flac', 'b44.flac', 5.53)):
+def dry_first_write():
+    for way, route in ((0, 'cold'), (2, 'preload'), (2, 'cold')):
+        for first, second, excess_ms in (('a44.mp3', 'b44.mp3', 4.0), ('a44.mp3', 'b44.mp3', 19.0), ('a44.flac', 'b44.flac', 1.93), ('a192.flac', 'b192.flac', 0.78),
+                                         ('a192.flac', 'b192.flac', 40.0), ('a44.flac', 'b44.flac', 5.53)):
+            p = Player(way)
+            rate = FILES[first][0]
+            p.excess = int(excess_ms * rate / 1000)
+            want = p.excess
+            (p.cold if route == 'cold' else p.preloaded)(first, second)
+            pcm = p.e.pcm
+            assert p.jumped == 1 and len(p.e.streams) == 1, (way, first, excess_ms, p.jumped, len(p.e.streams))
+            assert pcm.lost == 0, (way, first, excess_ms, pcm.lost)
+            assert len(pcm.forwards) == 1 and want <= pcm.forwards[0] <= want + period(pcm) + rate // 1000, (way, first, pcm.forwards, want)
+            s = pcm.samples()
+            hole = run = 0
+            for v in s:
+                run = run + 1 if v == 0 else 0
+                hole = max(hole, run)
+            assert hole <= want + period(pcm) + rate // 500, (way, first, excess_ms, hole)
+        # Not yet past: nothing moved, one read more than the check at init.
         p = Player(way)
-        rate = FILES[first][0]
-        p.excess = int(excess_ms * rate / 1000)
-        want = p.excess
-        (p.cold if route == 'cold' else p.preloaded)(first, second)
-        pcm = p.e.pcm
-        assert p.jumped == 1 and len(p.e.streams) == 1, (way, first, excess_ms, p.jumped, len(p.e.streams))
-        assert pcm.lost == 0, (way, first, excess_ms, pcm.lost)
-        assert len(pcm.forwards) == 1 and want <= pcm.forwards[0] <= want + period(pcm) + rate // 1000, (way, first, pcm.forwards, want)
-        s = pcm.samples()
-        hole = run = 0
-        for v in s:
-            run = run + 1 if v == 0 else 0
-            hole = max(hole, run)
-        assert hole <= want + period(pcm) + rate // 500, (way, first, excess_ms, hole)
-    # Not yet past: nothing moved, one read more than the check at init.
-    p = Player(way)
-    p.excess = -200
-    (p.cold if route == 'cold' else p.preloaded)('a44.flac', 'b44.flac')
-    assert p.e.pcm.lost == 0 and not p.e.pcm.forwards, way
-print('Kept PCM run dry by the first write: on the jack and USB, at 44.1 and 192 kHz, FLAC and MP3, appl_ptr moves past hw_ptr; no frame lost, a gap of the deficit and a period.')
+        p.excess = -200
+        (p.cold if route == 'cold' else p.preloaded)('a44.flac', 'b44.flac')
+        assert p.e.pcm.lost == 0 and not p.e.pcm.forwards, way
+    print('Kept PCM run dry by the first write: on the jack and USB, at 44.1 and 192 kHz, FLAC and MP3, appl_ptr moves past hw_ptr; no frame lost, a gap of the deficit and a period.')
 # Crossfade in stock Shuffle: the filter in the chain, a fade asked, the held tail mixed under the next file's first frames.
 def fade(second, excess, way=0):
     p = Player(way)
@@ -357,62 +358,66 @@ def fade(second, excess, way=0):
     p.song(second)
     p.run(4)
     return p, mixes[0]
-p, total = fade('g44.flac', 96)  # 96 frames past, the review's Crossfade case
-pcm = p.e.pcm
-assert total > 0 and len(p.e.streams) == 1 and pcm.lost == 0 and len(pcm.forwards) == 1, (total, len(p.e.streams), pcm.lost, pcm.forwards)
-assert total > 40000, total  # the 1 s tail, held to the first block, is the mix's whole length
-p, total = fade('g44.flac', 96, 2)  # USB's dry first write takes the same forward
-pcm = p.e.pcm
-assert total > 40000 and len(p.e.streams) == 1 and pcm.lost == 0 and len(pcm.forwards) == 1, (total, len(p.e.streams), pcm.lost, pcm.forwards)
-# Across a rate: a reopen, drained, at the new rate, and the tail still mixes after it.
-p, total = fade('h48.flac', None)
-assert len(p.e.streams) == 2 and p.e.pcm.rate == 48000 and p.e.pcm.lost == 0 and total > 40000, (len(p.e.streams), p.e.pcm.rate, total)
-print('Crossfade in Shuffle: at the same format one PCM and the whole tail mixed, past a dry first write too; across a rate one reopen and the tail mixed after it.')
+def crossfade_shuffle():
+    p, total = fade('g44.flac', 96)  # 96 frames past, the review's Crossfade case
+    pcm = p.e.pcm
+    assert total > 0 and len(p.e.streams) == 1 and pcm.lost == 0 and len(pcm.forwards) == 1, (total, len(p.e.streams), pcm.lost, pcm.forwards)
+    assert total > 40000, total  # the 1 s tail, held to the first block, is the mix's whole length
+    p, total = fade('g44.flac', 96, 2)  # USB's dry first write takes the same forward
+    pcm = p.e.pcm
+    assert total > 40000 and len(p.e.streams) == 1 and pcm.lost == 0 and len(pcm.forwards) == 1, (total, len(p.e.streams), pcm.lost, pcm.forwards)
+    # Across a rate: a reopen, drained, at the new rate, and the tail still mixes after it.
+    p, total = fade('h48.flac', None)
+    assert len(p.e.streams) == 2 and p.e.pcm.rate == 48000 and p.e.pcm.lost == 0 and total > 40000, (len(p.e.streams), p.e.pcm.rate, total)
+    print('Crossfade in Shuffle: at the same format one PCM and the whole tail mixed, past a dry first write too; across a rate one reopen and the tail mixed after it.')
 # Pause soon after a natural change: the kept frames against the PCM's timeline.
 def reference(first, second, xfade=0, seconds=3):
     p = natural_into(first, second, None, xfade)
     p.run(seconds)
     return written(p.e.pcm.chunks)
-plain = reference('n1.flac', 'n2.flac')
-for after in 0.02, 0.1, 0.4, 1.0:  # the fade's start in the old track, then the new
-    p = natural_into('n1.flac', 'n2.flac')
-    held = pause_resume(p, after)
+def pause_after_natural():
+    plain = reference('n1.flac', 'n2.flac')
+    for after in 0.02, 0.1, 0.4, 1.0:  # the fade's start in the old track, then the new
+        p = natural_into('n1.flac', 'n2.flac')
+        held = pause_resume(p, after)
+        p.run(2.5)
+        got = replayed_right(p, held, plain)
+        assert got != 'stock' and got[0] == got[1] + got[2], (after, got)  # the whole way back to the fade
+    # The first write forwarded past a dry ring: what goes back is the new track's only, whatever the fade's age, and the
+    # hole is never filled with the old track's frames. (A pause with the hole still to play: test/bt_resample.py.)
+    for after in 0.002, 0.04, 0.1, 0.4:
+        p = natural_into('n1.flac', 'n2.flac', excess=88)
+        held = pause_resume(p, after)
+        p.run(2.5)
+        pcm = p.e.pcm
+        assert len(pcm.forwards) == 1 and len(p.e.streams) == 1 and pcm.lost == 0, (after, pcm.forwards, pcm.lost)
+        got = replayed_right(p, held, None)
+        assert got != 'stock', (after, got)
+    print('Pause after a natural change: from the fade across the seam, every frame right; after a forward, only the new track goes back.')
+def pause_in_mix():
+    # Pause inside Crossfade's mix on the PCM that stayed open: the mix's frames go back as they were written.
+    mixed = reference('f44.flac', 'g44.flac', 1000)
+    p = natural_into('f44.flac', 'g44.flac', None, 1000)
+    held = pause_resume(p, 0.3)
+    assert p.e.r32(ps['xf'] + 12) > 40000, 'mixing'
     p.run(2.5)
-    got = replayed_right(p, held, plain)
-    assert got != 'stock' and got[0] == got[1] + got[2], (after, got)  # the whole way back to the fade
-# The first write forwarded past a dry ring: what goes back is the new track's only, whatever the fade's age, and the
-# hole is never filled with the old track's frames. (A pause with the hole still to play: test/bt_resample.py.)
-for after in 0.002, 0.04, 0.1, 0.4:
-    p = natural_into('n1.flac', 'n2.flac', excess=88)
-    held = pause_resume(p, after)
-    p.run(2.5)
-    pcm = p.e.pcm
-    assert len(pcm.forwards) == 1 and len(p.e.streams) == 1 and pcm.lost == 0, (after, pcm.forwards, pcm.lost)
-    got = replayed_right(p, held, None)
-    assert got != 'stock', (after, got)
-print('Pause after a natural change: from the fade across the seam, every frame right; after a forward, only the new track goes back.')
-# Pause inside Crossfade's mix on the PCM that stayed open: the mix's frames go back as they were written.
-mixed = reference('f44.flac', 'g44.flac', 1000)
-p = natural_into('f44.flac', 'g44.flac', None, 1000)
-held = pause_resume(p, 0.3)
-assert p.e.r32(ps['xf'] + 12) > 40000, 'mixing'
-p.run(2.5)
-assert len(p.e.streams) == 1, len(p.e.streams)
-assert replayed_right(p, held, mixed) != 'stock'
-print('Pause inside the mix on a stayed-open PCM: the mix resumes where the fade began, nothing lost.')
-# Bluetooth and USB: writes leave the kept frames empty, a kept PCM included, and a resume is stock's.
-for way in 1, 2:
-    p = Player(way)
-    p.song('n1.flac')
-    p.run(0.2)
-    p.gapless('n2.flac')
-    held = pause_resume(p, 1.5)  # n2 under way, on the PCM n1 opened
-    p.run(0.3)
-    pcm = p.e.pcm
-    fill, ring = p.e.r32(ps['ps.1']), bytes(p.e.u.mem_read(ps['ps_ring'], 1 << 16))
-    assert fill == 0 and not any(ring) and pcm.released == 1 and not pcm.epochs, (way, fill, pcm.released, len(pcm.epochs))
-    assert len(p.e.streams) == 1, (way, len(p.e.streams))
-print('Bluetooth and USB: a write keeps nothing beside the ring, a kept PCM too, and an unpause is stock\'s.')
+    assert len(p.e.streams) == 1, len(p.e.streams)
+    assert replayed_right(p, held, mixed) != 'stock'
+    print('Pause inside the mix on a stayed-open PCM: the mix resumes where the fade began, nothing lost.')
+def outputs_keep_nothing():
+    # Bluetooth and USB: writes leave the kept frames empty, a kept PCM included, and a resume is stock's.
+    for way in 1, 2:
+        p = Player(way)
+        p.song('n1.flac')
+        p.run(0.2)
+        p.gapless('n2.flac')
+        held = pause_resume(p, 1.5)  # n2 under way, on the PCM n1 opened
+        p.run(0.3)
+        pcm = p.e.pcm
+        fill, ring = p.e.r32(ps['ps.1']), bytes(p.e.u.mem_read(ps['ps_ring'], 1 << 16))
+        assert fill == 0 and not any(ring) and pcm.released == 1 and not pcm.epochs, (way, fill, pcm.released, len(pcm.epochs))
+        assert len(p.e.streams) == 1, (way, len(p.e.streams))
+    print('Bluetooth and USB: a write keeps nothing beside the ring, a kept PCM too, and an unpause is stock\'s.')
 # A track under the exit hold, then a natural reopen: one wait, the drain whole, and none at all for a track of 300 ms or more.
 HOLD_AFTER = 0x4226dc  # past exit_hold's jal and its delay slot
 def short_then_reopen(short):
@@ -435,36 +440,39 @@ def short_then_reopen(short):
     assert [d['left'] > 0 for d in drains] == [True, False], (short, drains)  # ao_init's, then stock's own on a drained PCM
     assert written(pcm.chunks) == middle, short  # what the first PCM ended with reached the drain untouched
     return (left[1] - enter[1]) / 1e9, (left[1] - left[0]) / 1e9, drains[0]['left']
-hold, apart, _ = short_then_reopen('t100.flac')
-assert 0 < hold <= 0.3 and apart >= 0.299, (hold, apart)
-hold, apart, _ = short_then_reopen('t400.flac')
-assert hold == 0 and apart >= 0.299, (hold, apart)
-print('A track under the exit hold, then a reopen: its exit waits once, the drain runs whole; a 400 ms track waits for nothing.')
-# The other trims on the stay-open route: the same frames as a preload's, whose seams test/player_seam.py and
-# test/mp3_gapless_player.py measure in samples, so the seam is what it was and the level can't step.
-for first, second in (('c1.mp3', 'c2.mp3'), ('c1.m4a', 'c2.m4a'), ('c1.opus', 'c2.opus'), ('c1.ogg', 'c2.ogg')):
-    p = Player()
-    p.preloaded(first, second)
-    want = written(p.e.pcm.chunks)
-    p = Player()
-    p.cold(first, second)
-    pcm = p.e.pcm
-    assert len(p.e.streams) == 1 and not pcm.lost and not pcm.forwards, (first, len(p.e.streams), pcm.lost, pcm.forwards)
-    got = written(pcm.chunks)
-    assert got == want, (first, len(got), len(want))
-print('MP3, AAC in M4A, Opus and Vorbis on the stay-open route: frame for frame what a preload gives.')
+def exit_hold_reopen():
+    hold, apart, _ = short_then_reopen('t100.flac')
+    assert 0 < hold <= 0.3 and apart >= 0.299, (hold, apart)
+    hold, apart, _ = short_then_reopen('t400.flac')
+    assert hold == 0 and apart >= 0.299, (hold, apart)
+    print('A track under the exit hold, then a reopen: its exit waits once, the drain runs whole; a 400 ms track waits for nothing.')
+def trims_stay_open():
+    # The other trims on the stay-open route: the same frames as a preload's, whose seams test/player_seam.py and
+    # test/mp3_gapless_player.py measure in samples, so the seam is what it was and the level can't step.
+    for first, second in (('c1.mp3', 'c2.mp3'), ('c1.m4a', 'c2.m4a'), ('c1.opus', 'c2.opus'), ('c1.ogg', 'c2.ogg')):
+        p = Player()
+        p.preloaded(first, second)
+        want = written(p.e.pcm.chunks)
+        p = Player()
+        p.cold(first, second)
+        pcm = p.e.pcm
+        assert len(p.e.streams) == 1 and not pcm.lost and not pcm.forwards, (first, len(p.e.streams), pcm.lost, pcm.forwards)
+        got = written(pcm.chunks)
+        assert got == want, (first, len(got), len(want))
+    print('MP3, AAC in M4A, Opus and Vorbis on the stay-open route: frame for frame what a preload gives.')
 # Crossfade's hold on the stay-open route: the level through hold, mix and on stays flat.
 def windows(v, rate, ms=500):  # pink noise swings over 2 dB by itself in 100 ms
     n = rate * ms // 1000
     return [math.sqrt(sum(x * x for x in v[i:i + n]) / n) for i in range(0, len(v) - n, n)]
-p = natural_into('n5.flac', 'n6.flac', None, 1000)
-assert p.e.r32(ps['xf'] + 12) > 40000, 'mixing'
-p.run(3)
-assert len(p.e.streams) == 1, len(p.e.streams)
-levels = windows(p.e.pcm.samples(), 44100)
-mid = sorted(levels)[len(levels) // 2]
-assert mid > 0.01 and all(abs(20 * math.log10(max(x, 1e-6) / mid)) < 1.5 for x in levels[1:-1]), [round(x, 3) for x in levels]
-print('Crossfade on the stay-open route: the level stays within 1.5 dB through the hold and the mix.')
+def crossfade_level():
+    p = natural_into('n5.flac', 'n6.flac', None, 1000)
+    assert p.e.r32(ps['xf'] + 12) > 40000, 'mixing'
+    p.run(3)
+    assert len(p.e.streams) == 1, len(p.e.streams)
+    levels = windows(p.e.pcm.samples(), 44100)
+    mid = sorted(levels)[len(levels) // 2]
+    assert mid > 0.01 and all(abs(20 * math.log10(max(x, 1e-6) / mid)) < 1.5 for x in levels[1:-1]), [round(x, 3) for x in levels]
+    print('Crossfade on the stay-open route: the level stays within 1.5 dB through the hold and the mix.')
 # Bluetooth and USB, real chain, with a volume: way 1 writes zeros without one. What leaves the player is compared.
 def heard(way, transport=None):
     p = Player(way, transport)
@@ -475,63 +483,66 @@ def heard(way, transport=None):
 ROUTES = (1, None), (1, 96000), (2, None)  # Bluetooth at AAC's and SBC's 48 kHz, at LDAC's 96 kHz; a USB DAC
 def out_rate(way, transport, name):
     return transport or (48000 if way == 1 else FILES.get(name, (44100,))[0])
-# The same format: one PCM and every frame as a preload writes it, the resampler's carried tail in its place and none
-# at the next track's head beyond that.
-for way, transport in ROUTES:
-    for first, second in (('n1.flac', 'n2.flac'), ('a44.flac', 'b44.flac'), ('h48.flac', 'b48.flac')):
-        p = heard(way, transport)
-        p.preloaded(first, second)
-        p.run(1.5)
-        want = written(p.e.pcm.chunks)
-        assert len(p.e.streams) == 1, (way, transport, first)
-        p = heard(way, transport)
-        p.cold(first, second, marked=False)
-        p.run(1.5)
-        pcm = p.e.pcm
-        assert len(p.e.streams) == 1 and pcm.lost == 0 and not pcm.forwards, (way, transport, first, len(p.e.streams), pcm.lost, pcm.forwards)
-        assert pcm.rate == out_rate(way, transport, first), (way, transport, first, pcm.rate)
-        assert written(pcm.chunks) == want and any(want), (way, transport, first, len(written(pcm.chunks)), len(want))
-        seconds = sum(NOISE_SECONDS.get(n) or LONG.get(n, SECONDS) for n in (first, second))
-        assert abs(len(want) // pcm.bytes() - seconds * pcm.rate) < 64, (way, transport, first, len(want) // pcm.bytes())
-        if first[0] != 'n':
-            s = pcm.samples()
-            f, rms, peak = tone(s, pcm.rate)
-            assert abs(f - TONE) < 2 and abs(rms / peak - 0.707) < 0.03, (way, transport, first, f, rms, peak)
-print('Bluetooth at 48 and 96 kHz and USB, with a volume, a plain cold change: one PCM, frame for frame a preload\'s, the tone right.')
-# Another file rate on Bluetooth: the request is a constant, so the PCM stays and the chain's resampler changes. The
-# pitch holds on both sides of the change.
-for transport in (None, 96000):
-    for first, second in (('a44.flac', 'b48.flac'), ('h48.flac', 'b44.flac')):
-        p = heard(1, transport)
-        p.cold(first, second, marked=False)
-        p.run(1.5)
-        pcm = p.e.pcm
-        assert len(p.e.streams) == 1 and pcm.lost == 0, (transport, first, len(p.e.streams), pcm.lost)
-        s, rate = pcm.samples(), pcm.rate
-        change = int(LONG.get(first, SECONDS) * rate)
-        frames = len(written(pcm.chunks)) // pcm.bytes()
-        assert abs(frames - change - SECONDS * rate) < 64, (transport, first, frames)
-        for part in s[:change], s[change:]:
-            f, rms, peak = tone(part, rate)
-            assert abs(f - TONE) < 2 and abs(rms / peak - 0.707) < 0.03, (transport, first, f, rms, peak)
-print('Bluetooth, 44.1 and 48 kHz files either way round: one PCM, the pitch right on each side, at 48 and 96 kHz.')
-# Gapless off, another bit depth and channels: a reopen; nothing of the old track lost.
-for way, transport in ROUTES:
-    for second, keep in (('b44.flac', 0), ('c96.flac', 1), ('d44.flac', 1)):
-        p = heard(way, transport)
-        p.song('a44.flac')
-        assert p.until(p.ended, 8)
-        p.song(second, keep)
-        p.run(SECONDS + 0.8)
-        assert len(p.e.streams) == 2, (way, transport, second, keep, len(p.e.streams))
-        assert all(pcm.lost == 0 for pcm in p.e.streams), (way, transport, second)
-        assert any(k['left'] > 0 for _, n, k in p.e.events if n == 'pcm_drain'), (way, transport, second)
-        for pcm in p.e.streams:
-            f, rms, peak = tone(pcm.samples(), pcm.rate)
-            assert abs(f - TONE) < 2 and peak > 0.3 and abs(rms / peak - 0.707) < 0.03, (way, transport, second, f, rms, peak)
+def outputs_cold():
+    # The same format: one PCM and every frame as a preload writes it, the resampler's carried tail in its place and none
+    # at the next track's head beyond that.
+    for way, transport in ROUTES:
+        for first, second in (('n1.flac', 'n2.flac'), ('a44.flac', 'b44.flac'), ('h48.flac', 'b48.flac')):
+            p = heard(way, transport)
+            p.preloaded(first, second)
+            p.run(1.5)
+            want = written(p.e.pcm.chunks)
+            assert len(p.e.streams) == 1, (way, transport, first)
+            p = heard(way, transport)
+            p.cold(first, second, marked=False)
+            p.run(1.5)
+            pcm = p.e.pcm
+            assert len(p.e.streams) == 1 and pcm.lost == 0 and not pcm.forwards, (way, transport, first, len(p.e.streams), pcm.lost, pcm.forwards)
+            assert pcm.rate == out_rate(way, transport, first), (way, transport, first, pcm.rate)
+            assert written(pcm.chunks) == want and any(want), (way, transport, first, len(written(pcm.chunks)), len(want))
+            seconds = sum(NOISE_SECONDS.get(n) or LONG.get(n, SECONDS) for n in (first, second))
+            assert abs(len(want) // pcm.bytes() - seconds * pcm.rate) < 64, (way, transport, first, len(want) // pcm.bytes())
+            if first[0] != 'n':
+                s = pcm.samples()
+                f, rms, peak = tone(s, pcm.rate)
+                assert abs(f - TONE) < 2 and abs(rms / peak - 0.707) < 0.03, (way, transport, first, f, rms, peak)
+    print('Bluetooth at 48 and 96 kHz and USB, with a volume, a plain cold change: one PCM, frame for frame a preload\'s, the tone right.')
+def bluetooth_rate():
+    # Another file rate on Bluetooth: the request is a constant, so the PCM stays and the chain's resampler changes. The
+    # pitch holds on both sides of the change.
+    for transport in (None, 96000):
+        for first, second in (('a44.flac', 'b48.flac'), ('h48.flac', 'b44.flac')):
+            p = heard(1, transport)
+            p.cold(first, second, marked=False)
+            p.run(1.5)
+            pcm = p.e.pcm
+            assert len(p.e.streams) == 1 and pcm.lost == 0, (transport, first, len(p.e.streams), pcm.lost)
+            s, rate = pcm.samples(), pcm.rate
+            change = int(LONG.get(first, SECONDS) * rate)
             frames = len(written(pcm.chunks)) // pcm.bytes()
-            assert abs(frames - SECONDS * pcm.rate) < 64, (way, transport, second, frames)  # the resampler's few short of a file
-print('Bluetooth and USB: Gapless off, another bit depth and channels reopen, with what the buffer held drained first, tone and level right on both sides.')
+            assert abs(frames - change - SECONDS * rate) < 64, (transport, first, frames)
+            for part in s[:change], s[change:]:
+                f, rms, peak = tone(part, rate)
+                assert abs(f - TONE) < 2 and abs(rms / peak - 0.707) < 0.03, (transport, first, f, rms, peak)
+    print('Bluetooth, 44.1 and 48 kHz files either way round: one PCM, the pitch right on each side, at 48 and 96 kHz.')
+def outputs_reopen():
+    # Gapless off, another bit depth and channels: a reopen; nothing of the old track lost.
+    for way, transport in ROUTES:
+        for second, keep in (('b44.flac', 0), ('c96.flac', 1), ('d44.flac', 1)):
+            p = heard(way, transport)
+            p.song('a44.flac')
+            assert p.until(p.ended, 8)
+            p.song(second, keep)
+            p.run(SECONDS + 0.8)
+            assert len(p.e.streams) == 2, (way, transport, second, keep, len(p.e.streams))
+            assert all(pcm.lost == 0 for pcm in p.e.streams), (way, transport, second)
+            assert any(k['left'] > 0 for _, n, k in p.e.events if n == 'pcm_drain'), (way, transport, second)
+            for pcm in p.e.streams:
+                f, rms, peak = tone(pcm.samples(), pcm.rate)
+                assert abs(f - TONE) < 2 and peak > 0.3 and abs(rms / peak - 0.707) < 0.03, (way, transport, second, f, rms, peak)
+                frames = len(written(pcm.chunks)) // pcm.bytes()
+                assert abs(frames - SECONDS * pcm.rate) < 64, (way, transport, second, frames)  # the resampler's few short of a file
+    print('Bluetooth and USB: Gapless off, another bit depth and channels reopen, with what the buffer held drained first, tone and level right on both sides.')
 # Bluetooth with the next track late: under BT_STAY_MS of the ring left, stock's reopen and its Drain; more, it stays.
 def late(ms_left, transport=None):
     p = heard(1, transport)
@@ -542,13 +553,14 @@ def late(ms_left, transport=None):
     p.song('b44.flac')
     p.run(SECONDS + 0.8)
     return p
-for transport in (None, 96000):
-    p = late(300, transport)
-    assert len(p.e.streams) == 1 and not [k for _, n, k in p.e.events if n == 'pcm_drain'], (transport, len(p.e.streams))
-    p = late(120, transport)
-    drains = [k['left'] for _, n, k in p.e.events if n == 'pcm_drain']
-    assert len(p.e.streams) == 2 and drains and drains[0] > 0, (transport, len(p.e.streams), drains)
-print('Bluetooth, the next track late: 300 ms left stays on one PCM; 120 ms left reopens through stock\'s Drain.')
+def bluetooth_late():
+    for transport in (None, 96000):
+        p = late(300, transport)
+        assert len(p.e.streams) == 1 and not [k for _, n, k in p.e.events if n == 'pcm_drain'], (transport, len(p.e.streams))
+        p = late(120, transport)
+        drains = [k['left'] for _, n, k in p.e.events if n == 'pcm_drain']
+        assert len(p.e.streams) == 2 and drains and drains[0] > 0, (transport, len(p.e.streams), drains)
+    print('Bluetooth, the next track late: 300 ms left stays on one PCM; 120 ms left reopens through stock\'s Drain.')
 # Crossfade in Shuffle: the whole tail mixed over one PCM, the level flat, and across a rate on Bluetooth the pitch right.
 def fade_over(way, transport, first, second, preload=False):
     p = heard(way, transport)
@@ -576,36 +588,38 @@ def holes(s):
         run = run + 1 if v == 0 else 0
         worst = max(worst, run)
     return worst
-for way, transport in ROUTES:
-    p = fade_over(way, transport, 'n5.flac', 'n6.flac')
-    pcm = p.e.pcm
-    assert len(p.e.streams) == 1 and pcm.lost == 0 and not pcm.forwards, (way, transport, len(p.e.streams), pcm.lost, pcm.forwards)
-    levels = windows(pcm.samples(), pcm.rate)
-    mid = sorted(levels)[len(levels) // 2]
-    assert mid > 0.01 and all(abs(20 * math.log10(max(x, 1e-6) / mid)) < 1.5 for x in levels[1:-1]), (way, transport, [round(x, 3) for x in levels])
-    assert holes(pcm.samples()) < pcm.rate // 100, (way, transport, holes(pcm.samples()))
-    assert as_preload(pcm, fade_over(way, transport, 'n5.flac', 'n6.flac', True).e.pcm), (way, transport)
-for transport in (None, 96000):
-    p = fade_over(1, transport, 'f44.flac', 'h48.flac')
-    pcm = p.e.pcm
-    assert len(p.e.streams) == 1 and pcm.lost == 0, (transport, len(p.e.streams), pcm.lost)
-    f, rms, peak = tone(pcm.samples(), pcm.rate)
-    assert abs(f - TONE) < 2 and holes(pcm.samples()) < pcm.rate // 100, (transport, f)
-    assert as_preload(pcm, fade_over(1, transport, 'f44.flac', 'h48.flac', True).e.pcm), transport
-print('Crossfade on Bluetooth at 48 and 96 kHz and on USB: one PCM, within 1.5 dB through the hold and the mix, the whole tail mixed; across a rate on Bluetooth the pitch holds.')
-# A real DSD end stays stock's on either way.
-for way in 1, 2:
-    p = heard(way)
-    p.song('z.dsf')
-    ends = []
-    p.e.watch_fn(ps['ao_uninit'], lambda e: ends.append(e.clock))
-    assert p.until(lambda: ends, 8), way
-    p.run(0.02)
-    assert p.e.pcm.appl > 0 and p.e.r32(ps['ao_natural']) == 0, way
-    p.song('b44.flac')
-    p.run(SECONDS + 0.8)
-    assert len(p.e.streams) == 2, (way, len(p.e.streams))
-print('A DSD file\'s end on Bluetooth and USB: not taken as natural, and the next file reopens.')
+def crossfade_outputs():
+    for way, transport in ROUTES:
+        p = fade_over(way, transport, 'n5.flac', 'n6.flac')
+        pcm = p.e.pcm
+        assert len(p.e.streams) == 1 and pcm.lost == 0 and not pcm.forwards, (way, transport, len(p.e.streams), pcm.lost, pcm.forwards)
+        levels = windows(pcm.samples(), pcm.rate)
+        mid = sorted(levels)[len(levels) // 2]
+        assert mid > 0.01 and all(abs(20 * math.log10(max(x, 1e-6) / mid)) < 1.5 for x in levels[1:-1]), (way, transport, [round(x, 3) for x in levels])
+        assert holes(pcm.samples()) < pcm.rate // 100, (way, transport, holes(pcm.samples()))
+        assert as_preload(pcm, fade_over(way, transport, 'n5.flac', 'n6.flac', True).e.pcm), (way, transport)
+    for transport in (None, 96000):
+        p = fade_over(1, transport, 'f44.flac', 'h48.flac')
+        pcm = p.e.pcm
+        assert len(p.e.streams) == 1 and pcm.lost == 0, (transport, len(p.e.streams), pcm.lost)
+        f, rms, peak = tone(pcm.samples(), pcm.rate)
+        assert abs(f - TONE) < 2 and holes(pcm.samples()) < pcm.rate // 100, (transport, f)
+        assert as_preload(pcm, fade_over(1, transport, 'f44.flac', 'h48.flac', True).e.pcm), transport
+    print('Crossfade on Bluetooth at 48 and 96 kHz and on USB: one PCM, within 1.5 dB through the hold and the mix, the whole tail mixed; across a rate on Bluetooth the pitch holds.')
+def dsd_end():
+    # A real DSD end stays stock's on either way.
+    for way in 1, 2:
+        p = heard(way)
+        p.song('z.dsf')
+        ends = []
+        p.e.watch_fn(ps['ao_uninit'], lambda e: ends.append(e.clock))
+        assert p.until(lambda: ends, 8), way
+        p.run(0.02)
+        assert p.e.pcm.appl > 0 and p.e.r32(ps['ao_natural']) == 0, way
+        p.song('b44.flac')
+        p.run(SECONDS + 0.8)
+        assert len(p.e.streams) == 2, (way, len(p.e.streams))
+    print('A DSD file\'s end on Bluetooth and USB: not taken as natural, and the next file reopens.')
 # The jack's natural start, demo's mute and sleep skipped: the line lets go, then DAC_RELEASE_MS, then frames, once.
 # The routes ao_init's branch doesn't take read the mark at init's end. Time from the release to hw_ptr's start.
 def released(first, second, marked=True, preload=False):
@@ -624,38 +638,56 @@ def released(first, second, marked=True, preload=False):
         p.song(second)
     p.run(1)
     return (p.e.pcm.hw_at - freed[-1]) // 10**6, len(freed), len(p.e.streams)
-for first, second in (('a44.flac', 'z.dsf'), ('z.dsf', 'y.dsf'), ('z.dsf', 'b44.flac'), ('a44.flac', 'b48.flac')):
-    wait, opens, pcms = released(first, second)
-    assert wait == 130 and opens == 2 and pcms == 2, (first, second, wait, opens, pcms)
-# No mark: demo muted and slept as stock, so stock's timing. A preloaded change at another format waits once, the same.
-wait, opens, pcms = released('a44.flac', 'z.dsf', marked=False)
-assert wait == 0 and pcms == 2, (wait, pcms)
-wait, opens, pcms = released('a44.flac', 'b48.flac', preload=True)
-assert wait == 130 and pcms == 2, (wait, pcms)
-# The same format stays open: nothing to release, no wait, and a preload the same.
-for preload in (False, True):
-    wait, opens, pcms = released('a44.flac', 'b44.flac', preload=preload)
-    assert opens == 1 and pcms == 1, (preload, opens, pcms)
-# A natural end out of DSD waits with no mark: a preload, where demo has no mute, and a cold one. The flag also reads 1 at
-# a PCM track's end into a preloaded DSD one, so that waits too. Into DSD with no preload and no mark, and PCM to PCM, as before.
-for first, second, preload in (('z.dsf', 'b44.flac', True), ('z.dsf', 'y.dsf', True), ('z.dsf', 'b44.flac', False), ('a44.flac', 'z.dsf', True)):
-    wait, opens, pcms = released(first, second, marked=False, preload=preload)
-    assert wait == 130 and opens == 2 and pcms == 2, (first, second, preload, wait, opens, pcms)
-wait, opens, pcms = released('a44.flac', 'b48.flac', marked=False)
-assert wait == 0 and pcms == 2, (wait, pcms)
+def jack_release():
+    for first, second in (('a44.flac', 'z.dsf'), ('z.dsf', 'y.dsf'), ('z.dsf', 'b44.flac'), ('a44.flac', 'b48.flac')):
+        wait, opens, pcms = released(first, second)
+        assert wait == 130 and opens == 2 and pcms == 2, (first, second, wait, opens, pcms)
+    # No mark: demo muted and slept as stock, so stock's timing. A preloaded change at another format waits once, the same.
+    wait, opens, pcms = released('a44.flac', 'z.dsf', marked=False)
+    assert wait == 0 and pcms == 2, (wait, pcms)
+    wait, opens, pcms = released('a44.flac', 'b48.flac', preload=True)
+    assert wait == 130 and pcms == 2, (wait, pcms)
+    # The same format stays open: nothing to release, no wait, and a preload the same.
+    for preload in (False, True):
+        wait, opens, pcms = released('a44.flac', 'b44.flac', preload=preload)
+        assert opens == 1 and pcms == 1, (preload, opens, pcms)
+    # A natural end out of DSD waits with no mark: a preload, where demo has no mute, and a cold one. The flag also reads 1 at
+    # a PCM track's end into a preloaded DSD one, so that waits too. Into DSD with no preload and no mark, and PCM to PCM, as before.
+    for first, second, preload in (('z.dsf', 'b44.flac', True), ('z.dsf', 'y.dsf', True), ('z.dsf', 'b44.flac', False), ('a44.flac', 'z.dsf', True)):
+        wait, opens, pcms = released(first, second, marked=False, preload=preload)
+        assert wait == 130 and opens == 2 and pcms == 2, (first, second, preload, wait, opens, pcms)
+    wait, opens, pcms = released('a44.flac', 'b48.flac', marked=False)
+    assert wait == 0 and pcms == 2, (wait, pcms)
 # ao_uninit's own word, as stock's uninit starts: a natural end out of DSD sets it; the same end cut by a press, and PCM's end, don't.
 def uninit_word(first, second, pressed):
     p = Player()
     words = []
-    if pressed: p.e.watch_fn(ps['ao_uninit'], lambda e: e.w32(0xb10e6c, 1))
-    p.e.watch_fn(0x43868c, lambda e: words.append(e.r32(ps['ao_wait'])))
+    if pressed: p.e.watch_fn(ps['ao_uninit'], lambda e: e.w32(NEXT_FLAG, 1))
+    p.e.watch_fn(STOCK_UNINIT, lambda e: words.append(e.r32(ps['ao_wait'])))
     p.song(first)
     p.run(0.2)
     p.gapless(second)
     assert p.until(lambda: words, 8), (first, pressed)
     return words[0]
-assert uninit_word('z.dsf', 'b44.flac', False) == 1
-assert uninit_word('z.dsf', 'b44.flac', True) == 0
-assert uninit_word('a44.flac', 'b48.flac', False) == 0
-print('The jack, a natural start: DSD on either side and another format wait once before frames; a natural end out of DSD waits with no mark, a press-cut one sets no word; a stay-open adds none.')
-shutil.rmtree(work, ignore_errors=True)
+def uninit_words():
+    assert uninit_word('z.dsf', 'b44.flac', False) == 1
+    assert uninit_word('z.dsf', 'b44.flac', True) == 0
+    assert uninit_word('a44.flac', 'b48.flac', False) == 0
+    print('The jack, a natural start: DSD on either side and another format wait once before frames; a natural end out of DSD waits with no mark, a press-cut one sets no word; a stay-open adds none.')
+
+
+CASES = (reopens, dry_first_write, crossfade_shuffle, pause_after_natural, pause_in_mix, outputs_keep_nothing, exit_hold_reopen,
+         trims_stay_open, crossfade_level, outputs_cold, bluetooth_rate, outputs_reopen, bluetooth_late, crossfade_outputs, dsd_end,
+         jack_release, uninit_words)
+
+
+def main(cases=CASES):
+    signal.alarm(1500)  # a spinning player fails the run
+    setup()
+    for case in cases:
+        case()
+    shutil.rmtree(work, ignore_errors=True)
+
+
+if __name__ == '__main__':
+    main()

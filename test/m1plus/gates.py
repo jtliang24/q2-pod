@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The M1 Plus gates, in order, on one --dev build: every step every run, stopping at the first failure.
 
-    python3 test/m1plus/gates.py BUILD            # all 20: q2compare --suites, a fresh build in BUILD, its gates
+    python3 test/m1plus/gates.py BUILD            # all 25: q2compare --suites, a fresh build in BUILD, its gates
     python3 test/m1plus/gates.py BUILD --base TAG  # at a sync: q2compare against the tag merged
     python3 test/m1plus/gates.py BUILD --from boot  # after a test-only fix: the failed gate onward, same build
     python3 test/m1plus/gates.py BUILD --release  # tools/release_m1.py validate()'s subset, on a release build
@@ -14,8 +14,8 @@ a fresh build and every gate, so --from and --only refuse a stale build. Edits u
 Logs and summary.txt (`step: exit N after Ts`) go to --out, by default work/gates/<timestamp>/.
 Environment: GATES_PYTEST (the unit/fw runner, default this Python's pytest, else work/sync/venv's, the main
 checkout's from a git worktree), GATES_CLANG (a wrapped host clang for unit/fw, default nixpkgs#clang's wrapper),
-GATES_FFMPEG (an ffmpeg binary for q2compare's suites, default nixpkgs#ffmpeg-headless; lame and flac come from
-nixpkgs)."""
+GATES_FFMPEG (an ffmpeg binary for q2compare's suites and the natural and seam steps, default nixpkgs#ffmpeg-headless; lame
+and flac come from nixpkgs)."""
 import argparse, datetime, importlib.util, json, os, pathlib, shlex, shutil, subprocess, sys, time
 sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first
 from build import ROOT, source_sha256
@@ -36,12 +36,17 @@ def q2compare(ctx):
     # 1.3.8's chapters and 1.6.7's player suites run /usr/bin/ffmpeg, and take lame and flac from PATH:
     # bind an ffmpeg in over an overlay (a tmpfs /usr/bin hides /bin/sh on merged-/usr hosts).
     ffmpeg = pathlib.Path(os.environ.get('GATES_FFMPEG') or nix_out('ffmpeg-headless')/'bin/ffmpeg')
-    path = ':'.join([str(ffmpeg.parent), str(nix_out('lame')/'bin'), str(nix_out('flac.bin')/'bin'),
-                     os.environ['PATH']])
+    path = encoders()
     # TMPDIR=/tmp: under the devShell's long TMPDIR, peq's Tidal check fails on -Wformat-truncation.
     return ['bwrap', '--dev-bind', '/', '/', '--overlay-src', '/usr/bin', '--tmp-overlay', '/usr/bin',
             '--ro-bind', ffmpeg, '/usr/bin/ffmpeg', 'env', 'TMPDIR=/tmp', f'PATH={path}',
             sys.executable, 'test/q2compare.py', *([ctx.base] if ctx.base else []), '--suites', '--zip', Q2_ZIP]
+
+
+def encoders():
+    """PATH with q2compare's ffmpeg, lame and flac first: test/hci_natural.py's setup makes its files with them."""
+    ffmpeg = pathlib.Path(os.environ.get('GATES_FFMPEG') or nix_out('ffmpeg-headless')/'bin/ffmpeg')
+    return ':'.join([str(ffmpeg.parent), str(nix_out('lame')/'bin'), str(nix_out('flac.bin')/'bin'), os.environ['PATH']])
 
 
 def replaceable(build):
@@ -125,6 +130,17 @@ STEPS = {
     'id3': (suite('m1plus/id3'), False),
     # the real hciplayer under Unicorn: get-music-info with no stream, a FLAC cut inside its metadata
     'faults': (suite('m1plus/player_faults'), True),
+    # test/player_seam.py's seams on V2.1's player, in samples: MP3, M4A, Opus and Vorbis gapless; HE-AAC as stock
+    'seam': (lambda ctx: ['env', f'PATH={encoders()}', *suite('m1plus/seam')(ctx)], False),
+    # test/hci_natural.py's natural changes on V2.1's player: a bad next, the exit hold (G3), preloads, FLAC seeks
+    'natural': (lambda ctx: ['env', f'PATH={encoders()}', *suite('m1plus/natural')(ctx)], False),
+    # test/hci_wait.py's futex waits on V2.1's player, and its wakeups a second stopped and paused
+    'wait': (suite('m1plus/hci_wait'), False),
+    # test/hci_ao.py's output cases on V2.1's player: reopens, a kept PCM, the jack's resume and release, USB's buffer and
+    # held request
+    'ao': (lambda ctx: ['env', f'PATH={encoders()}', *suite('m1plus/ao')(ctx)], False),
+    # test/bt_resample.py's resampler half on V2.1's player: a tone across a change through lavcresample, stock's loses the tail
+    'resample': (suite('m1plus/bt_resample'), False),
     'headset': (suite('m1plus/headset_io'), False),
     'ldac': (suite('ldac'), True),
     'bluealsa': (suite('bluealsa'), False),

@@ -896,10 +896,18 @@ static inline int arc_out(int r, int y) {
 /* Classic's Home Library list (navigation.c library_rows, 1.6.7): Classic is unported */
 #define LOCALMUSIC_BG M1_UNPORTED
 /* The return addresses two live playback.c hooks compare (1.6.7): View Queue's pick of the playing file keeps it
- * playing (ringnav_start_queue), and the skip past an unplayable file is no press (ringnav_change). V2.1's callers
- * aren't pinned, so on M1 neither matches and both act as in 1.6.4 (docs/m1plus-unported.md). */
-#define VIEW_QUEUE_RET M1_UNPORTED
-#define UNPLAYABLE_NEXT_RET M1_UNPORTED
+ * playing (ringnav_start_queue), and the skip past an unplayable file is no press (ringnav_change). V2.1's View
+ * Queue is its queue dialog, whose row click (0x479f60) reaches its one jalr start_playqueue (0x47a0c8) from both
+ * paths. on_wm_timer_dialogresponse's skip (0x4cfd3c) goes to that dialog's jalr (0x4cf8b4) with next_music in
+ * $t9, which tail-branches to change_music with ra restored. */
+#define VIEW_QUEUE_RET 0x47a0d0
+#define UNPLAYABLE_NEXT_RET 0x4cf8bc
+/* ringnav_player_start's callers (1.6.7): playing_page_init's jalr start_player (0x53d298), past its class 0xff
+ * skip, and the album page's play (0x525e54), which stays on its page. V2.1 has no localmusic_albuminfo_page:
+ * its other two callers are SyncLink's startPlayFolderSong and startPlayClassSong. */
+#define PAGE_PICK_RET 0x53d2a0
+#define ALBUM_PLAY_RET 0x525e5c
+#define ALBUMINFO_PLAY_RET M1_UNPORTED
 #define LYRIC_PUSH_DETENTS 2
 #define LYRIC_PUSH_MS 1000
 #define DRIFT_ZOOM_PCT 110
@@ -958,8 +966,8 @@ extern unsigned char m1_return_latch;
 #define LCD_FORMAT M1_UNPORTED
 #define LCD_BGRA8888 M1_UNPORTED
 /* The state record and S90play's crash log (1.6.1) run on M1: /mnt/data is V2.1's writable UBIFS. The hardware
- * watchdog (1.6.2) runs in --dev builds only until its first device pass (navigation.c wdt_poll): V2.1 ships the
- * Q2's soc_watchdog.ko and libhardware2.so byte for byte, and nothing of its own opens /dev/jz_watchdog. */
+ * watchdog (1.6.2) runs on every M1 build (2.9; navigation.c wdt_poll): V2.1 ships the Q2's soc_watchdog.ko and
+ * libhardware2.so byte for byte, and nothing of its own opens /dev/jz_watchdog. */
 #define WDT_MS 60000
 #define WDT_LONG_MS 900000
 

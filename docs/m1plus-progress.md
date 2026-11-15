@@ -5132,6 +5132,62 @@ removed and the library rescanned. Recently Played and Most Played still list th
 **Finding G3** ([unported doc](m1plus-unported.md#known-issues-on-the-m1)): when the track before it ends on its own,
 the cut FLAC sits on Now Playing at 00:00, playing, until Next (45 s and more; the CPU idle). It goes to a fix round.
 
+## 91. Unported, round 2 (Nov 15)
+
+Round 2 brings the player up to the Q2's level, on `feature/m1-unported-r2` (plan `.plan/unported-r2.md`). V2.1's
+`hciplayer` is V1.32's code at moved addresses, so every site exists and no row closed as native. The risk was shared
+C holding V1.32 literals: step 1 named them all, and an audit now checks the player payload reads only
+`PLAYER_PROFILE`'s addresses.
+
+**The steps**, each built, gated and committed with its tests:
+- **0** (c1a259d0, 79fb8f89) V2.1's track length is `0xb10e68`, not `0xb10e5c`: Crossfade, the visualizer and the EQ
+  carry read the wrong word before (a shipped bug).
+- **1** (84e09aa5, a2d8ddad, dc7d0028) the player's V1.32 addresses become named macros with the Q2's defaults; no
+  change on either device.
+- **2** (f30b5e44, d483d580, 9a037f7a) 2.1's stop, preload and seek fixes and 2.8's `EXIT_HOLD` (G3), with M1 asm
+  for `probe_stop_dff`, `forced_eof`, `exit_hold` and `cold_clear`; new gate `natural`.
+- **3** (27dc4282, 9487383d) the MP3 and lossy gapless trims (`mp3_gapless.c`, `lavf_gapless.c`); new gate `seam`.
+- **4** (db5b0923, b4217de0, 07a27299) the player's command-driven waits (`PAUSE_WAIT`, `CMD_DONE`, `IDLE_WAIT`);
+  demo's paced scheduling stays V2.1's (the user's decision); new gate `wait`.
+- **5** (3bed7b03, b5a4daee, c17b9677) the press timing and Previous's restart ask; `START_MUTE_CALL` and
+  `START_SLEEP_CALL` pinned.
+- **6** (03351c96, d0964e92, de29f3cf) the output side: `DAC_RELEASE`, `ao_uninit`, `ao_init`, `USB_BUFFER`, and
+  step 5's two start words; new gate `ao`.
+- **7** (15265073, f60fa054, 6e24ac45) the Bluetooth resampler's carry (`rs_open`); new gate `resample`.
+- **8** (be6be845, 340a5e62) the watchdog on release builds, and `batch_add_file` (Add to Playlist, Add to My Fav)
+  under its long count.
+
+**Gates** (`V079m`, `work/unported/r2/final/gates/summary.txt`): all 25 pass. `patch.py` runs 2,163 scenarios, 114
+`NOT PORTED`; `pytest test/unit` passes 1,270 and `test/fw` 3,638; the Q2's `update.tar` is byte-identical to 1.7.0's
+and `q2compare --suites` passes all 37 runs. Step 8's release build passed the gates too.
+
+**The device pass** on `V079m` (flashed by the user over `V06Mm`), over q2remote with a USB DAC and then the jack;
+results and logs in `work/unported/r2/final/pass/`:
+- Gapless with no PCM reopen: LAME MP3, iTunes MP3 (iTunSMPB), AAC M4A (FFmpeg's and iTunes' shapes), Opus, Vorbis,
+  FLAC. A format change (16/44 to 24/96 and back) drains the old end in full, then reopens; Next during the drain
+  cuts it in 10 ms. DSD into PCM drains too. USB holds a 500 ms buffer.
+- A song before a junk .dff, .dsf, .iso, frameless .aac or stream-less .wma plays whole, then "Not Supported". An MP3
+  with a 3 MB cover after its audio and a FLAC whose STREAMINFO halves its length play whole. Very short and bad
+  tracks in a row move on. G3's cut FLAC is skipped in 0.37 s by a natural change.
+- Next in a gapless track's last second, Play Next while the next is preloaded, a scrub to 3 s from the end, Next
+  onto junk bytes: all right. 281 Next/Previous presses in 3 minutes: `hciplayer` kept its pid and memory.
+- 2.7 (screen off, 60 s): paused, `hciplayer`'s main thread wakes 1 a second (V06Mm 20); playing, the whole player
+  105 (162); stopped, 3. Play after a 10 s pause: 0.31 to 0.33 s on the jack (V06Mm 0.20 to 0.24, the DAC wait);
+  after more than ~30 s, 1.7 s, as V2.1 powers the DAC down (V06Mm the same). 12.7 minutes paused: same pid.
+- Watchdog: Add to Playlist for the largest artist (165 songs) ~3 s; the whole music folder to the queue < 1 s;
+  Import Playlists with 3,423 entries ~11 s; Scan music now; Refresh Cover Flow and its rebuild: no reboot.
+- By ear and over Bluetooth, the user: no clicks at the changes, no burst after a tagged MP3, no pop from DSD, a short
+  gap and no pop at a format change, Pause and Play, Crossfade, the EQ with gapless and Previous all right; the
+  Bluetooth checks pass. USB storage, a wrong Wi-Fi password and Standby with Bluetooth are left to the user.
+
+**Findings** ([unported doc](m1plus-unported.md#known-issues-on-the-m1)): G4, Play Next leaks the preload it replaces;
+G5, View Queue's playing row restarts the song; G6, the command thread wakes ~20 a second while paused. Also seen: the
+next file is often opened just after a change rather than ~5 s before the end (order and gaplessness right), and the
+known-gap DSDIFF did not cut the song on the device. They go to a fix round.
+
+Restored after the pass: Screen Off at 1 min, boot-target "rockbox". The test folders (`R2Test`,
+`_explaylist_data`) and the test playlists were removed and the library rescanned.
+
 ## How to check a build now
 
 ```sh

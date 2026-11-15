@@ -1416,98 +1416,106 @@ m.poll(100); assert m.places()==place and m.toasts[-1]=='Press again to restart'
 assert press()==1 and m.seen; m.poll(0,3); assert m.places()==[] and not m.seeks
 checks+=1
 
-if not is_m1plus:  # Previous's restart ask and picks of the playing file (player_seek_start, player_start unported)
-    # The same guard from the real keys: on_wm_keyup_fun's prev_quick_click and next_quick_click, through stock's
-    # player_prev_music, whose first move on anything playing or paused is player_seek_start: past 10 s it seeks to the
-    # start, in any queue and mode, without reaching player_change_music. Everything above enters below that seek, and
-    # with one key at a time.
-    PREV_KEY,NEXT_KEY=syms['prev_quick_click'],syms['next_quick_click']
-    class KeyMixin:
-        def keys(self,status=2,sec=100):
-            for n in ('mclGetPlayStatus','mclGetPlayPos','mclGetPlayType','prev_quick_click','next_quick_click','player_prev_music','player_next_music','player_seek_start'): self.handlers.pop(syms[n],None)
-            self.word(PLAY_STATUS,status); self.sec=sec; self.set_seeks=[]
-            for n in ('toolsmtimer','player_playtime','mclSetSeek','mclSetResume','mclSetMute','mclGetCueFlag','dmrSendPause','dmrSendPlay','usleep@GLIBC_2.0'):
-                self.handlers[syms[n]]='k:'+n.split('@')[0]
-        def hook(self,u,address,size,unused):
-            name=self.handlers.get(address,'')
-            if not name.startswith('k:'): return super().hook(u,address,size,unused)
-            ret=0; name=name[2:]; a=signed(u.reg_read(REGS[0]))
-            if name=='toolsmtimer': ret=self.now
-            elif name=='player_playtime': ret=self.sec
-            elif name=='mclSetSeek': self.set_seeks.append(a); self.sec=a; ret=1
-            self.returns(ret,clobber=True)
-        def key(self,which,gap=600):  # above prev_quick_click's own 500 ms filter
-            self.now+=gap; del self.seen[:]; del self.set_seeks[:]; self.word(ps['restart_ask'],0)
-            self.call(address=which,args=(0,0,0,0),gap=0)
-            moved=[e for e in self.seen if e!='resume_held']
-            if self.set_seeks: assert self.set_seeks==[0] and not self.get(ps['restart_ask']); return 'seek'
-            if self.get(ps['restart_ask']): assert not moved,moved; return 'ask'
-            return 'change' if moved else 'none'
-    class KeyMachine(KeyMixin,ChangeMachine): pass
-    def keyed(k=1,mode=0,cls=1,skip=0,status=2,sec=100,held=1):
-        m=KeyMachine(); m.install([(str(i),'/a/'+str(i),'A',0,i,0,0) for i in range(k)],0); m.held=held; m.keys(status,sec)
-        m.word(O['MCL_TYPE'],cls); m.word(O['MCL_MODE'],mode); m.byte(O['MCL_JUMPFOLDER'],skip); m.word(O['MCL_POOL'],m.deque([]))
-        return m
-    IN,OUT=O_RESTART,3001
-    # Only the same key confirms: another key inside the window asks and arms for itself.
-    m=keyed(); assert m.key(NEXT_KEY)=='ask' and m.key(PREV_KEY)=='ask' and m.key(PREV_KEY)=='seek'
-    m=keyed(); assert m.key(PREV_KEY)=='ask' and m.key(NEXT_KEY)=='ask' and m.key(NEXT_KEY)=='change'
-    m=keyed(); assert m.key(NEXT_KEY)=='ask' and m.key(PREV_KEY)=='ask' and m.key(NEXT_KEY)=='ask'  # back and forth never confirms
-    for which,done in ((PREV_KEY,'seek'),(NEXT_KEY,'change')):
-        m=keyed(); assert m.key(which)=='ask' and m.key(which,IN)==done  # the same key inside the window
-        m=keyed(); assert m.key(which)=='ask' and m.key(which,OUT)=='ask' and m.key(which,IN)==done  # outside it: asks again, and arms
-    # The window ends when a press no longer would restart: resume_held false, or change_restarts false, then back.
-    m=keyed(); assert m.key(NEXT_KEY)=='ask'; m.held=0; assert m.key(NEXT_KEY)=='change'; m.held=1; assert m.key(NEXT_KEY)=='ask'
-    m=keyed(); assert m.key(PREV_KEY)=='ask'; m.held=0; assert m.key(PREV_KEY)=='seek'; m.held=1; m.sec=100; assert m.key(PREV_KEY)=='ask'
-    m=keyed(); assert m.key(NEXT_KEY)=='ask'; m.word(O['MCL_TYPE'],0xf001); assert m.key(NEXT_KEY)=='none' and m.stops==1
-    m.word(O['MCL_TYPE'],1); assert m.key(NEXT_KEY)=='ask'
-    # Previous asks past 10 s in any queue, mode, class, Folder Skip, playing or paused; the second press seeks to the start.
-    for k in (1,3):
-        for mode in (0,1,2,3):
-            for cls in (1,0xff10,0xf001):
-                for skip in (0,1):
-                    for status in (2,3):
-                        m=keyed(k=k,mode=mode,cls=cls,skip=skip,status=status); assert m.key(PREV_KEY)=='ask',(k,mode,cls,skip,status)
-                        assert m.key(PREV_KEY,IN)=='seek'; checks+=1
-    # Nothing held: stock's seek at once. Under 11 s stock changes track: a queue moves on, and Next in one moves on too.
-    m=keyed(k=3,held=0); assert m.key(PREV_KEY)=='seek'
-    m=keyed(k=3,mode=1,sec=10); r=m.key(PREV_KEY); assert r=='change' and m.current()==2,(r,m.seen,m.current())
-    m=keyed(k=3,sec=11); assert m.key(PREV_KEY)=='ask'
-    m=keyed(k=3); assert m.key(NEXT_KEY)=='change' and m.current()==1
-    m=keyed(k=3,status=1); assert m.key(PREV_KEY)=='change'  # stopped: no seek
-    m=keyed(status=1); assert m.key(PREV_KEY)=='ask'  # stopped, alone in the queue: player_change_music's restart
-    checks+=8
-    # Through the real Resume poll: the place stays and the toast shows; the second Previous seeks; the poll forgets it.
-    class RealKeyMachine(KeyMixin,HeldMachine):
-        sec=property(lambda self:self.play[0],lambda self,v:setattr(self,'play',(v,self.play[1])))
-    m=RealKeyMachine(); m.install([('book','/a/book.m4b','B',0,0,0,0)],0); m.word(O['MCL_TYPE'],1); m.keys()
-    m.poll(0,2); m.poll(100,3); place=m.places(); assert [s for _,s in place]==[100]
-    assert m.key(PREV_KEY)=='ask'; m.word(ps['restart_ask'],1); m.poll(100); assert m.places()==place and m.toasts[-1]=='Press again to restart'
-    assert m.key(PREV_KEY,600)=='seek'; m.poll(0,3); assert m.places()==[]
-    # The time is live, not the poll's: a scrub to 100 s before the next poll asks; a third Previous after a restart, with no
-    # poll yet, restarts unasked; Previous within a second of Next, on a track at 0, doesn't ask for the one left.
-    def book(sec=100):
-        m=RealKeyMachine(); m.install([('book','/a/book.m4b','B',0,0,0,0)],0); m.word(O['MCL_TYPE'],1); m.keys(); m.poll(0,2); m.poll(sec,3); return m
-    m=book(20); m.play=(100,3600); assert m.key(PREV_KEY)=='ask'
-    m=book(); m.play=(20,3600); assert m.key(PREV_KEY)=='seek'
-    m=book(); assert m.key(PREV_KEY)=='ask' and m.key(PREV_KEY)=='seek' and m.key(PREV_KEY)=='change'
-    m=book(); m.play=(0,3600); assert m.key(PREV_KEY)=='change'
-    m=book(3580); assert m.key(PREV_KEY)=='seek'  # the last 30 s keep no place
-    # Started again after a stop, with the same key: back to the place it stopped at, the place kept. A load's -1 (still
-    # playing) is no stop, a confirmed restart isn't sent back, and a stop in the last 30 s has nothing to go back to.
-    def stopped(m,status=1): m.word(PLAY_STATUS,status); m.play=(0,0); m.now+=1000; m.fn('ringnav_sleep',0x1234)
-    m=book(); kept=m.places(); stopped(m); m.word(PLAY_STATUS,2); m.poll(1); assert m.seeks==[100] and m.places()==kept; m.poll(100,3); assert m.places()==kept
-    m=book(); m.seeks=[]; stopped(m,2); m.poll(1); assert not m.seeks
-    m=book(); m.seeks=[]; stopped(m); assert m.key(PREV_KEY)=='ask'; assert m.key(PREV_KEY)=='change'; m.word(PLAY_STATUS,2); m.poll(1); assert not m.seeks
-    m=book(3580); m.seeks=[]; stopped(m); m.word(PLAY_STATUS,2); m.poll(1); assert not m.seeks
-    # A remote's Previous on a DLNA or online queue stays stock's: its seek at once.
-    for cls in (2,3,0xf1,0xf2):
-        m=keyed(cls=cls); m.call(address=syms['player_prev_music'],args=(0,0,0,0),gap=0); assert m.set_seeks==[0] and not m.get(ps['restart_ask']),cls
-    # The toast's msginfo_dialog stops Previous, Next and Play itself, in stock's own words (0x49a478), so a second press under
-    # it would never reach on_wm_keyup_fun; the before-hook sends the same key on. Another key stays stopped, and armed.
-    m=keyed(); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-    for key,stop in ((O['KEY_BACK_BTN'],1),(O['KEY_FWD_BTN'],1),(0xab,1),(0x40,0)):
-        assert m.call(key,address=0x49a478,args=(0,m.event,0,0),gap=0)==(11 if stop else 0),key
+# The same guard from the real keys: on_wm_keyup_fun's prev_quick_click and next_quick_click, through stock's
+# player_prev_music, whose first move on anything playing or paused is player_seek_start: past 10 s it seeks to the
+# start, in any queue and mode, without reaching player_change_music. Everything above enters below that seek, and
+# with one key at a time.
+PREV_KEY,NEXT_KEY=syms['prev_quick_click'],syms['next_quick_click']
+# V2.1's quick clicks take the key event and filter on its time (+8), 1000 ms from the last change key's, where V1.32's
+# read toolsmtimer and keep 500; V2.1's toast stops Play, Previous and Next in a leaf (0x4783b0, its key-up's). The
+# rest of the V1.32 code entered below has its V2.1 twin beside it (work/unported/r2/2.2/firstcheck.md).
+DEMO_GP=0xa03ed0 if is_m1plus else 0xa26cc0
+KEY_GAP=1100 if is_m1plus else 600  # above prev_quick_click's own filter
+class KeyMixin:
+    def keys(self,status=2,sec=100):
+        for n in ('mclGetPlayStatus','mclGetPlayPos','mclGetPlayType','prev_quick_click','next_quick_click','player_prev_music','player_next_music','player_seek_start'): self.handlers.pop(syms[n],None)
+        self.word(PLAY_STATUS,status); self.sec=sec; self.set_seeks=[]
+        for n in ('toolsmtimer','player_playtime','mclSetSeek','mclSetResume','mclSetMute','mclGetCueFlag','dmrSendPause','dmrSendPlay','usleep@GLIBC_2.0',
+                  'networkGetConnectStatus'):
+            if n in syms: self.handlers[syms[n]]='k:'+n.split('@')[0]
+        self.key_event=self.alloc(0x20)
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if not name.startswith('k:'): return super().hook(u,address,size,unused)
+        ret=0; name=name[2:]; a=signed(u.reg_read(REGS[0]))
+        if name=='toolsmtimer': ret=self.now
+        elif name=='player_playtime': ret=self.sec
+        elif name=='mclSetSeek': self.set_seeks.append(a); self.sec=a; ret=1
+        self.returns(ret,clobber=True)
+    def key(self,which,gap=KEY_GAP):  # above prev_quick_click's own filter
+        self.now+=gap; del self.seen[:]; del self.set_seeks[:]; self.word(ps['restart_ask'],0)
+        self.word(self.key_event+8,self.now); self.call(address=which,args=(self.key_event,1,0,0) if is_m1plus else (0,0,0,0),gap=0)
+        moved=[e for e in self.seen if e!='resume_held']
+        if self.set_seeks: assert self.set_seeks==[0] and not self.get(ps['restart_ask']); return 'seek'
+        if self.get(ps['restart_ask']): assert not moved,moved; return 'ask'
+        return 'change' if moved else 'none'
+class KeyMachine(KeyMixin,ChangeMachine): pass
+def keyed(k=1,mode=0,cls=1,skip=0,status=2,sec=100,held=1):
+    m=KeyMachine(); m.install([(str(i),'/a/'+str(i),'A',0,i,0,0) for i in range(k)],0); m.held=held; m.keys(status,sec)
+    m.word(O['MCL_TYPE'],cls); m.word(O['MCL_MODE'],mode); m.byte(O['MCL_JUMPFOLDER'],skip); m.word(O['MCL_POOL'],m.deque([]))
+    return m
+IN,OUT=O_RESTART,3001
+# Only the same key confirms: another key inside the window asks and arms for itself.
+m=keyed(); assert m.key(NEXT_KEY)=='ask' and m.key(PREV_KEY)=='ask' and m.key(PREV_KEY)=='seek'
+m=keyed(); assert m.key(PREV_KEY)=='ask' and m.key(NEXT_KEY)=='ask' and m.key(NEXT_KEY)=='change'
+m=keyed(); assert m.key(NEXT_KEY)=='ask' and m.key(PREV_KEY)=='ask' and m.key(NEXT_KEY)=='ask'  # back and forth never confirms
+for which,done in ((PREV_KEY,'seek'),(NEXT_KEY,'change')):
+    m=keyed(); assert m.key(which)=='ask' and m.key(which,IN)==done  # the same key inside the window
+    m=keyed(); assert m.key(which)=='ask' and m.key(which,OUT)=='ask' and m.key(which,IN)==done  # outside it: asks again, and arms
+# The window ends when a press no longer would restart: resume_held false, or change_restarts false, then back.
+m=keyed(); assert m.key(NEXT_KEY)=='ask'; m.held=0; assert m.key(NEXT_KEY)=='change'; m.held=1; assert m.key(NEXT_KEY)=='ask'
+m=keyed(); assert m.key(PREV_KEY)=='ask'; m.held=0; assert m.key(PREV_KEY)=='seek'; m.held=1; m.sec=100; assert m.key(PREV_KEY)=='ask'
+m=keyed(); assert m.key(NEXT_KEY)=='ask'; m.word(O['MCL_TYPE'],0xf001); assert m.key(NEXT_KEY)=='none' and m.stops==1
+m.word(O['MCL_TYPE'],1); assert m.key(NEXT_KEY)=='ask'
+# Previous asks past 10 s in any queue, mode, class, Folder Skip, playing or paused; the second press seeks to the start.
+for k in (1,3):
+    for mode in (0,1,2,3):
+        for cls in (1,0xff10,0xf001):
+            for skip in (0,1):
+                for status in (2,3):
+                    m=keyed(k=k,mode=mode,cls=cls,skip=skip,status=status); assert m.key(PREV_KEY)=='ask',(k,mode,cls,skip,status)
+                    assert m.key(PREV_KEY,IN)=='seek'; checks+=1
+# Nothing held: stock's seek at once. Under 11 s stock changes track: a queue moves on, and Next in one moves on too.
+m=keyed(k=3,held=0); assert m.key(PREV_KEY)=='seek'
+m=keyed(k=3,mode=1,sec=10); r=m.key(PREV_KEY); assert r=='change' and m.current()==2,(r,m.seen,m.current())
+m=keyed(k=3,sec=11); assert m.key(PREV_KEY)=='ask'
+m=keyed(k=3); assert m.key(NEXT_KEY)=='change' and m.current()==1
+m=keyed(k=3,status=1); assert m.key(PREV_KEY)=='change'  # stopped: no seek
+m=keyed(status=1); assert m.key(PREV_KEY)=='ask'  # stopped, alone in the queue: player_change_music's restart
+checks+=8
+# Through the real Resume poll: the place stays and the toast shows; the second Previous seeks; the poll forgets it.
+class RealKeyMachine(KeyMixin,HeldMachine):
+    sec=property(lambda self:self.play[0],lambda self,v:setattr(self,'play',(v,self.play[1])))
+m=RealKeyMachine(); m.install([('book','/a/book.m4b','B',0,0,0,0)],0); m.word(O['MCL_TYPE'],1); m.keys()
+m.poll(0,2); m.poll(100,3); place=m.places(); assert [s for _,s in place]==[100]
+assert m.key(PREV_KEY)=='ask'; m.word(ps['restart_ask'],1); m.poll(100); assert m.places()==place and m.toasts[-1]=='Press again to restart'
+assert m.key(PREV_KEY,KEY_GAP)=='seek'; m.poll(0,3); assert m.places()==[]
+# The time is live, not the poll's: a scrub to 100 s before the next poll asks; a third Previous after a restart, with no
+# poll yet, restarts unasked; Previous within a second of Next, on a track at 0, doesn't ask for the one left.
+def book(sec=100):
+    m=RealKeyMachine(); m.install([('book','/a/book.m4b','B',0,0,0,0)],0); m.word(O['MCL_TYPE'],1); m.keys(); m.poll(0,2); m.poll(sec,3); return m
+m=book(20); m.play=(100,3600); assert m.key(PREV_KEY)=='ask'
+m=book(); m.play=(20,3600); assert m.key(PREV_KEY)=='seek'
+m=book(); assert m.key(PREV_KEY)=='ask' and m.key(PREV_KEY)=='seek' and m.key(PREV_KEY)=='change'
+m=book(); m.play=(0,3600); assert m.key(PREV_KEY)=='change'
+m=book(3580); assert m.key(PREV_KEY)=='seek'  # the last 30 s keep no place
+# Started again after a stop, with the same key: back to the place it stopped at, the place kept. A load's -1 (still
+# playing) is no stop, a confirmed restart isn't sent back, and a stop in the last 30 s has nothing to go back to.
+def stopped(m,status=1): m.word(PLAY_STATUS,status); m.play=(0,0); m.now+=1000; m.fn('ringnav_sleep',0x1234)
+m=book(); kept=m.places(); stopped(m); m.word(PLAY_STATUS,2); m.poll(1); assert m.seeks==[100] and m.places()==kept; m.poll(100,3); assert m.places()==kept
+m=book(); m.seeks=[]; stopped(m,2); m.poll(1); assert not m.seeks
+m=book(); m.seeks=[]; stopped(m); assert m.key(PREV_KEY)=='ask'; assert m.key(PREV_KEY)=='change'; m.word(PLAY_STATUS,2); m.poll(1); assert not m.seeks
+m=book(3580); m.seeks=[]; stopped(m); m.word(PLAY_STATUS,2); m.poll(1); assert not m.seeks
+# A remote's Previous on a DLNA or online queue stays stock's: its seek at once.
+for cls in (2,3,0xf1,0xf2):
+    m=keyed(cls=cls); m.call(address=syms['player_prev_music'],args=(0,0,0,0),gap=0); assert m.set_seeks==[0] and not m.get(ps['restart_ask']),cls
+# The toast's msginfo_dialog stops Previous, Next and Play itself, in stock's own words (V1.32 0x49a478, V2.1 0x4783b0),
+# so a second press under it would never reach on_wm_keyup_fun.
+m=keyed(); m.u.reg_write(UC_MIPS_REG_GP,DEMO_GP)
+for key,stop in ((O['KEY_BACK_BTN'],1),(O['KEY_FWD_BTN'],1),(O['KEY_PLAY'] if is_m1plus else 0xab,1),(0x40,0)):
+    assert m.call(key,address=0x4783b0 if is_m1plus else 0x49a478,args=(0,m.event,0,0),gap=0)==(11 if stop else 0),key
+# On the Q2 the before-hook sends the same key on. Another key stays stopped, and armed.
+if not is_m1plus:
     def under_toast(m,key,gap=600):
         m.top=m.node('dialog','msginfo_dialog'); m.now+=gap; del m.set_seeks[:]; del m.seen[:]; m.word(ps['restart_ask'],0)
         return m.call(key,gap=0)
@@ -1525,121 +1533,130 @@ if not is_m1plus:  # Previous's restart ask and picks of the playing file (playe
     for key in (O['KEY_BACK_BTN'],O['KEY_FWD_BTN']):
         for kind in (DOWN_,UP_): assert m.input(kind,key)==1 and m.mute(),(key,kind)
     checks+=24
-    # A CUE track holds no place to lose at a chapter's start: Previous restarts it unasked.
-    m=RealKeyMachine(); m.install([('ch','/a/book.m4b','B',0,0,600,1200)],0); m.word(O['MCL_TYPE'],1); m.keys(); m.poll(0,2); m.poll(100,3)
-    assert m.key(PREV_KEY)=='seek'
-    checks+=2
+else:  # the M1's ringnav is on_wm_keyup_fun itself, after the toast's stop: the confirm waits for the toast to close
+    print("NOT PORTED: Previous's and Next's confirm under the restart toast (the M1 has no key-up before-hook; V2.1's toast stops them)")
+# A CUE track holds no place to lose at a chapter's start: Previous restarts it unasked.
+m=RealKeyMachine(); m.install([('ch','/a/book.m4b','B',0,0,600,1200)],0); m.word(O['MCL_TYPE'],1); m.keys(); m.poll(0,2); m.poll(100,3)
+assert m.key(PREV_KEY)=='seek'
+checks+=2
 
-    # A list pick of the playing file, from each caller's own words into player_start. No caller reads its result: the same
-    # row of the same list starts nothing, what the page does after depends on who called. A short song keeps stock's restart.
-    class PickMachine(ChangeMachine):
+# A list pick of the playing file, from each caller's own words into player_start. No caller reads its result: the same
+# row of the same list starts nothing, what the page does after depends on who called. A short song keeps stock's restart.
+class PickMachine(ChangeMachine):
+    if is_m1plus:  # V2.1 has no albuminfo page, and its View Queue row keeps the row in $s2
+        PAGE=(0x53d27c,0x53d2a0); ALBUM=(0x525e44,0x525e5c); INFO=None; SYNC=(0x510628,0x510640); SYNC2=(0x5107f8,0x510810); ROW=(0x47a0c4,0x47a0d0)
+        PAGE_SKIP=0x53d2a4
+    else:
         PAGE=(0x52cbfc,0x52cc1c); ALBUM=(0x4a5d54,0x4a5d6c); INFO=(0x4a9c30,0x4a9c48); SYNC=(0x51b724,0x51b73c); SYNC2=(0x51b8f4,0x51b90c); ROW=(0x529938,0x529944)
-        def __init__(self,status=2,cls=1):
-            super().__init__(); self.install([('x','/a/x','A',0,0,0,0),('1','/a/1','A',0,1,0,0)],1); self.held=1; self.word(O['MCL_TYPE'],cls); self.word(O['MCL_MODE'],0); self.byte(O['MCL_JUMPFOLDER'],0)
-            for n in ('player_start','player_start_queue','player_play_pause','navigator_back'): self.handlers.pop(syms[n],None)
-            self.handlers[ps['stock_player_start_trampoline']]='x:stock_start'; self.handlers[ps['stock_start_queue_trampoline']]='x:stock_queue'
-            self.handlers[ps['stock_pause_trampoline']]='x:unpause'; self.handlers[ps['resume_return']]='x:go_back'
-            self.handlers[syms['navigator_switch_to_with_context']]='pick:np'; self.handlers[syms['navigator_back']]='x:back'
-            self.handlers.pop(syms['mclGetPlayStatus'],None); self.word(PLAY_STATUS,status)
-            self.ctx=self.alloc(16); self.cell=self.alloc(4); self.np=[]
-            self.same=self.rows_of('/a/x','/a/1'); self.other=self.rows_of('/a/y','/a/z')
-        def rows_of(self,*paths):
-            rows=[]
-            for p in paths: r=self.song(p); self.word(r+O['REC_PATH'],self.string(p)); rows.append(r)
-            return self.deque(rows)
-        def hook(self,u,address,size,unused):
-            if address==self.enter_at:
-                self.keep=[u.reg_read(r) for r in (UC_MIPS_REG_S0,UC_MIPS_REG_S1,UC_MIPS_REG_S2)]
-                for r,v in zip((UC_MIPS_REG_S0,UC_MIPS_REG_S1,UC_MIPS_REG_S2),self.regs): u.reg_write(r,v)
-            if address==self.stops_at or (address==0x52cc24 and self.stops_at==0x52cc1c):  # the page's 0xff skips the call
-                for r,v in zip((UC_MIPS_REG_S0,UC_MIPS_REG_S1,UC_MIPS_REG_S2),self.keep): u.reg_write(r,v)
-                return u.reg_write(UC_MIPS_REG_PC,0x1000000)
-            if self.handlers.get(address)=='pick:np':
-                self.np.append((self.text(u.reg_read(REGS[0])),self.get(u.reg_read(REGS[1])+8))); self.seen.append('np'); return self.returns(0,clobber=True)
-            return super().hook(u,address,size,unused)
-        enter_at=stops_at=None
-        def at_site(self,site,q=None,at=1,cls=1):
-            self.enter_at,self.stops_at=site; del self.seen[:]; del self.np[:]; self.now+=600; self.word(ps['restart_ask'],0); queue=self.get(syms['mcl_pdeqplaylist'])
-            q=q or self.same; self.word(self.cell,cls)
-            if site==self.PAGE:
-                for i,v in enumerate((q,at,cls,2)): self.word(self.ctx+4*i,v)
-                self.regs=(0,self.ctx,0); args=(0,0,cls,0)
-            elif site in (self.ALBUM,self.INFO): self.regs=(q,at,self.cell); args=(0,0,0,0)
-            elif site in (self.SYNC,self.SYNC2): self.regs=(q,at,cls); args=(0,0,0,0)
-            else: self.regs=(0,at,0); args=(0,0,0,0)
-            self.u.reg_write(UC_MIPS_REG_GP,0xa26cc0); self.call(address=site[0],args=args,gap=0)
-            assert not self.get(ps['restart_ask']) and self.get(syms['mcl_pdeqplaylist'])==queue
-            return [e for e in self.seen if e!='resume_held']
-        def picked(self,**kw): return self.at_site(self.PAGE,**kw)
-    START,GO=['stock_start'],['go_back','stock_start']
-    for site in (PickMachine.PAGE,PickMachine.SYNC):
-        m=PickMachine(); assert m.at_site(site)==[] and m.at_site(site)==[]  # the same row, twice, without asking or arming
-    # Album pages stay on their page after a start: refused, they open Now Playing, class 0xff as on_backplay_click.
-    for site in (PickMachine.ALBUM,PickMachine.INFO):
-        m=PickMachine(); assert m.at_site(site)==['np'] and m.np==[('playing_page',0xff)]
-        m=PickMachine(status=3); assert m.at_site(site)==['np','unpause']  # paused: a pick means play this
-    # SyncLink, off the UI thread: silent, no window and no Play.
-    for site in (PickMachine.SYNC,PickMachine.SYNC2):
-        m=PickMachine(status=3); assert m.at_site(site)==[],site
-    m=PickMachine(status=3); assert m.picked()==['unpause']  # the page opens itself
-    m=PickMachine(status=1); assert m.picked()==START  # stopped: a real start, never Now Playing in silence
-    m=PickMachine(); m.held=0; assert m.picked()==START and PickMachine().picked()==[]  # a short song, or no place to lose
-    m=PickMachine(); assert m.picked(at=0)==START  # another row
-    m=PickMachine(); assert m.picked(at=5)==START  # stock's to refuse
-    # Another list with the same file: stock loads it and the poll goes back. By position, by size, by class.
-    m=PickMachine(); assert m.picked(q=m.other,at=1)==START
-    m=PickMachine(); assert m.picked(q=m.rows_of('/a/1'),at=0)==GO
-    m=PickMachine(); assert m.picked(q=m.rows_of('/a/x','/a/1','/a/w'),at=1)==GO
-    m=PickMachine(); assert m.picked(q=m.rows_of('/a/1','/a/x'),at=0)==GO
-    m=PickMachine(); assert m.picked(cls=0xff10)==GO
-    # A CUE row of the file playing whole is another track, the first chapter too (start 0, an end): stock, nothing to go back to.
-    for start,end in ((600,1200),(0,600),(600,0)):
-        m=PickMachine(); q=m.rows_of('/a/x','/a/1'); r=list(m.items(q))[1]; m.word(r+O['REC_CUE_START'],start); m.word(r+O['REC_CUE_END'],end); assert m.picked(q=q)==START,(start,end)
-    for cls in (2,3,0xf1,0xf2): m=PickMachine(); m.word(O['MCL_TYPE'],cls); assert m.picked(cls=cls)==START,cls  # DLNA, online: nobody pressed here
-    m=PickMachine(); m.word(O['MCL_TYPE'],2); assert m.picked(cls=1)==START  # a local list over a remote queue
-    m=PickMachine(); m.word(ps['press_natural'],1); assert m.picked()==START  # an app's .play
-    m=PickMachine(); m.word(ps['s']+24,1); assert m.picked()==START  # Shuffle Albums' load
-    m=PickMachine(); assert m.picked(cls=0xff)==[]  # 0xff: Now Playing's own open, no player_start
-    # View Queue's row of the playing file: Now Playing, unpaused; another row, or anyone else's call, stock's.
-    m=PickMachine(); assert m.at_site(m.ROW)==['np']
-    m=PickMachine(status=3); assert m.at_site(m.ROW)==['np','unpause']
-    m=PickMachine(); assert m.at_site(m.ROW,at=0)==['stock_queue']
-    m=PickMachine(status=1); assert m.at_site(m.ROW)==['stock_queue']
-    m=PickMachine(); m.held=0; assert m.at_site(m.ROW)==['stock_queue']
-    m=PickMachine(); m.handlers.pop(syms['player_start_queue'],None); m.fn('ringnav_start_queue',1); assert m.seen==['resume_held','stock_queue'] or m.seen==['stock_queue'],m.seen  # DLNA, a delete
-    # Up Next's row of it closes the page, then opens Now Playing. Any other row plays, as before.
-    m=PickMachine(); m.word(O['MCL_POS'],0); del m.seen[:]; m.fn('un_play',0); assert [e for e in m.seen if e!='resume_held']==['back','np'],m.seen
-    m=PickMachine(); m.held=0; m.word(O['MCL_POS'],0); del m.seen[:]; m.fn('un_play',0); assert [e for e in m.seen if e!='resume_held']==['stock_queue','back'],m.seen
-    checks+=30
-    # player_start's real body: another list loads and starts through the hook, past stock's mclLoadPlayList and mclStartPlayer.
-    class BodyMachine(PickMachine):
-        def __init__(self):
-            super().__init__(); self.handlers.pop(ps['stock_player_start_trampoline'])
-            for a in (0x50f1a4,0x4f6bbc,0x5146bc,0x5195e8,0x504c9c,0x5199e0,0x51c808,0x51b068,0x5061e8,0x512700,0x503f74,0x764940): self.handlers[a]='x:body'
-            for name in ('mclSetPlayMode','sendBtHeadsetPlayStatus','sendBtHeadsetPlayInfo','dmrRenderQplayQueueSize'):
-                if name in syms: self.handlers[syms[name]]='x:body'
-            self.handlers[ps['stock_load_trampoline']]='x:loaded'; self.handlers[syms['mclStartPlayer']]='x:started'
-    m=BodyMachine(); r=[e for e in m.picked(q=m.rows_of('/a/1'),at=0) if e!='body']; assert r==['go_back','loaded','started'],r
-    m=BodyMachine(); r=[e for e in m.picked() if e!='body']; assert r==[],r
-    # The return itself, through the real poll: stock's load plays the file from 0, the poll seeks back and the place stands.
-    class ReturnMachine(RealKeyMachine):
-        def __init__(self):
-            super().__init__(); self.install([('book','/a/book.m4b','B',0,0,0,0)],0); self.word(O['MCL_TYPE'],1); self.keys(); self.poll(0,2); self.poll(100,3)
-            self.handlers.pop(syms['player_start'],None); self.handlers[ps['stock_player_start_trampoline']]='r:start'; self.started=0; self.seeks=[]
-        def hook(self,u,address,size,unused):
-            if self.handlers.get(address)=='r:start': self.started+=1; self.play=(0,3600); return self.returns(1,clobber=True)
-            return super().hook(u,address,size,unused)
-        def pick(self,*paths,at=0,cls=0xff10):
-            rows=[]
-            for p in paths: r=self.song(p); self.word(r+O['REC_PATH'],self.string(p)); rows.append(r)
-            self.call(address=syms['player_start'],args=(self.deque(rows),at,cls,2),gap=0)
-    m=ReturnMachine(); kept=m.places(); m.pick('/a/book.m4b'); assert m.started==1 and m.places()==kept
-    m.poll(0); assert not m.seeks; m.poll(1); assert m.seeks==[100] and m.places()==kept; m.poll(100,3); assert m.places()==kept
-    m=ReturnMachine(); kept=m.places(); m.pick('/a/book.m4b'); m.poll(100,9); assert not m.seeks and m.started==1  # it never restarted: the wait runs out
-    m=ReturnMachine(); m.pick('/a/other'); assert m.started==1; m.poll(0,2); assert not m.seeks  # another file: nothing to go back to here
-    checks+=5
-else:
-    print("NOT PORTED: Previous's restart ask and picks of the playing file (player_seek_start, player_start unported)")
+        PAGE_SKIP=0x52cc24
+    ALBUMS=tuple(site for site in (ALBUM,INFO) if site)
+    def __init__(self,status=2,cls=1):
+        super().__init__(); self.install([('x','/a/x','A',0,0,0,0),('1','/a/1','A',0,1,0,0)],1); self.held=1; self.word(O['MCL_TYPE'],cls); self.word(O['MCL_MODE'],0); self.byte(O['MCL_JUMPFOLDER'],0)
+        for n in ('player_start','player_start_queue','player_play_pause','navigator_back'): self.handlers.pop(syms[n],None)
+        self.handlers[ps['stock_player_start_trampoline']]='x:stock_start'; self.handlers[ps['stock_start_queue_trampoline']]='x:stock_queue'
+        self.handlers[ps['stock_pause_trampoline']]='x:unpause'; self.handlers[ps['resume_return']]='x:go_back'
+        self.handlers[syms['navigator_switch_to_with_context']]='pick:np'; self.handlers[syms['navigator_back']]='x:back'
+        self.handlers.pop(syms['mclGetPlayStatus'],None); self.word(PLAY_STATUS,status)
+        self.ctx=self.alloc(16); self.cell=self.alloc(4); self.np=[]
+        self.same=self.rows_of('/a/x','/a/1'); self.other=self.rows_of('/a/y','/a/z')
+    def rows_of(self,*paths):
+        rows=[]
+        for p in paths: r=self.song(p); self.word(r+O['REC_PATH'],self.string(p)); rows.append(r)
+        return self.deque(rows)
+    def hook(self,u,address,size,unused):
+        if address==self.enter_at:
+            self.keep=[u.reg_read(r) for r in (UC_MIPS_REG_S0,UC_MIPS_REG_S1,UC_MIPS_REG_S2)]
+            for r,v in zip((UC_MIPS_REG_S0,UC_MIPS_REG_S1,UC_MIPS_REG_S2),self.regs): u.reg_write(r,v)
+        if address==self.stops_at or (address==self.PAGE_SKIP and self.stops_at==self.PAGE[1]):  # the page's 0xff skips the call
+            for r,v in zip((UC_MIPS_REG_S0,UC_MIPS_REG_S1,UC_MIPS_REG_S2),self.keep): u.reg_write(r,v)
+            return u.reg_write(UC_MIPS_REG_PC,0x1000000)
+        if self.handlers.get(address)=='pick:np':
+            self.np.append((self.text(u.reg_read(REGS[0])),self.get(u.reg_read(REGS[1])+8))); self.seen.append('np'); return self.returns(0,clobber=True)
+        return super().hook(u,address,size,unused)
+    enter_at=stops_at=None
+    def at_site(self,site,q=None,at=1,cls=1):
+        self.enter_at,self.stops_at=site; del self.seen[:]; del self.np[:]; self.now+=600; self.word(ps['restart_ask'],0); queue=self.get(syms['mcl_pdeqplaylist'])
+        q=q or self.same; self.word(self.cell,cls)
+        if site==self.PAGE:
+            for i,v in enumerate((q,at,cls,2)): self.word(self.ctx+4*i,v)
+            self.regs=(0,self.ctx,0); args=(0,0,cls,0)
+        elif site in self.ALBUMS: self.regs=(q,at,self.cell); args=(0,0,0,0)
+        elif site in (self.SYNC,self.SYNC2): self.regs=(q,at,cls); args=(0,0,0,0)
+        else: self.regs=(0,0,at) if is_m1plus else (0,at,0); args=(0,0,0,0)
+        # V2.1's page reloads $gp from its frame before the call
+        self.u.reg_write(UC_MIPS_REG_GP,DEMO_GP); self.call(address=site[0],args=args,gap=0,stack=(DEMO_GP,) if is_m1plus else ())
+        assert not self.get(ps['restart_ask']) and self.get(syms['mcl_pdeqplaylist'])==queue
+        return [e for e in self.seen if e!='resume_held']
+    def picked(self,**kw): return self.at_site(self.PAGE,**kw)
+START,GO=['stock_start'],['go_back','stock_start']
+for site in (PickMachine.PAGE,PickMachine.SYNC):
+    m=PickMachine(); assert m.at_site(site)==[] and m.at_site(site)==[]  # the same row, twice, without asking or arming
+# Album pages stay on their page after a start: refused, they open Now Playing, class 0xff as on_backplay_click.
+for site in PickMachine.ALBUMS:
+    m=PickMachine(); assert m.at_site(site)==['np'] and m.np==[('playing_page',0xff)]
+    m=PickMachine(status=3); assert m.at_site(site)==['np','unpause']  # paused: a pick means play this
+# SyncLink, off the UI thread: silent, no window and no Play.
+for site in (PickMachine.SYNC,PickMachine.SYNC2):
+    m=PickMachine(status=3); assert m.at_site(site)==[],site
+m=PickMachine(status=3); assert m.picked()==['unpause']  # the page opens itself
+m=PickMachine(status=1); assert m.picked()==START  # stopped: a real start, never Now Playing in silence
+m=PickMachine(); m.held=0; assert m.picked()==START and PickMachine().picked()==[]  # a short song, or no place to lose
+m=PickMachine(); assert m.picked(at=0)==START  # another row
+m=PickMachine(); assert m.picked(at=5)==START  # stock's to refuse
+# Another list with the same file: stock loads it and the poll goes back. By position, by size, by class.
+m=PickMachine(); assert m.picked(q=m.other,at=1)==START
+m=PickMachine(); assert m.picked(q=m.rows_of('/a/1'),at=0)==GO
+m=PickMachine(); assert m.picked(q=m.rows_of('/a/x','/a/1','/a/w'),at=1)==GO
+m=PickMachine(); assert m.picked(q=m.rows_of('/a/1','/a/x'),at=0)==GO
+m=PickMachine(); assert m.picked(cls=0xff10)==GO
+# A CUE row of the file playing whole is another track, the first chapter too (start 0, an end): stock, nothing to go back to.
+for start,end in ((600,1200),(0,600),(600,0)):
+    m=PickMachine(); q=m.rows_of('/a/x','/a/1'); r=list(m.items(q))[1]; m.word(r+O['REC_CUE_START'],start); m.word(r+O['REC_CUE_END'],end); assert m.picked(q=q)==START,(start,end)
+for cls in (2,3,0xf1,0xf2): m=PickMachine(); m.word(O['MCL_TYPE'],cls); assert m.picked(cls=cls)==START,cls  # DLNA, online: nobody pressed here
+m=PickMachine(); m.word(O['MCL_TYPE'],2); assert m.picked(cls=1)==START  # a local list over a remote queue
+m=PickMachine(); m.word(ps['press_natural'],1); assert m.picked()==START  # an app's .play
+m=PickMachine(); m.word(ps['s']+24,1); assert m.picked()==START  # Shuffle Albums' load
+m=PickMachine(); assert m.picked(cls=0xff)==[]  # 0xff: Now Playing's own open, no player_start
+# View Queue's row of the playing file: Now Playing, unpaused; another row, or anyone else's call, stock's.
+m=PickMachine(); assert m.at_site(m.ROW)==['np']
+m=PickMachine(status=3); assert m.at_site(m.ROW)==['np','unpause']
+m=PickMachine(); assert m.at_site(m.ROW,at=0)==['stock_queue']
+m=PickMachine(status=1); assert m.at_site(m.ROW)==['stock_queue']
+m=PickMachine(); m.held=0; assert m.at_site(m.ROW)==['stock_queue']
+m=PickMachine(); m.handlers.pop(syms['player_start_queue'],None); m.fn('ringnav_start_queue',1); assert m.seen==['resume_held','stock_queue'] or m.seen==['stock_queue'],m.seen  # DLNA, a delete
+# Up Next's row of it closes the page, then opens Now Playing. Any other row plays, as before.
+m=PickMachine(); m.word(O['MCL_POS'],0); del m.seen[:]; m.fn('un_play',0); assert [e for e in m.seen if e!='resume_held']==['back','np'],m.seen
+m=PickMachine(); m.held=0; m.word(O['MCL_POS'],0); del m.seen[:]; m.fn('un_play',0); assert [e for e in m.seen if e!='resume_held']==['stock_queue','back'],m.seen
+checks+=30
+# player_start's real body: another list loads and starts through the hook, past stock's mclLoadPlayList and mclStartPlayer.
+class BodyMachine(PickMachine):
+    def __init__(self):
+        super().__init__(); self.handlers.pop(ps['stock_player_start_trampoline'])
+        # V2.1's: airplay_stop, set_outputchannel, mclSetPlayM3uFlag, mclSetPause, get_id3info, notifyPlayStatus,
+        # dmrNotifyPlayStatus, notifyPlayInfo, notifyRefreshLyric, notifyRefleshList, dlnaRenderSaveUrlMetadata, reset_repeatinfo
+        for a in (0x507908,0x4d6f68,0x5d4308,0x5d2604,0x4dfd58,0x50e4e4,0x4f11c0,0x50e8dc,0x5116b4,0x50ff6c,0x5081c8,0x4e3ccc) if is_m1plus else (0x50f1a4,0x4f6bbc,0x5146bc,0x5195e8,0x504c9c,0x5199e0,0x51c808,0x51b068,0x5061e8,0x512700,0x503f74,0x764940): self.handlers[a]='x:body'
+        for name in ('mclSetPlayMode','sendBtHeadsetPlayStatus','sendBtHeadsetPlayInfo','dmrRenderQplayQueueSize'):
+            if name in syms: self.handlers[syms[name]]='x:body'
+        self.handlers[ps['stock_load_trampoline']]='x:loaded'; self.handlers[syms['mclStartPlayer']]='x:started'
+m=BodyMachine(); r=[e for e in m.picked(q=m.rows_of('/a/1'),at=0) if e!='body']; assert r==['go_back','loaded','started'],r
+m=BodyMachine(); r=[e for e in m.picked() if e!='body']; assert r==[],r
+# The return itself, through the real poll: stock's load plays the file from 0, the poll seeks back and the place stands.
+class ReturnMachine(RealKeyMachine):
+    def __init__(self):
+        super().__init__(); self.install([('book','/a/book.m4b','B',0,0,0,0)],0); self.word(O['MCL_TYPE'],1); self.keys(); self.poll(0,2); self.poll(100,3)
+        self.handlers.pop(syms['player_start'],None); self.handlers[ps['stock_player_start_trampoline']]='r:start'; self.started=0; self.seeks=[]
+    def hook(self,u,address,size,unused):
+        if self.handlers.get(address)=='r:start': self.started+=1; self.play=(0,3600); return self.returns(1,clobber=True)
+        return super().hook(u,address,size,unused)
+    def pick(self,*paths,at=0,cls=0xff10):
+        rows=[]
+        for p in paths: r=self.song(p); self.word(r+O['REC_PATH'],self.string(p)); rows.append(r)
+        self.call(address=syms['player_start'],args=(self.deque(rows),at,cls,2),gap=0)
+m=ReturnMachine(); kept=m.places(); m.pick('/a/book.m4b'); assert m.started==1 and m.places()==kept
+m.poll(0); assert not m.seeks; m.poll(1); assert m.seeks==[100] and m.places()==kept; m.poll(100,3); assert m.places()==kept
+m=ReturnMachine(); kept=m.places(); m.pick('/a/book.m4b'); m.poll(100,9); assert not m.seeks and m.started==1  # it never restarted: the wait runs out
+m=ReturnMachine(); m.pick('/a/other'); assert m.started==1; m.poll(0,2); assert not m.seeks  # another file: nothing to go back to here
+checks+=5
 
 print(f'{checks} advanced playback/wheel MIPS checks passed')
 
@@ -1941,154 +1958,161 @@ for _ in range(6):
 assert fades=={0,7000},fades  # both cases met along the way
 print('Crossfade: the next change\'s fade, album and Gapless gates, the shared file, the filter and Shuffle Songs passed')
 
-if not is_m1plus:  # 1.6.7's press and natural-start stamps (player_seek_time, player_start, START_MUTE_CALL, START_SLEEP_CALL unported)
-    # What waits for the DAC (crossfade.c press_stamp, docs/internals.md#wired-start): demo's stamp in PRESS_FILE.
-    class PressMachine(XfadeMachine):
-        def __init__(self):
-            super().__init__('0'); self.now=5000; self.handlers.pop(ps['press_stamp']); self.handlers.pop(ps['mute_stamp'])
-            self.handlers[syms['clock_gettime@GLIBC_2.2']]='xf:clock'; self.handlers[syms['rename@GLIBC_2.0']]='xf:rename'
-            self.handlers[0x4ea848]='xf:dialog'; self.handlers[syms['mclStartPlayer']]='xf:start'
-            self.stock=[]; self.nested_load=0; self.held=0; self.sec=100
-            for name in ('change','next','load','pause','seek_time','seek_start','player_start'): self.handlers[ps[f'stock_{name}_trampoline']]='xf:'+name
-            self.handlers[ps['resume_held']]='xf:held'; self.handlers[syms['player_playtime']]='xf:playtime'
-            self.word(O['MCL_TYPE'],0xf001)
-        def hook(self,u,address,size,unused):
-            name=self.handlers.get(address,'')
-            if name=='xf:clock':
-                b=u.reg_read(REGS[1]); self.word(b,self.now//1000&0xffffffff); self.word(b+4,self.now%1000*1000000); return self.returns(0)
-            if name=='xf:rename': self.files[self.text(u.reg_read(REGS[1]))]=b''; return self.returns(0)
-            if name=='xf:dialog': return u.reg_write(UC_MIPS_REG_PC,0x1000000)  # back in on_wm_timer_dialog
-            if name=='xf:held': return self.returns(self.held)
-            if name=='xf:playtime': return self.returns(self.sec)
-            if name[3:] in ('change','next','load','pause','seek_time','seek_start','start','player_start'):
-                self.stock.append(name); self.seen=self.get(self.flag)
-                if name=='xf:start': self.start_natural=self.get(ps['press_natural'])
-                if name in ('xf:next','xf:change') and self.nested_load:  # Folder Skip's load, as stock's do within them
-                    self.nested_load=0; self.nested(ps['ringnav_load'],self.get(syms['mcl_pdeqplaylist']),0,1)
-                return self.returns(0)
-            return super().hook(u,address,size,unused)
-        def at(self): return self.get(self.flag)
-        def nothing(self): return not {'/tmp/q2press','/tmp/q2press.tmp'}&set(self.files)
-        def enter(self,name,*args):  # through the hook, not the fixtures' mock
-            self.handlers.pop(syms[name],None); return self.call(address=syms[name],args=tuple(args)+(0,)*(4-len(args)),gap=0)
-    # Nothing is created until the first press or start_mute's mark: a poll, ringnav_next(1)'s forget and the Stop that ends a queue make no file.
-    m=PressMachine(); m.fn('playback_poll'); m.advance_song(1); assert m.nothing() and m.stock==['xf:next']
-    # A manual Next or Previous stamps, odd and so never 0, the low 32 bits of the monotonic clock's ms, before stock runs.
-    m.enter('player_next_music'); assert '/tmp/q2press' in m.files and m.at()==5001 and m.seen==5001
-    m.now=6000; m.fn('ringnav_change',0); assert m.at()==6001
-    m.now=(1<<32)+1002; m.fn('ringnav_change',1); assert m.at()==1003
-    # A natural change forgets it and stamps nothing, before stock's next or advanced play's mclStartPlayer; a rollover too.
-    m=PressMachine(); m.fn('ringnav_change',1); m.advance_song(1); assert m.at()==0 and m.seen==0 and m.get(ps['press_natural'])==0
-    m=PressMachine(); m.options(1,5,0); m.fn('ringnav_change',1); m.stock=[]; m.advance_song(1); assert m.stock==['xf:start'] and m.seen==0
-    m=PressMachine(); m.fn('ringnav_change',1); m.nested_load=1; m.advance_song(1); assert m.at()==0 and 'xf:load' in m.stock
-    m=PressMachine(); m.nested_load=1; m.advance_song(1); assert m.nothing() and 'xf:load' in m.stock
-    # ringnav_next(0) is reached only under ringnav_change, which has stamped: alone it neither stamps nor forgets.
-    m=PressMachine(); m.advance_song(0); assert m.nothing()
-    m=PressMachine(); m.fn('ringnav_change',1); m.now=7000; m.advance_song(0); assert m.at()==5001
-    # A list pick stamps, after stock's load. Memory Playback's restore doesn't, in its load or player_start's second.
-    m=PressMachine(); m.fn('ringnav_load',m.get(syms['mcl_pdeqplaylist']),0,0xf001); assert m.at()==5001 and m.seen==0
-    s=PlaybackMachine(); s.options(4,5,0); s.advance_song(0); s.fn('playback_save')
-    m=PressMachine(); m.handlers.pop(ps['stock_load_trampoline']); m.files.update(s.files); m.byte(syms['g_memory_play'],2); out=m.deque([])
-    at=m.fn('ringnav_memory',out); assert at>=0 and m.nothing(); m.fn('ringnav_load',out,at,1); assert m.nothing()
-    # Only a local queue's press: DLNA's (2, 3) and the online ones' (0xf1, 0xf2) start tracks by themselves.
-    for kind,stamps in ((1,True),(0xff10,True),(0xf001,True),(2,False),(3,False),(0xf1,False),(0xf2,False)):
-        m=PressMachine(); m.word(O['MCL_TYPE'],kind); m.fn('ringnav_load',m.get(syms['mcl_pdeqplaylist']),0,kind); assert m.nothing()!=stamps,kind
-        m=PressMachine(); m.word(O['MCL_TYPE'],kind); m.fn('ringnav_change',1); assert m.nothing()!=stamps,kind
-    # Stock's own player_start_queue hook doesn't stamp (DLNA, SyncLink's URL plays); Up Next's row does, before it.
-    m=PressMachine(); m.handlers[ps['stock_start_queue_trampoline']]='xf:none'; m.fn('ringnav_start_queue',2); assert m.nothing()
-    m=PressMachine(); m.handlers[syms['player_start_queue']]='xf:start'; m.handlers[syms['navigator_back']]='xf:none'
-    m.fn('un_play',0); assert m.stock==['xf:start'] and m.seen==5001
-    # Play from a stop stamps, a headset's own too (media_set_playing, through the same hook); playing or paused doesn't.
-    m=PressMachine(); m.word(PLAY_STATUS,1); m.enter('player_play_pause'); assert m.at()==5001 and m.stock==['xf:pause']
-    m=PressMachine(); m.handlers.pop(syms['player_play_pause'],None); m.word(PLAY_STATUS,1); m.fn('media_set_playing',1); assert m.at()==5001 and m.stock==['xf:pause']
-    for status in (2,3):
-        m=PressMachine(); m.word(PLAY_STATUS,status); m.enter('player_play_pause'); assert m.nothing(),status
-    # The fade's start (docs/internals.md#unpause): a Pause from playing stamps MUTE_FILE before stock's mute(2), and nothing else does.
-    m=PressMachine(); m.word(PLAY_STATUS,2); m.enter('player_play_pause'); assert '/tmp/q2mute' in m.files and m.seen==5001 and m.stock==['xf:pause']
-    for status in (1,3):
-        m=PressMachine(); m.word(PLAY_STATUS,status); m.enter('player_play_pause'); assert '/tmp/q2mute' not in m.files,status
-    m=PressMachine(); m.options(3,0,0); m.fn('playback_group_skip',1); assert m.at()==5001  # Next Group, a press
-    # A user's scrub and Previous restarting the track stamp, through the hooks, and go on to stock.
-    m=PressMachine(); m.enter('player_seek_time',50); assert m.at()==5001 and m.stock==['xf:seek_time'] and m.seen==5001
-    m=PressMachine(); m.enter('player_seek_start'); assert m.at()==5001 and m.stock==['xf:seek_start'] and m.seen==5001
-    # The skip past a file stock can't play: on_wm_timer_dialog's own words into stock's player_next_music, and nobody
-    # pressed, for a Folder Skip load in it too. The same Next from anywhere else stamps (above).
-    for load in (0,1):
-        m=PressMachine(); m.handlers.pop(syms['player_next_music'],None); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0); m.nested_load=load
-        m.call(address=0x4eaa8c,args=(0,0,0,0),gap=0); assert 'xf:change' in m.stock and m.nothing(),load
-        assert m.get(ps['press_natural'])==0
-    # A full tmpfs: the file isn't made and nothing is stored, so no SIGBUS; the next press tries again.
-    m=PressMachine(); m.written=-1; m.word(m.flag,0xdead); m.fn('ringnav_change',1); assert m.at()==0xdead and '/tmp/q2press' not in m.files
-    m.written=4; m.fn('ringnav_change',1); assert m.at()==5001
-    # A press the restart guard refuses plays nothing, so it stamps nothing, not even the file; its confirmation stamps before
-    # stock runs. Under 11 s the seek hook stamps nothing either: player_change_music does, if it goes ahead.
-    def asks(m,name,*args): m.handlers.pop(syms[name],None); return signed(m.call(address=syms[name],args=tuple(args)+(0,)*(4-len(args)),gap=0))
-    def guarded(machine=None):
-        m=(machine or PressMachine)(); m.held=1; m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,2); m.install([('a','/a/a','A',0,0,0,0)],0); m.word(O['MCL_TYPE'],1); m.word(O['MCL_MODE'],0); m.byte(O['MCL_JUMPFOLDER'],0); return m
-    m=guarded(); assert asks(m,'player_seek_start')==1 and m.nothing() and not m.stock
-    m.now+=2000; asks(m,'player_seek_start'); assert m.stock==['xf:seek_start'] and m.seen==7001 and m.at()==7001
-    m=guarded(); assert asks(m,'player_change_music',1)==0 and m.nothing() and not m.stock
-    m.now+=2000; asks(m,'player_change_music',1); assert m.stock==['xf:change'] and m.seen==7001 and m.at()==7001
-    # A pick that starts nothing stamps nothing; one of a short song goes on to stock, where ringnav_load stamps.
-    m=guarded(); q=m.get(syms['mcl_pdeqplaylist']); assert asks(m,'player_start',q,0,1,2)==1 and m.nothing() and not m.stock
-    m.now+=2000; assert asks(m,'player_start',q,0,1,2)==1 and m.nothing() and not m.stock
-    m=guarded(); m.word(PLAY_STATUS,3); q=m.get(syms['mcl_pdeqplaylist']); assert asks(m,'player_start',q,0,1,2)==1 and m.nothing()
-    m=guarded(); m.held=0; q=m.get(syms['mcl_pdeqplaylist']); asks(m,'player_start',q,0,1,2); assert m.stock==['xf:player_start']
-    m=guarded(); m.sec=10; asks(m,'player_seek_start'); assert m.stock==['xf:seek_start'] and m.nothing()
-    # An earlier stamp stands through a refusal: the press it was for, not this one.
-    m=guarded(); m.held=0; asks(m,'player_change_music',1); assert m.at()==5001; m.held=1; m.now=9000; asks(m,'player_seek_start'); assert m.at()==5001
-    # Never an automatic change: on_wm_timer_dialog's skip past an unplayable file goes to stock, unasked and unstamped.
-    m=guarded(); m.handlers.pop(syms['player_next_music'],None); m.u.reg_write(UC_MIPS_REG_GP,0xa26cc0)
-    m.call(address=0x4eaa8c,args=(0,0,0,0),gap=0); assert m.stock==['xf:change'] and m.nothing() and not m.get(ps['restart_ask'])
-    print('Press: Next, Previous, a list pick and a user\'s seek stamp; a natural change forgets, stamps nothing and makes no file')
-    # What mclStartPlayer does on the jack from the idle player, its own code run from the way's test to the send (0x5ad1a8-0x5ad1e4).
-    class StartMachine(PressMachine):
-        def __init__(self):
-            super().__init__(); self.quiet=[]
-            self.handlers[syms['mclSetMute']]='xf:mute'; self.handlers[syms['usleep@GLIBC_2.0']]='xf:usleep'
-        def hook(self,u,address,size,unused):
-            name=self.handlers.get(address,'')
-            if name in ('xf:mute','xf:usleep'): self.quiet.append((name[3:],u.reg_read(REGS[0]))); return self.returns(0)
-            return super().hook(u,address,size,unused)
-        def site(self):
-            self.quiet=[]; sp=self.u.reg_read(UC_MIPS_REG_SP)-0x100
-            self.word(sp+0x20,0xa26cc0); self.u.reg_write(UC_MIPS_REG_SP,sp); self.u.reg_write(UC_MIPS_REG_GP,0xa26cc0); self.u.reg_write(UC_MIPS_REG_FP,0xa40000)
-            self.u.emu_start(0x5ad1a8,0x5ad1e4,count=200000); self.u.reg_write(UC_MIPS_REG_SP,sp+0x100)
-            return self.quiet
-    STOCK=[('mute',1),('usleep',100000)]
-    m=StartMachine(); assert m.get(0x5ad1bc)==jal(ps['start_mute']) and m.get(0x5ad1d4)==jal(ps['start_sleep'])
-    assert m.site()==STOCK and m.nothing()  # outside a natural change: a press, a boot, a resume, an app
-    m.word(ps['press_natural'],1); assert m.site()==STOCK and m.nothing()  # the natural starts ringnav_next(1) doesn't make
-    m.word(ps['press_natural'],2); assert m.site()==[] and m.at()==5000  # even: not a press's stamp
-    assert m.site()==[] and m.at()==5000
-    m.fn('start_sleep',150000); assert m.quiet==[('usleep',150000)]  # the skip is one sleep's, whatever comes next
-    m.now=(1<<32)+1; m.quiet=[]; assert m.site()==[] and m.at()==2  # and never 0
-    m.now=5000
-    m.word(ps['press_natural'],0); assert m.site()==STOCK and m.at()==0  # the skip doesn't outlast its start, and a start that mutes clears an unspent mark
-    m=StartMachine(); m.fn('ringnav_change',1); assert m.at()==5001; m.site(); assert m.at()==5001  # a press's stamp stays
-    m.word(ps['press_natural'],2); m.now=7001; assert m.site()==[] and m.at()==7000
-    for cls in (0xf1,0xf2,2,3,5):  # DLNA and the online queues stay stock's
-        m=StartMachine(); m.word(ps['press_natural'],2); m.word(O['MCL_TYPE'],cls); assert m.site()==STOCK and m.nothing(),cls
-    m=StartMachine(); m.word(ps['press_natural'],2); m.written=-1; assert m.site()==STOCK and '/tmp/q2press' not in m.files  # no word to tell hciplayer
-    m=StartMachine(); m.word(ps['press_natural'],2); m.word(0xa3beb0,1); assert m.site()==[] and m.nothing()  # stock's own test: the jack's only
-    # ringnav_next(1) is what sets it, and only for its own span; a rollover's load inside it keeps the local class.
-    m=PressMachine(); m.options(1,5,0); m.stock=[]; m.advance_song(1); assert m.stock==['xf:start'] and m.start_natural==2 and m.get(ps['press_natural'])==0
-    m=PressMachine(); m.nested_load=1; m.advance_song(1); assert m.get(ps['press_natural'])==0
-    # The restart guard around the marks: a refused press or a pick that starts nothing leaves a natural start's even mark as
-    # it was, so it can't read as a press, and the next natural start marks afresh. A confirmed press stamps odd, its own start
-    # mutes as stock's, and a natural change after it forgets the word, so no wait comes of it.
-    m=guarded(StartMachine); q=m.get(syms['mcl_pdeqplaylist']); m.word(ps['press_natural'],2); assert m.site()==[] and m.at()==5000; m.word(ps['press_natural'],0)
-    assert asks(m,'player_seek_start')==1 and m.at()==5000 and not m.stock
-    assert asks(m,'player_change_music',1)==0 and m.at()==5000 and not m.stock  # another key: it asks again
-    assert asks(m,'player_start',q,0,1,2)==1 and m.at()==5000 and not m.stock
-    m.word(ps['press_natural'],2); m.now=6000; assert m.site()==[] and m.at()==6000; m.word(ps['press_natural'],0)
-    m=guarded(StartMachine); assert asks(m,'player_change_music',1)==0 and m.nothing()
-    m.now+=2000; asks(m,'player_change_music',1); assert m.at()==7001 and m.stock==['xf:change'] and m.site()==STOCK and m.at()==7001
-    m.handlers[syms['player_change_music']]='xf:none'; m.advance_song(1); assert m.at()==0 and m.get(ps['press_natural'])==0
-    m=guarded(StartMachine); assert asks(m,'player_seek_start')==1; m.now+=2000; asks(m,'player_seek_start'); assert m.at()==7001 and m.site()==STOCK and m.at()==7001
-    m.advance_song(1); assert m.at()==0
-    m=guarded(StartMachine); m.word(ps['press_natural'],2); m.site(); m.word(ps['press_natural'],0); m.held=0; asks(m,'player_start',m.get(syms['mcl_pdeqplaylist']),0,1,2)
-    assert m.stock==['xf:player_start'] and m.site()==STOCK and m.at()==0  # a real pick's start mutes, and clears the mark it isn't for
-    print('Start: a natural start on the jack skips demo\'s mute and sleep and marks the word; everything else keeps stock\'s')
-else:
-    print("NOT PORTED: 1.6.7's press and natural-start stamps (player_seek_time, player_start, START_MUTE_CALL, START_SLEEP_CALL unported)")
+# V2.1's twins (work/unported/r2/2.2/firstcheck.md): on_wm_timer_dialogresponse's skip past a file it can't play enters at
+# 0x4cfd3c and comes back at UNPLAYABLE_NEXT_RET; the start routine's idle branch runs from its jack test to its send, with
+# $fp on V2.1's page of the running byte.
+CHANGE_MUSIC='change_music' if is_m1plus else 'player_change_music'
+UNPLAYABLE_ENTRY,UNPLAYABLE_RET=(0x4cfd3c,0x4cf8bc) if is_m1plus else (0x4eaa8c,0x4ea848)
+if is_m1plus: START_RUN,START_FP,JACK,MUTE_AT,SLEEP_AT=(0x5d50e8,0x5d5124),0xa10000,0xa0abe8,0x5d50fc,0x5d5114
+else: START_RUN,START_FP,JACK,MUTE_AT,SLEEP_AT=(0x5ad1a8,0x5ad1e4),0xa40000,0xa3beb0,0x5ad1bc,0x5ad1d4
+# What waits for the DAC (crossfade.c press_stamp, docs/internals.md#wired-start): demo's stamp in PRESS_FILE.
+class PressMachine(XfadeMachine):
+    def __init__(self):
+        super().__init__('0'); self.now=5000; self.handlers.pop(ps['press_stamp']); self.handlers.pop(ps['mute_stamp'])
+        self.handlers[syms['clock_gettime@GLIBC_2.2']]='xf:clock'; self.handlers[syms['rename@GLIBC_2.0']]='xf:rename'
+        self.handlers[UNPLAYABLE_RET]='xf:dialog'; self.handlers[syms['mclStartPlayer']]='xf:start'
+        self.stock=[]; self.nested_load=0; self.held=0; self.sec=100
+        for name in ('change','next','load','pause','seek_time','seek_start','player_start'): self.handlers[ps[f'stock_{name}_trampoline']]='xf:'+name
+        self.handlers[ps['resume_held']]='xf:held'; self.handlers[syms['player_playtime']]='xf:playtime'
+        self.word(O['MCL_TYPE'],0xf001)
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if name=='xf:clock':
+            b=u.reg_read(REGS[1]); self.word(b,self.now//1000&0xffffffff); self.word(b+4,self.now%1000*1000000); return self.returns(0)
+        if name=='xf:rename': self.files[self.text(u.reg_read(REGS[1]))]=b''; return self.returns(0)
+        if name=='xf:dialog': return u.reg_write(UC_MIPS_REG_PC,0x1000000)  # back in on_wm_timer_dialog
+        if name=='xf:held': return self.returns(self.held)
+        if name=='xf:playtime': return self.returns(self.sec)
+        if name[3:] in ('change','next','load','pause','seek_time','seek_start','start','player_start'):
+            self.stock.append(name); self.seen=self.get(self.flag)
+            if name=='xf:start': self.start_natural=self.get(ps['press_natural'])
+            if name in ('xf:next','xf:change') and self.nested_load:  # Folder Skip's load, as stock's do within them
+                self.nested_load=0; self.nested(ps['ringnav_load'],self.get(syms['mcl_pdeqplaylist']),0,1)
+            return self.returns(0)
+        return super().hook(u,address,size,unused)
+    def at(self): return self.get(self.flag)
+    def nothing(self): return not {'/tmp/q2press','/tmp/q2press.tmp'}&set(self.files)
+    def enter(self,name,*args):  # through the hook, not the fixtures' mock
+        self.handlers.pop(syms[name],None); return self.call(address=syms[name],args=tuple(args)+(0,)*(4-len(args)),gap=0)
+# Nothing is created until the first press or start_mute's mark: a poll, ringnav_next(1)'s forget and the Stop that ends a queue make no file.
+m=PressMachine(); m.fn('playback_poll'); m.advance_song(1); assert m.nothing() and m.stock==['xf:next']
+# A manual Next or Previous stamps, odd and so never 0, the low 32 bits of the monotonic clock's ms, before stock runs.
+m.enter('player_next_music'); assert '/tmp/q2press' in m.files and m.at()==5001 and m.seen==5001
+m.now=6000; m.fn('ringnav_change',0); assert m.at()==6001
+m.now=(1<<32)+1002; m.fn('ringnav_change',1); assert m.at()==1003
+# A natural change forgets it and stamps nothing, before stock's next or advanced play's mclStartPlayer; a rollover too.
+m=PressMachine(); m.fn('ringnav_change',1); m.advance_song(1); assert m.at()==0 and m.seen==0 and m.get(ps['press_natural'])==0
+m=PressMachine(); m.options(1,5,0); m.fn('ringnav_change',1); m.stock=[]; m.advance_song(1); assert m.stock==['xf:start'] and m.seen==0
+m=PressMachine(); m.fn('ringnav_change',1); m.nested_load=1; m.advance_song(1); assert m.at()==0 and 'xf:load' in m.stock
+m=PressMachine(); m.nested_load=1; m.advance_song(1); assert m.nothing() and 'xf:load' in m.stock
+# ringnav_next(0) is reached only under ringnav_change, which has stamped: alone it neither stamps nor forgets.
+m=PressMachine(); m.advance_song(0); assert m.nothing()
+m=PressMachine(); m.fn('ringnav_change',1); m.now=7000; m.advance_song(0); assert m.at()==5001
+# A list pick stamps, after stock's load. Memory Playback's restore doesn't, in its load or player_start's second.
+m=PressMachine(); m.fn('ringnav_load',m.get(syms['mcl_pdeqplaylist']),0,0xf001); assert m.at()==5001 and m.seen==0
+s=PlaybackMachine(); s.options(4,5,0); s.advance_song(0); s.fn('playback_save')
+m=PressMachine(); m.handlers.pop(ps['stock_load_trampoline']); m.files.update(s.files); m.byte(syms['g_memory_play'],2); out=m.deque([])
+at=m.fn('ringnav_memory',out); assert at>=0 and m.nothing(); m.fn('ringnav_load',out,at,1); assert m.nothing()
+# Only a local queue's press: DLNA's (2, 3) and the online ones' (0xf1, 0xf2) start tracks by themselves.
+for kind,stamps in ((1,True),(0xff10,True),(0xf001,True),(2,False),(3,False),(0xf1,False),(0xf2,False)):
+    m=PressMachine(); m.word(O['MCL_TYPE'],kind); m.fn('ringnav_load',m.get(syms['mcl_pdeqplaylist']),0,kind); assert m.nothing()!=stamps,kind
+    m=PressMachine(); m.word(O['MCL_TYPE'],kind); m.fn('ringnav_change',1); assert m.nothing()!=stamps,kind
+# Stock's own player_start_queue hook doesn't stamp (DLNA, SyncLink's URL plays); Up Next's row does, before it.
+m=PressMachine(); m.handlers[ps['stock_start_queue_trampoline']]='xf:none'; m.fn('ringnav_start_queue',2); assert m.nothing()
+m=PressMachine(); m.handlers[syms['player_start_queue']]='xf:start'; m.handlers[syms['navigator_back']]='xf:none'
+m.fn('un_play',0); assert m.stock==['xf:start'] and m.seen==5001
+# Play from a stop stamps, a headset's own too (media_set_playing, through the same hook); playing or paused doesn't.
+m=PressMachine(); m.word(PLAY_STATUS,1); m.enter('player_play_pause'); assert m.at()==5001 and m.stock==['xf:pause']
+m=PressMachine(); m.handlers.pop(syms['player_play_pause'],None); m.word(PLAY_STATUS,1); m.fn('media_set_playing',1); assert m.at()==5001 and m.stock==['xf:pause']
+for status in (2,3):
+    m=PressMachine(); m.word(PLAY_STATUS,status); m.enter('player_play_pause'); assert m.nothing(),status
+# The fade's start (docs/internals.md#unpause): a Pause from playing stamps MUTE_FILE before stock's mute(2), and nothing else does.
+m=PressMachine(); m.word(PLAY_STATUS,2); m.enter('player_play_pause'); assert '/tmp/q2mute' in m.files and m.seen==5001 and m.stock==['xf:pause']
+for status in (1,3):
+    m=PressMachine(); m.word(PLAY_STATUS,status); m.enter('player_play_pause'); assert '/tmp/q2mute' not in m.files,status
+m=PressMachine(); m.options(3,0,0); m.fn('playback_group_skip',1); assert m.at()==5001  # Next Group, a press
+# A user's scrub and Previous restarting the track stamp, through the hooks, and go on to stock.
+m=PressMachine(); m.enter('player_seek_time',50); assert m.at()==5001 and m.stock==['xf:seek_time'] and m.seen==5001
+m=PressMachine(); m.enter('player_seek_start'); assert m.at()==5001 and m.stock==['xf:seek_start'] and m.seen==5001
+# The skip past a file stock can't play: on_wm_timer_dialog's own words into stock's player_next_music, and nobody
+# pressed, for a Folder Skip load in it too. The same Next from anywhere else stamps (above).
+for load in (0,1):
+    m=PressMachine(); m.handlers.pop(syms['player_next_music'],None); m.u.reg_write(UC_MIPS_REG_GP,DEMO_GP); m.nested_load=load
+    m.call(address=UNPLAYABLE_ENTRY,args=(0,0,0,0),gap=0); assert 'xf:change' in m.stock and m.nothing(),load
+    assert m.get(ps['press_natural'])==0
+# A full tmpfs: the file isn't made and nothing is stored, so no SIGBUS; the next press tries again.
+m=PressMachine(); m.written=-1; m.word(m.flag,0xdead); m.fn('ringnav_change',1); assert m.at()==0xdead and '/tmp/q2press' not in m.files
+m.written=4; m.fn('ringnav_change',1); assert m.at()==5001
+# A press the restart guard refuses plays nothing, so it stamps nothing, not even the file; its confirmation stamps before
+# stock runs. Under 11 s the seek hook stamps nothing either: player_change_music does, if it goes ahead.
+def asks(m,name,*args): m.handlers.pop(syms[name],None); return signed(m.call(address=syms[name],args=tuple(args)+(0,)*(4-len(args)),gap=0))
+def guarded(machine=None):
+    m=(machine or PressMachine)(); m.held=1; m.handlers.pop(syms['mclGetPlayStatus'],None); m.word(PLAY_STATUS,2); m.install([('a','/a/a','A',0,0,0,0)],0); m.word(O['MCL_TYPE'],1); m.word(O['MCL_MODE'],0); m.byte(O['MCL_JUMPFOLDER'],0); return m
+m=guarded(); assert asks(m,'player_seek_start')==1 and m.nothing() and not m.stock
+m.now+=2000; asks(m,'player_seek_start'); assert m.stock==['xf:seek_start'] and m.seen==7001 and m.at()==7001
+m=guarded(); assert asks(m,CHANGE_MUSIC,1)==0 and m.nothing() and not m.stock
+m.now+=2000; asks(m,CHANGE_MUSIC,1); assert m.stock==['xf:change'] and m.seen==7001 and m.at()==7001
+# A pick that starts nothing stamps nothing; one of a short song goes on to stock, where ringnav_load stamps.
+m=guarded(); q=m.get(syms['mcl_pdeqplaylist']); assert asks(m,'player_start',q,0,1,2)==1 and m.nothing() and not m.stock
+m.now+=2000; assert asks(m,'player_start',q,0,1,2)==1 and m.nothing() and not m.stock
+m=guarded(); m.word(PLAY_STATUS,3); q=m.get(syms['mcl_pdeqplaylist']); assert asks(m,'player_start',q,0,1,2)==1 and m.nothing()
+m=guarded(); m.held=0; q=m.get(syms['mcl_pdeqplaylist']); asks(m,'player_start',q,0,1,2); assert m.stock==['xf:player_start']
+m=guarded(); m.sec=10; asks(m,'player_seek_start'); assert m.stock==['xf:seek_start'] and m.nothing()
+# An earlier stamp stands through a refusal: the press it was for, not this one.
+m=guarded(); m.held=0; asks(m,CHANGE_MUSIC,1); assert m.at()==5001; m.held=1; m.now=9000; asks(m,'player_seek_start'); assert m.at()==5001
+# Never an automatic change: on_wm_timer_dialog's skip past an unplayable file goes to stock, unasked and unstamped.
+m=guarded(); m.handlers.pop(syms['player_next_music'],None); m.u.reg_write(UC_MIPS_REG_GP,DEMO_GP)
+m.call(address=UNPLAYABLE_ENTRY,args=(0,0,0,0),gap=0); assert m.stock==['xf:change'] and m.nothing() and not m.get(ps['restart_ask'])
+print('Press: Next, Previous, a list pick and a user\'s seek stamp; a natural change forgets, stamps nothing and makes no file')
+# What mclStartPlayer does on the jack from the idle player, its own code run from the way's test to the send (START_RUN).
+class StartMachine(PressMachine):
+    def __init__(self):
+        super().__init__(); self.quiet=[]
+        if is_m1plus:  # V2.1's twins, in CALL_SITES['m1plus'] since DAC_RELEASE (round 2 step 6): the build's own words
+            from m1plus import CALL_SITES
+            assert [w[:2] for k in ('START_MUTE_CALL','START_SLEEP_CALL') for w in CALL_SITES['m1plus'][k]]==[(MUTE_AT,0x0411ff2b),(SLEEP_AT,0x0320f809)]
+        self.handlers[syms['mclSetMute']]='xf:mute'; self.handlers[syms['usleep@GLIBC_2.0']]='xf:usleep'
+    def hook(self,u,address,size,unused):
+        name=self.handlers.get(address,'')
+        if name in ('xf:mute','xf:usleep'): self.quiet.append((name[3:],u.reg_read(REGS[0]))); return self.returns(0)
+        return super().hook(u,address,size,unused)
+    def site(self):
+        self.quiet=[]; sp=self.u.reg_read(UC_MIPS_REG_SP)-0x100
+        self.word(sp+0x20,DEMO_GP); self.u.reg_write(UC_MIPS_REG_SP,sp); self.u.reg_write(UC_MIPS_REG_GP,DEMO_GP); self.u.reg_write(UC_MIPS_REG_FP,START_FP)
+        self.u.emu_start(*START_RUN,count=200000); self.u.reg_write(UC_MIPS_REG_SP,sp+0x100)
+        return self.quiet
+STOCK=[('mute',1),('usleep',100000)]
+m=StartMachine(); assert m.get(MUTE_AT)==jal(ps['start_mute']) and m.get(SLEEP_AT)==jal(ps['start_sleep'])
+assert m.site()==STOCK and m.nothing()  # outside a natural change: a press, a boot, a resume, an app
+m.word(ps['press_natural'],1); assert m.site()==STOCK and m.nothing()  # the natural starts ringnav_next(1) doesn't make
+m.word(ps['press_natural'],2); assert m.site()==[] and m.at()==5000  # even: not a press's stamp
+assert m.site()==[] and m.at()==5000
+m.fn('start_sleep',150000); assert m.quiet==[('usleep',150000)]  # the skip is one sleep's, whatever comes next
+m.now=(1<<32)+1; m.quiet=[]; assert m.site()==[] and m.at()==2  # and never 0
+m.now=5000
+m.word(ps['press_natural'],0); assert m.site()==STOCK and m.at()==0  # the skip doesn't outlast its start, and a start that mutes clears an unspent mark
+m=StartMachine(); m.fn('ringnav_change',1); assert m.at()==5001; m.site(); assert m.at()==5001  # a press's stamp stays
+m.word(ps['press_natural'],2); m.now=7001; assert m.site()==[] and m.at()==7000
+for cls in (0xf1,0xf2,2,3,5):  # DLNA and the online queues stay stock's
+    m=StartMachine(); m.word(ps['press_natural'],2); m.word(O['MCL_TYPE'],cls); assert m.site()==STOCK and m.nothing(),cls
+m=StartMachine(); m.word(ps['press_natural'],2); m.written=-1; assert m.site()==STOCK and '/tmp/q2press' not in m.files  # no word to tell hciplayer
+m=StartMachine(); m.word(ps['press_natural'],2); m.word(JACK,1); assert m.site()==[] and m.nothing()  # stock's own test: the jack's only
+# ringnav_next(1) is what sets it, and only for its own span; a rollover's load inside it keeps the local class.
+m=PressMachine(); m.options(1,5,0); m.stock=[]; m.advance_song(1); assert m.stock==['xf:start'] and m.start_natural==2 and m.get(ps['press_natural'])==0
+m=PressMachine(); m.nested_load=1; m.advance_song(1); assert m.get(ps['press_natural'])==0
+# The restart guard around the marks: a refused press or a pick that starts nothing leaves a natural start's even mark as
+# it was, so it can't read as a press, and the next natural start marks afresh. A confirmed press stamps odd, its own start
+# mutes as stock's, and a natural change after it forgets the word, so no wait comes of it.
+m=guarded(StartMachine); q=m.get(syms['mcl_pdeqplaylist']); m.word(ps['press_natural'],2); assert m.site()==[] and m.at()==5000; m.word(ps['press_natural'],0)
+assert asks(m,'player_seek_start')==1 and m.at()==5000 and not m.stock
+assert asks(m,CHANGE_MUSIC,1)==0 and m.at()==5000 and not m.stock  # another key: it asks again
+assert asks(m,'player_start',q,0,1,2)==1 and m.at()==5000 and not m.stock
+m.word(ps['press_natural'],2); m.now=6000; assert m.site()==[] and m.at()==6000; m.word(ps['press_natural'],0)
+m=guarded(StartMachine); assert asks(m,CHANGE_MUSIC,1)==0 and m.nothing()
+m.now+=2000; asks(m,CHANGE_MUSIC,1); assert m.at()==7001 and m.stock==['xf:change'] and m.site()==STOCK and m.at()==7001
+m.handlers[syms[CHANGE_MUSIC]]='xf:none'; m.advance_song(1); assert m.at()==0 and m.get(ps['press_natural'])==0
+m=guarded(StartMachine); assert asks(m,'player_seek_start')==1; m.now+=2000; asks(m,'player_seek_start'); assert m.at()==7001 and m.site()==STOCK and m.at()==7001
+m.advance_song(1); assert m.at()==0
+m=guarded(StartMachine); m.word(ps['press_natural'],2); m.site(); m.word(ps['press_natural'],0); m.held=0; asks(m,'player_start',m.get(syms['mcl_pdeqplaylist']),0,1,2)
+assert m.stock==['xf:player_start'] and m.site()==STOCK and m.at()==0  # a real pick's start mutes, and clears the mark it isn't for
+print('Start: a natural start on the jack skips demo\'s mute and sleep and marks the word; everything else keeps stock\'s')

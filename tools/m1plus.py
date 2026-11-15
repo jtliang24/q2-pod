@@ -344,9 +344,17 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
         # instead. Tidal's is a bal with its $t9, HiFi's a jalr; login success and logout keep their Home.
         'LOGIN_BACK': ((0x4c704c, 0x8f99ade4, 0x8f99aad8), (0x4c7058, 0x04112c11, 0x04112c20),
                        (0x49aa7c, 0x8f99ade4, 0x8f99aad8)),
+        # 1.6.7's natural start (crossfade.c start_mute, start_sleep) at V2.1's twins of the Q2's, in the static start
+        # routine (0x5d4e00) that mclStartPlayer and mcl_tidalStartPlayer bal: the idle branch's bal mclSetMute (a0=1
+        # in its slot) and its jalr usleep (100000), which the 0xf/0x12 branch's 150000 also reaches. Skipping demo's
+        # mute leans on ao_init's after the drain and dac_ioctl's wait (PLAYER_PROFILE's ao_init_slot, dac_release).
+        'START_MUTE_CALL': ((0x5d50fc, 0x0411ff2b, 'start_mute'),),
+        'START_SLEEP_CALL': ((0x5d5114, 0x0320f809, 'start_sleep'),),
     },
 }
 CALL_SITE_PURPOSES = {
+    'START_MUTE_CALL': 'natural start: no mute before the end',
+    'START_SLEEP_CALL': 'natural start: no sleep before the end',
     'BOOT_MODE_CALL': 'config_init preserves the saved queue when applying the boot play mode',
     'ARTIST_ALBUMS': 'artist detail opens on Albums',
     'SHUFFLE_CALL': 'shuffle honours Play next',
@@ -451,13 +459,7 @@ M1PLUS_PORTS = {
     # unhooked until its item ports it
     'list_get_img_pic': ('native', "song rows' format badge, which the iPod hides: V2.1 has no list_get_img_pic, and "
                          "its song rows draw no badge but img_mqa (music_create_tablerow) (ipod-ui 4.4)"),
-    # 1.6.7's audio timing and Previous's resume ask, V1.32's player routines (docs/m1plus-unported.md)
-    'player_seek_time': ('unported', "a user's seek stamps a press (1.6.7, playback.c press_stamp); V2.1's seek_time not pinned"),
-    'player_seek_start': ('unported', "Previous's restart past 10 s asks too (1.6.7 restart_refused); V2.1's not pinned"),
-    'player_start': ('unported', 'a press waits for the DAC, a natural change keeps stock timing (1.6.7); V2.1 start_player not pinned'),
     # Call sites
-    'START_MUTE_CALL': ('unported', "a natural end plays out before any mute (1.6.7); V2.1's mclStartPlayer not pinned"),
-    'START_SLEEP_CALL': ('unported', "a natural change skips the 100 ms DAC sleep (1.6.7); V2.1's mclStartPlayer not pinned"),
     'SONG_UNKNOWN_CALL': ('q2only', "a song row's empty artist line under a set without text-row artwork: Classic's only (1.6.7)"),
     'ARTIST_ALBUMS': ('native', "V2.1's artist page lists the artist's albums (roadmap 4)"),
     'BOOT_MODE_CALL': ('native', 'V2.1 saves ARTISTTYPE and reads it in config_init (roadmap 4)'),
@@ -469,7 +471,9 @@ M1PLUS_PORTS = {
                     '(ipod-ui 4.4)'),
     'STANDBY_WAKE': ('q2only', "Standby resume staying dark goes with the Q2's Centre-key Wake; V2.1 has Double wake"),
     'WHEEL_TS_READ': ('q2only', 'the touch wheel'),
-    'MAINSCHEDULING_CALL': ('unported', 'paced player scheduling (1.5.5); V2.1 call site not yet pinned'),
+    'MAINSCHEDULING_CALL': ('native', "demo's paced player scheduling (1.5.5), left V2.1's by decision (Nov 14): V2.1 inlines "
+                            "player_mainscheduling in on_wm_idle_status, its round trip mclAutoChange's call at 0x4ce834; "
+                            "the player's command-driven waits are ported (PLAYER_PROFILE's pause_wait, cmd_done, idle_wait)"),
     'HOLD_KEYS': ('unported', "Play/Pause's hold at 700 ms (1.4.5); V2.1's input_device_status is unnamed, and the "
                   'M1 opens the hold menu with a touch long-press too'),
     'STREAM_POLL_CALLS': ('native', "V2.1 creates a Tidal URL worker per request (get_tidal_trackurl, 0x512ed0); "
@@ -607,7 +611,6 @@ M1PLUS_UNRESOLVED = {
     # Home's Library list in Split (coverflow.c home_library, 1.6.7): bound only where Home's asset has
     # list_view_homelib, a geometry set's home_lib, which only Classic's has (unported on M1)
     'on_home_music_onclick': "Classic's Home Library list (coverflow.c home_library): Classic is unported",
-    'player_playtime': "Previous's restart ask (playback.c ringnav_seek_start, 1.6.7): player_seek_start unported",
 }
 # V1.32 routines V2.1 has no twin of that navigation.c names, which is one section (the tests call its unhooked
 # routines, so --gc-sections cannot drop any): a stand-in in patch/m1plus_nav.h under the same name, as (status, why).
@@ -632,6 +635,11 @@ M1PLUS_FUNCTION_ALIASES = {
     'folder_reload_data': 'folder_reload',
     'player_playtime_and_length': 'get_playtimeandlength',
     'player_seek_time': 'seek_time',
+    # Previous's restart ask (playback.c ringnav_seek_start, 1.6.7): prev_music's bal seek_starttime (0x4e4320),
+    # whose own bal get_playtime (0x4e0430) is V1.32's player_playtime but for its end: V2.1 returns the raw
+    # difference, no clamp at 0, which "> 10" reads alike
+    'player_seek_start': 'seek_starttime',
+    'player_playtime': 'get_playtime',
     'switch_charge_enable': 'toolsSetChargeSwitch',
     'taglib_file_open': 'taglib_file_new',
     # Now Playing's position timer, which the scrub stops and restarts: V2.1's playing_page_init starts
@@ -698,6 +706,13 @@ M1PLUS_HOOKS = {
     # A queue row's pick (View Queue, stock's View Queue dialog, a queue delete) in a shuffle's play
     # order: V1.32's player_start_queue. The payload's player_start_queue calls reach it by alias.
     'start_playqueue': (0x4e47d0, 'ringnav_start_queue', 'start_queue'),
+    # 1.6.7's press timing and restart ask: a pick of the playing file keeps it playing (its callers' return
+    # addresses, m1plus_offsets.inc PAGE_PICK_RET and ALBUM_PLAY_RET), Previous past 10 s asks before it
+    # restarts a held place (prev_music's only call), and a user's seek stamps a press (the slider's two
+    # GOT calls, 0x53c5bc and 0x53c70c). V1.32's player_start, player_seek_start and player_seek_time.
+    'start_player': (0x4e4648, 'ringnav_player_start', 'player_start'),
+    'seek_starttime': (0x4e03cc, 'ringnav_seek_start', 'seek_start'),
+    'seek_time': (0x4e0544, 'ringnav_seek_time', 'seek_time'),
     # A track's LYRICS tag without a .lrc; stock's loader runs first, from every caller's GOT call
     'mclLoadExLyric': (0x5d41e4, 'ringnav_lyric', 'lyric'),
     # An .lrc's UTF-8 test (1.5.9), the local loader's (bal at 0x5d3d34) and the match page's (online_loadexlyric,
@@ -713,6 +728,9 @@ M1PLUS_HOOKS = {
     # Standby Limit: into_standby's suspend to RAM (V1.32's device_standby's), V1.32's instruction for
     # instruction; the M1's rtc-ingenic has the same wakealarm
     'toolsIntoStandby': (0x5e5228, 'ringnav_standby', 'standby'),
+    # Add to Playlist and Add to My Fav (2.9): batch_add_file commits one song at a time on the UI thread, so it runs
+    # under the watchdog's long count (m1plus_batch_add.c). The Q2 doesn't hook it (V1.32's 0x4f4be8).
+    'batch_add_file': (0x4da7dc, 'ringnav_batch_add', 'batchadd'),
     # Gapless: the next track's pick and its decoder's open, V1.32's moved
     'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
     'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),
@@ -857,8 +875,6 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'eq_rate_gates': ((0x42ce24, 0x8c429e30, 0), (0x42ce28, 0x8c42002c, 0), (0x42ce2c, 0x8c42003c, 0),
                       (0x42ce34, 0x10400098, 0),
                       (0x42fa78, 0x14400052, 0x10000052)),  # bnez $v0 to the insert -> b
-    # MPlayer pause loop: usec_sleep(20000) in its command/event loop, 50 ms as upstream.
-    'pause_sleep': (0x42ff2c, 0x24044e20, 0x3404c350),
     # peq.py's MEDIA_INFO_NULL: get-music-info's NULL sh_audio branch answers as with no stream (the block is V1.32's
     # 0x42c030 less 0x9c; the reply at 0x42c3c0 sends "{media-info\no-playing-status}", 0x8864e0)
     'media_info_null': ((0x42bfcc, 0x10600008, 0x106000fc),   # beqz $v1, 0x42bff0 -> 0x42c3c0 (Q2 0x42c068)
@@ -872,7 +888,9 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'id3_calls': (0x48ee74, 0x492028, 0x492ab4),
     'stock_id3': 0x48b760,
     'written_audio_pts': 0x44600c,
-    'length_addr': 0xb10e5c,
+    # the length in whole seconds, Q2 0xb10e84: get-music-info's third field (0x42bfbc), stored at 0x421d74; 0xb10e5c
+    # next to it is the bitrate, its first field
+    'length_addr': 0xb10e68,
     # the skip and stop flags, Q2 0xb10e6c and 0xb10e70: the idle loop clears both at 0x42d864 (Q2 0x42da10),
     # set-nexturl sets the first at 0x42d304 (Q2 0x42d3a0)
     'next_flag': 0xb10e50,
@@ -881,7 +899,183 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'av_dict_free': 0x6ea65c,
     'rg_export': 0x5381c4,
     'hr_mp3_seek': 0xb15298,
+    # peq.py's PROBE_STOP: the DSF, DFF and ISO checks' failure stores of the stop code (V2.1's 0xb10e58). DFF's no
+    # longer has its epilogue inline (a b to the shared one at 0x479e64, the flag store in its delay slot): an M1 hook
+    'probe_stop': ((0x47b4cc, 0xac640e58, 'probe_stop_dsf'), (0x47a4d8, 0xac640e58, 'probe_stop_dff'),
+                   (0x478800, 0xac640e58, 'probe_stop_iso')),  # sw $a0, 0xe58($v1)
+    # peq.py's STOP_SITES, STOP_NOPS and STOP_FILL: the ISO TOC's, the AAC scan's and the ASF open's stores (lui $v0, 0xb1)
+    'stop_sites': ((0x478730, 0x3c0200b1, 'stop_iso'), (0x47fc44, 0x3c0200b1, 'stop_aac'), (0x482164, 0x3c0200b1, 'stop_asf')),
+    'stop_nops': ((0x478740, 0x3c0200b1, 0), (0x47fc50, 0x3c0200b1, 0), (0x482170, 0x3c0200b1, 0)),
+    'stop_fill': (0x46bd74, 0xac430e58, 'stop_fill'),  # sw $v1, 0xe58($v0)
+    # peq.py's FORCED_EOF: mpctx in $v1 and 1 in $a0, and the jal's delay slot (lw $v1, 0x1058($sp)) overwrites mpctx: an M1 hook
+    'forced_eof': (0x423310, 0xac640014, 'forced_eof'),  # sw $a0, 0x14($v1)
+    # peq.py's EXIT_HOLD: {player-status\exit}'s lui is $a1's here, and $a0 is kept: an M1 hook
+    'exit_hold': (0x4226fc, 0x3c050089, 'exit_hold'),  # lui $a1, 0x89
+    # peq.py's PRELOAD_*: the preload thread (V1.32's less 0x9c) and the cold path's clear (base $s6: an M1 hook)
+    'preload_publish': (0x42ba7c, 0xac440dd0, 'preload_publish'),  # sw $a0, 0xdd0($v0)
+    'preload_failed': (0x42bb08, 0x00001025, 'preload_failed'),    # move $v0, $zero
+    'preload_fail_stores': ((0x42bae4, 0xac430dd0, 0), (0x42bb50, 0xac430dd0, 0), (0x42bb78, 0xac430dd0, 0)),  # sw $v1, 0xdd0($v0)
+    'cold_clear': (0x421a20, 0xaec00dd0, 'cold_clear'),            # sw $zero, 0xdd0($s6)
+    'preload_close': ((0x42c1c8, 0x24030002, 'preload_close'), (0x42c8f8, 0x24030002, 'preload_stop')),  # li $v1, 2
+    # peq.py's FLAC_GATE (the decoder less 0x5a0), SEEK_NOSYNC and SEEK_WORDS (demux_audio_seek less 0x540); the
+    # branches' sites and targets move together, so their words are V1.32's
+    'flac_gate': (0x5b7824, 0x1000fd74, 'flac_gate'),     # b 0x5b6df8
+    'seek_nosync': (0x48d0ac, 0x8fa20030, 'seek_nosync'), # lw $v0, 0x30($sp)
+    'seek_words': ((0x48d0b0, 0x00822023, 0), (0x48ced8, 0x03c0a825, 0), (0x48cedc, 0x02e08825, 0),
+                   (0x48d7a0, 0x1440fdcd, 0x14400003), (0x48d2cc, 0x188002d5, 0)),
+    # The addresses those hooks read, as peq_player.c's macros (PLAYER_MACROS); pinned by player_words
+    'mpctx': 0xaf9e30,
+    'player_globals': 0xb10000,
+    'stop_code': 0xb10e58,
+    'dsd_file': 0xb10e44,
+    'audio_demuxer': 0x89f740,  # demux_audio's desc: its seek slot is seek_slot
+    'probe_loop_ra': 0x485464,
+    'probe_open_ra': 0x4854b0,
+    'preload_state': 0xb10dd0,
+    'preload_free': 0x42a9cc,
+    'preload_publish_ret': 0x42ba80,
+    'preload_close_ret': 0x42c1d0,
+    'preload_stop_ret': 0x42c900,
+    'flac_target': 0xb15290,
+    'flac_pass_ret': 0x5b6518,
+    'flac_epilogue_ret': 0x5b6b88,
+    'seek_nosync_ret': 0x48d0b4,
+    # peq.py's MP3_* (patch/mp3_gapless.c): demux_audio_open's malloc(16) of its private state, filter_n_bytes' af_play
+    # call, ad_libmad read_frame's demux_read_data call (V1.32's less 0x540, 0x540 and 0x580), and the audio
+    # demuxer's fill and close slots (audio_demuxer + 0x20, + 0x28)
+    'mp3_alloc': (0x48f650, 0x0c2b69e0, 'mp3_private_alloc'),  # jal 0xada780, malloc's PLT stub
+    'mp3_filter': (0x47f3a0, 0x0c1133d0, 'mp3_filter_entry'),  # jal af_play
+    'mp3_read': (0x4b1f0c, 0x0c1211b3, 'mp3_read'),            # jal demux_read_data
+    'mp3_fill': (0x89f760, 0x48bc44, 'mp3_fill'),
+    'mp3_close': (0x89f768, 0x48b2a4, 'mp3_close'),
+    # peq.py's LAVF_PRIV and MOV_EDITS (patch/lavf_gapless.c): lavf_check_file's calloc of lavf_priv_t (V1.32's less
+    # 0x540), and mov_read_trak's av_freep(&sc->elst_data) (FFmpeg's less 0x5a0)
+    'lavf_priv': (0x4ae50c, 0x24040c38, 0x24040c58),  # addiu $a0, $zero, 0xc38 -> 0xc58
+    'mov_edits': (0x516358, 0x0c1bcede, 0),           # jal 0x6f3b78, av_freep
+    # The addresses those two read, as their macros (PLAYER_MACROS)
+    'af_play': 0x44cf40,
+    'demux_read_data': 0x4846cc,
+    'stock_mp3_fill': 0x48bc44,
+    'stock_mp3_close': 0x48b2a4,
+    'mp3_seek_fill': 0xb15294,  # stock's fill-after-seek flag, V1.32's 0xb152b4
+    'lavf_pref_desc': 0x8a431c,
+    'lavf_desc': 0x8a4350,
+    'mov_format': 0xafc030,
+    'ogg_format': 0xafc250,
+    'av_dict_get': 0x6ea068,
+    'ds_get_next_pts': 0x485968,
+    # peq.py's PAUSE_WAIT, CMD_DONE and IDLE_WAIT (patch/peq_player.c's hci_*): the paused loop's usec_sleep(20000), the
+    # command thread's handler call (its $a0 set in the blez's slot before it, its own slot a nop) and the stopped
+    # loop's usleep(10000), V1.32's less 0x308, 0xcc and 0x190. V2.1's command thread has no heartbeat to keep
+    'pause_wait': (0x42ff28, 0x0c1291cc, 'hci_pause_wait'),  # jal 0x4a4730, usec_sleep
+    'cmd_done': (0x42d6f8, 0x0c10af61, 'hci_command'),       # jal cmd_handler
+    'idle_wait': (0x42d838, 0x0c2b6a14, 'hci_idle_wait'),    # jal 0xada850, usleep's PLT stub
+    'play_flag': 0xb10e1c,    # V1.32's 0xb10e34: the idle loop waits on it, the handler sets it
+    'cmd_handler': 0x42bd84,  # V1.32's 0x42be20
+    # peq.py's DAC_RELEASE (the wired outputs' release wait): init's end jal ioctl (its DAC_MUTE 0 after the sw $zero to
+    # the mute flag), seek's jal to the DAC helper, resume's jal snd_pcm_pause and play's jal snd_pcm_writei (V1.32's
+    # 0x4391b0, 0x42b164, 0x43881c, 0x43afa4)
+    'dac_release': ((0x438e64, 0x0c2b6d0c, 'dac_ioctl'), (0x42b184, 0x0c10eb9d, 'dac_unmute'),
+                    (0x4384dc, 0x0c2b695c, 'dac_resume'), (0x43ab98, 0x0c2b6aa8, 'ao_write')),
+    # peq.py's AO_INIT_SLOT and AO_UNINIT_SLOT: ao_alsa's descriptor (0x88f168, V1.32's 0x88f758), init and uninit
+    'ao_init_slot': (0x88f170, 0x438648, 'ao_init'),
+    'ao_uninit_slot': (0x88f174, 0x43834c, 'ao_uninit'),
+    # peq.py's USB_BUFFER: one site on V2.1, hw:2,0's and hw:1,0's blocks merged; the bne's delay slot after
+    # lui/ori 100000 (V1.32's 0x43977c and 0x439a60)
+    'usb_buffer': ((0x439580, 0xafc4017c, 0),),  # sw $a0, 0x17c($fp) -> nop
+    # peq.py's RS_OPEN_SLOT: lavcresample's af_info (0x8a3ef0, V1.32's 0x8a4540), its open at + 0x14; rs_open sets the
+    # instance's play and uninit to rs_play and rs_uninit, which call stock's (the addresses open stores) and swr_free
+    'rs_open_slot': (0x8a3f04, 0x4abd80, 'rs_open'),
+    'stock_rs_open': 0x4abd80, 'stock_rs_play': 0x4abe1c, 'stock_rs_uninit': 0x4abff4, 'swr_free': 0x41e2d0,
+    # The addresses the output hooks read, as their macros (PLAYER_MACROS). ao_data and the MQA words are V1.32's
+    'output_way': 0xb10e3c,   # V1.32's 0xb10e54 (V2.1's stop flag there)
+    'alsa_pcm': 0xb11588,     # V1.32's 0xb115a8
+    'ao_bytes': 0xb11578,     # V1.32's 0xb11598
+    'dac_fd': 0xb1156c,       # V1.32's 0xb1158c
+    'dac_muted': 0xb11564,    # V1.32's 0xb11584
+    'keep_gapless': 0xb10e40, # V1.32's 0xb10e58 (V2.1's stop code there)
+    'dac_helper': 0x43ae74,   # V1.32's 0x43b280
+    'stock_ao_init': 0x438648, 'stock_ao_uninit': 0x43834c, 'ao_get_space': 0x437e1c,
+    'ao_rate': 0xafa1a0, 'ao_channels': 0xafa1a4, 'ao_format': 0xafa1a8, 'ao_outburst': 0xafa1b0, 'ao_buffersize': 0xafa1b4,
+    'prev_format': 0xafa164, 'prev_rate': 0xafa168, 'prev_channels': 0xafa16c,
+    'mqa_mode': 0xb10c54, 'mqa_width': 0xb10b6c, 'seek_pending': 0xb10c38,
+    # the PLT stubs, checked by their JUMP_SLOT symbols
+    'plt': {'snd_pcm_state': 0xadaf00, 'snd_pcm_status': 0xada450, 'snd_pcm_status_get_avail': 0xadb030,
+            'snd_pcm_drain': 0xadaf20, 'snd_pcm_drop': 0xada7e0, 'snd_pcm_writei': 0xadaaa0, 'snd_pcm_pause': 0xada570,
+            'snd_pcm_prepare': 0xadab30, 'ioctl': 0xadb430},
+    # Stock words that pin them (address, word): patch_player checks each
+    'player_words': ((0x423308, 0x8ea39e30),  # forced EOF's lw $v1, -0x61d0($s5): mpctx, 0xb00000 - 0x61d0
+                     (0x409144, 0xaca40e44),  # sw $a0, 0xe44($a1): the DSD flag, V1.32's 0xe5c at the same address
+                     (0x4853f4, 0x8e420e54),  # the probe loop's lw $v0, 0xe54($s2): the stop flag, through $18
+                     (0x48545c, 0x0320f809), (0x485464, 0x1440ffcd),  # jalr $t9; the unsafe pass's return: bnez $v0
+                     (0x4854a8, 0x0320f809), (0x4854b0, 0x1040ffa3),  # jalr $t9; the open's return: beqz $v0
+                     (0x42a9cc, 0x27bdffd8),  # the context free's addiu $sp, -0x28
+                     (0x42ba80, 0x3c0200b1),  # after the publish: lui $v0, 0xb1
+                     (0x42c1cc, 0x8c440dd0), (0x42c1d0, 0x1483ff4f),  # mcl-closegapless: lw $a0, 0xdd0($v0); bne $a0, $v1
+                     (0x42c8fc, 0x8c440dd0), (0x42c900, 0x14830002),  # the direct stop's: the same
+                     (0x5b6508, 0xc4415290),  # the gate's lwc1 $f1, 0x5290($v0): the seek's target
+                     (0x5b6510, 0x450104c4), (0x5b6518, 0x8e02000c),  # bc1t to the gate's failure; the pass: lw $v0, 0xc($s0)
+                     (0x5b6b88, 0x02801025),  # the decoder's epilogue: move $v0, $s4
+                     (0x48d0b4, 0x000417c3),  # after the scan's subtraction: sra $v0, $a0, 31
+                     (0xada784, 0x8df99744),  # malloc's PLT stub: lw $t9, -0x68bc($t7), GOT 0xaf9744 as V1.32's
+                     (0x48be78, 0x8c425294), (0x48be90, 0xac405294),  # the fill reads and clears the seek flag
+                     (0x48d2b4, 0xac445294),  # the seek sets it
+                     (0x4ae5cc, 0x0c1ba81a),  # lavf_check_file's jal av_dict_get (V1.32's 0x4aeb0c)
+                     (0x492e54, 0x0c12165a),  # jal ds_get_next_pts (V1.32's 0x493394)
+                     (0x42d82c, 0x8e020e1c), (0x42d840, 0x8e020e1c),  # the idle loop's lw $v0, 0xe1c($s0): the play flag
+                     (0x42d2e0, 0xaca60e1c), (0x42d51c, 0xaca60e1c),  # the handler's two sw $a2, 0xe1c($a1) (V1.32's less 0x9c)
+                     (0x42fd80, 0x8e029e30), (0x42fd88, 0x8c450004),  # the pause loop's mpctx, then its state (MPCTX_STATE)
+                     (0x42ff2c, 0x24044e20),  # the pause wait's slot: a0 = 20000, which hci_pause_wait ignores
+                     (0x42d6f4, 0x27a40020), (0x42d6fc, 0x00000000),  # the handler's buffer in the slot before; its own slot
+                     (0x438928, 0x8e820e3c), (0x438964, 0x8e820e3c),  # init's lw $v0, 0xe3c($s4): the output way
+                     (0x4389a0, 0x8ea41588), (0x437e68, 0x8c441588),  # init's and get_space's lw $a0, 0x1588: the PCM
+                     (0x439094, 0xae021578), (0x437ea8, 0x8c631578),  # init's sw $v0, 0x1578($s0): bytes a frame; get_space's lw
+                     (0x438950, 0x8c420e40), (0x43920c, 0x8c420e40),  # init's lw $v0, 0xe40($v0): Gapless kept
+                     (0x438988, 0x8c64156c), (0x43ae7c, 0x8c64156c),  # init's and the DAC helper's lw $a0, 0x156c($v1): the fd
+                     (0x438e58, 0xae001564), (0x438a30, 0x8e121564),  # sw $zero, 0x1564($s0) before init's unmute; the mute flag
+                     (0x439614, 0xaee2a1a0), (0x4393a4, 0x8c63a164),  # ao_data's rate store; the triple's lw -0x5e9c: PREV_FORMAT
+                     (0x43ab24, 0x8c42a1b0),  # play's lw -0x5e50: ao_data's outburst
+                     (0x439574, 0x3c040001), (0x439578, 0x348486a0),  # USB's 100000 us, stored in usb_buffer's slot
+                     (0x43908c, 0x27c6017c), (0x439098, 0x0c2b6c8c),  # &0x17c($fp) to set_buffer_time_near (0xadb230)
+                     (0x88f17c, 0x437e1c),  # the descriptor's get_space
+                     (0x4abd84, 0x24050048),  # lavcresample's open: calloc(1, 0x48), the lavc_resample peq_player.c asserts
+                     (0x4abdc0, 0x2463bff4), (0x4abdc8, 0xae030008),  # addiu $v1, -0x400c: uninit, stored at af + 8
+                     (0x4abdd0, 0x2463be1c), (0x4abddc, 0xae03000c),  # addiu $v1, -0x41e4: play, stored at af + 0xc
+                     (0x4ac030, 0x0c1078b4))  # uninit's jal swr_free
 }
+# peq_player.c's address macros (V1.32's values by default) and the PLAYER_PROFILE keys the M1 sets them from.
+# patch_player checks that the code it links reads no other (player_coverage).
+PLAYER_MACROS = (
+    ('WRITTEN_AUDIO_PTS', 'written_audio_pts'), ('LENGTH_ADDR', 'length_addr'), ('STOCK_ID3_ADDR', 'stock_id3'),
+    ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
+    ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'),
+    ('NEXT_FLAG_ADDR', 'next_flag'), ('STOP_FLAG_ADDR', 'stop_flag'),
+    ('MPCTX_ADDR', 'mpctx'), ('PLAYER_GLOBALS', 'player_globals'), ('STOP_CODE_ADDR', 'stop_code'),
+    ('DSD_FILE_ADDR', 'dsd_file'), ('AUDIO_DEMUXER', 'audio_demuxer'),
+    ('PROBE_LOOP_RA', 'probe_loop_ra'), ('PROBE_OPEN_RA', 'probe_open_ra'),
+    ('PRELOAD_STATE_ADDR', 'preload_state'), ('PRELOAD_FREE_ADDR', 'preload_free'),
+    ('PRELOAD_PUBLISH_RET', 'preload_publish_ret'), ('PRELOAD_CLOSE_RET', 'preload_close_ret'),
+    ('PRELOAD_STOP_RET', 'preload_stop_ret'), ('FLAC_TARGET_ADDR', 'flac_target'), ('FLAC_PASS_RET', 'flac_pass_ret'),
+    ('FLAC_EPILOGUE_RET', 'flac_epilogue_ret'), ('SEEK_NOSYNC_RET', 'seek_nosync_ret'),
+    ('STOCK_AF_PLAY_ADDR', 'af_play'), ('DEMUX_READ_DATA_ADDR', 'demux_read_data'),
+    ('STOCK_MP3_FILL_ADDR', 'stock_mp3_fill'), ('STOCK_MP3_CLOSE_ADDR', 'stock_mp3_close'),
+    ('MP3_SEEK_FILL_ADDR', 'mp3_seek_fill'), ('LAVF_PREF_DESC', 'lavf_pref_desc'), ('LAVF_DESC', 'lavf_desc'),
+    ('MOV_FORMAT_ADDR', 'mov_format'), ('OGG_FORMAT_ADDR', 'ogg_format'), ('AV_DICT_GET_ADDR', 'av_dict_get'),
+    ('DS_GET_NEXT_PTS_ADDR', 'ds_get_next_pts'), ('PLAY_FLAG', 'play_flag'), ('STOCK_CMD_HANDLER_ADDR', 'cmd_handler'),
+    ('OUTPUT_WAY_ADDR', 'output_way'), ('ALSA_PCM_ADDR', 'alsa_pcm'), ('AO_BYTES_ADDR', 'ao_bytes'), ('DAC_FD_ADDR', 'dac_fd'),
+    ('DAC_MUTED_ADDR', 'dac_muted'), ('KEEP_GAPLESS_ADDR', 'keep_gapless'), ('DAC_HELPER_ADDR', 'dac_helper'),
+    ('STOCK_AO_INIT_ADDR', 'stock_ao_init'), ('STOCK_AO_UNINIT_ADDR', 'stock_ao_uninit'), ('STOCK_GET_SPACE_ADDR', 'ao_get_space'),
+    ('AO_RATE_ADDR', 'ao_rate'), ('AO_CHANNELS_ADDR', 'ao_channels'), ('AO_FORMAT_ADDR', 'ao_format'),
+    ('AO_OUTBURST_ADDR', 'ao_outburst'), ('AO_BUFFERSIZE_ADDR', 'ao_buffersize'), ('PREV_FORMAT_ADDR', 'prev_format'),
+    ('PREV_RATE_ADDR', 'prev_rate'), ('PREV_CHANNELS_ADDR', 'prev_channels'), ('MQA_MODE_ADDR', 'mqa_mode'),
+    ('MQA_WIDTH_ADDR', 'mqa_width'), ('SEEK_PENDING_ADDR', 'seek_pending'),
+    ('STOCK_RS_OPEN_ADDR', 'stock_rs_open'), ('STOCK_RS_PLAY_ADDR', 'stock_rs_play'),
+    ('STOCK_RS_UNINIT_ADDR', 'stock_rs_uninit'), ('SWR_FREE_ADDR', 'swr_free'))
+# peq_player.c's PLT stub macros and the symbols PLAYER_PROFILE['plt'] holds them by
+PLAYER_PLT_MACROS = (('PCM_STATE_ADDR', 'snd_pcm_state'), ('PCM_STATUS_ADDR', 'snd_pcm_status'),
+                     ('PCM_STATUS_AVAIL_ADDR', 'snd_pcm_status_get_avail'), ('PCM_DRAIN_ADDR', 'snd_pcm_drain'),
+                     ('PCM_DROP_ADDR', 'snd_pcm_drop'), ('PCM_WRITEI_ADDR', 'snd_pcm_writei'), ('PCM_PAUSE_ADDR', 'snd_pcm_pause'),
+                     ('PCM_PREPARE_ADDR', 'snd_pcm_prepare'))
 # libc/libcstl imports only the M1 payload uses, placed after peq.py's deque_pop_back.
 M1PLUS_LIBC = {
     # V2.1 imports no deque_pop_back; navigation.c erases the last element through these
@@ -898,8 +1092,8 @@ def m1plus_libc(libc):
         if name == 'deque_pop_back': out.update(M1PLUS_LIBC)
     return out
 
-def compile_common(out, binary, player=False):
-    """peq.compile_common for V2.1: its imports, V2.1's symbols, and the player's addresses."""
+def compile_common(out, binary, player=False, defines=()):
+    """peq.compile_common for V2.1: its imports, V2.1's symbols, and the player's addresses. defines: more -D flags."""
     from peq import LIBC
     got = {}
     for line in run('readelf', '-AW', binary).splitlines():
@@ -945,19 +1139,20 @@ def compile_common(out, binary, player=False):
                 'lw $t9, 0($t8)', 'jr $t9', 'nop']
         if name in ('memcpy', 'memset', '__udivdi3'):
             asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
-    if player:  # peq_player.c's stock addresses, V1.32's by default
-        header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}u' for macro, key in (
-            ('WRITTEN_AUDIO_PTS', 'written_audio_pts'), ('LENGTH_ADDR', 'length_addr'), ('STOCK_ID3_ADDR', 'stock_id3'),
-            ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
-            ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'),
-            ('NEXT_FLAG_ADDR', 'next_flag'), ('STOP_FLAG_ADDR', 'stop_flag'))]
+    if player:  # peq_player.c's stock addresses, V1.32's by default; unsuffixed, as asm text takes some
+        header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}' for macro, key in PLAYER_MACROS]
+        header += [f'#define {macro} 0x{PLAYER_PROFILE["plt"][key]:x}' for macro, key in PLAYER_PLT_MACROS]
+        # filter_n_bytes keeps sh_audio in $fp; af_play's two arguments stay intact (peq.py's)
+        asm += ['.section .text.mp3_filter_entry,"ax",@progbits', '.globl mp3_filter_entry',
+                'mp3_filter_entry:', 'move $a2, $fp', 'j mp3_filter', 'nop']
     if not player:
         # V1.32's private routines are V1.32 code: never merged into V2.1's table
         syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
         # A routine V2.1 hooks where V1.32 does not (on_wm_keyup_fun, ringnav's): the payload's own
         # replays reach stock through its trampoline, not back into the hook.
         from build import HOOKS
-        resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS}
+        # batch_add_file's hook only adds the watchdog's long count: the payload's own adds go through it too.
+        resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS and n != 'batch_add_file'}
         for name, (ret, args) in (FUNCTIONS | M1PLUS_FUNCTIONS).items():
             if name in resumed:
                 header += [f'extern {ret} stock_{resumed[name]}_trampoline({args});',
@@ -975,10 +1170,10 @@ def compile_common(out, binary, player=False):
                 header.append(f'#define {name} (*(volatile unsigned char *)0x{syms[name]:x}u)')
     (out/'peq_platform.h').write_text('\n'.join(header)+'\n')
     (out/'peq_imports.S').write_text('\n'.join(asm)+'\n')
-    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1']
+    flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1', *defines]
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
+    for name in ['peq.c', 'peq_player.c', 'mp3_gapless.c', 'lavf_gapless.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'm1plus_batch_add.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -991,9 +1186,31 @@ def compile_common(out, binary, player=False):
         objects.append(out/'m1stubs.o')
     return objects
 
+def player_defaults():
+    """The address macros the player's C defaults to V1.32's values (#ifndef NAME / #define NAME 0x...), by name."""
+    found = {}
+    for path in (ROOT/'patch').glob('*.c'):
+        if path.name in ('peq.c', 'peq_player.c', 'mp3_gapless.c', 'lavf_gapless.c') or path.name.startswith('m1plus_peq_player_'):
+            for name, value in re.findall(r'^#ifndef (\w+)\n#define \1 (0x[0-9a-fA-F]+)\b', path.read_text(), re.M):
+                found[name] = int(value, 16)
+    return found
+
+
+def player_coverage(where, payload, link):
+    """Every address macro the linked player code reads comes from PLAYER_PROFILE (PLAYER_MACROS): with every other
+    one moved by 4, the payload links to the same bytes. Without this a name the profile lacks keeps V1.32's value on
+    the M1, silently. A difference is narrowed to the names that make it."""
+    others = {n: v for n, v in player_defaults().items() if n not in dict(PLAYER_MACROS) | dict(PLAYER_PLT_MACROS)}
+    moved = lambda names: [f'-D{n}=0x{others[n] + 4:x}' for n in names]
+    if link(where, moved(others)) == payload: return
+    culprits = [n for n in others if link(where, moved([n])) != payload]
+    check(False, f'The M1 player payload reads V1.32 addresses PLAYER_PROFILE does not set: {", ".join(culprits)}')
+
+
 def patch_player(raw, out):
     """peq.patch_player for V2.1's hciplayer, at PLAYER_PROFILE's addresses."""
     from ipod import jal, patch_word
+    from build import j
     from peq import PLAYER_BASE
     out.mkdir(exist_ok=True)
     binary = out/'stock-hciplayer'
@@ -1003,30 +1220,123 @@ def patch_player(raw, out):
     prof = PLAYER_PROFILE
     check(raw[fileoff(raw, prof['desc']):fileoff(raw, prof['desc'])+24].hex() ==
           prof['desc_bytes'], 'EQ descriptor mismatch')
-    objects = compile_common(out, binary, True)
+    for address, word in prof['player_words']:
+        check(struct.unpack_from('<I', raw, fileoff(raw, address))[0] == word, f'hciplayer 0x{address:x}: not 0x{word:08x}')
+    # the globals and targets the hooks take, against the stock words they replace
+    check(prof['seek_slot'] - prof['audio_demuxer'] == 0x2c, 'Audio demuxer desc')
+    check(all(w & 0xffff == prof['stop_code'] - prof['player_globals'] for _, w, _ in prof['probe_stop']), 'Stop code')
+    check(prof['stop_fill'][1] & 0xffff == prof['stop_code'] - prof['player_globals'], 'Stop code')
+    check({w for _, w, _ in prof['stop_sites']} == {0x3c020000 | prof['player_globals'] >> 16}, 'Player globals')
+    check(prof['stop_flag'] - prof['player_globals'] == 0xe54 and prof['mpctx'] == 0xb00000 - 0x61d0, 'Stop flag, mpctx')
+    check(all(w & 0xffff == prof['preload_state'] - prof['player_globals'] for _, w, _ in
+              (prof['preload_publish'], prof['cold_clear'], *prof['preload_fail_stores'])), 'Preload state')
+    check(prof['flac_target'] - prof['player_globals'] == 0x5290 and prof['dsd_file'] & 0xffff == 0xe44, 'FLAC target, DSD flag')
+    check(prof['preload_publish_ret'] == prof['preload_publish'][0] + 4 and prof['seek_nosync_ret'] == prof['seek_nosync'][0] + 8 and
+          [r - 8 for r in (prof['preload_close_ret'], prof['preload_stop_ret'])] == [a for a, _, _ in prof['preload_close']], 'Return targets')
+    check(prof['mp3_alloc'][1] == jal(0xada780) and prof['mp3_filter'][1] == jal(prof['af_play']) and
+          prof['mp3_read'][1] == jal(prof['demux_read_data']), 'MP3 gapless calls')
+    check([prof[k][0] - prof['audio_demuxer'] for k in ('mp3_fill', 'mp3_close')] == [0x20, 0x28] and
+          (prof['mp3_fill'][1], prof['mp3_close'][1]) == (prof['stock_mp3_fill'], prof['stock_mp3_close']), 'MP3 gapless slots')
+    check(prof['mp3_seek_fill'] - prof['player_globals'] == 0x5294, 'MP3 seek fill flag')
+    check(prof['pause_wait'][1] == jal(0x4a4730) and prof['cmd_done'][1] == jal(prof['cmd_handler']) and
+          prof['idle_wait'][1] == jal(0xada850) and prof['play_flag'] - prof['player_globals'] == 0xe1c, 'Player waits')
+    # each PLT stub the output hooks call, by the JUMP_SLOT symbol its .got.plt slot (lui $t7; lw $t9) holds
+    slots = dict((int(m[1], 16), m[2].split('@')[0]) for m in
+                 re.finditer(r'^([0-9a-f]{8})\s+\S+\s+R_MIPS_JUMP_SLOT\s+\S+\s+(\S+)', run('readelf', '-rW', binary), re.M))
+    for name, stub in prof['plt'].items():
+        hi, lo = struct.unpack_from('<II', raw, fileoff(raw, stub))
+        check(hi >> 16 == 0x3c0f and lo >> 16 == 0x8df9 and slots.get(((hi & 0xffff) << 16) + ((lo & 0xffff) ^ 0x8000) - 0x8000) == name,
+              f'hciplayer 0x{stub:x}: not the {name} PLT stub')
+    ao_slot, ao_init_stock, _ = prof['ao_init_slot']
+    check(prof['ao_uninit_slot'][0] == ao_slot + 4 and (ao_init_stock, prof['ao_uninit_slot'][1]) == (prof['stock_ao_init'], prof['stock_ao_uninit']),
+          'ao_alsa descriptor')
+    check([w for _, w, _ in prof['dac_release']] == [jal(prof['plt']['ioctl']), jal(prof['dac_helper']), jal(prof['plt']['snd_pcm_pause']),
+                                                    jal(prof['plt']['snd_pcm_writei'])], 'DAC release calls')
+    check([prof[k] - prof['player_globals'] for k in ('output_way', 'keep_gapless', 'dac_muted', 'dac_fd', 'ao_bytes', 'alsa_pcm')] ==
+          [0xe3c, 0xe40, 0x1564, 0x156c, 0x1578, 0x1588] and prof['usb_buffer'][0][1] == 0xafc4017c, 'Output globals')
+    def text(address):
+        at = fileoff(raw, address)
+        return raw[at:raw.index(0, at)].decode()
+    word = lambda address: struct.unpack_from('<I', raw, fileoff(raw, address))[0]
+    check([text(word(prof[k] + 4)) for k in ('lavf_pref_desc', 'lavf_desc')] == ['lavfpref', 'lavf'] and
+          [text(word(prof[k])) for k in ('mov_format', 'ogg_format')] == ['mov,mp4,m4a,3gp,3g2,mj2', 'ogg'], 'lavf demuxers')
+    # lavcresample: the slot's af_info names it, and its open stores the play and uninit the profile names (lui $v1, 0x4b)
+    rs_slot, rs_stock, _ = prof['rs_open_slot']
+    low = lambda address: ((word(address) & 0xffff) ^ 0x8000) - 0x8000
+    check(text(word(rs_slot - 0x10)) == 'lavcresample' and rs_stock == prof['stock_rs_open'] and
+          [0x4b0000 + low(rs_stock + d) for d in (0x40, 0x50)] == [prof['stock_rs_uninit'], prof['stock_rs_play']] and
+          word(prof['stock_rs_uninit'] + 0x3c) == jal(prof['swr_free']), 'lavcresample')
     script = out/'link.ld'
     script.write_text('SECTIONS { . = 0xe10000; .text : { *(.text*) } .rodata : { *(.rodata*) } '
                       '.data : { *(.data*) *(.sdata*) } .bss : { *(.bss*) *(.sbss*) } '
                       '__end = .; /DISCARD/ : { *(.comment) *(.note*) *(.pdr) *(.mdebug*) '
                       '*(.MIPS.abiflags) *(.reginfo) } }')
-    run('ld.lld', '-m', 'elf32ltsmip', '--gc-sections', '-T', script, '-e', 'peq_open', '--undefined=mp3_seek', '--undefined=id3_gain',
-        *objects, '-o', out/'peq.elf')
-    run('llvm-objcopy', '-O', 'binary', out/'peq.elf', out/'peq.bin')
+    # peq.py's bad-next, exit and preload hooks, its FLAC seek's, its MP3 trim's and its player waits (each (address,
+    # stock word, symbol))
+    hooks = (*prof['probe_stop'], *prof['stop_sites'], prof['stop_fill'], *prof['preload_close'], prof['forced_eof'],
+             prof['exit_hold'], prof['preload_publish'], prof['preload_failed'], prof['cold_clear'], prof['flac_gate'],
+             prof['seek_nosync'], *(prof[k] for k in ('mp3_alloc', 'mp3_filter', 'mp3_read', 'mp3_fill', 'mp3_close')),
+             prof['pause_wait'], prof['cmd_done'], prof['idle_wait'], *prof['dac_release'], prof['ao_init_slot'],
+             prof['ao_uninit_slot'], prof['rs_open_slot'])
+    def link(where, defines=()):
+        """Compile and link the payload in where; its bytes."""
+        where.mkdir(exist_ok=True)
+        objects = compile_common(where, binary, True, defines)
+        run('ld.lld', '-m', 'elf32ltsmip', '--gc-sections', '-T', script, '-e', 'peq_open', '--undefined=mp3_seek', '--undefined=id3_gain',
+            *(f'--undefined={name}' for _, _, name in hooks), *objects, '-o', where/'peq.elf')
+        run('llvm-objcopy', '-O', 'binary', where/'peq.elf', where/'peq.bin')
+        return (where/'peq.bin').read_bytes()
+    payload = link(out)
+    player_coverage(out/'coverage', payload, link)
     ps = symbols(out/'peq.elf')
-    payload = (out/'peq.bin').read_bytes()
     data = bytearray(raw)
     off = fileoff(raw, prof['open_slot'])
     data[off:off+4] = struct.pack('<I', ps['peq_open'])
     patch_word(data, prof['vbr_scan'], 0x144008a8, 0, 'VBR scan')  # bnez $v0, ... -> nop
     for address, stock, patched in prof['eq_rate_gates']:
         patch_word(data, address, stock, patched, 'Equalizer rate gate')
-    pause_addr, pause_old, pause_new = prof['pause_sleep']
-    patch_word(data, pause_addr, pause_old, pause_new, 'pause loop sleep')
+    patch_word(data, *prof['pause_wait'][:2], jal(ps['hci_pause_wait']), 'pause loop waits for a command')
+    patch_word(data, *prof['cmd_done'][:2], jal(ps['hci_command']), 'a command wakes the idle and pause loops')
+    patch_word(data, *prof['idle_wait'][:2], jal(ps['hci_idle_wait']), 'idle loop waits on the play flag')
+    for address, stock, patched in prof['usb_buffer']:
+        patch_word(data, address, stock, patched, 'USB DAC buffer')
+    for address, stock, name in prof['dac_release']:
+        patch_word(data, address, stock, jal(ps[name]), 'DAC release wait')
+    patch_word(data, *prof['ao_init_slot'][:2], ps['ao_init'], 'Output init slot')
+    patch_word(data, *prof['ao_uninit_slot'][:2], ps['ao_uninit'], 'Output uninit slot')
+    patch_word(data, *prof['rs_open_slot'][:2], ps['rs_open'], 'Resampler open slot')
     for address, stock, patched in prof['media_info_null']:
         patch_word(data, address, stock, patched, 'Music info with no stream')
     for address, stock, patched in prof['flac_meta_eof']:
         patch_word(data, address, stock, patched, 'FLAC metadata at EOF')
+    for address, stock, name in prof['probe_stop']:
+        patch_word(data, address, stock, j(ps[name]), 'Probe stop')
+    patch_word(data, *prof['preload_publish'][:2], j(ps['preload_publish']), 'Preload publish')
+    patch_word(data, *prof['preload_failed'][:2], jal(ps['preload_failed']), 'Preload failed')
+    for address, stock, patched in prof['preload_fail_stores']:
+        patch_word(data, address, stock, patched, 'Preload failed')
+    patch_word(data, *prof['forced_eof'][:2], jal(ps['forced_eof']), 'Forced EOF')
+    patch_word(data, *prof['exit_hold'][:2], jal(ps['exit_hold']), 'Exit hold')
+    for address, stock, name in prof['stop_sites']:
+        patch_word(data, address, stock, jal(ps[name]), 'Stop base')
+    for address, stock, patched in prof['stop_nops']:
+        patch_word(data, address, stock, patched, 'Stop base')
+    patch_word(data, *prof['stop_fill'][:2], j(ps['stop_fill']), 'Stop in a fill')
+    for address, stock, name in prof['preload_close']:
+        patch_word(data, address, stock, j(ps[name]), 'Preload close')
+    patch_word(data, *prof['cold_clear'][:2], jal(ps['cold_clear']), 'Cold clear')
+    patch_word(data, *prof['flac_gate'][:2], j(ps['flac_gate']), 'FLAC gate')
+    patch_word(data, *prof['seek_nosync'][:2], j(ps['seek_nosync']), 'Seek no sync')
+    for address, stock, patched in prof['seek_words']:
+        patch_word(data, address, stock, patched, 'Seek no sync')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
+    patch_word(data, *prof['mp3_alloc'][:2], jal(ps['mp3_private_alloc']), 'MP3 gapless private state')
+    patch_word(data, *prof['mp3_filter'][:2], jal(ps['mp3_filter_entry']), 'MP3 gapless PCM')
+    patch_word(data, *prof['mp3_close'][:2], ps['mp3_close'], 'MP3 gapless cleanup')
+    patch_word(data, *prof['mp3_read'][:2], jal(ps['mp3_read']), 'MP3 last frame')
+    patch_word(data, *prof['mp3_fill'][:2], ps['mp3_fill'], 'MP3 tail tags')
+    patch_word(data, *prof['lavf_priv'], 'lavf gapless window')
+    patch_word(data, *prof['mov_edits'], 'M4A edit list kept')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')
     append_payload(data, payload, PLAYER_BASE, max(len(payload), ps['__end']-PLAYER_BASE), 'player')
@@ -1119,6 +1429,7 @@ def compile_payload(out):
                   '--undefined=ringnav_boot']
     # every call site's payload routine: a jal from stock code is no reference the linker sees
     undefined += [f'--undefined={new}' for words in CALL_SITES['m1plus'].values() for _, _, new in words if isinstance(new, str)]
+    # and each pinned site's, which nothing reaches until its word is switched on: test/m1plus/playback.py runs it in V2.1's code
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
         *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
@@ -1296,16 +1607,21 @@ def build(target_path, out, logo, dev=False, m1_release=None):
         check(pic_gp(raw_demo, address) == M1PLUS_GP, f'{name}: not a V2.1 PIC entry')
     # ringnav_speed and ringnav_mode tell config_mplayer's re-applying calls, and config_init's
     # boot one, from a choice by their return addresses: each a jalr $t9 after lw $t9, <callee's
-    # GOT slot>($gp).
+    # GOT slot>($gp). So do ringnav_player_start and ringnav_start_queue their picks (1.6.7).
+    def got_word(load): return struct.unpack_from('<I', raw_demo, fileoff(raw_demo, M1PLUS_GP + (load & 0xffff) - (0x10000 if load & 0x8000 else 0)))[0]
     for ret, callee in (('INITCONFIG_SPEED_RET', 'mclSetPlaySpeed'), ('INITCONFIG_MODE_RET', 'mclSetPlayMode'),
-                        ('BOOT_MODE_RET', 'mclSetPlayMode')):
+                        ('BOOT_MODE_RET', 'mclSetPlayMode'), ('PAGE_PICK_RET', 'start_player'),
+                        ('ALBUM_PLAY_RET', 'start_player'), ('VIEW_QUEUE_RET', 'start_playqueue')):
         ret = m1plus_inc(ret)
         words = struct.unpack_from('<5I', raw_demo, fileoff(raw_demo, ret - 24))
         load = next((w for w in reversed(words[:4]) if w >> 16 == 0x8f99), 0)
-        slot = M1PLUS_GP + (load & 0xffff) - (0x10000 if load & 0x8000 else 0)
-        check(load and words[4] == 0x0320f809 and
-              struct.unpack_from('<I', raw_demo, fileoff(raw_demo, slot))[0] == syms[callee],
-              f'config_mplayer: unexpected {callee} call')
+        check(load and words[4] == 0x0320f809 and got_word(load) == syms[callee], f'{ret:#x}: unexpected {callee} call')
+    # The unplayable skip's entry branches to the toast's jalr with next_music's slot in its delay slot (1.6.7).
+    ret = m1plus_inc('UNPLAYABLE_NEXT_RET')
+    entry = struct.unpack_from('<2I', raw_demo, fileoff(raw_demo, 0x4cfd3c))
+    check(struct.unpack_from('<I', raw_demo, fileoff(raw_demo, ret - 8))[0] == 0x0320f809 and
+          entry[0] == 0x10000000 | ((ret - 8 - 0x4cfd40) >> 2) & 0xffff and entry[1] >> 16 == 0x8f99 and
+          got_word(entry[1]) == syms['next_music'], 'on_wm_timer_dialogresponse: unexpected unplayable skip')
     raw_player = cat('usr/bin/hciplayer')
     audio = patch_player(raw_player, out/'peq')
     check(sha(cat(BLUEALSA)) == BLUEALSA_SHA, 'Unexpected bluealsa')

@@ -19,6 +19,11 @@ work, root, aud = build/'hci_natural', build/'hci_natural'/'root', build/'hci_na
 AUTH, STOP, NEXT = 0x43084c, 0xb10e70, 0xb10de8  # the licence check; the stop flag; the preload's state
 TOUCH_NOTSUPPORT, COLD_PATH = 0x4234e8, 0x421a3c
 LAVF_CHECK, LAVF_PREFERRED, FREE_PRELOAD = 0x4ae664, 0x4af03c, 0x42a9ac  # lavf's check; from the preferred one, stock's first try; the thread's free of its context
+STOP_READ, FORCED = 0x4223c8, (0x485aec, 0x485af4)  # the main loop's read of the stop flag; either side of the thread's forced checks
+ISO_STOP, AAC_STOP, ASF_STOP = 0x478b40, 0x480184, 0x4826a4  # the stores STOP_SITES hook
+ISO_TOC, ISO_ZEROS = 0x46a010, (0x46bd18, 0x469e90)  # the ISO check's TOC read, and the two it calls after
+DAC_HELPER, LENGTH = 0x43b280, 0xb10e84  # stock's DAC mute helper; the length in whole seconds
+LAVF_LAST = True  # the probe list tries lavf after the DSD and ISO checks, so a thread that gives up never reaches it
 SECONDS, RATE = 5, 44100
 N = SECONDS * RATE
 LONG_SECONDS = 10
@@ -197,11 +202,10 @@ def bad_next(name, site=None):
     """The next file opens and fails its probe: a plays to its last frame, then the player reports."""
     p = Player()
     tids, lavf, hit, forced = set(), [], [], []
-    p.e.watch_fn(0x4223c8, lambda e: tids.add(e.cur.tid))
+    p.e.watch_fn(STOP_READ, lambda e: tids.add(e.cur.tid))
     p.e.watch_fn(LAVF_CHECK, lambda e: lavf.append(e.cur.tid) if e.u.reg_read(UC_MIPS_REG_RA) != LAVF_PREFERRED else None)
     # either side of the thread's forced checks
-    p.e.watch_fn(0x485aec, lambda e: forced.append(e.u.reg_read(UC_MIPS_REG_S2)) if e.cur.tid != 1 else None)
-    p.e.watch_fn(0x485af4, lambda e: forced.append(e.u.reg_read(UC_MIPS_REG_S2)) if e.cur.tid != 1 else None)
+    for at in FORCED: p.e.watch_fn(at, lambda e: forced.append(e.u.reg_read(UC_MIPS_REG_S2)) if e.cur.tid != 1 else None)
     if site: p.e.watch_fn(site, lambda e: hit.append(e.cur.tid))
     p.song('a.flac')
     p.run(1)
@@ -214,7 +218,7 @@ def bad_next(name, site=None):
         p.e.send_cmd('{player-status\\request}')
         return b'error' in said
     check(p.until(reported, SECONDS + 1), f'{name}: reported: {said[-60:]}')
-    check(not [t for t in lavf if t != 1], f'{name}: the thread gave up before the list reached lavf ({lavf})')
+    if LAVF_LAST: check(not [t for t in lavf if t != 1], f'{name}: the thread gave up before the list reached lavf ({lavf})')
     check(forced[::2] == forced[1::2], f"{name}: a forced check leaves its caller's $18 ({forced})")
     if site: check([t for t in hit if t != 1], f'{name}: the thread reached {site:#x} ({hit})')
     check(not stopped[0], f'{name}: the stop flag stays clear while a plays')
@@ -493,10 +497,9 @@ def iso_no_tracks():
     p.e.ensure(toc, 0x1000)
     p.e.w32(toc + 0x68, area)
     hit = []
-    p.e.watch_fn(0x478b40, lambda e: hit.append(e.cur.tid))
-    p.e.hook_fn(0x46a010, lambda e: toc)
-    p.e.hook_fn(0x46bd18, lambda e: 0)
-    p.e.hook_fn(0x469e90, lambda e: 0)
+    p.e.watch_fn(ISO_STOP, lambda e: hit.append(e.cur.tid))
+    p.e.hook_fn(ISO_TOC, lambda e: toc)
+    for at in ISO_ZEROS: p.e.hook_fn(at, lambda e: 0)
     p.song('a.flac')
     p.run(1)
     p.gapless('junk.iso')
@@ -647,9 +650,12 @@ def understated_mp3(name):
     check(p.frames() >= N - 2304, f'{name}: plays to its end, {p.frames()} of {N} frames')
 
 
+PAST_THE_COUNT = (('joined.mp3', 2 * N, -0.1, 0.1), ('junkjoined.mp3', 2 * N, -0.4, 1), ('apex.mp3', N, -0.1, 1))
+
+
 def past_the_count():
     """Past the count: frames joined on play, whatever follows them or a real tag's cover doesn't."""
-    for name, audio, least, most in ('joined.mp3', 2 * N, -0.1, 0.1), ('junkjoined.mp3', 2 * N, -0.4, 1), ('apex.mp3', N, -0.1, 1):
+    for name, audio, least, most in PAST_THE_COUNT:
         p = Player()
         p.song(name)
         p.settled(2 * SECONDS + 15)
@@ -662,7 +668,7 @@ def dsd():
     for name in 'whole.dsf', 'under.dsf':
         p = Player()
         muted = []
-        p.e.watch_fn(0x43b280, lambda e: muted.append((round(p.now(), 2), p.frames(), e.u.reg_read(UC_MIPS_REG_A0))))
+        p.e.watch_fn(DAC_HELPER, lambda e: muted.append((round(p.now(), 2), p.frames(), e.u.reg_read(UC_MIPS_REG_A0))))
         p.song(name)
         p.settled(SECONDS + 3)
         print(f'     {name}: {p.frames()} frames at the end; mute helper calls (t, frames, arg) {muted[:6]}')
@@ -672,7 +678,7 @@ def dsd():
     p = Player()  # past its length, where stock mutes it: stock's store ends it, not the file's end with the clock running
     p.song('whole.dsf')
     p.run(1)
-    p.e.w32(0xb10e84, 2)
+    p.e.w32(LENGTH, 2)
     p.settled(SECONDS + 3)
     print(f'     whole.dsf, a length of 2 s: {p.frames()} frames')
     check(p.frames() < whole * 5 // 8, f'DSD past its length ends, {p.frames()} of {whole}')
@@ -778,8 +784,8 @@ if __name__ == '__main__':
     bad_next('junk.dff')
     bad_next('junk.iso')
     bad_next('big.flac')
-    bad_next('big.aac', 0x480184)
-    bad_next('nostreams.wma', 0x4826a4)
+    bad_next('big.aac', AAC_STOP)
+    bad_next('nostreams.wma', ASF_STOP)
     iso_no_tracks()
     exit_apart()
     metadata_cut()

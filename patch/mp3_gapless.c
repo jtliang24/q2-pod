@@ -241,8 +241,27 @@ static const char *mp3_smpb_text(int fd, long long end, char *t, unsigned cap) {
     return 0;
 }
 
+/* V1.32's hciplayer addresses, each overridable: an M1 Plus build's peq_platform.h (tools/m1plus.py) gives V2.1's. */
+#ifndef AUDIO_DEMUXER
+#define AUDIO_DEMUXER 0x89fd90 /* demux_audio's demuxer_desc */
+#endif
+#ifndef STOCK_AF_PLAY_ADDR
+#define STOCK_AF_PLAY_ADDR 0x44d350 /* af_play, the filter chain */
+#endif
+#ifndef MP3_SEEK_FILL_ADDR
+#define MP3_SEEK_FILL_ADDR 0xb152b4 /* stock's fill-after-seek flag */
+#endif
+#ifndef DEMUX_READ_DATA_ADDR
+#define DEMUX_READ_DATA_ADDR 0x484c0c
+#endif
+#ifndef STOCK_MP3_FILL_ADDR
+#define STOCK_MP3_FILL_ADDR 0x48c184 /* demux_audio's fill and close */
+#endif
+#ifndef STOCK_MP3_CLOSE_ADDR
+#define STOCK_MP3_CLOSE_ADDR 0x48b7e4
+#endif
 static mp3_private *mp3_state(void *d) {
-    mp3_private *p = d && AT(d, 0, unsigned) == 0x89fd90u ? AT(d, 0xc70, mp3_private *) : 0;
+    mp3_private *p = d && AT(d, 0, unsigned) == AUDIO_DEMUXER ? AT(d, 0xc70, mp3_private *) : 0;
     return p && p->format == 1 ? p : 0;
 }
 
@@ -285,7 +304,7 @@ af_data *mp3_filter(void *filters, af_data *data, void *sh) {
     }
     if (p && p->start) mp3_trim(p, data);
     lavf_trim(d, sh, data);
-    return ((af_data *(*)(void *, af_data *))0x44d350u)(filters, data);
+    return ((af_data *(*)(void *, af_data *))STOCK_AF_PLAY_ADDR)(filters, data);
 }
 
 void mp3_gapless_seek(void *d, int at_start) {
@@ -297,7 +316,7 @@ void mp3_gapless_seek(void *d, int at_start) {
         /* Stock's fill after a seek (flag 0xb152b4, 0x48c3b8) checks the next frame's header, goes back, and sizes
          * the first packet from the next frame (0x48c4d0): the tag frame, cut short if that one is shorter, loses
          * libmad its sync, and a rewind starts two frames late on VBR. The start needs no checking. */
-        if (at_start) *(volatile int *)0xb152b4u = 0;
+        if (at_start) *(volatile int *)MP3_SEEK_FILL_ADDR = 0;
         p->skip = at_start ? p->start : 0;
     }
 }
@@ -307,7 +326,7 @@ void mp3_gapless_seek(void *d, int at_start) {
  * frame: the end of the track's audio, which the trailing trim then cut further, a tick into
  * the next track. Zeros after it once, as Rockbox and minimp3 do, decode it. */
 int mp3_read(void *ds, unsigned char *buf, int room) {
-    int got = ((int (*)(void *, unsigned char *, int))0x484c0cu)(ds, buf, room);
+    int got = ((int (*)(void *, unsigned char *, int))DEMUX_READ_DATA_ADDR)(ds, buf, room);
     mp3_private *p = got > 0 ? 0 : mp3_state(AT(ds, 0x58, void *));
     if (!p || p->guarded || room < 8) return got;
     p->guarded = 1;
@@ -320,12 +339,12 @@ int mp3_fill(void *d, void *ds) {
     mp3_private *p = mp3_state(d);
     void *s = AT(d, 0x20, void *);
     if (p && p->audio_end && AT(s, 0x30, long long) + AT(s, 0x28, int) - AT(s, 0x2c, int) >= p->audio_end) return 0;
-    return ((int (*)(void *, void *))0x48c184u)(d, ds);
+    return ((int (*)(void *, void *))STOCK_MP3_FILL_ADDR)(d, ds);
 }
 
 void mp3_close(void *d) {
     mp3_private *p = mp3_state(d);
     if (p) free(p->tail);
-    ((void (*)(void *))0x48b7e4u)(d);
+    ((void (*)(void *))STOCK_MP3_CLOSE_ADDR)(d);
 }
 #endif
