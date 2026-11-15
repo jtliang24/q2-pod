@@ -883,9 +883,61 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'av_dict_free': 0x6ea65c,
     'rg_export': 0x5381c4,
     'hr_mp3_seek': 0xb15298,
-    'mpctx': 0xaf9e30,  # MPlayer's context, as V1.32's (PLAYER_MACROS' MPCTX_ADDR)
-    # Stock words that pin the addresses above (address, word): patch_player checks each
-    'player_words': ((0x423308, 0x8ea39e30),),  # forced EOF's lw $v1, -0x61d0($s5): mpctx, 0xb00000 - 0x61d0
+    # peq.py's PROBE_STOP: the DSF, DFF and ISO checks' failure stores of the stop code (V2.1's 0xb10e58). DFF's no
+    # longer has its epilogue inline (a b to the shared one at 0x479e64, the flag store in its delay slot): an M1 hook
+    'probe_stop': ((0x47b4cc, 0xac640e58, 'probe_stop_dsf'), (0x47a4d8, 0xac640e58, 'probe_stop_dff'),
+                   (0x478800, 0xac640e58, 'probe_stop_iso')),  # sw $a0, 0xe58($v1)
+    # peq.py's STOP_SITES, STOP_NOPS and STOP_FILL: the ISO TOC's, the AAC scan's and the ASF open's stores (lui $v0, 0xb1)
+    'stop_sites': ((0x478730, 0x3c0200b1, 'stop_iso'), (0x47fc44, 0x3c0200b1, 'stop_aac'), (0x482164, 0x3c0200b1, 'stop_asf')),
+    'stop_nops': ((0x478740, 0x3c0200b1, 0), (0x47fc50, 0x3c0200b1, 0), (0x482170, 0x3c0200b1, 0)),
+    'stop_fill': (0x46bd74, 0xac430e58, 'stop_fill'),  # sw $v1, 0xe58($v0)
+    # peq.py's FORCED_EOF: mpctx in $v1 and 1 in $a0, and the jal's delay slot (lw $v1, 0x1058($sp)) overwrites mpctx: an M1 hook
+    'forced_eof': (0x423310, 0xac640014, 'forced_eof'),  # sw $a0, 0x14($v1)
+    # peq.py's EXIT_HOLD: {player-status\exit}'s lui is $a1's here, and $a0 is kept: an M1 hook
+    'exit_hold': (0x4226fc, 0x3c050089, 'exit_hold'),  # lui $a1, 0x89
+    # peq.py's PRELOAD_*: the preload thread (V1.32's less 0x9c) and the cold path's clear (base $s6: an M1 hook)
+    'preload_publish': (0x42ba7c, 0xac440dd0, 'preload_publish'),  # sw $a0, 0xdd0($v0)
+    'preload_failed': (0x42bb08, 0x00001025, 'preload_failed'),    # move $v0, $zero
+    'preload_fail_stores': ((0x42bae4, 0xac430dd0, 0), (0x42bb50, 0xac430dd0, 0), (0x42bb78, 0xac430dd0, 0)),  # sw $v1, 0xdd0($v0)
+    'cold_clear': (0x421a20, 0xaec00dd0, 'cold_clear'),            # sw $zero, 0xdd0($s6)
+    'preload_close': ((0x42c1c8, 0x24030002, 'preload_close'), (0x42c8f8, 0x24030002, 'preload_stop')),  # li $v1, 2
+    # peq.py's FLAC_GATE (the decoder less 0x5a0), SEEK_NOSYNC and SEEK_WORDS (demux_audio_seek less 0x540); the
+    # branches' sites and targets move together, so their words are V1.32's
+    'flac_gate': (0x5b7824, 0x1000fd74, 'flac_gate'),     # b 0x5b6df8
+    'seek_nosync': (0x48d0ac, 0x8fa20030, 'seek_nosync'), # lw $v0, 0x30($sp)
+    'seek_words': ((0x48d0b0, 0x00822023, 0), (0x48ced8, 0x03c0a825, 0), (0x48cedc, 0x02e08825, 0),
+                   (0x48d7a0, 0x1440fdcd, 0x14400003), (0x48d2cc, 0x188002d5, 0)),
+    # The addresses those hooks read, as peq_player.c's macros (PLAYER_MACROS); pinned by player_words
+    'mpctx': 0xaf9e30,
+    'player_globals': 0xb10000,
+    'stop_code': 0xb10e58,
+    'dsd_file': 0xb10e44,
+    'audio_demuxer': 0x89f740,  # demux_audio's desc: its seek slot is seek_slot
+    'probe_loop_ra': 0x485464,
+    'probe_open_ra': 0x4854b0,
+    'preload_state': 0xb10dd0,
+    'preload_free': 0x42a9cc,
+    'preload_publish_ret': 0x42ba80,
+    'preload_close_ret': 0x42c1d0,
+    'preload_stop_ret': 0x42c900,
+    'flac_target': 0xb15290,
+    'flac_pass_ret': 0x5b6518,
+    'flac_epilogue_ret': 0x5b6b88,
+    'seek_nosync_ret': 0x48d0b4,
+    # Stock words that pin them (address, word): patch_player checks each
+    'player_words': ((0x423308, 0x8ea39e30),  # forced EOF's lw $v1, -0x61d0($s5): mpctx, 0xb00000 - 0x61d0
+                     (0x409144, 0xaca40e44),  # sw $a0, 0xe44($a1): the DSD flag, V1.32's 0xe5c at the same address
+                     (0x4853f4, 0x8e420e54),  # the probe loop's lw $v0, 0xe54($s2): the stop flag, through $18
+                     (0x48545c, 0x0320f809), (0x485464, 0x1440ffcd),  # jalr $t9; the unsafe pass's return: bnez $v0
+                     (0x4854a8, 0x0320f809), (0x4854b0, 0x1040ffa3),  # jalr $t9; the open's return: beqz $v0
+                     (0x42a9cc, 0x27bdffd8),  # the context free's addiu $sp, -0x28
+                     (0x42ba80, 0x3c0200b1),  # after the publish: lui $v0, 0xb1
+                     (0x42c1cc, 0x8c440dd0), (0x42c1d0, 0x1483ff4f),  # mcl-closegapless: lw $a0, 0xdd0($v0); bne $a0, $v1
+                     (0x42c8fc, 0x8c440dd0), (0x42c900, 0x14830002),  # the direct stop's: the same
+                     (0x5b6508, 0xc4415290),  # the gate's lwc1 $f1, 0x5290($v0): the seek's target
+                     (0x5b6510, 0x450104c4), (0x5b6518, 0x8e02000c),  # bc1t to the gate's failure; the pass: lw $v0, 0xc($s0)
+                     (0x5b6b88, 0x02801025),  # the decoder's epilogue: move $v0, $s4
+                     (0x48d0b4, 0x000417c3)), # after the scan's subtraction: sra $v0, $a0, 31
 }
 # peq_player.c's address macros (V1.32's values by default) and the PLAYER_PROFILE keys the M1 sets them from.
 # patch_player checks that the code it links reads no other (player_coverage).
@@ -894,7 +946,13 @@ PLAYER_MACROS = (
     ('AV_DICT_SET_ADDR', 'av_dict_set'), ('AV_DICT_FREE_ADDR', 'av_dict_free'), ('RG_EXPORT_ADDR', 'rg_export'),
     ('STOCK_SEEK_ADDR', 'stock_seek'), ('HR_MP3_SEEK_ADDR', 'hr_mp3_seek'),
     ('NEXT_FLAG_ADDR', 'next_flag'), ('STOP_FLAG_ADDR', 'stop_flag'),
-    ('MPCTX_ADDR', 'mpctx'))
+    ('MPCTX_ADDR', 'mpctx'), ('PLAYER_GLOBALS', 'player_globals'), ('STOP_CODE_ADDR', 'stop_code'),
+    ('DSD_FILE_ADDR', 'dsd_file'), ('AUDIO_DEMUXER', 'audio_demuxer'),
+    ('PROBE_LOOP_RA', 'probe_loop_ra'), ('PROBE_OPEN_RA', 'probe_open_ra'),
+    ('PRELOAD_STATE_ADDR', 'preload_state'), ('PRELOAD_FREE_ADDR', 'preload_free'),
+    ('PRELOAD_PUBLISH_RET', 'preload_publish_ret'), ('PRELOAD_CLOSE_RET', 'preload_close_ret'),
+    ('PRELOAD_STOP_RET', 'preload_stop_ret'), ('FLAC_TARGET_ADDR', 'flac_target'), ('FLAC_PASS_RET', 'flac_pass_ret'),
+    ('FLAC_EPILOGUE_RET', 'flac_epilogue_ret'), ('SEEK_NOSYNC_RET', 'seek_nosync_ret'))
 # libc/libcstl imports only the M1 payload uses, placed after peq.py's deque_pop_back.
 M1PLUS_LIBC = {
     # V2.1 imports no deque_pop_back; navigation.c erases the last element through these
@@ -1024,6 +1082,7 @@ def player_coverage(where, payload, link):
 def patch_player(raw, out):
     """peq.patch_player for V2.1's hciplayer, at PLAYER_PROFILE's addresses."""
     from ipod import jal, patch_word
+    from build import j
     from peq import PLAYER_BASE
     out.mkdir(exist_ok=True)
     binary = out/'stock-hciplayer'
@@ -1035,17 +1094,32 @@ def patch_player(raw, out):
           prof['desc_bytes'], 'EQ descriptor mismatch')
     for address, word in prof['player_words']:
         check(struct.unpack_from('<I', raw, fileoff(raw, address))[0] == word, f'hciplayer 0x{address:x}: not 0x{word:08x}')
+    # the globals and targets the hooks take, against the stock words they replace
+    check(prof['seek_slot'] - prof['audio_demuxer'] == 0x2c, 'Audio demuxer desc')
+    check(all(w & 0xffff == prof['stop_code'] - prof['player_globals'] for _, w, _ in prof['probe_stop']), 'Stop code')
+    check(prof['stop_fill'][1] & 0xffff == prof['stop_code'] - prof['player_globals'], 'Stop code')
+    check({w for _, w, _ in prof['stop_sites']} == {0x3c020000 | prof['player_globals'] >> 16}, 'Player globals')
+    check(prof['stop_flag'] - prof['player_globals'] == 0xe54 and prof['mpctx'] == 0xb00000 - 0x61d0, 'Stop flag, mpctx')
+    check(all(w & 0xffff == prof['preload_state'] - prof['player_globals'] for _, w, _ in
+              (prof['preload_publish'], prof['cold_clear'], *prof['preload_fail_stores'])), 'Preload state')
+    check(prof['flac_target'] - prof['player_globals'] == 0x5290 and prof['dsd_file'] & 0xffff == 0xe44, 'FLAC target, DSD flag')
+    check(prof['preload_publish_ret'] == prof['preload_publish'][0] + 4 and prof['seek_nosync_ret'] == prof['seek_nosync'][0] + 8 and
+          [r - 8 for r in (prof['preload_close_ret'], prof['preload_stop_ret'])] == [a for a, _, _ in prof['preload_close']], 'Return targets')
     script = out/'link.ld'
     script.write_text('SECTIONS { . = 0xe10000; .text : { *(.text*) } .rodata : { *(.rodata*) } '
                       '.data : { *(.data*) *(.sdata*) } .bss : { *(.bss*) *(.sbss*) } '
                       '__end = .; /DISCARD/ : { *(.comment) *(.note*) *(.pdr) *(.mdebug*) '
                       '*(.MIPS.abiflags) *(.reginfo) } }')
+    # peq.py's bad-next, exit and preload hooks, and its FLAC seek's (each (address, stock word, symbol))
+    hooks = (*prof['probe_stop'], *prof['stop_sites'], prof['stop_fill'], *prof['preload_close'], prof['forced_eof'],
+             prof['exit_hold'], prof['preload_publish'], prof['preload_failed'], prof['cold_clear'], prof['flac_gate'],
+             prof['seek_nosync'])
     def link(where, defines=()):
         """Compile and link the payload in where; its bytes."""
         where.mkdir(exist_ok=True)
         objects = compile_common(where, binary, True, defines)
         run('ld.lld', '-m', 'elf32ltsmip', '--gc-sections', '-T', script, '-e', 'peq_open', '--undefined=mp3_seek', '--undefined=id3_gain',
-            *objects, '-o', where/'peq.elf')
+            *(f'--undefined={name}' for _, _, name in hooks), *objects, '-o', where/'peq.elf')
         run('llvm-objcopy', '-O', 'binary', where/'peq.elf', where/'peq.bin')
         return (where/'peq.bin').read_bytes()
     payload = link(out)
@@ -1063,6 +1137,26 @@ def patch_player(raw, out):
         patch_word(data, address, stock, patched, 'Music info with no stream')
     for address, stock, patched in prof['flac_meta_eof']:
         patch_word(data, address, stock, patched, 'FLAC metadata at EOF')
+    for address, stock, name in prof['probe_stop']:
+        patch_word(data, address, stock, j(ps[name]), 'Probe stop')
+    patch_word(data, *prof['preload_publish'][:2], j(ps['preload_publish']), 'Preload publish')
+    patch_word(data, *prof['preload_failed'][:2], jal(ps['preload_failed']), 'Preload failed')
+    for address, stock, patched in prof['preload_fail_stores']:
+        patch_word(data, address, stock, patched, 'Preload failed')
+    patch_word(data, *prof['forced_eof'][:2], jal(ps['forced_eof']), 'Forced EOF')
+    patch_word(data, *prof['exit_hold'][:2], jal(ps['exit_hold']), 'Exit hold')
+    for address, stock, name in prof['stop_sites']:
+        patch_word(data, address, stock, jal(ps[name]), 'Stop base')
+    for address, stock, patched in prof['stop_nops']:
+        patch_word(data, address, stock, patched, 'Stop base')
+    patch_word(data, *prof['stop_fill'][:2], j(ps['stop_fill']), 'Stop in a fill')
+    for address, stock, name in prof['preload_close']:
+        patch_word(data, address, stock, j(ps[name]), 'Preload close')
+    patch_word(data, *prof['cold_clear'][:2], jal(ps['cold_clear']), 'Cold clear')
+    patch_word(data, *prof['flac_gate'][:2], j(ps['flac_gate']), 'FLAC gate')
+    patch_word(data, *prof['seek_nosync'][:2], j(ps['seek_nosync']), 'Seek no sync')
+    for address, stock, patched in prof['seek_words']:
+        patch_word(data, address, stock, patched, 'Seek no sync')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')

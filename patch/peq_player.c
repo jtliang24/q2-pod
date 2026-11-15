@@ -1107,7 +1107,9 @@ int forced_eof_c(char *mp, int pos) {
     }
     return 0;
 }
-/* From 0x4232bc, $a0 mpctx, $s0 position: stock's store if that says so; every register else as it was. */
+/* From 0x4232bc, $a0 mpctx, $s0 position: stock's store if that says so; every register else as it was. V2.1's
+ * site differs (mpctx in $v1, overwritten by the jal's delay slot): the M1's is m1plus_peq_player_hooks.c's. */
+#if !M1PLUS
 __asm__(".set push\n.set noreorder\n.set noat\n.globl forced_eof\nforced_eof:\naddiu $sp, $sp, -88\n"
         "sw $ra, 84($sp)\nsw $v0, 16($sp)\nsw $v1, 20($sp)\nsw $a0, 24($sp)\nsw $a2, 28($sp)\nsw $a3, 32($sp)\n"
         "sw $t0, 36($sp)\nsw $t1, 40($sp)\nsw $t2, 44($sp)\nsw $t3, 48($sp)\nsw $t4, 52($sp)\nsw $t5, 56($sp)\n"
@@ -1118,6 +1120,7 @@ __asm__(".set push\n.set noreorder\n.set noat\n.globl forced_eof\nforced_eof:\na
         "lw $t0, 36($sp)\nlw $t1, 40($sp)\nlw $t2, 44($sp)\nlw $t3, 48($sp)\nlw $t4, 52($sp)\nlw $t5, 56($sp)\n"
         "lw $t6, 60($sp)\nlw $t7, 64($sp)\nlw $t8, 68($sp)\nlw $t9, 72($sp)\nlw $a1, 76($sp)\n"
         "jr $ra\naddiu $sp, $sp, 88\n.set pop\n");
+#endif
 #endif
 
 /* Stopped, the main thread's idle loop (0x42d994) polled the play flag (PLAY_FLAG) with usleep(10000), and
@@ -1220,7 +1223,9 @@ void *probe_stop_c(unsigned ra) {
 __asm__(".set push\n.set noreorder\n"
         ".globl probe_stop_dsf\nprobe_stop_dsf:\nb probe_stop\naddiu $sp, $sp, 0xa8\n"
         ".globl probe_stop_iso\nprobe_stop_iso:\nlw $s1, 0x3c($sp)\nb probe_stop\naddiu $sp, $sp, 0x60\n"
+#if !M1PLUS /* V2.1's DFF check branches to a shared epilogue: the M1's is m1plus_peq_player_hooks.c's */
         ".globl probe_stop_dff\nprobe_stop_dff:\naddiu $sp, $sp, 0xc0\n"
+#endif
         "probe_stop:\naddiu $sp, $sp, -24\nsw $ra, 20($sp)\nmove $a0, $ra\njal probe_stop_c\nnop\n"
         "lw $ra, 20($sp)\nbeqz $v0, 1f\naddiu $sp, $sp, 24\nmove $s2, $v0\n"
         "1:\njr $ra\nmove $v0, $zero\n.set pop\n");
@@ -1281,6 +1286,7 @@ void exit_hold_c(void) {
 }
 /* From 0x4226d4, in the main loop's exit send: every register as it was, $a0 stock's lui. V1.32's: V2.1's site
  * differs (lui $a1, $a0 kept), so the M1 gets its own variant. */
+#if !M1PLUS
 __asm__(".set push\n.set noreorder\n.set noat\n.globl exit_hold\nexit_hold:\naddiu $sp, $sp, -80\n"
         "sw $ra, 76($sp)\nsw $v0, 16($sp)\nsw $v1, 20($sp)\nsw $a1, 24($sp)\nsw $a2, 28($sp)\nsw $a3, 32($sp)\n"
         "sw $t0, 36($sp)\nsw $t1, 40($sp)\nsw $t2, 44($sp)\nsw $t3, 48($sp)\nsw $t4, 52($sp)\nsw $t5, 56($sp)\n"
@@ -1289,6 +1295,7 @@ __asm__(".set push\n.set noreorder\n.set noat\n.globl exit_hold\nexit_hold:\nadd
         "lw $t0, 36($sp)\nlw $t1, 40($sp)\nlw $t2, 44($sp)\nlw $t3, 48($sp)\nlw $t4, 52($sp)\nlw $t5, 56($sp)\n"
         "lw $t6, 60($sp)\nlw $t7, 64($sp)\nlw $t8, 68($sp)\nlw $t9, 72($sp)\nlui $a0, 0x89\n"
         "jr $ra\naddiu $sp, $sp, 80\n.set pop\n");
+#endif
 
 /* A preload the song outran: the main thread reached its EOF first, cleared 0xb10de8 (0 none, 1 thread
  * running, 2 ready, -1 failed) and cold-started that file. The thread then stored 2 regardless, so the
@@ -1337,9 +1344,11 @@ __asm__(".set push\n.set noreorder\n.set noat\n"
         "2:\njal preload_stale\nnop\nlw $ra, 0x65c($sp)\njr $ra\naddiu $sp, $sp, 0x660\n"
         /* From 0x421a3c, in the main loop, between stock's uses of $v0 and $v1: touches only $t8, $t9. V1.32's word
          * and base register: V2.1's base differs, so the M1 gets its own variant. */
+#if !M1PLUS
         ".globl cold_clear\ncold_clear:\n"
         "1:\nll $t8, 0xde8($v1)\naddiu $t8, $t8, -1\nins $t8, $zero, 1, 1\nli $t9, 3\nmovn $t9, $zero, $t8\n"
         "sc $t9, 0xde8($v1)\nbeqz $t9, 1b\nnop\njr $ra\nnop\n"
+#endif
         /* mcl-closegapless and the direct stop, from the stock li $v1, 2 before their read of the word ($v0 0xb10000):
          * a running thread is stale now, so 1 becomes 3. $a0 is the value stock's next instruction tests, not 2 for a 1. */
         ".globl preload_close\npreload_close:\nli $v1, 2\n"
@@ -1406,4 +1415,5 @@ __asm__(".set push\n.set noreorder\n.set noat\n"
         ".globl seek_nosync\nseek_nosync:\nlw $v0, 0x30($sp)\nbne $a0, $a3, 1f\nnop\n"
         "lui $a1, 1\naddiu $a1, $a1, -1\nsubu $a0, $v0, $a1\n"
         "1:\nj " ASM_STR(SEEK_NOSYNC_RET) "\nsubu $a0, $a0, $v0\n.set pop\n");
+#include "m1plus_peq_player_hooks.c"
 #endif
