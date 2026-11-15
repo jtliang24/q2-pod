@@ -32,9 +32,6 @@ n.DAC_HELPER = 0x43ae74                   # V1.32's 0x43b280
 # V2.1's list tries lavf ahead of the DSD checks (stock's order): a thread that gives up at one has met lavf first.
 # A junk .iso or .dff its forced check (0x4855ac) let by meets lavf, too, and the thread gives up there
 n.LAVF_LAST = False
-# mp3_gapless.c isn't in V2.1's player yet (step 3 of .plan/unported-r2.md): each MP3 keeps LAME's delay and padding,
-# 1836 frames on x.mp3 here, and the two joined files ran 0.11 s over with nothing past the count
-n.PAST_THE_COUNT = (('joined.mp3', 2 * n.N, -0.1, 0.15), *n.PAST_THE_COUNT[1:])
 
 
 def rate_dff():

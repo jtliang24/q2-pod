@@ -375,16 +375,21 @@ def shared_checks(directory, manifest, stock, demo, read):
     if m1plus: profile = dict(profile, eq_rate_gates=(*profile['eq_rate_gates'], profile['pause_sleep'],
                                                       *profile['media_info_null'], *profile['flac_meta_eof']))
     gates = [fileoff(old, a) for a in (*(a for a, _, _ in profile['eq_rate_gates']), *profile['id3_calls'])]
-    if m1plus:  # peq.py's bad-next, exit, preload and FLAC seek fixes at V2.1's sites: a j or jal to the payload's hook,
-        # or the word peq.py writes (PLAYER_PROFILE's probe_stop .. seek_words)
+    if m1plus:  # peq.py's bad-next, exit, preload, FLAC seek and gapless fixes at V2.1's sites: a j or jal to the payload's hook,
+        # or the word peq.py writes (PLAYER_PROFILE's probe_stop .. seek_words, mp3_alloc .. mov_edits)
         ps = symbols(directory/'peq'/'peq.elf')
         hooks = [(a, j(ps[n])) for a, _, n in (*profile['probe_stop'], profile['stop_fill'], *profile['preload_close'],
                                                profile['preload_publish'], profile['flac_gate'], profile['seek_nosync'])]
         hooks += [(a, jal(ps[n])) for a, _, n in (*profile['stop_sites'], profile['forced_eof'], profile['exit_hold'],
-                                                 profile['preload_failed'], profile['cold_clear'])]
-        hooks += [(a, w) for a, _, w in (*profile['stop_nops'], *profile['preload_fail_stores'], *profile['seek_words'])]
-        assert len({a for a, _ in hooks}) == len(hooks) == 27
+                                                 profile['preload_failed'], profile['cold_clear'],
+                                                 profile['mp3_alloc'], profile['mp3_filter'], profile['mp3_read'])]
+        hooks += [(a, w) for a, _, w in (*profile['stop_nops'], *profile['preload_fail_stores'], *profile['seek_words'],
+                                         profile['lavf_priv'], profile['mov_edits'])]
+        assert len({a for a, _ in hooks}) == len(hooks) == 32
         assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _ in hooks] == [w for _, w in hooks]
+        # the MP3 trim's fill and close slots, in the audio demuxer's descriptor (rodata, outside .text)
+        assert [struct.unpack_from('<I', new, fileoff(old, a))[0] for a, _, _ in (profile['mp3_fill'], profile['mp3_close'])] == \
+            [ps['mp3_fill'], ps['mp3_close']]
         gates += [fileoff(old, a) for a, _ in hooks]
     if not m1plus:
         from peq import IDLE_WAIT, PAUSE_WAIT, CMD_DONE, MP3_ALLOC, MP3_FILTER, MP3_CLOSE, MP3_READ

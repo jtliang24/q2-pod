@@ -22770,7 +22770,7 @@ assert m.get(buf+8)==7 and m.get(buf+4)==30; passed()
 
 
 if is_m1plus:
-    not_ported('MP3 encoder delay/padding trim and command-driven player waits (1.5.5)')
+    not_ported('Command-driven player waits (1.5.5)')
 
 if is_m1plus:
     not_ported("Bluetooth gapless resampler continuity (RS_OPEN_SLOT, 1.5.6)")

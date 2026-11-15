@@ -924,6 +924,30 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'flac_pass_ret': 0x5b6518,
     'flac_epilogue_ret': 0x5b6b88,
     'seek_nosync_ret': 0x48d0b4,
+    # peq.py's MP3_* (patch/mp3_gapless.c): demux_audio_open's malloc(16) of its private state, filter_n_bytes' af_play
+    # call, ad_libmad read_frame's demux_read_data call (V1.32's less 0x540, 0x540 and 0x580), and the audio
+    # demuxer's fill and close slots (audio_demuxer + 0x20, + 0x28)
+    'mp3_alloc': (0x48f650, 0x0c2b69e0, 'mp3_private_alloc'),  # jal 0xada780, malloc's PLT stub
+    'mp3_filter': (0x47f3a0, 0x0c1133d0, 'mp3_filter_entry'),  # jal af_play
+    'mp3_read': (0x4b1f0c, 0x0c1211b3, 'mp3_read'),            # jal demux_read_data
+    'mp3_fill': (0x89f760, 0x48bc44, 'mp3_fill'),
+    'mp3_close': (0x89f768, 0x48b2a4, 'mp3_close'),
+    # peq.py's LAVF_PRIV and MOV_EDITS (patch/lavf_gapless.c): lavf_check_file's calloc of lavf_priv_t (V1.32's less
+    # 0x540), and mov_read_trak's av_freep(&sc->elst_data) (FFmpeg's less 0x5a0)
+    'lavf_priv': (0x4ae50c, 0x24040c38, 0x24040c58),  # addiu $a0, $zero, 0xc38 -> 0xc58
+    'mov_edits': (0x516358, 0x0c1bcede, 0),           # jal 0x6f3b78, av_freep
+    # The addresses those two read, as their macros (PLAYER_MACROS)
+    'af_play': 0x44cf40,
+    'demux_read_data': 0x4846cc,
+    'stock_mp3_fill': 0x48bc44,
+    'stock_mp3_close': 0x48b2a4,
+    'mp3_seek_fill': 0xb15294,  # stock's fill-after-seek flag, V1.32's 0xb152b4
+    'lavf_pref_desc': 0x8a431c,
+    'lavf_desc': 0x8a4350,
+    'mov_format': 0xafc030,
+    'ogg_format': 0xafc250,
+    'av_dict_get': 0x6ea068,
+    'ds_get_next_pts': 0x485968,
     # Stock words that pin them (address, word): patch_player checks each
     'player_words': ((0x423308, 0x8ea39e30),  # forced EOF's lw $v1, -0x61d0($s5): mpctx, 0xb00000 - 0x61d0
                      (0x409144, 0xaca40e44),  # sw $a0, 0xe44($a1): the DSD flag, V1.32's 0xe5c at the same address
@@ -937,7 +961,12 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
                      (0x5b6508, 0xc4415290),  # the gate's lwc1 $f1, 0x5290($v0): the seek's target
                      (0x5b6510, 0x450104c4), (0x5b6518, 0x8e02000c),  # bc1t to the gate's failure; the pass: lw $v0, 0xc($s0)
                      (0x5b6b88, 0x02801025),  # the decoder's epilogue: move $v0, $s4
-                     (0x48d0b4, 0x000417c3)), # after the scan's subtraction: sra $v0, $a0, 31
+                     (0x48d0b4, 0x000417c3),  # after the scan's subtraction: sra $v0, $a0, 31
+                     (0xada784, 0x8df99744),  # malloc's PLT stub: lw $t9, -0x68bc($t7), GOT 0xaf9744 as V1.32's
+                     (0x48be78, 0x8c425294), (0x48be90, 0xac405294),  # the fill reads and clears the seek flag
+                     (0x48d2b4, 0xac445294),  # the seek sets it
+                     (0x4ae5cc, 0x0c1ba81a),  # lavf_check_file's jal av_dict_get (V1.32's 0x4aeb0c)
+                     (0x492e54, 0x0c12165a)), # jal ds_get_next_pts (V1.32's 0x493394)
 }
 # peq_player.c's address macros (V1.32's values by default) and the PLAYER_PROFILE keys the M1 sets them from.
 # patch_player checks that the code it links reads no other (player_coverage).
@@ -952,7 +981,12 @@ PLAYER_MACROS = (
     ('PRELOAD_STATE_ADDR', 'preload_state'), ('PRELOAD_FREE_ADDR', 'preload_free'),
     ('PRELOAD_PUBLISH_RET', 'preload_publish_ret'), ('PRELOAD_CLOSE_RET', 'preload_close_ret'),
     ('PRELOAD_STOP_RET', 'preload_stop_ret'), ('FLAC_TARGET_ADDR', 'flac_target'), ('FLAC_PASS_RET', 'flac_pass_ret'),
-    ('FLAC_EPILOGUE_RET', 'flac_epilogue_ret'), ('SEEK_NOSYNC_RET', 'seek_nosync_ret'))
+    ('FLAC_EPILOGUE_RET', 'flac_epilogue_ret'), ('SEEK_NOSYNC_RET', 'seek_nosync_ret'),
+    ('STOCK_AF_PLAY_ADDR', 'af_play'), ('DEMUX_READ_DATA_ADDR', 'demux_read_data'),
+    ('STOCK_MP3_FILL_ADDR', 'stock_mp3_fill'), ('STOCK_MP3_CLOSE_ADDR', 'stock_mp3_close'),
+    ('MP3_SEEK_FILL_ADDR', 'mp3_seek_fill'), ('LAVF_PREF_DESC', 'lavf_pref_desc'), ('LAVF_DESC', 'lavf_desc'),
+    ('MOV_FORMAT_ADDR', 'mov_format'), ('OGG_FORMAT_ADDR', 'ogg_format'), ('AV_DICT_GET_ADDR', 'av_dict_get'),
+    ('DS_GET_NEXT_PTS_ADDR', 'ds_get_next_pts'))
 # libc/libcstl imports only the M1 payload uses, placed after peq.py's deque_pop_back.
 M1PLUS_LIBC = {
     # V2.1 imports no deque_pop_back; navigation.c erases the last element through these
@@ -1018,6 +1052,9 @@ def compile_common(out, binary, player=False, defines=()):
             asm += [f'.globl {name}', f'.set {name}, peq_lib_{name}']
     if player:  # peq_player.c's stock addresses, V1.32's by default; unsuffixed, as asm text takes some
         header += [f'#define {macro} 0x{PLAYER_PROFILE[key]:x}' for macro, key in PLAYER_MACROS]
+        # filter_n_bytes keeps sh_audio in $fp; af_play's two arguments stay intact (peq.py's)
+        asm += ['.section .text.mp3_filter_entry,"ax",@progbits', '.globl mp3_filter_entry',
+                'mp3_filter_entry:', 'move $a2, $fp', 'j mp3_filter', 'nop']
     if not player:
         # V1.32's private routines are V1.32 code: never merged into V2.1's table
         syms, stubs = m1plus_symbols(symbols(binary), run('readelf', '-Ws', binary))
@@ -1045,7 +1082,7 @@ def compile_common(out, binary, player=False, defines=()):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1', *defines]
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
+    for name in ['peq.c', 'peq_player.c', 'mp3_gapless.c', 'lavf_gapless.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -1062,7 +1099,7 @@ def player_defaults():
     """The address macros the player's C defaults to V1.32's values (#ifndef NAME / #define NAME 0x...), by name."""
     found = {}
     for path in (ROOT/'patch').glob('*.c'):
-        if path.name in ('peq.c', 'peq_player.c') or path.name.startswith('m1plus_peq_player_'):
+        if path.name in ('peq.c', 'peq_player.c', 'mp3_gapless.c', 'lavf_gapless.c') or path.name.startswith('m1plus_peq_player_'):
             for name, value in re.findall(r'^#ifndef (\w+)\n#define \1 (0x[0-9a-fA-F]+)\b', path.read_text(), re.M):
                 found[name] = int(value, 16)
     return found
@@ -1105,15 +1142,26 @@ def patch_player(raw, out):
     check(prof['flac_target'] - prof['player_globals'] == 0x5290 and prof['dsd_file'] & 0xffff == 0xe44, 'FLAC target, DSD flag')
     check(prof['preload_publish_ret'] == prof['preload_publish'][0] + 4 and prof['seek_nosync_ret'] == prof['seek_nosync'][0] + 8 and
           [r - 8 for r in (prof['preload_close_ret'], prof['preload_stop_ret'])] == [a for a, _, _ in prof['preload_close']], 'Return targets')
+    check(prof['mp3_alloc'][1] == jal(0xada780) and prof['mp3_filter'][1] == jal(prof['af_play']) and
+          prof['mp3_read'][1] == jal(prof['demux_read_data']), 'MP3 gapless calls')
+    check([prof[k][0] - prof['audio_demuxer'] for k in ('mp3_fill', 'mp3_close')] == [0x20, 0x28] and
+          (prof['mp3_fill'][1], prof['mp3_close'][1]) == (prof['stock_mp3_fill'], prof['stock_mp3_close']), 'MP3 gapless slots')
+    check(prof['mp3_seek_fill'] - prof['player_globals'] == 0x5294, 'MP3 seek fill flag')
+    def text(address):
+        at = fileoff(raw, address)
+        return raw[at:raw.index(0, at)].decode()
+    word = lambda address: struct.unpack_from('<I', raw, fileoff(raw, address))[0]
+    check([text(word(prof[k] + 4)) for k in ('lavf_pref_desc', 'lavf_desc')] == ['lavfpref', 'lavf'] and
+          [text(word(prof[k])) for k in ('mov_format', 'ogg_format')] == ['mov,mp4,m4a,3gp,3g2,mj2', 'ogg'], 'lavf demuxers')
     script = out/'link.ld'
     script.write_text('SECTIONS { . = 0xe10000; .text : { *(.text*) } .rodata : { *(.rodata*) } '
                       '.data : { *(.data*) *(.sdata*) } .bss : { *(.bss*) *(.sbss*) } '
                       '__end = .; /DISCARD/ : { *(.comment) *(.note*) *(.pdr) *(.mdebug*) '
                       '*(.MIPS.abiflags) *(.reginfo) } }')
-    # peq.py's bad-next, exit and preload hooks, and its FLAC seek's (each (address, stock word, symbol))
+    # peq.py's bad-next, exit and preload hooks, its FLAC seek's and its MP3 trim's (each (address, stock word, symbol))
     hooks = (*prof['probe_stop'], *prof['stop_sites'], prof['stop_fill'], *prof['preload_close'], prof['forced_eof'],
              prof['exit_hold'], prof['preload_publish'], prof['preload_failed'], prof['cold_clear'], prof['flac_gate'],
-             prof['seek_nosync'])
+             prof['seek_nosync'], *(prof[k] for k in ('mp3_alloc', 'mp3_filter', 'mp3_read', 'mp3_fill', 'mp3_close')))
     def link(where, defines=()):
         """Compile and link the payload in where; its bytes."""
         where.mkdir(exist_ok=True)
@@ -1158,6 +1206,13 @@ def patch_player(raw, out):
     for address, stock, patched in prof['seek_words']:
         patch_word(data, address, stock, patched, 'Seek no sync')
     patch_word(data, prof['seek_slot'], prof['stock_seek'], ps['mp3_seek'], 'Audio demuxer seek slot')
+    patch_word(data, *prof['mp3_alloc'][:2], jal(ps['mp3_private_alloc']), 'MP3 gapless private state')
+    patch_word(data, *prof['mp3_filter'][:2], jal(ps['mp3_filter_entry']), 'MP3 gapless PCM')
+    patch_word(data, *prof['mp3_close'][:2], ps['mp3_close'], 'MP3 gapless cleanup')
+    patch_word(data, *prof['mp3_read'][:2], jal(ps['mp3_read']), 'MP3 last frame')
+    patch_word(data, *prof['mp3_fill'][:2], ps['mp3_fill'], 'MP3 tail tags')
+    patch_word(data, *prof['lavf_priv'], 'lavf gapless window')
+    patch_word(data, *prof['mov_edits'], 'M4A edit list kept')
     for address in prof['id3_calls']:
         patch_word(data, address, jal(prof['stock_id3']), jal(ps['id3_gain']), 'MP3 ReplayGain')
     append_payload(data, payload, PLAYER_BASE, max(len(payload), ps['__end']-PLAYER_BASE), 'player')
