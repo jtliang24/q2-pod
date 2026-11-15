@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The M1 Plus gates, in order, on one --dev build: every step every run, stopping at the first failure.
 
-    python3 test/m1plus/gates.py BUILD            # all 21: q2compare --suites, a fresh build in BUILD, its gates
+    python3 test/m1plus/gates.py BUILD            # all 22: q2compare --suites, a fresh build in BUILD, its gates
     python3 test/m1plus/gates.py BUILD --base TAG  # at a sync: q2compare against the tag merged
     python3 test/m1plus/gates.py BUILD --from boot  # after a test-only fix: the failed gate onward, same build
     python3 test/m1plus/gates.py BUILD --release  # tools/release_m1.py validate()'s subset, on a release build
@@ -14,7 +14,7 @@ a fresh build and every gate, so --from and --only refuse a stale build. Edits u
 Logs and summary.txt (`step: exit N after Ts`) go to --out, by default work/gates/<timestamp>/.
 Environment: GATES_PYTEST (the unit/fw runner, default this Python's pytest, else work/sync/venv's, the main
 checkout's from a git worktree), GATES_CLANG (a wrapped host clang for unit/fw, default nixpkgs#clang's wrapper),
-GATES_FFMPEG (an ffmpeg binary for q2compare's suites and the natural step, default nixpkgs#ffmpeg-headless; lame
+GATES_FFMPEG (an ffmpeg binary for q2compare's suites and the natural and seam steps, default nixpkgs#ffmpeg-headless; lame
 and flac come from nixpkgs)."""
 import argparse, datetime, importlib.util, json, os, pathlib, shlex, shutil, subprocess, sys, time
 sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first
@@ -130,6 +130,8 @@ STEPS = {
     'id3': (suite('m1plus/id3'), False),
     # the real hciplayer under Unicorn: get-music-info with no stream, a FLAC cut inside its metadata
     'faults': (suite('m1plus/player_faults'), True),
+    # test/player_seam.py's seams on V2.1's player, in samples: MP3, M4A, Opus and Vorbis gapless; HE-AAC as stock
+    'seam': (lambda ctx: ['env', f'PATH={encoders()}', *suite('m1plus/seam')(ctx)], False),
     # test/hci_natural.py's natural changes on V2.1's player: a bad next, the exit hold (G3), preloads, FLAC seeks
     'natural': (lambda ctx: ['env', f'PATH={encoders()}', *suite('m1plus/natural')(ctx)], False),
     'headset': (suite('m1plus/headset_io'), False),
