@@ -728,6 +728,9 @@ M1PLUS_HOOKS = {
     # Standby Limit: into_standby's suspend to RAM (V1.32's device_standby's), V1.32's instruction for
     # instruction; the M1's rtc-ingenic has the same wakealarm
     'toolsIntoStandby': (0x5e5228, 'ringnav_standby', 'standby'),
+    # Add to Playlist and Add to My Fav (2.9): batch_add_file commits one song at a time on the UI thread, so it runs
+    # under the watchdog's long count (m1plus_batch_add.c). The Q2 doesn't hook it (V1.32's 0x4f4be8).
+    'batch_add_file': (0x4da7dc, 'ringnav_batch_add', 'batchadd'),
     # Gapless: the next track's pick and its decoder's open, V1.32's moved
     'mcl_preload': (0x5d0ea4, 'ringnav_preload', 'preload'),
     'mcl_open_preload': (0x5d0bd8, 'ringnav_open_preload', 'open_preload'),
@@ -1148,7 +1151,8 @@ def compile_common(out, binary, player=False, defines=()):
         # A routine V2.1 hooks where V1.32 does not (on_wm_keyup_fun, ringnav's): the payload's own
         # replays reach stock through its trampoline, not back into the hook.
         from build import HOOKS
-        resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS}
+        # batch_add_file's hook only adds the watchdog's long count: the payload's own adds go through it too.
+        resumed = {n: x for n, (_, _, x) in M1PLUS_HOOKS.items() if x and n not in HOOKS and n != 'batch_add_file'}
         for name, (ret, args) in (FUNCTIONS | M1PLUS_FUNCTIONS).items():
             if name in resumed:
                 header += [f'extern {ret} stock_{resumed[name]}_trampoline({args});',
@@ -1169,7 +1173,7 @@ def compile_common(out, binary, player=False, defines=()):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1', *defines]
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c', 'mp3_gapless.c', 'lavf_gapless.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
+    for name in ['peq.c', 'peq_player.c', 'mp3_gapless.c', 'lavf_gapless.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'm1plus_batch_add.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
