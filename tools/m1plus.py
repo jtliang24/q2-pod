@@ -872,7 +872,9 @@ PLAYER_PROFILE: dict[str, Any] = {  # heterogeneous audited words, word groups a
     'id3_calls': (0x48ee74, 0x492028, 0x492ab4),
     'stock_id3': 0x48b760,
     'written_audio_pts': 0x44600c,
-    'length_addr': 0xb10e5c,
+    # the length in whole seconds, Q2 0xb10e84: get-music-info's third field (0x42bfbc), stored at 0x421d74; 0xb10e5c
+    # next to it is the bitrate, its first field
+    'length_addr': 0xb10e68,
     # the skip and stop flags, Q2 0xb10e6c and 0xb10e70: the idle loop clears both at 0x42d864 (Q2 0x42da10),
     # set-nexturl sets the first at 0x42d304 (Q2 0x42d3a0)
     'next_flag': 0xb10e50,
