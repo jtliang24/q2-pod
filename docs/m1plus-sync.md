@@ -281,3 +281,5 @@ stay flat or fall.
 | Merge step: sync to 1.6.4 on `feature/m1-ipod` (Nov 10) | 1.6.4 (`fb1890d`) | +2,579/−480 over 35 files: the M1's Display, System and Playback builders moved to `m1plus_nav_display.c`, `m1plus_nav_sysset.c` and `m1plus_nav_audioset.c`; `stale_heal`'s `!M1PLUS` |
 | Merge step: sync to 1.6.7 on `feature/m1-ipod` (Nov 10) | 1.6.7 (`bf471b5`) | +2,598/−479 over 36 files: the theme engine's tables built for the M1 in `m1plus.py` (Minimal and Modern), Classic's Home bindings and `tick_gate` behind `!M1PLUS`, `client_h()`'s `UI_H`, `HSCROLL_*` and the player's flags as names |
 | Merge step: sync to 1.7.0 on `feature/m1-ipod` (Nov 11) | 1.7.0 (`85fe884`) | +2,668/−425 over 36 files: `PAGE_X`'s CF_EDGE for page rows, `np_beside`'s M1 return, `M1_BACK_W` apart from Classic's `BACK_W`, the new Classic and raw-wheel paths behind `!M1PLUS` |
+| Unported rounds 1 and 2 (Nov 15) | 1.7.0 (`85fe884`) | +4,616/−1,758 over 42 files |
+| Merge step: sync to 1.7.1 (Nov 18) | 1.7.1 (`dc1c017`) | +4,620/−1,755 over 42 files: `np_full`'s restack under the column's parent, `np_line_hold`'s Q2-only `SCROLL_Y`, `lyric_seek` Q2-only beside the M1 scrub's |
