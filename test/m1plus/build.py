@@ -2,7 +2,7 @@
 """JPEG and boot script checks; --build BUILD audits a build (Q2 or M1 Plus), and a stock firmware ZIP
 also tests packaging with a custom logo and quoted paths."""
 import io, math, re, sys; sys.path[1:1] = [sys.path[0] + '/..']; sys.path.insert(0, sys.path[0] + '/../../tools')  # tools/ first: test/m1plus/build.py must import tools/build.py
-from build import TAG, jal, j, ICONS, LABELS, relabel, ROOT, STOCK_EQ, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web, DEFAULT_CONFIG, COVERMODE
+from build import TAG, jal, j, ICONS, LABELS, relabel, ROOT, STOCK_EQ, dev_tag, jpeg_size, FONT, TAG_C, patch_m4b_cover, WEB, patch_web, DEFAULT_CONFIG
 
 logo = (ROOT/'assets/boot-logo.jpg').read_bytes()
 assert jpeg_size(logo) == (320, 375)
@@ -215,7 +215,7 @@ def boot_check(s90play=None):
             out, cp = logged(status, False)
             assert f'== demo exit {status}\n' in out and '== dmesg' in out and cp is False and state.exists()
         keep.unlink(); state.unlink()
-        # a library scan's and Coverflow's art build's records (navigation.c crash_note): the file in progress and
+        # a library scan's and Coverflow's art build's records (tags.c crash_note): the file in progress and
         # the last 60 memory lines
         for name, last, every in (('scan', 'last scanned', 500), ('art', 'last art', 50)):
             note_file, note_log = r/f'tmp/q2-{name}-file', r/f'tmp/q2-{name}.log'
@@ -243,7 +243,7 @@ def boot_check(s90play=None):
         oom, tail = out.split('== oom\n')[1].split('== dmesg\n')
         assert oom == f'{head}\n{summary}\n{kill}\n{reap}\n' and head not in tail and kill in tail
         (r/'bin/dmesg').unlink(); (r/'dmesg').unlink()
-        # /mnt/data/q2-state (navigation.c state_poll) still there at boot: the last session ended in a forced
+        # /mnt/data/q2-state (system.c state_poll) still there at boot: the last session ended in a forced
         # restart, or the battery. It goes into q2-crash.log, a new one that says so or the crash's, and goes.
         state, line = r/'mnt/data/q2-state', 'screen:off power:suspending cable:out battery:57 play:paused out:jack\n'
         state.write_text(line); out, cp = logged(0, False)
@@ -254,7 +254,7 @@ def boot_check(s90play=None):
         assert '== last state' in out and out.endswith('== cover flow\nstart albums=0 0 ms\nstaged albums=20000 900 ms\n') and not trace.exists()
         trace.write_text('stale\n'); out, cp = logged(0, False)
         assert out is False and not trace.exists()  # no forced restart: dropped, not reported
-        # the UI loop's stall record (navigation.c stall_write) goes in last, and goes
+        # the UI loop's stall record (system.c stall_write) goes in last, and goes
         stall, record = r/'mnt/data/q2-stall', 'age 20000 ms\ntoasts 1\nstate D\nwchan wait_on_page_bit_common\n'
         state.write_text(line); trace.write_text('start albums=0 0 ms\n'); stall.write_text(record); out, cp = logged(0, False)
         assert out.endswith('== cover flow\nstart albums=0 0 ms\n== stall\n' + record) and not stall.exists() and not trace.exists()
@@ -1649,8 +1649,9 @@ def validate_assets(directory):
                     continue
                 if n[2].get('name') in ('img_add', 'img_dec'):
                     assert n == before[n[2]['name']]  # ranges, touch and wheel controls stay stock
-        if short == VOLUME:  # Hidden before the first paint, including transition snapshots.
+        if short == VOLUME:  # Hidden before the first paint, including transition snapshots; no border, paper in Light Mode.
             plain = decode(original); del plain[2]['highlight']
+            plain[2].update({f'style:{s}:border_color': '#00000000' for s in ('normal', 'disable', 'focused')})
             for child in plain[3]: child[2]['visible'] = 'false'
             assert root == plain
             continue
@@ -1964,7 +1965,7 @@ def validate_assets(directory):
             ink = lambda text, px: math.ceil(sum(face['hmtx'][cmap[ord(c)]][0] for c in text) * px / (face['hhea'].ascent - face['hhea'].descent))
             page = {n[2].get('name'): n for n in walk(decode(read('rootfs.squashfs', ui + f'{g.name}_{PLAYING_PAGE}')))}
             # the times beside the bar in "-9:59"'s boxes (the build's class, the widest bar) hold their font's line, their outer
-            # edges and the bar's ends clear of the glass; so in every length class navigation.c ipod_times fits them to: each class's longest times, any digit, the outer
+            # edges and the bar's ends clear of the glass; so in every length class np_bar.c ipod_times fits them to: each class's longest times, any digit, the outer
             # edges where the build put them, the gap kept, the bar between
             for name in ('label_playtime', 'label_ipod_remain'):
                 x, y, w, h = page[name][1]
