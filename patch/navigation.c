@@ -1,15 +1,6 @@
 /* Logical menu selection is independent of native touch focus. Stock code owns gestures. */
-#include "chapters.h"
-#include "offsets.inc"
-#include "peq.h" /* libc/libcstl imports (deque_*, send) and the shared helpers */
-#include "playback.h"
-#include "stock.h"
-#include "m1plus_nav.h" /* the M1 Plus's declarations and V2.1 stand-ins (docs/m1plus-roadmap.md U1c) */
-#if M1PLUS
-#include "m1plus_np_view.h"
-#endif
-#include "xiph.h"
-#undef select /* the UI selection helper below; headset.c uses libc select */
+#include "navigation.h"
+#include "m1plus_nav_shims.c" /* the M1 Plus's V2.1 stand-ins and globals, once (m1plus_nav.h) */
 extern int stock_sorted_query_trampoline(const char *, const char *, void *, int);
 extern int stock_seek_time_trampoline(int);
 extern int stock_dbquery_trampoline(const char *, const char *, void *, int),
@@ -31,7 +22,7 @@ int ringnav_timezone(void) {
 }
 
 /* Past 2038, 28 years back for stock's 32-bit localtime: the same calendar until 2100. */
-static long clock_back(long long wall) {
+long clock_back(long long wall) {
     unsigned back = (unsigned)wall; /* 32-bit: the payload has no 64-bit division */
     while (back > 0x7fffffff) back -= 883612800;
     return (long)back;
@@ -60,7 +51,19 @@ static void tz_now(unsigned char *rows) {
     }
 }
 
-static void zone_caption(void *item);
+/* Stock's Time Zone caption, between rows 0 and 1, sits 20 px down its item and over row 1: Classic
+ * gives it the item, the set's row. */
+static void zone_caption(void *item) {
+    if (!classic_pages()) return;
+    void *list = P(item, W_PARENT); /* item is its last child, the caption's the one before */
+    int n = list ? widget_count_children(list) : 0;
+    void *cap = n > 1 ? widget_get_child(list, n - 2) : (void *)0;
+    cap = cap && widget_count_children(cap) ? widget_get_child(cap, 0) : (void *)0;
+    if (cap && !tk_strcmp(widget_get_type(cap), "hscroll_label")) {
+        widget_move_resize(cap, 0, 0, 375, geom_val(V_SET_ROW));
+        theme_font(cap, ROLE_INFO, FONT_ROW);
+    }
+}
 /* Row i > 0 shows zone rows[i - 1] as "GMT-4 New York", the offset it has now, so a zone on
  * daylight saving reads as its clocks do; stock names, ticks and clicks by the index it is given.
  * Focus-only, a label too long for the row keeps its ellipsis instead of scrolling once as the
@@ -89,7 +92,6 @@ void ringnav_timezone_row(void *item, int i) {
         widget_set_text_utf8(label, s);
     }
 }
-extern int stock_music_info_trampoline(int, char *, const char *);
 static int library_music __attribute__((section(".scratch")));
 static int spoken(const char *path);
 
@@ -171,33 +173,13 @@ int ringnav_sorted_query(const char *db, const char *sql, void *row, int sort) {
 int ringnav_content_query(const char *db, const char *sql, void *row, void *arg, int sort) {
     return library_query(1, db, sql, row, arg, sort);
 }
-extern int stock_keyup_trampoline(void *, void *), stock_touch_trampoline(void *, void *),
-    stock_output_trampoline(int), stock_write_config_trampoline(int, const char *, const char *),
-    stock_paint_trampoline(void *, void *), stock_dispatch_trampoline(void *, void *),
-    stock_keylong_trampoline(void *, void *), stock_paint_bg_trampoline(void *, void *),
-    stock_showface_trampoline(void *), stock_playing_trampoline(void *, void *),
-    stock_display_trampoline(void *, void *), stock_bigcover_trampoline(void *, void *),
-    stock_localmusic_trampoline(void *, void *), stock_keydown_trampoline(void *, void *),
-    stock_btvol_trampoline(int, int), stock_sleep_trampoline(void *),
-    stock_color_trampoline(void *, void *, const char *, unsigned),
-    stock_image_trampoline(void *, const char *, void *), stock_about_trampoline(void *, void *),
-    stock_folder_trampoline(void *, void *), stock_folder_back_trampoline(void *, void *),
-    stock_folder_top_trampoline(void), stock_folder_click_trampoline(void *, void *),
-    stock_input_trampoline(void *, void *), stock_buzzer_trampoline(int),
-    stock_localclass_trampoline(int), stock_detail_trampoline(int, void *),
-    stock_artist_trampoline(int), stock_power_trampoline(void *, void *),
-    stock_systemset_trampoline(void *, void *), stock_audioset_trampoline(void *, void *),
-    stock_btrows_trampoline(void *, void *), stock_playlist_trampoline(void *),
-    stock_stream_trampoline(void *, void *), stock_start_player_trampoline(void),
-    stock_standby_trampoline(void), stock_usbmode_trampoline(void *, void *, void *, void *),
-    stock_hscroll_start_trampoline(void *);
 extern void *coverflow_tracks(void *page);
 extern int coverflow_jump(void *w, int from, int dir, unsigned *letter), coverflow_bounded(void *w),
     coverflow_slide(void *w);
 extern void coverflow_lost_touch(void), coverflow_wheel_land(void);
 extern int coverflow_wheel_live(void), coverflow_wheel_poll(int usable, int gated),
     coverflow_wheel_on(void *w);
-extern void *coverflow_album(void *page), *coverflow_album_tracks(void *r);
+extern void *coverflow_album(void *page);
 extern int coverflow_turning(void);
 extern int coverflow_goto_album(void *r), coverflow_shows_album(void *r);
 extern unsigned coverflow_scope(void *page);
@@ -209,24 +191,15 @@ extern void coverflow_slant(void *w, void *canvas, unsigned paper), coverflow_sl
 extern int coverflow_home_back(void *top), coverflow_home_owns(void *w);
 extern void coverflow_home_top(void);
 extern const char *coverflow_home_title(void);
-extern const char coverflow_home_name[];
 extern void coverflow_home_row(void *surface, void *row, int id, int painting);
 extern void lockscreen_paint(void *w, void *canvas);
 extern void coverflow_paint(void *w, void *canvas), photos_paint(void *w, void *canvas),
     photos_open(const char *root), books_paint(void *w, void *canvas), books_open(const char *root),
-    video_poll(void), video_key(unsigned key);
+    video_poll(void);
 extern int books_key(void *top, unsigned key), video_on(void), books_video(const char *path);
 extern void games_paint(void *w, void *canvas);
-extern int games_key(void *top, unsigned key), games_open(void *ctx, void *event);
-extern void spot_poll(void), spot_yield(void), spot_paint(void *w, void *canvas), *spot_art(void);
-#if M1PLUS
-extern int spot_band(void *win, void **bar, void **times);
-static int spot_page(void *w) { return w && !tk_strcmp(widget_get_prop_str(w, "name", ""), "spotify_page"); }
-#endif
-extern int spot_media(unsigned key), spot_key(void *top, unsigned key),
-    spot_open(void *ctx, void *event), spot_hold(void *top);
-extern void up_next(int (*closed)(void *, void *), int (*keyup)(void *, void *)),
-    upnext_closed(void *page);
+extern void spot_poll(void), spot_paint(void *w, void *canvas), *spot_art(void);
+extern void up_next(int (*keyup)(void *, void *));
 extern int un_hold(void *top);
 extern void radio_poll(void);
 extern void xfade_row(void *label), wheel_row(void *label), resume_row(void *label),
@@ -235,17 +208,11 @@ extern int mono_click(void *ctx, void *event), swap_click(void *ctx, void *event
     mqa_click(void *ctx, void *event);
 extern int xfade_open(void *ctx, void *event), xfade_key(void *top, unsigned key), resume_min(void);
 extern int eq_key(void *top, unsigned key); /* peq_ui.c */
-extern int radio_media(unsigned key), radio_open(void *ctx, void *event);
 extern const char *radio_hold(void *top);
 extern void visualizer_paint(void *w, void *canvas), visualizer_attach(void *win);
 extern int visualizer_live(void), games_live(void);
-extern void *queue_now(unsigned *pos, unsigned *n);
-extern const char *now_tag(void *r, int field);
 extern unsigned char now_cover(void *r, const char **file);
-extern int scrobble_ready(void), scrobble_start(void), scrobble_poll(int *sent),
-    scrobble_flag(const char *key), scrobble_value(const char *key);
 extern void scrobble_append(const char *line, unsigned n);
-extern void *staged(int (*query)(void *), void *arg, int *count);
 extern int staged_into(void *into, int (*query)(void *), void *arg);
 /* Scope music detail loads too: spoken tracks can share all their tags with music. */
 void *staged_music(int (*query)(void *), void *arg, int *count) {
@@ -257,12 +224,6 @@ void *staged_music(int (*query)(void *), void *arg, int *count) {
 }
 
 extern int album_only(void *, void *, int), coverflow_split(void *);
-extern unsigned album_id(void *r);
-extern unsigned album_dir(const char *, int);
-extern volatile unsigned library_gen;
-extern const char *track_name(char *buf, unsigned size, void *t);
-static int ple_key(unsigned key, int phase);
-#define STOP 11
 #define SCROLL_MARGIN 12
 #define HOME_FAST_WINDOW_MS 200
 #define WHEEL_RUN_MS 140
@@ -272,365 +233,10 @@ static int ple_key(unsigned key, int phase);
 #define LIST_RAMP_MS 200  /* then one row more per this much spin */
 #define CF_FIRST_MS 700   /* Coverflow: one cover per step this long before it jumps by letter */
 #define SHORT_LIST_MAX 16
-#define MAX_ENTRIES 512
-#define POS_MEM 64
-#define B(p, o) (*(unsigned char *)((char *)(p) + (o)))
+scratch_t st __attribute__((section(".scratch")));
 
-typedef struct {
-    int ctx, id; /* logical row + 1; 0 = unused */
-    unsigned scope, hash, hash2;
-} position_t;
-
-/* The settings rows pod_rows builds (pod_values and the Q2POD keys below). */
-enum {
-    POD_CHARGE,
-    POD_WAKE,
-    POD_ARTIST_CF,
-    POD_YEAR_OLD,
-    POD_ARTISTS,
-    POD_RESUME,
-    POD_LOCKCLOCK,
-    POD_ARTIST_AZ,
-    POD_VOL_GUARD,
-    POD_HOLD_HOME,
-    POD_STANDBY,
-    POD_BT_LINK,
-    POD_CF_SORT,    /* Display's Coverflow Sort: coverflow.c's SORT_FILE, not config.ini */
-    POD_CF_REFRESH, /* and Refresh Coverflow, an action */
-    POD_EQ_OUTPUT,  /* EQ per Output: the value and key; its row is Advanced EQ's (peq_ui.c) */
-    POD_KEYTONE, /* Key Tone and In-Vehicle Mode: stock's bytes and SYSSET keys, as its rows did */
-    POD_CARMODE,
-#if M1PLUS
-    POD_KNOB, /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
-    POD_KNOB_DIR, /* Navigation's volume-up turn: 0 up the list, 1 down */
-#endif
-    POD_COUNT
-};
-
-/* Writable state lives in the zero-filled page the builder maps past the payload text.
- * center_timer defers confirmation; wheel_* scale repeated fast detents; pos_* remember
- * the selected row per audited context across page recreation; reveal_* pin the recall glide so
- * an interruption cannot silently rewrite that memory. */
-typedef struct {
-    unsigned last_center; /* release time of the pending selection press */
-    unsigned center_timer, center_token, center_scope, center_hash, center_hash2;
-    unsigned edit_press, edit_at; /* a slider or time editor's pending Centre (edit_key) */
-    int center_id, center_ctx, center_rows;
-    unsigned cf_letter, cf_letter_at, cf_letter_timer;
-    void *cf_letter_surface;
-    unsigned last_home;
-    int home_dir;
-    void *home_surface;   /* non-null also marks a step accepted at time zero */
-    void *center_top;     /* top window of that press */
-    void *center_surface; /* navigation surface of that press */
-    unsigned last_wheel;  /* time of the previous wheel detent */
-    int wheel_dir;        /* direction of that detent */
-    unsigned wheel_run;   /* continuous same-direction spin ms + 1; capped at full speed */
-    int touch_mode;       /* session-wide drawing preference, independent of selection */
-    void *wheel_top, *wheel_surface;
-    unsigned wheel_scope;
-    int wheel_ctx;
-    /* iPod: a Return by button ends touch mode once stock has handled it */
-    unsigned untouch_timer;
-    /* iPod: the row pressed_pill last drew grey, and the repaint once it is released */
-    void *press_row;
-    unsigned press_timer;
-    /* wheel ticks held while a page slides or loads (hold_wheel), replayed into it */
-    int held;
-    unsigned held_at, held_timer;
-    void *held_ctx;
-    unsigned held_event[12];
-    position_t pos[POS_MEM]; /* most recently selected first; keyed by context and scope */
-    void *reveal_surface;    /* surface of the interrupted recall glide, 0 when none */
-    int reveal_id;           /* logical row that glide was bringing into view */
-    /* Bump repaint and wrap arm; the widget token rejects recycled surfaces. */
-    void *fx_surface;
-    int fx_token, bump_dir, edge_dir, edge_id;
-    unsigned fx_timer, edge_time;
-    /* Resume: the saved places, file seconds by path hash, most recent first; the track polled
-     * (rs_key, listen_key's, 0 none) and whether it is long, its last seconds, the seconds last
-     * saved and how many polls they stood still; rs_pending is the place to restore once it plays,
-     * rs_settle a track change one poll old. rs_file is its path's hash, rs_cue and rs_end its CUE
-     * start and end, rs_total its seconds; rs_go is the seconds into rs_go_key's chapter a Resume
-     * row asked for at rs_go_at. */
-    struct {
-        unsigned key;
-        int sec;
-    } spots[RESUME_SLOTS];
-    unsigned spots_read, rs_at, rs_key, rs_file, rs_go_key, rs_go_at;
-    int rs_long, rs_settle, rs_sec, rs_saved, rs_still, rs_pending, rs_cue, rs_end, rs_total, rs_go,
-        rs_stopped;
-    int rs_spoken; /* under Podcasts or Audiobooks: resumed at any length, never counted */
-    /* Play counts by path hash (plays_read once loaded); the playing track's last second, the
-     * seconds of it heard, whether this play has counted and been scrobbled, and .scrobble.ini's
-     * PERCENT (1-100, else 0) as it read when the play began. */
-    struct {
-        unsigned key, n;
-    } plays[PLAYS_SLOTS];
-    unsigned plays_read, ls_key;
-    int ls_sec, ls_heard, ls_done, ls_sent, ls_pct;
-    /* Most Played's page and its tracks: the last ranking plus the songs counted since, kept across
-     * opens while the library is at mp_gen (~library_gen once stale). */
-    void *mp_page, *mp_list, *td_page, *td_list;
-    unsigned td_timer;
-    int td_asking; /* Tidal Downloads shows Clear All Downloads' confirmation */
-    unsigned mp_gen;
-    void *sp_page; /* the Library Shuffle menu's page, kept across picks */
-    void *ch_page;
-    chapters *ch;
-    unsigned ch_timer, ch_track, ch_key;
-    int ch_cue, ch_end;        /* the Chapters track's CUE start and end, file seconds */
-    void *sc_page, *sc_row[3]; /* Streaming's Configuration page, its cache rows and Erase's */
-    int sc_armed;              /* Erase Spotify Data pressed once: the next press erases */
-/* Streaming's services (svc): five fixed, and at most APPS_MAX card apps. */
-#define SVC_FIXED 5
-#define SVC_MAX (SVC_FIXED + APPS_MAX)
-#define SVC_HIDE 260 /* STREAMHIDE, "key,key" */
-#define SVC_PROP "ringnav_svc"
-    void *sc_check[SVC_MAX]; /* the Configuration page's switch labels, by service */
-    int svc_n;               /* the card apps Streaming listed at its last build */
-    /* Ratings: the songs' 1-4 and albums' 1-5 heart tables (calloc'd on first use); Now Playing's
-     * window, its heart and the heart's stock click context, the 1-4 badge, the window the picker
-     * is up on (0 when down), the hearts picked, the heart's hold timer (rate_held once it fired),
-     * and the album rated (album_id, 0 for the playing track); the Ratings menu
-     * and the list it opened, with its tracks. */
-    unsigned *rates, *album_rates;
-    void *rate_win, *rate_fav, *rate_ctx, *rate_badge, *rate_on;
-    int rate_shown; /* the badge's hearts plus 1, 0 for a new badge */
-    int empty_kind; /* the empty Library list empty_toast names and closes */
-    int rate_pick, rate_held;
-    unsigned rate_hold, rate_tick, rate_album;
-    void *rt_menu, *rt_page, *rt_list;
-    int dark; /* 1: the backlight was off at the last UI loop pass; 2: a centre press woke it */
-    /* Power's Charge limit (read once from config.ini's Q2POD), the value labels of that row
-     * and Artists, and the poll: charging is held off at the limit;
-     * last_input times the screen-on idle. year_old: Year order, oldest first. resume:
-     * Bluetooth's Resume on connect on. hold_home: Hold Return goes Home. standby_limit: Standby
-     * limit's choice; standby_off: its alarm ended a Standby, so the next pass powers off. */
-    int pod_read, charge_limit, wake_double, wake_pass, wake_eat,
-        wake_down, /* 1: the held Centre press passes; 2: it is dropped */
-        charge_held, artist_cf, year_old, resume, lock_clock, artist_az, hold_home, standby_limit,
-        standby_off, eq_output;
-    void *pod_label[POD_COUNT];
-#if M1PLUS
-    int knob_mode;    /* Display's Knob: 0 Volume (V2.1's own), 1 Navigation */
-    int knob_reverse; /* Display's Knob Up: 0 List Up (Previous), 1 List Down (Next) */
-    void *bar_back;   /* the status bar's back chevron (img_back), whose tap is previous_back (ipod-ui 4.2) */
-    int chev_down;    /* its press is held by the chevron until its release */
-    void *lock_icon, *lock_level; /* the Large lock clock's battery icon and level bar, when it shows a percentage */
-#endif
-    void *art_cf_win, *art_cf_list; /* the artist page given its Coverflow, the albums pending */
-    void *art_cf_veil;              /* the artist page unseen until they show, and its anim_hint */
-    char art_cf_hint[64];
-    unsigned art_cf_timer;
-    unsigned wake_at; /* Wake: Double press, the screen-off centre press a second one must follow */
-    unsigned woke_at; /* the centre press that woke the screen, then its first lit loop pass */
-    unsigned return_at;          /* chord_gate: Return's press while held, else 0 */
-    int chord_eat;               /* 1: the held Centre press is dropped; -1: it passes */
-    unsigned chord_at;           /* the last Centre event chord_gate saw */
-    unsigned return_up;          /* chord_gate: a hold's release, else 0 */
-    unsigned edge_held, edge_at; /* chord_gate: edge buttons held (bits), the last one's press */
-    unsigned edge_seen;          /* chord_gate: an edge button's last press or repeat */
-    unsigned centre_at, centre_hold; /* a passing Centre press, and its hold timer */
-    int return_eat;                  /* 1: a ghost Return press is dropped */
-    unsigned return_eat_at;
-    void *np_origin; /* the page Hold Return opened Now Playing over */
-    void *dc_top;    /* the page of the last centre press no list click took, and its time */
-    unsigned dc_at;
-    unsigned charge_at, last_input;
-    unsigned touch_at; /* the last pointer event's time, type and place (stale_heal, stale_note) */
-    int touch_type, touch_x, touch_y, stale_notes;
-    int wdt;      /* the hardware watchdog's fd: 0 untried, -1 none or refused (wdt_poll) */
-    int wdt_long; /* counting WDT_LONG_MS for a long pass (ringnav_wdt_long) */
-    int ended;    /* a clean end began: no feed and no state record from here (ringnav_clean_end) */
-    int toasts;   /* toast()'s dialogs open, nested ones too, for the stall record (stall_write) */
-    int suspended;  /* inside Standby's suspend (ringnav_standby), for the state record */
-    char state[96]; /* the state record last written (state_poll) */
-    /* the boot logo's poll: last check, card seen mounted, its sync thread, its failure to toast */
-    unsigned logo_at;
-    int logo_mounted;
-    volatile int logo_busy;
-    const char *volatile logo_err;
-    void *pull_page, *pull_surface;
-    int pull_x, pull_y, pull_claimed;
-    unsigned pull_scope;
-    void *sel_w; /* the surface whose selection was last drawn */
-    int sel_row, sel_y;
-    void *paint_w, *sel_widget; /* paint-local color mapping, never stored on recycled widgets */
-    int sel_home;
-    unsigned clock_key;   /* minute + 1 and format bits; 0 before the first, ~0 for --:-- */
-    unsigned clock_timer; /* clock_due, at the next minute; 0 until the bar first paints */
-    int clock_full;       /* g_time24h_flag as clock_show last read it */
-    /* The status bar's Bluetooth, Wi-Fi and battery widgets, looked up once (the bar is never
-     * destroyed); the codec badge shown (index + 1 in BT_CODECS, 0 none), its fade step (0 showing,
-     * CODEC_STEPS the glyph fading in, 2 * CODEC_STEPS done) and timer; the battery slot's last
-     * level, charge and low state. Classic's bar also has a title (bar_title_sync), from the
-     * top window title_win and, when a label holds it, title_lbl (both found once per window), and
-     * a play state of Home's own (home_state), which takes the title's place there (bar_home). */
-    void *bar_bt, *bar_wifi, *bar_pct, *bar_slot, *bar_icon, *bar_idle, *bar_state, *bar_eq,
-        *bar_title, *home_state, *title_win, *title_lbl,
-        *action_view; /* Songs' action bar on title_win, under a set with action_row */
-    /* The row action's confirm on show (confirm_over): its second cell's verb, and its window */
-    const char *confirm_verb;
-    void *confirm_win;
-    int codec, codec_step, batt_mode;
-    unsigned codec_timer, batt_key, bar_timer;
-    int pct_digit, pct_sign; /* BATT_PX advances of '0' and '%', measured on the first paint */
-    unsigned letter_timer;   /* the fast-scroll letter shows while this runs */
-    /* Now Playing's window and payload-filled widgets, and the sources they last showed. */
-    void *np_win, *np_pos, *np_album, *np_slider, *np_remain, *np_elapsed, *np_cover, *np_title;
-    int np_bold;             /* the title's font: theme_font's face | px << 2, -1 not set yet */
-    void *np_slide, *np_lrc; /* the art/lyrics/info pages and the lyric lines' scroll_view */
-    /* Now Playing's full-screen lyrics (np_full), where the last touch on them came
-     * down and the timer of its hold on a line (np_lyric_touch) */
-    int np_full, np_tap_x, np_tap_y;
-    unsigned np_line_timer;
-    int np_was[9]; /* the column before full screen (np_full) */
-    /* The full-screen art's song name, its shade and its window, the fade's step and timer
-     * (ringnav_bigcover) */
-    void *bc[3];
-    int bc_step;
-    unsigned bc_timer, bc_track, bc_repaint;
-    unsigned bc_key, bc_box, bc_shape,
-        bc_url; /* the track, cover and image bc_fit sized for, the box
-                 * it left, the image's w << 16 | h and its track */
-    /* Volume: the dialog vol_paint last drew, its value and the redraw timer */
-    void *vol_dialog;
-    int vol_drawn;
-    unsigned vol_timer;
-    /* Classic (classic_pages): the rating panel, the slider page and its slider; the dark
-     * bar and the title's place under it; the volume in the time row's place. */
-    void *rate_box, *slider_win, *slider_w, *slider_sw;
-    const __WCHAR_TYPE__ *slider_hint; /* its caption */
-    void *t9_page, *t9_back;           /* t9_box's page and chevron, while its box lives */
-    /* Classic's message screens (msg_open): USB's page; the scan's dialog, stock's label_msg
-     * in it, our line, btn_no, the songs before the scan, the bar's part in px, stock's text as
-     * last read and the poll following it. msg_counting: 1 msg_count runs, 3 + n it has answered
-     * n (-1 failed): one word, so the UI thread can't see the flag before the value. */
-    void *usb_win, *msg_win, *msg_src, *msg_line, *msg_btn;
-    int msg_total, usb_lun; /* usb_lun: USB Storage's card has read open (usb_poll) */
-    volatile int msg_counting;
-    short msg_part;
-    unsigned msg_timer;
-    char msg_seen[128];
-    /* Classic's T9 keyboard window, and Search with its tab group (search_open). */
-    void *kb_win, *search_win, *search_tabs, *pl_box;
-    unsigned pl_timer;       /* pl_click's pending row, its action the timer's ctx */
-    int search_px;           /* search_edit's size in its disabled state, 0 until set */
-    const char *number_face; /* the slider page's value's, as slider_number last set it */
-    int title_color;
-    short title_x, title_y, title_w;
-    unsigned char title_align, slider_kind, bar_dark;
-    unsigned np_hash; /* of the album text, position and queue length shown, 0 to refresh */
-    unsigned np_art;  /* the track and player cover img_cover last took (np_art_poll) */
-    int np_left;
-    /* Minimal's album marquee: np_off px scrolled of the np_over px the album overflows its label.
-     */
-    int np_off, np_over;
-    unsigned np_marquee;
-    unsigned np_remain_timer; /* remain_due */
-    unsigned np_fit_timer;    /* np_fit_due */
-    /* Classic's Spotify or Internet Radio Now Playing (stream_ipod): its slanted art's widget, and
-     * the radio's bar, always full */
-    void *stream_art, *stream_bar;
-    /* The info page's Genre line: its label, np_info's copy (genre_fill), and px scrolled. */
-    void *genre_label;
-    int genre_off;
-    unsigned genre_timer;
-    /* The selected row's marquee (marq_moved); Time in Title off (bar_title). */
-    void *marq_row, *marq_label;
-    unsigned marq_timer;
-    int marq_id, marq_passes;
-    int time_title, bar_titled, bar_bold, bar_home;
-    /* Scrub: a centre press at np_press_at waits DOUBLE_CLICK_MS in np_press for a second one;
-     * scrub_to is the target second, scrub_moved set once the wheel changed it. */
-    unsigned np_press, np_press_at, scrub_timer, scrub_track, settle_timer;
-    int scrub, scrub_to, scrub_moved, settle_played;
-#if M1PLUS
-    const void *scrub_page; /* the np_page_t the scrub runs or settles on, 0 for the local page (m1plus_np_view.c) */
-    unsigned np_repaint;    /* np_sync's repaint, after the frame that wrote the labels */
-    unsigned char np_drag;  /* whose the local bar's touch is: 0 not decided yet, 1 the scrub's, 2 V2.1's (np_bar_touch) */
-#endif
-    int held_sec; /* a paused seek to scrub_to on scrub_track: the player's second then, +1; 0 none
-                   */
-    /* The lyrics (lyric_poll), of the song lyric_song, their rows built for lyric_rows_song:
-     * lyric_raw while their page holds the wheel's raw travel; lyric_held once the wheel or a drag
-     * moved them; lyric_spun once the wheel moved them since it was let go (2: only nudged them,
-     * still following); lyric_touch while a
-     * finger is on Now Playing, 1 if it came down on the lyrics, lyric_drag_y the offset then; the
-     * glide's target lyric_to (1/16 px), its last step lyric_at, and lyric_glide while it moves;
-     * lyric_follow_at the last follow. */
-    int lyric_raw, lyric_held, lyric_spun, lyric_touch, lyric_drag_y, lyric_glide, lyric_to;
-    int lyric_push, lyric_home; /* travel short of LYRIC_PUSH_DETENTS, and where it nudged from */
-    unsigned lyric_push_at;
-    unsigned lyric_at, lyric_follow_at, lyric_song, lyric_rows_song;
-    /* The Display settings, read from config.ini on first use, and the display page's value labels.
-     */
-    int settings_read, accent, minimal_accent, home, battery, home_rockbox, theme, shortcut,
-        rounded, light, light_day, /* light_day: Auto's answer for now (LIGHT=2) */
-        keep_lit,                  /* Smart Awake (#57, keep_lit_poll) */
-        np_centred,                /* Centred Now Playing (ringnav_ui_load) */
-        keytone_hp,                /* Click With Headphones (ringnav_buzzer) */
-        scrub_single,              /* Single Press Scrub (np_key) */
-        theme_booted,              /* theme_boot ran (ringnav_ui_load) */
-        raw_ink,                   /* a final colour's draw: ui_ink leaves it alone */
-        geom;                      /* the geometry set theme_boot wrote; 0, SET0, until then */
-    int own[THEME_KEYS]; /* the themes' own keys' values (theme_keys[], tools/theme.py), read after
-                            the thirteen */
-    unsigned keep_lit_at;
-    void *sel_accent; /* the row on a coloured selection, for Light Mode's ink */
-    int style_depth;  /* nested style hooks (a mutable style's fallback) map nothing */
-    void *setting_label[12 + THEME_KEYS]; /* SETTING_OWN + THEME_KEYS */
-    unsigned tone_key;  /* the wheel key whose press ringnav_keydown silenced, 0 when none */
-    unsigned tick_drop; /* tick_gate: the wheel keys whose press it dropped, bits */
-    int greeted;        /* the first reachable list got its boot repaint */
-#include "m1plus_nav_state.inc"
-    /* Queue menu: the hold's AWTK press time marks its release; the target is a track/list row
-     * checked by count, record and browsing-state hashes; qm_cls is the class its list holds;
-     * qm_forced is a shuffle Play next. */
-    unsigned long long qm_press;
-    int qs_wheel; /* Quick Settings' wheel, 1 + Q2POD QSVOLUME once read (quick_volume) */
-    unsigned qm_timer, qm_cls, qm_idx, qm_rows, qm_hash, qm_browse, qm_forced, qm_forced_hash;
-    int qm_kind, qm_action, qm_choice;
-    void *qm_dialog, *qm_queue, *qm_playlist;
-    unsigned qm_queue_hash;
-    unsigned char qm_classinfo[912]; /* g_local_classinfo_save before a Go to */
-    /* Podcasts/Audiobooks: folder_page opens at media_root once media_open is set (else at the
-     * card, /mnt/mmc, with a card and no drive; otherwise the storage selector stays); while the
-     * page is there, Back at that root leaves it. */
-    int media_open;
-    char media_root[32];
-    /* Go to Folder: once set, folder_page opens at go_folder at g_folder_layer go_layer. */
-    int go_layer;
-    char go_folder[1024]; /* g_folder_path's size */
-    void *root_label;     /* Playback settings' Folder Root row */
-    void *album;     /* what an Albums row or Go to album opened (album_open), a one-record deque */
-    char **art_keys; /* an artist's albums tab's art keys by row, 0 for a name's own
-                        (ringnav_artist_list) */
-    unsigned *art_ids; /* and its rows' album_id, 0 for an album not found */
-    unsigned art_n;
-#if M1PLUS
-    void *lock_win; /* the lock window while it is open: Light Mode leaves it dark (ipod_lock_dark) */
-#endif
-#if M1PLUS
-    unsigned chev_timer; /* its long-press, Hold Return's (chevron_hold), armed at the press */
-    int chev_x, chev_y, chev_held; /* the press's point; the hold fired, so the release is spent */
-    int bar_play_down, bar_play_x, bar_play_y; /* a press on the bar's play state: 1 still, 2 dragged; its point */
-#endif
-} scratch_t;
-static scratch_t st __attribute__((section(".scratch")));
-static void rate_bind(void *win); /* ratings: Now Playing's heart */
-
-typedef struct {
-    int x, y, w, h;
-} rect_t;
-typedef struct {
-    void *w, *at[MAX_ENTRIES];
-    int id[MAX_ENTRIES], n, kind, rows, row, height, ctx;
-    unsigned scope;
-} menu_t;
 /* Single shared view: no entry point keeps a menu live across a nested load(). */
-static menu_t g_menu __attribute__((section(".scratch")));
+menu_t g_menu __attribute__((section(".scratch")));
 
 /* Audited top windows, each tagged with its content-identity class and whether its row list is
  * one of the audited local row lists that carry over at the ends. The index is remembered
@@ -707,7 +313,7 @@ static void find_surface(void *w, void **found, int *count, int *aborted, int de
         find_surface(widget_get_child(w, i), found, count, aborted, depth + 1, budget);
 }
 
-static int clamp_step(int offset, int maximum, int delta) {
+int clamp_step(int offset, int maximum, int delta) {
     if (maximum < 0) maximum = 0;
     offset = offset < 0 ? 0 : offset > maximum ? maximum : offset;
     if (delta > maximum - offset) return maximum;
@@ -773,9 +379,7 @@ static void collect(void *w, entries_t *s, int depth) {
 }
 
 /* Widget-owned properties die with the surface; never retain recycled row pointers. */
-#define SEL "_ringnav_index"
 #define TOUCH "_ringnav_touch"
-#define COUNT "_ringnav_count"
 #define SCOPE "_ringnav_scope"
 #define FX "_ringnav_fx"
 
@@ -835,7 +439,7 @@ static void drop_spin(void) {
 }
 
 /* Input that is not navigation here: no pending confirmation and no run survive it. */
-static void drop_input(void) {
+void drop_input(void) {
     cancel_center();
     drop_spin();
 }
@@ -864,7 +468,7 @@ static int is_row(void *w) {
 }
 
 /* A widget's own window: the top-level widget it sits in. */
-static void *window_of(void *w) {
+void *window_of(void *w) {
     void *wm = window_manager();
     while (w && P(w, W_PARENT) != wm) w = P(w, W_PARENT);
     return w;
@@ -1033,7 +637,7 @@ static void home_step(void *w, int dir, unsigned now, int jump) {
 
 #include "m1plus_nav_slide.c"
 
-static int usable(void) {
+int usable(void) {
     if (!g_backlight_status || g_lockscreen_pageflag || g_testmode_flag || g_guideflag ||
         g_poweroff_state > 1)
         return 0;
@@ -1057,7 +661,7 @@ static int usb_prompt(void) {
 static int allowed_top(void *top) {
     return top && context_id(widget_get_prop_str(top, "name", (void *)0)) >= 0;
 }
-static int pointer_down(void) { return window_manager_get_pointer_pressed(window_manager()); }
+int pointer_down(void) { return window_manager_get_pointer_pressed(window_manager()); }
 
 /* A click identifies its pane by ancestry. On the first wheel turn, an unowned pair starts
  * with the first pane in UI order; painting and touch never choose one implicitly. */
@@ -1095,7 +699,7 @@ static void *surface(void *target, void **other) {
     return w;
 }
 
-static void prop(void *w, const char *name, int value) {
+void prop(void *w, const char *name, int value) {
     if (widget_get_prop_int(w, name, -1) != value) widget_set_prop_int(w, name, value);
 }
 
@@ -1142,16 +746,6 @@ typedef struct {
     unsigned one, two;
     const unsigned *title; /* the first text itself, for the iPod fast-scroll letter */
 } row_id_t;
-
-/* Classic's Playlists (pl_dress): a page's add mode (ringnav_playlist), the button of a row that
- * isn't a playlist, its list item's action + 1, a playlist row's item, whether the rows pl_rows
- * last showed were select mode's, and the empty list's label. */
-#define PL_MODE "_pl_mode"
-#define PL_ACTION "_pl_action"
-#define PL_ACT "_pl_act"
-#define PL_ROW "_pl_row"
-#define PL_MARKING "_pl_marks"
-#define PL_NONE "_pl_none"
 
 /* The library browsing state both position memory and the queue menu key on. */
 static unsigned local_hash(unsigned h) {
@@ -1242,7 +836,6 @@ static int context_now(unsigned *scope) {
 }
 
 static int index_of(menu_t *m, int id);
-static void reveal(menu_t *m, int id, int immediate);
 
 /* Bounded recency order avoids a timestamp that could wrap during a long session. */
 static int position(menu_t *m) {
@@ -1279,7 +872,7 @@ static void select(menu_t *m, int id) {
     prop(m->w, SEL, id);
 }
 
-static int load_rows(menu_t *m, void *w) {
+int load_rows(menu_t *m, void *w) {
     m->w = w;
     m->n = 0;
     m->kind = kind(w);
@@ -1405,7 +998,16 @@ static int view_top(menu_t *m) {
     return m->kind == 2 ? I(m->w, TABLE_TOP) : m->kind == 1 ? I(m->w, SCROLL_Y) : 0;
 }
 
-static int sel_height(menu_t *m);
+/* The height a selected row scrolls in: the surface's, cut at the set's list_end, a row of the
+ * client under the bar (W_Y summed up to the window), where the rows below draw on to the glass but
+ * a selected one's text would not show. */
+static int sel_height(menu_t *m) {
+    int y = 0, end = geom_val(V_LIST_END);
+    if (!end || m->kind == 3 || m->kind == 4) return m->height;
+    void *wm = window_manager();
+    for (void *p = m->w; p && P(p, W_PARENT) != wm; p = P(p, W_PARENT)) y += I(p, W_Y);
+    return end - y < m->height ? end - y : m->height;
+}
 
 /* Largest viewport top that still shows content; the clamp bound for every glide. */
 static int scroll_end(menu_t *m, int height) {
@@ -1456,6 +1058,12 @@ static void stop_scroll(menu_t *m) {
     }
 }
 
+/* View w's scroll animation stopped, for a touch claimed sideways (addon.c swipe, as pull_event).
+ */
+void list_stop_scroll(void *w) {
+    if (load_rows(&g_menu, w)) stop_scroll(&g_menu);
+}
+
 /* Wheel offsets are synchronous; table setters can replace the recycled row pool. Scroll end
  * loads the covers in view, as after a touch scroll. */
 static void wheel_offset(menu_t *m, int top) {
@@ -1476,7 +1084,7 @@ static void wheel_offset(menu_t *m, int top) {
 
 /* Least viewport move that reveals logical row id with a small reading margin.
  * Remembered-position restoration keeps its glide; wheel steps are immediate. */
-static void reveal(menu_t *m, int id, int immediate) {
+void reveal(menu_t *m, int id, int immediate) {
     int top = view_top(m);
     int y, h;
     if (m->kind == 2) {
@@ -1539,7 +1147,6 @@ void ringnav_select(void *w, int id, int rows) {
  * selection with the visible row nearest the viewport centre (ties go to the earlier row), so a
  * swipe never leaves the highlight pinned to the top edge. An interrupted recall glide is
  * retried once instead: the remembered row must not be silently replaced by a visible one. */
-static int pl_first(menu_t *m, int cur);
 static int reconcile(menu_t *m, int settle) {
     int id = m->kind == 3 ? slide_index(m->w) : widget_get_prop_int(m->w, SEL, -1);
     int cur = index_of(m, id);
@@ -1789,418 +1396,6 @@ static void pull_begin(void *event) {
     context_now(&st.pull_scope);
 }
 
-/* A one-digit setting under section in the stock config.ini, 0 to n - 1, else def (a missing key
- * too): toolsReadConfig(path, section, key, out, default) copies the value, or the default. */
-int config_value(const char *section, const char *key, int n, int def) {
-    char s[256] = "", d[2] = { (char)('0' + def), 0 };
-    toolsReadConfig("/mnt/data/config.ini", section, key, s, d);
-    return s[0] >= '0' && s[0] < '0' + n && !s[1] ? s[0] - '0' : def;
-}
-
-#define ROCKBOX_BIN "/mnt/mmc/.rockbox/rockbox"
-/* glibc 2.28 MIPS o32 stat v3: st_mode at byte 20, as stock's fs stat reads it. */
-int rockbox_available(void) {
-    unsigned info[36];
-    return !__xstat(3, ROCKBOX_BIN, info) && (info[5] & 0170000) == 0100000;
-}
-
-/* Light Mode (docs/ipod.md#light-mode): a neutral colour, its channels within LIGHT_SPREAD, flipped
- * per channel from black to the light half's paper and white to its ink (LIGHT_PAPER and LIGHT_INK
- * unless the scheme sets them); any other hue, and the alpha byte, as they are. Either byte order
- * (color_t or 0xRRGGBB): the paper and ink are grey. */
-static int neutral(unsigned c) {
-    unsigned hi = 0, lo = 255;
-    for (int s = 0; s < 24; s += 8) {
-        unsigned v = c >> s & 255;
-        hi = v > hi ? v : hi;
-        lo = v < lo ? v : lo;
-    }
-    return hi - lo <= LIGHT_SPREAD;
-}
-static unsigned flip_v(unsigned v, unsigned paper, unsigned ink) {
-    return paper - v * (paper - ink) / 255;
-}
-static const scheme_t *light_row(void);
-static unsigned flip(unsigned c) {
-    if (!neutral(c)) return c;
-    /* greys, so either byte order */
-    const scheme_t *S = light_row();
-    unsigned paper = S->paper & 255, ink = S->ink & 255;
-    unsigned out = c & 0xff000000u;
-    for (int s = 0; s < 24; s += 8) out |= flip_v(c >> s & 255, paper, ink) << s;
-    return out;
-}
-static unsigned flip_if(int on, unsigned c) { return on ? flip(c) : c; }
-/* The grey whose flip is v, by the half's paper and ink; v itself when dark. */
-unsigned unflip(unsigned v) {
-    if (!ipod_light()) return v;
-    const scheme_t *S = light_row();
-    unsigned paper = S->paper & 255, ink = S->ink & 255;
-    return v < ink ? 255 : v > paper ? 0 : (paper - v) * 255 / (paper - ink);
-}
-
-/* Every colour the payload draws passes here (peq.h wraps the canvas setters), as stock's pass
- * the style and image hooks: flipped in Light Mode. A clear colour stays 0: stock tests for it
- * (Now Playing's slider draws no dragger under a #00000000 border). */
-unsigned ui_ink(unsigned c) { return !st.raw_ink && ipod_light() && c >> 24 ? flip(c) : c; }
-/* Sets whether ui_ink leaves colours alone (final colours follow); the last setting, to restore. */
-unsigned ui_ink_raw(unsigned raw) {
-    unsigned old = st.raw_ink;
-    st.raw_ink = raw;
-    return old;
-}
-
-/* The 0xRRGGBB j/n of the way from one color to another, per channel. Shared with visualizer.c. */
-unsigned mix(unsigned from, unsigned to, int j, int n) {
-    unsigned c = 0;
-    for (int s = 0; s < 24; s += 8)
-        c |= (unsigned)(((int)(from >> s & 255) * (n - j) + (int)(to >> s & 255) * j) / n) << s;
-    return c;
-}
-
-/* The Accent, Home, Battery and Theme settings; each theme keeps its own accent
- * (docs/ipod.md#display-settings). */
-static const unsigned accents[][5] = { ACCENTS };
-#define ACCENT_N (int)(sizeof accents / sizeof *accents)
-static const char *const accent_names[] = {
-    "Accent: Graphite",  "Accent: Crimson", "Accent: Tidal", "Accent: Champagne", "Accent: Cobalt",
-    "Accent: Tangerine", "Accent: Plum",    "Accent: Ivory", "Accent: Green"
-};
-_Static_assert(sizeof accent_names / sizeof *accent_names == ACCENT_N, "one name per ACCENTS row");
-enum {
-    SETTING_ACCENT,
-    SETTING_HOME,
-    SETTING_BATTERY,
-    SETTING_THEME,
-    SETTING_SHORTCUT,
-    SETTING_ROUNDED,
-    SETTING_LIGHT,
-    SETTING_KEEPLIT,
-    SETTING_NPCENTRED,
-    SETTING_KEYTONEHP,
-    SETTING_SCRUBSINGLE,
-    SETTING_TIMETITLE,
-    SETTING_OWN
-};
-_Static_assert(sizeof st.setting_label / sizeof *st.setting_label == SETTING_OWN + THEME_KEYS,
-               "one label per Display row");
-#include "themes.inc" /* tools/theme.py, from assets/themes/<id>/theme.xml */
-_Static_assert(DRIFT_TEXELS >= 4 * (375 - HOME_SPLIT_W) * CLIENT_H_MAX,
-               "Home drift frame fits every set");
-#if __SIZEOF_POINTER__ == 4 /* the Q2's layout; test/fw's 64-bit build has its own */
-_Static_assert(__builtin_offsetof(theme_t, geom) == THEME_GEOM_OFF, "test/patch.py's set_geom");
-_Static_assert(__builtin_offsetof(theme_t, motion) == THEME_MOTION_OFF && sizeof(motion_t) == 8 &&
-                   __builtin_offsetof(theme_t, recall_ms) == THEME_MOTION_OFF + MOTION_N * 8 &&
-                   __builtin_offsetof(theme_t, bump_px) == THEME_MOTION_OFF + MOTION_N * 8 + 2,
-               "test/patch.py's set_motion, set_recall and set_bump");
-_Static_assert(__builtin_offsetof(scheme_t, mode) == SCHEME_MODE_OFF, "test/patch.py patches it");
-#endif
-/* A value of the set theme_boot wrote (st.geom), never the live theme's: V_BAR, ... */
-static int geom_val(int v) { return geom_vals[st.geom][v]; }
-int client_h(void) { return UI_H - geom_val(V_BAR); }
-/* Stock's Time Zone caption, between rows 0 and 1, sits 20 px down its item and over row 1: Classic
- * gives it the item, the set's row. */
-static void zone_caption(void *item) {
-    if (!classic_pages()) return;
-    void *list = P(item, W_PARENT); /* item is its last child, the caption's the one before */
-    int n = list ? widget_count_children(list) : 0;
-    void *cap = n > 1 ? widget_get_child(list, n - 2) : (void *)0;
-    cap = cap && widget_count_children(cap) ? widget_get_child(cap, 0) : (void *)0;
-    if (cap && !tk_strcmp(widget_get_type(cap), "hscroll_label")) {
-        widget_move_resize(cap, 0, 0, 375, geom_val(V_SET_ROW));
-        theme_font(cap, ROLE_INFO, FONT_ROW);
-    }
-}
-/* The Display rows' settings, by ringnav_display's index: 0 Accent, 1 Home (0 Split, 1 Full,
- * 2 Carousel), 2 Battery, 3 Theme, 4 Shortcut, 5 Corners, 6 Light Mode, 7 Smart Awake, 8 Centred
- * Now Playing, 9 Click With Headphones (Controls, under Key Tone), 10 Single Press Scrub, 11 Time
- * in Title; 12 on: a theme's own options, SETTING_OWN + k for theme_keys[k]. */
-static const char *const setting_keys[] = { "ACCENT",    "HOME",      "BATTERY",     "THEME",
-                                            "SHORTCUT",  "ROUNDED",   "LIGHT",       "KEEPLIT",
-                                            "NPCENTRED", "KEYTONEHP", "SCRUBSINGLE", "TIMETITLE" };
-static const int setting_counts[] = { SETTING_N_ACCENT,
-                                      SETTING_N_HOME,
-                                      SETTING_N_BATTERY,
-                                      THEME_N,
-                                      SETTING_N_SHORTCUT,
-                                      SETTING_N_CORNERS,
-                                      SETTING_N_LIGHT,
-                                      2,
-                                      SETTING_N_NP_LAYOUT,
-                                      2,
-                                      2,
-                                      2 };
-_Static_assert(SETTING_N_ACCENT == ACCENT_N, "the accent option's values are the ACCENTS rows");
-static int *const setting_values[] = { &st.accent,     &st.home,         &st.battery,
-                                       &st.theme,      &st.shortcut,     &st.rounded,
-                                       &st.light,      &st.keep_lit,     &st.np_centred,
-                                       &st.keytone_hp, &st.scrub_single, &st.time_title };
-/* An option's value and config key: the accent's are the theme's own, an own option's st.own[] and
- * theme_keys[], the rest setting_values'. */
-static int *option_slot(const theme_t *T, int setting) {
-    return setting == SETTING_ACCENT ? T->accent_slot
-           : setting >= SETTING_OWN  ? &st.own[setting - SETTING_OWN]
-                                     : setting_values[setting];
-}
-static const char *option_key(const theme_t *T, int setting) {
-    return setting == SETTING_ACCENT ? T->accent_key
-           : setting >= SETTING_OWN  ? theme_keys[setting - SETTING_OWN].key
-                                     : setting_keys[setting];
-}
-/* The option bound to setting, or NULL. */
-static const option_t *option_of(const theme_t *T, int setting) {
-    for (int k = 0; k < T->n_opts; ++k)
-        if (T->opts[k].setting == setting) return &T->opts[k];
-    return (void *)0;
-}
-/* The local time now into buf (struct tm: tm_sec @0, tm_min @4, tm_hour @8), or 0 when the clock
- * cannot be read. */
-static const int *clock_now(int *buf) {
-    long long wall = wall_time();
-    long now = clock_back(wall);
-    return wall == -1 ? (void *)0 : localtime_r(&now, buf);
-}
-/* Light Mode's Auto (LIGHT=2) is light from 7:00 to 19:00 by the clock. clock_show applies it each
- * minute: when Auto crosses either time it drops the cached images (ringnav_image_add bakes the
- * mode into them) and repaints, as setting_click does. */
-#define LIGHT_FROM 7
-#define LIGHT_UNTIL 19
-static int light_day(const int *tm) { return tm && tm[2] >= LIGHT_FROM && tm[2] < LIGHT_UNTIL; }
-/* Night Shift's Auto (nightshift.c) is on while Light Mode's would be dark, 19:00 to 7:00, and
- * off while the clock cannot be read. */
-int clock_night(void) {
-    int buf[11];
-    const int *tm = clock_now(buf);
-    return tm && !light_day(tm);
-}
-static void np_fill(int scrub);
-static void text_inks(void *w);
-#define INK_LABEL 1
-#define INK_BUTTON 5
-#define INK_TAB 10
-#define INK_EDIT 15
-static void light_apply(const int *tm) {
-    if (st.light != 2 || light_day(tm) == st.light_day) return;
-    st.light_day = !st.light_day;
-    np_fill(0);
-    text_inks(window_manager());
-    image_manager_unload_all(image_manager());
-    widget_invalidate_force(window_manager(), (void *)0);
-}
-/* accent()'s first call: the [IPOD] keys. Its own function, so accent()'s every later call (each
- * colour Light Mode flips asks twice: ipod_light(), scheme()) skips this frame. */
-__attribute__((noinline)) static void settings_read(void) {
-    for (int i = 0; i < 4; ++i)
-        *setting_values[i] = config_value("IPOD", setting_keys[i], setting_counts[i], 0);
-    _Static_assert(SETTING_N_SHORTCUT <= 10, "config_value reads one digit");
-    st.shortcut = config_value("IPOD", "SHORTCUT", SETTING_N_SHORTCUT,
-                               SETTING_N_SHORTCUT); /* no key, see shortcut() */
-    st.minimal_accent = config_value("IPOD", "MINIMAL_ACCENT", ACCENT_N, MINIMAL_ACCENT);
-    st.rounded = config_value("IPOD", "ROUNDED", 2, 0); /* Square unless chosen */
-    st.light = config_value("IPOD", "LIGHT", 3, 0);     /* dark unless chosen; 2 Auto */
-    st.keep_lit = config_value("IPOD", "KEEPLIT", 2, 0);
-    st.np_centred = config_value("IPOD", "NPCENTRED", 2, 0);
-    st.keytone_hp = config_value("IPOD", "KEYTONEHP", 2, 0);
-    st.scrub_single = config_value("IPOD", "SCRUBSINGLE", 2, 0);
-    st.time_title = config_value("IPOD", "TIMETITLE", 2, 1); /* the clock unless chosen */
-    /* the themes' own keys, after the thirteen, in table order */
-    for (int k = 0; k < THEME_KEYS; ++k)
-        st.own[k] = config_value("IPOD", theme_keys[k].key, theme_keys[k].n, theme_keys[k].def);
-    /* A stored value outside an option's values reads as its default (Classic's Ivory: Classic
-     * Blue), the key untouched. A payload key is every theme's: only the live theme's reading
-     * counts. */
-    for (int t = 0; t < THEME_N; ++t)
-        for (int k = 0; k < themes[t].n_opts; ++k) {
-            const option_t *o = &themes[t].opts[k];
-            int *v = option_slot(&themes[t], o->setting);
-            if (o->values && o->def >= 0 && !(o->values >> *v & 1) &&
-                (t == st.theme || o->setting == SETTING_ACCENT))
-                *v = o->def;
-        }
-    int buf[11];
-    st.light_day = light_day(clock_now(buf));
-    st.settings_read = 1;
-}
-static int accent(void) {
-    if (!st.settings_read) settings_read();
-    return *themes[st.theme].accent_slot;
-}
-const theme_t *theme(void) {
-    accent();
-    return &themes[st.theme];
-}
-/* 1 for scheme v's light half: its mode, else Light Mode (Auto: light_day), which reads 0 where the
- * theme does not declare it (setting()'s rule). The dark row's mode: both carry it. */
-static int light_on(const theme_t *T, int v) {
-    int m = T->schemes[v].mode;
-    return m == SCHEME_LIGHT || (m == SCHEME_DERIVE && !(T->undeclared >> SETTING_LIGHT & 1) &&
-                                 (st.light == 2 ? st.light_day : st.light));
-}
-/* The half Light Mode picks; Minimal's and Modern's two halves are one row. */
-const scheme_t *scheme(void) {
-    int v = accent();
-    const theme_t *T = &themes[st.theme];
-    return &(light_on(T, v) ? T->light : T->schemes)[v];
-}
-/* scheme() for code that runs only in the light half (flip, red_map's light term), so after
- * ipod_light()'s accent(): the light row without a second accent() and light_on() on these
- * per-colour paths (a Classic folder paint sets ~470 colours). */
-static const scheme_t *light_row(void) {
-    const theme_t *T = &themes[st.theme];
-    return &T->light[*T->accent_slot];
-}
-static inline const unsigned *tones_of(int v) { return theme()->schemes[v].tones; }
-static inline const unsigned *tones(void) { return tones_of(accent()); }
-/* An option the theme does not declare reads 0, its stored key untouched (ponytail: 0 is every
- * hidden option's value today; a theme hiding Home or Battery needs a value per bit). */
-static int setting(int i) {
-    accent();
-    return themes[st.theme].undeclared >> i & 1 ? 0 : *setting_values[i];
-}
-/* A theme's own choice (OWN_*): its stored value while the theme offers it, else 0. */
-static int theme_own(int k) { return option_of(theme(), SETTING_OWN + k) ? st.own[k] : 0; }
-/* Classic's Home in Split (coverflow.c): Library on Home and Row Preview */
-int home_lib_on(void) { return theme_own(OWN_HOMELIB); }
-int row_preview_on(void) { return theme_own(OWN_ROWPREVIEW); }
-static const char *const np_pages[] = { "playing_page", "playing_page_stock" }; /* [NP_*] */
-_Static_assert(sizeof np_pages / sizeof *np_pages == NP_N, "one page per NP_* layout");
-/* The Now Playing page: the theme's layout, which Centred Now Playing forces to NP_CENTRED. */
-static int np_layout(void) { return setting(SETTING_NPCENTRED) ? NP_CENTRED : theme()->np_layout; }
-/* Shortcut with no key is Rockbox while the card has it, else Favorites: asked each time, as the
- * card may mount after the first read. */
-static int shortcut(void) {
-    accent();
-#if M1PLUS /* Rockbox, Games, Playlists, Podcasts and Audiobooks aren't the M1's (ipod-ui 4.8; 1.6.7's three new
-            * shortcuts are unported): any of them stored, or no key, is Favorites, the stored value kept until
-            * the row is changed */
-    return st.shortcut >= 1 && st.shortcut <= 5 ? st.shortcut : 3;
-#endif
-    return st.shortcut < SETTING_N_SHORTCUT ? st.shortcut : rockbox_available() ? 0 : 3;
-}
-int ipod_home(void) {
-    accent();
-    return st.home;
-}
-int ipod_light(void) {
-    int v = accent();
-#if M1PLUS
-    if (st.lock_win) return 0; /* ipod_lock_dark */
-#endif
-    return light_on(&themes[st.theme], v);
-}
-int ipod_battery(void) {
-    accent();
-    return st.battery;
-} /* lockscreen.c's Large clock */
-/* 1 when Home shows its Rockbox row (coverflow_home_layout): the card has Rockbox. */
-int ipod_home_rockbox(void) {
-    st.home_rockbox = rockbox_available();
-    return shortcut() || st.home_rockbox;
-}
-const char *ipod_home_shortcut(void) {
-    static const char *const names[] = { "Rockbox",      "Artists",   "Albums", "Favorites",
-                                         "Rated Albums", "Shuffle",   "Games",  "Playlists",
-                                         "Podcasts",     "Audiobooks" };
-    _Static_assert(sizeof names / sizeof *names == SETTING_N_SHORTCUT, "one per shortcut");
-    return names[shortcut()];
-}
-/* Podcasts, Audiobooks and Videos (docs/internals.md#podcasts-and-audiobooks): the card's top-level
- * folders of these names, case aside, browsed in folder_page from there; Photos opens photos.c,
- * Books books.c. */
-enum { PODCASTS = 1, AUDIOBOOKS, PHOTOS, BOOKS, VIDEOS };
-static const char *const MEDIA[] = { "Podcasts", "Audiobooks", "Photos", "Books", "Videos" };
-extern int rockbox_open(void *, void *);
-static int rated_albums(void *, void *), shuffle_menu(void *, void *), media_click(void *, void *);
-#if M1PLUS /* V2.1's library pages are at ui/'s top, as its Home card click (0x533b80) opens them */
-#define LOCAL_UI ""
-#else
-#define LOCAL_UI "localmusic/"
-#endif
-int home_shortcut_open(void *ctx, void *event) {
-    int s = shortcut();
-    if (!s) return rockbox_open(ctx, event);
-    if (s == 4) return rated_albums(ctx, event);
-    if (s == 5) return shuffle_menu(ctx, event);
-    if (s == 6) return games_open(ctx, event);
-    if (s == 8 || s == 9) return media_click((void *)(long)(s == 8 ? PODCASTS : AUDIOBOOKS), event);
-    if (s == 7)
-        return navigator_to_with_context(LOCAL_UI "playlist_page",
-                                         (void *)0); /* as stock's Home */
-    if (s == 2) {
-        struct {
-            int cls;
-            void *record;
-        } album = { 0xf003, 0 };
-        return navigator_to_with_context(LOCAL_UI "album_page", &album);
-    }
-    return navigator_to_with_context(s == 1 ? LOCAL_UI "localclass_page"
-                                            : LOCAL_UI "allmusic_page",
-                                     (void *)(long)(s == 1 ? 0xf004 : 0xf00a));
-}
-enum { TONE_LIGHT = 2, TONE_RED = 3 }; /* columns of ACCENTS */
-/* Light Mode keeps a coloured accent's tones; a neutral one (Graphite, Ivory) takes its silver red
- * tone for both, which flips dark. Before flip. */
-static unsigned tone_of(const unsigned *a, int tone) {
-    return ipod_light() && neutral(a[0]) ? a[TONE_RED] : a[tone];
-}
-unsigned accent_tone(int tone) {
-    const scheme_t *S = scheme();
-    return tone == TONE_LIGHT && S->flags & SCHEME_CARD ? S->fill : tone_of(S->tones, tone);
-}
-
-/* The height a selected row scrolls in: the surface's, cut at the set's list_end, a row of the
- * client under the bar (W_Y summed up to the window), where the rows below draw on to the glass but
- * a selected one's text would not show. */
-static int sel_height(menu_t *m) {
-    int y = 0, end = geom_val(V_LIST_END);
-    if (!end || m->kind == 3 || m->kind == 4) return m->height;
-    void *wm = window_manager();
-    for (void *p = m->w; p && P(p, W_PARENT) != wm; p = P(p, W_PARENT)) y += I(p, W_Y);
-    return end - y < m->height ? end - y : m->height;
-}
-
-/* A color_t (bytes r, g, b, a) that is stock red blended with a neutral, t * red + k * white per
- * channel within RED_TOLERANCE, becomes the same blend of one of the preset's tones (TONE_RED for
- * text and images, TONE_LIGHT for every other color): flat reds,
- * pressed tints and anti-aliased edges follow the accent, alpha is kept, and greys and other hues
- * are unchanged. t comes from least squares against red with the mean removed, in 1/4096. The white
- * part (k) becomes that share of glyph: white keeps a blend's light part as it is. With another
- * glyph, neutral pixels (the glyph itself) map too, so pass it only for an image that holds red.
- * Crimson is the identity. Light Mode (light) puts the red share over paper instead: a tint over
- * black becomes the same tint of tone over the light half's paper, its grey part flipped. */
-static unsigned red_map(unsigned c, unsigned tone, unsigned glyph, int light) {
-    int paper = light ? (int)(light_row()->paper & 255) : 0,
-        ink = light ? (int)(light_row()->ink & 255) : 0;
-    static const int red[3] = { STOCK_RED >> 16, STOCK_RED >> 8 & 255, STOCK_RED & 255 };
-    const int sum = red[0] + red[1] + red[2];
-    int ch[3] = { c & 255, c >> 8 & 255, c >> 16 & 255 }, s = ch[0] + ch[1] + ch[2], d = 0, dd = 0;
-    for (int i = 0; i < 3; ++i) {
-        d += (3 * ch[i] - s) * (3 * red[i] - sum);
-        dd += (3 * red[i] - sum) * (3 * red[i] - sum);
-    }
-    int t = d * 4096 / dd;
-    if (t < 256 && glyph != 0xffffff) t = 0; /* a neutral glyph pixel takes the glyph colour too */
-    int k = (s * 4096 - t * sum) / (3 * 4096);
-    if ((t && t < 256) || t > 4096 + 256 || k < -RED_TOLERANCE) return c;
-    unsigned out = c & 0xff000000u;
-    for (int i = 0; i < 3; ++i) {
-        int miss = ch[i] - (t * red[i] / 4096 + k);
-        if (miss > RED_TOLERANCE || miss < -RED_TOLERANCE) return c;
-        int v = t * (int)(tone >> (16 - 8 * i) & 255) / 4096 +
-                (light ? (t < 4096 ? 4096 - t : 0) * paper / 4096 - k * (paper - ink) / 255
-                       : k * (int)(glyph >> (16 - 8 * i) & 255) / 255);
-        out |= (unsigned)(v < 0 ? 0 : v > 255 ? 255 : v) << 8 * i;
-    }
-    return out;
-}
-unsigned accent_map(unsigned c, int preset, int tone) {
-    const unsigned *a = tones_of(preset);
-    if (ipod_light())
-        return !(c >> 24) || neutral(c) ? ui_ink(c)
-                                        : red_map(c, flip(tone_of(a, tone)), 0xffffff, 1);
-    return theme()->schemes[preset].flags & SCHEME_RAW_RED ? c : red_map(c, a[tone], 0xffffff, 0);
-}
-
 /* A pill's end radius on a list row (h tall, its card inset px from the row's left): h / 2, less
  * where the round end would cut across a leading cover's square corner (search results' art, which
  * sits closer to the edge than the Library's), so the cover stays inside the card.
@@ -2257,7 +1452,7 @@ static void gradient(void *canvas, rect_t r, unsigned top, unsigned bottom, unsi
 }
 
 /* Row j of h of the stops s, 0xRRGGBB: one stop a row when there are h of them. */
-static unsigned stops_row(const stops_t *s, int j, int h) {
+unsigned stops_row(const stops_t *s, int j, int h) {
     if (s->n == h) return s->rgb[j];
     int p = h > 1 ? j * 25600 / (h - 1) : 0, k = 0; /* 1/256 % */
     while (k + 2 < s->n && p > s->pos[k + 1] * 256) ++k;
@@ -2275,10 +1470,9 @@ void paint_stops(void *canvas, int x, int y, int w, int h, const stops_t *s) {
     }
 }
 /* How far a rounded box's row i starts in from its side: a hard corner. */
-static int round_inset(int R, int i, int h) {
+int round_inset(int R, int i, int h) {
     return i < R ? arc_out(R, i) >> 4 : i >= h - R ? arc_out(R, h - 1 - i) >> 4 : 0;
 }
-static void scrub_row(void *canvas, unsigned c, int x, int y, int w);
 /* R's corner pixels' coverage out of 255, by radius (tools/art.py CORNERS); a radius outside the
  * table takes a hard corner. */
 static const unsigned char *const round_cover[] = ROUND_COVER;
@@ -2293,8 +1487,6 @@ static int corner_row(const rect_t *r, int R, int i) {
 /* Row i of r, its corners rounded by R and antialiased, in a final 0xAARRGGBB: each corner pixel
  * the colour at its coverage of the colour's alpha. Only the ends named are rounded (ROUND_LEFT,
  * ROUND_RIGHT); the other side is square. */
-#define ROUND_LEFT 1
-#define ROUND_RIGHT 2
 static void round_row_ends(void *canvas, const rect_t *r, int R, int i, unsigned c, int ends) {
     const unsigned char *cover = cover_of(R);
     int row = corner_row(r, R, i), n = cover ? 0 : round_inset(R, i, r->h);
@@ -2308,17 +1500,17 @@ static void round_row_ends(void *canvas, const rect_t *r, int R, int i, unsigned
     int l = ends & ROUND_LEFT ? n : 0, rr = ends & ROUND_RIGHT ? n : 0;
     if (r->w > l + rr) scrub_row(canvas, c, r->x + l, r->y + i, r->w - l - rr);
 }
-static void round_row(void *canvas, const rect_t *r, int R, int i, unsigned c) {
+void round_row(void *canvas, const rect_t *r, int R, int i, unsigned c) {
     round_row_ends(canvas, r, R, i, c, ROUND_LEFT | ROUND_RIGHT);
 }
 /* The gradient s over r, one row at a time, its corners rounded by R and antialiased. */
-static void paint_round_rows(void *canvas, const rect_t *r, const stops_t *s, int R) {
+void paint_round_rows(void *canvas, const rect_t *r, const stops_t *s, int R) {
     for (int i = 0; s->n >= 2 && i < r->h; ++i)
         round_row(canvas, r, R, i, 0xff000000u | stops_row(s, i, r->h));
 }
 /* A ring a pixel wide just inside r: what R's corners cover and R - 1's, a pixel in, don't. With
  * either out of the table, hard corners. */
-static void round_ring(void *canvas, const rect_t *r, int R, unsigned c) {
+void round_ring(void *canvas, const rect_t *r, int R, unsigned c) {
     const unsigned char *out = cover_of(R), *in = cover_of(R - 1);
     for (int i = 0; i < r->h; ++i) {
         int row = corner_row(r, R, i);
@@ -2343,9 +1535,7 @@ void paint_art(void *w, void *canvas, const char *name, int x, int y);
 /* Classic's panel (volume, rating) over r: the scheme's bar gloss, LETTER_RADIUS corners, in
  * a 1 px ring of its line, on its soft shadow, an image reaching PANEL_PAD past the shadow's box,
  * which sits PANEL_DROP below the panel (tools/art.py SHADOWS). Restores the fill. */
-#define PANEL_PAD 8
-#define PANEL_DROP 2
-static void paint_panel(void *w, void *canvas, const rect_t *r, const char *shadow) {
+void paint_panel(void *w, void *canvas, const rect_t *r, const char *shadow) {
     const scheme_t *S = scheme();
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
     paint_art(w, canvas, shadow, r->x - PANEL_PAD, r->y - PANEL_PAD + PANEL_DROP);
@@ -2408,7 +1598,6 @@ void draw_centred(void *canvas, const unsigned *s, unsigned n, const void *r, un
 }
 /* A label's shadow, which AWTK hasn't: its text, from under it in a paint hook, in black at alpha,
  * in r, its box moved. Black in either half (Light Mode's text setter flips this back). */
-static unsigned wide_len(const unsigned *s);
 void text_shadow(void *canvas, const char *face, const unsigned *s, const void *r, unsigned px,
                  unsigned alpha) {
     unsigned n = wide_len(s);
@@ -2419,7 +1608,7 @@ void text_shadow(void *canvas, const char *face, const unsigned *s, const void *
 
 /* A rounded box in color, or a square one when the canvas declines to round it (no vgcanvas, or a
  * radius under 3, which stock zeroes and then fails). */
-static void fill_box(void *canvas, rect_t *r, unsigned color, unsigned radius) {
+void fill_box(void *canvas, rect_t *r, unsigned color, unsigned radius) {
     if (canvas_fill_rounded_rect(canvas, r, (void *)0, &color, radius)) {
         canvas_set_fill_color(canvas, color);
         canvas_fill_rect(canvas, r->x, r->y, r->w, r->h);
@@ -2462,7 +1651,6 @@ static int drill(void *w) {
     return ctx >= 0 && (contexts[ctx].flags & DRILL);
 }
 
-static int geom(int group);
 /* row_into's image, hidden, w's last child (geometry only: no string on the paint path). */
 static int into_mark(void *w) {
     unsigned n = widget_count_children(w);
@@ -2527,7 +1715,7 @@ static void paint_chevrons(void *w, void *canvas) {
 }
 
 /* Writes v (under 1000) in decimal to s; returns the digits written. */
-static unsigned put_num(unsigned *s, unsigned v) {
+unsigned put_num(unsigned *s, unsigned v) {
     unsigned n = 0;
     if (v >= 100) s[n++] = '0' + v / 100 % 10;
     if (v >= 10) s[n++] = '0' + v / 10 % 10;
@@ -2773,6 +1961,13 @@ static void *marq_row(void) {
                     : (void *)0;
     return row == st.marq_row ? row : (void *)0;
 }
+#endif
+/* The row's title was rewritten in place (addon.c relabel): if it is the marquee's, the next paint
+ * re-arms it for the new text's width. */
+void marq_restart(void *row) {
+    if (row == st.marq_row) st.marq_row = (void *)0;
+}
+#if !M1PLUS
 static int marq_moved(const void *info) {
     (void)info;
     st.marq_timer = 0;
@@ -2844,9 +2039,7 @@ unsigned ringnav_hscroll_lull(void *w, int (*lulled)(const void *), unsigned ms)
  * is full-screen (0, 0, 375, 320) and its background clear, so the bar and the page show through.
  */
 #define BAR_ROWS geom_val(V_BAR)
-#define CONFIRM_CELL_PX 23
 enum { FORM_NONE, FORM_PAGE, FORM_TRAY };
-static void bar_rect(void *canvas, unsigned color, int x, int y, int w, int h);
 static int dialogs_painted(void) { return theme()->painter[PAINT_CONFIRM] != CONFIRM_STOCK; }
 /* The confirm's form: the tray for the prompt confirm_over asked for, the page for any other. The
  * first confirm painted after the call takes the flag, so a prompt stock opens over it (a held
@@ -2859,12 +2052,12 @@ static int confirm_form(void *win) {
     return st.confirm_verb && win == st.confirm_win ? FORM_TRAY : FORM_PAGE;
 }
 /* An inset shadow from above (0, 2, blur 2): of its alpha a, what a gaussian leaves on each row. */
-static void inset_top(void *canvas, const rect_t *r, int R, unsigned a) {
+void inset_top(void *canvas, const rect_t *r, int R, unsigned a) {
     static const unsigned char part[] = { 239, 177, 79, 17 };
     for (int i = 0; i < 4; ++i) round_row(canvas, r, R, i, (a * part[i] >> 8) << 24);
 }
 /* A box's one-pixel light below it. */
-static void row_below(void *canvas, const rect_t *r, int R, unsigned c) {
+void row_below(void *canvas, const rect_t *r, int R, unsigned c) {
     rect_t down = { r->x, r->y + 1, r->w, r->h };
     round_row(canvas, &down, R, r->h - 1, c);
 }
@@ -2875,17 +2068,15 @@ static const unsigned confirm_light[30] = { 0x7389a5, 0x7b90a9, 0x8094ac, 0x8598
                                             0xb3becd, 0xb5c0ce, 0xb7c1cf, 0xb8c2d0, 0xb9c3d1,
                                             0xbbc4d2, 0xbcc5d3, 0xbec7d4, 0xbfc8d4, 0xbfc8d4,
                                             0xc0c8d5, 0xc0c8d5, 0xbfc8d5, 0xbfc7d4, 0xbec7d4 };
-static const stops_t confirm_dark = { 4,
-                                      { 0, 30, 85, 100 },
-                                      { 0x14171c, 0x1d2127, 0x2a2f36, 0x191c21 } },
-                     confirm_tray = { 8,
-                                      { 0, 8, 20, 34, 44, 49, 92, 100 },
-                                      { 0x6a707a, 0x565c66, 0x464b54, 0x343840, 0x22252c, 0x121419,
-                                        0x111216, 0x1b1f26 } },
-                     confirm_well = { 5,
-                                      { 0, 25, 70, 90, 100 },
-                                      { 0x07090d, 0x0e1015, 0x15181e, 0x1c1f26, 0x0b0d12 } };
-static unsigned wide_len(const unsigned *s) {
+const stops_t confirm_dark = { 4, { 0, 30, 85, 100 }, { 0x14171c, 0x1d2127, 0x2a2f36, 0x191c21 } },
+              confirm_tray = { 8,
+                               { 0, 8, 20, 34, 44, 49, 92, 100 },
+                               { 0x6a707a, 0x565c66, 0x464b54, 0x343840, 0x22252c, 0x121419,
+                                 0x111216, 0x1b1f26 } },
+              confirm_well = { 5,
+                               { 0, 25, 70, 90, 100 },
+                               { 0x07090d, 0x0e1015, 0x15181e, 0x1c1f26, 0x0b0d12 } };
+unsigned wide_len(const unsigned *s) {
     unsigned n = 0;
     while (s && s[n]) ++n;
     return n;
@@ -3031,7 +2222,7 @@ static void confirm_track(void *w, void *canvas, int form) {
 }
 /* The lit cell, in the scheme's selection: its light top row and dark foot row, rounded at the
  * ends named (round_row_ends). */
-static void lit_rows(void *canvas, const rect_t *c, int ends) {
+void lit_rows(void *canvas, const rect_t *c, int ends) {
     for (int i = 0; i < c->h; ++i)
         round_row_ends(canvas, c, 6, i, 0xff000000u | stops_row(&scheme()->sel, i, c->h), ends);
     round_row_ends(canvas, c, 6, 0, 0x73ffffffu, ends);
@@ -3368,7 +2559,6 @@ static void paint_separators(void *w, void *canvas) {
 
 static void edit_paint(void *w, void *canvas);
 
-static int painting_in(void *row);
 /* Minimal's own accent: stock's white radio
  * images (select, unselect: a 26 px ring, a 12 px dot when checked) vanish on the selected row's
  * off-white card, so they are drawn again over it in the card's ink. So does the Wi-Fi, Bluetooth
@@ -3581,11 +2771,7 @@ static void paint_scrollbar(void *canvas, void *bar, int table) {
 }
 
 /* Stock paints children first and calls this with the surface's canvas origin restored. */
-static void paint_scrubber(void *w, void *canvas);
-static void slider_scrub(void *w, void *canvas);
 static void quick_scrub(void *w, void *canvas);
-static void search_over(void *w, void *canvas);
-static int search_del(void *w);
 int ringnav_paint(void *w, void *canvas) {
     if (st.pull_page && !pull_live()) pull_cancel();
     int result = search_del(w) ? 0 : stock_paint_trampoline(w, canvas);
@@ -3654,8 +2840,8 @@ static void *list_button(void *view) {
  * (no icon: at x 10, as the Bluetooth page's rows), into adding stock's list_into trailing image
  * with the label narrowed clear of it, as the stock Local Music categories place it. Returns the
  * label. */
-static void *list_row_core(void *view, const char *icon, int (*click)(void *, void *), void *ctx,
-                           int w, int into) {
+void *list_row_core(void *view, const char *icon, int (*click)(void *, void *), void *ctx, int w,
+                    int into) {
     /* The Library constructor's live words (tools/ipod.py, theme_boot): lib_body and lib_inset. */
     int compact = !tk_strcmp(widget_get_prop_str(view, "name", ""), "scroll_view_localmusic");
     int h = compact ? *(const volatile unsigned short *)LIBRARY_ROW_BODY : 70;
@@ -3680,8 +2866,6 @@ static void *list_row_core(void *view, const char *icon, int (*click)(void *, vo
 void *list_row(void *view, const char *icon, int (*click)(void *, void *), void *ctx) {
     return list_row_core(view, icon, click, ctx, 260, 0);
 }
-/* A list_row label's list_item: its parent on V2.1, its button's on V1.32. */
-static void *row_of(void *label) { return M1PLUS ? P(label, W_PARENT) : P(P(label, W_PARENT), W_PARENT); }
 
 /* A settings row that opens a page, its label clear of the chevron. */
 static void *list_row_into(void *view, const char *icon, int (*click)(void *, void *), void *ctx) {
@@ -4001,7 +3185,8 @@ int ringnav_quick_settings(void *win, void *ctx) {
  * Power's Volume guard (VOLGUARD, playback.c's wheel_guard; docs/internals.md#volume-guard), and
  * Display's Hold Return (HOLDRETURN, compact_now_playing; docs/ipod.md#hold-return), and Power's
  * Standby limit (STANDBYLIMIT, ringnav_standby; docs/internals.md#standby-limit), and Bluetooth's
- * Control Device Volume (BTVOLLINK, bt_audio_ready; docs/internals.md#headset-controls-and-volume).
+ * Control Device Volume (BTVOLLINK, bt_audio_ready; docs/internals.md#headset-controls-and-volume),
+ * and Power's Smart Wi-Fi (SMARTWIFI, smart_poll; docs/internals.md#smart-wi-fi).
  */
 /* Bluetooth's Control Device Volume on: the Q2's volume is the device's own (bt_audio_ready). */
 static int bt_vol_link __attribute__((section(".scratch")));
@@ -4024,6 +3209,7 @@ static int *const pod_values[] = { &st.charge_limit,
                                    &st.eq_output,
                                    0,
                                    0,
+                                   &st.smart_wifi,
 #if M1PLUS
                                    &st.knob_mode,
                                    &st.knob_reverse,
@@ -4031,12 +3217,27 @@ static int *const pod_values[] = { &st.charge_limit,
 };
 _Static_assert(POD_LOCKCLOCK == 6, "lockscreen.c passes pod_rows 6");
 _Static_assert(sizeof pod_values / sizeof *pod_values == POD_COUNT, "a pod_values per row");
-static const char *const pod_keys[] = {
-    "CHARGELIMIT", "WAKEDOUBLE", "ARTISTCF",     "YEAROLD",   0, "RESUME", "LOCKCLOCK", "ARTISTAZ",
-    "VOLGUARD",    "HOLDRETURN", "STANDBYLIMIT", "BTVOLLINK", 0, 0,        "EQOUTPUT",  0,
-    0,
+static const char *const pod_keys[] = { "CHARGELIMIT",
+                                        "WAKEDOUBLE",
+                                        "ARTISTCF",
+                                        "YEAROLD",
+                                        0,
+                                        "RESUME",
+                                        "LOCKCLOCK",
+                                        "ARTISTAZ",
+                                        "VOLGUARD",
+                                        "HOLDRETURN",
+                                        "STANDBYLIMIT",
+                                        "BTVOLLINK",
+                                        0,
+                                        0,
+                                        "EQOUTPUT",
+                                        0,
+                                        0,
+                                        "SMARTWIFI",
 #if M1PLUS
-    "KNOB",        "KNOBDIR",
+                                        "KNOB",
+                                        "KNOBDIR",
 #endif
 };
 _Static_assert(sizeof pod_keys / sizeof *pod_keys == POD_COUNT, "a pod_keys entry per row");
@@ -4049,7 +3250,7 @@ static int pod_default(unsigned i) {
 #endif
     return i == POD_ARTIST_CF;
 }
-static void pod_settings(void) {
+void pod_settings(void) {
     if (st.pod_read) return;
     for (unsigned i = 0; i < sizeof pod_keys / sizeof *pod_keys; ++i)
         if (pod_keys[i])
@@ -4097,301 +3298,14 @@ static int bt_link(void) {
 void ringnav_read_artistype(void) {
     I(artist_type, 0) = config_value("PLAYSET", "ARTISTTYPE", 2, 1);
 }
-/* toolsGetMusicInfo's genre strcpy (GENRE_COPY): TagLib joins multi-value genres with " / ",
- * but style has only 0x80 bytes before name. Keep whole entries that fit, or as many whole
- * characters of an oversized first one as fit 0x7f bytes; the tag file is untouched.
- * ponytail: only " / " is an entry boundary, so one value joined with ";" or "//" is cut at 127
- * bytes, and an empty first entry before an oversized one stores an empty genre. */
-char *ringnav_genre_copy(char *dst, const char *joined) {
-    const char *entry = joined;
-    unsigned keep = 0;
-    for (;;) {
-        const char *end = entry;
-        while (*end && (end[0] != ' ' || end[1] != '/' || end[2] != ' ')) ++end;
-        unsigned n = end - joined;
-        if (n > 0x7f) {
-            if (entry == joined) keep = 0x7f;
-            break;
-        }
-        keep = n;
-        if (!*end) break;
-        entry = end + 3;
-    }
-    while (keep && (joined[keep] & 0xc0) == 0x80) --keep; /* not inside a UTF-8 character */
-    memcpy(dst, joined, keep);
-    dst[keep] = 0;
-    return dst;
-}
-
-/* The crash log's records (docs/boot.md), for a library scan's tag reads and Coverflow's art build:
- * file holds the path in progress, and every `every`th call appends "<count> <VmRSS kB> <path>" to
- * log, which each demo starts afresh and stops past CRASH_NOTE_MAX bytes, so an OOM kill names the
- * file and shows whether demo grew. n is the caller's {calls, bytes logged}. tmpfs, no locks: a
- * thread racing on n only shifts a line. */
-#define CRASH_NOTE_MAX 65536
-void crash_note(const char *path, const char *file, const char *log, unsigned every, unsigned *n) {
-    int fd = open(file, 0x80301, 0644); /* O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC */
-    if (fd >= 0) write(fd, path, strlen(path)), write(fd, "\n", 1), close(fd);
-    if (++n[0] % every || n[1] >= CRASH_NOTE_MAX) return;
-    char m[64], line[600];
-    unsigned pages = 0;
-    fd = open("/proc/self/statm", 0x80000); /* O_RDONLY | O_CLOEXEC: "size resident ..." in pages */
-    int got = fd < 0 ? 0 : read(fd, m, sizeof m - 1);
-    if (fd >= 0) close(fd);
-    m[got > 0 ? got : 0] = 0;
-    const char *p = m;
-    while (*p && *p != ' ') ++p;
-    while (*p == ' ') ++p;
-    while (*p >= '0' && *p <= '9') pages = pages * 10 + (*p++ - '0');
-    /* O_WRONLY | O_CREAT | O_CLOEXEC, and O_APPEND, or O_TRUNC for this demo's first line */
-    fd = open(log, n[1] ? 0x80109 : 0x80301, 0644);
-    if (fd < 0) return;
-    int len = snprintf(line, sizeof line, "%u %u %.500s\n", n[0], pages * 4, path);
-    if (write(fd, line, len) == len) n[1] += len;
-    close(fd);
-}
-static unsigned scan_counts[2];
-
-/* toolsGetMusicInfo's TagLib branch (0x5c6084-0x5c64d0) for an Ogg file whose comment header is
- * over OGG_TAGS_MAX, from xiph.c's fields: each text field through stock's toolsFixId3ErrorCode as
- * libtag_c's pair of copies (Latin-1, UTF-8) and isLatin1 would reach it, then strcpy'd (the genre
- * through GENRE_COPY's ringnav_genre_copy); year, track() split into disc (high half, +0x684) and
- * track (+0x688), mqaflag into +0x68c's 0x100 bit; with a, the audio properties' sample rate and 16
- * bits. A header TagLib would find no tag in leaves info as stock does. */
-static int ogg_music_info(int a, char *info, const char *path) {
-    static const unsigned short at[] = { 0x280, 0x100, 0, 0x200, 0x480, MUSIC_INFO_ALBUM_ARTIST };
-    xiph_tags t;
-    if (!ogg_tags(path, &t)) return 0;
-    for (unsigned k = 0; t.kind && k < sizeof at / sizeof *at; k++) {
-        char latin1[XIPH_TEXT] = { 0 }, out[0x100] = { 0 }; /* utf8_latin1 ends no invalid text */
-        int latin = utf8_latin1(t.text[k], latin1) == 2;
-        toolsFixId3ErrorCode(latin, latin1, t.text[k], out, k + 1);
-        if (at[k] == 0x200)
-            ringnav_genre_copy(info + at[k], out);
-        else
-            memcpy(info + at[k], out, strlen(out) + 1);
-    }
-    if (t.kind) {
-        unsigned track = (unsigned)t.disc << 16 | (unsigned)t.track;
-        I(info, 0x680) = t.year, I(info, 0x684) = track >> 16, I(info, 0x688) = track & 0xffff;
-        I(info, 0x68c) |= t.mqa << 8;
-        if (a) I(info, 0x690) = t.rate, I(info, 0x68c) |= 16;
-    }
-    return 1;
-}
-
-/* toolsGetMusicInfo (the library scan and the player's tag reads): crash_note first, an Ogg file
- * with an oversized comment header read by ogg_music_info, then an empty album artist falls back
- * to flac_album_artist. */
-int ringnav_music_info(int a, char *info, const char *path) {
-    if (path) crash_note(path, "/tmp/q2-scan-file", "/tmp/q2-scan.log", 500, scan_counts);
-    if (path && ogg_music_info(a, info, path)) return 1;
-    int r = stock_music_info_trampoline(a, info, path);
-    if (path && !info[MUSIC_INFO_ALBUM_ARTIST])
-        flac_album_artist(path, info + MUSIC_INFO_ALBUM_ARTIST);
-    return r;
-}
-/* A card app's song (its folder's listing, or an .m3u, reads no tags) in a library queue: stock
- * parses only a folder play's file (player_get_id3info, MCL_TYPE 1) and copies any other queue's
- * record, so its title was its file's name and its artist Unknown. As it starts, the playing
- * record and the parsed tags take its file's, read as the library scan reads them
- * (toolsGetMusicInfo): title, artist, album, album artist, track and disc. A record with an album
- * is left, so a card app's song is read once a queue (a card song without an album tag, played from
- * a list, at each start, as stock reads every folder play's); one without tags keeps its record's,
- * and a CUE track its sheet's (ringnav_id3_path). ponytail: Up Next and an app's lists show the
- * songs not yet played by their file names, and an app's list has no Go to rows (Now Playing's
- * has). */
-static void card_tags(char *id3, const char *path) {
-    static const unsigned from[] = { 0x280, 0x100, 0, MUSIC_INFO_ALBUM_ARTIST };
-    static const unsigned to[] = { REC_TITLE, REC_ARTIST, REC_ALBUM, REC_ALBUM_ARTIST };
-    unsigned pos, n;
-    void *r = queue_now(&pos, &n);
-    const char *album = r ? P(r, REC_ALBUM) : 0;
-    char info[0x698] = { 0 };
-    if (I(MCL_TYPE, 0) == 1 || mclGetCueFlag() || !r || !P(r, REC_PATH) ||
-        strcmp(P(r, REC_PATH), path) || (album && *album) ||
-        !tk_str_start_with(path, "/mnt/mmc/") || toolsGetMusicInfo(0, info, path) != 1)
-        return;
-    for (unsigned k = 0; k < sizeof to / sizeof *to; k++) {
-        char *t, **field = (char **)((char *)r + to[k]);
-        info[from[k] + 0xff] = 0;
-        if (!info[from[k]] || !(t = strdup(info + from[k]))) continue;
-        free(*field), *field = t;
-        tk_snprintf(id3 + ID3_ALBUM + from[k], 0x100, "%s", t);
-    }
-    if (I(info, 0x684) > 0) I(r, REC_TRACK) = I(info, 0x684);
-    if (I(info, 0x688) > 0) I(r, REC_DISC) = I(info, 0x688);
-}
-/* player_get_id3info's copy of the parsed path (ID3_PATH in tools/build.py), after the tags and
- * before Now Playing's lines. A CUE track's tags are its record's, the stock parser's TITLE and
- * PERFORMER (the track's, else the sheet's); a sheet without them takes the file's (issue #59).
- * ponytail: the playing track only; the database keeps the sheet's empty fields for Library. */
-char *ringnav_id3_path(char *id3, const char *path) {
-    static const int fields[] = { ID3_ALBUM, ID3_ARTIST, ID3_ALBUM_ARTIST };
-    if (mclGetCueFlag() && (!id3[ID3_ALBUM] || !id3[ID3_ARTIST] || !id3[ID3_ALBUM_ARTIST])) {
-        char info[0x698] = { 0 };
-        if (toolsGetMusicInfo(0, info, path) == 1)
-            for (unsigned i = 0; i < sizeof fields / sizeof *fields; i++) {
-                char *f = id3 + fields[i];
-                if (*f) continue;
-                tk_snprintf(f, 0x100, "%s", info + fields[i] - ID3_ALBUM);
-                toolsTrimLeft(f); /* as stock did to its fields before this copy */
-            }
-    }
-    card_tags(id3, path);
-    /* last: now_tag and marked_empty read a matching path as the tags being complete */
-    tk_snprintf(id3, 0x400, "%s", path); /* +0x400: the CUE start */
-    return id3;
-}
-/* The library scan's folder walk (SCAN_DIRS in tools/build.py): its first exclusion, strcmp(name,
- * "."), here skips every hidden folder, as Folder view's list does, so a card app's own
- * (q2-deezer's stream cache in .deezer/stream) never joins the Library. */
-int ringnav_scan_dir(const char *name, const char *dot) {
-    return name[0] == '.' ? 0 : strcmp(name, dot);
-}
-
-static int ascii_letter(unsigned c) { return (c | 32) >= 'a' && (c | 32) <= 'z'; }
-
-/* Whether s reads as GBK rather than Latin-1 or Windows-1252: not UTF-8, and every byte from 0x80
- * a two-byte character's, lead 0x81-0xFE then trail 0x80-0xFE, none of them between two ASCII
- * letters. Western text has an accented letter beside an ASCII one ("mú-s-ica" is FA 73), or a
- * pair inside a word ("Can-çã-o", "Beyonc-é’-s"); Chinese text runs of high-byte pairs. ponytail: a
- * GBK character with an ASCII-range trail (0x40-0x7E, rarer GBK/3-4 ones), or one alone inside a
- * Latin word, reads as Latin-1, and accented pairs at a word's edge only ("ñó" alone) as GBK; a
- * real charset guesser if either shows up. */
-static int gbk_text(const char *s) {
-    int high = 0;
-    for (const unsigned char *p = (const unsigned char *)s; *p; ++p) {
-        if (*p < 0x80) continue;
-        if (*p == 0x80 || *p == 0xff || p[1] < 0x80 || p[1] == 0xff ||
-            (p > (const unsigned char *)s && ascii_letter(p[-1]) && ascii_letter(p[2])))
-            return 0;
-        high = 1, ++p;
-    }
-    return high && !utf8_text(s);
-}
-
-/* Tag text (TAG_TEXT in tools/build.py): stock toolsFixId3ErrorCode took a field TagLib found all
- * Latin-1 for GBK when its Latin-1 bytes (latin1) went to UTF-8 and back unchanged (round, the
- * strcmp this replaces), and "Lo que la música me enseñó" does. It is GBK now only if it also reads
- * as GBK; anything else (nonzero) keeps TagLib's UTF-8 copy. */
-int ringnav_gbk_tag(const char *round, const char *latin1) {
-    return strcmp(round, latin1) || !gbk_text(latin1);
-}
-
-/* The CUE sheet parser's fields (CUE_TEXT in tools/build.py), up to 500 bytes each in buffers of
- * 512 or more: stock took any field that wasn't Chinese UTF-8 for GBK ("Café" became Chinese).
- * UTF-8 stays as it is, GBK (gbk_text) goes through stock's conversion as before; anything else is
- * Windows-1252, the code page Western rippers write, re-encoded as UTF-8 in place and cut at a
- * whole character to 511 bytes. Stock's returned 1 for kept text; so does this. */
-int ringnav_cue_text(char *s, const char *to, const char *from) {
-    if (!s || utf8_text(s)) return 1;
-    /* stock's conversion writes back over s unbounded: GBK grows by half as UTF-8, so 340 bytes at
-     * most fill the 512; a longer field reads as Windows-1252 */
-    if (strlen(s) <= 340 && gbk_text(s))
-        return ((int (*)(char *, const char *, const char *))CUE_CONVERT_ADDR)(s, to, from);
-    static const unsigned short cp1252[32] = {
-        0x20ac, '?',    0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
-        0x2039, 0x0152, '?',    0x017d, '?',    '?',    0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
-        0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, '?',    0x017e, 0x0178
-    };
-    char out[512];
-    unsigned n = 0;
-    for (const unsigned char *p = (const unsigned char *)s; *p; ++p) {
-        unsigned c = *p >= 0x80 && *p < 0xa0 ? cp1252[*p - 0x80] : *p, k = c < 0x80    ? 1
-                                                                           : c < 0x800 ? 2
-                                                                                       : 3;
-        if (n + k >= sizeof out) break;
-        if (k == 1)
-            out[n++] = (char)c;
-        else if (k == 2)
-            out[n++] = (char)(0xc0 | c >> 6), out[n++] = (char)(0x80 | (c & 63));
-        else
-            out[n++] = (char)(0xe0 | c >> 12), out[n++] = (char)(0x80 | (c >> 6 & 63)),
-            out[n++] = (char)(0x80 | (c & 63));
-    }
-    out[n] = 0;
-    memcpy(s, out, n + 1);
-    return 1;
-}
-
-/* Quote bounded scanner paths/tags into one UPDATE; never execute a truncated statement. */
-static int scan_quote(char *sql, unsigned cap, unsigned *n, const char *s) {
-    if (*n + 3 >= cap) return 0;
-    sql[(*n)++] = '\'';
-    for (; s && *s; ++s) {
-        if (*n + 3 >= cap) return 0;
-        if (*s == '\'') sql[(*n)++] = '\'';
-        sql[(*n)++] = *s;
-    }
-    sql[(*n)++] = '\'';
-    sql[*n] = 0;
-    return 1;
-}
-/* Only toolsLoadAllFile's folder-scan duplicate check calls this. Keep the row's ID, CUE bounds,
- * creation time and library count, so saved queues/favourites still refer to the same song. */
-int ringnav_scan_refresh(void *row, const char *table, int type) {
-    int exists = toolsCheckItemExist(row, table, type);
-    if (!table || strcmp(table, "songtable")) return exists;
-    if (!exists) return toolsGetMusicNum() >= 65000;
-    const char *path = P(row, REC_PATH), *name = P(row, REC_NAME);
-    if (!path || !name) return exists;
-    char info[0x698] = { 0 }, sql[8192];
-    int cue = I(row, REC_CUE_START) || I(row, REC_CUE_END);
-    if (!cue) {
-        /* Stock returns success even when TagLib cannot open/read a tag; keep the old tags then.
-         * An oversized Ogg header is xiph.c's to read (ogg_music_info), not TagLib's. */
-        xiph_tags t;
-        int big = ogg_tags(path, &t);
-        void *file = big ? 0 : taglib_file_new(path, 0);
-        int valid = big ? t.kind : file && taglib_file_tag(file);
-        if (file) taglib_file_free(file);
-        /* Refresh tags without the audio-properties probe that can walk the whole file. */
-        if (!valid || toolsGetMusicInfo(0, info, path) != 1) return exists;
-    }
-    static const char *const fields[] = { "album", "songer",   "style",
-                                          "name",  "composer", "albumsonger" };
-    static const unsigned offsets[] = { 0, 0x100, 0x200, 0x280, 0x480, 0x580 };
-    static const unsigned records[] = { REC_ALBUM, REC_ARTIST, 0x1c,
-                                        REC_TITLE, 0x20,       REC_ALBUM_ARTIST };
-    unsigned n = tk_snprintf(sql, sizeof sql, "update songtable set ");
-    for (unsigned i = 0; i < sizeof fields / sizeof *fields; ++i) {
-        n += tk_snprintf(sql + n, sizeof sql - n, "%s%s=", i ? "," : "", fields[i]);
-        if (n >= sizeof sql ||
-            !scan_quote(sql, sizeof sql, &n, cue ? P(row, records[i]) : info + offsets[i]))
-            return exists;
-    }
-    /* Stock indexes the trimmed title's pinyin initial, falling back to the filename. */
-    char title[128] = "", key[128] = "";
-    tk_snprintf(title, 31, "%s",
-                cue && P(row, REC_TITLE) ? (char *)P(row, REC_TITLE) : info + 0x280);
-    toolsTrimLeft(title);
-    toolsTrimRight(title);
-    if (!*title || !strcmp(title, "(null)")) tk_snprintf(title, 31, "%s", name);
-    toolsHanziToPinyin(title, key);
-    unsigned initial = (unsigned char)*key;
-    if (initial >= 'a' && initial <= 'z') initial -= 'a' - 'A';
-    initial = initial >= 'A' && initial <= 'Z'   ? initial
-              : initial >= '0' && initial <= '9' ? '*'
-                                                 : '#';
-    n += tk_snprintf(sql + n, sizeof sql - n,
-                     ",Initial=%u,year=%d,track=%d,cd_num=%d where filename=", initial,
-                     cue ? I(row, 0x30) : I(info, 0x680), cue ? I(row, REC_TRACK) : I(info, 0x684),
-                     cue ? I(row, REC_DISC) : I(info, 0x688));
-    if (n >= sizeof sql || !scan_quote(sql, sizeof sql, &n, name)) return exists;
-    n += tk_snprintf(sql + n, sizeof sql - n, " and fileurl=");
-    if (n >= sizeof sql || !scan_quote(sql, sizeof sql, &n, path)) return exists;
-    n += tk_snprintf(sql + n, sizeof sql - n, " and time=%d and time_end=%d", I(row, REC_CUE_START),
-                     I(row, REC_CUE_END));
-    if (n < sizeof sql) toolsUpdateDbTable("/mnt/data/database.db", sql);
-    return exists;
-}
 /* checkBluetoothStatus' player_save_start(0) once a headset's A2DP comes up (tools/build.py
  * BT_CONNECT_START): player_save_stop stopped the local or Tidal queue, and stock restarts it
  * unpaused, so a paused queue plays, and a stopped one starts over whatever owns playback
  * (mclStartPlayer's hook yields Spotify and Internet Radio). Resume on connect off (the default):
- * a queue that was playing goes on, a paused one comes back paused, and nothing else starts. */
+ * a queue that was playing goes on, a paused one comes back paused, and nothing else starts. A
+ * card game with the sound (addon.c) keeps it either way. */
 int ringnav_bt_connect_start(int pause) {
+    if (addon_game_audio()) return 0;
     if (ringnav_bt_resume()) return player_save_start(pause);
     int saved = media_owner() == 1 ? mclGetSavePlayStatus() : 0; /* 2 playing, 3 paused */
     return saved == 2 || saved == 3 ? player_save_start(saved == 3) : 0;
@@ -4417,6 +3331,7 @@ static void pod_text(int i) {
         { 0 }, /* EQ per Output: a switch */
         { 0 }, /* Key Tone: a switch */
         { 0 }, /* In-Vehicle Mode: a switch */
+        { 0 }, /* Smart Wi-Fi: a switch */
 #if M1PLUS
         { "Knob: Volume", "Knob: Navigation" },
         { "Knob Up: List Up", "Knob Up: List Down" },
@@ -4434,13 +3349,14 @@ static void pod_text(int i) {
             : i == POD_CARMODE ? g_carmode != 0
             : pod_values[i]    ? *pod_values[i]
                                : 0;
-    const char *toggle = i == POD_CHARGE      ? "Charge Limit (" STR(CHARGE_STOP) "%)"
-                         : i == POD_RESUME    ? "Resume on Connect"
-                         : i == POD_VOL_GUARD ? "Volume Guard"
-                         : i == POD_BT_LINK   ? "Control Device Volume"
-                         : i == POD_KEYTONE   ? "Key Tone"
-                         : i == POD_CARMODE   ? "In-Vehicle Mode"
-                                              : 0;
+    const char *toggle = i == POD_CHARGE       ? "Charge Limit (" STR(CHARGE_STOP) "%)"
+                         : i == POD_RESUME     ? "Resume on Connect"
+                         : i == POD_VOL_GUARD  ? "Volume Guard"
+                         : i == POD_BT_LINK    ? "Control Device Volume"
+                         : i == POD_KEYTONE    ? "Key Tone"
+                         : i == POD_CARMODE    ? "In-Vehicle Mode"
+                         : i == POD_SMART_WIFI ? "Smart Wi-Fi"
+                                               : 0;
     if (toggle)
         list_toggle(st.pod_label[i], toggle, v);
     else
@@ -4450,7 +3366,8 @@ static void pod_text(int i) {
     if (i == POD_CARMODE) widget_set_tr_text(st.pod_label[i], "system_carmode");
 }
 /* Centre or tap toggles and saves. Charge limit takes effect on the next UI loop pass
- * (power_poll); Artists on the next load of an artist list, as the artist page's switch does;
+ * (power_poll), Smart Wi-Fi within SMART_POLL_MS; Artists on the next load of an artist list, as
+ * the artist page's switch does;
  * Standby limit at the next Standby; Coverflow Sort and Refresh Coverflow at Coverflow's next open
  * (coverflow.c), Refresh with a toast, as it changes nothing in view. */
 static int pod_click(void *ctx, void *event) {
@@ -4506,7 +3423,7 @@ int ringnav_powermanager(void *win, void *ctx) {
     static const char *const icons[] = { 0, 0, 0 };
 #else
     static const char *const icons[] = { "usb_chargeswitch", "system_powermanager",
-                                         "system_carmode" };
+                                         "system_carmode", "wifiset_wifi" };
 #endif
     int result = stock_power_trampoline(win, ctx);
 #if M1PLUS
@@ -4518,6 +3435,7 @@ int ringnav_powermanager(void *win, void *ctx) {
     pod_rows(win, "scroll_view_powermanager", POD_STANDBY, 1,
              icons + 1); /* beside stock's Standby */
     pod_rows(win, "scroll_view_powermanager", POD_CHARGE, 1, icons);
+    pod_rows(win, "scroll_view_powermanager", POD_SMART_WIFI, 1, icons + 3);
     pod_rows(win, "scroll_view_powermanager", POD_CARMODE, 1, icons + 2);
     boot_row(win ? widget_lookup(win, "scroll_view_powermanager", 1) : (void *)0);
 #endif
@@ -4864,7 +3782,7 @@ static int seek_position(int to) {
  * pass after the bar first paints or paints with a new 24-hour setting (ringnav_paint_bg).
  * ponytail: a network time sync while lit shows at the next minute. */
 static void clock_show(void);
-static int clock_due(const void *info) {
+int clock_due(const void *info) {
     (void)info;
     st.clock_timer = 0;
     clock_show();
@@ -4938,7 +3856,7 @@ int bar_status(void) {
  * label_idle shows when neither it nor label_eq does. Returns whether a state image changed. */
 static int bar_state_sync(void *bar) {
     int changed = 0;
-    if (!st.bar_bt && bar) { /* bar_title_sync passes none: the widgets it found already */
+    if (!st.bar_bt && bar) {
         st.bar_bt = widget_lookup(bar, STATUSW_BT, 1);
         st.bar_wifi = widget_lookup(bar, STATUSW_WIFI, 1);
         st.bar_pct = widget_lookup(bar, STATUSW_PCT, 1);
@@ -4948,7 +3866,6 @@ static int bar_state_sync(void *bar) {
         st.bar_state = widget_lookup(bar, STATUSW_STATE, 1);
         st.bar_eq = widget_lookup(bar, STATUSW_EQ, 1);
         st.bar_title = widget_lookup(bar, "label_title", 1);
-        st.home_state = widget_lookup(bar, "img_home_state", 1);
 #if M1PLUS
         st.bar_back = widget_lookup(bar, "img_back", 1);
 #endif
@@ -4957,16 +3874,11 @@ static int bar_state_sync(void *bar) {
     if (st.bar_state) {
         int status = bar_status();
         on = status == 2 || status == 3;
-        /* Classic: by the battery, but on Home's own list in the title's place, "Q2 Pod" hidden */
-        void *at = !on ? (void *)0 : st.bar_home && st.home_state ? st.home_state : st.bar_state;
-        for (void *const *w = (void *const[]){ st.bar_state, st.home_state }, *const *e = w + 2;
-             w < e; ++w)
-            if (*w && (*w == at) != !!widget_get_visible(*w)) {
-                widget_set_visible(*w, *w == at, 0);
-                changed = 1;
-            }
-        if (st.home_state && st.bar_title) widget_set_visible(st.bar_title, at != st.home_state, 0);
-        if (at) {
+        if (on != !!widget_get_visible(st.bar_state)) {
+            widget_set_visible(st.bar_state, on, 0);
+            changed = 1;
+        }
+        if (on) {
             /* BATT_CLASSIC_LIGHT's play state is its own art (tools/art.py), by state and half */
             static const char *const classic_light_icon[2][2] = {
                 { "classic_light_play_d", "classic_light_pause_d" },
@@ -4978,8 +3890,8 @@ static int bar_state_sync(void *bar) {
                                    ? classic_light_icon[ipod_light()][status != 2]
                                : status == 2 ? "bar_play"
                                              : "bar_pause";
-            if (tk_strcmp(widget_get_prop_str(at, "image", ""), icon)) {
-                image_base_set_image(at, icon);
+            if (tk_strcmp(widget_get_prop_str(st.bar_state, "image", ""), icon)) {
+                image_base_set_image(st.bar_state, icon);
                 changed = 1;
             }
         }
@@ -4999,7 +3911,7 @@ static int bar_state_sync(void *bar) {
  * img_state keeps its dirty flag, so stock's own invalidates skip it until something else repaints
  * the bar: Now Playing, painting every 250 ms, sees a Play/Pause first and left a stale icon
  * (#116). Repaint the bar once, after the frame. */
-static int bar_repaint(const void *info) {
+int bar_repaint(const void *info) {
     (void)info;
     st.bar_timer = 0;
     widget_invalidate_force(*(void *const *)system_bar, (void *)0);
@@ -5045,7 +3957,7 @@ static void dark_title(void *t) {
     slider_label(t, 0, dark_title_y(), 375, 25, px, face ? face : "default");
 }
 /* w at x, y on the screen, unless it's there. */
-static void bar_place(void *w, int x, int y, int ww, int h) {
+void bar_place(void *w, int x, int y, int ww, int h) {
     void *p = P(w, W_PARENT);
     x -= I(p, W_X), y -= I(p, W_Y);
     if (I(w, W_X) != x || I(w, W_Y) != y || I(w, W_W) != ww || I(w, W_H) != h)
@@ -5105,7 +4017,9 @@ static void bar_sync(void *bar) {
     } else if (c && st.codec_step >= CODEC_STEPS)
         image_base_set_image(st.bar_bt, BT_GLYPH);
     accent(); /* reads the settings */
-    if (st.home_rockbox != rockbox_available()) coverflow_home_layout();
+    if (st.home_rockbox != rockbox_available() ||
+        (shortcut() == SHORTCUT_GROOVEBOX && st.home_groovebox != groovebox_available()))
+        coverflow_home_layout();
     /* Classic's battery: the set's body, which Percent Inside keeps */
     const theme_t *T = theme();
     /* A relayout puts them back in the row; the bar paints at least once a second. */
@@ -5200,7 +4114,7 @@ int ringnav_showface(void *bar) {
     return result;
 }
 
-static void bar_rect(void *canvas, unsigned color, int x, int y, int w, int h) {
+void bar_rect(void *canvas, unsigned color, int x, int y, int w, int h) {
     stock_canvas_set_fill_color(canvas, color);
     canvas_fill_rect(canvas, x, y, w, h);
 }
@@ -5418,13 +4332,13 @@ void ipod_lock_dark(void *win) {
 #endif
 
 /* Seconds as stock writes label_playtime, after a minus when negative is 1. */
-static void clock_text(void *label, int negative, int t) {
+void clock_text(void *label, int negative, int t) {
     char s[16] = "-";
     toolsTimeItoa(s + negative, t);
     widget_set_text_utf8(label, s);
 }
 
-static void label_font(void *w, int bold) {
+void label_font(void *w, int bold) {
     static const char *const font[] = { "style:normal:font_name", "style:focused:font_name",
                                         "style:disable:font_name" };
     for (unsigned i = 0; i < sizeof font / sizeof *font; ++i)
@@ -5519,302 +4433,9 @@ const char *theme_face(const unsigned *s, int n, int *px) {
     return "bold";
 }
 
-/* Classic's bar's left end for a track sec long: the times' boxes hold "-9:59" under 10:00,
- * "-59:59" under an hour, else "-9:59:59" (NP_IPOD_TIME_W*, tools/ipod.py measures them), their
- * outer edges and the gap kept; the bar takes the rest, mirrored. */
-static int ipod_bar_x(int sec) {
-    return NP_IPOD_BAR_X - NP_IPOD_TIME_W1 +
-           (sec < 600    ? NP_IPOD_TIME_W1
-            : sec < 3600 ? NP_IPOD_TIME_W2
-                         : NP_IPOD_TIME_W);
-}
-
-/* Classic's elapsed and remaining times and bar (with none, the radio's own) fitted to a track sec
- * long (ipod_bar_x); unknown (0 or less) leaves them, so the page keeps the build's "-9:59" boxes
- * and widest bar, or the last track's, whose times hold the 0:00 an unknown length shows. Each
- * keeps its y and height and repaints where it was and where it goes, so the caller is outside a
- * paint, which loses its invalidates (#116). 1 when any moved. */
-int ipod_times(void *elapsed, void *remain, void *bar, int sec) {
-    if (sec <= 0) return 0;
-    int x = ipod_bar_x(sec), tw = x - (NP_IPOD_BAR_X - NP_IPOD_TIME_W1), bw = 375 - 2 * x,
-        moved = 0;
-    void *w[] = { elapsed, remain, bar ? bar : st.stream_bar };
-    const int to[3][2] = { { x - NP_IPOD_TIME_GAP - tw, tw },
-                           { x + bw + NP_IPOD_TIME_GAP, tw },
-                           { x, bw } };
-    for (unsigned i = 0; i < 3; ++i) {
-        if (!w[i] || (I(w[i], W_X) == to[i][0] && I(w[i], W_W) == to[i][1])) continue;
-        widget_invalidate_force(w[i], (void *)0);
-        widget_move_resize(w[i], to[i][0], I(w[i], W_Y), to[i][1], I(w[i], W_H));
-        widget_invalidate_force(w[i], (void *)0);
-        moved = 1;
-    }
-    return moved;
-}
-
-/* The remaining time, once after a frame whose paint np_sync wrote it in: its invalidate there is
- * lost with the frame's dirty rects (#116). Minimal's and Modern's sit in the rect the slider's and
- * the elapsed time's repaint takes each second; only times beside the bar (np_beside) need it. */
-static int remain_due(const void *info) {
-    (void)info;
-    st.np_remain_timer = 0;
-    if (st.np_remain) widget_invalidate_force(st.np_remain, (void *)0);
-    return 0;
-}
-
-/* 1 when Now Playing's times sit on its bar's rows, beside it (Classic's iPod page; its Centred
- * page and the other themes' put them under the bar): outside the slider's repaint. */
-static int np_beside(void) {
-    if (M1PLUS) return 0; /* no Classic iPod page; its NP_IPOD_* geometry is the Q2's */
-    if (!st.np_remain || !st.np_slider || !st.np_elapsed) return 0;
-    int bh = widget_get_prop_int(st.np_slider, "bar_size", 8);
-    return I(st.np_elapsed, W_Y) < I(st.np_slider, W_Y) + (I(st.np_slider, W_H) + bh) / 2;
-}
-
-/* Classic's times and bar fitted to the playing track's length (the slider's max), off the paint
- * whose np_sync found them stale. */
-static int np_fit_due(const void *info) {
-    (void)info;
-    st.np_fit_timer = 0;
-    if (np_beside())
-        ipod_times(st.np_elapsed, st.np_remain, st.np_slider,
-                   widget_get_prop_int(st.np_slider, "max", 0));
-    return 0;
-}
-
 #if M1PLUS
 #include "m1plus_np_view.c"
 #else
-/* Now Playing's "3 of 12", album and remaining time (slider max less value, stock's seconds, so a
- * drag or scrub previews it). Labels are written only when their source changes; 1 when the
- * remaining time was. Classic's times beside the bar refit when the length's class changes: a
- * seek, a pause or a rate change keeps it. */
-static int np_sync(void *top) {
-    if (!top || top != st.np_win) return 0;
-    st.np_bold = theme_font(st.np_title, ROLE_NP, st.np_bold); /* the title, as it changes */
-    unsigned at, n;
-    void *r = queue_now(&at, &n);
-    const char *album = now_tag(r, REC_ALBUM);
-    char s[24] = "";
-    unsigned pos[2] = { at, n };
-    unsigned h = hash_bytes(fnv(FNV_SEED, (const unsigned char *)album), (const unsigned char *)pos,
-                            sizeof pos);
-    if (h != st.np_hash) {
-        st.np_hash = h;
-        if (r) tk_snprintf(s, sizeof s, "%d of %d", at + 1, n);
-        widget_set_text_utf8(st.np_pos, s);
-        widget_set_text_utf8(st.np_album, album ? album : "");
-        st.np_off = 0;
-        stop_timer(&st.np_marquee); /* the next paint restarts it if the album overflows */
-    }
-    int max = widget_get_prop_int(st.np_slider, "max", 0),
-        left = max - widget_get_prop_int(st.np_slider, "value", 0);
-    if (max > 0 && !st.np_fit_timer && np_beside() && I(st.np_slider, W_X) != ipod_bar_x(max))
-        st.np_fit_timer = timer_add(np_fit_due, (void *)0, 0); /* mid-paint */
-    if (left < 0) left = 0;
-    if (left == st.np_left) return 0;
-    st.np_left = left;
-    clock_text(st.np_remain, 1, left);
-    return 1;
-}
-#endif
-
-/* Time in Title off: the bar's centre names the page in front, as an iPod's, in Modern's bold:
- * Now Playing or Cover Flow, else stock's title in the page's hidden navbar (scrlabel_title, or a
- * settings page's unnamed first child). Home, a page showing its navbar and an untitled page keep
- * the clock; a pop-up or keyboard leaves the bar as it is. This runs in a paint, which drops the
- * label's invalidate, so bar_repaint follows; the clock waits for its timer. */
-static void bar_title(void *bar, void *top) {
-    static const unsigned
-        now_playing[] = { 'N', 'o', 'w', ' ', 'P', 'l', 'a', 'y', 'i', 'n', 'g', 0 },
-        cover_flow[] = { 'C', 'o', 'v', 'e', 'r', ' ', 'F', 'l', 'o', 'w', 0 }, none = 0;
-    if (st.bar_title) { /* this bar names the page in its own label: off, the clock makes way */
-        const unsigned *own = widget_get_text(st.bar_title);
-        int titled = !st.time_title && own && *own;
-        void *clock = titled != st.bar_titled ? widget_lookup(bar, "label_clock", 1) : (void *)0;
-        if (!clock) return;
-        st.bar_titled = titled;
-        st.clock_key = 0;
-        if (titled)
-            widget_set_text(clock, &none);
-        else
-            rearm(&st.clock_timer, clock_due, 0); /* clock_show writes it again */
-        /* the title takes the clock's room while it makes way, up to EQ's box, where the right
-         * group's room starts (tools/ipod.py) */
-        static int title_w;
-        if (!title_w) title_w = I(st.bar_title, W_W);
-        void *eq = st.bar_eq ? P(st.bar_eq, W_PARENT) : (void *)0;
-        int wide = eq ? I(eq, W_X) + I(st.bar_eq, W_X) - I(st.bar_title, W_X) : title_w;
-        widget_resize(st.bar_title, titled && wide > title_w ? wide : title_w,
-                      I(st.bar_title, W_H));
-        if (!st.bar_timer) st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
-        return;
-    }
-    if (st.time_title && !st.bar_titled) return; /* the clock, every paint */
-    if (!top || tk_strcmp(widget_get_type(top), "window")) return;
-    void *label = widget_lookup(bar, "label_clock", 1);
-    if (!label) return;
-    const unsigned *title = (void *)0;
-    if (!st.time_title) {
-        void *nav = widget_lookup(top, "view_navbar", 0), *t = (void *)0;
-        if (nav && !widget_get_visible(nav)) {
-            t = widget_lookup(nav, "scrlabel_title", 0);
-            if (!t && widget_count_children(nav)) t = widget_get_child(nav, 0);
-            if (t && tk_strcmp(widget_get_type(t), "hscroll_label")) t = (void *)0;
-        }
-        title = top == st.np_win                                                     ? now_playing
-                : !tk_strcmp(widget_get_prop_str(top, "name", ""), "coverflow_page") ? cover_flow
-                : t ? widget_get_text(t)
-                    : (void *)0;
-        if (title && !*title) title = (void *)0;
-        static const unsigned null_name[] = { '(', 'n', 'u', 'l', 'l', ')', 0 };
-        const unsigned *a = title, *b = null_name; /* stock's "%s" of a NULL name: no title */
-        while (a && *a && *a == *b) ++a, ++b;
-        if (a && !*a && !*b) title = (void *)0;
-    }
-    if (!title) {
-        if (!st.bar_titled) return;
-        st.bar_titled = 0;
-        st.clock_key = 0; /* clock_show writes it again */
-        if (st.bar_bold) label_font(label, 0);
-        st.bar_bold = 0;
-        rearm(&st.clock_timer, clock_due, 0);
-        return;
-    }
-    const unsigned *had = widget_get_text(label), *want = title;
-    while (had && *had && *had == *want) ++had, ++want;
-    int changed = !st.bar_titled || !had || *had != *want;
-    if (changed) widget_set_text(label, title);
-    st.bar_titled = 1;
-    int bold = theme_font(label, ROLE_NP,
-                          st.bar_bold); /* a new Theme can change it under the same title */
-    if ((changed || bold != st.bar_bold) && !st.bar_timer)
-        st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
-    st.bar_bold = bold;
-}
-
-/* Scrub (docs/internals.md#scrub-ipod) follows stock's own key seek (0x52c754): the page's 250 ms
- * timer stops, the slider and label_playtime preview the target, player_seek_time commits it once
- * on exit in track seconds (it adds a CUE track's start), and the timer restarts. */
-/* The accent's light tone (Minimal's own accent: MINIMAL_FILL) fills the progress bar in every
- * state a touch passes through; a white fill (Minimal: a thicker line) marks the scrub. */
-static void slider_fill(void *slider, unsigned color) {
-    static const char *const fill[] = { "style:normal:fg_color", "style:pressed:fg_color",
-                                        "style:over:fg_color", "style:focused:fg_color" };
-    for (unsigned i = 0; i < sizeof fill / sizeof *fill; ++i)
-        widget_set_prop_int(slider, fill[i], (int)color);
-}
-#if M1PLUS
-static void np_fill(int scrub) {
-    if (!st.np_slider) return;
-    np_bar_t bar = np_bar_fill(0, 0, scrub, 0, 0);
-    slider_fill(st.np_slider, bar.fill);
-    const theme_t *T = theme();
-    if (T->np_scrub != T->np_bar) widget_set_prop_int(st.np_slider, "bar_size", bar.h);
-    widget_invalidate_force(st.np_slider, (void *)0);
-}
-#else
-static void np_fill(int scrub) {
-    if (!st.np_slider) return;
-    slider_fill(st.np_slider, scrub ? 0xffffffff : RGBA(accent_tone(TONE_LIGHT)));
-    /* Minimal's fill is near white already: its scrub thickens the line to Classic's. */
-    const theme_t *T = theme();
-    if (T->np_scrub != T->np_bar)
-        widget_set_prop_int(st.np_slider, "bar_size", scrub ? T->np_scrub : T->np_bar);
-    widget_invalidate_force(st.np_slider, (void *)0);
-}
-#endif
-
-/* One part of Classic's bar, w wide at x, y: the stops' rows h high, then mirrored under them from
- * SCRUB_REFLECT_A/256 to the paper over SCRUB_REFLECT_ROWS. */
-static void bar_part(void *canvas, const stops_t *s, int x, int y, int w, int h, unsigned paper) {
-    paint_stops(canvas, x, y, w, h, s);
-    for (int k = 0; k < SCRUB_REFLECT_ROWS; ++k) {
-        int a = SCRUB_REFLECT_A * (SCRUB_REFLECT_ROWS - k) / SCRUB_REFLECT_ROWS;
-        stock_canvas_set_fill_color(canvas, RGBA(mix(paper, stops_row(s, h - 1 - k, h), a, 256)));
-        canvas_fill_rect(canvas, x, y + h + k, w, 1);
-    }
-}
-
-/* Classic's bar (playing.scrubber.stops), an iPod classic's, bw wide and the theme's np_bar high at
- * x, y: the accent's band over the first `on` columns, the track's rows after them, square ends,
- * each mirrored under it. With mark, a scrub's cue on the gloss: a diamond in the ink,
- * NP_SCRUB_MARK each side of its middle row and column, at the fill's end, kept inside the bar. 0
- * when the theme has none. The canvas's fill colour is left as it was. */
-int ipod_bar(void *canvas, int x, int y, int bw, int on, int mark) {
-    const theme_t *T = theme();
-    const stops_t *track = &T->np_track[ipod_light()];
-    if (track->n < 2) return 0;
-    unsigned saved = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR), paper = scheme()->paper;
-    bar_part(canvas, &scheme()->sel, x, y, on, T->np_bar, paper);
-    bar_part(canvas, track, x + on, y, bw - on, T->np_bar, paper);
-    stock_canvas_set_fill_color(canvas, RGBA(scheme()->ink));
-    int end = bw - 1 - NP_SCRUB_MARK, cx = on < NP_SCRUB_MARK ? NP_SCRUB_MARK : on,
-        cy = y + (T->np_bar - 1) / 2;
-    if (cx > end) cx = end;
-    for (int j = -NP_SCRUB_MARK; mark && j <= NP_SCRUB_MARK; ++j) {
-        int half = NP_SCRUB_MARK - (j < 0 ? -j : j);
-        canvas_fill_rect(canvas, x + cx - half, cy + j, 2 * half + 1, 1);
-    }
-    stock_canvas_set_fill_color(canvas, saved);
-    return 1;
-}
-
-/* Classic's progress bar over stock's plain one, centred in the slider as stock's, the scrub's cue
- * on it while a scrub runs; the times sit beside it (tools/ipod.py np_ipod). */
-static void paint_scrubber(void *w, void *canvas) {
-    if (w && w == st.stream_bar && P(canvas, CANVAS_LCD))
-        ipod_bar(canvas, 0, 0, I(w, W_W), I(w, W_W), 0);
-    if (!w || w != st.np_slider || !P(canvas, CANVAS_LCD)) return;
-    int bw = I(w, W_W), lo = widget_get_prop_int(w, "min", 0),
-        n = widget_get_prop_int(w, "max", 100) - lo,
-        v = clamp_step(0, n, widget_get_prop_int(w, "value", 0) - lo);
-    ipod_bar(canvas, 0, (I(w, W_H) - theme()->np_bar) / 2, bw, n > 0 ? bw * v / n : 0, st.scrub);
-}
-
-/* One row of final colour, its alpha the row's. */
-static void scrub_row(void *canvas, unsigned c, int x, int y, int w) {
-    stock_canvas_set_fill_color(canvas, (RGBA(c & 0xffffffu) & 0xffffffu) | (c & 0xff000000u));
-    canvas_fill_rect(canvas, x, y, w, 1);
-}
-void paint_rows_bar(void *canvas, int x, int y, int w, int h, int fill_w) {
-    const theme_t *T = theme();
-    const unsigned (*rows)[NP_ROWS] = T->np_rows + 2 * ipod_light();
-    unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
-    for (int j = 0; j < h && j < NP_ROWS; ++j) {
-        scrub_row(canvas, rows[0][j], x, y + j, w);
-        if (fill_w > 0) scrub_row(canvas, rows[1][j], x, y + j, fill_w < w ? fill_w : w);
-    }
-    stock_canvas_set_fill_color(canvas, fill);
-}
-/* The Theme's progress bar over the asset's (Minimal's square 4px line): its np_bar, Modern's
- * NP_BAR_CLASSIC capsule or Classic's NP_BAR_IPOD (paint_scrubber draws it), and stock's play-state
- * glyph, which Minimal and Classic hide (playing.state.opacity). */
-static void np_theme(void) {
-    static const char *const radius[] = { "style:normal:round_radius", "style:pressed:round_radius",
-                                          "style:over:round_radius", "style:disable:round_radius",
-                                          "style:focused:round_radius" };
-#if !M1PLUS
-    void *glyph = st.np_win ? widget_lookup(st.np_win, "img_playstate", 1) : (void *)0;
-#endif
-    const theme_t *T = theme();
-    int h = T->np_bar;
-    for (unsigned i = 0; st.np_slider && i < sizeof radius / sizeof *radius; ++i)
-        widget_set_prop_int(st.np_slider, radius[i], h / 2);
-    if (st.np_slider) widget_set_prop_int(st.np_slider, "bar_size", h);
-#if M1PLUS
-    (void)T;
-    np_view_t v = np_view_local();
-    np_view_theme(&v);
-    spot_theme();
-#else
-    if (glyph) widget_set_opacity(glyph, T->np_state_op);
-    /* Minimal: the album is paint_caps' capitals. */
-    if (st.np_album) widget_set_opacity(st.np_album, T->np_album_op);
-#endif
-}
-
-#if !M1PLUS /* m1plus_np_view.c */
 /* Paused, the seek waits for Play (scrub_end) and the player's second stands still until then,
  * and the page's timer would put the bar back on it. The bar keeps the
  * target until the player reports it, the track changes or stops, or SETTLE_PLAY_MS of playing
@@ -5888,26 +4509,10 @@ static void lyric_step(void *lrc) {
     scroll_view_set_offset(lrc, I(lrc, SCROLL_X), y + (step ? step : to > y ? 1 : -1));
 }
 
-/* The lyrics page's line in the middle: the one whose centre (0 at least, as lyric_follow's) is
- * nearest the offset, or the glide's target while it moves; the first of those as near. */
-static int lyric_aim(void *lrc) {
-    int at = st.lyric_glide ? (st.lyric_to + 8) >> 4 : I(lrc, SCROLL_Y), aim = 0, near = 1 << 30;
-    for (int i = 0, n = widget_count_children(lrc); i < n; ++i) {
-        int c = lyric_centre(lrc, i), d = (c > 0 ? c : 0) - at;
-        if ((d < 0 ? -d : d) < near) near = d < 0 ? -d : d, aim = i;
-    }
-    return aim;
-}
-
-/* The wheel let go: the glide ends on the row top nearest its target, so no row is cut at the top;
- * on the lyrics page, with a line in the middle (lyric_aim). The end is one (lyric_pad). */
+/* The wheel let go: the glide ends on the row top nearest its target, so no row is cut at the top.
+ * The end is one (lyric_pad). */
 static void lyric_snap(void *lrc) {
     lyric_pad(lrc);
-    if (lyrics_on(lrc)) {
-        int c = lyric_centre(lrc, lyric_aim(lrc));
-        lyric_glide(lrc, (c > 0 ? c : 0) * 16);
-        return;
-    }
     int at = st.lyric_glide ? st.lyric_to : I(lrc, SCROLL_Y) * 16, to = 0;
     for (int i = 0, n = widget_count_children(lrc); i < n; ++i) {
         int top = I(widget_get_child(lrc, i), W_Y) * 16;
@@ -6029,7 +4634,6 @@ static void lyric_poll(void) {
         st.lyric_song = song;
         lyric_top(lrc);
     }
-    if (st.lyric_held == 2 && mclGetPlayStatus() == 2) st.lyric_held = 0; /* lyric_seek's, played */
     int page = lrc && st.np_slide && widget_get_prop_int(st.np_slide, "value", 0) == 1;
     if (st.np_full && !page) np_full(0); /* full-screen lyrics end off their page */
     int touch = lrc && window_manager_get_top_window(wm) == st.np_win && pointer_down();
@@ -6112,7 +4716,6 @@ static void lyric_poll(void) {
         st.lyric_glide = 0;
     else if (st.lyric_glide)
         lyric_step(lrc);
-    if (shown) lyrics_aim(lrc, st.lyric_held ? lyric_aim(lrc) : -1); /* a scan of the rows */
 }
 
 /* A tick on the lyrics page while the track has lyrics, which comes only before lyric_poll takes
@@ -6188,40 +4791,6 @@ static void scrub_start(void) {
     rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
 }
 
-/* The song plays from ms, a synced line's start (lyrics_start) on the lyrics page, a scrub to it
- * committed at once (scrub_end), and the lyrics follow again; paused, the seek waits for Play, and
- * so does the follow (lyric_held 2, lyric_poll), so they stay on the line chosen. 0 for an unsynced
- * line (-1), no bar or a line past the song's end. ponytail: the player seeks whole seconds, so it
- * lands up to 999 ms before the line, and the follow may go back a line that started in that
- * second; a millisecond seek would need hciplayer's own. */
-static int lyric_seek(int ms) {
-    int max = st.np_slider ? widget_get_prop_int(st.np_slider, "max", 0) : 0;
-    if (ms < 0 || !st.np_slider || (max > 0 && ms / 1000 > max)) return 0;
-    scrub_start();
-    st.scrub_to = ms / 1000, st.scrub_moved = 1;
-    widget_set_prop_int(st.np_slider, "value", st.scrub_to);
-    clock_text(st.np_elapsed, 0, st.scrub_to);
-    np_sync(st.np_win);
-    scrub_end();
-    st.lyric_held = mclGetPlayStatus() == 2 ? 0 : 2, st.lyric_spun = 0;
-    return 1;
-}
-
-#endif
-
-/* Play/Pause held on the lyrics page in front: the song plays from the line in the middle
- * (lyric_aim) once the wheel or a finger holds them, else the playing line, so a hold without
- * scrolling starts it again; before the first line, the song's start, once its lyrics are synced.
- */
-static int lyric_seek_hold(void) {
-    void *lrc = st.np_lrc;
-    if (!lyrics_shown() || !lyrics_on(lrc)) return 0;
-    int line = st.lyric_held ? lyric_aim(lrc) : lyrics_line(lrc, lyrics_now(), 1);
-    if (line < 0 && !st.lyric_held) return lyric_seek(lyrics_start(lrc, 0) >= 0 ? 0 : -1);
-    return lyric_seek(lyrics_start(lrc, line));
-}
-
-#if !M1PLUS /* m1plus_np_view.c */
 /* Single Press Scrub (IPOD SCRUBSINGLE)'s single press, DOUBLE_CLICK_MS on: scrub starts. */
 static int np_scrub(const void *info) {
     st.np_press = 0;
@@ -6278,7 +4847,6 @@ static int np_gone(void *win, void *event) {
             st.np_slide = st.np_lrc = st.np_title = (void *)0;
         st.scrub_moved = 0; /* the page is going: no seek */
         st.np_off = st.np_full = st.lyric_held = 0;
-        stop_timer(&st.np_line_timer);
         stop_timer(&st.np_marquee);
 #if M1PLUS
         stop_timer(&st.np_repaint);
@@ -6381,36 +4949,11 @@ int stream_ipod(void *art, void *const text[4], void *elapsed, void *remain, voi
     return 1;
 }
 
-/* A finger held still on the lyrics page RATE_HOLD_MS (np_lyric_touch): the song plays from the
- * line under it (lyric_seek), an unsynced one or none doing nothing, and its lift is no tap. */
-static int np_line_hold(const void *info) {
-    st.np_line_timer = 0;
-    void *lrc = st.np_lrc;
-    int xy[2] = { st.np_tap_x, st.np_tap_y };
-    st.np_tap_x = 1 << 20;
-    if (!lrc || !st.np_slide || !usable() || !pointer_down() || !lyrics_on(lrc) ||
-        window_manager_get_top_window(window_manager()) != st.np_win ||
-        widget_get_prop_int(st.np_slide, "value", 0) != 1)
-        return 0;
-    widget_to_local(lrc, xy);
-    if (!M1PLUS) /* M1 Plus: V2.1's widget_to_local adds the view's own offset already (get_offset) */
-        xy[1] += I(lrc, SCROLL_Y); /* its rows' place: the view's own offset is no parent's */
-    for (int i = widget_count_children(lrc); i-- > 0;) {
-        void *row = widget_get_child(lrc, i);
-        if (xy[1] >= I(row, W_Y) && xy[1] < I(row, W_Y) + I(row, W_H)) {
-            lyric_seek(lyrics_start(lrc, i));
-            break;
-        }
-    }
-    return 0;
-}
-
-/* Now Playing's lyrics page (ringnav_playing): a touch that stays within TAP_PX of where it came
- * down, so neither a swipe nor a drag of the lines, plays from the line under it once held
- * RATE_HOLD_MS (np_line_hold), else at its lift switches them to full screen and back (np_full),
- * once there are lyrics to show. The slide_view taking the touch for a
- * swipe (its abort) ends full screen at once, so the pages slide in their column. Returns 0: a STOP
- * would keep the slide_view's grab (rate_fav_click). */
+/* Now Playing's lyrics page (ringnav_playing): a touch that lifts within TAP_PX of where it came
+ * down, so neither a swipe nor a drag of the lines, switches them to full screen and back
+ * (np_full), once there are lyrics to show. The slide_view or scroll_lrc taking the touch (its
+ * abort) ends full screen at once, so the pages slide in their column. Returns 0: a STOP would
+ * keep the slide_view's grab (rate_fav_click). */
 #define TAP_PX 10 /* AWTK's drag threshold */
 static int np_lyric_touch(void *ctx, void *event) {
     int type = I(event, EVENT_TYPE), x = I(event, EVENT_X), y = I(event, EVENT_Y);
@@ -6418,15 +4961,12 @@ static int np_lyric_touch(void *ctx, void *event) {
               (unsigned)(y - st.np_tap_y + TAP_PX) <= 2 * TAP_PX;
     if (type == EVT_POINTER_DOWN) {
         st.np_tap_x = x, st.np_tap_y = y;
-        rearm(&st.np_line_timer, np_line_hold, RATE_HOLD_MS);
         return 0;
     }
-    if (type == EVT_POINTER_MOVE_BEFORE && tap) return 0;
-    stop_timer(&st.np_line_timer);
     st.np_tap_x = 1 << 20; /* used or taken for a swipe: a later lift is no tap */
     if (type == EVT_POINTER_ABORT) {
         if (st.np_full) np_full(0);
-    } else if (type == EVT_POINTER_UP_BEFORE && tap && (st.np_full || lyrics_on(st.np_lrc)))
+    } else if (tap && (st.np_full || lyrics_on(st.np_lrc)))
         np_full(!st.np_full);
     return 0;
 }
@@ -6449,7 +4989,6 @@ int ringnav_playing(void *win, void *ctx) {
         np_full(0); /* another Now Playing: the last one's lyrics back in their column */
     /* and their place: np_gone leaves a page this one replaces alone */
     st.lyric_held = 0;
-    stop_timer(&st.np_line_timer);
     int result = stock_playing_trampoline(win, ctx);
     if (!win) return result;
     rate_bind(win);
@@ -6479,8 +5018,7 @@ int ringnav_playing(void *win, void *ctx) {
     st.lyric_song = st.lyric_rows_song = np_track(); /* no song change at the start */
     lyric_init();                                    /* the rows stock's init built */
     void *lyric = widget_lookup(win, VIEW_LYRIC, 1);
-    static const unsigned touch[] = { EVT_POINTER_DOWN, EVT_POINTER_MOVE_BEFORE,
-                                      EVT_POINTER_UP_BEFORE, EVT_POINTER_ABORT };
+    static const unsigned touch[] = { EVT_POINTER_DOWN, EVT_POINTER_UP_BEFORE, EVT_POINTER_ABORT };
     for (unsigned i = 0; lyric && i < sizeof touch / sizeof *touch; ++i)
         widget_on(lyric, touch[i], np_lyric_touch, (void *)0);
     st.np_hash = 0;
@@ -6693,7 +5231,7 @@ static const char *ui_redirect(const char *name, char *buf) {
 }
 
 /* The value of group (G_PITCH, G_BODY, ...) in the set theme_boot wrote (st.geom). */
-static int geom(int group) { return boot_values[st.geom][group]; }
+int geom(int group) { return boot_values[st.geom][group]; }
 
 /* An A-B marker's x for point t (stock 0x52a268, from its three calls in the markers' placement:
  * AB_X_CALLS in tools/build.py), on the boot set's bar (the np_bar_x and np_bar_w immediates):
@@ -6713,24 +5251,12 @@ int ringnav_ab_x(int t) {
  * one; any opener comes through here. */
 extern void *stock_ui_load_trampoline(const char *name, void *parent);
 /* key: STYLE_KEY bytes. */
-#define STYLE_KEY 48
-static const char *style_key(char *key, const char *state, const char *name) {
+const char *style_key(char *key, const char *state, const char *name) {
     tk_snprintf(key, STYLE_KEY, "style:%s:%s", state, name);
     return key;
 }
-/* Classic's slider pages, one shape over stock's four windows: a dark bar (dark_bar_rows),
- * the page image, a band holding the slider between its ends, the caption. Only the painter reads
- * these tables. */
-static const stops_t slider_band = { 8,
-                                     { 0, 8, 22, 38, 49, 50, 92, 100 },
-                                     { 0x6a707a, 0x565c66, 0x464b54, 0x343840, 0x23262d, 0x0e1014,
-                                       0x0b0d11, 0x181b21 } },
-                     slider_track = { 4,
-                                      { 0, 40, 80, 100 },
-                                      { 0x2f4052, 0x42566a, 0x3b4d60, 0x26333f } },
-                     slider_lit = { 3, { 0, 45, 100 }, { 0xf7ffff, 0xeceeef, 0xc6cbcf } };
 /* The slider's value as a part of w px. */
-static int slider_part(void *s, int w) {
+int slider_part(void *s, int w) {
     int min = widget_get_prop_int(s, "min", 0), max = widget_get_prop_int(s, "max", 100);
     return max > min ? w * (widget_get_prop_int(s, "value", 0) - min) / (max - min) : 0;
 }
@@ -6785,7 +5311,7 @@ void text_ink(void *w, unsigned color, int n) {
     for (int i = 0; i < n; ++i)
         widget_set_prop_int(w, style_key(key, ink_state[i], "text_color"), (int)ink);
 }
-static void text_inks(void *w) {
+void text_inks(void *w) {
     int n = widget_get_prop_int(w, "_final_n", 0);
     if (n) text_ink(w, (unsigned)widget_get_prop_int(w, "_final", 0), n);
     for (int i = widget_count_children(w) - 1; i >= 0; --i) text_inks(widget_get_child(w, i));
@@ -6800,7 +5326,7 @@ void slider_label(void *w, int x, int y, int ww, int h, int px, const char *face
 }
 /* The value's label, on the pages that show one, in the face its text has. Shared with crossfade.c.
  */
-static const char *number_face(void *label, int *px) {
+const char *number_face(void *label, int *px) {
     *px = 32;
     const char *face = theme_face(widget_get_text(label), -1, px);
     return face ? face : "default";
@@ -6816,7 +5342,6 @@ static void time_open(void *win);
 static void time_paint(void *w, void *canvas);
 /* Stock's window as it loads, before its init. Every look-up it makes by name still finds its
  * widget: edit_key clicks img_dec and img_add, hidden here. */
-enum { SLIDER_LIGHT, SLIDER_MAX, SLIDER_BALANCE, SLIDER_BOOT }; /* st.slider_kind */
 static const __WCHAR_TYPE__ slider_caption[] = L"Press Centre When Finished";
 /* Crossfade's and Night Shift's Centre stays on the page (crossfade.c): what it does there. */
 void slider_centre_hint(void *page, int night) {
@@ -6887,7 +5412,7 @@ static void slider_open(void *win) {
     widget_on(c, EVT_CLICK, slider_switch_hit, win);
 }
 /* The Off and On tray on its shadow, the recessed track, the lit cell in the scheme's selection. */
-static void slider_switch(void *w, void *canvas, void *sw) {
+void slider_switch(void *w, void *canvas, void *sw) {
     static const unsigned off[] = { 'O', 'f', 'f' }, on[] = { 'O', 'n' };
     rect_t tray = { 125, 28, 125, 44 }, track = { 138, 37, 100, 26 };
     rect_t left = { 138, 37, 50, 26 }, right = { 188, 37, 50, 26 };
@@ -6930,7 +5455,7 @@ unsigned dark_bar_key(const unsigned *t) {
 }
 /* The dark bar's rows and its line, the last of h rows from y: the scheme's dark half in either
  * half, over the bar's own line, with no second one. Final colours. */
-static void dark_bar_rows(void *canvas, int y, int w, int h) {
+void dark_bar_rows(void *canvas, int y, int w, int h) {
     const theme_t *T = theme();
     const scheme_t *S = &T->schemes[*T->accent_slot];
     paint_stops(canvas, 0, y, w, h - 1, &S->bar);
@@ -6979,650 +5504,6 @@ int clock_minutes(void) {
     return tm ? tm[2] * 60 + tm[1] : -1;
 }
 
-/* Classic's T9 keyboard (stock's kb_default_t9, shared with the other themes, so nothing here
- * changes the asset): a ramp down its window, from screen row 60. Keys paint in the background hook
- * in place of stock's fill, and stock's text clears (the style hook). All colours are final. */
-static unsigned kb_ramp(int y) {
-    static const short rows[] = { 60, 62, 130, 190, 250, 320 };
-    static const unsigned rgb[] = { 0x8b93a0, 0x8b93a0, 0x7d8590, 0x6b7581, 0x535d69, 0x444e5a };
-    int k = 0;
-    while (k < 4 && y >= rows[k + 1]) ++k;
-    return mix(rgb[k], rgb[k + 1], y - rows[k], rows[k + 1] - rows[k]);
-}
-/* The ramp's screen rows y0 up to y1, where the canvas starts at screen row top. */
-static void paint_ramp(void *canvas, int y0, int y1, int top) {
-    for (int y = y0; y < y1; ++y) bar_rect(canvas, RGBA(kb_ramp(y)), 0, y - top, 375, 1);
-}
-/* A button of the keyboard's: its panel's page's row's. */
-static int kb_key(void *w) {
-    if (!st.kb_win || !w) return 0;
-    for (int i = 0; i < 4 && w; ++i) w = P(w, W_PARENT);
-    return w == st.kb_win;
-}
-static void kb_paint_key(void *w, void *canvas) {
-    static const stops_t plain = { 5,
-                                   { 0, 6, 45, 85, 100 },
-                                   { 0xfbfbfb, 0xf4f4f4, 0xeeeef0, 0xe3e4e6, 0xdadbdd } },
-                         function = { 4,
-                                      { 0, 8, 50, 100 },
-                                      { 0x9aa1a9, 0x8d939f, 0x7e8693, 0x6a7384 } },
-                         enter = { 3, { 0, 50, 100 }, { 0x7cb0ec, 0x3f7fdf, 0x1f5fc8 } };
-    static const unsigned done[] = { 'D', 'o', 'n', 'e', 0 },
-                          space_text[] = { 's', 'p', 'a', 'c', 'e', 0 };
-    void *lcd = P(canvas, CANVAS_LCD);
-    if (!lcd) return;
-    unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR);
-    const char *name = widget_get_prop_str(w, "name", "");
-    char c = name ? *name : 0; /* opt:, page:, key:, action, space, or the character itself */
-    int action = c == 'a', space = c == 's', fn = c == 'p' || c == 'k', white = action || fn;
-    int kw = I(w, W_W), kh = I(w, W_H);
-    rect_t r = { 0, 0, kw, kh }, ring = { -1, -1, kw + 2, kh + 2 }, down = { 0, 2, kw, kh };
-    round_ring(canvas, &ring, 7, 0x1f000000u);
-    /* the foot: the key's own last rows, two lower */
-    for (int i = 0; i < 2; ++i) round_row(canvas, &down, 6, kh - 2 + i, 0xcc282b30u);
-    paint_round_rows(canvas, &r, action ? &enter : fn ? &function : &plain, 6);
-    const unsigned *s = action ? done : space ? space_text : widget_get_text(w);
-    if (s && *s) {
-        unsigned n = wide_len(s);
-        int px = white || space ? 24 : 27, fpx = px;
-        const char *face = theme_face(s, (int)n, &fpx);
-        rect_t under = { 0, white ? -1 : 1, kw, kh };
-        final_text(canvas, face, s, &under, (unsigned)fpx, white ? 0x77000000u : 0xffffffffu);
-        final_text(canvas, face, s, &r, (unsigned)fpx,
-                   white   ? 0xffffffffu
-                   : space ? 0xff555555u
-                           : 0xff111111u);
-    } else {
-        paint_art(w, canvas, c == 'k' ? "classic_light_kb_del" : "classic_light_kb_shift",
-                  (kw - 22) / 2, (kh - 18) / 2);
-    }
-    stock_canvas_set_fill_color(canvas, fill);
-}
-/* The field's image: 15 px caps round a stretched column, the row under it included. */
-static void paint_field_plain(void *w, void *canvas, int x, int y, int fw) {
-    unsigned bitmap[64]; /* bitmap_t */
-    if (widget_load_image(w, "classic_light_field", bitmap)) return;
-    rect_t left = { 0, 0, 15, 31 }, mid = { 15, 0, 2, 31 }, right = { 17, 0, 15, 31 };
-    rect_t to_left = { x, y, 15, 31 }, to_mid = { x + 15, y, fw - 30, 31 },
-           to_right = { x + fw - 15, y, 15, 31 };
-    canvas_draw_image(canvas, bitmap, &left, &to_left);
-    canvas_draw_image(canvas, bitmap, &mid, &to_mid);
-    canvas_draw_image(canvas, bitmap, &right, &to_right);
-}
-/* ... with the glass in it. */
-static void paint_field(void *w, void *canvas, int x, int y, int fw) {
-    paint_field_plain(w, canvas, x, y, fw);
-    paint_art(w, canvas, "classic_light_field_glass", x + 10, y + 7);
-}
-/* Stock's search_edit is disabled, so it paints in that state, hint and query alike: the hint's
- * size (search_layout's) only while it's empty. Written once per change: this is on the paint. */
-static void search_hint(void *win) {
-    void *edit = widget_lookup(win, "search_edit", 1);
-    const unsigned *text = edit ? widget_get_text(edit) : (void *)0;
-    int px = text && *text ? 26 : st.kb_win ? 14 : 19;
-    char key[STYLE_KEY];
-    if (!edit || px == st.search_px) return;
-    st.search_px = px;
-    widget_set_prop_int(edit, style_key(key, "disable", "font_size"), px);
-}
-/* The search field's box and its children's: over the keyboard with the keyboard up, in the strip
- * with it down, where stock's toolbar hides and only the Return key goes back. The toolbar's return
- * is the chevron's tap. */
-static void search_layout(void *win, int keyboard) {
-    st.search_px = 0; /* search_hint's size follows the field */
-    void *nav = widget_lookup(win, "view_navbar", 1),
-         *item = widget_lookup(win, "list_item_search", 1),
-         *edit = widget_lookup(win, "search_edit", 1), *glass = widget_lookup(win, "img_search", 1);
-    int fw = keyboard ? 244 : 327;
-    if (nav) {
-        widget_set_visible(nav, keyboard, 0);
-        widget_set_enable(nav, keyboard);
-    }
-    if (item) widget_move_resize(item, keyboard ? 72 : 24, keyboard ? 15 : 33, fw, 30);
-    if (edit) {
-        /* Stock's hint, wider than either field at the typed text's 26: an empty field's own size,
-         * for its 38 characters in stock's face, 14.8 px across per px, in the fw - 32 left. */
-        static const char *const empty[] = { "empty", "empty_focus", "empty_over" };
-        char key[STYLE_KEY];
-        widget_move_resize(edit, 0, 0, fw, 30);
-        for (unsigned k = 0; k < sizeof empty / sizeof *empty; ++k)
-            widget_set_prop_int(edit, style_key(key, empty[k], "font_size"), keyboard ? 14 : 19);
-    }
-    if (glass) widget_move_resize(glass, 0, 0, 32, 30);
-    widget_invalidate_force(win, (void *)0);
-}
-static int kb_gone(void *win, void *event) {
-    if (win != st.kb_win) return 0;
-    st.kb_win = (void *)0;
-    if (st.search_win) search_layout(st.search_win, 0);
-    return 0;
-}
-static void kb_open(void *win) {
-    static const char *const state[] = { "normal", "disable", "focused" };
-    char key[STYLE_KEY];
-    void *cand = widget_lookup(win, "candidates", 1);
-    for (unsigned i = 0; cand && i < sizeof state / sizeof *state; ++i)
-        widget_set_prop_int(cand, style_key(key, state[i], "bg_color"), 0);
-    st.kb_win = win;
-    widget_on(win, EVT_DESTROY, kb_gone, win);
-    if (st.search_win) search_layout(st.search_win, 1);
-}
-static int search_gone(void *win, void *event) {
-    if (win == st.search_win) st.search_win = st.search_tabs = (void *)0;
-    return 0;
-}
-/* An edit clear, in the field's dark text, over paint_field's image, its text margin in from it. */
-static void search_field_margin(void *edit, int margin) {
-    static const char *const edit_state[] = { "normal", "focused",    "disable",
-                                              "error",  "empty",      "empty_focus",
-                                              "over",   "empty_over", "changed" };
-    char key[STYLE_KEY];
-    for (unsigned k = 0; k < sizeof edit_state / sizeof *edit_state; ++k) {
-        widget_set_prop_int(edit, style_key(key, edit_state[k], "bg_color"), 0);
-        widget_set_prop_int(edit, style_key(key, edit_state[k], "round_radius"), 0);
-        widget_set_prop_int(edit, style_key(key, edit_state[k], "margin_left"), margin);
-        widget_set_prop_int(edit, style_key(key, edit_state[k], "margin_top"), 0);
-        widget_set_prop_int(edit, style_key(key, edit_state[k], "margin_bottom"), 0);
-        widget_set_prop_int(edit, style_key(key, edit_state[k], "font_size"), 26);
-    }
-    text_ink(edit, 0xff111111u, INK_EDIT);
-}
-static void search_field_style(void *edit) { search_field_margin(edit, 32); }
-/* A hint too wide for the room at the typed text's 26 takes a size of its own; none under 12, the
- * smallest worth reading, however long a playlist's name.
- * ponytail: stock's face averages 0.39 px a character per px; a hint of wide letters can still cut.
- */
-static void field_tips(void *edit, const char *tips, int room) {
-    static const char *const empty[] = { "empty", "empty_focus", "empty_over" };
-    char key[STYLE_KEY];
-    int fit = room * 100 / (39 * (int)strlen(tips) + 1);
-    if (fit < 12) fit = 12;
-    widget_set_prop_str(edit, "tips", tips);
-    for (unsigned k = 0; fit < 26 && k < sizeof empty / sizeof *empty; ++k)
-        widget_set_prop_int(edit, style_key(key, empty[k], "font_size"), fit);
-}
-static int search_key(unsigned key);
-static int t9_gone(void *ctx, void *event) {
-    st.t9_page = st.t9_back = (void *)0;
-    return 0;
-}
-/* A search box alone on a page (peq.h edit_create), its keyboard about to open, with its hint;
- * under Classic Light, the keyboard's look. The page stays under the bar, unlike Search's
- * full-screen dialog, so the dark bar fills the strip between them and the bar says Search. The
- * box's foot clears T9's top, page y 30, so the keyboard doesn't move the page. Its hint has the
- * 212 px past the glass, as Search's does.
- */
-void t9_box(void *page, void *edit, const char *tips) {
-    widget_set_prop_str(edit, "tips", tips);
-    if (!classic_pages()) return;
-    void *title = text(page, 0, 0, 375, 28);
-    widget_set_text_utf8(title, "Search");
-    widget_set_name(title, PAGE_TITLE);
-    widget_set_visible(title, 0, 0);
-    st.t9_back = image_create(page, 30, 0, 40, 30); /* ringnav_touch takes its press */
-    widget_move_resize(edit, 72, 2, 244, 27);
-    search_field_style(edit);
-    field_tips(edit, tips, 212);
-    widget_on(edit, EVT_DESTROY, t9_gone, 0);
-    st.t9_page = page;
-}
-/* New Playlist and Rename, stock's dialogs as they load under Classic: the keyboard's page under
- * the status bar, which says what's asked, the white chevron over stock's Return, a field with no
- * glass, its hint a page's muted. Every name stock looks up stays. */
-static int pl_box_gone(void *win, void *event) {
-    if (win == st.pl_box) st.pl_box = (void *)0;
-    return 0;
-}
-/* Next pass: stock's init, which writes its own hint, has returned; the bar title stays until the
- * dialog goes, as bar_title_sync doesn't name a dialog. */
-static int pl_box_due(const void *info) {
-    (void)info;
-    static const char *const empty[] = { "empty", "empty_focus", "empty_over" };
-    char key[STYLE_KEY];
-    void *win = st.pl_box, *lists = P(p_deque_playlist, 0);
-    if (!win) return 0;
-    void *edit = widget_lookup(win, "ssedit", 1), *r = (void *)0;
-    const char *title = "New Playlist", *tips = "Playlist Name";
-    if (!edit) {
-        edit = widget_lookup(win, "edit", 1);
-        title = "Rename";
-        if (lists && (unsigned)I(PL_RENAME_ROW, 0) < deque_size(lists))
-            r = deque_at(lists, (unsigned)I(PL_RENAME_ROW, 0));
-        tips = r ? P(r, REC_TITLE) ?: title : title;
-    }
-    if (edit) {
-        field_tips(edit, tips, 214);
-        for (unsigned k = 0; k < sizeof empty / sizeof *empty; ++k)
-            widget_set_prop_int(edit, style_key(key, empty[k], "tips_text_color"),
-                                (int)RGBA(flip_if(ipod_light(), 0x6b6d6b)));
-    }
-    if (st.bar_title) {
-        widget_set_text_utf8(st.bar_title, title);
-        theme_font(st.bar_title, ROLE_BAR, FONT_ROW);
-        widget_invalidate_force(st.bar_title, (void *)0);
-    }
-    return 0;
-}
-static void pl_box_open(void *win) {
-    static const char *const state[] = { "normal", "pressed", "over", "disable", "focused" };
-    static const char *const prop_name[] = { "bg_color", "border_color", "round_radius" };
-    char key[STYLE_KEY];
-    void *item =
-             widget_lookup(win, "list_item_ssedit", 1) ?: widget_lookup(win, "list_item_edit", 1),
-         *edit = widget_lookup(win, "ssedit", 1) ?: widget_lookup(win, "edit", 1),
-         *back = widget_lookup(win, "img_return", 1);
-    if (!item || !edit || !back) return;
-    for (unsigned s = 0; s < sizeof state / sizeof *state; ++s)
-        for (unsigned k = 0; k < sizeof prop_name / sizeof *prop_name; ++k)
-            widget_set_prop_int(item, style_key(key, state[s], prop_name[k]), 0);
-    widget_move_resize(item, 72, 28, 244, 30);
-    widget_move_resize(edit, 0, 0, 244, 30);
-    search_field_margin(edit, 15);
-    widget_use_style(back, "default");
-    widget_move_resize(back, 30, 26, 42, 34);
-    st.pl_box = win;
-    widget_on(win, EVT_DESTROY, pl_box_gone, win);
-    timer_add(pl_box_due, (void *)0, 0);
-}
-/* The dialog's own paint, under its children; the bar goes after the page, as Search's. */
-static void pl_box_paint(void *w, void *canvas) {
-    void *lcd = P(canvas, CANVAS_LCD), *bar = *(void *const *)system_bar;
-    if (!lcd) return;
-    unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR);
-    for (int y = 0; y < 60; ++y)
-        bar_rect(canvas, RGBA(mix(0xb4bdc9, 0x8b93a0, y, 60)), 0, y, 375, 1);
-    paint_ramp(canvas, 60, 320, 0);
-    paint_art(w, canvas, "classic_light_kb_back", 43, 33);
-    paint_field_plain(w, canvas, 72, 28, 244);
-    if (bar) widget_paint(bar, canvas);
-    st.paint_w = w;
-    stock_canvas_set_fill_color(canvas, fill);
-}
-/* The history's top under Classic: the field (33 to 64), the strip's 7 rows above it and below. */
-#define SEARCH_HISTORY_Y 71
-/* The dialog as it loads, before its init: every name stock looks up stays. It covers the bar, so
- * it paints the bar (search_paint); it's at 0, 0, so these boxes are the screen's. */
-static void search_open(void *win) {
-    static const char *const tab_state[] = { "normal",
-                                             "pressed",
-                                             "over",
-                                             "disable",
-                                             "focused",
-                                             "normal_of_active",
-                                             "pressed_of_active",
-                                             "over_of_active",
-                                             "disable_of_active",
-                                             "focused_of_active" },
-                             *const tabs[] = { "btn_track", "btn_artist", "btn_album",
-                                               "btn_genre" },
-                             *const lists[] = { "scroll_view_track", "scroll_view_artist",
-                                                "scroll_view_album", "scroll_view_genre" },
-                             *const messages[] = { "label_track_msg", "label_artist_msg",
-                                                   "label_album_msg", "label_genre_msg",
-                                                   "label_tip" },
-                             *const label_state[] = { "normal", "disable", "focused" },
-                             *const full[] = { "view_album", "view_genre" };
-    char key[STYLE_KEY];
-    void *c, *control = widget_lookup(win, "tab_control", 1),
-             *group = widget_lookup(win, "tab_button_group", 1),
-             *pages = widget_lookup(win, "pages", 1);
-    if (!control || !group || !pages) return;
-    /* tab_control stays under the field, whose taps stock binds */
-    widget_move_resize(control, 0, 64, 375, 256);
-    widget_move_resize(group, 24, 7, 327, 30);
-    widget_set_self_layout_params(pages, "0", "44", "375", "212");
-    widget_move_resize(pages, 0, 44, 375, 212);
-    for (unsigned i = 0; i < sizeof full / sizeof *full; ++i)
-        if ((c = widget_lookup(win, full[i], 1))) widget_move_resize(c, 0, 0, 375, 212);
-    for (unsigned i = 0; i < sizeof tabs / sizeof *tabs; ++i) {
-        if (!(c = widget_lookup(win, tabs[i], 1))) continue;
-        widget_move_resize(c, (int)i * 327 / 4, 0, (int)(i + 1) * 327 / 4 - (int)i * 327 / 4, 30);
-        for (unsigned k = 0; k < sizeof tab_state / sizeof *tab_state; ++k) {
-            widget_set_prop_int(c, style_key(key, tab_state[k], "bg_color"), 0);
-            widget_set_prop_int(c, style_key(key, tab_state[k], "font_size"), 21);
-            widget_set_prop_str(c, style_key(key, tab_state[k], "font_name"), "classic-light");
-        }
-        text_ink(c, 0xffffffffu, INK_TAB);
-    }
-    if ((c = widget_lookup(win, "search_edit", 1))) search_field_style(c);
-    if ((c = widget_lookup(win, "img_search", 1))) image_base_set_image(c, "");
-    if ((c = widget_lookup(win, "img_return", 1))) { /* the chevron's tap: the ramp draws it */
-        widget_use_style(c, "default");
-        widget_move_resize(c, 30, 10, 40, 40);
-    }
-    for (unsigned i = 0; i < sizeof lists / sizeof *lists; ++i)
-        if ((c = widget_lookup(win, lists[i], 1)))
-            widget_set_prop_int(P(c, W_PARENT), "default_item_height", 52);
-    for (unsigned i = 0; i < sizeof messages / sizeof *messages; ++i)
-        if ((c = widget_lookup(win, messages[i], 1)))
-            for (unsigned k = 0; k < sizeof label_state / sizeof *label_state; ++k)
-                widget_set_prop_int(c, style_key(key, label_state[k], "font_size"), 15);
-    /* The history (its header, then the list where the rows go) and its tip show only while the
-     * tabs don't (search_results), so they sit in the tabs' place, right under the field's strip.
-     * Stock never moves them, and neither has a self_layout to put them back. */
-    if ((c = widget_lookup(win, "view", 1))) {
-        void *list = widget_lookup(c, "list_view", 1);
-        widget_move_resize(c, 0, SEARCH_HISTORY_Y, 375, 320 - SEARCH_HISTORY_Y);
-        if (list) widget_resize(list, 375, 320 - SEARCH_HISTORY_Y - 50);
-    }
-    if ((c = widget_lookup(win, "view_tip", 1)))
-        widget_move_resize(c, 0, SEARCH_HISTORY_Y, 375, 320 - SEARCH_HISTORY_Y);
-    st.search_win = win;
-    st.search_tabs = group;
-    widget_on(win, EVT_DESTROY, search_gone, win);
-    search_layout(win, 0);
-}
-/* Stock shows the tabs (tab_control, the group's parent) with results, else the history or its
- * tip (0x49bba4, 0x49d9a8). The strip, the field's and the tabs' with results, ends at 108; with
- * the history, the field's alone, SEARCH_HISTORY_Y, as far under the field as it starts above. */
-static int search_strip_end(void) {
-    return st.search_tabs && widget_get_visible(P(st.search_tabs, W_PARENT)) ? 108
-                                                                             : SEARCH_HISTORY_Y;
-}
-/* The dialog's own paint, under its children: the dark bar's rows behind the field. The bar goes
- * first: the window manager paints a dialog over it. With the keyboard up there's no bar. */
-static void search_paint(void *w, void *canvas) {
-    void *lcd = P(canvas, CANVAS_LCD), *bar = *(void *const *)system_bar;
-    if (!lcd) return;
-    unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR);
-    search_hint(w);
-    if (st.kb_win) {
-        dark_bar_rows(canvas, 0, 375, 60);
-        paint_art(w, canvas, "classic_light_kb_back", 42, 18);
-        paint_field(w, canvas, 72, 15, 244);
-    } else {
-        dark_bar_rows(canvas, 26, 375, search_strip_end() - 26);
-        paint_field(w, canvas, 24, 33, 327);
-        if (bar) widget_paint(bar, canvas);
-        st.paint_w = w;
-    }
-    stock_canvas_set_fill_color(canvas, fill);
-}
-/* Stock's init names the tabs from its translations (its widget_foreach's visitor, 0x49aef8:
- * search_track, songer, album, genre), which other pages' words share; the bin's words go back on
- * under the theme's dialog. */
-extern int stock_search_init_trampoline(void *win, void *ctx);
-int ringnav_search_init(void *win, void *ctx) {
-    static const __WCHAR_TYPE__ names[4][8] = { L"Songs", L"Artists", L"Albums", L"Genres" };
-    int result = stock_search_init_trampoline(win, ctx);
-    if (win == st.search_win)
-        for (unsigned i = 0, n = widget_count_children(st.search_tabs); i < n && i < 4; ++i)
-            widget_set_text(widget_get_child(st.search_tabs, i), (const unsigned *)names[i]);
-    return result;
-}
-/* The history's delete buttons, stock's: each row's X (s_btn_cancel_navbar) and the header's trash
- * (s_btn_delete_navbar). Their styles' opaque black border, unseen on stock's black, turns white in
- * Light Mode, a frame broken at its round corners over the selection: neither paints its border
- * (ringnav_paint). 1 the X, 2 the trash, else 0. */
-static int search_del(void *w) {
-    if (!w || !st.search_win || window_of(w) != st.search_win) return 0;
-    const char *s = widget_get_prop_str(w, "style", "");
-    return !tk_strcmp(s, "s_btn_cancel_navbar") ? 1 : !tk_strcmp(s, "s_btn_delete_navbar") ? 2 : 0;
-}
-/* The X in stock's image's place, the theme's own mark as paint_tick's: 3 px runs, 15 x 13, about a
- * row label's cap height, in the selection's text on the selected row, else the ink. */
-static void search_x(void *w, void *canvas) {
-    void *lcd = P(canvas, CANVAS_LCD);
-    if (!lcd) return;
-    const scheme_t *S = scheme();
-    unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR);
-    int x = I(w, W_W) / 2 - 7, y = I(w, W_H) / 2 - 6;
-    stock_canvas_set_fill_color(canvas, RGBA(painting_in(st.sel_accent) ? S->sel_text : S->ink));
-    for (int r = 0; r < 13; ++r) {
-        canvas_fill_rect(canvas, x + r, y + r, 3, 1);
-        if (r != 6) canvas_fill_rect(canvas, x + 12 - r, y + r, 3, 1);
-    }
-    stock_canvas_set_fill_color(canvas, fill);
-}
-/* The strip's row below it, over the rows. */
-static void search_over(void *w, void *canvas) {
-    if (!w || w != st.search_win || st.kb_win || !P(canvas, CANVAS_LCD)) return;
-    unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
-    scrub_row(canvas, 0x55000000u, 0, search_strip_end(), 375);
-    stock_canvas_set_fill_color(canvas, fill);
-}
-/* The tabs, in the group's coordinates: the choice control's track, the lit tab, the labels'
- * shadows under stock's labels. */
-static void search_tabs_paint(void *group, void *canvas) {
-    static const stops_t light = { 4,
-                                   { 0, 35, 70, 100 },
-                                   { 0x7b90a9, 0x8597ae, 0x8a9bb1, 0x8e9fb4 } };
-    void *lcd = P(canvas, CANVAS_LCD);
-    if (!lcd) return;
-    unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR);
-    int paper = ipod_light();
-    rect_t track = { 0, 0, 327, 30 };
-    row_below(canvas, &track, 6, paper ? 0xb0ffffffu : 0x29ffffffu);
-    paint_round_rows(canvas, &track, paper ? &light : &confirm_dark, 6);
-    if (paper)
-        round_row(canvas, &track, 6, 0, 0xff647ca0u);
-    else
-        inset_top(canvas, &track, 6, 0xaa);
-    round_ring(canvas, &track, 6, paper ? 0x1a000000u : 0x88000000u);
-    for (unsigned i = 0, n = widget_count_children(group); i < n && i < 4; ++i) {
-        void *tab = widget_get_child(group, i);
-        int x = (int)i * 327 / 4, w = (int)(i + 1) * 327 / 4 - x, fpx = 21;
-        const unsigned *s = widget_get_text(tab);
-        /* the lit tab fills its slot: rounded as the track at the track's ends, square beside
-         * the other tabs, so no track shows between them, and over the light row below the
-         * track, which under it read as a gap */
-        if (widget_get_prop_int(tab, "value", 0))
-            lit_rows(canvas, &(rect_t){ x, 0, w, 31 },
-                     (i ? 0 : ROUND_LEFT) | (i + 1 < n && i < 3 ? 0 : ROUND_RIGHT));
-        rect_t under = { x, -1, w, 30 };
-        text_shadow(canvas, theme_face(s, (int)wide_len(s), &fpx), s, &under, (unsigned)fpx, 0x4d);
-    }
-    stock_canvas_set_fill_color(canvas, fill);
-}
-
-/* The page, in the window's coordinates, under its children. */
-static void slider_paint(void *w, void *canvas) {
-    void *lcd = P(canvas, CANVAS_LCD), *s = st.slider_w, *sw = st.slider_sw;
-    if (!lcd) return;
-    unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR);
-    int maxvol = st.slider_kind == SLIDER_MAX, px;
-    void *number = widget_lookup(w, "label_balance", 1); /* stock writes its text after the load */
-    if (number && number_face(number, &px) != st.number_face) slider_number(number);
-    if (!sw && st.slider_kind == SLIDER_BOOT)
-        sw = st.slider_sw = widget_lookup(w, "img_bootswitch", 1);
-    paint_page(w, canvas, 0);
-    if (sw && widget_get_visible(sw)) slider_switch(w, canvas, sw);
-    if (widget_get_visible(
-            P(s, W_PARENT))) { /* stock hides it while Default Volume's switch is off */
-        rect_t band = { 28, 129, 322, 46 };
-        paint_art(w, canvas, "classic_light_band_shadow", 21, 124);
-        paint_round_rows(canvas, &band, &slider_band, 8);
-        paint_art(w, canvas, "classic_light_band_top", 28, 129);
-        paint_art(w, canvas, "classic_light_band_foot", 28, 167);
-        if (maxvol || (st.slider_kind == SLIDER_BOOT && !xfade_page(w))) {
-            paint_art(w, canvas, "classic_light_spk_quiet_w", 50, maxvol ? 139 : 145);
-            paint_art(w, canvas, "classic_light_spk_loud_w", 311, maxvol ? 139 : 145);
-        } else if (st.slider_kind == SLIDER_LIGHT) {
-            paint_art(w, canvas, "classic_light_sun_small", 48, 144);
-            paint_art(w, canvas, "classic_light_sun_big", 311, 141);
-        }
-        for (int i = 0; maxvol && i < 6; ++i) { /* a triangle at the fill's end, tip up */
-            int half = i ? i : 1;
-            bar_rect(canvas, 0xffffffffu, 81 + slider_part(s, 204) - half, 155 + i, 2 * half, 1);
-        }
-    }
-    text_shadow(canvas, "classic-light", (const unsigned *)st.slider_hint,
-                &(rect_t){ 0, 229, 375, 32 }, 31, 0x59);
-    stock_canvas_set_fill_color(canvas, fill);
-}
-/* ringnav_paint, after stock's slider: the bar's 8 rows over its own, inset a pixel at each end on
- * the first and last. */
-static void slider_scrub(void *w, void *canvas) {
-    if (!w || w != st.slider_w || !P(canvas, CANVAS_LCD)) return;
-    unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
-    int ww = I(w, W_W), part = slider_part(w, ww);
-    for (int j = 0; j < 8; ++j) {
-        int in = !j || j == 7;
-        bar_rect(canvas, RGBA(stops_row(&slider_track, j, 8)), in, 31 + j, ww - 2 * in, 1);
-    }
-    for (int j = 0; part > 2 && j < 8; ++j) {
-        int in = !j || j == 7;
-        bar_rect(canvas, RGBA(stops_row(&slider_lit, j, 8)), in, 31 + j, part - 2 * in, 1);
-    }
-    stock_canvas_set_fill_color(canvas, fill);
-}
-
-/* Classic's message screens, over stock's two windows: Update Local Music's dialog
- * (full-screen, so it paints its own bar) and USB mode's page. Screen rows; each window's own
- * origin is read when it paints. Only the painter reads these tables. */
-#define MSG_BAR_X 72
-#define MSG_BAR_Y 218
-#define MSG_BAR_W 229
-#define MSG_BAR_H 14
-static const stops_t msg_fill = { 12,
-                                  { 0, 8, 16, 25, 33, 42, 50, 58, 67, 75, 83, 100 },
-                                  { 0xf7ffff, 0xfcfdff, 0xf4f4f4, 0xedebec, 0xeae8e9, 0xe2e1df,
-                                    0xd5d4d2, 0xcbcac8, 0xc8c7c5, 0xc0c0c0, 0xbebfc1, 0xbdc1c4 } },
-                     msg_cancel = { 3, { 0, 30, 100 }, { 0x232c33, 0x3a434a, 0x333c43 } };
-static const unsigned char msg_track[MSG_BAR_H] = { 0x87, 0x5c, 0x4d, 0x3d, 0x3d, 0x3b, 0x3b,
-                                                    0x3b, 0x3b, 0x3b, 0x3b, 0x3b, 0x54, 0x54 };
-static int msg_gone(void *win, void *event) {
-    if (win == st.usb_win) st.usb_win = (void *)0;
-    if (win == st.msg_win) {
-        stop_timer(&st.msg_timer);
-        st.msg_win = (void *)0;
-    }
-    return 0;
-}
-/* Follows stock's label_msg, which it writes from the running count in the language's format, one
- * number, and which is hidden here: "312 of 704 songs" and the bar's part, held under its end until
- * the dialog closes. With no total to measure against (the first scan, a scan past it, a folder's
- * scan, or until msg_count answers) the line is stock's text and st.msg_part -1 hides the bar.
- * Whether anything changed. */
-static int msg_sync(void) {
-    char now[sizeof st.msg_seen], line[48];
-    *now = 0;
-    int answer = st.msg_counting;
-    if (answer > 1) { /* the total: read stock's text against it */
-        st.msg_total = answer - 3, st.msg_counting = 0, st.msg_seen[0] = 0;
-    }
-    if (!st.msg_seen[0]) { /* over stock's translation; runs in paints, so only if it differs */
-        widget_get_text_utf8(st.msg_btn, now, sizeof now);
-        if (tk_strcmp(now, "Cancel")) widget_set_text_utf8(st.msg_btn, "Cancel");
-        *now = 0;
-    }
-    widget_get_text_utf8(st.msg_src, now, sizeof now);
-    if (!tk_strcmp(now, st.msg_seen)) return 0;
-    tk_snprintf(st.msg_seen, sizeof st.msg_seen, "%s", now);
-    const char *p = now;
-    while (*p && (*p < '0' || *p > '9')) ++p;
-    int count = atoi(p), total = st.msg_total;
-    st.msg_part = -1;
-    if (*p && total && count <= total && *(volatile char *)SCAN_WHOLE == 1) {
-        st.msg_part = (short)(MSG_BAR_W * count / total);
-        if (st.msg_part > MSG_BAR_W * 99 / 100) st.msg_part = MSG_BAR_W * 99 / 100;
-        tk_snprintf(line, sizeof line, "%d of %d songs", count, total);
-        widget_set_text_utf8(st.msg_line, line);
-    } else
-        widget_set_text_utf8(st.msg_line, now);
-    return 1;
-}
-/* Stock's hidden label repaints nothing, so this does, at the rate stock writes it. */
-static int msg_poll(const void *info) {
-    (void)info;
-    if (msg_sync()) widget_invalidate_force(st.msg_win, &(rect_t){ 16, 188, 343, 45 });
-    return 8; /* RET_REPEAT */
-}
-int library_count(const char *sql);
-/* The songs before the scan, off the UI thread as coverflow.c's count_worker: a count, as a
- * 47,000-song library's rows are too many to hold beside the scan. Detached, as nothing may wait
- * for it when the dialog closes; msg_sync takes the answer. */
-static void *msg_count(void *unused) {
-    st.msg_counting = 3 + library_count("select count(*) from songtable");
-    return 0;
-}
-#define MSG_HEAD_PX 29
-#define MSG_HEAD_H 32 /* holds the font */
-#define MSG_LINE_PX 18
-/* Stock's window as it loads, before its init. Every look-up stock makes by name still finds its
- * widget, and btn_no keeps its binding. A cable can open USB's page over the scan's dialog, so each
- * has its own st. */
-static void msg_open(void *win) {
-    static const char *const hide[] = { "img_animation", "label_msg", "label_scanfolder",
-                                        "img_usbmode", "scrlabel_info" },
-                             *const state[] = { "normal", "pressed", "over", "disable", "focused" };
-    const char *name = widget_get_prop_str(win, "name", "");
-    char key[STYLE_KEY];
-    int scan = !tk_strcmp(name, "updatemusic_dialog");
-    void *c, *src = widget_lookup(win, "label_msg", 1), *btn = widget_lookup(win, "btn_no", 1);
-    if (scan ? !src || !btn : tk_strcmp(name, "usbmode_page") != 0) return;
-    for (unsigned i = 0; i < sizeof hide / sizeof *hide; ++i)
-        if ((c = widget_lookup(win, hide[i], 1))) widget_set_visible(c, 0, 0);
-    widget_on(win, EVT_DESTROY, msg_gone, win);
-    c = text(win, 16, 0, 343, 24);
-    widget_set_name(c, "msg_heading");
-    widget_set_text_utf8(c, scan ? "Updating Local Music" : "Connected");
-    slider_label(c, 16, 0, 343, MSG_HEAD_H, MSG_HEAD_PX, "classic-light");
-    c = text(win, 16, 0, 343, 20);
-    widget_set_name(c, "msg_line");
-    slider_label(c, 16, 0, 343, 20, MSG_LINE_PX, "default");
-    if (!scan) {
-        st.usb_win = win;
-        if (g_usbmode != 1) widget_set_text_utf8(c, "Eject before disconnecting");
-        return;
-    }
-    st.msg_win = win, st.msg_src = src, st.msg_btn = btn, st.msg_line = c;
-    widget_move_resize(btn, 127, 248, 121, 34);
-    for (unsigned i = 0; i < sizeof state / sizeof *state; ++i) {
-        widget_set_prop_int(btn, style_key(key, state[i], "bg_color"), 0);
-        widget_set_prop_str(btn, style_key(key, state[i], "font_name"), "classic-light");
-        widget_set_prop_int(btn, style_key(key, state[i], "font_size"), CONFIRM_CELL_PX);
-    }
-    text_ink(btn, 0xffffffffu, INK_BUTTON);
-    st.msg_seen[0] = 0, st.msg_part = -1, st.msg_total = 0;
-    if (st.msg_counting != 1) { /* one running answers this dialog too */
-        unsigned long thread;
-        st.msg_counting = 1; /* before it starts: it may answer before create returns */
-        if (pthread_create(&thread, 0, msg_count, 0))
-            st.msg_counting = 0;
-        else
-            pthread_detach(thread);
-    }
-    st.msg_timer = timer_add(msg_poll, (void *)0, 200);
-}
-/* Under the window's children. */
-static void msg_paint(void *w, void *canvas) {
-    static const unsigned update[] = { 'U', 'p', 'd', 'a', 't', 'e', ' ', 'L',
-                                       'i', 'b', 'r', 'a', 'r', 'y', 0 },
-                          q2pod[] = { 'Q', '2', ' ', 'P', 'o', 'd', 0 };
-    void *lcd = P(canvas, CANVAS_LCD);
-    if (!lcd) return;
-    unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR);
-    int scan = w == st.msg_win, dy = I(w, W_Y), head = scan ? 159 : 228, line = scan ? 188 : 255;
-    void *heading = widget_lookup(w, "msg_heading", 1), *below = widget_lookup(w, "msg_line", 1);
-    if (scan) msg_sync();
-    bar_place(heading, 16, head, 343, MSG_HEAD_H);
-    bar_place(below, 16, line, 343, 20);
-    paint_page(w, canvas, 26 - dy);
-    if (dy < 26) paint_dark_bar(w, canvas, scan ? update : q2pod, st.batt_key);
-    paint_art(w, canvas, scan ? "classic_light_orb_note" : "classic_light_orb_usb",
-              scan ? 129 : 122, (scan ? 38 : 67) - dy);
-    text_shadow(canvas, "classic-light", widget_get_text(heading),
-                &(rect_t){ 16, head + 1 - dy, 343, MSG_HEAD_H }, MSG_HEAD_PX, 0x59);
-    text_shadow(canvas, "default", widget_get_text(below), &(rect_t){ 16, line + 1 - dy, 343, 20 },
-                MSG_LINE_PX, 0x59);
-    if (scan) {
-        rect_t cancel = { 127, 248, 121, 34 };
-        /* the track's corners clip the fill, whose moving end is square */
-        for (int i = 0; st.msg_part >= 0 && i < MSG_BAR_H; ++i) {
-            int n = round_inset(7, i, MSG_BAR_H), x = MSG_BAR_X + n, y = MSG_BAR_Y + i,
-                end = MSG_BAR_X + MSG_BAR_W - n, to = MSG_BAR_X + st.msg_part;
-            scrub_row(canvas, (unsigned)msg_track[i] << 24, x, y, end - x);
-            if (to > end) to = end;
-            if (to > x) bar_rect(canvas, RGBA(stops_row(&msg_fill, i, MSG_BAR_H)), x, y, to - x, 1);
-        }
-        if (st.msg_part >= 0)
-            scrub_row(canvas, 0x14ffffffu, MSG_BAR_X + 7, MSG_BAR_Y + MSG_BAR_H, MSG_BAR_W - 14);
-        paint_round_rows(canvas, &cancel, &msg_cancel, 7);
-        row_below(canvas, &cancel, 7, 0x26ffffffu);
-    }
-    stock_canvas_set_fill_color(canvas, fill);
-}
 /* USB Storage's page, every theme: the computer's eject (SCSI START STOP UNIT, LoEj) closes the
  * card's LUN in the kernel's f_mass_storage, and its configfs file then reads empty. Once it has
  * read open, empty is the eject: the heading (Classic) or stock's line (scrlabel_info, which
@@ -7703,150 +5584,6 @@ int ringnav_bigcover(void *win, void *ctx) {
     bc_show();
     widget_on(win, EVT_DESTROY, bc_gone, win);
     return result;
-}
-
-/* A volume bar's end where the time it replaces sits: the speaker image name (tools/art.py) from x,
- * or ending at x when right, centred on bar's rows. */
-static void vol_end(void *top, void *canvas, const char *name, int x, int right,
-                    const rect_t *bar) {
-    unsigned bitmap[64]; /* bitmap_t: width @0, height @4 */
-    if (widget_load_image(top, name, bitmap)) return;
-    int w = (int)bitmap[0], h = (int)bitmap[1];
-    rect_t src = { 0, 0, w, h }, dst = { right ? x - w : x, bar->y + (bar->h - h) / 2, w, h };
-    canvas_draw_image(canvas, bitmap, &src, &dst);
-}
-
-/* Every VOL_POLL_MS while the dialog vol_paint drew is still on top: a changed volume repaints it
- * whole. Stock's own invalidation of the hidden slider does not reliably reach the screen, so the
- * bar would stop following the wheel after a tick or two. */
-static int vol_poll(const void *info) {
-    void *top = window_manager_get_top_window(window_manager());
-    void *vol = top && top == st.vol_dialog ? widget_lookup(top, VIEW_VOL, 1) : (void *)0;
-    if (!vol) {
-        st.vol_timer = 0;
-        st.vol_dialog = (void *)0;
-        return 0; /* RET_OK: removed */
-    }
-    if (widget_get_prop_int(vol, "value", 0) != st.vol_drawn)
-        widget_invalidate_force(top, (void *)0);
-    return 8; /* RET_REPEAT */
-}
-
-#define VOL_CL_X 28 /* Classic's panel: its ring and corners clear the glass */
-/* The volume, drawn by stock's dialog/volume_dialog itself: transparent and full-screen (its
- * dimming highlight removed at build time, tools/ipod.py), it opens on the wheel's volume and
- * sets its slider_vol. Over Now Playing, as on an iPod classic, the band from the progress bar to
- * the times turns black with a white bar over the track and "Volume N"; with Classic's times beside
- * its bar, the bar shows the volume between the iPod's speakers in the times' place (vol_end), no
- * number. Over any other window (Quick Settings included) a VOL_PANEL_* rounded panel in the
- * fast-scroll letter's style holds a pill bar and the number alone; Classic's, VOL_CL_X in, the
- * rows painter's gloss between two speakers. slider_vol and label_vol are
- * hidden, and slider_vol is moved onto the area drawn, so stock's partial repaints land on it;
- * vol_poll catches the changes those miss. */
-static void vol_paint(void *top, void *canvas) {
-    void *wm = window_manager(), *lcd = P(canvas, CANVAS_LCD);
-    if (!lcd || tk_strcmp(widget_get_prop_str(top, "name", ""), "volume_dialog")) return;
-#if M1PLUS /* V2.1's full VOLUME page (view_page2, tools/m1plus_ipod.py volume_dialog) draws itself */
-    void *strip = widget_lookup(top, "view_page1", 1);
-    if (strip && !widget_get_visible(strip)) return;
-#endif
-    unsigned n = widget_count_children(wm);
-    void *vol = widget_lookup(top, VIEW_VOL, 1), *label = widget_lookup(top, "label_vol", 1);
-    if (n < 2 || !vol) return;
-    int np = widget_get_child(wm, n - 2) == st.np_win && st.np_slider && st.np_elapsed;
-#if M1PLUS /* the band over Spotify's page too, which paints its bar (spot_paint): the Theme's line */
-    void *under = widget_get_child(wm, n - 2), *spot_bar = (void *)0, *spot_times = (void *)0;
-    int spot = spot_band(under, &spot_bar, &spot_times);
-    np = np || spot;
-#endif
-    const theme_t *T = theme();
-    int gloss = !np && T->painter[PAINT_VOLUME] == VOL_CLASSIC_LIGHT;
-    rect_t area, bar, text, lo, hi;
-    int beside = 0;
-    if (np) {
-#if M1PLUS /* Centred's V2.1 page: the times are above the bar, in the column under the gesture view */
-        void *win = spot ? under : st.np_win, *slider = spot ? spot_bar : st.np_slider, *times = spot ? spot_times : st.np_elapsed;
-        int dy = I(win, W_Y) - I(top, W_Y), y = dy, ty = dy,
-            bh = spot ? theme()->np_bar : widget_get_prop_int(slider, "bar_size", 8);
-        for (void *p = slider; p && p != win; p = P(p, W_PARENT)) y += I(p, W_Y);
-        for (void *p = times; p && p != win; p = P(p, W_PARENT)) ty += I(p, W_Y);
-        int from = y < ty ? y : ty, to = y + I(slider, W_H) > ty + I(times, W_H) ? y + I(slider, W_H) : ty + I(times, W_H);
-        area = (rect_t){ 0, from, I(win, W_W), to - from };
-        bar = (rect_t){ I(slider, W_X), y + (I(slider, W_H) - bh) / 2, I(slider, W_W), bh };
-        text = (rect_t){ 0, ty, area.w, I(times, W_H) };
-#else
-        void *slider = st.np_slider, *times = st.np_elapsed;
-        int dy = I(st.np_win, W_Y) - I(top, W_Y), y = dy + I(slider, W_Y),
-            bh = widget_get_prop_int(slider, "bar_size", 8), ty = dy + I(times, W_Y);
-        bar = (rect_t){ I(slider, W_X), y + (I(slider, W_H) - bh) / 2, I(slider, W_W), bh };
-        text = (rect_t){ 0, ty, I(st.np_win, W_W), I(times, W_H) };
-        area = (rect_t){ 0, y, text.w, ty + text.h - y };
-        /* Classic's times share the bar's rows: their boxes, and the bar with its reflection */
-        beside = np_beside();
-        if (beside) {
-            lo = (rect_t){ I(times, W_X), ty, I(times, W_W), text.h };
-            hi = (rect_t){ I(st.np_remain, W_X), dy + I(st.np_remain, W_Y), I(st.np_remain, W_W),
-                           I(st.np_remain, W_H) };
-            int end = bar.y + bh + SCRUB_REFLECT_ROWS;
-            area.y = ty < bar.y ? ty : bar.y;
-            area.h = (ty + text.h > end ? ty + text.h : end) - area.y;
-        }
-#endif
-    } else {
-        int ax = gloss ? VOL_CL_X : VOL_PANEL_X;
-        area = (rect_t){ ax, VOL_PANEL_Y, I(top, W_W) - 2 * ax, VOL_PANEL_H };
-        int x = area.x + VOL_PANEL_PAD, bw = area.w - 2 * VOL_PANEL_PAD - VOL_PANEL_TEXT;
-        bar = (rect_t){ x, area.y + (area.h - VOL_PANEL_BAR) / 2, bw, VOL_PANEL_BAR };
-        text = (rect_t){ x + bw, area.y, VOL_PANEL_TEXT, area.h };
-    }
-    if (I(vol, W_Y) != area.y) widget_move_resize(vol, area.x, area.y, area.w, area.h);
-    widget_set_visible(vol, 0, 0);
-    if (label) widget_set_visible(label, 0, 0);
-    int max = widget_get_prop_int(vol, "max", 100), level = widget_get_prop_int(vol, "value", 0);
-    st.vol_dialog = top;
-    st.vol_drawn = level;
-    if (!st.vol_timer) st.vol_timer = timer_add(vol_poll, (void *)0, VOL_POLL_MS);
-    unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR), s[12] = { 'V', 'o', 'l', 'u', 'm', 'e', ' ' },
-             k = np ? 7 : 0;
-    if (gloss) { /* no number */
-        int L = ipod_light(), bx = 68, bw = 243, y = 271;
-        paint_panel(top, canvas, &area, "classic_light_panel_shadow");
-        paint_rows_bar(canvas, bx, y, bw, 17, max > 0 ? bw * clamp_step(0, max, level) / max : 0);
-        paint_art(top, canvas, L ? "classic_light_spk_quiet_l" : "classic_light_spk_quiet_d", 52,
-                  y + 2);
-        paint_art(top, canvas, L ? "classic_light_spk_loud_l" : "classic_light_spk_loud_d", 317,
-                  y + 2);
-        stock_canvas_set_fill_color(canvas, fill);
-        return;
-    }
-    int w = max > 0 ? bar.w * clamp_step(0, max, level) / max : 0;
-    if (beside) { /* paper over the times alone; ponytail: the elapsed time's box also takes the
-                   * reflection's faint last rows (internals.md) */
-        canvas_set_fill_color(canvas, RGBA(0));
-        canvas_fill_rect(canvas, lo.x, lo.y, lo.w, lo.h);
-        canvas_fill_rect(canvas, hi.x, hi.y, hi.w, hi.h);
-    } else if (np) {
-        canvas_set_fill_color(canvas, RGBA(0));
-        canvas_fill_rect(canvas, area.x, area.y, area.w, area.h);
-    } else {
-        fill_box(canvas, &area, (LETTER_ALPHA << 24) | FILL_RGB, LETTER_RADIUS);
-    }
-    /* Pills, like the progress capsule: a non-zero fill is at least round, never a sliver. Over
-     * Classic's Now Playing, its own bar. */
-    if (!np || !ipod_bar(canvas, bar.x, bar.y, bar.w, w, 0)) {
-        fill_box(canvas, &bar, RGBA(np ? TRACK_COLOR : VOL_PANEL_TRACK), bar.h / 2);
-        rect_t on = { bar.x, bar.y, w < bar.h ? bar.h : w, bar.h };
-        /* Over Now Playing it is the progress bar's own: the accent's fill */
-        if (w) fill_box(canvas, &on, RGBA(np ? accent_tone(TONE_LIGHT) : 0xffffff), bar.h / 2);
-    }
-    stock_canvas_set_fill_color(canvas, fill);
-    if (beside) {
-        vol_end(top, canvas, "classic_light_vol_lo", lo.x + lo.w, 1, &bar);
-        vol_end(top, canvas, "classic_light_vol_hi", hi.x, 0, &bar);
-        return;
-    }
-    k += put_num(s + k, (unsigned)clamp_step(0, 999, level));
-    draw_centred(canvas, s, k, &text, np ? NP_TIMES_PX : VOL_PANEL_PX, 0xffffffff);
 }
 
 /* Both native album constructors use 110px square covers, with playing overlays either
@@ -8202,13 +5939,6 @@ void bar_title_sync(void *win) {
     static const unsigned none = 0;
     char s[256], now[256]; /* stock writes nothing unless all of it fits */
     const char *t = home_menu(win) ? coverflow_home_title() : (const char *)0;
-    /* Home's own list: the play state moves to the title's place (bar_state_sync), after this paint
-     */
-    if ((t == coverflow_home_name) != st.bar_home) {
-        st.bar_home = t == coverflow_home_name;
-        if (bar_state_sync((void *)0) && !st.bar_timer)
-            st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
-    }
     if (t)
         ;
     else if (win != st.title_win) {
@@ -8404,7 +6134,7 @@ int ringnav_paint_bg(void *w, void *canvas) {
  * (text_color, highlight_text_color) to the red tone, fills and borders to the light tone. The name
  * is only compared for a color that maps. */
 /* Resolve ancestry during painting: rebinding a pooled row never leaves a color override behind. */
-static int painting_in(void *row) {
+int painting_in(void *row) {
     for (void *w = st.paint_w; row && w; w = P(w, W_PARENT)) {
         if (w == row) return 1;
         if (w == st.sel_w) break;
@@ -8658,10 +6388,11 @@ int ringnav_image_add(void *manager, const char *name, void *bitmap) {
     if (s && !*s && tk_str_start_with(name, "menu_") && tk_strcmp(name, "menu_left") &&
         tk_strcmp(name, "menu_right"))
         s = (void *)0;
-    /* The images a BATT_CLASSIC_LIGHT theme generates (tools/art.py) are final, but for Sort's
-     * bars and the volume's speakers: marks on the paper, in the half's ink */
-    if (s && !*s && T->painter[PAINT_BATTERY] == BATT_CLASSIC_LIGHT &&
-        tk_str_start_with(name, "classic_light_") && tk_strcmp(name, "classic_light_sort_bars") &&
+    /* art_final, Classic Light's (tools/theme.py refuses it for another theme): its own images
+     * (tools/art.py) are final, but for Sort's bars and the volume's speakers: marks on the paper,
+     * in the half's ink */
+    if (s && !*s && T->art_final && tk_str_start_with(name, "classic_light_") &&
+        tk_strcmp(name, "classic_light_sort_bars") &&
         !tk_str_start_with(name, "classic_light_vol_"))
         s = (void *)0;
     /* Minimal: the codec badges (img_flac, img_mp3, ...: red with the name cut out) take the
@@ -8797,10 +6528,10 @@ int ringnav_image_add(void *manager, const char *name, void *bitmap) {
                     (unsigned char)((p[o[0]] * 299 + p[o[1]] * 587 + p[o[2]] * 114) / 1000);
         bitmap_unlock_buffer(bitmap);
     }
-    /* Under Classic's battery the codec badges in the half's ink (its monochrome marks):
+    /* An icons_badge_ink theme's codec badges (Classic's monochrome marks) in the half's ink:
      * every pixel that colour, alpha kept, final. */
     int mark = -1;
-    if (format < 4 && s && !*s && T->painter[PAINT_BATTERY] == BATT_CLASSIC_LIGHT)
+    if (format < 4 && s && !*s && T->icons_badge_ink)
         for (unsigned i = 0; i < sizeof codecs / sizeof *codecs; ++i)
             if (!tk_strcmp(name, codecs[i])) mark = (int)sc->ink;
     unsigned char *one = mark >= 0 ? bitmap_lock_buffer_for_write(bitmap) : (void *)0;
@@ -8979,11 +6710,11 @@ static int setting_click(void *ctx, void *event) {
     int *value = option_slot(T, i), was = *value;
     const char *key = option_key(T, i);
     /* Rockbox, Favorites, Shuffle, Rated Albums, Playlists, Artists, Albums, Games, Podcasts,
-     * Audiobooks */
+     * Audiobooks, Groovebox (skipped unless the card has it; Rockbox is always offered) */
 #if M1PLUS /* Favorites, Shuffle, Rated Albums, Artists, Albums: the rest aren't the M1's (shortcut()) */
-    static const int shortcut_next[] = { 3, 2, 3, 5, 1, 4, 3, 3, 3, 3 }; /* as 1.6.4: Rated Albums wraps to Artists */
+    static const int shortcut_next[] = { 3, 2, 3, 5, 1, 4, 3, 3, 3, 3, 3 }; /* as 1.6.4: Rated Albums wraps to Artists */
 #else
-    static const int shortcut_next[] = { 3, 2, 6, 5, 7, 4, 8, 1, 9, 0 };
+    static const int shortcut_next[] = { 3, 2, 6, 5, 7, 4, 8, 1, 9, SHORTCUT_GROOVEBOX, 0 };
 #endif
     _Static_assert(sizeof shortcut_next / sizeof *shortcut_next == SETTING_N_SHORTCUT,
                    "one per shortcut");
@@ -8991,9 +6722,11 @@ static int setting_click(void *ctx, void *event) {
      * own Classic Blue) */
     static const int accent_next[] = { 1, 2, 3, 4, 5, 6, 8, 0, MINIMAL_ACCENT };
     _Static_assert(sizeof accent_next / sizeof *accent_next == ACCENT_N, "one per ACCENTS row");
-    if (i == 4)
+    if (i == 4) {
         *value = shortcut_next[shortcut()];
-    else if (i) {
+        if (*value == SHORTCUT_GROOVEBOX && !groovebox_available())
+            *value = shortcut_next[SHORTCUT_GROOVEBOX];
+    } else if (i) {
         const option_t *o = option_of(T, i);
         unsigned mask = o && o->values ? o->values : ~0u;
         do
@@ -9583,7 +7316,7 @@ static int two_lines(void *row) {
 /* A row's text after its title, however deep stock nests it (view_artist): the meta role. A theme
  * with its own face there also takes it to stock's secondary grey, the theme's muted (a style's
  * white would read as black ink in Light Mode). */
-static void row_meta(void *w) {
+void row_meta(void *w) {
     const theme_t *T = theme();
     if (tk_strcmp(widget_get_type(w), "hscroll_label")) {
         for (unsigned i = 0;
@@ -9599,7 +7332,6 @@ static void row_meta(void *w) {
 
 /* Only audited ordinary row constructors install this per-instance layouter. Stock still
  * positions every child, skips hidden controls, and owns clone/destruction and text overflow. */
-static void pl_fit(void *button);
 static int compact_row_layout(void *layout, void *row) {
     void *text = (void *)0, *title = (void *)0;
     /* Classic's playlist rows hold their children in their own places: stock's layout has none */
@@ -10083,7 +7815,6 @@ enum {
     QA_CHAPTERS,
     QA_MORE
 };
-#define MCL(a) (*(volatile int *)(a))
 
 static char *play_key(void) {
     char *s = window_manager_get_input_device_status(window_manager());
@@ -10140,7 +7871,7 @@ static void *qm_list(void) {
                                       : P(p_deque_showlist, 0);
 }
 
-static void *qm_record(void) {
+void *qm_record(void) {
     if (st.qm_kind == QM_PLAYING) {
         unsigned at, n;
         void *r = queue_now(&at, &n), *q = P(mcl_pdeqplaylist, 0);
@@ -10165,7 +7896,7 @@ static void *qm_record(void) {
 
 /* The queue menu's album's album_id, 0 when not an album it rates: a Coverflow cover's, a Library
  * Albums row's (split as Coverflow's), an artist's albums tab row's (ringnav_artist_list). */
-static unsigned qm_album_id(void *r) {
+unsigned qm_album_id(void *r) {
     if (st.qm_kind == QM_COVERALBUM || (st.qm_kind == QM_ALBUM && st.qm_cls == CLASS_ALBUMS))
         return album_id(r);
     return st.qm_kind == QM_ALBUM && st.qm_cls == CLASS_ARTIST_ALBUMS && st.art_ids &&
@@ -10587,10 +8318,9 @@ int ringnav_badge(const char *path, char *out, int size) {
     tk_snprintf(out, (unsigned)size, "null");
     return 0;
 }
-static unsigned listen_key(void *r);
 /* A deque's songs by path and CUE start (listen_key), open addressing at most half full: slot j + 1
  * for record j, so a key's first record in deque order is met first. calloc'd, 0 if that fails. */
-static unsigned *rec_index(void *songs, unsigned *mask) {
+unsigned *rec_index(void *songs, unsigned *mask) {
     unsigned n = deque_size(songs), size = 2, *slot;
     while (size < 2 * n) size <<= 1;
     *mask = size - 1;
@@ -10605,7 +8335,7 @@ static unsigned *rec_index(void *songs, unsigned *mask) {
     return slot;
 }
 /* The first of rec_index's songs with r's path and CUE start, else 0. */
-static void *rec_find(void *songs, const unsigned *slot, unsigned mask, void *r) {
+void *rec_find(void *songs, const unsigned *slot, unsigned mask, void *r) {
     const char *path = P(r, REC_PATH);
     for (unsigned h = path ? listen_key(r) : 0; path && slot[h & mask]; ++h) {
         void *s = deque_at(songs, slot[h & mask] - 1);
@@ -10619,7 +8349,6 @@ static void *rec_find(void *songs, const unsigned *slot, unsigned mask, void *r)
  * file name and track number.
  * ponytail: the library is staged and indexed once per list load (O(library)) when any row is
  * untitled; keep an index across loads if that shows. */
-static int songs_unsorted(void *);
 static void fav_titles(void *list, int n) {
     void *songs = 0;
     unsigned mask = 0, *slot = 0;
@@ -10804,7 +8533,7 @@ void toast(const char *text) {
     --st.toasts;
 }
 
-static int all_songs(void *music) {
+int all_songs(void *music) {
     int saved = library_music;
     library_music = music != 0;
     int n = getAllMusic(0);
@@ -10815,7 +8544,7 @@ static int all_songs(void *music) {
 /* Shuffle does not need the expensive pinyin title sort; groups order their tracks themselves.
  * Non-zero music leaves audiobooks and podcasts out, as the Library's Artists and Albums
  * (MUSIC_WHERE). */
-static int songs_unsorted(void *music) {
+int songs_unsorted(void *music) {
     int saved = library_music;
     library_music = music != 0;
     int n = getAllMusic(3);
@@ -10823,75 +8552,15 @@ static int songs_unsorted(void *music) {
     return n;
 }
 
-/* Collection Shuffle is Shuffle Songs over the collection. */
-static int shuffle_play(void *all) {
-    int size = (int)deque_size(all);
-    if (size) {
-        int at = (int)rand_below((unsigned)size);
-        if (playback_keeps(all, at)) { /* not a pick of it: another song, or alone, Now Playing */
-            if (size == 1) {
-                playback_np();
-                return size;
-            }
-            at = (at + 1 + (int)rand_below((unsigned)size - 1)) % size;
-        }
-        int mode = playback_unshuffle();
-        playback_clear(); /* stock Shuffle keeps Shuffle Albums/Folders otherwise */
-        config_playmode(2, 1);
-        play_folder(all, at, 0xf001);
-        playback_shuffle(mode); /* an order Up Next can list; stock's shuffle stays the fallback */
-    }
-    return size;
-}
-
-static int shuffle_songs(void *ctx, void *event) {
-    int n;
-    void *all = staged(songs_unsorted, (void *)1, &n);
-    if (!shuffle_play(all)) toast("Update Local Music first");
-    deque_destroy(all);
-    return 0;
-}
-
-static int shuffle_groups(void *ctx, void *event) {
-    int n;
-    void *all = staged(songs_unsorted, (void *)1, &n);
-    if (!playback_groups(all, (int)(long)ctx))
-        toast(deque_size(all) ? "Too many songs to shuffle" : "Update Local Music first");
-    deque_destroy(all);
-    return 0;
-}
-
-/* Return and destroy for the payload's own pages, shared with Most Played; Return with
- * netupdate.c's Apps page. */
+/* Return for the payload's own pages; each passes page_open its own close. */
 int page_keyup(void *ctx, void *event) {
     if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
     navigator_back();
     return STOP;
 }
 
-static void ls_closed(void);
+/* The close of navigation.c's own pages: Chapters and Streaming's Configuration. */
 static int page_closed(void *ctx, void *event) {
-    if (ctx == st.rt_page) {
-        st.rt_page = 0;
-        if (st.rt_list) deque_destroy(st.rt_list);
-        st.rt_list = 0;
-        ls_closed();
-    }
-    if (ctx == st.rt_menu) st.rt_menu = 0;
-    if (ctx == st.mp_page) st.mp_page = 0;
-    if (ctx == st.td_page) {
-        st.td_page = 0;
-        st.td_asking = 0;
-        stop_timer(&st.td_timer);
-        if (st.td_list) deque_destroy(st.td_list);
-        st.td_list = 0;
-    }
-    if (ctx == st.sp_page) st.sp_page = 0;
-#if M1PLUS
-    if (ctx == st.lib_page) st.lib_page = 0;
-    if (ctx == st.stream_page) st.stream_page = 0;
-#endif
-    upnext_closed(ctx);
     if (ctx == st.ch_page) {
         st.ch_page = 0;
         if (st.ch && !st.ch->done)
@@ -10902,40 +8571,6 @@ static int page_closed(void *ctx, void *event) {
         }
     }
     if (ctx == st.sc_page) st.sc_page = 0, st.sc_armed = 0;
-    return 0;
-}
-
-/* The Library's Shuffle row opens these three actions on one page. A pick starts playback and
- * leaves the page open, as Most Played's rows do. Album and folder shuffles queue and group the
- * whole library, hence the note. */
-static int sp_pick(void *ctx, void *event) {
-    if ((long)ctx)
-        shuffle_groups((void *)((long)ctx - 1), 0);
-    else
-        shuffle_songs(0, 0);
-    return 0;
-}
-
-static int shuffle_menu(void *ctx, void *event) {
-    if (st.sp_page || !(st.sp_page = page_open("shuffle_page", page_closed, page_keyup))) return 0;
-    void *view = page_list(st.sp_page, st.sp_page, 0, "Shuffle", 3, 48);
-    page_row_detail(view, 0, "Shuffle Songs", 0, sp_pick);
-    page_row_detail(view, 1, "Shuffle Albums", 0, sp_pick);
-    page_row_detail(view, 2, "Shuffle Folders", 0, sp_pick);
-#if M1PLUS /* the Q2's 335 px ran past the 320 px screen: two centred lines in the screen's width */
-    void *note = label_create(st.sp_page, 20, 48 + 3 * LIB_PITCH + 10, UI_W - 40, 44); /* under the rows */
-    widget_use_style(note, STYLE_LABEL_WHITE18C);
-    label_set_line_wrap(note, 1);
-    widget_set_prop_int(note, "word_wrap", 1); /* between words: line_wrap alone split "shu/ffle" */
-#else
-    /* With the title in the bar: centred at the page's foot, its box clear of the glass. */
-    void *note = theme()->page_title_h ? text(st.sp_page, 20, 200, 335, 24)
-                                       : text(st.sp_page, 46, 262, 283, 24);
-#endif
-    widget_set_prop_int(note, "style:normal:text_color", (int)0xffaaaaaau);
-    widget_set_text_utf8(note, "Albums and folders take a moment to shuffle");
-    theme_font(note, ROLE_INFO, FONT_ROW);
-    widget_set_prop_int(note, "style:normal:font_size", 16);
     return 0;
 }
 
@@ -10954,7 +8589,7 @@ static int spot_at(unsigned key) {
     return 0;
 }
 
-static void plays_load(void) {
+void plays_load(void) {
     if (!st.plays_read) {
         st.plays_read = 1;
         BLOB_IO(PLAYS_FILE, st.plays, 0);
@@ -10963,93 +8598,11 @@ static void plays_load(void) {
 
 /* A play count's key: the path's hash, with a CUE track's start mixed in, since a CUE image's
  * tracks share one path. Never 0, which marks a free slot. */
-static unsigned listen_key(void *r) {
+unsigned listen_key(void *r) {
     unsigned key = fnv(FNV_SEED, P(r, REC_PATH));
     int cue = I(r, REC_CUE_START);
     if (cue) key = hash_bytes(key, (const unsigned char *)&cue, sizeof cue);
     return key | !key;
-}
-
-/* Most Played's row: the ranked list from that track, as a library (not folder) queue. */
-static int mp_play(void *ctx, void *event) {
-    play_folder(st.mp_list, (int)(long)ctx, 0xf001);
-    return 0;
-}
-
-/* The PLAYS_TOP most played of songs, their indices in idx, most played first and, among equal
- * counts, most recently counted first (the table keeps that order); returns how many. */
-static int mp_rank(void *songs, int *idx, unsigned *score) {
-    int top = 0, size = (int)deque_size(songs);
-    plays_load();
-    for (int i = 0; i < size; i++) {
-        unsigned key = listen_key(deque_at(songs, i)), c = 0;
-        for (int j = 0; j < PLAYS_SLOTS && !c; j++)
-            if (st.plays[j].key == key) c = st.plays[j].n * PLAYS_SLOTS + PLAYS_SLOTS - j;
-        if (!c || (top == PLAYS_TOP && score[top - 1] >= c)) continue;
-        int at = top < PLAYS_TOP ? top++ : PLAYS_TOP - 1;
-        for (; at > 0 && score[at - 1] < c; at--) score[at] = score[at - 1], idx[at] = idx[at - 1];
-        score[at] = c;
-        idx[at] = i;
-    }
-    return top;
-}
-
-/* Coverflow's Most Played order: every counted song's listens added to sum[album_of(song)], the
- * album's index in Coverflow's list (-1 none). One pass over the library. */
-void album_plays(int (*album_of)(void *), unsigned *sum) {
-    int n;
-    void *songs = staged(songs_unsorted, (void *)1, &n);
-    plays_load();
-    for (unsigned i = 0; i < deque_size(songs); i++) {
-        void *r = deque_at(songs, i);
-        unsigned key = listen_key(r), c = 0;
-        for (int j = 0; j < PLAYS_SLOTS && !c; j++)
-            if (st.plays[j].key == key) c = st.plays[j].n;
-        int a = c ? album_of(r) : -1;
-        if (a >= 0) sum[a] += c;
-    }
-    deque_destroy(songs);
-}
-
-/* Where key is among Most Played's tracks, -1 when not (or none are kept). */
-static int mp_find(unsigned key) {
-    for (unsigned i = 0; st.mp_list && i < deque_size(st.mp_list); i++)
-        if (listen_key(deque_at(st.mp_list, i)) == key) return (int)i;
-    return -1;
-}
-
-/* Most Played: a page of the PLAYS_TOP most played songs of the library. The whole library is read
- * only when nothing is kept; otherwise the kept tracks are ranked again.
- * ponytail: the first open after boot or a library change still reads every song, and a song first
- * counted from stock's folder browser shows without its artist until then (no library tags). */
-static int most_played(void *ctx, void *event) {
-    if (st.mp_page || !(st.mp_page = page_open("mostplayed_page", page_closed, page_keyup)))
-        return 0;
-    int n, idx[PLAYS_TOP];
-    unsigned score[PLAYS_TOP], gen = library_gen;
-    void *from = st.mp_list;
-    if (!from || st.mp_gen != gen) {
-        from = staged(songs_unsorted, (void *)1, &n);
-        st.mp_gen = gen;
-    }
-    int top = mp_rank(from, idx, score);
-    void *ranked = _create_deque("stSongInfo");
-    deque_init(ranked);
-    for (int i = 0; i < top; i++) _deque_push_back(ranked, deque_at(from, idx[i]));
-    if (st.mp_list && st.mp_list != from) deque_destroy(st.mp_list);
-    deque_destroy(from);
-    st.mp_list = ranked;
-    void *view = page_list_or(st.mp_page, st.mp_page, "Most Played", "No plays yet", top, 64);
-    char name[512], detail[300];
-    for (int i = 0; i < top; i++) { /* the artist, if tagged, and the play count, under the title */
-        void *t = deque_at(st.mp_list, (unsigned)i);
-        const char *artist = P(t, REC_ARTIST);
-        unsigned plays = (score[i] - 1) / PLAYS_SLOTS, a = artist && *artist;
-        tk_snprintf(detail, sizeof detail, a ? "%s · %u play%s" : "%s%u play%s", a ? artist : "",
-                    plays, plays == 1 ? "" : "s");
-        page_row_detail(view, i, track_name(name, sizeof name, t), detail, mp_play);
-    }
-    return 0;
 }
 
 /* Chapters are read only while this snapshot is open: an M4B's, or a spoken file's in any format
@@ -11154,155 +8707,6 @@ static void chapters_open(void *r) {
     page_list(st.ch_page, st.ch_page, 0, "Loading chapters…", 0, 64);
 }
 
-/* Songs on the card, played from it as a folder queue, without Wi-Fi: Tidal Downloads
- * (docs/internals.md#tidal-cache), Streaming's row listing tidal.c's complete downloads, and an
- * add-on's local rows (songs_open: q2-deezer's downloads). A folder lists its songs newest first,
- * or, an album's (q2-deezer's Artist/Album folders, their files "01 - Title [id].flac"), by name:
- * in track order. ponytail: newest download first, not last played; demo imports no utime to touch
- * a replay. */
-typedef struct {
-    long mtime;
-    void *r;
-} td_row;
-static int td_newer(const void *a, const void *b) {
-    long x = ((const td_row *)a)->mtime, y = ((const td_row *)b)->mtime;
-    return (y > x) - (y < x);
-}
-static int td_named(const void *a, const void *b) {
-    const char *x = P(((const td_row *)a)->r, REC_NAME), *y = P(((const td_row *)b)->r, REC_NAME);
-    return strcmp(x ? x : "", y ? y : "");
-}
-static int td_play(void *ctx, void *event) {
-    void *t = deque_at(st.td_list, (unsigned)(long)ctx);
-    if (t && !access(P(t, REC_PATH), 0)) play_folder(st.td_list, (int)(long)ctx, 0xf001);
-    return 0;
-}
-/* dir's songs, newest first (or, album, by name), a deque the caller destroys. */
-static void *card_songs(const char *dir, int album) {
-    int n = 0;
-    void *rows = staged(directory, (void *)dir, &n);
-    unsigned size = deque_size(rows), info[36];
-    td_row *v = calloc(size + 1, sizeof *v);
-    n = 0;
-    for (unsigned i = 0; v && i < size; i++) { /* songs only: .tmp, .part, folders aren't audio */
-        void *r = deque_at(rows, i);
-        if (I(r, REC_TYPE) == 8 && P(r, REC_PATH) && !__xstat(3, P(r, REC_PATH), info))
-            v[n++] = (td_row){ (long)info[16], r };
-    }
-    if (n) qsort(v, (unsigned)n, sizeof *v, album ? td_named : td_newer);
-    void *songs = _create_deque("stSongInfo");
-    deque_init(songs);
-    for (int i = 0; i < n; i++) _deque_push_back(songs, v[i].r);
-    free(v);
-    deque_destroy(rows);
-    return songs;
-}
-/* A card app's stream folder's songs in play order (addon.c stream_poll), a deque the caller
- * destroys. */
-void *app_album_songs(const char *dir) { return card_songs(dir, 1); }
-
-/* A song's label from its file: Tidal's after its "<id>-<quality> ", a card app's before a
- * trailing " [<id>]" (q2-deezer's, as OpenDeezer names them), either less its extension. */
-static void song_label(const char *f, int tidal, char *out, unsigned size) {
-    const char *sp = tidal && f ? strstr(f, " ") : 0;
-    tk_snprintf(out, size, "%s", sp ? sp + 1 : f ? f : "");
-    char *dot = strrchr(out, '.'), *id;
-    if (dot && dot != out) *dot = 0;
-    if (!tidal && (id = strrchr(out, '[')) && id > out + 1 && id[-1] == ' ' &&
-        id[strlen(id) - 1] == ']')
-        id[-1] = 0;
-}
-static int td_show(const void *unused);
-/* Clear All Downloads…, then on its confirmation Cancel or Remove (row 2: tidal_clear), each
- * through td_show, from a timer, as a row's click may not rebuild the list it is in. */
-static int td_clear(void *ctx, void *event) {
-    if (st.td_asking && (long)ctx == 2) tidal_clear();
-    st.td_asking = !st.td_asking;
-    rearm(&st.td_timer, td_show, 0);
-    return 0;
-}
-/* The page's songs, read again; Tidal's end with Clear All Downloads…, as Spotify's Storage
- * Management does. Returns the list. */
-static void *songs_rows(const char *dir, const char *title, int tidal, int album) {
-    if (st.td_list) deque_destroy(st.td_list);
-    st.td_list = card_songs(dir, album);
-    int n = (int)deque_size(st.td_list);
-    void *view =
-        page_list_or(st.td_page, st.td_page, title, "No downloads yet", n + (tidal && n), 48);
-    char name[256];
-    for (int i = 0; i < n; i++) {
-        song_label(P(deque_at(st.td_list, (unsigned)i), REC_NAME), tidal, name, sizeof name);
-        page_row_detail(view, i, name, 0, td_play);
-    }
-    if (tidal && n) page_row_detail(view, n, "Clear All Downloads…", 0, td_clear);
-    return view;
-}
-/* Clear All Downloads' confirmation in the list's place, as Spotify's Remove Downloads?, on Cancel;
- * or the list again, on its Clear row. */
-static int td_show(const void *unused) {
-    st.td_timer = 0;
-    if (!st.td_page) return 0;
-    unsigned n = deque_size(st.td_list);
-    if (!st.td_asking) {
-        void *view = songs_rows(TIDAL_DIR, "Tidal Downloads", 1, 0);
-        if ((n = deque_size(st.td_list))) ringnav_select(view, (int)n, (int)n + 1);
-        return 0;
-    }
-    char note[32];
-    tk_snprintf(note, sizeof note, n == 1 ? "%u track" : "%u tracks", n);
-    void *view = page_list(st.td_page, st.td_page, 0, "Remove Downloads?", 3, 64);
-    page_row_detail(view, 0, note, "Keeps settings", 0);
-    page_row_detail(view, 1, "Cancel", "", td_clear);
-    page_row_detail(view, 2, "Remove", "", td_clear);
-    ringnav_select(view, 1, 3);
-    return 0;
-}
-/* Return on the confirmation is its Cancel. */
-static int td_keyup(void *ctx, void *event) {
-    if (!st.td_asking || I(event, EVENT_KEY) != KEY_RETURN) return page_keyup(ctx, event);
-    td_clear((void *)1, event);
-    return STOP;
-}
-static int songs_page(const char *window, const char *dir, const char *title, int tidal,
-                      int album) {
-    if (st.td_page || !(st.td_page = page_open(window, page_closed, tidal ? td_keyup : page_keyup)))
-        return 0;
-    songs_rows(dir, title, tidal, album);
-    return 0;
-}
-static int tidal_downloads(void *ctx, void *event) {
-    (void)ctx, (void)event;
-    return songs_page("tidal_downloads", TIDAL_DIR, "Tidal Downloads", 1, 0);
-}
-/* A card app's local row (addon.c): a folder ("/" last) lists its songs; a song plays its folder
- * from it, as Tidal Downloads does. album: the folder is an album's, listed and played in track
- * order. */
-int songs_open(const char *path, const char *title, int album) {
-    char dir[256];
-    unsigned k = strlen(path);
-    if (!k || k >= sizeof dir) return 0;
-    tk_snprintf(dir, sizeof dir, "%s", path);
-    if (dir[k - 1] == '/') {
-        if (k > 1) dir[k - 1] = 0;
-        return songs_page("app_songs", dir, title, 0, album);
-    }
-    char *slash = strrchr(dir, '/');
-    if (!slash || slash == dir) return 0;
-    *slash = 0;
-    void *songs = card_songs(dir, album);
-    int at = -1;
-    for (unsigned i = 0; at < 0 && i < deque_size(songs); i++) {
-        const char *p = P(deque_at(songs, i), REC_PATH);
-        if (p && !strcmp(p, path)) at = (int)i;
-    }
-    if (at >= 0)
-        play_folder(songs, at, 0xf001); /* playing_page copies the queue at once */
-    else
-        toast("It isn't on the card any more");
-    deque_destroy(songs);
-    return 0;
-}
-
 /* Streaming's Configuration (docs/internals.md#streaming-configuration): Tidal's and Spotify's
  * cache caps, 512 MB to 8 GB, each kept in its folder's .cache-size as "<MB>M", librespot's
  * --cache-size-limit form, which the card's Spotify launcher reads when it starts librespot. Files,
@@ -11357,11 +8761,11 @@ static const char *svc(int i, int label) {
     if (i >= 2 && i < 2 + st.svc_n) return label ? addon_name(i - 2) : addon_id(i - 2);
     return svc_fixed[i < 2 ? i : i - st.svc_n][label];
 }
-static void svc_hidden(char *s) {
+void svc_hidden(char *s) {
     s[0] = 0; /* as root_read: a missing key leaves s alone */
     toolsReadConfig("/mnt/data/config.ini", "Q2POD", "STREAMHIDE", s, "");
 }
-static char *svc_find(char *hide, int i) {
+char *svc_find(char *hide, int i) {
     const char *key = svc(i, 0);
     return key ? csv_find(hide, key) : 0;
 }
@@ -11427,7 +8831,7 @@ static int sc_click(void *ctx, void *event) {
     return 0;
 }
 
-static int stream_config(void *ctx, void *event) {
+int stream_config(void *ctx, void *event) {
     if (st.sc_page || !(st.sc_page = page_open("streamconf_page", page_closed, page_keyup)))
         return 0;
     int n = SVC_FIXED + st.svc_n;
@@ -11448,933 +8852,6 @@ static int stream_config(void *ctx, void *event) {
 }
 
 #endif
-
-/* Ratings (docs/internals.md#ratings): 0 to 5 hearts a song. 5 is stock's My Fav, so Now Playing's
- * heart, the queue menu's Favourites rows and Loved stay one; 1 to 4 are kept here by listen_key,
- * its low three bits holding the hearts, read once into a table calloc'd on first use. */
-#define RATINGS_FILE "/mnt/data/ringnav-ratings"
-/* Albums keep 1 to 5 hearts apart from their songs, by coverflow.c's album_id: 5 is the album's
- * favourite, there being no stock one. */
-#define ALBUM_RATINGS_FILE "/mnt/data/ringnav-album-ratings"
-#define FAV_CLICK ((int (*)(void *, void *))FAV_CLICK_ADDR) /* Now Playing's heart (offsets.inc) */
-void ratings_copy_due(void);
-
-/* The songs' table, or with album the albums'. */
-static int rate_io(int album, int write) {
-    const char *f = album ? ALBUM_RATINGS_FILE : RATINGS_FILE;
-    const char *tmp = album ? ALBUM_RATINGS_FILE ".tmp" : RATINGS_FILE ".tmp";
-    return blob_io(f, tmp, album ? st.album_rates : st.rates, RATE_SLOTS * sizeof *st.rates, write);
-}
-static unsigned *rates(int album) {
-    unsigned **t = album ? &st.album_rates : &st.rates;
-    if (!*t && (*t = calloc(RATE_SLOTS, sizeof **t))) rate_io(album, 0);
-    return *t;
-}
-
-/* key's slot; with free, the first free one when it has none; -1 when neither. */
-static int rate_slot(int album, unsigned key, int free) {
-    unsigned *t = rates(album);
-    int empty = -1;
-    for (int i = 0; t && i < RATE_SLOTS; i++) {
-        if (t[i] && (t[i] ^ key) < 8) return i;
-        if (!t[i] && empty < 0) empty = i;
-    }
-    return free ? empty : -1;
-}
-
-/* The hearts kept for key, 1 to 4 for a song or 5 for an album, else 0 (a malformed slot too). */
-static int rate_kept(int album, unsigned key) {
-    int i = rate_slot(album, key, 0), n = i < 0 ? 0 : (int)(rates(album)[i] & 7);
-    return n <= 4 + album ? n : 0;
-}
-
-/* Keeps n hearts for key: a song's 1 to 4, none for 0 and 5 (My Fav's); an album's 1 to 5. 1 when
- * saved, 0 when the table is full, -1 when the file was not written (the slot then as it was). */
-static int rate_keep(int album, unsigned key, int n) {
-    int some = n > 0 && n < 5 + album, i = rate_slot(album, key, some);
-    if (i < 0) return !some;
-    unsigned *t = rates(album), old = t[i];
-    t[i] = some ? (key & ~7u) | (unsigned)n : 0;
-    if (rate_io(album, 1)) {
-        ratings_copy_due();
-        return 1;
-    }
-    t[i] = old;
-    return -1;
-}
-
-/* Report only failures from rate_keep. */
-static int rate_saved(int k) {
-    if (k <= 0) toast(k ? "Rating not saved" : "Ratings are full");
-    return k > 0;
-}
-
-/* The playing local track (the queue menu's types), or 0. */
-static void *rate_track(void) {
-    unsigned at, n, type = (unsigned)MCL(MCL_TYPE);
-    if (type != 1 && (type & 0xf000) != 0xf000) return (void *)0;
-    return queue_now(&at, &n);
-}
-
-/* "♥♥♥♡♡" for n hearts, in s (16 bytes). */
-static const char *hearts_text(char *s, int n) {
-    char *p = s;
-    for (int i = 0; i < 5; i++) p += tk_snprintf(p, 4, i < n ? "\xe2\x99\xa5" : "\xe2\x99\xa1");
-    return s;
-}
-
-/* A theme's glyph on w (tools/art.py): the half's image, set only on a change. */
-static void np_image(void *w, const char *glyph) {
-    char name[40];
-    tk_snprintf(name, sizeof name, "classic_light_%s_%s", glyph, ipod_light() ? "l" : "d");
-    if (w && tk_strcmp(widget_get_prop_str(w, "image", ""), name)) {
-        image_base_set_image(w, name);
-        widget_invalidate_force(w, (void *)0);
-    }
-}
-/* The badge on an empty heart: the playing track's 1-4 hearts, hidden for none and on a full heart
- * (My Fav, whatever was kept before). */
-static void rate_badge(void) {
-    if (!st.rate_badge) return;
-    void *r = rate_track();
-    int n = r ? rate_kept(0, listen_key(r)) : 0;
-#if M1PLUS
-    if (n && !tk_strcmp(widget_get_prop_str(st.rate_fav, "style", ""), STYLE_FAV)) n = 0;
-#else
-    if (n && !tk_strcmp(widget_get_prop_str(st.rate_fav, "image", ""), ICON_FAV)) n = 0;
-#endif
-    /* each set repaints the badge, and this runs every 500 ms: only a change (AWTK's "text" is
-     * a wide string widget_get_prop_str doesn't read) */
-    if (st.rate_shown == n + 1) return;
-    st.rate_shown = n + 1;
-    char s[4] = { (char)('0' + n) };
-    widget_set_text_utf8(st.rate_badge, s);
-    widget_set_visible(st.rate_badge, n != 0, 0);
-}
-
-static int rate_tick(const void *unused) {
-    if (g_backlight_status) rate_badge();
-    return 8; /* RET_REPEAT */
-}
-
-static int rate_tap(void *ctx, void *event);
-static int rate_out(void *ctx, void *event);
-/* The picker goes down with its page or panel (Coverflow's load destroys the page's children). */
-static int rate_panel_gone(void *win, void *event) {
-    if (win == st.rate_on) st.rate_on = (void *)0;
-    st.rate_box = (void *)0; /* rate_panel names it again */
-    return 0;
-}
-/* The picker on win, made on first use: a dark rounded panel, its caption, then five of the
- * heart's own images. */
-static void *rate_panel(void *win) {
-    void *panel = widget_lookup(win, "rate_panel", 0);
-    /* Classic's panel paints itself (ringnav_paint_bg) */
-    int gloss = classic_pages();
-    if (panel) {
-        if (gloss) st.rate_box = panel;
-        return panel;
-    }
-    int h = 110, w = 5 * 56 + 24;
-    /* Classic's widget also holds the panel's ring and soft shadow, so they repaint with it
-     */
-    int mx = gloss ? PANEL_PAD : 0, my = gloss ? PANEL_PAD - PANEL_DROP : 0;
-    if (gloss) { /* under the panel, over the page: a tap outside leaves it as Return does */
-        void *out = image_create(win, 0, 0, I(win, W_W), I(win, W_H));
-        widget_set_name(out, "rate_out");
-        widget_set_prop_str(out, "clickable", "true");
-        widget_on(out, EVT_CLICK, rate_out, (void *)0);
-    }
-    panel =
-        text(win, (I(win, W_W) - w) / 2 - mx, (I(win, W_H) - h) / 2 - my, w + 2 * mx, h + 2 * mx);
-    widget_set_name(panel, "rate_panel");
-    if (gloss) {
-        st.rate_box = panel;
-        widget_set_prop_int(panel, "style:normal:bg_color", 0);
-    } else {
-        widget_set_prop_int(panel, "style:normal:bg_color",
-                            (int)(0xff000000u | FILL_RGB)); /* opaque */
-        widget_set_prop_int(panel, "style:normal:round_radius", LETTER_RADIUS);
-    }
-    void *caption = text(panel, mx, my + 8, w, 28);
-    if (gloss) { /* the ink, which Light Mode's style hook flips back */
-        widget_set_prop_int(caption, "style:normal:text_color",
-                            (int)RGBA(flip_if(ipod_light(), scheme()->ink)));
-        widget_set_prop_str(caption, "style:normal:font_name", "classic-light");
-        widget_set_prop_int(caption, "style:normal:font_size", 22);
-    }
-    for (int i = 0; i < 5; i++) {
-        /* centred in it, Classic's 32 x 30 heart starts 58 down the panel */
-        void *heart = image_create(panel, mx + 12 + i * 56, my + 44 + gloss, 56, 56);
-        image_set_draw_type(heart, IMAGE_DRAW_CENTER);
-        widget_set_prop_str(heart, "clickable", "true");
-        widget_on(heart, EVT_CLICK, rate_tap, (void *)(long)(i + 1));
-    }
-    widget_on(panel, EVT_DESTROY, rate_panel_gone, win);
-    widget_on(win, EVT_DESTROY, rate_panel_gone, win);
-    return panel;
-}
-
-/* The picker's hearts and caption for rate_pick. */
-static void rate_paint(void) {
-    void *panel = rate_panel(st.rate_on);
-    char t[24] = "Unrated";
-    int gloss = classic_pages();
-    for (int i = 0; i < 5; i++) {
-        void *heart = widget_get_child(panel, (unsigned)i + 1);
-        if (gloss)
-            np_image(heart, i < st.rate_pick ? "heart_on" : "heart_off");
-        else
-            image_base_set_image(heart, i < st.rate_pick ? ICON_FAV : ICON_UNFAV);
-    }
-    if (st.rate_pick)
-        tk_snprintf(t, sizeof t,
-                    !gloss              ? "%d of 5"
-                    : st.rate_pick == 1 ? "1 Heart"
-                                        : "%d Hearts",
-                    st.rate_pick);
-    widget_set_text_utf8(widget_get_child(panel, 0), t);
-}
-
-/* What's under the picker takes a touch again, or doesn't. */
-static void rate_outside(void *win, int on) {
-    void *out = widget_lookup(win, "rate_out", 0);
-    if (!out) return;
-    widget_set_visible(out, on, 0);
-    widget_set_sensitive(out, on);
-}
-
-/* Closes the picker, and with save rates rate_pick: an album (rate_album) if still Coverflow's
- * centre card, else the playing track, My Fav in or out through the heart's own click and the
- * rest kept here. */
-static void rate_close(int save) {
-    void *win = st.rate_on;
-    if (!win) return;
-    st.rate_on = (void *)0;
-    void *panel = rate_panel(win);
-    widget_set_visible(panel, 0, 0);
-    widget_set_sensitive(panel, 0); /* stock's hit test skips only the insensitive, hidden or not */
-    rate_outside(win, 0);
-    int n = st.rate_pick;
-    if (save && st.rate_album) { /* the menu's album, still on its page */
-        void *a = window_manager_get_top_window(window_manager()) == win ? qm_record() : (void *)0;
-        if (!a || qm_album_id(a) != st.rate_album) {
-            toast("Album changed");
-            return;
-        }
-        rate_saved(rate_keep(1, st.rate_album, n));
-        return;
-    }
-    void *r = save ? rate_track() : (void *)0;
-    if (!r) return;
-    int fav = checkFavExist(r) != 0;
-    if (!rate_saved(rate_keep(0, listen_key(r), n))) return;
-#if M1PLUS /* V2.1's click takes the heart from the event */
-    void *click[8] = { (void *)EVT_CLICK };
-    click[EVENT_TARGET / 4] = st.rate_fav;
-    if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, click), ratings_copy_due();
-#else
-    if ((n == 5) != fav) FAV_CLICK(st.rate_ctx, (void *)0), ratings_copy_due();
-#endif
-    rate_badge();
-}
-
-static int rate_tap(void *ctx, void *event) {
-    st.rate_pick = (int)(long)ctx;
-    rate_close(1);
-    return STOP;
-}
-static int rate_out(void *ctx, void *event) {
-    rate_close(0);
-    return STOP;
-}
-
-/* The picker over win on pick hearts, for the queue menu's album album or, with 0, the playing
- * track: the wheel moves the rating, Centre saves it and Return leaves it as it was; a tap on a
- * heart saves that many. */
-static int rate_show(void *win, int pick, unsigned album) {
-    if (!win || st.rate_on) return 0;
-    st.rate_on = win;
-    st.rate_pick = pick;
-    st.rate_album = album;
-    rate_paint();
-    void *panel = rate_panel(win);
-    widget_set_visible(panel, 1, 0);
-    widget_set_sensitive(panel, 1);
-    rate_outside(win, 1);
-    return 1;
-}
-/* Now Playing's, on the playing track's rating. */
-static int rate_open(void) {
-    void *r = rate_track();
-    return r && rate_show(st.rate_win, checkFavExist(r) ? 5 : rate_kept(0, listen_key(r)), 0);
-}
-
-/* The wheel, Centre and Return while the picker is up. */
-static int rate_key(void *top, unsigned key) {
-    if (!st.rate_on || top != st.rate_on) return 0;
-    if (key == KEY_NEXT || key == KEY_PREV) {
-        st.rate_pick = clamp_step(st.rate_pick, 5, key == KEY_NEXT ? 1 : -1);
-        rate_paint();
-    } else if (key == KEY_CENTER || key == KEY_RETURN)
-        rate_close(key == KEY_CENTER);
-    else
-        return 0;
-    drop_input();
-    return 1;
-}
-
-/* Holding the heart RATE_HOLD_MS opens the picker; a tap is stock's, a full heart then keeping
- * nothing here, so taking it away leaves the song unrated. The picker aborts the press, so the
- * slide_view under the heart lets go of its grab and the picker takes the next touch. */
-static int rate_long(const void *unused) {
-    st.rate_hold = 0;
-    if (!pointer_down() || !(st.rate_held = rate_open())) return 0;
-    unsigned abort_event[12];
-    pointer_event_init(abort_event, EVT_POINTER_ABORT, st.rate_win, 0, 0);
-    widget_dispatch_event_to_target_recursive(st.rate_win, abort_event);
-    return 0;
-}
-static int rate_down(void *ctx, void *event) {
-    st.rate_held = 0;
-    rearm(&st.rate_hold, rate_long, RATE_HOLD_MS);
-    return 0;
-}
-/* Returns 0 as stock's does: a STOP skips the slide_view's own release, and it keeps its grab. */
-static int rate_fav_click(void *ctx, void *event) {
-    stop_timer(&st.rate_hold);
-    if (st.rate_held || st.rate_on) {
-        st.rate_held = 0;
-        return 0;
-    }
-    FAV_CLICK(ctx, event);
-    ratings_copy_due();
-    void *r = rate_track();
-    if (r) rate_keep(0, listen_key(r), 0);
-    rate_badge();
-    return 0;
-}
-
-static int rate_gone(void *win, void *event) {
-    if (win != st.rate_win) return 0;
-    stop_timer(&st.rate_hold);
-    stop_timer(&st.rate_tick);
-    st.rate_win = st.rate_fav = st.rate_ctx = st.rate_badge = (void *)0;
-    st.rate_held = 0;
-    return 0;
-}
-
-/* Now Playing's heart (playing_page_init): stock's click is swapped for one that
- * tells a hold from a tap, and the badge sits on the heart's top right. */
-static void rate_bind(void *win) {
-    void *fav = widget_lookup(win, VIEW_FAV, 1), *emitter = fav ? P(fav, W_EMITTER) : (void *)0;
-    stop_timer(&st.rate_tick);
-    stop_timer(&st.rate_hold);
-    st.rate_ctx = (void *)0;
-    for (void *item = emitter ? P(emitter, 0) : 0; item; item = P(item, EMIT_NEXT))
-        if (I(item, EMIT_TYPE) == EVT_CLICK && P(item, 12) == (void *)FAV_CLICK &&
-            !B(item, EMIT_PENDING_REMOVE)) {
-            st.rate_ctx = P(item, 0);
-            break;
-        }
-    if (!st.rate_ctx) return;
-    st.rate_win = win;
-    st.rate_fav = fav;
-    widget_off_by_func(fav, EVT_CLICK, (void *)FAV_CLICK, st.rate_ctx);
-    widget_on(fav, EVT_CLICK, rate_fav_click, st.rate_ctx);
-    widget_on(fav, EVT_POINTER_DOWN, rate_down, (void *)0);
-    st.rate_badge = label(P(fav, W_PARENT), I(fav, W_X) + I(fav, W_W) - 18, I(fav, W_Y) + 6, 16, 16,
-                          STYLE_SCRLABEL_WHITE20C, 12, 0xffffffffu);
-    widget_set_sensitive(st.rate_badge, 0); /* the heart's corner stays the heart's */
-    st.rate_shown = 0;
-    widget_on(win, EVT_DESTROY, rate_gone, win);
-    st.rate_tick = timer_add(rate_tick, (void *)0, 500);
-    rate_badge();
-}
-
-/* The Library's Ratings row: its menu, then a page of one list's songs, as Most Played's. */
-static int fav_songs(void *unused) {
-    return getAllFav(); /* select * from myfav, stock's song rows */
-}
-
-static int rt_play(void *ctx, void *event) {
-    play_folder(st.rt_list, (int)(long)ctx, 0xf001);
-    return 0;
-}
-
-/* Each of songs' hearts into h: 5 for My Fav's, else the kept 1-4.
- * ponytail: every song against every rated one, fine for thousands rated; a sorted table if not. */
-static void rate_all(void *songs, unsigned char *h) {
-    int nf, kept = 0;
-    void *favs = staged(fav_songs, 0, &nf);
-    unsigned nfav = deque_size(favs), n = deque_size(songs), *t = rates(0);
-    unsigned *keys = calloc(nfav + RATE_SLOTS + 1, sizeof *keys);
-    for (unsigned i = 0; keys && i < nfav; i++) keys[i] = listen_key(deque_at(favs, i)) | 7;
-    for (int i = 0; keys && t && i < RATE_SLOTS; i++)
-        if (t[i]) keys[nfav + kept++] = t[i];
-    for (unsigned i = 0; keys && i < n; i++) {
-        unsigned key = listen_key(deque_at(songs, i));
-        h[i] = 0;
-        for (unsigned j = 0; j < nfav + (unsigned)kept && h[i] < 5; j++)
-            if ((keys[j] ^ key) < 8) h[i] = j < nfav ? 5 : (unsigned char)(keys[j] & 7);
-    }
-    free(keys);
-    deque_destroy(favs);
-}
-
-/* Top Rated (4-5 hearts), Loved (5), All Rated (1-5) and Disliked (1): most hearts first, then
- * the library's title order, each row's hearts under its title. */
-static const char *const rt_names[] = { "Top Rated", "Loved", "All Rated", "Disliked" };
-#define RT_ALBUMS 2 /* the Ratings menu's Albums row, after Loved */
-static int rated_open(void *ctx, void *event) {
-    static const unsigned char lo[] = { 4, 5, 1, 1 }, hi[] = { 5, 5, 5, 1 };
-    int k = (int)(long)ctx - ((int)(long)ctx > RT_ALBUMS), n;
-    if (st.rt_page || !(st.rt_page = page_open("rated_page", page_closed, page_keyup))) return 0;
-    void *songs = staged(all_songs, 0, &n), *list = _create_deque("stSongInfo");
-    unsigned size = deque_size(songs);
-    unsigned char *h = calloc(size + 1, 1), *of = calloc(size + 1, 1);
-    deque_init(list);
-    if (h && of) {
-        rate_all(songs, h);
-        for (int v = hi[k]; v >= lo[k]; v--)
-            for (unsigned i = 0; i < size; i++)
-                if (h[i] == v)
-                    of[deque_size(list)] = (unsigned char)v,
-                    _deque_push_back(list, deque_at(songs, i));
-    }
-    st.rt_list = list;
-    deque_destroy(songs);
-    int count = (int)deque_size(list);
-    void *view = page_list(st.rt_page, st.rt_page, 0, rt_names[k], count ? count : 1, 64);
-    char name[512], detail[300], hs[16];
-    for (int i = 0; i < count; i++) {
-        void *t = deque_at(list, (unsigned)i);
-        const char *artist = P(t, REC_ARTIST);
-        tk_snprintf(detail, sizeof detail, artist && *artist ? "%s · %s" : "%s%s",
-                    hearts_text(hs, of[i]), artist && *artist ? artist : "");
-        page_row_detail(view, i, track_name(name, sizeof name, t), detail, rt_play);
-    }
-    if (!count)
-        page_row_detail(view, 0, "No songs yet", "Hold the heart on Now Playing to rate", 0);
-    free(h);
-    free(of);
-    return 0;
-}
-
-/* Albums: the rated albums as Coverflow (coverflow_rated), by most hearts unless sorted. */
-extern int coverflow_rated(int (*hearts)(void *));
-static int album_hearts(void *r) { return rate_kept(1, album_id(r)); }
-static int rated_albums(void *ctx, void *event) {
-    if (!coverflow_rated(album_hearts)) toast("No rated albums yet");
-    return 0;
-}
-
-/* The songs' best first, then the albums, then the songs' lists to tidy. */
-static int ratings_menu(void *ctx, void *event) {
-    if (st.rt_menu || !(st.rt_menu = page_open("ratings_page", page_closed, page_keyup))) return 0;
-    void *view = page_list(st.rt_menu, st.rt_menu, 0, "Ratings", 5, 48);
-    for (int i = 0; i < 5; i++)
-        page_row_into(view, i, i == RT_ALBUMS ? "Albums" : rt_names[i - (i > RT_ALBUMS)],
-                      i == RT_ALBUMS ? rated_albums : rated_open);
-    return 0;
-}
-
-/* Era (docs/internals.md#era): a row per decade with dated music, oldest first, and a decade's
- * albums by year. An album's year is its tracks' latest, as Coverflow's Year sort; undated albums
- * and the untagged have none. ponytail: decades only, no year level or covers, and the album rows
- * have no hold menu; a year page, or the decade as a scoped Coverflow, if asked for. */
-#define ERA_DECADES 32
-#define ERA_ALBUMS                                                                                 \
-    "select album,ifnull(nullif(albumsonger,''),songer)," ALBUM_YEAR                               \
-    " as release_year," ALBUM_TRACK " from songtable "                                             \
-    "where " MUSIC_WHERE " and ifnull(album,'')<>''" ALBUM_GROUP
-typedef struct {
-    char *album, *artist, *path;
-    int year;
-} era_t;
-static struct {
-    void *page, *albums; /* the decades page, a decade's page */
-    int decade[ERA_DECADES], count[ERA_DECADES], n;
-    era_t *v; /* the open decade's albums, oldest first, room for cap */
-    unsigned m, cap;
-} era __attribute__((section(".scratch")));
-
-static int era_sql(const char *sql, int (*row)(void *, int, char **, char **), void *ctx) {
-    void *db = 0;
-    /* Era uses SQLite directly rather than the stock library query wrappers. */
-    char *expanded = library_scope_query(sql); /* none: the whole library, as library_query */
-    /* Keep a full-library grouping query from competing with the player's song records for RAM. */
-    int bad = sqlite3_open("/mnt/data/database.db", &db) ||
-              sqlite3_exec(db, "PRAGMA cache_size=64;PRAGMA temp_store=FILE", 0, 0, 0) ||
-              sqlite3_exec(db, expanded ? expanded : sql, row, ctx, 0);
-    if (db) sqlite3_close(db);
-    free(expanded);
-    return !bad;
-}
-/* Home pane's counts: sql's one number, -1 when it can't be had. On coverflow.c count_worker's
- * thread: era_sql opens its own connection, and the device's libsqlite3 is THREADSAFE=1. */
-static int count_row(void *ctx, int n, char **v, char **c) {
-    if (n == 1 && v[0]) *(int *)ctx = atoi(v[0]);
-    return 0;
-}
-int library_count(const char *sql) {
-    int n = 0;
-    return era_sql(sql, count_row, &n) ? n : -1;
-}
-static int era_decade_row(void *ctx, int n, char **v, char **c) {
-    if (n == 2 && v[0] && v[1] && era.n < ERA_DECADES)
-        era.decade[era.n] = atoi(v[0]), era.count[era.n++] = atoi(v[1]);
-    return 0;
-}
-static int era_album_row(void *ctx, int n, char **v, char **c) {
-    if (n != 4 || !v[0] || !v[2] || !v[3] || era.m == era.cap) return 0;
-    era_t *e = &era.v[era.m];
-    e->album = strdup(v[0]), e->artist = strdup(v[1] ? v[1] : ""), e->path = strdup(v[3]);
-    e->year = atoi(v[2]);
-    if (!e->album || !e->artist || !e->path) {
-        free(e->album), free(e->artist), free(e->path);
-        return 1;
-    }
-    ++era.m;
-    return 0;
-}
-static void era_free(void) {
-    for (unsigned i = 0; i < era.m; ++i)
-        free(era.v[i].album), free(era.v[i].artist), free(era.v[i].path);
-    free(era.v);
-    era.v = 0, era.m = era.cap = 0;
-}
-static int era_closed(void *ctx, void *event) {
-    if (ctx == era.page) era.page = 0;
-    if (ctx == era.albums) era.albums = 0, era_free();
-    return 0;
-}
-/* "60s" to "90s", then "2000s" on. */
-static const char *era_name(char *buf, int decade) {
-    tk_snprintf(buf, 16, decade < 2000 ? "%02ds" : "%ds", decade < 2000 ? decade % 100 : decade);
-    return buf;
-}
-
-/* Album i's record: the album name's songs, the one at its path. *songs holds it, the caller's. */
-static int era_by_name(void *name) { return getMusicByAlbum(name); }
-static void *era_record(unsigned i, void **songs) {
-    int n;
-    *songs = staged_music(era_by_name, era.v[i].album, &n);
-    for (unsigned k = 0; k < deque_size(*songs); ++k)
-        if (!strcmp(P(deque_at(*songs, k), REC_PATH), era.v[i].path)) return deque_at(*songs, k);
-    return 0;
-}
-/* Every album's tracks, in the page's order, each in album order. ponytail: two queries an album,
- * as Coverflow's All albums; one decade query split back into albums if a large decade drags. */
-static void *era_songs(void) {
-    void *all = _create_deque("stSongInfo");
-    deque_init(all);
-    for (unsigned i = 0; i < era.m; ++i) {
-        void *songs, *r = era_record(i, &songs);
-        void *t = r ? coverflow_album_tracks(r) : 0;
-        for (unsigned j = 0; t && j < deque_size(t); ++j) _deque_push_back(all, deque_at(t, j));
-        if (t) deque_destroy(t);
-        deque_destroy(songs);
-    }
-    return all;
-}
-/* Shuffle's songs: one query for the decade's files, then the library filtered by them; its
- * order is about to be shuffled, so era_songs' two queries an album would only cost time. */
-static struct {
-    unsigned *v, n, cap;
-} era_keys __attribute__((section(".scratch")));
-static int era_key_row(void *ctx, int n, char **v, char **c) {
-    if (n != 1 || !v[0]) return 0;
-    if (era_keys.n == era_keys.cap) {
-        unsigned cap = era_keys.cap ? era_keys.cap * 2 : 1024, *p = calloc(cap, sizeof *p);
-        if (!p) return 1;
-        if (era_keys.n) memcpy(p, era_keys.v, era_keys.n * sizeof *p);
-        free(era_keys.v);
-        era_keys.v = p, era_keys.cap = cap;
-    }
-    era_keys.v[era_keys.n++] = (unsigned)atoi(v[0]);
-    return 0;
-}
-static int era_key_cmp(const void *a, const void *b) {
-    unsigned x = *(const unsigned *)a, y = *(const unsigned *)b;
-    return x < y ? -1 : x > y;
-}
-static void *era_shuffle_songs(void) {
-    char sql[2048];
-    int from = era.m ? era.v[0].year / 10 * 10 : 0, n;
-    void *out = _create_deque("stSongInfo");
-    deque_init(out);
-    /* The songs of ERA_ALBUMS' groups dated in the decade, matched on ALBUM_GROUP's keys. */
-    tk_snprintf(
-        sql, sizeof sql,
-        "%s from songtable s join (select album a,ifnull(albumsonger,'') b,case "
-        "ifnull(albumsonger,'') when '' then rtrim(fileurl,replace(fileurl,'/','')) end d,"
-        "%s as y from songtable where %s and ifnull(album,'')<>''%s having y between %d and %d) g "
-        "on s.album=g.a COLLATE NOCASE and ifnull(s.albumsonger,'')=g.b COLLATE NOCASE and "
-        "(g.d is null or rtrim(s.fileurl,replace(s.fileurl,'/',''))=g.d)",
-        "select distinct s.id", ALBUM_YEAR, MUSIC_WHERE, ALBUM_GROUP, from, from + 9);
-    era_keys.n = 0;
-    if (era.m && era_sql(sql, era_key_row, 0) && era_keys.n) {
-        qsort(era_keys.v, era_keys.n, sizeof *era_keys.v, era_key_cmp);
-        void *all = staged(songs_unsorted, (void *)1, &n);
-        for (unsigned i = 0; i < deque_size(all); ++i) {
-            unsigned key = (unsigned)I(deque_at(all, i), REC_ID), lo = 0, hi = era_keys.n;
-            while (lo < hi) /* the first key not below this one */
-                if (era_keys.v[(lo + hi) / 2] < key)
-                    lo = (lo + hi) / 2 + 1;
-                else
-                    hi = (lo + hi) / 2;
-            if (lo < era_keys.n && era_keys.v[lo] == key) _deque_push_back(out, deque_at(all, i));
-        }
-        deque_destroy(all);
-    }
-    free(era_keys.v);
-    era_keys.v = 0, era_keys.n = era_keys.cap = 0;
-    return out;
-}
-/* Play All from the first song as a library queue, as Coverflow's All albums; Shuffle is Shuffle
- * Songs over them; an album opens its tracks in Coverflow. */
-static int era_pick(void *ctx, void *event) {
-    int i = (int)(long)ctx;
-    if (i < 2) {
-        void *all = i ? era_shuffle_songs() : era_songs();
-        if (!deque_size(all) || access(P(deque_at(all, 0), REC_PATH), 0))
-            toast("Storage unavailable");
-        else if (i)
-            shuffle_play(all);
-        else
-            play_folder(all, 0, 0xf001);
-        deque_destroy(all);
-        return 0;
-    }
-    void *songs, *r = (unsigned)(i - 2) < era.m ? era_record((unsigned)(i - 2), &songs) : 0;
-    if (!r || !coverflow_goto_album(r)) toast("Album not found");
-    if ((unsigned)(i - 2) < era.m) deque_destroy(songs);
-    return 0;
-}
-static int era_open_decade(void *ctx, void *event) {
-    int k = (int)(long)ctx, from = era.decade[k];
-    if (era.albums || !(era.albums = page_open("era_albums_page", era_closed, page_keyup)))
-        return 0;
-    char sql[1024], name[16], detail[300];
-    tk_snprintf(
-        sql, sizeof sql, /* MUSIC_WHERE's like patterns hold '%': an argument, not the format */
-        "%s having release_year between %d and %d order by release_year,album COLLATE NOCASE",
-        ERA_ALBUMS, from, from + 9);
-    era.v =
-        calloc((unsigned)era.count[k] + 1, sizeof *era.v); /* the decade's count, from era_menu */
-    era.cap = era.v ? (unsigned)era.count[k] : 0;
-    era_sql(sql, era_album_row, 0);
-    void *view = page_list(era.albums, era.albums, 0, era_name(name, from), (int)era.m + 2, 64);
-    tk_snprintf(detail, sizeof detail, era.m == 1 ? "%u album" : "%u albums", era.m);
-    page_row_detail(view, 0, "Play All", detail, era_pick);
-    page_row_detail(view, 1, "Shuffle", "Every song, shuffled", era_pick);
-    for (unsigned i = 0; i < era.m; ++i) {
-        tk_snprintf(detail, sizeof detail, *era.v[i].artist ? "%s \xe2\x80\xa2 %d" : "%s%d",
-                    era.v[i].artist, era.v[i].year);
-        page_row_detail_into(view, (int)i + 2, era.v[i].album, detail, era_pick);
-    }
-    return 0;
-}
-static int era_menu(void *ctx, void *event) {
-    if (era.page) return 0;
-    era.n = 0;
-    if (!era_sql("select year/10*10,count(*) from (select " ALBUM_YEAR
-                 " year from songtable where " MUSIC_WHERE " and ifnull(album,'')<>''" ALBUM_GROUP
-                 ") where year>0 group by 1 order by 1",
-                 era_decade_row, 0)) {
-        toast("Era unavailable");
-        return 0;
-    }
-    if (!era.n) {
-        toast("No dated albums yet");
-        return 0;
-    }
-    if (!(era.page = page_open("era_page", era_closed, page_keyup))) return 0;
-    void *view = page_list(era.page, era.page, 0, "Era", era.n, 64);
-    char name[16], detail[32];
-    for (int i = 0; i < era.n; ++i) {
-        tk_snprintf(detail, sizeof detail, era.count[i] == 1 ? "%d album" : "%d albums",
-                    era.count[i]);
-        page_row_detail_into(view, i, era_name(name, era.decade[i]), detail, era_open_decade);
-    }
-    return 0;
-}
-
-/* Long Songs (docs/internals.md#long-songs): the library's songs over LONG_SONG_S, longest first.
- * The database keeps no length, so each file's is probed once, through stock's TagLib, on a worker
- * thread, and kept in LENGTHS_FILE by path hash: {key, seconds} pairs sorted by key, 0 seconds for
- * a file TagLib can't read. A CUE track with both ends needs no probe. */
-#define LENGTHS_FILE "/mnt/data/ringnav-lengths"
-typedef struct {
-    unsigned key, sec;
-} length_t;
-static struct {
-    length_t *tab, *jobs; /* the cache, sorted; the files to probe, sec filled as done */
-    char **paths;         /* the jobs' files, the worker's own copies */
-    unsigned n, read, timer;
-    unsigned long thread;
-    int total, running;
-    volatile int done, cancel;
-    void *songs, *title; /* the library, while its lengths are probed, and the count's title */
-} ls __attribute__((section(".scratch")));
-
-static void lengths_read(void) {
-    if (ls.read) return;
-    unsigned size;
-    length_t *tab = read_all(LENGTHS_FILE, ~0u, &size);
-    ls.read = tab || file_size(LENGTHS_FILE) <=
-                         0; /* unread, not empty: not saved over, read again next time */
-    ls.n = size / sizeof(length_t);
-    if (!ls.n) free(tab), tab = 0;
-    ls.tab = tab;
-}
-
-/* key's seconds, -1 when never probed. */
-static int length_of(unsigned key) {
-    unsigned lo = 0, hi = ls.n;
-    while (lo < hi) {
-        unsigned mid = lo + (hi - lo) / 2;
-        if (ls.tab[mid].key < key)
-            lo = mid + 1;
-        else
-            hi = mid;
-    }
-    return lo < ls.n && ls.tab[lo].key == key ? (int)ls.tab[lo].sec : -1;
-}
-
-/* ponytail: a 32-bit path hash; two files that collide share a length (~1% across 10k files). */
-static unsigned file_key(void *r) { return fnv(FNV_SEED, P(r, REC_PATH)); }
-
-/* r's seconds: a CUE track's from its ends (to the file's end for the last), else the file's;
- * -1 when the file was never probed. */
-static int song_length(void *r) {
-    int start = I(r, REC_CUE_START), end = I(r, REC_CUE_END), len;
-    if (end > start) return end - start;
-    len = length_of(file_key(r));
-    return len < 0 ? -1 : len > start ? len - start : 0;
-}
-
-static int by_key(const void *a, const void *b) {
-    unsigned x = ((const length_t *)a)->key, y = ((const length_t *)b)->key;
-    return (x > y) - (x < y);
-}
-
-/* AudioProperties::length(), as libtag_c's taglib_audioproperties_length calls it: vtable +0xc. */
-static void *ls_worker(void *unused) {
-    while (ls.done < ls.total && !ls.cancel) {
-        /* ponytail: an oversized Ogg header (ogg_tags) would cost TagLib ~4 times it; no length */
-#if M1PLUS
-        void *f = ogg_tags(ls.paths[ls.done], 0) ? 0 : taglib_file_open(ls.paths[ls.done], 1); /* read audio properties: the length */
-#else
-        void *f = ogg_tags(ls.paths[ls.done], 0) ? 0 : taglib_file_new(ls.paths[ls.done], 1);
-#endif
-        void *p = f ? taglib_file_audioproperties(f) : (void *)0;
-        int sec = p ? ((int (*)(void *))(*(void ***)p)[3])(p) : 0;
-        ls.jobs[ls.done].sec = sec > 0 ? (unsigned)sec : 0;
-        if (f) taglib_file_free(f);
-        ++ls.done;
-    }
-    return 0;
-}
-
-/* The worker stopped, what it probed merged into the cache and saved, its jobs freed. */
-static void ls_stop(void) {
-    worker_stop(ls.thread, &ls.running, &ls.cancel, &ls.timer);
-    unsigned n = ls.n + (unsigned)ls.done;
-    length_t *tab = calloc(n + 1, sizeof *tab);
-    if (tab && ls.done) {
-        if (ls.n) memcpy(tab, ls.tab, ls.n * sizeof *tab);
-        memcpy(tab + ls.n, ls.jobs, (unsigned)ls.done * sizeof *tab);
-        qsort(tab, n, sizeof *tab, by_key);
-        unsigned k = 0; /* a file probed twice (two CUE tracks to its end) is kept once */
-        for (unsigned i = 0; i < n; i++)
-            if (!k || tab[i].key != tab[k - 1].key) tab[k++] = tab[i];
-        n = k;
-        free(ls.tab);
-        ls.tab = tab;
-        ls.n = n;
-        if (ls.read) blob_io(LENGTHS_FILE, LENGTHS_FILE ".tmp", ls.tab, ls.n * sizeof *ls.tab, 1);
-    } else
-        free(tab);
-    for (int i = 0; i < ls.total; i++) free(ls.paths[i]);
-    free(ls.paths);
-    free(ls.jobs);
-    ls.paths = 0;
-    ls.jobs = 0;
-    ls.total = ls.done = ls.cancel = 0;
-}
-
-static int by_length(const void *a, const void *b) {
-    unsigned x = ((const length_t *)a)->sec, y = ((const length_t *)b)->sec;
-    return (x < y) - (x > y);
-}
-
-/* The page's list: the songs over LONG_SONG_S, longest first, each row's artist and length under
- * its title, a row playing the list from itself as Most Played's. */
-static void ls_show(void) {
-    void *songs = ls.songs, *list = _create_deque("stSongInfo");
-    unsigned size = deque_size(songs), n = 0;
-    length_t *v = calloc(size + 1, sizeof *v); /* key: the song's index */
-    deque_init(list);
-    for (unsigned i = 0; v && i < size; i++) {
-        int sec = song_length(deque_at(songs, i));
-        if (sec > LONG_SONG_S) v[n].key = i, v[n++].sec = (unsigned)sec;
-    }
-    if (n) qsort(v, n, sizeof *v, by_length);
-    for (unsigned i = 0; i < n; i++) _deque_push_back(list, deque_at(songs, v[i].key));
-    st.rt_list = list;
-    void *view = page_list(st.rt_page, st.rt_page, 0, "Long Songs", n ? (int)n : 1, 64);
-    char name[512], detail[300], t[16];
-    for (unsigned i = 0; i < n; i++) {
-        void *r = deque_at(list, i);
-        const char *artist = P(r, REC_ARTIST);
-        toolsTimeItoa(t, (int)v[i].sec);
-        tk_snprintf(detail, sizeof detail, artist && *artist ? "%s · %s" : "%s%s",
-                    artist && *artist ? artist : "", t);
-        page_row_detail(view, (int)i, track_name(name, sizeof name, r), detail, rt_play);
-    }
-    if (!n) page_row_detail(view, 0, "No songs over 10 minutes", 0, 0);
-    free(v);
-    deque_destroy(songs);
-    ls.songs = 0;
-}
-
-/* The page gone: what was probed is kept. */
-static void ls_closed(void) {
-    ls_stop();
-    if (ls.songs) deque_destroy(ls.songs);
-    ls.songs = 0;
-}
-
-static int ls_done(const void *unused) {
-    ls.timer = 0;
-    ls_stop();
-    if (st.rt_page && ls.songs) ls_show();
-    return 0;
-}
-
-static int ls_cancel(void *ctx, void *event) {
-    ls.cancel = 1; /* the poll shows what is known */
-    return 0;
-}
-
-static int ls_poll(const void *unused) {
-    if (ls.done >= ls.total || ls.cancel) return ls_done(0);
-    char t[64];
-    tk_snprintf(t, sizeof t, "Measuring songs\xe2\x80\xa6 %d/%d", ls.done, ls.total);
-    page_retitle(st.rt_page, ls.title, t);
-    return 8; /* RET_REPEAT */
-}
-
-/* Cover Flow's tracks panel (coverflow.c): r's seconds from the cache, -1 when never probed. */
-int song_seconds(void *r) {
-    lengths_read();
-    return song_length(r);
-}
-
-/* Long Songs' row: the files never probed are probed first, with their count and Cancel, which
- * keeps what is done; the page closing does the same. */
-static int long_songs(void *ctx, void *event) {
-    if (st.rt_page || !(st.rt_page = page_open("longsongs_page", page_closed, page_keyup)))
-        return 0;
-    int n;
-    lengths_read();
-    ls.songs = staged(songs_unsorted, (void *)1, &n);
-    unsigned size = deque_size(ls.songs);
-    ls.jobs = calloc(size + 1, sizeof *ls.jobs);
-    ls.paths = calloc(size + 1, sizeof *ls.paths);
-    for (unsigned i = 0; ls.jobs && ls.paths && i < size; i++) {
-        void *r = deque_at(ls.songs, i);
-        unsigned key = file_key(r);
-        if (song_length(r) < 0 && P(r, REC_PATH) && (ls.paths[ls.total] = strdup(P(r, REC_PATH))))
-            ls.jobs[ls.total++].key = key;
-    }
-    if (ls.total && !pthread_create(&ls.thread, 0, ls_worker, 0)) {
-        ls.running = 1;
-        page_row_detail(
-            page_list(st.rt_page, st.rt_page, &ls.title, "Measuring songs\xe2\x80\xa6", 1, 48), 0,
-            "Cancel", 0, ls_cancel);
-        ls.timer = timer_add(ls_poll, (void *)0, 250);
-    } else {
-        ls_stop();
-        ls_show();
-    }
-    return 0;
-}
-
-/* [SCROBBLE] AUTO=1 (docs/internals.md#scrobbling): on Wi-Fi the log goes up by itself, silently,
- * once its oldest unsent listen is SA_MAX_MIN old, SA_STEP_MIN sooner per listen since, at least
- * every SA_MIN_MIN: a listen on its own waits three hours, an afternoon's album goes within the
- * hour, and with no listens nothing goes. A failed upload tries again after SA_RETRY_MIN.
- * ponytail: only listens since boot and outside an upload count; any others stay in the log and
- * go with the next upload, so the loop never reads the card for them. */
-#define SA_MAX_MIN 180
-#define SA_MIN_MIN 60
-#define SA_STEP_MIN 4
-#define SA_RETRY_MIN 30
-static struct {
-    unsigned pending, first_at, check_at;
-    int running;
-} sa __attribute__((section(".scratch")));
-unsigned scrobble_auto_ms(unsigned pending) {
-    int min = SA_MAX_MIN - SA_STEP_MIN * (int)pending;
-    return (unsigned)(min < SA_MIN_MIN ? SA_MIN_MIN : min) * 60000u;
-}
-static void scrobble_listened(void) {
-    if (!sa.pending++) sa.first_at = (unsigned)time_now_ms();
-}
-/* Due again SA_RETRY_MIN from now, sooner if more listens come. */
-static void sa_retry(unsigned now) {
-    sa.first_at = now - scrobble_auto_ms(sa.pending) + SA_RETRY_MIN * 60000u;
-}
-static void scrobble_auto(void) {
-    unsigned now = (unsigned)time_now_ms();
-    if (sa.running) {
-        int sent = 0, done = scrobble_poll(&sent);
-        if (!done) return;
-        sa.running = 0;
-        if (done > 0)
-            sa.pending = 0;
-        else
-            sa_retry(now);
-        return;
-    }
-    if (!sa.pending || now - sa.first_at < scrobble_auto_ms(sa.pending) ||
-        now - sa.check_at < 60000)
-        return;
-    sa.check_at = now; /* Wi-Fi at most once a minute; the card's settings only on Wi-Fi */
-    /* not while a computer has the card. ponytail: one already uploading when the cable goes in
-     * still rewrites the log at its end; join it in ringnav_usbmode if that ever bites. */
-    if (get_wifisignal() <= 0 || navigator_window_is_exist("usbmode_page")) return;
-    int started = scrobble_flag("AUTO") ? scrobble_start() : -1;
-    if (started > 0)
-        sa.running = 1;
-    else if (started < 0) /* off, or no account: the card again in SA_RETRY_MIN */
-        sa_retry(now);
-}
-
-/* Upload Scrobbles: the log goes up on scrobble.c's thread, and a timer reports how it went. */
-static int upload_wait(const void *unused) {
-    int sent = 0, done = scrobble_poll(&sent);
-    if (!done) return 8; /* RET_REPEAT */
-    if (done > 0) sa.pending = 0;
-    char s[48];
-    tk_snprintf(s, sizeof s, done < 0 ? "Upload failed, %d sent" : "Scrobbles sent: %d", sent);
-    toast(done > 0 && !sent ? "Nothing to upload" : s);
-    return 0;
-}
-
-static int upload_scrobbles(void *ctx, void *event) {
-    int started = get_wifisignal() > 0 ? scrobble_start() : -2;
-    if (!started && sa.running) sa.running = 0, started = 1; /* the automatic one: report it */
-    if (started > 0) timer_add(upload_wait, (void *)0, 500);
-    toast(started > 0     ? "Uploading scrobbles"
-          : !started      ? "Already uploading"
-          : started == -2 ? "Connect to Wi-Fi first"
-                          : "Upload failed");
-    return 0;
-}
 
 /* 1 + the MEDIA folder s names (up to its end or a '/'), 0 for none. MEDIA is letters only. */
 static int media_kind(const char *s) {
@@ -12422,7 +8899,7 @@ static void *book_place(void *list, void *r, int *at, int *off) {
 
 /* The card's folder for kind into path (sizeof st.media_root, which a MEDIA name always fits); 0
  * when there is none. */
-static int media_find(int kind, char *path) {
+int media_find(int kind, char *path) {
     void *dir = opendir("/mnt/mmc");
     int found = 0;
     for (struct dirent *e; dir && !found && (e = readdir(dir));)
@@ -12434,7 +8911,7 @@ static int media_find(int kind, char *path) {
 
 /* A Local Music row's, or Home's Shortcut's (Podcasts, Audiobooks): the folder found again, as the
  * card may have changed since; without it, a toast. */
-static int media_click(void *ctx, void *event) {
+int media_click(void *ctx, void *event) {
     int kind = (int)(long)ctx;
     char root[sizeof st.media_root], t[48];
     if (!media_find(kind, root)) {
@@ -12550,219 +9027,6 @@ int ringnav_folder_click(void *ctx, void *event) {
     return result;
 }
 
-/* A list_row titled text; returns its list_item. */
-static void *library_row(void *view, const char *icon, int (*click)(void *, void *), void *ctx,
-                         const char *text) {
-    void *label = list_row(view, icon, click, ctx);
-    widget_set_text_utf8(label, text);
-    return row_of(label);
-}
-
-/* A library row that opens another list: stock's own list_into trailing image, as the stock Local
- * Music categories place it. Returns the row's list_item. */
-static void *library_into(void *view, const char *icon, int (*click)(void *, void *), void *ctx,
-                          const char *text) {
-    void *label = list_row_core(view, icon, click, ctx, 210, 1);
-    widget_set_text_utf8(label, text);
-    return row_of(label);
-}
-
-/* localmusic_page_init: stock's 11 category rows (0x5247ec), by index (get_localmusic_showinfo
- * 0x5012d0): Update Local Music, All Songs, Album, Artist, Genre, Hi-Res, My Fav, Frequent,
- * Recent, Recently Added, Playlist. */
-enum {
-    L_UPDATE,
-    L_SONGS,
-    L_ALBUMS,
-    L_ARTISTS,
-    L_GENRES,
-    L_HIRES,
-    L_FAV,
-    L_FREQUENT,
-    L_RECENT,
-    L_ADDED,
-    L_PLAYLISTS,
-    L_STOCK
-};
-
-/* Every Library row, stock's and the added ones: its label takes the list titles' role. In a set
- * without Library icons (Classic) it also drops its icon and starts its label at the set's
- * text inset on screen, its right edge kept. */
-static void library_look(void *view) {
-    const theme_t *T = theme();
-    int bare = !geom_val(V_LIB_ART);
-    if (!bare && !T->font[ROLE_TITLE] && !T->font_px[ROLE_TITLE]) return;
-    for (unsigned i = 0, n = widget_count_children(view); i < n; ++i) {
-        void *row = widget_get_child(view, i);
-        void *button = widget_count_children(row) ? widget_get_child(row, 0) : (void *)0;
-        for (unsigned j = 0, k = button ? widget_count_children(button) : 0; j < k; ++j) {
-            void *c = widget_get_child(button, j);
-            if (tk_strcmp(widget_get_type(c), "hscroll_label")) {
-                if (bare) widget_set_visible(c, 0, 0);
-                continue;
-            }
-            theme_font(c, ROLE_TITLE, FONT_ROW);
-            if (bare) {
-                int x = geom_val(V_TEXT_X) - I(button, W_X);
-                widget_move_resize(c, x, I(c, W_Y), I(c, W_W) + I(c, W_X) - x, I(c, W_H));
-            }
-            break;
-        }
-    }
-}
-
-/* 1 when the Library leads with Search, in a set without Library icons (Classic): the pull-down's
- * own stock search (0x5241c4, which ignores its arguments) shown, as Home's Split list hides the
- * pull. Home's pane counts Shuffle's row from it (coverflow.c coverflow_home_row). */
-int library_search(void) { return !geom_val(V_LIB_ART); }
-
-/* The Library: Search (library_search), one Shuffle row opening its menu, browsing, the user's own
- * lists, listening history, the card's other media, then upkeep. The added rows' buttons have no
- * name, so stock's row click (atoi of the name, 0x5241fc) never sees them. */
-int ringnav_localmusic(void *win, void *ctx) {
-    int result = stock_localmusic_trampoline(win, ctx);
-    void *view = win ? widget_lookup(win, "scroll_view_localmusic", 1) : (void *)0;
-    if (!view || widget_count_children(view) != L_STOCK) return result;
-    void *stock[L_STOCK];
-    for (int i = 0; i < L_STOCK; i++) stock[i] = widget_get_child(view, i);
-    unsigned n = 0; /* each row moves to n as it comes, so Update Local Music, left, ends last */
-    if (library_search())
-        widget_restack(library_into(view, (void *)0, stock_search, 0, "Search"), n++);
-    widget_restack(library_into(view, "local_shuffle", shuffle_menu, 0, "Shuffle"), n++);
-    static const unsigned char middle[] = { L_ARTISTS,   L_ALBUMS, L_SONGS, L_GENRES,
-                                            L_PLAYLISTS, L_FAV,    L_ADDED, L_RECENT };
-    for (unsigned i = 0; i < sizeof middle; i++)
-        if (middle[i] == L_GENRES) { /* browsing by a tag, as Genre */
-            widget_restack(stock[L_GENRES], n++);
-            widget_restack(library_into(view, "local_era", era_menu, 0, "Era"), n++);
-        } else if (middle[i] == L_FAV) { /* My Fav is Ratings' Loved, its row kept hidden */
-            widget_restack(library_into(view, "local_fav", ratings_menu, 0, "Ratings"), n++);
-            widget_set_visible(stock[L_FAV], 0, 0);
-            widget_restack(stock[L_FAV], n++);
-        } else
-            widget_restack(stock[middle[i]], n++);
-    widget_restack(library_into(view, "local_frequentplay", most_played, 0, "Most Played"), n++);
-    widget_restack(stock[L_FREQUENT], n++);
-    widget_restack(stock[L_HIRES], n++);
-    widget_restack(library_into(view, "local_longsongs", long_songs, 0, "Long Songs"), n++);
-    /* Podcasts, Audiobooks, Photos, Books and Videos, each only with its folder; then iPod's Games.
-     */
-    static const char *const icons[] = { "local_podcasts", "local_audiobooks", "local_photos",
-                                         "local_books", "local_videos" };
-    char path[sizeof st.media_root];
-    for (int k = 0; k < VIDEOS; k++)
-        if (media_find(k + 1, path))
-            widget_restack(
-                library_into(view, icons[k], media_click, (void *)(long)(k + 1), MEDIA[k]), n++);
-    widget_restack(library_into(view, "local_games", games_open, 0, "Games"), n++);
-    if (scrobble_ready())
-        widget_restack(library_row(view, "local_scrobble", upload_scrobbles, 0, "Upload Scrobbles"),
-                       n++);
-    library_look(view);
-    return result;
-}
-
-#include "m1plus_nav_library.c"
-
-/* Home's Library list (coverflow.c home_library), filled each time it opens, as the page is: the
- * same rows in the same order, whatever card, user or app adds. Stock's constructor takes a window
- * and finds the rows' view by name, so list, which holds one of that name, stands in. What else it
- * sets on the window goes again, list being none: the play gif's timer and its handlers. */
-void library_rows(void *list) {
-    ringnav_localmusic(list, (void *)0);
-    ((int (*)(void *, void *))LOCALMUSIC_BG)(list, (void *)0);
-    widget_off_by_ctx(list, list);
-}
-
-/* Streaming's AirPlay row (M1 Plus: the Q2 Pod page's): stock's own receiver (Shairport 1.1.1,
- * AirPlay 1), whose switch is on System settings' Network service page; that page, one press away.
- * V2.1 keeps the switch there too (netservice_airplay). */
-static int airplay_open(void *ctx, void *event) {
-    navigator_to("systemset/netservice_page");
-    return 0;
-}
-
-#if !M1PLUS /* V2.1 has no Streaming page: the rows are on the Q2 Pod page (library_open) */
-/* Whether w, or a widget in it, shows the image name. */
-static int shows_image(void *w, const char *name) {
-    if (!tk_strcmp(widget_get_prop_str(w, "image", ""), name)) return 1;
-    for (unsigned i = 0, n = widget_count_children(w); i < n; ++i)
-        if (shows_image(widget_get_child(w, i), name)) return 1;
-    return 0;
-}
-
-/* Home pane's Streaming and Games captions, and the card's free space in tenths of a GB (0: no card
- * mounted, whose dir shares /mnt's device), read with home_counts, never on a wheel move: the
- * Streaming page's rows with the app scan it makes, less Configuration and those hidden; and the
- * Games page's built-ins and card games. */
-void home_pane_read(int *services, int *games, int *free_tenths) {
-    char hide[SVC_HIDE];
-    unsigned card[36], mnt[36], fs[32];
-    int n = 0, total = (st.svc_n = addon_scan()) + 5;
-    svc_hidden(hide);
-    for (int i = 0; i < total; ++i)
-        if (!svc_find(hide, i)) ++n;
-    *services = n;
-    *games = GAMES_BUILTIN + addon_games_last();
-    /* statfs on MIPS o32: f_bsize word 1, f_bavail word 7 (netupdate.c). In binary GB, as About's
-     * Remaining: 209715 blocks of 512 B to a tenth, so 32 bits hold a 2 TB card's. */
-    *free_tenths = !__xstat(3, "/mnt/mmc", card) && !__xstat(3, "/mnt", mnt) && card[0] != mnt[0] &&
-                           !statfs("/mnt/mmc", fs)
-                       ? (int)(fs[7] * (fs[1] >> 9) / 209715)
-                       : 0;
-}
-
-/* A Streaming row tagged as service i (svc), hidden when STREAMHIDE holds it. */
-static void svc_row(void *row, int i, char *hide) {
-    prop(row, SVC_PROP, i + 1);
-    if (svc_find(hide, i)) widget_set_visible(row, 0, 0);
-}
-
-/* stream_page_init: stock's rows but Baidu Netdisk (a Chinese cloud drive, signed in to from
- * Baidu's app: its row, the one with list_baidu's icon, removed), then Spotify (spotify.c), which
- * opens its browser, the card apps on the card (addon.c: Deezer, Soulseek, File Browser… as System
- * settings' Apps or the user put them there), Tidal Downloads, Internet Radio (radio.c), AirPlay
- * and Configuration. Their buttons have no name, so stock's row click never sees them. */
-int ringnav_stream(void *win, void *ctx) {
-    int result = stock_stream_trampoline(win, ctx);
-    void *view = win ? widget_lookup(win, "scroll_view_streamsset", 1) : (void *)0;
-    for (int i = view ? (int)widget_count_children(view) : 0; i-- > 0;)
-        if (shows_image(widget_get_child(view, (unsigned)i), "list_baidu"))
-            widget_destroy(widget_get_child(view, (unsigned)i));
-    if (view) {
-        char hide[SVC_HIDE];
-        int i = 1;
-        st.svc_n = addon_scan(); /* at most APPS_MAX */
-        svc_hidden(hide);
-        for (unsigned c = 0, stock = widget_count_children(view); c < stock; ++c)
-            if (shows_image(widget_get_child(view, c), "list_tidal"))
-                svc_row(widget_get_child(view, c), 0, hide);
-        svc_row(library_into(view, "stream_spotify", spot_open, 0, "Spotify"), i++, hide);
-        for (int k = 0; k < st.svc_n; ++k)
-            svc_row(library_into(view, addon_icon(k), addon_open, (void *)(long)k, addon_name(k)),
-                    i++, hide);
-        svc_row(library_into(view, "list_tidal", tidal_downloads, 0, "Tidal Downloads"), i++, hide);
-        svc_row(library_into(view, "stream_radio", radio_open, 0, "Internet Radio"), i++, hide);
-        svc_row(library_into(view, "stream_airplay", airplay_open, 0, "AirPlay"), i, hide);
-        library_into(view, "stream_config", stream_config, 0, "Configuration");
-    }
-    return result;
-}
-#endif
-
-/* Home's Streaming list (coverflow.c home_streaming), filled each time it opens, as the page is. As
- * library_rows: stock's constructor takes a window and finds the rows' view by name, so list, which
- * holds one of that name, stands in; it finds no view_navbar there. What it sets on a window goes
- * again: its play gif's timer and its handlers. */
-#if !M1PLUS /* Classic Home Streaming is unported */
-void stream_rows(void *list) {
-    ringnav_stream(list, (void *)0);
-    ((int (*)(void *, void *))STREAM_BG)(list, (void *)0);
-    widget_off_by_ctx(list, list);
-    library_look(widget_lookup(list, "scroll_view_streamsset", 1));
-}
-#endif
-
 /* usbmode_page_init, as a cable to a computer opens USB mode, before stock unmounts the card for
  * USB storage: the card apps, which write to it (downloads, uploads), end first, so nothing of
  * theirs keeps it busy (they run from /tmp: addon.c), as does Download Album Lyrics' job. */
@@ -12773,8 +9037,11 @@ int ringnav_usbmode(void *a, void *b, void *c, void *d) {
 }
 
 /* mclStartPlayer, every local track's start: a playing librespot or radio station lets the DAC's
- * PCM go first. A track too long for RAM fails as stock's own checks do, with -1. */
+ * PCM go first. A track too long for RAM fails as stock's own checks do, with -1; so, silently,
+ * does any start while a card game has the sound (addon.c): a jack or USB DAC change and a
+ * Bluetooth drop come here through player_save_start, and the game keeps its PCM. */
 int ringnav_start_player(void) {
+    if (addon_game_audio()) return -1;
     if (!playback_start_fits()) return -1;
     headset_manual();
     spot_yield();
@@ -12816,510 +9083,6 @@ int ringnav_about(void *win, void *ctx) {
     return result;
 }
 #endif
-
-/* Entry IDs are stock's order. Keep our records separate from browsing and the live queue. */
-static struct {
-    void *page, *view, *songs, *picker, *edit;
-    void **match;
-    int dest, mode, selected, pending, nmatch;
-    unsigned key, timer;
-    char name[128], query[128];
-} ple __attribute__((section(".scratch")));
-
-/* One private selection for demo's lifetime, so a covered stock picker keeps its batch intact. */
-static void *ple_add_select __attribute__((section(".scratch")));
-struct ple_check {
-    void *a, *b;
-    int seen;
-};
-static int ple_checked(void *ctx, int n, char **v, char **names) {
-    struct ple_check *c = ctx;
-    if (n != 4 || !v[0] || !v[1]) return 1;
-    int id = atoi(v[0]);
-    void *r = id == I(c->a, REC_ID) ? c->a : c->b;
-    if (!r || id != I(r, REC_ID) || tk_strcmp(v[1], P(r, REC_PATH)) ||
-        (v[2] ? atoi(v[2]) : 0) != I(r, REC_CUE_START) ||
-        (v[3] ? atoi(v[3]) : 0) != I(r, REC_CUE_END))
-        return 1;
-    c->seen++;
-    return 0;
-}
-static int ple_changed(void *ctx, int n, char **v, char **names) {
-    return n != 1 || !v[0] || atoi(v[0]) != 1;
-}
-static int ple_number(void *ctx, int n, char **v, char **names) {
-    if (n != 1 || !v[0]) return 1;
-    *(int *)ctx = atoi(v[0]);
-    return 0;
-}
-
-/* Revalidate under the write lock; the temporary ID is above every occupied ID. */
-static int ple_mutate(int dest, void *a, void *b) {
-    void *db = 0;
-    int ok = 0, temp = 0;
-    char sql[512];
-    struct ple_check check = { a, b, 0 };
-    if (dest < 0 || dest >= 100 || !a || I(a, REC_ID) <= 100 ||
-        (b && (I(b, REC_ID) <= 100 || I(a, REC_ID) == I(b, REC_ID))))
-        return 0;
-    if (sqlite3_open("/mnt/data/database.db", &db)) goto done;
-    if (sqlite3_exec(db, "begin immediate", 0, 0, 0)) goto done;
-    tk_snprintf(sql, sizeof sql,
-                "select id,fileurl,time,time_end from playlist where cd_num=%d and id in (%d,%d)",
-                dest, I(a, REC_ID), b ? I(b, REC_ID) : I(a, REC_ID));
-    if (sqlite3_exec(db, sql, ple_checked, &check, 0) || check.seen != (b ? 2 : 1)) goto rollback;
-    if (b) {
-        /* No HAVING: the firmware's SQLite (3.19.3) refuses one without GROUP BY. The top id gives
-         * NULL, which ple_number refuses. */
-        if (sqlite3_exec(db,
-                         "select case when ifnull(max(id),100)<2147483647 "
-                         "then max(100,ifnull(max(id),100))+1 end from playlist",
-                         ple_number, &temp, 0) ||
-            temp <= 100)
-            goto rollback;
-        tk_snprintf(sql, sizeof sql,
-                    "update playlist set id=%d where cd_num=%d and id=%d;select changes();"
-                    "update playlist set id=%d where cd_num=%d and id=%d;select changes();"
-                    "update playlist set id=%d where cd_num=%d and id=%d;select changes()",
-                    temp, dest, I(a, REC_ID), I(a, REC_ID), dest, I(b, REC_ID), I(b, REC_ID), dest,
-                    temp);
-    } else
-        tk_snprintf(sql, sizeof sql,
-                    "delete from playlist where cd_num=%d and id=%d;select changes()", dest,
-                    I(a, REC_ID));
-    if (sqlite3_exec(db, sql, ple_changed, 0, 0) || sqlite3_exec(db, "commit", 0, 0, 0))
-        goto rollback;
-    ok = 1;
-    goto done;
-rollback:
-    sqlite3_exec(db, "rollback", 0, 0, 0);
-done:
-    if (db) sqlite3_close(db);
-    return ok;
-}
-
-static int ple_query(void *ctx) { return getMusicByPlayList(ple.dest); }
-static void ple_reload(void) {
-    int n;
-    void *songs = staged(ple_query, 0, &n);
-    if (ple.songs) deque_destroy(ple.songs);
-    ple.songs = songs;
-    int size = (int)deque_size(songs);
-    if (ple.selected >= size) ple.selected = size ? size - 1 : 0;
-}
-/* The Add Songs picker's Search row filters by title, artist or album, ASCII case-insensitively.
- * ple.match holds the matching records only; the picker keeps every song, so clearing the query
- * restores the list without re-staging it. */
-static int ple_has(const char *text, const char *query) { return text && strcasestr(text, query); }
-static void ple_filter(void) {
-    free(ple.match);
-    ple.match = 0;
-    ple.nmatch = 0;
-    int n = ple.picker ? (int)deque_size(ple.picker) : 0;
-    if (!n || !(ple.match = calloc((unsigned)n, sizeof *ple.match))) return;
-    for (int i = 0; i < n; ++i) {
-        void *r = deque_at(ple.picker, (unsigned)i);
-        char name[512];
-        const char *fields[] = { track_name(name, sizeof name, r), P(r, REC_ARTIST),
-                                 P(r, REC_ALBUM) };
-        for (unsigned f = 0; f < sizeof fields / sizeof *fields; ++f)
-            if (ple_has(fields[f], ple.query)) {
-                ple.match[ple.nmatch++] = r;
-                break;
-            }
-    }
-}
-/* Stock's "select" check at the row's end, as the Shuffle and Repeat menus; the caption stops short
- * of it. */
-static void *ple_tick(void *item) {
-    void *label = item ? widget_get_child(item, 0) : 0;
-    if (!label) return 0;
-    widget_move_resize(label, I(label, W_X), I(label, W_Y), PLE_TICK_X - 10 - I(label, W_X), I(label, W_H));
-    void *tick = image_create(item, PLE_TICK_X, 0, 24, I(item, W_H));
-    image_base_set_image(tick, CHOICE_CHECK);
-    return tick;
-}
-static void ple_show(void);
-static int ple_closed(void *ctx, void *event) {
-    if (ple.timer) timer_remove(ple.timer);
-    if (ple.songs) deque_destroy(ple.songs);
-    if (ple.picker) deque_destroy(ple.picker);
-    free(ple.match);
-    unsigned key = ple.key; /* swallow the release even if the page closed during the press */
-    memset(&ple, 0, sizeof ple);
-    ple.key = key;
-    return 0;
-}
-static void ple_move(int at, int dir) {
-    int n = (int)deque_size(ple.songs), next = at + dir;
-    if (at < 0 || at >= n || next < 0 || next >= n) return;
-    if (ple_mutate(ple.dest, deque_at(ple.songs, (unsigned)at),
-                   deque_at(ple.songs, (unsigned)next))) {
-        ple.selected = next;
-        ple_reload();
-        ple_show();
-    } else
-        toast("Could not save playlist");
-}
-/* phase: press, release, or native delivery/long press. A repeat never moves twice. */
-static int ple_key(unsigned key, int phase) {
-    if (key != KEY_BACK_BTN && key != KEY_FWD_BTN) return 0;
-    unsigned bit = key == KEY_FWD_BTN ? 2 : 1;
-    int live = ple.page && window_manager_get_top_window(window_manager()) == ple.page;
-    if (!ple.page && !(ple.key & bit)) return 0;
-    if (phase == 1 && !(ple.key & bit)) {
-        ple.key |= bit;
-        if (live && !ple.mode && !ple.timer && usable())
-            ple_move(widget_get_prop_int(ple.view, SEL, ple.selected + 2) - 2,
-                     key == KEY_FWD_BTN ? 1 : -1);
-    }
-    if (phase == 2) ple.key &= ~bit;
-    return 1;
-}
-static int ple_run(const void *unused);
-static int ple_back(void *ctx, void *event) {
-    if (I(event, EVENT_KEY) != KEY_RETURN) return 0;
-    /* The search box's text is applied by the next loop pass, never under its own key event. */
-    if (ple.mode == 4) {
-        if (!ple.timer) ple.timer = timer_add(ple_run, 0, 0);
-        return STOP;
-    }
-    stop_timer(&ple.timer);
-    if (ple.mode) {
-        ple.mode = 0;
-        ple_reload();
-        ple_show();
-    } else
-        navigator_back();
-    return STOP;
-}
-
-/* Rebuilds and closes run after click delivery, as the queue menu does. */
-static int ple_run(const void *unused) {
-    ple.timer = 0;
-    if (!ple.page) return 0;
-    int action = ple.pending, mode = ple.mode;
-    if (!mode) {
-        if (action == 1) {
-            navigator_back();
-            return 0;
-        }
-        if (!action) {
-            int n;
-            if (ple.picker) deque_destroy(ple.picker);
-            ple.picker = staged_music(all_songs, (void *)1, &n);
-            ple_filter();
-            ple.mode = 1;
-        } else {
-            ple.selected = action - 2;
-            ple.mode = 2;
-        }
-    } else if (mode == 1) {
-        if (!action)
-            ple.mode = 4;
-        else if ((unsigned)(action - 1) >= (unsigned)ple.nmatch)
-            return 0;
-        else {
-            void *r = ple.match[action - 1];
-            if (checkPlayListExist(r, ple.dest))
-                toast("Already in playlist");
-            else {
-                int before = (int)deque_size(ple.songs);
-                void *one = _create_deque("stSongInfo");
-                if (!one) {
-                    toast("Could not save playlist");
-                    return 0;
-                }
-                deque_init(one);
-                _deque_push_back(one, r); /* stock rewrites the added record's ID and cd_num */
-                if (!ple_add_select) {
-                    ple_add_select = _create_vector("int");
-                    if (ple_add_select) {
-                        vector_init(ple_add_select);
-                        _vector_push_back(ple_add_select, 1);
-                    }
-                }
-                if (ple_add_select) batch_add_file(0xf001, 0xf00b, one, ple_add_select, ple.dest);
-                deque_destroy(one);
-                ple_reload();
-                int added = (int)deque_size(ple.songs) > before;
-                if (added) ple_tick(widget_get_child(ple.view, (unsigned)action));
-                toast(added ? "Added to Playlist" : "Could not save playlist");
-            }
-            return 0; /* picker stays on its selected song */
-        }
-    } else if (mode == 4) {
-        if (!ple.edit || widget_get_text_utf8(ple.edit, ple.query, sizeof ple.query))
-            ple.query[0] = 0;
-        ple.mode = 1;
-        ple_filter();
-    } else if (mode == 2) {
-        if (action == 2)
-            ple.mode = 3;
-        else {
-            ple.mode = 0;
-            ple_move(ple.selected, action ? 1 : -1);
-        }
-    } else {
-        if (!action && (unsigned)ple.selected < deque_size(ple.songs)) {
-            if (ple_mutate(ple.dest, deque_at(ple.songs, (unsigned)ple.selected), 0))
-                ple_reload();
-            else
-                toast("Could not save playlist");
-        }
-        ple.mode = 0;
-    }
-    ple_show();
-    return 0;
-}
-static int ple_pick(void *ctx, void *event) {
-    if (!ple.timer) {
-        ple.pending = (int)(long)ctx;
-        ple.timer = timer_add(ple_run, 0, 0);
-    }
-    return 0;
-}
-/* The T9 box over the title, as Internet Radio's pull-down: page children go so the keyboard has
- * room. Its widget is named search_edit, so navigation.c's search_key closes the keyboard before
- * Return can destroy the edit under it. */
-static int ple_searched(void *ctx, void *event) {
-    widget_set_focused(ple.edit, 0);
-    input_method_request(input_method(), 0); /* Detach the keyboard before rebuilding its owner. */
-    if (!ple.timer) ple.timer = timer_add(ple_run, 0, 0);
-    return 0;
-}
-static void ple_search_show(void) {
-    widget_destroy_children(ple.page);
-    ple.view = 0;
-    ple.edit = edit_create(ple.page, "text", 2, 26);
-    widget_set_name(ple.edit, "search_edit");
-    t9_box(ple.page, ple.edit, "Search songs");
-    if (*ple.query) widget_set_text_utf8(ple.edit, ple.query);
-    widget_on(ple.edit, EVT_IM_ACTION, ple_searched, 0);
-    widget_set_focused(ple.edit, 1);
-}
-static void ple_show(void) {
-    int mode = ple.mode;
-    if (mode == 4) {
-        ple_search_show();
-        return;
-    }
-    ple.edit = 0;
-    int n = mode == 0   ? (int)deque_size(ple.songs) + 2
-            : mode == 1 ? (ple.nmatch ? ple.nmatch + 1 : 2)
-            : mode == 2 ? 3
-                        : 2;
-    char title[180], name[512];
-    tk_snprintf(title, sizeof title, "%s: %s",
-                mode == 0   ? "Editing"
-                : mode == 1 ? "Add Songs"
-                : mode == 2 ? "Song Actions"
-                            : "Remove song?",
-                ple.name);
-    /* a bar that holds captions has room for the task's name alone, and no first line for it */
-    ple.view = page_list(ple.page, ple.page, 0,
-                         mode == 1 && !theme()->page_title_h ? "Add Songs" : title, n, 48);
-    static const char *const actions[] = { "Move Up", "Move Down", "Remove from Playlist" };
-    if (mode == 1) {
-        char search[160];
-        tk_snprintf(search, sizeof search, "%s%s", *ple.query ? "Search: " : "Search", ple.query);
-        page_row_detail(ple.view, 0, search, 0, ple_pick);
-        /* a tick on a song the playlist already holds: same path and CUE segment */
-        unsigned mask, *in = ple.nmatch ? rec_index(ple.songs, &mask) : 0;
-        if (!ple.nmatch)
-            page_row_detail(ple.view, 1, "No songs match", 0, 0);
-        else
-            for (int i = 0; i < ple.nmatch; i++) {
-                void *row = page_row_detail(
-                    ple.view, i + 1, track_name(name, sizeof name, ple.match[i]), 0, ple_pick);
-                if (in && rec_find(ple.songs, in, mask, ple.match[i])) ple_tick(row);
-            }
-        free(in);
-    } else
-        for (int i = 0; i < n; i++) {
-            const char *caption =
-                mode == 0 && i < 2 ? (i ? "Done" : "Add Songs")
-                : mode == 2        ? actions[i]
-                : mode == 3 ? (i ? "Cancel" : "Remove from Playlist")
-                            : track_name(name, sizeof name,
-                                         deque_at(ple.songs, (unsigned)(i - (mode == 0 ? 2 : 0))));
-            page_row_detail(ple.view, i, caption, 0, ple_pick);
-        }
-    /* only the selected row's long title moves, as Songs' */
-    for (int i = 0; !geom_val(V_TOOLBAR) && i < (int)widget_count_children(ple.view); ++i)
-        hscroll_label_set_only_focus(widget_get_child(widget_get_child(ple.view, i), 0), 1);
-    if (n) ringnav_select(ple.view, mode == 0 ? ple.selected + 2 < n ? ple.selected + 2 : 0 : 0, n);
-}
-static int ple_open(void *ctx, void *event) {
-    if (ple.page) return 0;
-    unsigned at = (unsigned)(long)ctx;
-    void *lists = P(p_deque_playlist, 0);
-    if (!lists || at >= deque_size(lists)) return 0;
-    void *r = deque_at(lists, at);
-    ple.dest = I(r, REC_DISC);
-    if (ple.dest < 0 || ple.dest >= 100) return 0;
-    tk_snprintf(ple.name, sizeof ple.name, "%s", P(r, REC_TITLE));
-    ple.page = page_open("playlistedit_page", ple_closed, ple_back);
-    if (ple.page) {
-        ple_reload();
-        ple_show();
-    }
-    return 0;
-}
-extern int stock_playlistsmore_trampoline(void *, void *);
-/* Stock's allocator assumes ID order; Library presents headers in name order. Allocate under
- * the database lock instead, and report a failed insert instead of pretending it succeeded. */
-static int playlist_used(void *ctx, int n, char **v, char **names) {
-    if (n != 1 || !v[0]) return 1;
-    int id = atoi(v[0]);
-    if (id >= 0 && id < 100) ((unsigned char *)ctx)[id] = 1;
-    return 0;
-}
-int ringnav_playlist_create(void *list, const char *name) {
-    void *db = 0;
-    unsigned char used[100] = { 0 };
-    char title[64], quoted[127], sql[512];
-    int result = -1, id = 0;
-    if (!list || sqlite3_open("/mnt/data/database.db", &db)) goto done;
-    if (sqlite3_exec(db, "begin immediate", 0, 0, 0)) goto done;
-    if (sqlite3_exec(db, "select id from playlist where id <= 100", playlist_used, used, 0))
-        goto rollback;
-    for (; id < 100 && used[id]; ++id) {}
-    if (id == 100) goto rollback;
-    if (name && *name)
-        tk_snprintf(title, sizeof title, "%s", name);
-    else
-        tk_snprintf(title, sizeof title, "Playlist%d", id);
-    unsigned j = 0;
-    for (unsigned i = 0; title[i]; ++i) {
-        quoted[j++] = title[i];
-        if (title[i] == '\'') quoted[j++] = '\'';
-    }
-    quoted[j] = 0;
-    int exists = 0;
-    tk_snprintf(sql, sizeof sql, "select count(*) from playlist where id <= 100 and filename='%s'",
-                quoted);
-    /* As stock, the whole name: a cut one matching would make importPlayList file its songs
-     * under -2. */
-    if ((!name || strlen(name) < sizeof title) && sqlite3_exec(db, sql, ple_number, &exists, 0))
-        goto rollback;
-    if (exists) {
-        result = -2;
-        goto rollback;
-    }
-    tk_snprintf(sql, sizeof sql,
-                "insert into playlist values (%d,'%s','','','','','%s','','',0,0,%d,0,0,0,0,0,0);"
-                "select changes()",
-                id, quoted, quoted, id);
-    if (sqlite3_exec(db, sql, ple_changed, 0, 0) || sqlite3_exec(db, "commit", 0, 0, 0))
-        goto rollback;
-    result = id;
-    goto done;
-rollback:
-    sqlite3_exec(db, "rollback", 0, 0, 0);
-done:
-    if (db) sqlite3_close(db);
-    return result;
-}
-
-/* A row action's confirm: under Classic its tray, the second cell saying verb. The prompt's
- * own text isn't read. */
-static int confirm_over(void *prompt, const char *verb) {
-    st.confirm_verb = verb;
-    int answer = navigator_to_with_context("dialog/confirminfo_dialog", prompt);
-    st.confirm_verb = (const char *)0;
-    st.confirm_win = (void *)0;
-    return answer;
-}
-#include "m1plus_nav_playlist_delete.inc"
-#if !M1PLUS
-int ringnav_playlist_delete(void *win, void *event) {
-    void *list = P(p_deque_playlist, 0), *db = 0;
-    int row = widget_get_prop_int(win, "_playlist", -1), ok = 0;
-    if (!list || row < 0 || (unsigned)row >= deque_size(list)) return 0;
-    int id = I(deque_at(list, (unsigned)row), REC_ID);
-    if (id < 0 || id >= 100) return 0;
-    struct {
-        int kind, ms;
-        char text[0x400];
-    } prompt = { 1, 0, "Delete Playlist?" };
-    if (confirm_over(&prompt, "Delete") != 10) return 0;
-    char sql[256];
-    if (sqlite3_open("/mnt/data/database.db", &db)) goto done;
-    if (sqlite3_exec(db, "begin immediate", 0, 0, 0)) goto done;
-    tk_snprintf(sql, sizeof sql,
-                "delete from playlist where id=%d;select changes();"
-                "delete from playlist where id>100 and cd_num=%d",
-                id, id);
-    if (sqlite3_exec(db, sql, ple_changed, 0, 0) || sqlite3_exec(db, "commit", 0, 0, 0)) {
-        sqlite3_exec(db, "rollback", 0, 0, 0);
-        goto done;
-    }
-    ok = 1;
-done:
-    if (db) sqlite3_close(db);
-    if (ok) {
-        g_delete_flag = 1;
-        navigator_back();
-    }
-    toast(ok ? "Playlist deleted" : "Could not delete playlist");
-    return 0;
-}
-#endif
-
-int ringnav_playlistsmore(void *win, void *ctx) {
-    int result = stock_playlistsmore_trampoline(win, ctx);
-    if (win) {
-        widget_set_prop_int(win, "_playlist", (int)ctx);
-        /* Stock's row says Delete Song; this page deletes the whole playlist. Rename only this
-         * label, as Now Playing's Delete Song still deletes the song. As its translation key, so a
-         * re-translation keeps it (no language has the key, so it reads as given). */
-        void *del = widget_lookup(win, "label_del", 1);
-        if (del) widget_set_tr_text(del, "Delete Playlist");
-        /* A row like this page's stock Rename and Delete: a 375 px list_item, the set's pitch high
-         * (SET0 72), holding a 335 px s_btn_listitem, its body high (68), its 52px icon at x 10 and
-         * its 20px label at x 72. Edit Playlist follows the Delete row at the same spacing. */
-#if M1PLUS /* the M1's rows keep the Q2's 72 (its SET0 is the library's rows) */
-        int h = 72, inner = 68;
-#else
-        int h = geom(G_PITCH), inner = geom(G_BODY);
-#endif
-        /* (tools/ipod.py: a set without toolbars has them from the top) */
-        void *item = list_item_create(win, 0, (geom_val(V_TOOLBAR) ? 10 : 0) + 2 * h, 375, h);
-        widget_use_style(item, "s_listitem_black");
-        void *button = button_create(item, 20, 0, UI_W - 40, inner);
-        widget_use_style(button, "s_btn_listitem");
-        widget_on(button, EVT_CLICK, ple_open, ctx);
-        void *image = image_create(button, 10, 0, 52, inner);
-        image_base_set_image(image, "rename");
-        image_set_draw_type(image, IMAGE_DRAW_CENTER);
-        void *label = hscroll_label_create(button, 72, 0, UI_W - 122, inner);
-        widget_use_style(label, "s_scrlabel_white20l");
-        set_hscroll_label_attribute(label);
-        widget_set_text_utf8(label, "Edit Playlist");
-        /* A set without settings icons: none here either, the text at its column */
-        void *const rows[][2] = { { widget_lookup(win, "img_rename", 1),
-                                    widget_lookup(win, "label_rename", 1) },
-                                  { widget_lookup(win, "img_del", 1), del },
-                                  { image, label } };
-        for (unsigned i = 0; !geom_val(V_SET_ICON) && i < 3; ++i) {
-            void *c = rows[i][1];
-            if (rows[i][0]) widget_set_visible(rows[i][0], 0, 0);
-            if (!c) continue;
-            /* the row's whole width, so its chevron is the theme's: on all but Delete */
-            void *row = P(c, W_PARENT), *row_item = row ? P(row, W_PARENT) : (void *)0;
-            int x = geom_val(V_TEXT_X) - SET_STOCK_X;
-            if (row_item) {
-                widget_move_resize(row, 0, 0, 375, h);
-                x = geom_val(V_TEXT_X);
-                if (i != 1) widget_set_visible(image_create(row_item, 302, 0, 50, 0), 0, 0);
-            }
-            widget_move_resize(c, x, I(c, W_Y), I(c, W_W), I(c, W_H));
-            theme_font(c, ROLE_TITLE, FONT_ROW);
-        }
-    }
-    return result;
-}
 
 #include "m1plus_nav_goto.c"
 
@@ -13377,366 +9140,6 @@ static void qm_goto(void *r, int album) {
     if (top != page) widget_on(top, EVT_WINDOW_CLOSE, qm_restore, top);
 }
 
-/* The row alone selected in the stock batch record, as player_addplayList (0x50d0b8) does. */
-static void qm_select(void) {
-    batch_init_selectrecord((int)st.qm_rows);
-    batch_set_selectitem((int)st.qm_idx);
-}
-
-/* Stock playlist rows use the queue in add mode 2. Guard their final dispatch as well. */
-#define PLAYLIST_PICK ((int (*)(void *, void *))PLAYLIST_PICK_ADDR)
-static int qm_playlist_pick(void *ctx, void *event) {
-    char click[0x30];
-    if (!qm_record()) {
-        toast("Queue unchanged");
-        return 0; /* a STOP would leave the list's scroll_view holding its grab */
-    }
-    qm_select();
-    /* Classic's picker has no dots: a tap at their place picks */
-    return PLAYLIST_PICK(
-        ctx, geom_val(V_TOOLBAR) ? event : pointer_event_init(click, EVT_CLICK, ctx, 0, 0));
-}
-
-static int qm_playlist_gone(void *ctx, void *event) {
-    st.qm_playlist = 0;
-    return 0;
-}
-
-/* w's live EVT_CLICK handler fn, as its emitter holds it (ctx @0, fn @12), or 0. */
-static void *click_bound(void *w, const void *fn) {
-    void *emitter = w ? P(w, W_EMITTER) : (void *)0;
-    for (void *item = emitter ? P(emitter, 0) : 0; item; item = P(item, EMIT_NEXT))
-        if (I(item, EMIT_TYPE) == EVT_CLICK && P(item, 12) == fn && !B(item, EMIT_PENDING_REMOVE))
-            return item;
-    return (void *)0;
-}
-
-static int pl_pick(void *ctx, void *event);
-static void qm_playlist_bind(void *w, int depth, int (*pick)(void *, void *)) {
-    if (!w || depth == 16) return;
-    void *item = click_bound(w, (void *)PLAYLIST_PICK) ?: click_bound(w, (void *)pl_pick);
-    if (item) {
-        void *ctx = P(item, 0), *fn = P(item, 12);
-        widget_off_by_func(w, EVT_CLICK, fn, ctx);
-        widget_on(w, EVT_CLICK, pick, ctx);
-    }
-    for (unsigned i = 0, n = widget_count_children(w); i < n; ++i)
-        qm_playlist_bind(widget_get_child(w, i), depth + 1, pick);
-}
-
-/* Classic's Playlists: under a set without toolbars (toolbar 0) the page is rows, as Songs'. Stock
- * still builds everything: its toolbar, hidden (tools/ipod.py), and its Import and Export tile row,
- * hidden, stay as the click targets; the rows stock can't have are added after each rebuild and
- * click those hidden widgets, so its mode, marks, dialogs and reload stay its own. Stock's own
- * handlers, which the rows' dispatch looks up: */
-enum { PL_SELECT_ALL, PL_NEW, PL_EDIT, PL_IMPORT, PL_EXPORT, PL_DELETE, PL_DONE, PL_N };
-static const unsigned pl_stock[PL_N] = { 0x4b1b88, 0x4b1a88, 0x4b19b8, 0x4b26d0,
-                                         0x4b2528, 0x4b23c0, 0x4b1ad0 };
-#define PLAYLIST_KEYUP ((int (*)(void *, void *))PLAYLIST_KEYUP_ADDR)
-
-/* A row's place on the list's two heights: name over second line in the page rows' boxes, which
- * hold their fonts; the dots or a mark at the right edge, centred on the picker's tick's column
- * (x 346), where the selected row's chevron (x 317) shows in their place. The text ends clear of
- * whichever shows. */
-#define PL_MARK_X 333 /* the tick's column, the dots' hit */
-static void pl_fit(void *button) {
-    const theme_t *T = theme();
-    int h = I(button, W_H), width = 289;
-    for (unsigned i = 0, n = widget_count_children(button); i < n; ++i) {
-        void *c = widget_get_child(button, i);
-        const char *name = widget_get_prop_str(c, "name", "");
-        if (tk_str_start_with(name, "img_more") && widget_get_visible(c)) {
-            widget_move_resize(c, 321, 0, 50, h);
-        } else if (tk_str_start_with(name, "img_choice") && widget_get_visible(c)) {
-            width = 309;
-            widget_move_resize(c, PL_MARK_X, 0, 26, h);
-            /* stock's mark is a disc: as a picker's, for paint_radio's tick */
-            if (!tk_strcmp(widget_get_prop_str(c, "image", ""), "mulselect"))
-                image_base_set_image(c, "select");
-        }
-    }
-    void *info = widget_lookup(button, "view_info", 0);
-    if (!info || widget_count_children(info) < 2) return;
-    widget_move_resize(info, T->page_x, 0, width, h);
-    widget_move_resize(widget_get_child(info, 0), 0, T->page_cap_y, width, T->page_cap_h);
-    widget_move_resize(widget_get_child(info, 1), 0, T->page_det_y, width, T->page_det_h);
-}
-
-/* Stock's row, as the list's other two-line rows: its art goes, its count reads "N Songs". */
-static void pl_row(void *item) {
-    const theme_t *T = theme();
-    char count[32];
-    void *button = widget_get_child(item, 0), *info = widget_lookup(button, "view_info", 0);
-    int h = T->page_detail;
-    if (!info || widget_count_children(info) < 2) return;
-    widget_set_name(item, PAGE_TALL);
-    widget_set_prop_int(item, PL_ROW, 1);
-    widget_resize(item, I(item, W_W), h);
-    widget_move_resize(button, 0, 0, 375, h);
-    for (unsigned i = 0, n = widget_count_children(button); i < n; ++i) {
-        void *c = widget_get_child(button, i);
-        const char *name = widget_get_prop_str(c, "name", "");
-        if (tk_str_start_with(name, "img_more")) {
-            /* emptied under the theme: paint_radio draws the dots; a picker has none */
-            image_base_set_image(c, "unselect");
-            if (widget_get_prop_int(window_of(item), PL_MODE, 0)) widget_set_visible(c, 0, 0);
-        } else if (c != info && !tk_str_start_with(name, "img_choice"))
-            widget_set_visible(c, 0, 0);
-    }
-    void *title = widget_get_child(info, 0), *second = widget_get_child(info, 1);
-    const unsigned *s = widget_get_text(second);
-    unsigned songs = 0;
-    while (s && *s && (*s < '0' || *s > '9')) ++s;
-    while (s && *s >= '0' && *s <= '9') songs = songs * 10 + (*s++ - '0');
-    tk_snprintf(count, sizeof count, "%u %s", songs, songs == 1 ? "Song" : "Songs");
-    widget_set_text_utf8(second, count);
-    hscroll_label_set_only_focus(title, 1);
-    theme_font(title, ROLE_TALL, FONT_ROW);
-    row_meta(second);
-    pl_fit(button);
-}
-
-/* Each row's click runs next pass: stock's handler may rebuild the rows under it (a dialog's close
- * does) and it finds its widget by handler, as nothing stock names. The row is the action, whatever
- * scrolled: no index reaches stock. */
-static void pl_rows(void *win);
-static int pl_page(void *win) {
-    return win && !tk_strcmp(widget_get_prop_str(win, "name", ""), "playlist_page");
-}
-static void *pl_target(void *parent, unsigned fn) {
-    for (unsigned i = 0, n = parent ? widget_count_children(parent) : 0; i < n; ++i)
-        if (click_bound(widget_get_child(parent, i), (void *)fn))
-            return widget_get_child(parent, i);
-    return (void *)0;
-}
-/* The hidden widget stock binds action's handler to: in its toolbar, or its tile row. */
-static void *pl_find(void *win, int action) {
-    void *view = widget_lookup(win, "scroll_view", 1);
-    return pl_target(widget_lookup(win, "view_navbar", 1), pl_stock[action])
-               ?: pl_target(view && widget_count_children(view) ? widget_get_child(view, 0)
-                                                                : (void *)0,
-                            pl_stock[action]);
-}
-static int pl_due(const void *info) {
-    void *wm = window_manager(), *win = window_manager_get_top_window(wm);
-    int action = (int)(long)P(info, TIMER_CTX);
-    char click[0x30];
-    st.pl_timer = 0;
-    if (!pl_page(win)) return 0;
-    void *w = pl_find(win, action);
-    if (w) stock_dispatch_trampoline(w, pointer_event_init(click, EVT_CLICK, w, 0, 0));
-    /* a dialog's up, or gone: its close rebuilds the rows */
-    if (window_manager_get_top_window(wm) == win) pl_rows(win); /* pl_page(win) above */
-    return 0;
-}
-/* The latest row clicked in a pass is the one that runs. */
-static int pl_click(void *action, void *event) {
-    (void)event;
-    stop_timer(&st.pl_timer);
-    st.pl_timer = timer_add(pl_due, action, 0);
-    return 0;
-}
-/* The row goes to index at, or after the rest when at < 0. */
-static void pl_action(void *view, const char *caption, int action, int into, int at) {
-    int h = geom(G_PITCH);
-    void *item = list_item_create(view, 0, 0, 0, h);
-    widget_use_style(item, "s_listitem_black");
-    void *button = button_create(item, 0, 0, 375, h);
-    widget_use_style(button, "s_btn_listitem");
-    widget_set_name(button, PL_ACTION);
-    widget_set_prop_int(item, PL_ACT, action + 1);
-    widget_on(button, EVT_CLICK, pl_click, (void *)(long)action);
-    void *label = hscroll_label_create(button, theme()->page_x, 0, 289, h);
-    widget_use_style(label, "s_scrlabel_white20l");
-    set_hscroll_label_attribute(label);
-    hscroll_label_set_only_focus(label, 1);
-    widget_set_text_utf8(label, caption);
-    theme_font(label, ROLE_TITLE, FONT_ROW);
-    if (into) widget_set_visible(image_create(button, 302, 0, 50, 0), 0, 0); /* page_into's */
-    if (at >= 0) widget_restack(item, at);
-}
-
-/* Which rows the mode shows, their words, the bar's: on every rebuild, and after a click or mark.
- * Moving between normal and select mode the selection stays on its playlist; marks only add rows
- * after it, so the count that load() would reset it on follows. */
-static void pl_rows(void *win) {
-    if (M1PLUS) return; /* Classic Playlists is unported; V2.1 keeps its own rows */
-    void *view = widget_lookup(win, "scroll_view", 1), *nav = widget_lookup(win, "view_navbar", 1);
-    void *lists = P(p_deque_playlist, 0);
-    if (!view) return;
-    int add = widget_get_prop_int(win, PL_MODE, 0), marking = !add && g_navbar_status == 1,
-        marks = 0, was = widget_get_prop_int(win, PL_MARKING, 0),
-        n = lists ? (int)deque_size(lists) : 0, count = (int)widget_count_children(view);
-    for (int i = 0; marking && i < n; ++i) marks += batch_get_selectitem(i) == 1;
-    char words[48];
-    void *row[PL_N] = { 0 };
-    int show[PL_N] = { marking,   !marking, !marking && n > 0, marking || !n, marks > 0,
-                       marks > 0, marking };
-    for (int i = 0; i < count; ++i) {
-        void *item = widget_get_child(view, i);
-        int action = widget_get_prop_int(item, PL_ACT, 0) - 1;
-        if (action < 0 || action >= PL_N) continue;
-        row[action] = item;
-        widget_set_visible(item, show[action], 0);
-        if (!show[action]) widget_move_resize(item, 0, 0, 375, geom(G_PITCH));
-    }
-    /* PAGE_TALL's the separators': every row shown but the list's last, a playlist's or ours */
-    for (int i = count - 1, last = 1; i >= 0; --i) {
-        void *item = widget_get_child(view, i);
-        if (!widget_get_prop_int(item, PL_ACT, 0) && !widget_get_prop_int(item, PL_ROW, 0))
-            continue;
-        int shown = widget_get_visible(item);
-        widget_set_name(item, shown && !last ? PAGE_TALL : "");
-        if (shown) last = 0;
-    }
-    if (row[PL_SELECT_ALL])
-        widget_set_text_utf8(widget_get_child(widget_get_child(row[PL_SELECT_ALL], 0), 0),
-                             B(G_ALLSELECT_FLAG, 0) ? "Deselect All" : "Select All");
-    for (int i = PL_EXPORT; marks && i <= PL_DELETE && row[i]; ++i) {
-        tk_snprintf(words, sizeof words, "%s %d Playlist%s%s", i == PL_EXPORT ? "Export" : "Delete",
-                    marks, marks == 1 ? "" : "s", i == PL_EXPORT ? "" : "\xe2\x80\xa6");
-        widget_set_text_utf8(widget_get_child(widget_get_child(row[i], 0), 0), words);
-    }
-    /* the bar reads the toolbar's first label, which stock writes with the last list opened */
-    tk_snprintf(words, sizeof words,
-                marks     ? "%d Selected"
-                : marking ? "Edit Playlists"
-                          : "Playlists",
-                marks);
-    if (nav && widget_count_children(nav)) widget_set_text_utf8(widget_get_child(nav, 0), words);
-    bar_title_sync(win);
-    void *none = widget_lookup(win, PL_NONE, 0);
-    if (!none && !n) {
-        none = text(win, 0, 124, 375, 32);
-        widget_set_name(none, PL_NONE);
-        widget_set_text_utf8(none, "No Playlists");
-        theme_font(none, ROLE_TITLE, FONT_ROW);
-        widget_set_prop_int(none, "style:normal:text_color", (int)SPOT_GREY);
-    }
-    if (none) widget_set_visible(none, !n, 0);
-    widget_set_prop_int(win, PL_MARKING, marking);
-    if (!marking && marking == was) return;
-    /* Stock showed its marks or the dots: the rows go to their places, the list to its new height.
-     */
-    for (int i = 1; i < count; ++i) {
-        void *item = widget_get_child(view, i);
-        if (widget_get_prop_int(item, PL_ROW, 0)) pl_fit(widget_get_child(item, 0));
-    }
-    widget_layout(view);
-    if (load_rows(&g_menu, view)) {
-        int id = widget_get_prop_int(view, SEL, -1);
-        /* select mode's rows: Select All, the playlists, its actions; the list's: New, Edit (with
-         * playlists), the playlists. Leaving, Select All goes to the first playlist, an action to
-         * Edit (Import on an empty list). */
-        if (marking != was)
-            id = marking ? (n ? 1 : 0) : id <= 0 ? (n ? 2 : 0) : id <= n ? id + 1 : 1;
-        prop(view, COUNT, g_menu.rows);
-        prop(view, SEL, id);
-        if (marking != was) reveal(&g_menu, id, 1);
-    }
-    widget_invalidate_force(win, (void *)0);
-}
-/* With nothing remembered (a first open, or a count changed) Classic's Playlists starts on its
- * first playlist, below New and Edit, as stock's and the iPod's lists of playlists alone do; an
- * empty list on New. */
-static int pl_first(menu_t *m, int cur) {
-    for (int i = cur; i < m->n && widget_get_prop_int(P(m->at[cur], W_PARENT), PL_ACT, 0); ++i)
-        if (widget_get_prop_int(P(m->at[i], W_PARENT), PL_ROW, 0)) return i;
-    return cur;
-}
-/* The second handler of a playlist row, after stock's marked it. */
-static int pl_marked(void *win, void *event) {
-    (void)event;
-    if (g_navbar_status == 1) pl_rows(win);
-    return 0;
-}
-/* Stock's row click opens More from x 286 outside select mode (0x4b1d90, 0x4b1e70): a picker has
- * no More, so a tap anywhere picks; in the list the dots' column at the edge (PL_MARK_X on) stays
- * More, and a tap left of it, the chevron's column (from x 317) too, opens the playlist. The band's
- * row draws its chevron and no dots, so it opens to the edge; its More is the hold's. A pick or an
- * open is a fresh click at x 0. */
-static int pl_pick(void *ctx, void *event) {
-    char click[0x30];
-    int lit = st.sel_accent && (ctx == st.sel_accent || P(ctx, W_PARENT) == st.sel_accent);
-    if (!widget_get_prop_int(window_of(ctx), PL_MODE, 0) &&
-        (g_navbar_status == 1 || (!lit && I(event, EVENT_X) >= PL_MARK_X)))
-        return PLAYLIST_PICK(ctx, event);
-    return PLAYLIST_PICK(ctx, pointer_event_init(click, EVT_CLICK, ctx, 0, 0));
-}
-/* Return in select mode is Done, not the page; without Done's target it is stock's. */
-static int pl_keyup(void *win, void *event) {
-    if (I(event, EVENT_KEY) == KEY_RETURN && g_navbar_status == 1 && pl_find(win, PL_DONE)) {
-        pl_click((void *)PL_DONE, event);
-        return STOP;
-    }
-    return PLAYLIST_KEYUP(win, event);
-}
-/* Stock leaves its mode set for a page gone in it (held Return, to Home). */
-static int pl_gone(void *win, void *event) {
-    (void)event;
-    if (widget_get_prop_int(win, PL_MARKING, 0)) g_navbar_status = 0;
-    return 0;
-}
-static void pl_dress(void *win, int first) {
-    void *view = widget_lookup(win, "scroll_view", 1);
-    int add = widget_get_prop_int(win, PL_MODE, 0);
-    if (!view) return;
-    /* the rows' click goes through pl_pick first (qm's guarded picker keeps its own), then select
-     * mode's second handler, pl_marked: both are appended, and to stock's fresh rows, as
-     * ringnav_playlist dresses only after stock's rebuild, whose row button has PLAYLIST_PICK
-     * alone, so the rebind leaves pl_pick its one handler and pl_marked goes on after it */
-    if (win != st.qm_playlist) qm_playlist_bind(win, 0, pl_pick);
-    for (unsigned i = 0, n = widget_count_children(view); i < n; ++i) {
-        void *item = widget_get_child(view, i);
-        if (!i && !add) {
-            widget_set_visible(item, 0, 0);
-            continue;
-        }
-        pl_row(item);
-        if (!add) widget_on(widget_get_child(item, 0), EVT_CLICK, pl_marked, win);
-    }
-    /* New and Edit head the list, after the hidden tile row (a picker has none); Select All, select
-     * mode's first row, sits with them, as the two modes never show both */
-    if (add) {
-        pl_action(view, "New Playlist\xe2\x80\xa6", PL_NEW, 1, 0);
-    } else {
-        pl_action(view, "Select All", PL_SELECT_ALL, 0, 1);
-        pl_action(view, "New Playlist\xe2\x80\xa6", PL_NEW, 1, 2);
-        pl_action(view, "Edit Playlists\xe2\x80\xa6", PL_EDIT, 1, 3);
-        pl_action(view, "Import Playlists", PL_IMPORT, 0, -1);
-        pl_action(view, "Export", PL_EXPORT, 0, -1);
-        pl_action(view, "Delete", PL_DELETE, 0, -1);
-        pl_action(view, "Done", PL_DONE, 0, -1);
-    }
-    pl_rows(win);
-    if (first && !add) { /* stock binds it with ctx win (0x4b3304) */
-        widget_off_by_func(win, EVT_KEY_UP, (void *)PLAYLIST_KEYUP, win);
-        widget_on(win, EVT_KEY_UP, pl_keyup, win);
-        widget_on(win, EVT_DESTROY, pl_gone, win);
-    }
-}
-
-/* After stock rebuilds its rows: the guarded Now Playing picker's rebind, Classic's rows. Stock's
- * add mode is one global, left by any picker that closes, which it reads as this page comes back:
- * each page keeps the one it opened with. */
-#if M1PLUS /* V2.1's rebuild takes any of the page's widgets: New Playlist's click passes its row */
-int ringnav_playlist(void *w) {
-    void *win = window_of(w);
-#else
-int ringnav_playlist(void *win) {
-    void *w = win;
-#endif
-    int mode = widget_get_prop_int(win, PL_MODE, -1), first = mode < 0;
-    if (first)
-        widget_set_prop_int(win, PL_MODE, I(PLAYLIST_ADD_MODE, 0));
-    else
-        I(PLAYLIST_ADD_MODE, 0) = mode;
-    int result = stock_playlist_trampoline(w);
-    if (win == st.qm_playlist) qm_playlist_bind(win, 0, qm_playlist_pick);
-    if (!geom_val(V_TOOLBAR)) pl_dress(win, first);
-    return result;
-}
-
 /* Deferred so the dialog is never closed under its own click dispatch. */
 static int qm_open(const void *unused);
 
@@ -13762,7 +9165,7 @@ static int qm_run(const void *unused) {
             if (queue && at < deque_size(queue) &&
                 rec_hash(deque_at(queue, at)) == st.qm_forced_hash)
                 playback_move(at);
-            up_next(page_closed, page_keyup);
+            up_next(page_keyup);
         } else {
 #if M1PLUS /* no playerqueue_page: V2.1's queue, as Now Playing's More opens it (0x53b14c), which first resets
             * Enlarged Art's countdown so the big cover doesn't open over it */
@@ -13774,7 +9177,7 @@ static int qm_run(const void *unused) {
         }
     } else if (a == QA_MORE && st.qm_kind == QM_PLAYLIST) {
 #if M1PLUS /* no playlistsmore_page: the playlist's editor (m1plus_nav_playlist_hold.inc) */
-        if (r) ple_open((void *)(long)st.qm_idx, 0);
+        if (r) m1_ple_open((void *)(long)st.qm_idx, 0);
 #else
         if (r) navigator_to_with_context("localmusic/playlistsmore_page", (void *)(long)st.qm_idx);
 #endif
@@ -14330,8 +9733,7 @@ static void quick_poll(void) {
  * Internet Radio station it is the favourite toggle, on a Spotify track Add to Queue (its reply
  * toasts), on a card app's row its hold op (addon_hold: a Deezer list downloaded whole), in Quick
  * Settings the wheel's brightness/volume switch, on View Queue's shuffle list
- * Play Next (un_hold), on Now Playing's synced lyrics a seek to a line (lyric_seek_hold), the
- * release latched as the queue menu's. */
+ * Play Next (un_hold), the release latched as the queue menu's. */
 #if M1PLUS
 static int hold_previous(unsigned key); /* m1plus_nav_back.c */
 #endif
@@ -14343,8 +9745,7 @@ int ringnav_keylong(void *ctx, void *event) {
     if (!event || I(event, EVENT_KEY) != KEY_PLAY) return stock_keylong_trampoline(ctx, event);
     void *top = window_manager_get_top_window(window_manager());
     const char *fav = radio_hold(top);
-    int taken = fav || quick_wheel_toggle(top) || spot_hold(top) || addon_hold(top) ||
-                un_hold(top) || lyric_seek_hold();
+    int taken = fav || quick_wheel_toggle(top) || spot_hold(top) || addon_hold(top) || un_hold(top);
     if (!taken && qm_hold()) return STOP;
     /* Stock has no Play/Pause hold, so its release would play or pause: Classic's does nothing. */
     if (taken || (usable() && classic_pages())) {
@@ -14441,17 +9842,8 @@ static void play_count(void *r, unsigned key) {
     int i = 0;
     for (int j = 0; j < PLAYS_SLOTS && st.plays[i].key != key; j++)
         if (st.plays[j].key == key || st.plays[j].n <= st.plays[i].n) i = j;
-    /* Most Played's kept tracks take a newly counted song, unless its page shows them (its rows
-     * and song menu match the deque); one that loses its count may have hidden the next best,
-     * which only the whole library knows. */
-    if (st.plays[i].key && st.plays[i].key != key && mp_find(st.plays[i].key) >= 0)
-        st.mp_gen = ~library_gen;
-    else if (st.mp_list && mp_find(key) < 0) {
-        if (!st.mp_page && deque_size(st.mp_list) < 2 * PLAYS_TOP)
-            _deque_push_back(st.mp_list, r);
-        else
-            st.mp_gen = ~library_gen;
-    }
+    unsigned evicted = st.plays[i].key;
+    mp_counted(r, key, evicted != key ? evicted : 0);
     unsigned n = st.plays[i].key == key ? st.plays[i].n + 1 : 1;
     for (; i > 0; i--) st.plays[i] = st.plays[i - 1];
     st.plays[0].key = key;
@@ -14460,11 +9852,11 @@ static void play_count(void *r, unsigned key) {
 }
 
 /* Scrobbling (docs/internals.md#scrobbling): a Rockbox-style AudioScrobbler 1.1 log at the card's
- * root, for any .scrobbler.log uploader or Upload Scrobbles (scrobble.c). Artist and album are the
- * player's parsed tags when it has parsed this track (now_tag), or with .scrobble.ini's
+ * root, for any .scrobbler.log uploader or Upload Scrobbles (scrobble.c). Artist, album and title
+ * are the player's parsed tags when it has parsed this track (now_tag), or with .scrobble.ini's
  * ALBUM_ARTIST the song's album artist when it has one (parsed too: folder queues' records have
  * none); untagged (artist-less) tracks are skipped, as scrobblers reject them. */
-static char *scrobble_tag(char *o, char *end, const char *s) {
+char *scrobble_tag(char *o, char *end, const char *s) {
     for (; s && *s && o < end - 1; s++) *o++ = *s == '\t' || *s == '\n' || *s == '\r' ? ' ' : *s;
     *o++ = '\t';
     return o;
@@ -14480,9 +9872,11 @@ static void scrobble(void *r, int total, int heard) {
     if (now < 1600000000) return; /* clock never set: Last.fm would reject the time */
     if (!addon_scrobbles(P(r, REC_PATH))) return; /* its card app's q2app says scrobble=0 */
     char line[800], name[512], *end = line + sizeof line - 48, *o = line; /* 48: the numbers */
+    const char *title = now_tag(r, REC_TITLE);
+    if (!title || !*title || !strcmp(title, "(null)")) title = track_name(name, sizeof name, r);
     o = scrobble_tag(o, end, artist);
     o = scrobble_tag(o, end, now_tag(r, REC_ALBUM));
-    o = scrobble_tag(o, end, track_name(name, sizeof name, r));
+    o = scrobble_tag(o, end, title);
     if (I(r, REC_TRACK) > 0) o += tk_snprintf(o, 12, "%d", I(r, REC_TRACK));
     o += tk_snprintf(o, (unsigned)(line + sizeof line - o), "\t%d\tL\t%u\t\n", total,
                      (unsigned)(now - heard));
@@ -14621,629 +10015,6 @@ static void resume_poll(void) {
     }
 }
 
-/* Charge limit (docs/internals.md#charge-limit): get_battery_capacity keeps g_power_capacity and
- * g_power_chargestate (1 Charging, 2 Full, the AXP2101's battery status); switch_charge_enable
- * drives the charge enable, as stock's USB mode does with g_usbdac_chargeflag. At CHARGE_STOP
- * charging stops, and again whenever something else (USB mode's exit, AirPlay) turned it back on,
- * until the level falls to CHARGE_RESUME; then, or with the limit off, charging is handed back as
- * stock would have it: USB mode's and AirPlay's own choice while their page is open, else on. */
-static void charge_poll(void) {
-    unsigned now = time_now_ms();
-    if (st.charge_at && now - st.charge_at < CHARGE_POLL_MS) return;
-    st.charge_at =
-        now | !now; /* never 0, no poll yet; |1 would eat a millisecond when now is even */
-    int level = I(g_power_capacity, 0), charging = (unsigned)I(g_power_chargestate, 0) - 1 < 2;
-    int hold = st.charge_limit && level > CHARGE_RESUME && (st.charge_held || level >= CHARGE_STOP);
-    if (hold && (!st.charge_held || charging))
-        switch_charge_enable(0);
-    else if (!hold && st.charge_held)
-        switch_charge_enable(navigator_window_is_exist("usbmode_page") ||
-                                     navigator_window_is_exist("airplay_page")
-                                 ? g_usbdac_chargeflag
-                                 : 1);
-    st.charge_held = hold;
-}
-
-/* The Wi-Fi signal (docs/internals.md#battery), for networkGetWifiSignal's two pollers: the status
- * bar's bars (get_wifisignal) and the network monitor thread's connect status, each about once a
- * second. Stock asks with SIOCGIWSTATS, which the driver answers through get_station, whose TX
- * report takes the radio out of power save (LPS) every time. The driver keeps the same signal in
- * rx_signal, a percentage that get_station reports less 100 as dBm, and reading it touches no
- * hardware. Unreadable, it is 0, as stock's failed ioctl. Stock's unsigned level wraps the one
- * value 0 dBm (100%) to -256, one bar; here it is 0, four. */
-#define WIFI_SIGNAL "/proc/net/rtl8733bs/wlan0/rx_signal"
-static struct {
-    unsigned at;
-    int dbm;
-} wifi __attribute__((section(".scratch")));
-
-int ringnav_wifi_signal(void) {
-    unsigned now = time_now_ms();
-    if (wifi.at && now - wifi.at < WIFI_SIGNAL_MS) return wifi.dbm;
-    char text[512];
-    int fd = open(WIFI_SIGNAL, 0x80000); /* O_RDONLY | O_CLOEXEC, MIPS */
-    int n = fd < 0 ? 0 : read(fd, text, sizeof text - 1);
-    if (fd >= 0) close(fd);
-    text[n > 0 ? n : 0] = 0;
-    const char *s = strstr(text, "signal_strength:");
-    int pct = 0;
-    if (s)
-        for (s += 16; *s >= '0' && *s <= '9'; ++s) pct = pct * 10 + *s - '0';
-    wifi.dbm = s ? pct - 100 : 0;
-    wifi.at = now | !now; /* never 0, not read yet */
-    return wifi.dbm;
-}
-
-/* Hardware watchdog (docs/internals.md#watchdog). Stock loads soc_watchdog.ko and never starts it,
- * so a Q2 whose UI loop or kernel stalls stays dark, every button dead, until a 15 s Centre hold
- * cuts the power. The first UI loop pass starts it counting WDT_MS and every pass feeds it, so a
- * stall that long reboots instead. It counts on the RTC clock, through a suspend, so Standby stops
- * it before and starts it again after (ringnav_standby). Its close is a no-op, so a clean end
- * (ringnav_clean_end: power-off, Restart, a firmware update, Rockbox) stops it. libhardware2's
- * watchdog_start/stop/feed ioctls; no device, or a refused start, leaves stock's behaviour.
- * ponytail: the UI loop is the only feeder, so a stalled worker thread is not caught. */
-#define WDT_DEV "/dev/jz_watchdog"
-#define WDT_START 0x8004570d /* an int of milliseconds, by pointer */
-#define WDT_STOP 0x2000570e
-#define WDT_FEED 0x2000570f
-/* Stall record (docs/internals.md#watchdog): after the watchdog's reset q2-crash.log says only that
- * demo did not end. A thread started with the watchdog wakes every STALL_POLL_MS; once the UI loop
- * has not passed for STALL_MS, and again at STALL_AGAIN_MS, it writes /mnt/data/q2-stall and syncs
- * it: the time since the pass, toast()'s dialogs open, the UI thread's state, wchan and syscall
- * line (sp and pc), MemAvailable, pgmajfault and workingset_refault_file, then the stack words from
- * that sp as a q2remote --prof line (ra 0). The time counts from the thread's first wake after the
- * pass, so up to STALL_POLL_MS short. The UI loop is demo's main thread, whose stat, wchan and
- * syscall /proc/self has. A pass removes the record: a stall that recovered is not what it is for.
- * Standby, a clean end and a long pass (ringnav_wdt_long) write nothing. Only open, read, write,
- * fsync, close and unlink on its own buffers, and the stack read in place: no stock call, no
- * allocation, no lock the UI thread takes. S90play puts it in q2-crash.log as "== stall". */
-#define STALL_FILE "/mnt/data/q2-stall"
-#define STALL_WORDS 160 /* q2remote --prof's STACK_WORDS */
-#define STALL_IN 4096   /* a /proc file's start, read; the record's buffers are the thread's own */
-static struct {
-    volatile unsigned passes; /* the UI loop's, counted by wdt_poll */
-    unsigned seen, at;        /* the thread's: passes at its last wake, and since when (now_ms) */
-    int level;                /* records written since that pass */
-} stall __attribute__((section(".scratch")));
-static void stall_read(char *in, const char *path) { /* the file's start, NUL-terminated */
-    int fd = open(path, 0x80000), n = 0, got;        /* O_RDONLY | O_CLOEXEC */
-    while (fd >= 0 && n < STALL_IN - 1 && (got = read(fd, in + n, STALL_IN - 1 - n)) > 0) n += got;
-    if (fd >= 0) close(fd);
-    in[n] = 0;
-}
-/* in's line that starts with key */
-static const char *stall_find(const char *in, const char *key) {
-    unsigned n = strlen(key);
-    for (const char *s = in; *s; ++s) {
-        if (!strncmp(s, key, n)) return s;
-        while (*s && *s != '\n') ++s;
-        if (!*s) break;
-    }
-    return 0;
-}
-static char *stall_add(char *p, char *end, const char *label, const char *s) { /* s's first line */
-    if (!s || p >= end) return p;
-    while (*label && p < end) *p++ = *label++;
-    while (*s && *s != '\n' && p < end) *p++ = *s++;
-    *p++ = '\n';
-    return p;
-}
-static void stall_write(unsigned age) {
-    char in[STALL_IN], out[2560], *p = out, *last = out + sizeof out - 1, *end = last - 11;
-    char state = '?';
-    unsigned long tid = 0, top = 0, sp = 0, pc = 0, d;
-    p += snprintf(p, 64, "age %u ms\ntoasts %d\n", age, st.toasts);
-    stall_read(in, "/proc/self/stat"); /* "pid (comm) S ...": the comm may hold ") " */
-    const char *s = strrchr(in, ')');
-    if (s && s[1] == ' ' && s[2]) state = s[2];
-    for (int field = 2; s && *s; ++s) /* 28, startstack: the main stack's top */
-        if (*s == ' ' && ++field == 28) {
-            for (++s; *s >= '0' && *s <= '9'; ++s) top = top * 10 + *s - '0';
-            break;
-        }
-    for (s = in; *s >= '0' && *s <= '9'; ++s) tid = tid * 10 + *s - '0';
-    p += snprintf(p, 16, "state %c\n", state);
-    stall_read(in, "/proc/self/wchan");
-    p = stall_add(p, last, "wchan ", in);
-    stall_read(in, "/proc/self/syscall"); /* "nr args sp pc", "-1 sp pc" or "running" */
-    p = stall_add(p, last, "syscall ", in);
-    for (s = in; (s = strstr(s, "0x"));) {
-        unsigned long v = 0;
-        for (s += 2; (d = *s >= '0' && *s <= '9' ? *s - '0' : (*s | 32) - 'a' + 10) < 16; ++s)
-            v = v << 4 | d;
-        sp = pc, pc = v; /* the last two */
-    }
-    stall_read(in, "/proc/meminfo");
-    p = stall_add(p, last, "", stall_find(in, "MemAvailable:"));
-    stall_read(in, "/proc/vmstat");
-    p = stall_add(p, last, "", stall_find(in, "pgmajfault "));
-    p = stall_add(p, last, "", stall_find(in, "workingset_refault_file "));
-    /* The stack's words that could be code, as --prof's, read in place: from a blocked thread's sp
-     * up to the main stack's top is its own stack, mapped; no other is within 8 MB of that top. */
-    if (sp && !(sp & 3) && sp < top && top - sp < 0x800000 && p + 40 < end) {
-        p += snprintf(p, 40, "%lu %c %lx 0", tid, state, pc);
-        for (unsigned long a = sp; a < sp + 4 * STALL_WORDS && a + 4 <= top && p < end; a += 4) {
-            unsigned w = *(const volatile unsigned *)a;
-            if (w >= 0x400000 && w < 0x80000000 && !(w & 3)) p += snprintf(p, 10, " %x", w);
-        }
-        *p++ = '\n';
-    }
-    /* O_WRONLY | O_CREAT | O_CLOEXEC, and O_APPEND, or O_TRUNC for the first */
-    int fd = open(STALL_FILE, stall.level ? 0x80109 : 0x80301, 0644);
-    if (fd < 0) return;
-    write(fd, out, p - out);
-    fsync(fd);
-    close(fd);
-    ++stall.level;
-}
-static void stall_step(void) {
-    unsigned now = (unsigned)now_ms(), passes = stall.passes;
-    if (passes != stall.seen || st.ended || st.suspended || st.wdt_long) {
-        if (passes != stall.seen && stall.level) unlink(STALL_FILE), stall.level = 0;
-        stall.seen = passes, stall.at = now;
-        return;
-    }
-    unsigned age = now - stall.at;
-    if (stall.level < 2 && age >= (stall.level ? STALL_AGAIN_MS : STALL_MS)) stall_write(age);
-}
-static void *stall_watch(void *arg) {
-    for (;;) usleep(STALL_POLL_MS * 1000), stall_step();
-    return arg;
-}
-static void wdt_set(int on) { /* Standby's suspend and the resume after it; a clean end */
-    int ms = WDT_MS;
-    if (st.wdt > 0) ioctl(st.wdt, on ? WDT_START : WDT_STOP, &ms);
-}
-static void wdt_span(int ms) {
-    ioctl(st.wdt, WDT_STOP, 0);
-    ioctl(st.wdt, WDT_START, &ms);
-}
-/* A known long pass is starting (an import's tag reads, a folder add's loads): WDT_LONG_MS for it,
- * and the next pass, once it has returned, WDT_MS again */
-void ringnav_wdt_long(void) {
-    if (st.ended || st.wdt <= 0 || st.wdt_long) return;
-    st.wdt_long = 1;
-    wdt_span(WDT_LONG_MS);
-}
-static void wdt_poll(void) {
-    if (st.ended || st.wdt < 0) return;
-    ++stall.passes;
-    if (st.wdt && st.wdt_long) {
-        st.wdt_long = 0;
-        wdt_span(WDT_MS);
-    } else if (st.wdt)
-        ioctl(st.wdt, WDT_FEED, 0);
-    if (st.wdt) return;
-    int fd = open(WDT_DEV, 0x80002), ms = WDT_MS; /* O_RDWR, as libhardware2, | O_CLOEXEC (MIPS) */
-    st.wdt = fd > 0 && !ioctl(fd, WDT_START, &ms) ? fd : -1;
-    if (fd > 0 && st.wdt < 0) close(fd);
-    unsigned long tid;
-    if (st.wdt > 0 && !pthread_create(&tid, 0, stall_watch, 0)) pthread_detach(tid);
-}
-/* The state record (docs/internals.md#watchdog): /mnt/data/q2-state says what the Q2 is doing, one
- * line rewritten and synced whenever it changes: the screen, Standby's suspend, the cable, the
- * battery, playback and its output. A clean end removes it; one still there at boot means a
- * forced restart (or the battery), and S90play puts it in q2-crash.log (docs/boot.md). */
-#define STATE_FILE "/mnt/data/q2-state"
-static char *put(char *p, const char *s) {
-    while (*s) *p++ = *s++;
-    return p;
-}
-static void state_poll(void) {
-    static const char *const play[] = { "?", "stopped", "playing", "paused" };
-    static const char *const out[] = { "jack", "bluetooth", "usb" };
-    if (st.ended) return;
-    unsigned ps = (unsigned)mclGetPlayStatus(), ow = (unsigned)mclGetOutputWay();
-    unsigned pct = (unsigned)I(g_power_capacity, 0), n = 0;
-    char s[sizeof st.state], d[4], *p = s;
-    p = put(p, g_backlight_status ? "screen:on" : "screen:off");
-    p = put(p, st.suspended ? " power:suspending" : " power:running");
-    p = put(p, g_usbdet_value ? " cable:in" : " cable:out");
-    p = put(p, " battery:");
-    if (pct > 100) pct = 100;
-    do d[n++] = '0' + pct % 10;
-    while (pct /= 10);
-    while (n) *p++ = d[--n];
-    p = put(p, " play:");
-    p = put(p, play[ps < 4 ? ps : 0]);
-    p = put(p, " out:");
-    p = put(p, out[ow < 3 ? ow : 0]);
-    p = put(p, "\n");
-    *p = 0;
-    if (!tk_strcmp(s, st.state)) return;
-    void *f = fopen(STATE_FILE, "w");
-    if (!f) return;
-    fwrite(s, 1, p - s, f);
-    fflush(f);
-    fsync(fileno(f));
-    fclose(f);
-    memcpy(st.state, s, p - s + 1);
-}
-/* A clean end: power-off, Restart, a firmware update, Rockbox. Nothing to report at the next boot.
- */
-void ringnav_clean_end(void) {
-    if (st.ended) return;
-    st.ended = 1;
-    wdt_set(0);
-    unlink(STATE_FILE);
-    unlink(STALL_FILE); /* one the thread hadn't removed yet: S90play's next demo never would */
-}
-/* Standby limit (docs/internals.md#standby-limit): device_standby puts the radios, the card and the
- * DAC down, then toolsIntoStandby suspends to RAM ("mem" to /sys/power/state) and returns once
- * something resumes it. With a limit, the RTC's wake alarm is set that far ahead first and cleared
- * after. A resume at or past the alarm is the alarm's, and the next UI loop pass powers off as
- * stock's Auto power-off does (poweroff_page), unless a cable is in or the music plays. A key or
- * anything else that resumes it sooner leaves it on, and the next Standby counts from zero.
- * Without the RTC's time, or with an alarm it refuses, Standby is stock's. */
-#define RTC_NOW "/sys/class/rtc/rtc0/since_epoch"
-#define RTC_ALARM "/sys/class/rtc/rtc0/wakealarm"
-static unsigned rtc_now(void) { /* the RTC's seconds since 1970 (UTC, RTC_WRITE); 0 unreadable */
-    char s[16];
-    void *f = fopen(RTC_NOW, "rb");
-    if (!f) return 0;
-    unsigned n = fread(s, 1, sizeof s, f), t = 0;
-    fclose(f);
-    for (unsigned i = 0; i < n && s[i] >= '0' && s[i] <= '9'; ++i) t = t * 10 + s[i] - '0';
-    return t;
-}
-static int rtc_alarm(unsigned at) { /* 0 clears it; one already set refuses another (EBUSY) */
-    char s[16];
-    void *f = fopen(RTC_ALARM, "w");
-    if (!f) return 0;
-    unsigned n = (unsigned)tk_snprintf(s, sizeof s, "%u", at);
-    int ok = fwrite(s, 1, n, f) == n;
-    return !fclose(f) && ok;
-}
-int ringnav_standby(void) {
-    static const unsigned hours[] = { 0, STANDBY_LIMIT_1, STANDBY_LIMIT_2, STANDBY_LIMIT_3 };
-    pod_settings();
-    unsigned start = st.standby_limit ? rtc_now() : 0;
-    unsigned alarm = start + hours[st.standby_limit] * 3600;
-    int armed = start && rtc_alarm(0) && rtc_alarm(alarm);
-    st.suspended = 1;
-    state_poll(); /* the record a resume that never comes leaves behind */
-    wdt_set(0);   /* it would count through the suspend */
-    int result = stock_standby_trampoline();
-    wdt_set(1);
-    st.suspended = 0; /* the next pass records the resume */
-    if (armed) {
-        unsigned now = rtc_now();
-        rtc_alarm(0);
-        st.standby_off = now >= alarm;
-    }
-    return result;
-}
-static void standby_poll(void) {
-    if (!st.standby_off) return;
-    st.standby_off = 0;
-    if (!g_usbdet_value && mclGetPlayStatus() != 2) navigator_to("poweroff_page");
-}
-/* User boot logo (docs/boot.md): the card's LOGO_SRC is kept as LOGO_DST, which the splash shows at
- * power-on, each time the card is mounted (boot, the end of USB storage). A 375x320 one is turned
- * upright by stock ffmpeg; anything but a 320x375 baseline JPEG is refused and LOGO_DST kept. No
- * card file, no LOGO_DST: the stock logo again. The thread keeps ffmpeg and flash off the UI; the
- * poll toasts its failure. */
-#define LOGO_SRC "/mnt/mmc/Q2Pod/boot/boot-logo.jpg"
-#define LOGO_DST "/mnt/data/boot-logo.jpg"
-#define LOGO_ROT "/tmp/boot-logo.jpg"
-#define LOGO_MAX (512 * 1024)
-/* tools/build.py's jpeg_size: w << 16 | h of a baseline 8-bit three-component JPEG, the only kind
- * stock display_logo draws right; 0 for anything else. */
-static unsigned jpeg_size(const unsigned char *b, unsigned n) {
-    unsigned i = 2, m, size;
-    if (n < 2 || b[0] != 0xff || b[1] != 0xd8) return 0;
-    while (i < n) {
-        if (b[i] != 0xff) return 0;
-        while (i < n && b[i] == 0xff) i++;
-        if (i >= n) return 0;
-        m = b[i++];
-        if (m == 0xd9 || m == 0xda || m == 0 || m == 0xd8) return 0;
-        if (m == 1 || (m >= 0xd0 && m <= 0xd7)) continue;
-        if (i + 2 > n || (size = b[i] << 8 | b[i + 1]) < 2 || i + size > n) return 0;
-        if (m >= 0xc0 && m <= 0xcf && m != 0xc4 && m != 0xc8 && m != 0xcc) {
-            if (size < 8 || size != 8 + 3u * b[i + 7] || m != 0xc0 || b[i + 2] != 8 ||
-                b[i + 7] != 3)
-                return 0;
-            unsigned h = b[i + 3] << 8 | b[i + 4], w = b[i + 5] << 8 | b[i + 6];
-            return w && h ? w << 16 | h : 0;
-        }
-        i += size;
-    }
-    return 0;
-}
-static void *logo_sync(void *unused) {
-    unsigned n = 0, old_n;
-    unsigned char *b = 0, *old = 0;
-#include "m1plus_nav_logo.inc"
-#if !M1PLUS
-    const char *err = "Boot logo must be a 320x375 JPEG";
-    if (access(LOGO_SRC, 0))
-        unlink(LOGO_DST), err = 0;
-    else if ((b = read_all(LOGO_SRC, LOGO_MAX, &n)) && jpeg_size(b, n) == (375u << 16 | 320)) {
-        free(b),
-            b = 0; /* landscape: ffmpeg turns it a quarter clockwise (coverflow.c's ff_thumb) */
-        int status, pid = fork();
-        if (!pid) {
-            child_oom_first();
-            execl("/usr/bin/ffmpeg", "/usr/bin/ffmpeg", "-nostdin", "-v", "quiet", "-i", LOGO_SRC,
-                  "-vf", "transpose=1", "-pix_fmt", "yuvj444p", "-q:v", "2", "-f", "mjpeg", "-y",
-                  LOGO_ROT, (char *)0);
-            child_exit(127);
-        }
-        if (pid > 0 && waitpid(pid, &status, 0) == pid && !status)
-            b = read_all(LOGO_ROT, LOGO_MAX, &n);
-        unlink(LOGO_ROT);
-    }
-    if (b && jpeg_size(b, n) == (320u << 16 | 375)) {
-#endif
-        old = read_all(LOGO_DST, LOGO_MAX, &old_n);
-        if ((old && old_n == n && !memcmp(old, b, n)) ||
-            blob_io(LOGO_DST, LOGO_DST ".tmp", b, n, 1))
-            err = 0; /* the same bytes are not written again each boot */
-        else
-            unlink(LOGO_DST ".tmp"), err = "Could not save boot logo";
-    }
-    free(b), free(old);
-    st.logo_err = err;
-    st.logo_busy = 0;
-    return 0;
-}
-static int card_mounted(void) {
-    char m[4096]; /* ponytail: the Q2's few mounts fit (remote.c's card_mounted) */
-    void *f = fopen("/proc/mounts", "rb");
-    if (!f) return 0;
-    unsigned n = fread(m, 1, sizeof m - 1, f);
-    fclose(f);
-    m[n] = 0;
-    return strstr(m, " /mnt/mmc ") != 0;
-}
-static void logo_poll(void) {
-    unsigned now = time_now_ms();
-    const char *said = st.logo_err;
-    if (said) st.logo_err = 0, toast(said); /* first: a toast's dialog polls here again */
-    /* Mount edges (boot, USB storage's end) come lit; dark it keeps its edge for the first lit
-     * poll. */
-    if (!g_backlight_status || st.logo_busy || (st.logo_at && now - st.logo_at < CHARGE_POLL_MS))
-        return;
-    st.logo_at = now | !now;
-    int mounted = card_mounted();
-    unsigned long tid;
-    if (mounted && !st.logo_mounted) {
-        ratings_copy_due(); /* another card, or the copy gone over USB storage */
-        st.logo_busy = 1;
-        if (pthread_create(&tid, 0, logo_sync, 0)) {
-            st.logo_busy = 0; /* the edge is tried again next poll */
-            return;
-        }
-        pthread_detach(tid);
-    }
-    st.logo_mounted = mounted;
-}
-/* The card's copy of the ratings (docs/internals.md#ratings): the tables hold only hashes, so a
- * pass reads the paths and tags back from the library, a page of rows each quiet poll on this
- * thread (demo has no busy timeout, so a worker's read lock could make stock's own My Fav writes
- * fail), and writes the card once at the end, only if the file would change; the longest copy so
- * far is kept as .1, the one way back from a lost table. ponytail: every row against every rated
- * one, as the Ratings lists do; a rating whose song or album has left the library has no name to
- * write, and stays out until it is back. */
-#define RC_FILE "/mnt/mmc/.ratings.tsv"
-#define RC_HEADER "#song\thearts\tpath\tcue_start\n#album\thearts\tname\talbum_artist\tfolder\n"
-#define RC_PAGE 64
-#define RC_WAIT_MS 5000 /* after a change, so a run of them writes once; between checks */
-#define RC_LINE 3200    /* the fields' limits below, and room */
-#define RC_GROW 0x10000
-#define RC_QUIET_MS 1000 /* no pages this soon after input: a long walk stays off the wheel */
-static struct {
-    void *db;
-    unsigned *song, *album; /* the rated still to find, their hearts in the low bits */
-    unsigned songs, albums, len, cap, at;
-    char *out;
-    int table, last, rows, oom;
-    unsigned gen;
-} rc __attribute__((section(".scratch")));
-static int rc_due __attribute__((section(".scratch")));
-
-void ratings_copy_due(void) {
-    rc_due = 1;
-    rc.at = time_now_ms();
-}
-
-/* key's hearts in the first n of t, its entry gone, or 0. */
-static int rc_take(unsigned *t, unsigned *n, unsigned key) {
-    for (unsigned i = 0; i < *n; i++)
-        if ((t[i] ^ key) < 8) {
-            int hearts = (int)(t[i] & 7);
-            t[i] = t[--*n];
-            return hearts;
-        }
-    return 0;
-}
-
-/* A line's start, its kind and hearts written, with room for RC_LINE more; 0 when there's no
- * memory. */
-static char *rc_line(const char *kind, int hearts) {
-    if (rc.cap - rc.len < RC_LINE) {
-        char *out = realloc(rc.out, rc.cap + RC_GROW);
-        if (!out) {
-            rc.oom = 1; /* ends the pass: a copy with rows missing must not replace the last */
-            return (char *)0;
-        }
-        rc.out = out, rc.cap += RC_GROW;
-    }
-    char *o = rc.out + rc.len;
-    return o + tk_snprintf(o, 16, "%s\t%d\t", kind, hearts);
-}
-static void rc_song(const char *path, int hearts, int cue) {
-    char *o = rc_line("song", hearts);
-    if (!o) return;
-    o = scrobble_tag(o, o + 1100, path);
-    if (cue) o += tk_snprintf(o, 16, "%d", cue);
-    *o++ = '\n';
-    rc.len = (unsigned)(o - rc.out);
-}
-static void rc_album(const char *name, const char *artist, const char *path, int hearts) {
-    char *o = rc_line("album", hearts);
-    if (!o) return;
-    o = scrobble_tag(o, o + 600, name);
-    o = scrobble_tag(o, o + 300, artist);
-    unsigned dir = name && *name && artist && *artist ? 0 : path ? album_dir(path, 1) : 0;
-    o = scrobble_tag(o, o + (dir < 1100 ? dir : 1100) + 1, path);
-    o[-1] = '\n';
-    rc.len = (unsigned)(o - rc.out);
-}
-
-/* A row as a record, for the keys its song and album are rated under. */
-static int rc_row(void *ctx, int n, char **v, char **c) {
-    int rec[REC_CUE_END / 4 + 1] = { 0 };
-    rc.last = atoi(v[0]), rc.rows++;
-    if (!v[1]) return 0;
-    P(rec, REC_PATH) = v[1], P(rec, REC_ALBUM) = v[3], P(rec, REC_ALBUM_ARTIST) = v[4];
-    int cue = I(rec, REC_CUE_START) = v[2] ? atoi(v[2]) : 0, hearts;
-    if (!rc.table) { /* My Fav's: 5, whatever is kept for it */
-        rc_take(rc.song, &rc.songs, listen_key(rec));
-        rc_song(v[1], 5, cue);
-        return rc.oom;
-    }
-    if (rc.songs && (hearts = rc_take(rc.song, &rc.songs, listen_key(rec))))
-        rc_song(v[1], hearts, cue);
-    if (rc.albums && (hearts = rc_take(rc.album, &rc.albums, album_id(rec))))
-        rc_album(v[3], v[4], v[1], hearts);
-    return rc.oom;
-}
-
-static void rc_end(void) {
-    if (rc.db) sqlite3_close(rc.db);
-    free(rc.song), free(rc.album), free(rc.out);
-    rc.db = 0, rc.song = rc.album = 0, rc.out = 0;
-    rc.len = rc.cap = rc.oom = 0;
-}
-
-/* path's lines, 0 with no file; same, if asked, whether it is this copy. */
-static unsigned rc_read(const char *path, int *same) {
-    void *f = fopen(path, "rb");
-    char b[1024];
-    unsigned n, at = 0, lines = 0;
-    int eq = f != 0;
-    while (f && (n = fread(b, 1, sizeof b, f)) > 0) {
-        eq = eq && at + n <= rc.len && !memcmp(b, rc.out + at, n);
-        at += n;
-        for (unsigned i = 0; i < n; i++) lines += b[i] == '\n';
-    }
-    if (f) fclose(f);
-    if (same) *same = eq && at == rc.len;
-    return lines;
-}
-
-/* The card's copy replaced, unless it is this one already. Once the new one is safely written, a
- * copy with more lines goes to .1, unless .1 has more still: a rating given and cleared after a
- * lost table must not take the way back. */
-static void rc_write(void) {
-    int same;
-    unsigned lines = rc_read(RC_FILE, &same), now = 0;
-    if (same) return;
-    if (!blob_io(RC_FILE ".tmp", RC_FILE ".tmp", rc.out, rc.len, 1)) {
-        unlink(RC_FILE ".tmp");
-        return;
-    }
-    for (unsigned i = 0; i < rc.len; i++) now += rc.out[i] == '\n';
-    if (lines > now && lines >= rc_read(RC_FILE ".1", 0)) rename(RC_FILE, RC_FILE ".1");
-    if (rename(RC_FILE ".tmp", RC_FILE)) unlink(RC_FILE ".tmp");
-}
-
-/* The rated of table album, valid hearts only, for rc_take. */
-static unsigned *rc_rated(int album, unsigned *n) {
-    unsigned *t = rates(album), *c = t ? calloc(RATE_SLOTS, sizeof *c) : (unsigned *)0;
-    for (unsigned i = 0; c && i < RATE_SLOTS; i++)
-        if ((t[i] & 7) && (t[i] & 7) <= 4u + (unsigned)album) c[(*n)++] = t[i];
-    return c;
-}
-
-static void rc_start(void) {
-    int unknown[REC_CUE_END / 4 + 1] = { 0 }, hearts;
-    rc.songs = rc.albums = 0, rc.table = rc.last = 0;
-    rc.song = rc_rated(0, &rc.songs), rc.album = rc_rated(1, &rc.albums);
-    rc.out = calloc(rc.cap = RC_GROW, 1);
-    if (!rc.song || !rc.album || !rc.out || sqlite3_open("/mnt/data/database.db", &rc.db) ||
-        sqlite3_exec(rc.db, "PRAGMA cache_size=64", 0, 0, 0)) {
-        rc_end();
-        return;
-    }
-    rc.len = (unsigned)tk_snprintf(rc.out, RC_LINE, RC_HEADER);
-    I(unknown, REC_ID) = -1; /* the Unknown Album card, which no row is */
-    if ((hearts = rc_take(rc.album, &rc.albums, album_id(unknown))))
-        rc_album("Unknown Album", "", (const char *)0, hearts);
-}
-
-static int rc_exists(void *ctx, int n, char **v, char **c) {
-    rc.rows = 1;
-    return 0;
-}
-
-/* A page of the pass, then its end. A failed read or write stays as it was, for the next change or
- * boot; a scan rewriting the library ends the pass, and library_gen starts another after it. */
-static void rc_page(void) {
-    char sql[128];
-    if (library_scanning()) {
-        rc_end();
-        return;
-    }
-    if (time_now_ms() - st.last_input < RC_QUIET_MS) return;
-    tk_snprintf(sql, sizeof sql,
-                "select id,fileurl,time,album,albumsonger from %s where id>%d order by id limit %d",
-                rc.table ? "songtable" : "myfav", rc.last, RC_PAGE);
-    rc.rows = 0;
-    if (sqlite3_exec(rc.db, sql, rc_row, 0, 0)) {
-        rc_end();
-        return;
-    }
-    if (rc.rows == RC_PAGE && (!rc.table || rc.songs || rc.albums)) return;
-    if (!rc.table++) {
-        rc.last = rc.rows = 0;
-        /* no songtable before the first scan: My Fav's alone, still worth a copy */
-        if (sqlite3_exec(rc.db, "select 1 from sqlite_master where name='songtable'", rc_exists, 0,
-                         0)) {
-            rc_end();
-            return;
-        }
-        if (rc.rows) return;
-    }
-    if (!card_mounted())
-        rc_due = 1; /* shared over USB meanwhile */
-    else
-        rc_write();
-    rc_end();
-}
-
-/* Every RC_WAIT_MS: a change, the boot (stock's own My Fav rows change it unseen) or the library
- * rewritten, once the card is there and no scan is running. */
-void ratings_copy_poll(void) {
-    if (rc.db) {
-        rc_page();
-        return;
-    }
-    unsigned now = time_now_ms();
-    if (!rc.at) {
-        rc_due = 1, rc.at = now | !now;
-        return;
-    }
-    if (now - rc.at < RC_WAIT_MS) return;
-    rc.at = now;
-    if (rc.gen != library_gen) rc.gen = library_gen, rc_due = 1;
-    if (!rc_due || library_scanning() || !card_mounted()) return;
-    rc_due = 0;
-    rc_start();
-}
-
-static void power_poll(void) {
-    pod_settings();
-    charge_poll();
-    standby_poll();
-    logo_poll();
-    ratings_copy_poll();
-    wdt_poll();
-    state_poll();
-}
-
 /* Home's Rockbox row (docs/boot.md#rockbox-from-home), bound by coverflow_home: a click leaves
  * Q2 Pod for Rockbox. demo cannot start it itself: Rockbox needs the screen, the keys and ALSA. So
  * demo leaves S90play's flag and ends; S90play sees it, runs Rockbox and starts demo again when
@@ -15292,8 +10063,10 @@ static int np_animating(void) {
                               (st.np_marquee && st.np_off > 0 && st.np_off < st.np_over)));
 }
 
-/* Keep stock VOLUME for wired/USB and boot; Bluetooth saves its own level. */
+/* Keep stock VOLUME for wired/USB and boot; Bluetooth saves its own level. Smart Wi-Fi's own
+ * toggles of the Wi-Fi switch save nothing (smart_config). */
 int ringnav_write_config(int value, const char *section, const char *key) {
+    if (smart_config(section, key)) return 0;
     if (!tk_strcmp(section, "PLAYSET") && !tk_strcmp(key, "VOLUME") && mclGetOutputWay() == 1)
         key = "BT_VOLUME";
     return stock_write_config_trampoline(value, section, key);
@@ -16361,7 +11134,7 @@ static int replay_wheel(const void *info) {
  * next Return goes back. Stock's search dialogs and the playlist editor's search (search_edit)
  * keep their text. Every other T9 edit of ours (EDIT_NAME, edit_create) is a cancel: emptied
  * first, so the blur's EVT_VALUE_CHANGED reads as no entry and its page backs out of the edit. */
-static int search_key(unsigned key) {
+int search_key(unsigned key) {
     if (key != KEY_RETURN) return 0;
     void *im = input_method(), *edit = im ? P(im, IM_WIDGET) : (void *)0;
     const char *name = edit ? widget_get_prop_str(edit, "name", "") : "";

@@ -10,28 +10,42 @@
  *   icon-40.png, icon.png
  *            its Streaming row's icon, 40 px (SET_ICON), drawn 1:1, else 52 px, scaled to fit;
  *            without them, the shared stream_app.
- * Streaming lists those on the card (navigation.c ringnav_stream). A row starts its app and opens
+ * Streaming lists those on the card (home.c ringnav_stream). A row starts its app and opens
  * addon_page, a list the app draws over Q2SPOT/1 (docs/librespot.md) on /tmp/q2-<id>.browse.sock:
  * each row's kind says what a press does (a local row plays a song or folder from the card,
- * navigation.c's songs_open). Its status file /tmp/q2-<id>.state says whether to hold standby off
+ * library_lists.c's songs_open). Its status file /tmp/q2-<id>.state says whether to hold standby off
  * (hold=1: files moving, a phone using its page) and carries its web page's QR code, address and
  * PIN, which qr_open's page draws. A TERM to the loop's pid asks it to end. An app that plays as
  * well (q2-deezer's Stream mode) names a card folder of songs in /tmp/q2-<id>.play, which
  * stream_poll plays as it fills, or an .m3u of card paths, which it plays in order, waiting for
- * each. It asks for Update Local Music and its playlists' import in /tmp/q2-<id>.library
- * (addon_library.c), the result in .library.done. A list reply whose message is "pages" and that
- * has a cursor is followed by its next pages, appended to the same list (page_next), up to
- * ADDON_PAGES.
+ * each, or its Q2URLS/1 queue of stream URLs, /tmp/q2-<id>.urls, which stock's Tidal player plays
+ * (tidal.c app_urls_play). It asks for Update Local Music and its playlists' import in
+ * /tmp/q2-<id>.library (addon_library.c), the result in .library.done. A list reply whose message
+ * is "pages" and that has a cursor is followed by its next pages, appended to the same list
+ * (page_next), up to ADDON_PAGES.
  *
  * Go to Album and Go to Artist on a song in an app's folder open the app's own page for them when
  * its q2app says goto=1 (addon_goto), and every song an app queues plays with its file's tags
- * (navigation.c card_tags).
+ * (tags.c card_tags).
  *
  * An app's /tmp/q2-<id>.sleep asks for a sleep timer: playback pauses at a time, or as the track
  * playing ends (sleep_read, sleep_check).
  *
  * A card game (q2app game=1, then no run or Streaming row) is a row in Library's Games instead:
- * it runs over the whole screen, as Videos' player does, until it exits (addon_game_start).
+ * it runs over the whole screen, as Videos' player does, until it exits (addon_game_start). One
+ * with audio=1 as well owns the sound: the player is stopped and the headphone output readied
+ * before it starts, as for a video, it gets the output device (and a soft output's volume) as
+ * its arguments, Play/Pause and the side buttons reach it, and the idle quit is its own.
+ *
+ * An app's first page may be sections (sec_take): one shows at a time, and a sideways swipe moves
+ * to the next or the previous (swipe).
+ *
+ * Covers ("art" in the caps): a row's cover is a JPEG the app leaves at /tmp/q2-<id>.art/<key>.jpg,
+ * key the row's URI, a tab and its context, hashed FNV-1a 32 (hash_bytes from FNV_SEED) and written
+ * as 8 lowercase hex digits. A list with a cover for any of its rows is drawn as stock Tidal's
+ * lists are (art_row): ART_ROW_H rows, the cover at the left, the title and subtitle beside it; a
+ * row without one keeps the cover's room empty. The app sizes the covers: one over ART_MAX px
+ * either way counts as none. The protocol is unchanged, so an app without covers, or firmware without "art", shows the plain rows.
  *
  * The card-app features this firmware has are words in /tmp/q2-addon.caps (ADDON_CAPS), written at
  * every Streaming scan. */
@@ -66,18 +80,27 @@
 #define CAPS_FILE "/tmp/q2-addon.caps"
 /* This firmware's card-app features, space-separated; a feature adds its word. */
 #if M1PLUS
-/* no library: its update is unported (addon_poll); no game: Library has no Games row on M1 (games.c) */
+/* no library: its update is unported (addon_poll); no game: Library has no Games row on M1 (games.c);
+ * 1.7.3's audio, sections, art, window and urls are unported (docs/m1plus-unported.md) */
 #define ADDON_CAPS "playlist progress pages goto sleep"
 #else
-#define ADDON_CAPS "playlist progress pages library goto sleep game"
+#define ADDON_CAPS "playlist progress pages library goto sleep game audio sections art window urls"
 #endif
+#define ADDON_SECTIONS 8  /* sections an app's first page may have */
+#define SWIPE_CLAIM_PX 24 /* a sideways move this far, twice as far as up or down, is a swipe's */
+#define SWIPE_PX 60       /* and this far at the lift, more than up or down, changes section */
+#define ART_ROW_H 78 /* a row with a cover: stock Tidal's list_view default_item_height */
+#define ART_PX 64    /* its cover, square, centred in the row's height */
+#define ART_MAX 128  /* the most a cover's file may be, either way; larger counts as none */
+#define ART_KEEP 24  /* the rows' covers kept decoded around the list's scroll position */
+#define ART_URL (APP_ID + 32) /* art_file's file:// URL, its NUL included */
 
 /* An app found on the card, kept for the life of demo in its slot. present: on the card at the
  * last scan; relaunch: stopped for USB storage, to start again; restart: stopped by Retry (its
  * socket gone), to start again once its loop is gone. */
 typedef struct {
     char id[APP_ID], name[32], tips[32], bin[48], run[48], pid[32], state[40], browse[48], icon[56];
-    int qr, game, present, launched, hold, relaunch, restart;
+    int qr, game, audio, present, launched, hold, relaunch, restart;
     unsigned polled, launch_at, restart_at, play; /* play: its .play as read last, hashed */
 } app_t;
 
@@ -128,6 +151,7 @@ int addon_scan(void) {
         if (!a->tips[0]) tk_snprintf(a->tips, sizeof a->tips, "Search");
         a->qr = number(raw, "qr") == 1;
         a->game = number(raw, "game") == 1;
+        a->audio = number(raw, "audio") == 1;
         a->present = !access(a->bin, 0);
         /* the row's size first, the other scaled to fit (navigation.c set_child), else stream_app
          */
@@ -203,6 +227,7 @@ static struct {
     unsigned timer;  /* the first song's start, on a timer (a window opens) */
     long seen;       /* the folder's mtime at the last scan that came well after it */
     int m3u;         /* sm.dir is a playlist file */
+    int urls;        /* sm.dir is the app's URL queue (tidal.c app_urls_play) */
     int next;        /* its entries passed so far */
     int more;        /* a batch filled, so the next poll goes on */
     char first[512]; /* the session's first song */
@@ -348,6 +373,20 @@ static int stream_start(const void *unused) {
     return 0;
 }
 
+/* A URL queue's start, on a timer as stream_start's (a window opens); then the session is done:
+ * the queue is stock's, and the app reads nothing back. */
+static int urls_start(const void *unused) {
+    (void)unused;
+    sm.timer = 0;
+    if (playback_loads != sm.loads) sm.state = S_DONE; /* the user played a queue since */
+    if (sm.state != S_WAIT || scanning()) return 0;    /* looked at again after the scan */
+    press_natural = 1;
+    app_urls_play(sm.dir);
+    press_natural = 0;
+    sm.state = S_DONE;
+    return 0;
+}
+
 /* Whether the queue playing is the session's: its first song in its folder; or a playlist's first
  * song, and no queue loaded since its own (a Library play of the same album is the user's). */
 static void *stream_queue(void) {
@@ -377,12 +416,15 @@ static void stream_poll(app_t *a) {
         sm.seen = 0;
         unsigned k = strlen(sm.dir);
         sm.m3u = k > 4 && !strcasecmp(sm.dir + k - 4, ".m3u");
+        char own[40];
+        tk_snprintf(own, sizeof own, "/tmp/q2-%s.urls", a->id);
+        sm.urls = !strcmp(sm.dir, own); /* the app's own alone, in /tmp */
         sm.next = sm.more = 0, sm.first[0] = sm.want[0] = 0;
         sm.loads = playback_loads;
-        /* a playlist on the card, or a hidden folder of it, as the app's own are; whole in raw and
-         * in sm.dir, as a cut path names another */
+        /* a playlist on the card, or a hidden folder of it, as the app's own are, or its URL queue;
+         * whole in raw and in sm.dir, as a cut path names another */
         sm.state = got < sizeof raw - 2 && dir && !dir[1 + k] && !dotdot(sm.dir) &&
-                           tk_str_start_with(sm.dir, sm.m3u ? CARD "/" : CARD "/.")
+                           (sm.urls || tk_str_start_with(sm.dir, sm.m3u ? CARD "/" : CARD "/."))
                        ? S_WAIT
                        : S_DONE;
         stop_timer(&sm.timer);
@@ -392,10 +434,18 @@ static void stream_poll(app_t *a) {
      * scan's thread fills too: none while one runs, the scan dialog's own loop included; and
      * play_folder would open Now Playing over the dialog, so nothing until it closes. */
     int scan = scanning();
+    if (sm.state == S_WAIT && sm.urls) { /* played whole at once, by stock's Tidal player */
+        if (playback_loads != sm.loads)
+            sm.state = S_DONE; /* the user played a queue before it started */
+        else if (!sm.timer && !scan && !addon_game_audio()) /* not under a card game's sound */
+            sm.timer = timer_add(urls_start, 0, 0);
+        return;
+    }
     if (sm.state == S_WAIT) {
         if (sm.m3u && playback_loads != sm.loads)
             sm.state = S_DONE; /* the user played a queue before its first song came */
-        else if (!sm.timer && !scan && (sm.m3u ? m3u_ready() : stream_newer(sm.dir, "")))
+        else if (!sm.timer && !scan && !addon_game_audio() && /* the game's sound: the song waits */
+                 (sm.m3u ? m3u_ready() : stream_newer(sm.dir, "")))
             sm.timer = timer_add(stream_start, 0, 0);
         return;
     }
@@ -594,9 +644,15 @@ static void poll_one(app_t *a) {
  *   "k d CODE", "k u CODE"            a key down, up (AWTK's codes: Return 170, Centre 218)
  *   "w N"                             the wheel's raw travel since the last (wheel_raw: 200 a turn,
  *                                     rising anticlockwise), sent once a UI loop pass
- * Play/Pause and the side buttons stay the music's, as stock has them under the Games page. The
- * game ends itself (from its Return menu); Return held GAME_HOLD_MS ends it (TERM, and its release
- * is dropped so stock's Games stays), as does GAME_IDLE_MS without input unless Smart Awake is on;
+ * Play/Pause and the side buttons stay the music's, as stock has them under the Games page, unless
+ * the game's q2app says audio=1: the sound is then the game's (player_stop and dac_take before it
+ * starts, as video_start; the output device and, on Bluetooth or USB, the volume as its arguments,
+ * as q2video gets them, and opened as q2video opens them, video.c sound_open; g_dacoff_time held
+ * while it runs), those keys reach it as "k d|u 171", 222 and 223, a headset's buttons do nothing
+ * (headset.c media_key, media_set_playing), and the idle quit below is left to the game, which
+ * alone knows whether it is playing. Music stays stopped when it ends, as after a video. The game
+ * ends itself (from its Return menu); Return held GAME_HOLD_MS ends it (TERM, and its release is
+ * dropped so stock's Games stays), as does GAME_IDLE_MS without input unless Smart Awake is on;
  * one still there GAME_KILL_MS after a TERM is KILLed. demo repaints when it has gone. Stock makes
  * a held key's long press after this hook, so the hold is timed here, from the game's key-down.
  * ponytail: the screen stays on while it runs, as for a video, and the idle quit is what lets it
@@ -607,6 +663,7 @@ static void poll_one(app_t *a) {
 #define GAME_KILL_MS 3000
 static struct {
     int pid, sock, eat;  /* eat: the held Return's release, after the game it ended */
+    int audio;           /* the running game's audio=1: the keys and the DAC are its */
     unsigned seen;       /* time_now_ms of the last input */
     unsigned held, term; /* when Return went down, when TERM went (0: neither) */
     char path[48];       /* the game's socket */
@@ -616,6 +673,7 @@ int addon_games(void) { return addon_scan(), ap.games; }
 int addon_games_last(void) { return ap.games; }
 const char *addon_game_name(int k) { return k >= 0 && k < ap.games ? ap.a[ap.game[k]].name : 0; }
 int addon_game_on(void) { return gm.pid; }
+int addon_game_audio(void) { return gm.pid && gm.audio; }
 
 static void game_kill(const char *how) {
     char cmd[24];
@@ -636,6 +694,16 @@ int addon_is_game(const char *id) {
     return 0;
 }
 
+/* Home's Shortcut (theme_engine.c home_shortcut_open): the card game with this id started as its
+ * Games row would start it (1 running, 0 not, with addon_game_start's toast); -1 when no card game
+ * has the id (no q2app with game=1 in its folder, or no slot left). */
+int addon_game_open(const char *id) {
+    int n = addon_games();
+    for (int k = 0; k < n; ++k)
+        if (!strcmp(ap.a[ap.game[k]].id, id)) return addon_game_start(k);
+    return -1;
+}
+
 /* Card game k started over the screen: 1 when it runs. */
 int addon_game_start(int k) {
     app_t *a = k >= 0 && k < ap.games ? &ap.a[ap.game[k]] : 0;
@@ -643,15 +711,29 @@ int addon_game_start(int k) {
     const char *busy = shelf_busy();
     if (busy && !strcmp(busy + 1, a->id)) return toast("Wait until the App Store finishes"), 0;
     if (access(a->bin, 0)) return toast("It isn't on the card"), 0;
+    char vol[5];
+    const char *dev = 0;
+    if (a->audio) { /* the sound is its: hciplayer off the PCM, the jack readied, as video_play */
+        headset_manual();
+        spot_yield();
+        radio_stop();
+        player_stop();
+        dev = output_device(vol);
+        if (!dev) dac_take();
+    }
     int pid = fork();
     if (!pid) {
         child_oom_first();
         for (int fd = 3; fd < 1024; ++fd) close(fd); /* demo's: the watchdog, the screen, sockets */
-        execl(a->bin, a->bin, (char *)0);
+        if (a->audio) /* q2video's arguments: the device, then a soft output's volume */
+            execl(a->bin, a->bin, dev ? dev : "plughw:0,0", dev ? vol : (char *)0, (char *)0);
+        else
+            execl(a->bin, a->bin, (char *)0);
         child_exit(127);
     }
-    if (pid < 0) return 0;
+    if (pid < 0) return toast("It couldn't start"), 0;
     gm.pid = pid;
+    gm.audio = a->audio;
     gm.sock = socket(1, 1, 0); /* AF_UNIX, SOCK_DGRAM (MIPS numbering) */
     gm.seen = time_now_ms();
     gm.held = gm.term = gm.eat = 0;
@@ -670,7 +752,8 @@ int addon_game_input(void *e) {
     if (keyish && key == KEY_RETURN && gm.eat) /* the held Return's repeats and release */
         return gm.eat = type != EVT_KEY_UP, 1;
     if (!gm.pid) return 0;
-    if (keyish && (key == KEY_PLAY || key == KEY_BACK_BTN || key == KEY_FWD_BTN)) return 0;
+    if (!gm.audio && keyish && (key == KEY_PLAY || key == KEY_BACK_BTN || key == KEY_FWD_BTN))
+        return 0;
     if (keyish && key == KEY_RETURN)
         gm.held = type == EVT_KEY_UP ? 0
                   : type == EVT_KEY_DOWN && !gm.held
@@ -700,7 +783,10 @@ static void game_poll(void) {
     if (!gm.pid) return;
     if (waitpid(gm.pid, &status, 1)) { /* WNOHANG: it has ended */
         close(gm.sock);
-        gm.pid = 0;
+        /* a jack or USB change meanwhile ran stock's player_save_start(1): its start failed
+         * (ringnav_start_player) but its pause stuck on nothing, so Play would do nothing */
+        if (gm.audio && mclGetPlayStatus() == 3) player_stop();
+        gm.pid = gm.audio = 0;
         wheel_raw = 0;
         widget_invalidate_force(window_manager(), 0);
         if (status == 127 << 8) toast("It couldn't start"); /* the child's execl failed */
@@ -718,9 +804,23 @@ static void game_poll(void) {
         gm.seen = time_now_ms();
     }
     reset_poweroptions_timer(1, 1, 1);
+    if (gm.audio) { /* the DAC kept on, as video_poll; the idle quit is the game's own */
+        if (I(g_dacoff_time, 0) > 0) I(g_dacoff_time, 0) = 0;
+        return;
+    }
     if (time_now_ms() - gm.seen < GAME_IDLE_MS) return;
     if (!ringnav_smart_awake()) game_end();
     gm.seen = time_now_ms(); /* Smart Awake: asked again GAME_IDLE_MS on */
+}
+
+/* Smart Wi-Fi (smart_wifi.c smart_needed): an app started, or restarting after Retry, keeps the radio
+ * on until it stops (by itself, Stop Streaming Services or Rockbox). One stopped for USB storage
+ * counts once it starts again: the cable holds the radio meanwhile, and an app deleted from the
+ * computer, which never starts again, holds nothing. */
+int addon_running(void) {
+    for (int i = 0; i < ap.n; ++i)
+        if (ap.a[i].launched || ap.a[i].restart) return 1;
+    return 0;
 }
 
 void addon_poll(void) {
@@ -880,23 +980,36 @@ static int req_done(void) {
  * A level is an op and its arguments; only the top one keeps its reply, cut in place by spot_reply
  * into the header's 4 fields and 6 a row; Back asks again for the one below. A row's kind: list
  * opens the level uri (its context the argument), action sends uri with the context and toasts the
- * reply's message, search opens the T9 box (OK opens "search" for the text), remote opens the QR
+ * reply's message, search opens the T9 box (OK opens "search" for the text; a list's first one is
+ * the title bar's search icon instead, take_find), remote opens the QR
  * code, local plays from the card (uri: a song, or a folder to list; context "album": in track
  * order), info does nothing; its position, when set, is the op a held Play/Pause sends. progress
  * (progress_row) draws a bar of its position, permille, under its title and subtitle; a press or a
- * held Play/Pause does nothing.
+ * held Play/Pause does nothing. page (caps word "window") shows the level's own list from the
+ * cursor in its context, in the level's place rather than over it (page_to): uri "prev" slides it
+ * in from the left and selects its last row, any other from the right, selecting its row after the
+ * first (the app's Previous page row).
  * A reply whose message is "refresh" is asked again every ADDON_LIVE_MS while its level is on top,
- * and redrawn only when it changed, its selected row kept. One whose message is "pages" and that
- * has a cursor is followed by its next pages (page_next), appended to its list (append) under a
- * Loading… row; any other keeps More…. */
+ * and redrawn only when it changed, its selected row kept; one with the same rows (same_rows) is
+ * written in place (relabel) instead of rebuilt. One whose message is "pages" and that has a cursor
+ * is followed by its next pages (page_next), appended to its list (append) under a Loading… row;
+ * any other keeps More….
+ * The first level's reply whose message is "sections" names the app's sections instead (sec_take):
+ * each list row one, its uri the op that fills it, its title the page's, its context the op's
+ * argument. The page shows one section at a time as its first level, the first to begin with, and
+ * a sideways swipe on it (swipe) opens the next or the previous, its list sliding in from that
+ * side; none past the ends. Only the first level swipes: a level opened from a section is a level
+ * as any other, and Back returns to the section. The wheel never changes section. */
 enum { K_LOAD, K_READY, K_ERROR, K_WAIT }; /* K_WAIT: no socket yet, the app starting */
-enum { G_ROW, G_SHOW, G_SEARCH };
+enum { G_ROW, G_SHOW, G_SEARCH, G_SECTION, G_FIND };
 
 /* A level's page that can't show the app's rows (an error, or a load or start taking SLOW_MS) has a
  * Stop row whenever the app may be running, so a frozen one can always be ended. */
 typedef struct {
     int state, n, sel, live, retry;
     int nosock, slow;  /* nosock: the error is no socket; slow: the wait's Stop row shown */
+    int art;           /* its rows are drawn with covers (art_row): how many have one, 0 none */
+    int find;          /* its first row, a search, is the title bar's search icon (take_find) */
     unsigned since;    /* when it began loading or waiting, 0 once done */
     unsigned base;     /* args' bytes before a More…'s cursor: the list's own */
     unsigned id, hash; /* id: the fetch whose reply this level takes; hash: its rows' bytes */
@@ -917,6 +1030,12 @@ static struct {
     char *buf[ADDON_PAGES], **f;
     int pages, paging;
     signed char moved; /* the depth's change the next rows or error push in: 1 deeper, -1 back */
+    lv_t *sec; /* the first page's sections, each the level it opens, calloc'd; nsec of them */
+    signed char nsec, cur; /* cur: the one showing */
+    /* a touch on the page: where it went down, and whether a sideways swipe has taken it (swipe) */
+    int sx, sy;
+    char sdown, sclaim;
+    int art_lo, art_hi; /* the rows whose covers may be decoded, half open (art_window) */
 } pg __attribute__((section(".scratch")));
 
 static void qr_open(const char *state, const char *title);
@@ -968,14 +1087,20 @@ static int progress_h(void) {
     return theme()->painter[PAINT_SCRUB] == SCRUB_ROWS ? PROGRESS_GLOSS : PROGRESS_H;
 }
 
+/* A progress row's bar's permille, clamped to 0 to 1000 for addon_paint. */
+static void set_pml(void *bar, long permille) {
+    widget_set_prop_int(bar, "_pml", permille < 0 ? 0 : permille > 1000 ? 1000 : (int)permille);
+}
+
 /* A progress row: page_row_detail's item re-dressed, its title and subtitle in the caption's box
  * (the theme's: an empty detail has moved the label), left and right on one line, over a bar
  * centred in the detail's, which addon_paint fills from the left: its _pml prop, permille, clamped
- * to 0 to 1000 here; strtol saturates what overflows, which atoi leaves undefined. */
+ * to 0 to 1000 (set_pml); strtol saturates what overflows, which atoi leaves undefined. */
 static void progress_row(void *item, long permille) {
     const theme_t *T = theme();
     void *t = widget_get_child(item, 0), *s = widget_get_child(item, 1);
-    int x = I(t, W_X), w = I(t, W_W), y = T->page_cap_y, h = T->page_cap_h;
+    int x = I(t, W_X), w = I(t, W_W), h = T->page_cap_h;
+    int y = T->page_cap_y + (I(item, W_H) - page_h(64)) / 2; /* a cover list's rows are taller */
     int dx = I(s, W_X), dy = I(s, W_Y), dw = I(s, W_W), dh = I(s, W_H);
     widget_move_resize(t, x, y, w * 3 / 5, h);
     widget_use_style(s, STYLE_SCRLABEL_WHITE20R); /* the style drops the detail's size and grey */
@@ -987,43 +1112,184 @@ static void progress_row(void *item, long permille) {
     int bh = progress_h();
     void *bar = widget_factory_create_widget(widget_factory(), "view", item, dx, dy + (dh - bh) / 2,
                                              dw, bh);
-    widget_set_prop_int(bar, "_pml", permille < 0 ? 0 : permille > 1000 ? 1000 : (int)permille);
+    set_pml(bar, permille);
 }
 
-/* The shown reply let go, and any page it waits for. */
+/* Row i's cover's file:// URL written to out (ART_URL bytes); no file is touched. */
+static void art_url(int i, char *out) {
+    unsigned key = hash_bytes(FNV_SEED, (const unsigned char *)cell(i, 1), strlen(cell(i, 1)));
+    key = hash_bytes(key, (const unsigned char *)"\t", 1);
+    key = hash_bytes(key, (const unsigned char *)cell(i, 4), strlen(cell(i, 4)));
+    tk_snprintf(out, ART_URL, "file:///tmp/q2-%s.art/%08x.jpg", app()->id, key);
+}
+
+/* Row i's cover, its URL in out (art_url); whether the file is there, with a known size of no more
+ * than ART_MAX px either way. */
+static int art_file(int i, char *out) {
+    int w = 0, h = 0;
+    art_url(i, out);
+    return picture_size(out + 7, &w, &h) && w && h && w <= ART_MAX && h <= ART_MAX;
+}
+
+/* Rows from.. to's covers, decoded or not, let go of the image manager. */
+static void art_unload(int from, int to) {
+    char url[ART_URL];
+    for (; from < to; ++from) {
+        art_url(from, url);
+        image_manager_unload_bitmap_by_name(image_manager(), url);
+    }
+}
+
+/* The range (art_window) unloaded and emptied; pg.f still names its rows. */
+static void art_forget(void) {
+    art_unload(pg.art_lo, pg.art_hi);
+    pg.art_lo = pg.art_hi = 0;
+}
+
+/* The shown reply let go, and any page it waits for; its covers leave the image manager while
+ * pg.f still names their rows, whether or not the files are still there. The rows painted since
+ * the last tick count too. */
+static void art_window(void);
 static void drop(void) {
+    art_window();
+    art_forget();
     while (pg.pages) free(pg.buf[--pg.pages]);
     pg.paging = 0;
 }
 
-/* More…'s arguments in a (n bytes): the list's own and the newest cursor, Q2SPOT/1's last; 0 when
- * they don't fit. */
-static int cursor_args(const lv_t *l, char *a, unsigned n) {
+/* The list's own arguments in a (n bytes), and cursor c as Q2SPOT/1's last, none for an empty c (a
+ * page row's for the list's start); 0 when they don't fit. */
+static int cursor_args(const lv_t *l, char *a, unsigned n, const char *c) {
     tk_snprintf(a, n, "%.*s", (int)l->base, l->args);
-    return put(a, n, pg.f[3]);
+    return !c[0] || put(a, n, c);
 }
 
 /* The level's next page asked for, as More… would, its reply appended by got(). */
 static void page_next(lv_t *l) {
     char a[sizeof l->args] = "";
     pg.act = 0;
-    if ((pg.paging = cursor_args(l, a, sizeof a)))
+    if ((pg.paging = cursor_args(l, a, sizeof a, pg.f[3])))
         req_send(app()->browse, l->op, a), l->id = req.id;
+}
+
+/* How many of the first count rows have covers, so the list is drawn with them; 0 too with a
+ * progress row among them, whose bar is page_row_detail's. */
+static int art_rows(int count) {
+    char url[ART_URL];
+    int art = 0;
+    for (int i = 0; i < count; ++i) {
+        if (!strcmp(cell(i, 0), "progress")) return 0;
+        art += art_file(i, url);
+    }
+    return art;
+}
+
+static int row_h(const lv_t *l) { return l->art ? ART_ROW_H : page_h(64); }
+
+/* A stock Tidal list row, page_row_detail's item moved over: the cover (url, or room for one) at
+ * the theme's left, the theme's label boxes beside it, centred in the taller row, an empty detail
+ * centring the caption, and the chevron when it opens a page. The image goes before row_into, whose
+ * chevron stays the last child (navigation.c into_mark), and is sized after it. */
+static void *art_row(int index, const char *caption, const char *detail, const char *url,
+                     int into) {
+    int x = page_x(), tx = x + ART_PX + 12, w = 375 - x - tx, dy = (ART_ROW_H - page_h(64)) / 2;
+    void *item = page_row_detail(pg.view, index, caption, detail, clicked), *img = 0;
+    void *t = widget_get_child(item, 0), *s = widget_get_child(item, 1);
+    widget_move_resize(item, 0, index * ART_ROW_H, 375, ART_ROW_H);
+    widget_move_resize(t, tx, *detail ? I(t, W_Y) + dy : 0, w, *detail ? I(t, W_H) : ART_ROW_H);
+    widget_move_resize(s, tx, I(s, W_Y) + dy, w, I(s, W_H));
+    if (url) {
+        img = image_create(item, x, (ART_ROW_H - ART_PX) / 2, ART_PX, ART_PX);
+        image_set_draw_type(img, 4); /* scaled to fit, as Cover Flow's covers */
+        image_manager_unload_bitmap_by_name(image_manager(), url); /* a file written since */
+        image_base_set_image(img, url);
+    }
+    if (into) row_into(item, ART_ROW_H);
+    if (img) widget_move_resize(img, x, (ART_ROW_H - ART_PX) / 2, ART_PX, ART_PX);
+    return item;
 }
 
 /* Row i of the level's list; i == l->n: the trailing row, Loading… while a page is on its way (a
  * press does nothing), else More…. */
 static void row(lv_t *l, int i) {
     if (i == l->n) {
-        page_row_detail(pg.view, i, pg.paging ? "Loading…" : "More…", "", clicked);
+        if (l->art)
+            art_row(i, pg.paging ? "Loading…" : "More…", "", 0, 0);
+        else
+            page_row_detail(pg.view, i, pg.paging ? "Loading…" : "More…", "", clicked);
         return;
     }
-    void *item = (opens(i) ? page_row_detail_into : page_row_detail)(pg.view, i, cell(i, 2),
-                                                                     cell(i, 3), clicked);
+    void *item;
+    if (l->art) {
+        char url[ART_URL];
+        item = art_row(i, cell(i, 2), cell(i, 3), art_file(i, url) ? url : 0, opens(i));
+    } else
+        item = (opens(i) ? page_row_detail_into : page_row_detail)(pg.view, i, cell(i, 2),
+                                                                   cell(i, 3), clicked);
     if (!strcmp(cell(i, 0), "progress")) progress_row(item, strtol(cell(i, 5), 0, 10));
 }
 
+/* Stock never lets a row's decoded cover go (nothing calls image_manager_unload_unused), so one a
+ * user scrolled past would stay until the list closes: at most ART_KEEP rows' stay decoded around
+ * the list's real scroll position (its yoffset, so wheel, touch and fling alike), others unloaded
+ * here, from show(), drop() and the tick; [pg.art_lo, pg.art_hi) names the rows that may be decoded,
+ * first widened to all a move crossed since the last tick, so none is left behind, and the cost is
+ * the rows crossing, not the list's length. An image draws by name and keeps no bitmap between
+ * paints (internals.md Covers), so a row scrolled back loads again and nothing dangles.
+ * ponytail: at most ART_KEEP covers (about 1.5 MB at ART_MAX px) plus what a fling paints in one
+ * 250 ms tick; a cover scrolled back decodes again on the UI thread, a decode thread if a long
+ * fling ever shows its fill-in. */
+static void art_window(void) {
+    const lv_t *l = top();
+    if (!pg.view || !l->art || l->state != K_READY) return;
+    int rh = row_h(l), y = widget_get_prop_int(pg.view, "yoffset", 0);
+    if (y < 0) y = 0; /* a drag past the top: stock's rubber band reads to minus the view's height */
+    /* a row either side of the view, which stock paints when it's within 4 px of the edge */
+    int first = y / rh ? y / rh - 1 : 0, last = (y + I(pg.view, W_H) + rh - 1) / rh + 1;
+    if (last > l->n) last = l->n;
+    if (first > last) first = last;
+    int lo = (first + last - ART_KEEP) / 2;
+    if (lo > l->n - ART_KEEP) lo = l->n - ART_KEEP;
+    if (lo < 0) lo = 0;
+    int hi = lo + ART_KEEP < l->n ? lo + ART_KEEP : l->n;
+    int a = pg.art_lo < pg.art_hi && pg.art_lo < first ? pg.art_lo : first;
+    int b = pg.art_lo < pg.art_hi && pg.art_hi > last ? pg.art_hi : last;
+    art_unload(a, b < lo ? b : lo);
+    art_unload(a > hi ? a : hi, b);
+    pg.art_lo = a > lo ? a : lo;
+    pg.art_hi = b < hi ? b : hi;
+}
+
 static void show(void);
+
+/* A first row of kind search leaves the list for a search icon at the title bar's right, as
+ * Tidal's navbar has (s_img_search), where the theme has a title bar; under one without (the name
+ * in the status bar) the row stays, as does a sole row, which would leave an empty list. The row's
+ * title and subtitle aren't shown: the box's tips are the app's. Whether it did, from reply f's *n
+ * rows. */
+static int take_find(char **f, int *n) {
+    if (M1PLUS) return 0; /* V2.1's theme has no s_img_search: the row stays (unported, 1.7.3) */
+    if (!theme()->page_title_h || *n < 2 || strcmp(f[4], "search")) return 0;
+    for (int i = 4; i < 4 + 6 * (*n - 1); ++i) f[i] = f[i + 6]; /* the rows up one */
+    --*n;
+    return 1;
+}
+
+static int find_tapped(void *ctx, void *event);
+
+/* The search icon at the title bar's right, the title narrowed to end before it and still centred.
+ * ponytail: taps only, so the wheel and buttons don't reach search on such a list; a key bound to
+ * G_FIND if that is ever asked for. */
+#define FIND_X 302 /* the rows' list_into chevron's box (row_into), so the icon lines up with them */
+static void find_icon(void) {
+    void *title = widget_get_child(pg.page, 0);
+    int h = I(title, W_H);
+    widget_move_resize(title, 375 - FIND_X, 0, 2 * FIND_X - 375, h);
+    void *icon = image_create(pg.page, FIND_X, 0, 50, h);
+    widget_use_style(icon, "s_img_search");
+    widget_set_prop_int(icon, "clickable", 1); /* an image sends no click unless it is, as Tidal's img_search */
+    widget_on(icon, EVT_CLICK, find_tapped, 0);
+}
 
 /* Rows from.. added to the shown list in place of its trailing row, the rest left as they are;
  * ringnav_select gives ringnav the new count, so it keeps the selection and the scroll. A reload's
@@ -1037,15 +1303,60 @@ static void append(lv_t *l, int from) {
     if (cur == from && l->sel > from) cur = l->sel;
     if (n && cur >= n) cur = n - 1; /* past an empty last page: its last row */
     if (cur < n - 1 || !pg.paging || l->sel < cur) l->sel = cur; /* unless still on its way */
-    if ((from + 1) * page_h(64) <=
+    if ((from + 1) * row_h(l) <=
         I(pg.view, W_H)) { /* page_list shrank a short first page: rebuilt */
         show();
         return;
     }
     widget_destroy(widget_get_child(pg.view, (unsigned)from));
     for (int i = from; i < n; ++i) row(l, i);
-    widget_set_prop_int(pg.view, "virtual_h", n * page_h(64));
+    widget_set_prop_int(pg.view, "virtual_h", n * row_h(l));
     ringnav_select(pg.view, cur, n);
+}
+
+/* A live level's new reply g (n rows) has the shown list's rows: as many, on one page, each of the
+ * same kind, uri and context (so a press queued on one still does what it did) and with a detail
+ * where it had one, More… shown or not as before, and as many covers. The shown reply's kinds, uris
+ * and contexts are the new one's by then, so art_rows' answer is the new one's.
+ * ponytail: covers are counted, not compared, so a cover swapped for another in one reply stays
+ * until the next rebuild; a key per row if apps do that. */
+static int same_rows(const lv_t *l, char **g, int n) {
+    if (!pg.view || n != l->n || pg.pages != 1 || !g[3][0] != !pg.f[3][0]) return 0;
+    for (int i = 0; i < n; ++i) {
+        char **r = g + 4 + 6 * i;
+        if (strcmp(r[0], cell(i, 0)) || strcmp(r[1], cell(i, 1)) || strcmp(r[4], cell(i, 4)) ||
+            !r[3][0] != !cell(i, 3)[0])
+            return 0;
+    }
+    return art_rows(n) == l->art;
+}
+
+/* The shown rows' texts and progress bars written from the level's reply in place: a refresh that
+ * only moves a percentage leaves the other rows, the selection and a long title's marquee as they
+ * are, where a rebuild would start them over. A row's labels are its title then its detail, in
+ * row()'s roles however it was dressed; one is set only when its text changed, read as UTF-8 (its
+ * "text" prop is a wide string, which widget_get_prop_str doesn't return). A changed text starts
+ * from its left, in the face it needs, and the selected row's new title has its marquee again at
+ * the next paint (paint_selection), for its own width; a changed detail leaves the title's alone. */
+static void relabel(const lv_t *l) {
+    for (int i = 0; i < l->n; ++i) {
+        void *item = widget_get_child(pg.view, (unsigned)i);
+        for (unsigned c = 0, k = 2, m = widget_count_children(item); c < m; ++c) {
+            void *w = widget_get_child(item, c);
+            if (!tk_strcmp(widget_get_type(w), "hscroll_label")) {
+                if (text_differs(w, cell(i, k))) {
+                    widget_set_text_utf8(w, cell(i, k));
+                    theme_font(w, k == 2 ? ROLE_TALL : ROLE_META, FONT_ROW);
+                    widget_set_prop_int(w, "xoffset", 0);
+                    if (k == 2) marq_restart(item);
+                }
+                ++k;
+            } else if (widget_get_prop_int(w, "_pml", -1) >= 0) { /* a progress row's bar */
+                set_pml(w, strtol(cell(i, 5), 0, 10));
+                widget_invalidate_force(w, 0);
+            }
+        }
+    }
 }
 
 /* The top level: its rows, or what it waits for. */
@@ -1074,11 +1385,19 @@ static void show(void) {
         if (n > 1) stop_row(1);
         page_push(pg.view, pg.moved), pg.moved = 0;
     } else {
-        pg.view = page_list(pg.page, pg.page, 0, l->title, n = l->n + (pg.f[3][0] != 0), 64);
+        /* ponytail: the first page decides, as pages appended later (append) keep this drawing's
+         * choice and Back or an action reloads from the first page; a list rebuilt whole with all
+         * its pages there (a short first page, the search box closing) counts them */
+        art_forget(); /* the rows are built anew: nothing of theirs decoded yet */
+        l->art = art_rows(l->n);
+        pg.view = page_list(pg.page, pg.page, 0, l->title, n = l->n + (pg.f[3][0] != 0),
+                            l->art ? ART_ROW_H : 64);
         for (int i = 0; i < n; ++i) row(l, i);
+        if (l->find) find_icon();
         page_push(pg.view, pg.moved), pg.moved = 0;
     }
-    if (n) ringnav_select(pg.view, l->sel < n ? l->sel : n - 1, n);
+    if (n) ringnav_select(pg.view, l->state == K_ERROR ? 0 : l->sel < n ? l->sel : n - 1, n);
+    art_window();
 }
 
 /* The selected row kept, from a page showing the level's own rows (not an error or a wait's). */
@@ -1117,6 +1436,61 @@ static void pop(void) {
     top()->state = K_LOAD;
     pg.moved = -1;
     show();
+}
+
+/* Section i shown as the first level: its op asked, its list sliding in from dir's side (1 from the
+ * right, as the next; -1 from the left; 0 in place), the one it replaces keeping its selected row.
+ * With two or more the title has the position, Albums 2/3. */
+static void sec_open(int i, int dir) {
+    lv_t *l = &pg.lv[0];
+    req_cancel();
+    keep_sel();
+    pg.sec[pg.cur].sel = l->sel;
+    drop();
+    pg.cur = (signed char)i;
+    *l = pg.sec[i]; /* K_LOAD */
+    if (pg.nsec > 1)
+        tk_snprintf(l->title, sizeof l->title, "%s %d/%d", pg.sec[i].title, i + 1, pg.nsec);
+    pg.moved = (signed char)dir;
+    show();
+}
+
+/* A page row's press: the top level's list from cursor c, in the level's place, so Back leaves the
+ * list instead of stepping back through its pages; dir: 1 a later page, -1 an earlier one. */
+static void page_to(lv_t *l, const char *c, int dir) {
+    char a[sizeof l->args] = "";
+    if (!cursor_args(l, a, sizeof a, c)) return;
+    /* the first content row: past Previous page, and past a Search row kept as a row */
+    int first = 1 + !strcmp(cell(0, 0), "search");
+    req_cancel();
+    drop();
+    memcpy(l->args, a, sizeof a);
+    l->n = 0, l->state = K_LOAD;
+    l->sel = dir > 0 ? first : 1 << 20; /* show() clamps it to the last row */
+    pg.moved = (signed char)dir;
+    show();
+}
+
+/* The first level's reply saying "sections": its list rows (n of g's) become the sections, and the
+ * first opens. 0 when it has none to take. */
+static int sec_take(char **g, int n) {
+    if (!pg.sec && !(pg.sec = calloc(ADDON_SECTIONS, sizeof *pg.sec))) return 0;
+    int k = 0;
+    for (int i = 0; i < n && k < ADDON_SECTIONS; ++i) {
+        char **c = g + 4 + 6 * i;
+        if (strcmp(c[0], "list") || !c[1][0]) continue;
+        lv_t *s = &pg.sec[k];
+        tk_snprintf(s->op, sizeof s->op, "%s", c[1]);
+        tk_snprintf(s->title, sizeof s->title, "%s", c[2]);
+        s->args[0] = 0;
+        if (c[4][0] && !put(s->args, sizeof s->args, c[4])) continue; /* too long: left out */
+        s->base = strlen(s->args);
+        ++k;
+    }
+    if (!k) return 0;
+    pg.nsec = (signed char)k;
+    sec_open(0, 0);
+    return 1;
 }
 
 /* The finished request: an action's toast, or the top level's rows. */
@@ -1169,6 +1543,9 @@ static void got(void) {
                (app()->restart || now - app()->launch_at < ADDON_START_MS)) {
         if (l->state != K_WAIT && l->state != K_READY) l->state = K_WAIT, show();
         pg.again = now + 500;
+    } else if (ok && pg.depth == 1 && !pg.nsec && !strcmp(f[2], "sections") && sec_take(g, n)) {
+        /* sections: the first asked for (sec_open); this reply's rows were their names. Taken once:
+         * a section that answers "sections" too is a plain list, not asked for again and again */
     } else if (!ok) {
         l->state = K_ERROR;
         l->retry = 1;
@@ -1182,16 +1559,25 @@ static void got(void) {
         l->live = !strcmp(f[2], "refresh");
         pg.again = now + ADDON_LIVE_MS;
         if (l->state != K_READY || hash != l->hash) {
+            int find = take_find(g, &n);
+            int same = l->state == K_READY && l->live && find == l->find && same_rows(l, g, n);
             keep_sel();
-            drop();
+            if (same)
+                free(pg.buf[0]); /* same_rows: its one page, and the covers stay drawn */
+            else
+                drop();
             pg.buf[0] = reply, pg.pages = 1, reply = 0;
             memcpy(pg.f, f, sizeof g); /* pg.f holds ADDON_PAGES replies' rows, g one's */
             l->n = n;
+            l->find = find;
             l->hash = hash;
             l->state = K_READY;
             /* an app opts in; older ones' lists keep More… */
             if (!strcmp(f[2], "pages") && f[3][0]) page_next(l);
-            show();
+            if (same)
+                relabel(l); /* only texts and bars moved: the rows stay */
+            else
+                show();
         }
         if (pg.code) /* turned on by its row: its address at once, the menu behind it */
             pg.code = 0, qr_open(app()->state, app()->name);
@@ -1227,6 +1613,69 @@ static int search_left(void *ctx, void *event) {
     return 0;
 }
 
+/* The page's touches (page_at binds them, before its children see them): a sideways swipe on the
+ * first level of an app with sections moves to the next or the previous one, as Pull to search's
+ * pull (navigation.c pull_event): once the move is a swipe's, the rows it pressed are told the
+ * touch is gone, so the lift clicks nothing, and the moves and the lift are kept from the list. Up
+ * and down stay the list's.
+ * ponytail: touch only. The wheel moves the selection, as on every list, so the sections past the
+ * first are reached by a swipe alone; bind a key here if that is ever asked for. */
+static int swipe(void *ctx, void *event) {
+    (void)ctx;
+    int type = I(event, EVENT_TYPE);
+    if (type == EVT_POINTER_ABORT || pg.nsec < 2 || pg.depth != 1 || pg.edit) {
+        pg.sdown = pg.sclaim = 0;
+        return 0;
+    }
+    int x = I(event, EVENT_X), y = I(event, EVENT_Y);
+    if (type == EVT_POINTER_DOWN) {
+        pg.sdown = 1, pg.sclaim = 0, pg.sx = x, pg.sy = y;
+        return 0;
+    }
+    if (!pg.sdown) return 0;
+    int dx = x - pg.sx, dy = y - pg.sy, ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+    if (type == EVT_POINTER_UP_BEFORE) {
+        int claimed = pg.sclaim;
+        pg.sdown = pg.sclaim = 0;
+        if (!claimed) return 0;
+        if (ax >= SWIPE_PX && ax > ay) later(G_SECTION, dx < 0 ? 1 : -1); /* a swipe to the left: the next */
+        return 11; /* RET_STOP */
+    }
+    if (type != EVT_POINTER_MOVE_BEFORE) return 0;
+    if (!pg.sclaim) {
+        if (ay >= SWIPE_CLAIM_PX) { /* the list's: it scrolls */
+            pg.sdown = 0;
+            return 0;
+        }
+        if (ax < SWIPE_CLAIM_PX || ax < 2 * ay) return 0;
+        unsigned abort_event[12];
+        pointer_event_init(abort_event, EVT_POINTER_ABORT, pg.page, pg.sx, pg.sy);
+        widget_dispatch_event_to_target_recursive(pg.page, abort_event);
+        pg.sdown = pg.sclaim = 1; /* after: the abort comes back here and clears them */
+        if (pg.view) list_stop_scroll(pg.view); /* as pull_event: a fling under the claim ends */
+    }
+    return 11; /* RET_STOP */
+}
+
+/* peq_ui.c's T9 edit over the title, its keyboard open: a Search row's press, or its icon's tap. */
+static void search_box(void) {
+    keep_sel();
+    widget_destroy_children(pg.page), pg.view = 0; /* the box alone, as Spotify's */
+    pg.edit = edit_create(pg.page, "text", 2, 26);
+    t9_box(pg.page, pg.edit, app()->tips);
+    widget_on(pg.edit, EVT_VALUE_CHANGED, searched, 0);
+    widget_on(pg.edit, EVT_IM_ACTION, searched, 0);
+    widget_on(pg.edit, EVT_BLUR, search_left, 0);
+    widget_set_focused(pg.edit, 1);
+}
+
+/* The icon's tap, on a timer as a row's: the box replaces the page the icon is in. */
+static int find_tapped(void *ctx, void *event) {
+    (void)ctx, (void)event;
+    later(G_FIND, 0);
+    return 0;
+}
+
 /* A row's choice, on a timer: a row's click may not rebuild the list it is in. */
 static int go(const void *unused) {
     (void)unused;
@@ -1236,7 +1685,12 @@ static int go(const void *unused) {
     pg.go = 0;
     if (pg.next == G_SHOW)
         show();
-    else if (pg.next == G_SEARCH) {
+    else if (pg.next == G_SECTION) { /* a swipe: the next or previous section, none past the ends */
+        int to = pg.cur + i;
+        if (pg.depth == 1 && to >= 0 && to < pg.nsec) sec_open(to, i);
+    } else if (pg.next == G_FIND) {
+        if (l->state == K_READY && l->find) search_box();
+    } else if (pg.next == G_SEARCH) {
         if (put(a, sizeof a, pg.term)) push("search", a, strlen(a), pg.term);
     } else if (l->state == K_ERROR ? i == 1 : l->state != K_READY && l->slow) { /* Stop <name> */
         char t[48];
@@ -1254,28 +1708,22 @@ static int go(const void *unused) {
         }
     } else if (l->state != K_READY) {
     } else if (i == l->n) { /* More…, as a level of its own; Loading… does nothing */
-        if (!pg.paging && cursor_args(l, a, sizeof a)) push(l->op, a, l->base, l->title);
+        if (!pg.paging && cursor_args(l, a, sizeof a, pg.f[3]))
+            push(l->op, a, l->base, pg.depth == 1 && pg.nsec ? pg.sec[pg.cur].title : l->title);
     } else {
         const char *kind = cell(i, 0), *uri = cell(i, 1), *ctx = cell(i, 4);
         if (!strcmp(kind, "list")) { /* with remote and a local folder, opens()'s pages */
             if (!ctx[0] || put(a, sizeof a, ctx)) push(uri, a, strlen(a), cell(i, 2));
-        } else if (!strcmp(kind, "action"))
+        } else if (!strcmp(kind, "page"))
+            page_to(l, ctx, strcmp(uri, "prev") ? 1 : -1);
+        else if (!strcmp(kind, "action"))
             action(uri, ctx);
         else if (!strcmp(kind, "remote"))
             qr_open(app()->state, app()->name);
         else if (!strcmp(kind, "local")) /* a song, or a folder of them, on the card */
             songs_open(uri, cell(i, 2), !strcmp(ctx, "album"));
-        else if (!strcmp(kind,
-                         "search")) { /* peq_ui.c's T9 edit over the title, its keyboard open */
-            keep_sel();
-            widget_destroy_children(pg.page), pg.view = 0; /* the box alone, as Spotify's */
-            pg.edit = edit_create(pg.page, "text", 2, 26);
-            t9_box(pg.page, pg.edit, app()->tips);
-            widget_on(pg.edit, EVT_VALUE_CHANGED, searched, 0);
-            widget_on(pg.edit, EVT_IM_ACTION, searched, 0);
-            widget_on(pg.edit, EVT_BLUR, search_left, 0);
-            widget_set_focused(pg.edit, 1);
-        }
+        else if (!strcmp(kind, "search"))
+            search_box();
     }
     return 0;
 }
@@ -1295,6 +1743,7 @@ static int tick(const void *unused) {
              (l->state == K_WAIT || (l->state == K_READY && l->live && g_backlight_status &&
                                      window_manager_get_top_window(window_manager()) == pg.page)))
         fetch(l);
+    art_window();
     return 8; /* RET_REPEAT */
 }
 
@@ -1326,6 +1775,7 @@ static int closed(void *ctx, void *event) {
     drop();
     free(pg.lv);
     free(pg.f);
+    free(pg.sec);
     memset(&pg, 0, sizeof pg);
     return 0;
 }
@@ -1343,6 +1793,10 @@ static int page_at(int k, const char *op, const char *args, const char *title, i
     int missing = access(a->bin, 0);
     if (!missing && (!a->launched || access(a->pid, 0))) launch(a), pg.code = qr && a->qr;
     pg.depth = 1;
+    static const unsigned short touches[] = { EVT_POINTER_DOWN, EVT_POINTER_MOVE_BEFORE,
+                                              EVT_POINTER_UP_BEFORE, EVT_POINTER_ABORT };
+    for (unsigned t = 0; t < sizeof touches / sizeof *touches; ++t)
+        widget_on(pg.page, touches[t], swipe, 0);
     lv_t *l = top();
     tk_snprintf(l->op, sizeof l->op, "%s", op);
     tk_snprintf(l->args, sizeof l->args, "%s", args);
@@ -1357,10 +1811,11 @@ static int page_at(int k, const char *op, const char *args, const char *title, i
     return 1;
 }
 
-/* An app's Streaming row (navigation.c ringnav_stream; ctx: its place by name at the last scan). */
+/* An app's Streaming row (home.c ringnav_stream; ctx: its place by name at the last scan). */
 int addon_open(void *ctx, void *event) {
     (void)event;
     int k = (int)(long)ctx;
+    if (smart_hold(addon_open, ctx, 0)) return 0; /* the app starts once Smart Wi-Fi's link is up */
     if (k >= 0 && k < ap.shown) page_at(ap.order[k], "menu", "", ap.a[ap.order[k]].name, 1);
     return 0;
 }

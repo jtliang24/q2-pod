@@ -10,7 +10,7 @@
   <a href="https://github.com/jtliang24/q2-pod/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/jtliang24/q2-pod?style=flat-square&color=3D424B&label=release"></a>
   <a href="#features"><img alt="Device: Shanling M1 Plus" src="https://img.shields.io/badge/device-Shanling%20M1%20Plus-B99AC8?style=flat-square"></a>
   <a href="https://github.com/DiamondBond/q2-pod"><img alt="Upstream: Q2 Pod" src="https://img.shields.io/badge/upstream-Q2%20Pod-6E8BA8?style=flat-square"></a>
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-D77868?style=flat-square"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-D77868?style=flat-square"></a>
 </p>
 
 <p align="center">
@@ -107,5 +107,10 @@ byte-identical to upstream's.
 Q2 Pod is [DiamondBond](https://github.com/DiamondBond)'s work. This fork only ports it to the M1 Plus.
 If it has made your player better, consider [supporting Q2 Pod on Ko-fi](https://ko-fi.com/diamondbond).
 
-[MIT](LICENSE) covers this repository's code and docs. The Shanling firmware included in release images remains
-Shanling's. Neither Q2 Pod nor this port is affiliated with Shanling.
+The code, tools, tests, documentation and artwork, Q2 Pod's and this port's, are under the
+[GNU General Public License, version 3](LICENSE) (GPL-3.0-only), as upstream's are from Q2 Pod 1.7.2 on.
+The kernel-side files in `tools/` (`pwm_clock.c`, `pwm_clock.h`, `mcu_pwm_clock.c`, `aic_idle_wait.c`) are
+GPL-2.0-or-later, so they stay compatible with the kernel they build against. The fonts in `assets/fonts` keep their
+own licences: Liberation Sans (OFL, shipped cut down and renamed Q2 Pod Sans) and TeX Gyre Heros (GUST Font License,
+shipped cut down and renamed Q2 Pod Classic Light, see `assets/fonts/README-classic-light.txt`). The Shanling firmware
+included in release images remains Shanling's. Neither Q2 Pod nor this port is affiliated with Shanling.

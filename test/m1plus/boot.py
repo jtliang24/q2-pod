@@ -426,11 +426,11 @@ def media_db(path):
 
 # The Library page's rows (patch/m1plus_nav_library.c), 64 px under the 48 px title, upstream's order with V2.1's
 # categories: Shuffle, Artists, Albums, All Songs, Genres, Era, Playlists, Ratings, Recently Added, Recently Played,
-# Most Played, Frequent, Hi-Res, Long Songs, then the card's Photos and Books, Composers, CD Ripper and Update Local
-# Music: 19 rows, six showing. A slow drag held before its release scrolls by its length (no fling), from y 420 (a touch
-# lower is V2.1's swipe up to Home): two of DRAG_PX bring Most Played to the top. Tap row centres: a settling scroll
-# must not pick the row above.
-LIB_ROWS, LIB_LIST_Y, LIB_LIST_H, DRAG_PX = 19, STATUS_H + 48, H - STATUS_H - 48, 320
+# Most Played, Hi-Res, Long Songs (no Frequent since 1.7.3), then the card's Photos and Books, Composers, CD Ripper
+# and Update Local Music: 18 rows, six showing. A slow drag held before its release scrolls by its length (no fling),
+# from y 420 (a touch lower is V2.1's swipe up to Home): two of DRAG_PX bring Most Played to the top. Tap row centres:
+# a settling scroll must not pick the row above.
+LIB_ROWS, LIB_LIST_Y, LIB_LIST_H, DRAG_PX = 18, STATUS_H + 48, H - STATUS_H - 48, 320
 def drag(x, y0, y1, steps=20):
     return [line for i in range(steps + 1) for line in (f'{x} {y0 + (y1 - y0) * i // steps} 200', 'wait 24')] + ['wait 600', f'{x} {y1} 0']
 def page_row(i, scroll=0): return tap(160, LIB_LIST_Y + 64 * i - scroll + 32)
@@ -485,16 +485,16 @@ MEDIA_WALK = LIBRARY_WALK + [
               ('shuffle', page_row(0), 4, ('not', 'lib')),
               ('shuffle_back', CHEVRON, 4, ('as', 'lib')),
               ('lib_mid', drag(160, 420, 420 - DRAG_PX) + ['wait 800'] + drag(160, 420, 420 - DRAG_PX), 4, ('not', 'lib')),
-              ('long_songs', page_row(13, MID), 12, ('not', 'lib_mid')),  # measures, then lists
+              ('long_songs', page_row(12, MID), 12, ('not', 'lib_mid')),  # measures, then lists
               ('long_songs_back', CHEVRON, 4, ('as', 'lib_mid')),
-              ('photos', page_row(14, MID), 6, ('not', 'lib_mid')),
+              ('photos', page_row(13, MID), 6, ('not', 'lib_mid')),
               ('photo', tap(56, 126), 5, ('not', 'photos')),         # the first tile
               # qemu's demo decodes neither photo ("Can't open this photo"), so the move to the
               # second and back shows only in the trace (photos.c moved); the viewer stays open.
               ('photo_swipes', swipe(240, 250, 60, 250) + ['wait 1500'] + swipe(60, 250, 240, 250), 4, ('as', 'photo')),
               ('photo_back', CHEVRON, 4, ('not', 'photo')),
               ('photos_back', CHEVRON, 4, ('as', 'lib_mid')),
-              ('books', page_row(15, MID), 4, ('not', 'lib_mid')),
+              ('books', page_row(14, MID), 4, ('not', 'lib_mid')),
               ('book', tap(160, 110), 5, ('not', 'books')),          # the first book's row
               ('book_back', CHEVRON, 4, ('not', 'book')),
               ('books_back', CHEVRON, 4, ('as', 'lib_mid')),

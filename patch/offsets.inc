@@ -146,13 +146,13 @@
 #define CONFIRM_PROMPT_PX 24
 #define NP_TIMES_PX 14 /* Now Playing's times, and the volume text in their place */
 #define NP_ART_RADIUS 12 /* Now Playing's art corners (paint_cover), as stock's play_defaultcover scaled to the art */
-/* Classic's Now Playing, an iPod classic's (coverflow.c slant_render, navigation.c paint_scrubber),
+/* Classic's Now Playing, an iPod classic's (coverflow.c slant_render, np_bar.c paint_scrubber),
  * fitted to Apple's own 320 x 240 capture: the art's far edge SLANT_FAR/256 of its near one (118 of
  * 135 px); its reflection from SLANT_REFLECT_A/256 fading out over SLANT_REFLECT_PCT of the
  * column's height; the progress bar NP_BAR_IPOD high, mirrored under it from
  * SCRUB_REFLECT_A/256 over SCRUB_REFLECT_ROWS; the times beside it NP_IPOD_TIME_PX, the largest
  * whose line fits their NP_IPOD_TIME_H box, NP_IPOD_TIME_GAP from the bar, in
- * boxes fitted to the track (navigation.c ipod_times): NP_IPOD_TIME_W1 holds "-9:59", the build's
+ * boxes fitted to the track (np_bar.c ipod_times): NP_IPOD_TIME_W1 holds "-9:59", the build's
  * layout, NP_IPOD_TIME_W2 "-59:59" and NP_IPOD_TIME_W "-9:59:59" (tools/ipod.py measures them).
  * The boxes' outer edges stay; the bar takes what they leave. */
 #define SLANT_FAR 224
@@ -463,6 +463,17 @@ static inline int arc_out(int r, int y) {
 #define STANDBY_LIMIT_1 1
 #define STANDBY_LIMIT_2 8
 #define STANDBY_LIMIT_3 24
+/* check_cardmount_status's request for on_wm_timer_dialog's TF card toast, and how long after a
+ * Standby resume ringnav_cardmount drops it (docs/internals.md#standby-limit). */
+#define CARD_TOAST 0xa37c97
+#define CARD_QUIET_MS 15000
+/* Smart Wi-Fi (docs/internals.md#smart-wi-fi), checked every SMART_POLL_MS: the radio goes off after
+ * SMART_IDLE_MS with nothing needing the network (a new link counts as a use), and whatever wakes it
+ * waits up to SMART_CONNECT_MS for the link before going on without it. */
+#define SMART_POLL_MS 1000
+#define SMART_IDLE_MS 300000
+#define SMART_CONNECT_MS 15000
+#define NET_TYPE 0xa3bf04 /* no symbol: initNetworkModule's type, 2 Wi-Fi; networkStart and networkStop act only then */
 /* The Wi-Fi signal (ringnav_wifi_signal) is read from the driver again at most every
  * WIFI_SIGNAL_MS; its two pollers each ask about once a second. */
 #define WIFI_SIGNAL_MS 1000
@@ -626,7 +637,7 @@ static inline int arc_out(int r, int y) {
 #define MUSIC_WHERE "fileurl not like '/mnt/mmc/audiobooks/%' and fileurl not like '/mnt/mmc/podcasts/%' and fileurl not like '%.m4b' and " LIBRARY_SCOPE_TOKEN
 /* Tags may store a full date (20220510 or 2022-05-10); compare the year before aggregating. */
 #define ALBUM_YEAR "max(case when cast(year as text) glob '[1-9][0-9][0-9][0-9]*' then cast(substr(year,1,4) as integer) else 0 end)"
-/* One row per album, as album_cmp tells them apart (coverflow.c; navigation.c's Era). */
+/* One row per album, as album_cmp tells them apart (coverflow.c; library_lists.c's Era). */
 /* An album group's art track: its lowest disc then track then path, as Coverflow lists it. A bare
  * fileurl would be whichever row SQLite saw last, so an album whose tracks carry different covers
  * showed a random one. Each number is clamped to 0-9999 so its prefix stays four digits (a date as

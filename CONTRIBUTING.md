@@ -27,6 +27,12 @@ Apps live in their own repos. To list one on the App Store page, open a pull req
 
 Commit titles are `area: what changed`, such as `audio: a skip on Bluetooth no longer crackles`. Keep one change per pull request.
 
+### Where new code goes
+
+`patch/navigation.c` is the UI's core: the hooks, input, the shared paint helpers and Now Playing. Don't add a feature to it. Give the feature its own file in `patch/`, list it in `NAVIGATION` in [`tools/build.py`](tools/build.py) (`tools/format.sh` reads it there), and declare what other files use in `patch/navigation.h` under its file's name, as `smart_wifi.c` and `system.c` do. Change navigation.c only where the code you change lives there, and say why in the pull request if you add to it.
+
+A helper another file calls for every row or pixel goes in `navigation.h` as `static inline`. Mark one `__attribute__((pure))` only if it writes nothing, not even a lazy first load (`accent()` reads the settings on its first call), always returns, and reads no `volatile` memory or state another thread writes: clang may keep one call for several, across a change it can't see. Called across files without that, it runs slower, and the paints can outgrow `test/patch.py`'s instruction limit.
+
 ## License
 
-Contributions are under the [MIT](LICENSE) license.
+Contributions are under the [GNU GPL v3](LICENSE) (GPL-3.0-only), the project's licence; the kernel-side files in `tools/` are GPL-2.0-or-later. By opening a pull request you license your change under the same terms as the file it changes.

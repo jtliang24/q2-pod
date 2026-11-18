@@ -2893,10 +2893,26 @@ TIDAL_DL = r'''#include <assert.h>
 #define child_exit _exit
 #define child_oom_first() ((void)0)
 static int thumb(const char *s, const char *d, int w, int h) { return 0; }
+/* card apps' URL queues (app_urls_play, app_track): built here, not run */
+#define REC_NAME 0
+#define REC_PATH 0
+#define REC_TYPE 0
+#define tk_str_start_with(s, p) (!strncmp(s, p, strlen(p)))
+static unsigned char savestartbt, transposition, tidalfurlstart;
+static unsigned playback_loads;
+static int networkGetConnectStatus(void) { return 0; }
+static int mclStop(void) { return 0; }
+static void *_create_deque(const char *kind) { return 0; }
+static void deque_init(void *q) {}
+static void _deque_push_back(void *q, void *r) {}
+static void deque_destroy(void *q) {}
+static void play_folder(void *q, int i, int cls) {}
 static long file_size(const char *p) { return -1; }
 static int quality = 27; static void *queue;
 #define tidalStreamingLevelNow (&quality)
 #define mcl_pdeqplaylist (&queue)
+static int play_pos;
+#define MCL_POS (&play_pos)
 static _Atomic int status = 1, gate, performing, performs, ended;
 static _Atomic unsigned long long clk = 1000;
 static char last[64];
@@ -3110,7 +3126,7 @@ def shelf_check(tmp, lib):
     assert len(sources(''.join(f'me/q2-a{i}\n' for i in range(20)), scratch)) == 16
     assert [a[2] for a in sources('a/q2\nb/q2-tidal\nc/downpic\nd/q2-tidal2\n', scratch)] == ['tidal2']  # never the firmware's folders
     own = {m for f in (ROOT/'patch').glob('*.[ch]')
-           for m in re.findall(r'(?:mmc/|CARD "/)\.([a-z0-9-]+)["/]', f.read_text())} - {'rockbox', 'spotify'}
+           for m in re.findall(r'(?:mmc/|CARD "/)\.([a-z0-9-]+)["/]', f.read_text())} - {'rockbox', 'spotify', 'groovebox'}  # card apps the firmware knows by path
     own -= {'soloify'}  # M1 Plus's Soloify (peq.h SOLOIFY_DIR): a card app there, not a firmware folder
     assert own and not [x for x in own if sources(f'a/q2-{x}\n', scratch)], own  # every card folder of the firmware's
     C.c_int.in_dll(lib, 'shelf_n').value = len(sources((ROOT/'sources.list').read_text()))

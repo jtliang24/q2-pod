@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from conftest import O, claim
+from conftest import O, claim, Game
 
 KEY_PLAY, KEY_BACK_BTN, KEY_FWD_BTN = O['KEY_PLAY'], O['KEY_BACK_BTN'], O['KEY_FWD_BTN']
 NEXT, PLAYPAUSE, PREV, STOP, PAUSE, PLAYCD, PAUSECD, PLAYKEY = 163, 164, 165, 166, 119, 200, 201, 207
@@ -279,6 +279,41 @@ def top_window(fw, name):
     fw.mock('widget_get_prop_str', lambda w, key, default, *_: C.addressof(page) if w == 0x5100 else default)
     fw.mock('tk_str_start_with', lambda s, prefix, *_: C.string_at(s).startswith(C.string_at(prefix)))
     return page
+
+
+
+@pytest.mark.parametrize('how', ['media_key', PLAYPAUSE, PLAYCD, PLAYKEY])
+@pytest.mark.parametrize('audio, toggles', [(1, 0), (0, 1)])
+def test_a_card_game_with_the_sound_keeps_the_headsets_keys_from_stock(fw, how, audio, toggles):
+    """Through media_key, and the headset's AVRCP PLAY, which headset_command sends to media_set_playing."""
+    player = Player(fw, status=PAUSED)
+    gm = fw.var('addon__gm', Game)
+    gm.pid, gm.audio = 4321, audio
+    def press():
+        player.status = PAUSED
+        if how == 'media_key':
+            fw.fn('media_key', None, C.c_uint)(KEY_PLAY)
+        else:
+            command(fw, player, how)
+    press()
+    assert player.toggles() == toggles
+    gm.pid = 0
+    press()
+    assert player.toggles() == toggles + 1
+
+
+@pytest.mark.parametrize('how', ['media_key', PLAYPAUSE, PAUSECD, PAUSE, STOP])
+def test_a_card_game_with_the_sound_lets_a_headset_pause_what_plays(fw, how):
+    """Something else playing (stock's player stands in for the Spotify a phone resumed, the real case): a pause still
+    passes, Play/Pause's too; only a start is kept."""
+    player = Player(fw, status=PLAYING)
+    gm = fw.var('addon__gm', Game)
+    gm.pid, gm.audio = 4321, 1
+    if how == 'media_key':
+        fw.fn('media_key', None, C.c_uint)(KEY_PLAY)
+    else:
+        command(fw, player, how)
+    assert player.toggles() == 1 and player.status == PAUSED
 
 
 def test_a_playing_video_takes_the_keys(fw):

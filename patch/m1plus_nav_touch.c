@@ -95,7 +95,7 @@ static int touch_closes(void *e) {
     }
     if (st.rate_on && top == st.rate_on && (panel = widget_lookup(top, "rate_panel", 0)) &&
         outside_of(panel, x, y)) {
-        rate_close(0);
+        m1_rate_close(0);
         return 1;
     }
     return 0;

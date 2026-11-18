@@ -66,7 +66,7 @@ np_bar_t np_bar_fill(unsigned pos_ms, unsigned dur_ms, int scrubbing, int w, int
 }
 
 /* The local page, by the names ringnav_playing looked up. */
-static np_view_t np_view_local(void) {
+np_view_t np_view_local(void) { /* np_bar.c np_theme too */
     return (np_view_t){ .win = st.np_win, .title = st.np_title, .album = st.np_album, .remain = st.np_remain,
                         .counter = st.np_pos, .hash = st.np_hash, .bold = st.np_bold };
 }
@@ -94,14 +94,15 @@ static int np_repaint(const void *info) {
     return 0; /* RET_REMOVE */
 }
 
-static void np_sync(void *top) {
-    if (!top || top != st.np_win) return;
+int np_sync(void *top) { /* navigation.h's; 0: the M1 writes its times itself (no remain_due) */
+    if (!top || top != st.np_win) return 0;
     np_view_t v = np_view_local();
     np_src_t s = np_src_local();
     np_write(&v, &s);
     if (v.hash != st.np_hash) rearm(&st.np_repaint, np_repaint, 0);
     st.np_hash = v.hash;
     st.np_bold = v.bold;
+    return 0;
 }
 
 /* The scrub, one for both pages: its state is st's, in the page's seconds, and st.scrub_page is whose it is while it runs and
@@ -227,18 +228,6 @@ void np_scrub_drag(const np_page_t *p, int sec, int done) {
     }
     p->preview(sec);
     rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
-}
-
-/* navigation.c's lyric_seek on the local page: a scrub to ms (a synced line's start), previewed and committed at once,
- * and the lyrics follow again; paused, the seek waits for Play (np_scrub_end), and so does the follow (lyric_held 2). 0 for
- * an unsynced line (-1), no bar or a line past the song's end. */
-static int lyric_seek(int ms) {
-    int max = st.np_slider ? widget_get_prop_int(st.np_slider, "max", 0) : 0;
-    if (ms < 0 || !st.np_slider || (max > 0 && ms / 1000 > max)) return 0;
-    np_scrub_drag(&np_local, ms / 1000, 0);
-    np_scrub_end();
-    st.lyric_held = mclGetPlayStatus() == 2 ? 0 : 2, st.lyric_spun = 0;
-    return 1;
 }
 
 /* The local bar's value-changing (ctx 0) and value-changed (ctx 1), bound after V2.1's, so they run first. V2.1's own pair

@@ -2,14 +2,7 @@
  * PictureFlow reads Rockbox's database. No tag reads: albums and tracks come from the stock library
  * queries, and the only thing Coverflow owns is a thumbnail cache, built on a modal screen by one
  * pthread that touches only files, the two stock art locks and the volatile counters below. */
-#include "offsets.inc"
-#include "peq.h"
-#ifndef PEQ_HOST
-#include "stock.h"
-#endif
-#include "library_scope.h"
-#include "playback.h"
-#include "xiph.h"
+#include "coverflow.h"
 
 /* On the card, beside stock's own cover cache (/mnt/mmc/.sldp). */
 #define ART_DIR PEQ_ROOT "/mnt/mmc/.coverflow"
@@ -19,15 +12,11 @@
 #define CF_W (UI_W - 2 * CF_EDGE)
 /* The theme's page rows' text column; the M1's narrower rows keep its own CF_EDGE. */
 #define PAGE_X(T) (M1PLUS ? CF_EDGE : (T)->page_x)
+#define BUILDING ART_DIR "/building" /* the key of the album the worker is on (strike) */
 #define MIN_FREE_MB 16 /* no new cache files below this much free space on the card */
 #define ART_NEAR 3 /* real art only this many covers either side, like PictureFlow's cache */
 /* Home's without a theme's pane (home_pane_paint), at 290px (stock's: 110) */
 #define HOME_PLACEHOLDER "default_album_home"
-enum { ARTIST_ALBUMS = 1, RATED_ALBUMS, ALBUM_TRACKS }; /* cf.scoped */
-/* after the albums: an artist's All albums (two or more), the rated albums' Sort; none after the
- * library's, whose Sort and Refresh are Display settings' Coverflow Sort and Refresh Coverflow
- * (coverflow_sort_step, coverflow_refresh_art) */
-#define CARDS (cf.scoped == ARTIST_ALBUMS ? deque_size(cf.albums) > 1 : cf.scoped ? 1 : 0)
 
 extern int stock_home_trampoline(void *win, void *ctx), stock_scan_all_trampoline(void *, void *),
     stock_scan_folder_trampoline(void *, void *), stock_delete_song_trampoline(void *, void *),
@@ -35,35 +24,7 @@ extern int stock_home_trampoline(void *win, void *ctx), stock_scan_all_trampolin
     stock_album_cover_trampoline(const char *, const char *, int, int);
 
 enum { PREPARING, COVERS, TRACKS };
-typedef struct {
-    char *track; /* the album's first track, copied so the thread never reads stock deques */
-    unsigned key;
-    int shared;  /* another album has a track in this folder, so its cover.jpg may be theirs */
-} job_t;
-static struct {
-    void *page, *body, *covers, *slide, *name, *artist, *title;
-    void *albums, *tracks; /* our copies of the stock query results; albums in the Sort's order */
-    void *stock;           /* the albums in stock order, which albums is, or is sorted from */
-    int sort, sort_read;   /* the Sort card's order (SORT_*), from SORT_FILE once */
-    int year_old, artists; /* the Year order and Artists settings albums was sorted in */
-    int on_sort;           /* the next load centres the Sort card */
-    int resort;            /* Display settings changed the library's order: the next load reads it */
-    job_t *jobs;
-    unsigned long thread;
-    unsigned timer, title_timer; /* title_timer: the captions follow the centre cover mid-move */
-    int titled;                  /* the album the captions name, + 1 */
-    unsigned saved_album, albums_gen; /* albums_gen: library_gen when albums was queried */
-    int screen, album, running, text_albums;
-    volatile int done, total, cancel;
-    /* Scoped (ARTIST_ALBUMS, RATED_ALBUMS or ALBUM_TRACKS, else 0): an artist's albums
-     * (coverflow_artist), albums holding them, the rated ones (coverflow_rated), stock holding them
-     * in the library's order and sort their own order, or one album's tracks alone
-     * (coverflow_goto_album); all_albums, all_stock and all_sort the library's, back on close.
-     * No saved album; hearts gives a rated album's. */
-    int scoped, all_sort;
-    void *all_albums, *all_stock;
-    int (*hearts)(void *);
-} cf __attribute__((section(".scratch")));
+cf_page_t cf __attribute__((section(".scratch")));
 
 static int pick(void *ctx, void *event);
 
@@ -131,7 +92,7 @@ static unsigned tags_key(const char *artist, const char *album) {
     return fnv(fnv(FNV_SEED, (const unsigned char *)artist), (const unsigned char *)album);
 }
 
-static unsigned album_key(void *r) { return tags_key(P(r, REC_ARTIST), P(r, REC_ALBUM)); }
+unsigned album_key(void *r) { return tags_key(P(r, REC_ARTIST), P(r, REC_ALBUM)); }
 
 /* An album's artist as Artists sets it: with Album Artist (artist_type 1), its album artist tag
  * when set, so a compilation reads "Various Artists" or its compiler, not its last track's artist.
@@ -206,30 +167,42 @@ static int ff_thumb(const char *src, const char *dst, int w, int h) {
 
 static unsigned be16(const unsigned char *p) { return p[0] << 8 | p[1]; }
 
-/* Whether stock's decoder would hold path's whole picture in demo, which the OOM killer would then
- * take (#216), read from its header: a PNG over 1024 px either way (its reader, 0x5b66f8, expands
- * the image with png_read_png before its own 1024 px test) or a progressive JPEG over 1024 px
- * (libjpeg keeps a full-size coefficient buffer at any scale). Magic bytes as toolsGetPictureInfo
- * tells them; the JPEG's frame header is looked for in its first 64 segments.
- * ponytail: only SOF2, as ffmpeg 4.2 decodes no arithmetic (SOF10) or hierarchical frames; a
- * progressive cover ffmpeg's -xerror rejects (cut short) no longer falls back to stock. */
-static int big_picture(const char *path) {
+#define PICTURE_PNG 1
+
+/* path's picture size in *w and *h, read from its header; 0 when it isn't known, else PICTURE_PNG
+ * or a JPEG's frame marker (0xc2: progressive). A PNG's size past 16 bits reads as 65536. Magic
+ * bytes as toolsGetPictureInfo tells them; the JPEG's frame header is looked for in its first 64
+ * segments. Shared with addon.c. */
+int picture_size(const char *path, int *w, int *h) {
     unsigned char b[24];
     void *f = fopen(path, "rb");
-    int got = f && fread(b, 1, sizeof b, f) == sizeof b, big = 0;
-    if (got && b[0] == 0x89 && b[1] == 'P' && !memcmp(b + 12, "IHDR", 4)) /* its width and height */
-        big = be16(b + 16) || be16(b + 18) > 1024 || be16(b + 20) || be16(b + 22) > 1024;
-    else if (got && b[0] == 0xff && b[1] == 0xd8)
+    int got = f && fread(b, 1, sizeof b, f) == sizeof b, kind = 0;
+    if (got && b[0] == 0x89 && b[1] == 'P' && !memcmp(b + 12, "IHDR", 4)) { /* its width, height */
+        kind = PICTURE_PNG;
+        *w = be16(b + 16) ? 65536 : (int)be16(b + 18);
+        *h = be16(b + 20) ? 65536 : (int)be16(b + 22);
+    } else if (got && b[0] == 0xff && b[1] == 0xd8)
         for (long at = 2, n = 0; n < 64 && !fseek(f, at, 0) && fread(b, 1, 9, f) == 9 &&
                                  b[0] == 0xff && b[1] != 0xda; /* image data follows */
              ++n, at += 2 + be16(b + 2))
             if (b[1] >> 4 == 0xc && b[1] != 0xc4 && b[1] != 0xc8 && b[1] != 0xcc) {
                 /* a frame header, SOF0 to SOF15: SOF2 is the Huffman progressive one */
-                big = b[1] == 0xc2 && (be16(b + 5) > 1024 || be16(b + 7) > 1024);
+                kind = b[1], *h = (int)be16(b + 5), *w = (int)be16(b + 7);
                 break;
             }
     if (f) fclose(f);
-    return big;
+    return kind;
+}
+
+/* Whether stock's decoder would hold path's whole picture in demo, which the OOM killer would then
+ * take (#216): a PNG over 1024 px either way (its reader, 0x5b66f8, expands the image with
+ * png_read_png before its own 1024 px test) or a progressive JPEG over 1024 px (libjpeg keeps a
+ * full-size coefficient buffer at any scale).
+ * ponytail: only SOF2, as ffmpeg 4.2 decodes no arithmetic (SOF10) or hierarchical frames; a
+ * progressive cover ffmpeg's -xerror rejects (cut short) no longer falls back to stock. */
+static int big_picture(const char *path) {
+    int w = 0, h = 0, kind = picture_size(path, &w, &h);
+    return (kind == PICTURE_PNG || kind == 0xc2) && (w > 1024 || h > 1024);
 }
 
 /* stock's thumbnailer, under the lock every stock caller holds, else ffmpeg; shared with photos.c.
@@ -450,11 +423,38 @@ static unsigned art_counts[2]; /* crash_note's, every 50th album */
 static void *worker(void *unused) {
     while (cf.done < cf.total && !cf.cancel) {
         crash_note(cf.jobs[cf.done].track, "/tmp/q2-art-file", "/tmp/q2-art.log", 50, art_counts);
+        void *note = fopen(BUILDING, "wb"); /* struck at the next open if this build never ends */
+        if (note) {
+            fwrite(&cf.jobs[cf.done].key, sizeof(unsigned), 1, note);
+            fflush(note), fsync(fileno(note)), fclose(note); /* synced: see strike */
+        }
         build_art(&cf.jobs[cf.done]);
         ++cf.done;
     }
+    unlink(BUILDING);
     return 0;
 }
+
+/* The album the last build never finished, BUILDING's key: demo died on it, or hung on it until the
+ * watchdog restarted the Q2, and nothing marked it, so every open would try it again and end the
+ * same way. It takes the "no art" marker (unless its cover is there: a death between the rename and
+ * the next note) until Refresh Cover Flow; q2-crash.log names its track (docs/boot.md). A clean end
+ * mid-build removes the note (coverflow_clean_end), as a power-off is no album's fault. The note
+ * is synced in place, a sync per album, and not through a rename, whose directory write a reset
+ * could lose: a tester's log (2026-11-09) showed the restart it must outlive is the watchdog's,
+ * demo still alive and nothing flushed, with no "last art" line, so the grey disc is what names
+ * the album. A torn note reads short and strikes nothing. ponytail: the battery running out
+ * mid-build strikes an innocent album; Refresh puts it back. */
+static void strike(void) {
+    unsigned key;
+    char path[512];
+    if (BLOB_IO(BUILDING, key, 0) && access(art_path(path, key, ""), 0)) {
+        void *f = fopen(path, "w");
+        if (f) fclose(f);
+    }
+    unlink(BUILDING);
+}
+void coverflow_clean_end(void) { unlink(BUILDING); }
 
 /* A running worker cancelled and joined, and its poll timer stopped; 1 when one ran. Shared with
  * photos.c and books.c. */
@@ -560,7 +560,7 @@ int album_cmp(void *a, void *b) {
     if (tx && (ax || ay)) return ay != ax ? ay - ax : strcasecmp(x, y);
     return dir_cmp(a, b, 1);
 }
-/* r's album as album_cmp tells it apart, hashed for navigation.c's album ratings: the name and the
+/* r's album as album_cmp tells it apart, hashed for ratings.c's album ratings: the name and the
  * album artist, else the folder (disc folders as one), ASCII case aside but the folder's; the
  * Unknown card is one album. Never 0. */
 static unsigned fnv_lower(unsigned h, const char *s) {
@@ -597,7 +597,7 @@ static void drop_unknown(void) {
  * (docs/internals.md#coverflow-sort): Album is the stock order;
  * Artist sorts by artist without a leading article, as every library list does (ringnav_sort_key),
  * then year, then album; Year in Playback settings' Year order (year_sql), undated last; Recently Added by the newest song's time_create; Most Played by the
- * album's listens (navigation.c album_plays); Random by playback.c's rand_below, reshuffled whenever
+ * album's listens (library_lists.c album_plays); Random by playback.c's rand_below, reshuffled whenever
  * the list is rebuilt. Ties keep the stock order, and the Unknown row stays last. Ranks come from ALBUM_SQL with another ORDER BY (toolsQueryDbTable without its name sort),
  * matched back to the rows by album_cmp. */
 enum { SORT_ALBUM, SORT_ARTIST, SORT_ADDED, SORT_PLAYED, SORT_RANDOM, SORT_RATING, SORT_YEAR };
@@ -632,7 +632,6 @@ static int sort_next(int dir) {
     return i == n ? o[0] : o[(i + (unsigned)dir) % n];
 }
 extern void album_plays(int (*album_of)(void *), unsigned *sum);
-extern unsigned rand_below(unsigned n);
 extern void ringnav_sort_key(char *s);
 #define ARTIST_KEY 96
 
@@ -965,7 +964,7 @@ static unsigned initial(int i) {
 }
 
 /* Letters mean something on w: the whole library's covers, sorted by album or artist. */
-static int lettered(void *w) {
+int lettered(void *w) {
     return w && w == cf.slide && cf.screen == COVERS && cf.sort <= SORT_ARTIST && !cf.scoped;
 }
 
@@ -1334,7 +1333,7 @@ static void *list(const char *title, int n) {
     return page_list(cf.page, cf.body, &cf.title, title, n, 48);
 }
 
-/* One row of a page_list (48px, the theme's page_h) or, with a detail (navigation.c's Most Played),
+/* One row of a page_list (48px, the theme's page_h) or, with a detail (library_lists.c's Most Played),
  * a taller one: the caption over the detail in 16px #AAAAAA, stock's s_scrlabel_gray24l grey, in
  * the theme's boxes and fonts. Under a theme's separators an empty detail centres the caption above
  * them, its label kept for whoever writes it. iPod left-aligns them, as every stock list. Returns
@@ -1449,11 +1448,9 @@ int image_show(void *img, const char *url, unsigned *size) {
 #define CF_ONE 65536
 #define CF_REACH 3 /* ring slots either side of the centre that can show (fading in) or preload */
 #define CF_RING (2 * CF_REACH + 1)
-#define CF_WIDE_REACH 7 /* the same under a thumb theme, for the row at speed */
-#define CF_WIDE (2 * CF_WIDE_REACH + 1)
 #define CF_TEXELS (ART_SIZE * ART_SIZE)
 /* the active theme's Cover Flow values, copied at page open (cf_restyle) */
-static cf_style_t cfs __attribute__((section(".scratch")));
+cf_style_t cfs __attribute__((section(".scratch")));
 /* with them, cf_restyle's: a side cover's sine, and its near edge's screen x (1/16 px), at t = 1 */
 static int cf_s1 __attribute__((section(".scratch")));
 static int cf_rest16 __attribute__((section(".scratch")));
@@ -1463,20 +1460,13 @@ static int cf_rest16 __attribute__((section(".scratch")));
 /* the horizon every cover shares, and a cover h high (1/256 px)'s top row on it */
 #define CF_TOP256(h) (256 * cfs.top + 40960 * cfs.horizon / 100 - (h) * cfs.horizon / 100)
 
-/* The covers held by the thumb (docs/internals.md#coverflow-thumb): one follower per UI pass, in
- * albums from SLIDE_INDEX, its speeds a ms. on: it owns the offset, until it commits. */
-static struct {
-    float pos, vel, goal, lead, lead_v, rate, tau, ticks, seen, seen_lead, stretch;
-    unsigned at, tick_at, edge_at;
-    int raw, on, finger, held, dir, dead, early, clicked, bounced, capped, jump;
-} th __attribute__((section(".scratch")));
 
-static int cf_floor(float x) {
+int cf_floor(float x) {
     int i = (int)x;
     return i - (x < (float)i);
 }
-static int cf_round(float x) { return cf_floor(x + .5f); }
-static float cf_smooth(float x) {
+int cf_round(float x) { return cf_floor(x + .5f); }
+float cf_smooth(float x) {
     x = x < 0 ? 0 : x > 1 ? 1 : x;
     return x * x * (3 - 2 * x);
 }
@@ -1842,17 +1832,8 @@ int coverflow_hit(int frac, int x, int y) {
 /* Covers decoded either side: more under a thumb theme, whose row shows about 11. */
 static int fx_reach(void) { return cfs.thumb ? CF_WIDE_REACH : CF_REACH; }
 #define FX_SLOTS (2 * fx_reach() + 1)
+cf_depth_t fx __attribute__((section(".scratch")));
 
-/* The depth renderer's state: the frame, the textures of the covers around the visual position
- * and the placeholder's. No frame: the flat fallback (stock images on the slide_menu). */
-static struct {
-    void *frame;                     /* bitmap_t *, CF_VIEW_W x cfs.view_h RGBA8888 */
-    unsigned *tex;                   /* fx_reach's texture slots, then the placeholder */
-    int album[CF_WIDE];              /* each slot's album + 1; 0 is empty */
-    const unsigned *art[CF_WIDE];    /* its texture: the slot's own, or the placeholder */
-    int c, frac, drawn, light, lead; /* the position and Light Mode the frame holds, once drawn */
-    int todo;                        /* a slot still waits for its decode (FX_DECODES) */
-} fx __attribute__((section(".scratch")));
 
 /* A decoded image copied into a texture: fitted whole and centred, nearest sampled to ART_SIZE,
  * over black, so a non-square cover shows uncropped between black bars, as Now Playing shows it.
@@ -2026,16 +2007,7 @@ static void fx_ring(int c, int n, const unsigned **ring) {
 #define PANEL_Y 9
 #define PANEL_HEAD 57
 #define PANEL_MUTED 0xffaaaaaau /* stock's second line: the theme's muted, white when selected */
-static struct {
-    void *frame;    /* bitmap_t *, CF_VIEW_W x FLIP_H */
-    unsigned *back; /* BACK_W x BACK_H, the panel as painted */
-    const unsigned *front;
-    void *panel, *sheet, *title, *artist;
-    unsigned timer, t0;
-    int dir;   /* 1 turning to the panel, -1 back, 0 at rest */
-    int drawn; /* the e the frame holds */
-    int light;
-} fl __attribute__((section(".scratch")));
+cf_flip_t fl __attribute__((section(".scratch")));
 
 int coverflow_turning(void) { return fl.dir != 0; }
 
@@ -2282,10 +2254,7 @@ void coverflow_paint(void *w, void *canvas) {
  * The press is the covers' view's; the moves and the release are the page's, so a release off the
  * covers still ends the touch, and one never seen ends at the next key (coverflow_lost_touch). */
 #if !M1PLUS
-extern int carousel_glide(void *w, int goal, unsigned ms, int easing);
-extern void coverflow_letter(void *w, unsigned letter, unsigned now);
 #define CF_SAMPLES 8
-#define ABS(x) ((x) < 0 ? -(x) : (x))
 
 /* EASE_FOLLOW (docs/internals.md#coverflow-step): a step follows its goal, critically damped, so a
  * tick moves the goal and never the speed. Over s time constants from the live offset, d px short
@@ -2297,7 +2266,7 @@ static struct {
 } ff __attribute__((section(".scratch")));
 
 /* e^-s, s under 256: (e^(-s/256))^256, smooth and falling, about .1% over at s = 7. */
-static float ff_decay(float s) {
+float ff_decay(float s) {
     float x = 1 - s / 256 + s * s / 131072;
     for (int i = 0; i < 8; ++i) x *= x;
     return x;
@@ -2333,7 +2302,7 @@ static struct {
     unsigned st[CF_SAMPLES];
 } tc __attribute__((section(".scratch")));
 
-static int stride_of(void *s) { return slide_menu_item_width(s) + I(s, SLIDE_SPACER); }
+int stride_of(void *s) { return slide_menu_item_width(s) + I(s, SLIDE_SPACER); }
 static int round_stride(int off, int stride) { return floor_div(2 * off + stride, 2 * stride) * stride; }
 
 /* An artist's albums give past an end as iOS's rubber band, x * 0.55 / (1 + x * 0.55 / D) with
@@ -2422,7 +2391,7 @@ static void tap(int x, int y) {
         carousel_glide(s, round_stride(I(s, SLIDE_OFFSET), stride) - j * stride, CF_TAP_MS, SLIDE_EASING);
 }
 
-static int covers_live(void) { return cf.slide && cf.screen == COVERS && !cf.timer; }
+int covers_live(void) { return cf.slide && cf.screen == COVERS && !cf.timer; }
 
 /* The touch ends at now: a drag glides on (thrown unless aborted), a stopped glide settles, a
  * still touch is a tap. Off the covers (a screen change mid-touch) they still settle on a whole
@@ -2491,7 +2460,7 @@ static void cover(void *img, unsigned i, int near) {
 static int caption_bold(void) { return theme()->font[ROLE_TITLE] == FONT_CLASSIC_LIGHT; }
 
 /* The captions name album c (or a card's), once each time it changes. */
-static void titles(unsigned c) {
+void titles(unsigned c) {
     unsigned n = widget_count_children(cf.slide);
     if ((int)c + 1 == cf.titled) return;
     cf.titled = (int)c + 1;
@@ -2596,277 +2565,6 @@ static void covers(int dir) {
     widget_invalidate_force(cf.page, 0);
 }
 
-#if !M1PLUS
-/* The thumb (docs/internals.md#coverflow-thumb), every UI pass while the covers are open
- * (navigation.c thumb_poll): the wheel's raw travel, 200 units a turn, moves a goal, and the
- * position follows it, critically damped and exact for any step, so its speed stays continuous
- * whatever the wheel or a slow frame does. */
-static void th_follow(float *x, float *v, float to, float tau, float ms) {
-    float w = 1 / tau, y = *x - to, b = *v + w * y, q = y + b * ms, e = ff_decay(w * ms);
-    *x = to + q * e;
-    *v = (b - w * q) * e;
-}
-
-/* Where the wheel has got to, the album the caption names and a stop lands on: ahead of the covers
- * at speed. */
-static int th_aim(void) {
-    float s = cfs.aim_snap / 100.f;
-    if (th.vel < .004f && th.vel > -.004f) return cf_round(th.goal);
-    return th.dir > 0 ? -cf_floor(s - th.goal) : cf_floor(th.goal + s);
-}
-
-static unsigned th_album(int a, unsigned n) {
-    if (!n) return 0;
-    int c = (I(cf.slide, SLIDE_INDEX) + a) % (int)n;
-    return (unsigned)(c < 0 ? c + (int)n : c);
-}
-
-/* At rest on album q: the slide_menu's index moves, as a glide's end does, its offset 0. */
-static void th_commit(int q) {
-    th.on = th.jump = 0, th.lead = th.lead_v = th.vel = th.pos = th.goal = 0;
-    carousel_glide(cf.slide, -q * stride_of(cf.slide), 0, 0);
-    widget_invalidate_force(cf.slide, 0);
-}
-
-/* The covers on the album named, at once: Centre, or nothing to show a landing on. */
-void coverflow_wheel_land(void) {
-    if (th.on && cf.slide) th_commit(th_aim());
-    th.on = 0; /* no covers left to land: a page's load replaced them */
-}
-int coverflow_wheel_live(void) { return th.raw || th.on || (cfs.thumb && cf.slide); }
-int coverflow_wheel_on(void *w) { return th.on && w == cf.slide; }
-
-/* From rest, or from a touch's glide or a held tick's step, whose goal it takes over. */
-static void th_grab(void *s, unsigned now) {
-    void *a = P(s, SLIDE_ANIMATOR);
-    float stride = (float)stride_of(s);
-    th.pos = (float)-I(s, SLIDE_OFFSET) / stride;
-    th.goal = a ? (float)-I(a, ANIM_X_TO) / stride : th.pos;
-    if (a) {
-        widget_animator_pause(a);
-        widget_animator_destroy(a);
-        P(s, SLIDE_ANIMATOR) = 0;
-        th.dir = th.goal < th.pos ? -1 : 1;
-    }
-    th.vel = th.lead = th.lead_v = th.rate = th.ticks = 0;
-    th.capped = th.jump = 0;
-    th.tau = cfs.snap;
-    th.tick_at = now;
-    th.on = 1;
-    th.clicked = cf_round(th.goal);
-}
-
-/* SLIDE_INDEX on by q albums and the follower back by as many, so nothing moves: its numbers stay
- * small, where a float still resolves the 1e-4 its settling needs. */
-static void th_rebase(void *s, int q, int n) {
-    int i = (I(s, SLIDE_INDEX) + q) % n;
-    I(s, SLIDE_OFFSET) = 0; /* the pass writes it again from pos */
-    slide_menu_set_value(s, i < 0 ? i + n : i);
-    th.pos -= (float)q, th.goal -= (float)q, th.seen -= (float)q;
-    th.clicked -= q;
-}
-#define TH_REBASE 64 /* albums: a float's step there is 8e-6 */
-#define TH_FRAME_MS 16 /* a frame at 60 Hz: the shortest pass th_turn's own rate is taken over */
-
-/* A letter on, Minimal's jump (coverflow_jump): the covers at rest on that letter's first album,
- * or the previous letter's turning back, its letter shown over them. */
-static void th_letter(void *s, int n, unsigned now) {
-    unsigned letter;
-    int from = (int)th_album(th_aim(), (unsigned)n);
-    th_rebase(s, from - I(s, SLIDE_INDEX) + th.dir * coverflow_jump(s, from, th.dir, &letter), n);
-    th.pos = th.goal = th.vel = th.lead = th.lead_v = 0;
-    th.clicked = 0;
-    coverflow_letter(s, letter, now);
-    widget_invalidate_force(s, 0);
-}
-
-/* travel raw units: the goal on by a share of an album that grows with the thumb's speed, at most
- * top_speed albums a second; turning back drops what's queued, and the speed with it. Going by
- * letters, the travel counts towards the next one instead. An artist's albums stop at the ends:
- * the first push past one kicks the covers out, and they spring back. */
-static void th_turn(void *s, int travel, unsigned now, int n, int ms) {
-    int dir = travel > 0 ? -1 : 1; /* x rises anticlockwise: back */
-    if (dir != th.dir) {
-        float l = th.goal - th.pos, m = cfs.back / 100.f;
-        th.goal = th.pos + (l > m ? m : l < -m ? -m : l);
-        th.rate = 0;
-        th.jump = 0; /* letters end: the turn back moves the covers */
-    }
-    th.dir = dir;
-    /* Wheel Sensitivity scales the travel, 50% as the theme has it */
-    float ticks = (float)ABS(travel) * cfs.ticks_turn * wheel_pct() / 10000,
-          slow = 1.f / cfs.ticks_album;
-    float r = th.rate < 1 ? 1 : th.rate, sr = slow * r, top = cfs.top_speed;
-    float f = cf_smooth((th.rate - cfs.fast_at) / (cfs.fast_full - cfs.fast_at));
-    float step = (sr + (top > sr ? top - sr : 0) * f) / r;
-    /* the cap, at the filtered rate or this pass's own, the faster: while the rate is still rising
-     * to a spin's, and past top_speed ticks_album ticks/s, the share would outrun it. This pass's
-     * own is over a frame at least: a pass a ms or two after the last would read its ticks as a
-     * spin many times the cap's and throw them away. */
-    float inst = ticks * 1000 / (float)(ms < TH_FRAME_MS ? TH_FRAME_MS : ms),
-          cap = top / (inst > r ? inst : r);
-    step = step > slow ? step : slow;
-    th.ticks += ticks;
-    th.tick_at = now;
-    if (th.jump) {
-        th.stretch += ticks;
-        return;
-    }
-    th.goal += (float)dir * ticks * (step < cap ? step : cap);
-    if (coverflow_bounded(s)) {
-        int i = I(s, SLIDE_INDEX);
-        float lo = (float)-i, hi = (float)(n - 1 - i);
-        float g = th.goal < lo ? lo : th.goal > hi ? hi : th.goal;
-        if (g != th.goal) {
-            th.goal = g;
-            if (!th.bounced && ABS(th.pos - g) < .02f)
-                th.pos = g + (float)dir / CF_BOUNCE, th.vel = 0, th.bounced = 1;
-        } else
-            th.bounced = 0;
-    }
-}
-
-/* usable: navigation.c's; gated: travel is to be dropped (its gates). Answers THUMB_*. */
-int coverflow_wheel_poll(int usable, int gated) {
-    void *s = cf.slide, *wm = window_manager();
-    int shown = usable && cfs.thumb && fx.frame && !fl.panel && covers_live() &&
-                widget_count_children(s) && window_manager_get_top_window(wm) == cf.page &&
-                !window_manager_is_animating(wm);
-    int raw = shown && !window_manager_get_pointer_pressed(wm);
-    if (raw != th.raw) {
-        __sync_lock_test_and_set(&wheel_travel, 0);
-        th.raw = raw, th.held = th.finger = th.early = 0;
-        if (!raw && wheel_raw == WHEEL_THUMB) wheel_raw = WHEEL_TICKS;
-    }
-    if (raw) wheel_raw = WHEEL_THUMB; /* decided afresh each pass: lyric_poll may have handed it */
-    if (!shown) {
-        coverflow_wheel_land();
-        return 0;
-    }
-    if (fx.todo) widget_invalidate_force(s, 0); /* covers still to decode, FX_DECODES a frame */
-    unsigned now = (unsigned)time_now_ms();
-    int ms = (int)(now - th.at), travel = raw ? __sync_lock_test_and_set(&wheel_travel, 0) : 0;
-    if (gated) travel = 0;
-    ms = ms < 1 ? 1 : ms > 250 ? 250 : ms;
-    th.at = now;
-    /* A still thumb sends no frames, for seconds: only wheel_held says it's there. A press only
-     * anchors (wheel_sample); a contact under contact_ms is nothing, and a lift that short changes
-     * nothing. */
-    int held = raw && wheel_held;
-    if (held != th.held) {
-        th.held = held, th.edge_at = now;
-        if (held)
-            th.dead = th.bounced = 0;
-        else if (!th.finger)
-            th.early = 0;
-    }
-    if ((int)(now - th.edge_at) >= cfs.contact_ms && th.finger != held) {
-        th.finger = held;
-        travel += th.early;
-        th.early = 0;
-    }
-    if (!th.finger) {
-        if (held) th.early += travel;
-        travel = 0;
-    }
-    /* its shake, a unit or so, moves nothing: travel runs loose in a band of dead units each way */
-    th.dead += travel;
-    travel = th.dead > cfs.dead ? th.dead - cfs.dead : th.dead < -cfs.dead ? th.dead + cfs.dead : 0;
-    th.dead -= travel;
-    if (!th.on && !travel) return 0;
-    if (!th.on) th_grab(s, now);
-    int n = (int)widget_count_children(s), r = THUMB_MOVED;
-    if (travel) {
-        th_turn(s, travel, now, n, ms);
-        r |= THUMB_TURNED;
-    }
-    /* the thumb's rate, ticks/s: quick to fall, so slowing down gives control back at once */
-    float inst = th.ticks * 1000 / (float)ms, tc = inst > th.rate ? cfs.rate_up : cfs.rate_down;
-    th.rate += (inst - th.rate) * (1 - ff_decay((float)ms / tc));
-    th.ticks = 0;
-    /* At jump_at or more for jump_ms the spin goes by letters, where the sort has them: one each
-     * jump_ticks of travel at any rate from fast_at, the first at once, so a moderate turn reads
-     * them. A lift, a turn back (th_turn), the rate under fast_at or no tick for stop_ms ends them:
-     * albums again from the letter's, under the thumb.
-     * ponytail: fast_at is the one floor; a thumb hovering on it may drop to albums on a slow pass.
-     * A leave rate of its own under fast_at if that shows on the wheel. */
-    int since = (int)(now - th.tick_at);
-    /* jump_at counts towards jump_ms; a dip under it, still at fast_at (a thumb re-gripping),
-     * drains the count rather than dropping it; a lift or a rate under fast_at drops it. */
-    th.capped = !th.finger || th.rate < cfs.fast_at ? 0
-                : th.rate >= cfs.jump_at       ? th.capped + ms
-                : th.capped > ms               ? th.capped - ms
-                                               : 0;
-    if (th.jump && (!th.finger || th.rate < cfs.fast_at || since > cfs.stop_ms))
-        th.jump = 0;
-    else if (!th.jump && th.capped >= cfs.jump_ms && cfs.jump_ticks && lettered(s))
-        th.jump = 1, th.stretch = cfs.jump_ticks;
-    for (; th.jump && th.stretch >= cfs.jump_ticks; th.stretch -= cfs.jump_ticks) {
-        th_letter(s, n, now);
-        r |= THUMB_CLICK;
-    }
-    /* Part-way is for a slow thumb that stays: a lift, the hold's timeout or a stop from speed goes
-     * to the album named. */
-    int idle = since > cfs.hold_ms;
-    float left = ABS(th.goal - th.pos);
-    if (th.goal != (float)cf_round(th.goal) &&
-        (!th.finger || idle || (since > cfs.stop_ms && left * 100 > cfs.stop_left)))
-        th.goal = (float)th_aim(), left = ABS(th.goal - th.pos);
-    float f = cf_smooth((th.rate - cfs.fast_at) / (cfs.fast_full - cfs.fast_at));
-    float base = idle || !th.finger ? cfs.snap : cfs.track + (float)(cfs.spin - cfs.track) * f;
-    float rest = cfs.snap + (float)(cfs.spin - cfs.snap) * cf_smooth(left * 100 / cfs.far_left);
-    /* only the thumb raises it, and how far is left only lets it fall: lag raising it would add lag
-     * and snap the row out at one speed */
-    th.tau = th.tau < rest ? th.tau : rest;
-    th.tau = th.tau > base ? th.tau : base;
-    /* its soft detent, slow and finger down: towards the albums, never against the thumb */
-    int g0 = cf_floor(th.goal);
-    float r0 = th.goal - (float)g0, k = th.finger ? (1 - f) * cfs.detent / 100 : 0;
-    float to = (float)g0 + (1 - k) * r0 + k * r0 * r0 * (3 - 2 * r0);
-    th_follow(&th.pos, &th.vel, to, th.tau, (float)ms);
-    if (ABS(th.pos - th.goal) < 1e-4f && ABS(th.vel) < 1e-5f) th.pos = th.goal, th.vel = 0;
-    /* The facing point is the wheel's target, where the covers will land: off under lead_from, so
-     * slow control is exact, and its short follow only smooths a reversal. */
-    float l = th.goal - th.pos;
-    float want = l * cf_smooth((ABS(l) * 100 - cfs.lead_from) / (cfs.lead_full - cfs.lead_from));
-    th_follow(&th.lead, &th.lead_v, want, cfs.lead_ms, (float)ms);
-    if (!want && ABS(th.lead) < 1e-4f && ABS(th.lead_v) < 1e-5f) th.lead = th.lead_v = 0;
-    /* Once the wheel's stopped, the facing point's follow, lagging as it shrinks, never passes the
-     * album the covers land on, or the next one faces for a moment and turns back. While it turns,
-     * the gap jumps with each tick, so it's left alone then. */
-    if (since > cfs.stop_ms && th.lead * l > 0 && ABS(th.lead) > ABS(l))
-        th.lead = l, th.lead_v = -th.vel;
-    int q = cf_round(th.pos);
-    if (q >= TH_REBASE || q <= -TH_REBASE) th_rebase(s, q, n);
-    I(s, SLIDE_OFFSET) = -cf_round(th.pos * (float)stride_of(s));
-    if (ABS(th.pos - th.seen) >= 1 / 4096.f || ABS(th.lead - th.seen_lead) >= 1 / 4096.f ||
-        !th.lead != !th.seen_lead) {
-        th.seen = th.pos, th.seen_lead = th.lead;
-        widget_invalidate_force(s, 0);
-    } else if (!(r & THUMB_TURNED))
-        r = 0; /* a thumb holding still: the loop may idle */
-    /* the album named is the one kept, here: closed() may come mid-destroy, with no slide_menu */
-    unsigned c = th_album(th_aim(), (unsigned)n);
-    int was = cf.titled;
-    titles(c);
-    if (cf.titled != was && c + CARDS < (unsigned)n && !cf.scoped)
-        cf.saved_album = album_key(deque_at(cf.albums, c));
-    if (cf_round(th.goal) != th.clicked) {
-        th.clicked = cf_round(th.goal);
-        r |= THUMB_CLICK;
-    }
-    if (!th.jump && !th.lead && th.pos == th.goal && th.goal == (float)cf_round(th.goal))
-        th_commit(cf_round(th.goal));
-    return r;
-}
-
-#else
-/* M1 Plus has a volume knob; the raw-wheel thumb is unported. */
-void coverflow_wheel_land(void) {}
-int coverflow_wheel_live(void) { return 0; }
-int coverflow_wheel_on(void *w) { (void)w; return 0; }
-int coverflow_wheel_poll(int usable, int gated) { (void)usable; (void)gated; return 0; }
-#endif
 
 static int to_covers(const void *unused) {
     cf.timer = 0;
@@ -2988,6 +2686,7 @@ static void load_albums(unsigned t0) {
     }
     char path[512];
     if (!cf.saved_album) BLOB_IO(LAST_ALBUM, cf.saved_album, 0); /* outlives a reboot */
+    strike();
     cf.jobs = calloc(count, sizeof(job_t));
     unsigned char *shared = folders_shared(cf.albums, count);
     for (unsigned i = 0; i < count; ++i) {
@@ -3076,7 +2775,7 @@ static void *in_order(void *tracks, void *album) {
 }
 
 /* A track's tagged title, else its file name without the extension; CUE names stay whole.
- * Shared with navigation.c's Most Played and scrobbler. */
+ * Shared with library_lists.c's Most Played and navigation.c's scrobbler. */
 const char *track_name(char *buf, unsigned size, void *t) {
     const char *title = P(t, REC_TITLE);
     if (title && *title) return title;
@@ -3542,7 +3241,7 @@ int coverflow_shows_album(void *r) {
     return cf.page && cf.scoped == ALBUM_TRACKS && !album_cmp(deque_at(cf.albums, 0), r);
 }
 
-/* Library Ratings' Albums (navigation.c): the albums hearts gives 1 to 5 hearts, as covers with the
+/* Library Ratings' Albums (ratings.c): the albums hearts gives 1 to 5 hearts, as covers with the
  * rated Sort card alone; 0 when none is. */
 int coverflow_rated(int (*hearts)(void *)) {
     int n;
@@ -4345,8 +4044,8 @@ void coverflow_home_row(void *surface, void *row, int id, int painting) {
         if (kind == PANE_ROCKBOX) { /* the Shortcut row: the Games icon, its count only for Games;
                                      * the Podcasts and Audiobooks folders, Folder's icon */
             const char *s = ipod_home_shortcut();
-            kind = !tk_strcmp(s, "Games")     ? PANE_GAMES
-                   : !tk_strcmp(s, "Rockbox") ? PANE_ROCKBOX
+            kind = !tk_strcmp(s, "Games")                                 ? PANE_GAMES
+                   : !tk_strcmp(s, "Rockbox") || !tk_strcmp(s, "Groovebox") ? PANE_ROCKBOX
                    : !tk_strcmp(s, "Shuffle") ? PANE_SHUFFLE
                    : !tk_strcmp(s, "Podcasts") || !tk_strcmp(s, "Audiobooks") ? PANE_FOLDER
                                               : PANE_LIBRARY;
@@ -4704,7 +4403,7 @@ static void home_fill(void *list, int service) {
 }
 
 /* Home's Library row in Split (a set with home_lib, Library on Home on): its rows slide in as Settings' do, each filled
- * by the page's own constructor (navigation.c library_rows) in Home's rows' shape, and open what
+ * by the page's own constructor (home.c library_rows) in Home's rows' shape, and open what
  * they open from the page. Full and Carousel keep the page. */
 static int home_library(void *ctx, void *event) {
     if (ipod_home() || !home.lib || !home_lib_on()) return on_home_music_onclick(ctx, event);
@@ -4714,7 +4413,7 @@ static int home_library(void *ctx, void *event) {
     return 0;
 }
 
-/* Home's Streaming row, the same way (navigation.c stream_rows). The rebuild frees the rows, and
+/* Home's Streaming row, the same way (home.c stream_rows). The rebuild frees the rows, and
  * home.row is read only under PANE_SERVICE, so that goes first. */
 static int home_streaming(void *ctx, void *event) {
     if (ipod_home() || !home.stream) return on_home_stream_onclick(ctx, event);
@@ -4811,11 +4510,10 @@ void coverflow_home_top(void) {
     home_show(home.list, 1);
 }
 
-/* Classic's bar title on Home (navigation.c bar_title_sync): coverflow_home_name on its own list. */
-const char coverflow_home_name[] = "Q2 Pod";
+/* Classic's bar title on Home (navigation.c bar_title_sync). */
 const char *coverflow_home_title(void) {
     void *open = home_open();
-    return !open                 ? coverflow_home_name
+    return !open                 ? "Q2 Pod"
            : open == home.lib    ? "Library"
            : open == home.stream ? "Streaming"
                                  : "Settings";
