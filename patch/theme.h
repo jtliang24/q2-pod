@@ -1,6 +1,6 @@
 #ifndef Q2_THEME_H
 #define Q2_THEME_H
-/* The built-in themes' shape (docs/internals.md#themes); the table is navigation.c's themes[]. */
+/* The built-in themes' shape (docs/internals.md#themes); the table is theme_engine.c's themes[]. */
 
 enum {
     PAINT_SELECTION,
@@ -69,7 +69,7 @@ typedef struct {
     const char *label;   /* a theme's own scheme's name ("Classic Blue"); NULL: accent_names[v] */
 } scheme_t;
 typedef struct {
-    unsigned char setting; /* SETTING_* (navigation.c): the bound row's click/text code, or
+    unsigned char setting; /* SETTING_* (theme_engine.c): the bound row's click/text code, or
                               SETTING_OWN + k: the theme's own option theme_keys[k] */
     signed char def;       /* stored value not in values -> def; -1 none */
     signed char preset;    /* theme_preset writes it; -1 none */
@@ -137,7 +137,8 @@ typedef struct {
     unsigned char bump_px;    /* the wheel's bump at a list's end */
     unsigned char painter[PAINTER_N];
     unsigned char chevron_home, chevron_sel, set_text, caps_mark, caps_home, caps_np, icons_mono,
-        icons_badge_muted, icons_addon_mono, np_album_op, np_state_op; /* flags 0/1; *_op 0/255 */
+        icons_badge_muted, icons_addon_mono, icons_badge_ink, art_final, np_album_op,
+        np_state_op;                             /* flags 0/1; *_op 0/255 */
     unsigned char font[ROLE_N], font_px[ROLE_N]; /* FONT_*; px 0: the style's size */
     stops_t batt;       /* BATT_CLASSIC_LIGHT: the level's stops, a hue in both halves */
     stops_t batt_empty; /* BATT_CLASSIC_LIGHT: the rows past the level */
@@ -167,6 +168,8 @@ typedef struct {
         set_top, np_bar, np_scrub;
     stops_t np_track[2]; /* Classic's progress bar's track (paint_scrubber), final: [0] dark, [1]
                             light; n 0: stock's plain bar */
+    stops_t np_fill;     /* ... its played part under the theme's own scheme (Classic Blue), both
+                            halves; n 0: the scheme's band */
     unsigned np_rows[4][NP_ROWS]; /* SCRUB_ROWS: 0xAARRGGBB; dark track, fill, light track, fill */
     unsigned np_info_value[2];    /* the info page's values, final: [0] dark, [1] light */
     /* Split's panel where no cover shows (home_pane_paint), final: [0] dark, [1] light; n 0:
@@ -207,11 +210,13 @@ static inline int classic_pages(void) {
 }
 int theme_geom(const theme_t *T); /* navigation.c: the set T boots with its stored values */
 const scheme_t *scheme(void);     /* theme()'s scheme accent(), in the half Light Mode picks */
-int client_h(void); /* the window under the bar of the set theme_boot wrote (navigation.c) */
+int client_h(void); /* the window under the bar of the set theme_boot wrote (theme_engine.c) */
 void paint_stops(void *canvas, int x, int y, int w, int h, const stops_t *s); /* navigation.c */
 /* The rows painter: the track across w, the played part over its first fill_w px; final colours
  * (the volume panel away from Now Playing, a card app's progress). */
 void paint_rows_bar(void *canvas, int x, int y, int w, int h, int fill_w);
 /* 0xRRGGBB to an opaque color_t, whose bytes are r, g, b, a. */
-#define RGBA(c) (0xff000000u | ((c) & 255) << 16 | ((c) & 0xff00) | (c) >> 16)
+static inline unsigned RGBA(unsigned c) {
+    return 0xff000000u | (c & 255) << 16 | (c & 0xff00) | c >> 16;
+}
 #endif

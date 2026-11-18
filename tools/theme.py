@@ -18,14 +18,14 @@ ALL_ACCENTS = (1 << len(ACCENT_NAMES)) - 1
 SETTINGS = {'light': ('SETTING_LIGHT', ('off', 'on', 'auto')), 'accent': ('SETTING_ACCENT', ACCENT_NAMES),
             'corners': ('SETTING_ROUNDED', ('square', 'round')), 'home': ('SETTING_HOME', ('split', 'full', 'carousel')),
             'battery': ('SETTING_BATTERY', ('icon', 'percent', 'both', 'inside')),
-            'shortcut': ('SETTING_SHORTCUT', ('rockbox', 'artists', 'albums', 'favorites', 'rated_albums', 'shuffle', 'games', 'playlists', 'podcasts', 'audiobooks')),
+            'shortcut': ('SETTING_SHORTCUT', ('rockbox', 'artists', 'albums', 'favorites', 'rated_albums', 'shuffle', 'games', 'playlists', 'podcasts', 'audiobooks', 'groovebox')),
             'time_title': ('SETTING_TIMETITLE', ('off', 'on')),
             'np_layout': ('SETTING_NPCENTRED', ('ipod', 'centred'))}
 ACCENT_KEYS = {'ACCENT': '&st.accent', 'MINIMAL_ACCENT': '&st.minimal_accent'}
-# The IPOD keys the payload reads itself (navigation.c setting_keys[], every "IPOD", "<KEY>" literal): a
+# The IPOD keys the payload reads itself (theme_engine.c setting_keys[], every "IPOD", "<KEY>" literal): a
 # theme's own key is never one of them.
 PAYLOAD_KEYS = frozenset(
-    re.findall(r'"([A-Z0-9_]+)"', need(re.search(r'setting_keys\[\] = \{([^}]*)\}', (ROOT/'patch/navigation.c').read_text()), 'Missing setting_keys')[1])
+    re.findall(r'"([A-Z0-9_]+)"', need(re.search(r'setting_keys\[\] = \{([^}]*)\}', (ROOT/'patch/theme_engine.c').read_text()), 'Missing setting_keys')[1])
     + [k for f in sorted((ROOT/'patch').glob('*.c')) for k in re.findall(r'"IPOD", "([A-Z0-9_]+)"', f.read_text())])
 # value name -> its C name (theme.h); the font keys take FONTS
 FONTS = {'regular': 'FONT_DEFAULT', 'bold': 'FONT_BOLD', 'classic-light': 'FONT_CLASSIC_LIGHT'}
@@ -98,6 +98,7 @@ SCHEMA = {k.path: k for k in (
     key('list.icons.mono', 'icons_mono', 'bool'),
     key('list.icons.badge_muted', 'icons_badge_muted', 'bool'),
     key('list.icons.addon_mono', 'icons_addon_mono', 'bool'),
+    key('list.icons.badge_ink', 'icons_badge_ink', 'bool'),  # the codec badges in the half's ink, final
     key('playing.title.font', 'font[ROLE_NP]', 'enum'),
     key('playing.title.font_px', 'font_px[ROLE_NP]', 'int', 64),
     key('playing.info.font', 'font[ROLE_INFO]', 'enum'),  # small text: the QR pages, the Time Zone caption, page notes
@@ -133,6 +134,7 @@ SCHEMA = {k.path: k for k in (
     key('volume.panel.painter', 'painter[PAINT_VOLUME]', 'enum'),
     key('dialog.confirm.painter', 'painter[PAINT_CONFIRM]', 'enum'),
     key('pages.own.painter', 'painter[PAINT_PAGES]', 'enum'),  # the theme's own pages (theme.h classic_pages)
+    key('pages.own.art_final', 'art_final', 'bool'),  # Classic Light's own art (art.py's classic_light_ images) is final
     # the rows painter's pixel rows, top to bottom (final colours): the track, the played part over it; the volume
     # panel away from Now Playing and a card app's progress (paint_rows_bar)
     Key('playing.scrubber.dark_track', 'np_rows[0]', 'rows', 0, 0, (), 'live'),
@@ -142,6 +144,7 @@ SCHEMA = {k.path: k for k in (
     key('playing.scrubber.height', 'np_bar', 'int', 375),
     key('playing.scrubber.scrub_height', 'np_scrub', 'int', 375),
     Key('playing.scrubber.stops', 'np_track', 'stops', 0, 0, (), 'live', True),  # Classic's track, final (paint_scrubber); (): stock's bar
+    Key('playing.scrubber.fill', 'np_fill', 'stops', 0, 0, (), 'live'),  # its played part under the theme's own scheme (ipod_bar); (): the scheme's band
     key('playing.art.square', 'art_square', 'bool'),
     key('list.row.font', 'font[ROLE_TITLE]', 'enum'),
     key('list.row.meta_font', 'font[ROLE_META]', 'enum'),
@@ -508,7 +511,7 @@ def split_half(attr):
 
 
 def flip(c, paper, ink):
-    """navigation.c's flip(): a neutral (channels within LIGHT_SPREAD) per channel paper - v * (paper - ink) // 255
+    """theme_engine.c's flip(): a neutral (channels within LIGHT_SPREAD) per channel paper - v * (paper - ink) // 255
     on the low bytes of paper and ink; else c."""
     ch = [c >> s & 255 for s in (0, 8, 16)]
     if max(ch) - min(ch) > O['LIGHT_SPREAD']:
@@ -663,7 +666,7 @@ def offered(c, o, names, what):
     return sum(1 << names.index(n) for n in set(listed))
 
 
-PLAIN_KEYS = {'HOMELIB', 'ROWPREVIEW'}  # the plain own keys the payload reads (navigation.c home_lib_on, row_preview_on)
+PLAIN_KEYS = {'HOMELIB', 'ROWPREVIEW'}  # the plain own keys the payload reads (theme_engine.c home_lib_on, row_preview_on)
 
 
 def own_option(c, known):
@@ -901,6 +904,8 @@ def validate(t, name):
     for s in settings:
         if settings.count(s) > 1:
             err(f'{s} declared twice')
+    if t['art_final'] and t['id'] != 'classic-light':  # navigation.c's image hook knows its names alone
+        err('pages.own: art_final is for classic-light\'s own images only')
     for end in ('top', 'bottom') if t['sb_w'] else ():  # the thumb's round end gives its corner pixel to the glass
         y = t['sb_' + end]
         if corner_inset(y) > t['sb_right'] + 1:
@@ -930,7 +935,7 @@ def validate(t, name):
         g = sets(t)[n]  # the bar's own label is laid out at bar_px (tools/ipod.py status_metrics), its text drawn at font_size
         if g.bar_px and t['font_px[ROLE_BAR]'] != g.bar_px:
             err(f"bar.title.font_size {t['font_px[ROLE_BAR]']} is not set {n}'s bar_px {g.bar_px}")
-        # the times beside the bar (navigation.c np_beside) are drawn with the iPod bar and its speakers (tools/art.py)
+        # the times beside the bar (np_bar.c np_beside) are drawn with the iPod bar and its speakers (tools/art.py)
         if bool(g.np_ipod) != bool(t['np_track'] or t['light'].get('np_track')):
             err(f"set {n}'s np_ipod needs playing.scrubber.stops, and they it")
     for o in t['opts']:
@@ -1095,7 +1100,8 @@ def motion_fields(t):
 
 
 def emit(themes, out, redirects={}):
-    """out/'themes.inc': the schemes, options and themes[] navigation.c includes, then the boot tables.
+    """out/'themes.inc': the schemes, options and themes[] theme_engine.c includes, then the boot tables;
+    out/'themes.h': their enums and macros, which every file of tools/build.py's NAVIGATION reads.
     redirects: ui name -> bitmask of the sets with their own <set>_<name>.bin."""
     sets = geometry_sets(themes)
     keys = list(theme_keys(themes))
@@ -1132,7 +1138,7 @@ def emit(themes, out, redirects={}):
         lines += [f'    {{ .setting = {setting(o)}, .def = {o["def"]}, .preset = {o["preset"]}, .keep = {o["keep"]}, '
                   f'.values = 0x{o["values"]:x} }},' for o in t['opts']]
         lines.append('};')
-    lines.append('static const theme_t themes[THEME_N] = {')
+    lines.append('const theme_t themes[THEME_N] = {')
     for t in themes:
         # a final field's halves {dark, light}, flipped between the default accent's light paper and ink
         d = t['schemes'][max(accent_default(t), 0)]
@@ -1182,4 +1188,7 @@ def emit(themes, out, redirects={}):
                   f'.names = (const char *const[]){{{", ".join(map(json.dumps, o["names"]))}}}, ' +
                   (f'.sets = (const unsigned char[]){{{", ".join(map(gname, o["sets"]))}}}, ' if o['sets'] else '.sets = 0, ') + f'.n = {n}, .def = {d} }},'
                   for k, (n, d, o) in theme_keys(themes).items()), '};', '']
-    (out/'themes.inc').write_text('\n'.join(lines))
+    names = [l for l in lines[1:] if l.startswith(('enum {', '#define '))]
+    globals = ['extern ' + l.split(' = ')[0] + ';' for l in lines if l.startswith('const ')]  # theme_engine.c defines them
+    (out/'themes.h').write_text('\n'.join([lines[0], *names, *globals, '']))
+    (out/'themes.inc').write_text('\n'.join(l for l in lines if l not in names))

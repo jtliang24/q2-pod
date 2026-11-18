@@ -185,7 +185,7 @@ NP_TEXT_X = NP_MARGIN + NP_ART + 12
 # Classic face, NP_IPOD_TIME_PX, beside the bar in NP_IPOD_TIME_W1 boxes ("-9:59" fits: stb scales
 # ascent - descent to the size, status_metrics' model) NP_IPOD_TIME_GAP from it, NP_IPOD_TIME_H high over its NP_BAR_IPOD rows
 # (half a row high of centre when one is odd), the outer edges clear of the glass over those rows. At run time the
-# boxes widen to the track's length (NP_IPOD_TIME_WS, navigation.c ipod_times), the bar narrowing between them.
+# boxes widen to the track's length (NP_IPOD_TIME_WS, np_bar.c ipod_times), the bar narrowing between them.
 NP_IPOD_ART = inc('NP_IPOD_ART')
 NP_IPOD_LIFT = 30
 NP_REFLECT = math.ceil(NP_IPOD_ART * inc('SLANT_REFLECT_PCT') / 100)
@@ -441,8 +441,7 @@ def patch_style(data, audit):
 STATUS_BAR = 'system_bar.bin'
 STATUS_LEFT = ['img_state', 'label_eq']
 STATE_W = 18  # Classic's play state's width: its ink's last column is 282 (tools/art.py STATE_BOX)
-BAR_PAD = 9  # Classic's bar: the title's and the Home play state's ink this far clear of the glass (bar_right gives the battery's)
-HOME_STATE_X = 52 + BAR_PAD  # Classic's play state on Home, in the title's place: 52 the glass's reach into its ink (test_art)
+BAR_PAD = 9  # Classic's bar: the title's ink this far clear of the glass (bar_right gives the battery's)
 STATUS_RIGHT = ['img_bt', 'img_wifi', 'label_battery', 'view_battery', 'img_battery']
 STATUS_HIDDEN = ['img_vol', 'label_vol', 'img_synclink']
 # The Battery setting (navigation.c bar_sync) shows one of the last three: the stock icon, stock's
@@ -456,8 +455,7 @@ BATT_MODES = STATUS_RIGHT[2:4]
 BATT_PCT_W, BATT_PCT_PX, BATT_ROOM, BT_REACH = (inc(n) for n in ('BATT_PCT_W', 'BATT_PCT_PX', 'BATT_ROOM', 'BT_REACH'))
 BATT_H_W = inc('BATT_BODY_W') + inc('BATT_NUB_W') + inc('BATT_GAP') + BATT_PCT_W  # the payload's battery with its nub
 # Classic's right group, left to right: EQ while it is on and nothing plays (never with the play state: navigation.c
-# bar_state_sync), Bluetooth, Wi-Fi, the play state and the battery. On Home's own list the play state is
-# img_home_state instead, in the title's place, "Q2 Pod" hidden.
+# bar_state_sync), Bluetooth, Wi-Fi, the play state and the battery.
 STATUS_RIGHT_CLASSIC_LIGHT = ['label_eq', *STATUS_RIGHT[:2], 'img_state', *STATUS_RIGHT[2:]]
 CLOCK_GAP = 4
 CLASSIC_LIGHT_CLOCK_GAP = 2  # Classic's EQ, when the widest clock shows with it
@@ -554,10 +552,6 @@ def status_bar(root, g=SET0):
         # Stock's 16 px icon canvases, centred, on the battery's middle row (paint_battery's body top plus half its height)
         right[1][3] = 2 * ((g.bar - 2 - g.batt_h) // 2 + g.batt_h // 2)
         left[1][3] = widgets['img_state'][1][3] = right[1][3]  # the state's 22 px art, its ink centred on the caps
-        home = copy.deepcopy(widgets['img_state'])
-        home[1][:] = [HOME_STATE_X, right[1][1], STATE_W, right[1][3]]
-        home[2].update(name='img_home_state', visible='false')
-        root[3].append(home)
         # The payload writes the top window's title (bar_title_sync) and the local time (ringnav_paint_bg).
         for name, style in (('title', 's_scrlabel_white20l'), ('clock', 's_scrlabel_white20c')):
             root[3].append(['hscroll_label', m[name], {'name': 'label_' + name, 'style': style, 'only_focus': 'true',
@@ -604,7 +598,7 @@ def plain_slider(props, track, fill, bar):
 
 def np_slider(slider, x, cy, w, h):
     """Now Playing's progress bar: an h-high plain track centred on row cy in an NP_TOUCH-high slider,
-    the accent's fill and the Theme's height set at runtime (navigation.c np_fill, np_theme)."""
+    the accent's fill and the Theme's height set at runtime (np_bar.c np_fill, np_theme)."""
     slider[1] = [x, cy - NP_TOUCH // 2, w, NP_TOUCH]
     slider[2] = plain_slider(slider[2], NP_TRACK, NP_FILL, h)
     # No thumb: stock skips the dragger only when border_color is clear, else a touch shows its blue.
@@ -912,7 +906,7 @@ def confirm_rows(root):
 
 # The volume dialog loses its highlight="default(alpha=200)", so the window manager
 # creates no highlighter and nothing under it dims; the payload draws the volume into the dialog
-# (navigation.c vol_paint): a band on Now Playing, a panel elsewhere.
+# (volume.c vol_paint): a band on Now Playing, a panel elsewhere.
 VOLUME = 'dialog/volume_dialog.bin'
 
 
@@ -920,6 +914,8 @@ def volume_dialog(root):
     check(root[0] == 'dialog' and root[2].get('name') == 'volume_dialog' and
             root[2].get('highlight') == 'default(alpha=200)', 'Unexpected volume dialog')
     del root[2]['highlight']
+    # Clear, as the status bar's: stock's black border rings the screen, paper in Light Mode.
+    root[2].update({f'style:{s}:border_color': '#00000000' for s in ('normal', 'disable', 'focused')})
     # Snapshot paints can precede vol_paint; never expose the stock full-screen controls.
     check([(n[0], n[2].get('name')) for n in root[3]] ==
           [('slider', 'slider_vol'), ('label', 'label_vol')], 'Unexpected volume controls')
@@ -945,7 +941,7 @@ def page_rows(g, kind):
     """(pitch, body, artwork inset) of a page kind's rows under g."""
     return {'art': (g.art_pitch, g.art_body, g.art_inset), 'lib': (g.lib_pitch, g.lib_body, g.lib_inset),
             'song': (g.song_pitch, g.song_body, g.text_art_inset),
-            # a set without toolbars gives Playlists two-line rows; navigation.c's pl_dress sizes them
+            # a set without toolbars gives Playlists two-line rows; playlists.c's pl_dress sizes them
             'playlist': (g.pitch, g.body, g.text_art_inset) if g.toolbar else (g.song_pitch, g.song_body, g.text_art_inset)
             }.get(kind, (g.pitch, g.body, g.text_art_inset))
 
@@ -1185,7 +1181,7 @@ def patch_asset(path, data, g=SET0):  # pragma: no mutate block
             check(box == [0, 50, 375, 50], f'{path}: unexpected action bar')
             box[1] = 0
         elif kind == 'list_item':  # playlist editing actions
-            box[1] = (10 if g.toolbar else 0) + ((box[1] - 60) // 78) * pitch  # navigation.c ringnav_playlistsmore
+            box[1] = (10 if g.toolbar else 0) + ((box[1] - 60) // 78) * pitch  # playlists.c ringnav_playlistsmore
         elif props.get('name') == 'view':  # allmusic's stock empty-state panel
             box[1] -= 50
         elif path in NAVBAR_ONLY:  # settings panels and notes keep their size; text ends clear of a top corner

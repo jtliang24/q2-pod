@@ -39,7 +39,7 @@
        outline and a gloss green level, a hue in both halves -->
   <view name="list">
     <element name="selection" painter="stops"/>
-    <element name="icons" mono="0" badge_muted="0" addon_mono="0"/>
+    <element name="icons" mono="0" badge_muted="0" addon_mono="0" badge_ink="1"/>
     <element name="row" font="classic-light" title_px="27" meta_px="17" text_end="350" tall_font="classic-light" tall_px="28"/>
     <!-- Songs' rows and Play All's end on these three rows, each row its stop; none on the selected row -->
     <element name="separator" light.stops="#fcfcfc 0, #e2e3e2 50, #f7f7f7 100" dark.stops="#000000 0, #2c2c2c 50, #000000 100"/>
@@ -87,11 +87,14 @@
        coverflow.c slant_render), and the progress bar's track over its NP_BAR_IPOD (20) rows: faint 1 px top
        and bottom lines round a near-white inside, the inner stops from 5 to 95 so no row past the first and before the
        last takes an edge's colour; the dark half's Apple's capture darkened, its step at the middle
-       kept; the accent's band fills the played part (navigation.c paint_scrubber). Its rows painter's 31 rows, fixed
+       kept; a column at each end in the last stop's colour (np_bar.c ipod_bar). The played part is the accent's band;
+       under Classic Blue it is fill: the 14 rows of the bar in Apple's native 320x240 capture (iPod classic User
+       Guide, Now Playing), its two nearly equal rows at 27 made one to fit 13 stops. Its rows painter's 31 rows, fixed
        colours (#rrggbbaa its own alpha), are the volume panel's away from Now Playing and a card app's progress -->
   <view name="playing">
     <element name="art" square="1"/>
-    <element name="scrubber" light.stops="#e2e2e2 0, #ffffff 5, #ffffff 14, #ffffff 23, #fafafa 32, #fafafa 41, #f6f6f6 50, #f6f6f6 59, #f6f6f6 68, #f4f4f4 77, #f4f4f4 86, #f4f4f4 95, #cecece 100"
+    <element name="scrubber" fill="#7d96d7 0, #86aafe 8, #739df9 15, #6b9bf2 27, #6ca2f8 38, #65a3ff 46, #3c89eb 54, #3698f8 62, #32a2fe 69, #36affe 77, #40b3fc 85, #5bbbfe 92, #5b9ecf 100"
+             light.stops="#e2e2e2 0, #ffffff 5, #ffffff 14, #ffffff 23, #fafafa 32, #fafafa 41, #f6f6f6 50, #f6f6f6 59, #f6f6f6 68, #f4f4f4 77, #f4f4f4 86, #f4f4f4 95, #cecece 100"
              dark.stops="#313131 0, #373737 5, #383838 14, #373737 23, #363636 32, #353535 41, #323232 50, #313131 59, #323232 68, #343434 77, #353535 86, #343434 95, #2b2b2b 100"
              painter="rows"
              light_track="#e7e7e7 #eeeeee #ffffff #fdfdfd #f7f7f7 #f7f7f7 #f3f3f3 #f0f0f0 #ebebeb #e4e4e4 #dedede #dfdfdf #e6e6e6 #ededed #ececec #d1d1d1 #d0d0d0 #fdfdfd #f0f0f0 #efefef #f5f5f5 #f8f8f8 #f4f4f4 #efefef #efefef #efefef #f6f6f6 #f7f7f7 #f7f7f7 #f7f7f7 #f9f9f9"
@@ -132,7 +135,7 @@
   <view name="dialog"><element name="confirm" painter="classic-light"/></view>
   <!-- Its own pages: Quick Settings, the slider pages, the rating, T9 and Search, Set Time and Date, the message
        screens, the lock info screen, Cover Flow's flip -->
-  <view name="pages"><element name="own" painter="classic-light"/></view>
+  <view name="pages"><element name="own" painter="classic-light" art_final="1"/></view>
   <!-- Light Mode: On is the look as drawn, Off its dark half, Auto both by the clock -->
   <option setting="light" preset="on" keep="auto"/>
   <option setting="accent" key="CLASSIC_LIGHT_ACCENT" default="classic-blue" preset="classic-blue"/>

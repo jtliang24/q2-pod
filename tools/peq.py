@@ -72,7 +72,7 @@ USB_BUFFER = ((0x43977c, 0xafc2017c, 0),           # sw $v0, 0x17c($fp)  -> nop 
 DAC_RELEASE = ((0x4391b0, 0x0c2b6eec, 'dac_ioctl'),   # end of init: jal ioctl
                (0x42b164, 0x0c10eca0, 'dac_unmute'),  # seek: jal 0x43b280, the unmute helper
                (0x43881c, 0x0c2b6b3c, 'dac_resume'),  # resume: jal snd_pcm_pause
-               (0x43afa4, 0x0c2b6c88, 'ao_write'))    # play: jal snd_pcm_writei; the first write after a kept PCM; an unpause writes these frames again
+               (0x43afa4, 0x0c2b6c88, 'ao_write'))    # play: jal snd_pcm_writei; every write off Bluetooth looks for a dry PCM; an unpause writes these frames again
 # The DSF, DFF and ISO checks' failure exits store the global stop: on the preload thread they don't (peq_player.c,
 # docs/internals.md#a-bad-file-next): (address, stock word, hook). The delay slot's lui stays, unused.
 PROBE_STOP = ((0x47b97c, 0xac640e74, 'probe_stop_dsf'),  # sw $a0, 0xe74($v1)
@@ -198,7 +198,7 @@ LIBC = {
 }
 
 # The payload's C beside navigation.c (build.py compile_payload), in link order; test/fw builds the same set.
-UI_SOURCES = ['peq.c', 'peq_ui.c', 'coverflow.c', 'library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']
+UI_SOURCES = ['peq.c', 'peq_ui.c', 'coverflow.c', 'coverflow_thumb.c', 'library_scope.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']
 
 def function_macros(address):
     """Each stock function in address (name -> its C address) as a macro calling it there."""
