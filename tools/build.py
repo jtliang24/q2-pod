@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 ZIP_SHA = '154c17822d09be001be35c03d2d3488424dee195221790bd70864480d55b0f00'
 DEMO_SHA = '2c5f06142850b4fc168f82b44a81550cce0a5b4b9fe1c179dced4a08a3049138'
 Q2_TAR_SHA = '0a910790ef7902b0fe7de7d0f9f26cdac3f2c0909368c6c90778a67ee3b5dab1'  # the update.tar in the ZIP, alone
-VERSION = '1.7.0'  # major.minor.patch, single digits, shown as is (About and release tag)
+VERSION = '1.7.1'  # major.minor.patch, single digits, shown as is (About and release tag)
 REPO = 'DiamondBond/q2-pod'  # whose releases Network Update fetches (--update-repo) and release.py publishes
 # The updater's identity (firmware_v20.info and demo's version literal) must be 5 characters and
 # differ from the installed one, so it packs the digits: 1.0.1 is V101I. About shows the stock
@@ -229,13 +229,22 @@ BOOT_HOOK = (b'    /release/bin/demo &\n', f'''    (
             {{ echo "== last state"; ls -l $m; cat $m; }} >> $c
             # Coverflow's open never finished (coverflow.c cf_trace): the phase it reached
             [ -f /mnt/data/q2-cf-trace ] && {{ echo "== cover flow"; cat /mnt/data/q2-cf-trace; }} >> $c
+            # The UI loop stalled (navigation.c stall_write): what its thread was doing
+            [ -f /mnt/data/q2-stall ] && {{ echo "== stall"; cat /mnt/data/q2-stall; }} >> $c
             rm -f $m
         }}
-        rm -f /mnt/data/q2-cf-trace
+        rm -f /mnt/data/q2-cf-trace /mnt/data/q2-stall
         [ -f $c ] && (
             i=0
             while [ $i -lt 60 ] && ! grep -q ' /mnt/mmc ' /proc/mounts; do usleep 500000; i=$((i+1)); done
-            grep -q ' /mnt/mmc ' /proc/mounts && cp $c /mnt/mmc/q2-crash.log && sync && rm -f $c
+            grep -q ' /mnt/mmc ' /proc/mounts || exit
+            # the card keeps the two before it: q2-crash.log.1, then .2; they move only once the copy is
+            # whole (a full card or a power cut leaves them, and the log stays on /mnt/data)
+            l=/mnt/mmc/q2-crash.log
+            cp $c $l.new && sync || exit
+            [ -f $l.1 ] && mv -f $l.1 $l.2
+            [ -f $l ] && mv -f $l $l.1
+            mv -f $l.new $l && sync && rm -f $c
         ) &
         rb=/mnt/mmc/.rockbox
         rockbox() {{
@@ -270,6 +279,8 @@ BOOT_HOOK = (b'    /release/bin/demo &\n', f'''    (
             {{
                 echo "== date"; date
                 echo "== demo exit $s"
+                # the OOM killer's own lines from all of dmesg: its task dump can push them out of the tail
+                echo "== oom"; dmesg | grep -E 'invoked oom-killer|oom-kill:|Killed process|oom_reaper'
                 echo "== dmesg"; dmesg | tail -n 200
                 echo "== meminfo"; cat /proc/meminfo
                 echo "== ps"; ps
