@@ -1,5 +1,40 @@
 # Changelog
 
+- **1.7.6**:
+  - Cover Flow: a fast spin starts going by letters after 0.7 s instead of 0.5 s, as it did before 1.6.9, so a brisk turn through a few albums stays album by album.
+  - Quick Settings: under **Theme: Classic** the System Settings button shows a gear. It used to look like the brightness sun.
+  - Streaming: in a card app, choosing an option on a page that keeps itself up to date (such as a choice list with **Selected** under the current one) no longer blanks the screen to **Loading…**: the page stays and is redrawn as soon as the app answers.
+  - Streaming: in a card app, a list with a **Search** magnifying glass in the title bar can have a sort button beside it, as on the Songs page. Tap it to choose the order. Under **Theme: Classic**, which has no title bar, it stays a row.
+- **1.7.5**:
+  - Library: adding an album to your favourites, or rating it five hearts, now makes its songs favourites too, so they show in **Favorites** and **Loved**. Removing the album, or rating it lower, takes them out. For an album already at five hearts, choose five again under **Rate Album**.
+  - Cover Flow: a fast spin no longer skips letters. Each letter with albums now comes in turn, both ways, and round from the last letter to the first.
+  - View Queue: the song playing has a ▶ before its title.
+  - Display: with **Status Bar** on another theme's look, the battery, Bluetooth and Wi-Fi line up as they do under that theme. Under **Theme: Classic**, Minimal's and Modern's battery sat a little low, Wi-Fi a little high and Bluetooth a little low; under Minimal and Modern, Classic's battery sat a little high.
+  - Network Update: pressing Cancel just as a download finishes, while the card takes its last bytes, now says **Download cancelled** rather than **Can't write to the card**.
+  - Cover Flow: turning the Q2 off while it prepares artwork no longer marks the album it was about to start as one that restarted the Q2.
+  - Bluetooth: when the Q2 shows **Bluetooth abnormal** and restarts by itself, `q2-crash.log` on the card now says so, with the system's and the Bluetooth start-up's last messages, where before there was nothing to attach to a bug report.
+  - System: when the Q2 restarts by itself, `q2-crash.log` now ends with the last messages from the player's helpers, such as the Bluetooth and Wi-Fi start-up's, which used to go to a serial port nobody reads.
+  - USB: under **USB mode: Audio and DAC**, a Nintendo Switch 2, or any host that connects to the Q2 but never reads its card, now gets the Q2 as a USB DAC. The Q2 used to wait for the host to read the card first, so it stayed a drive the Switch did nothing with. A charger still only charges, and **USB Storage** is as it was.
+- **1.7.4**:
+  - Display: **Appearance** has a **Status Bar** row. **Theme** (the default) follows your theme; **Minimal**, **Modern** or **Classic** give the bar that theme's look under any theme, so Classic can have a plain black bar. It applies at once, with no restart.
+  - Cover Flow: a fast spin flows. The letters come at about one turn a second instead of two and keep a steady pace however hard you spin, while the covers keep moving through them, so slowing down or turning back carries straight on into single albums. Letting go lands on the letter's first album, and lifting your thumb to re-grip no longer drops the letters.
+  - Quick Settings: holding Play/Pause there briefly shows **Wheel: Volume** or **Wheel: Brightness**. The wheel keeps working while it shows.
+  - Now Playing: under **Theme: Classic** the hearts picker has a plain background in Light Mode instead of a gradient.
+  - Bluetooth: the buttons of a headset or earbuds whose name is longer than 55 characters now work. The Q2 read the name cut short and so never found their buttons.
+  - Library: in **Scan Folders**, tapping a folder that has no folders inside ticks it. It used to say **Folder not found**.
+  - Scrobbling: a line of the scrobble log with a damaged time no longer stops every upload until it is edited out. It is left out, as other unreadable lines are.
+  - Playlists: opening Library → Playlists, or a card app importing playlists, soon after a boot no longer restarts the Q2.
+  - Library: Albums, Artists, Composers and Genres open faster on a big library where some songs have no album, artist or genre. Each used to read every such song only to decide whether to show Unknown.
+  - Streaming: a card app's page, or Spotify's browser, no longer stays on **Loading…** when the reply comes back at once.
+  - Library: opening **Songs**, or coming back to it, no longer holds on to more memory each time, about 8 MB on a 65,000-song library, which could add up until the Q2 ran out. Albums, Artists, Folder and the other lists held on to a little each time too.
+  - Library: **Update Local Music** no longer sometimes skips the update without a word and keeps the old library. That could happen when it started while the songs were still being counted, more often the bigger the library.
+  - Settings: a Centre press on Night Shift's page followed at once by Back no longer switches Crossfade on or off instead.
+  - Library: on a large library, opening an album, **Go to Album**, **Recently Added**, deleting songs and **Scan specified folders** are much faster, and Era's **Play All** no longer risks restarting the Q2 on a decade of many albums. They speed up after the next **Update Local Music** or **Scan specified folders**.
+  - Cover Flow: when an album's artwork restarted the Q2 while Cover Flow was preparing artwork, the next Cover Flow open adds that album's file to `q2-crash.log` on the card, under **cover flow skipped**.
+  - Streaming: songs a card app streams show the lyrics the app leaves for them on the lyrics page, synced when timed.
+  - EQ: on the Advanced tab a long preset name no longer runs into **Presets**. It stays on the right, is cut short with an ellipsis, and scrolls while its row is selected.
+  - Streaming: in **Internet Radio**, a favourite whose address is a `file://` path with an `=` in its name is listed. It was taken for a `.pls` entry and left out.
+
 - **1.7.3**:
   - Standby: waking from Standby no longer shows TF card removed and inserted messages.
   - Power: Standby starts off after a fresh install or a factory reset. If you already have it on, it stays on.

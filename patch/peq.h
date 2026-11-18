@@ -33,6 +33,7 @@ static inline void crash_note(const char *path, const char *file, const char *lo
 void child_exit(int status) __attribute__((noreturn));
 void child_oom_first(void); /* between fork and exec: the OOM killer takes this child, not demo (#169) */
 void ringnav_clean_end(void); /* a clean end begins: the watchdog stops, the state record goes (system.c) */
+void reboot_record(void *caller); /* a Bluetooth abnormal reboot's q2-crash.log (system.c) */
 /* The crash log's record of a long job's current file and demo's memory (tags.c) */
 void crash_note(const char *path, const char *file, const char *log, unsigned every, unsigned *n);
 #ifdef canvas_set_fill_color
@@ -289,6 +290,7 @@ int clock_night(void); /* theme_engine.c: Night Shift's Auto hours now */
 int worker_stop(unsigned long thread, int *running, volatile int *cancel, unsigned *timer);
 void ringnav_select(void *w, int id, int rows);
 int library_scanning(void); /* coverflow.c: a library scan's thread runs */
+int library_counting(void); /* coverflow.c: a song count reads songtable */
 /* coverflow.c: the library's generation, one up each rewrite (Most Played's too); an album row's
  * tracks, its id and the length of a path's album folder */
 extern volatile unsigned library_gen;
@@ -302,6 +304,7 @@ int blob_io(const char *path, const char *tmp, void *buf, unsigned size, int wri
 int clip_within(void *canvas, int *old, int *clip, int x, int y, int w, int h);
 void play_folder(void *dq, int idx, int cls);
 int app_urls_play(const char *path); /* tidal.c: a card app's Q2URLS/1 queue, played */
+int app_lyrics(const char *id, char *out, unsigned size); /* tidal.c: an app track's .lrc path */
 int directory(void *path); /* playback.c: toolsLoadDirectory, for staged */
 #define TIDAL_DIR "/mnt/mmc/.tidal" /* tidal.c's cache, Tidal Downloads' list */
 void tidal_clear(void);
@@ -321,6 +324,7 @@ int addon_scan(void), addon_open(void *ctx, void *event), addon_hold(void *top);
 int addon_games_last(void); /* the card's games as the last addon_scan found them */
 #define GAMES_BUILTIN 4     /* games.c's Sudoku, Vortex, Solitaire and Snake */
 const char *addon_name(int a), *addon_id(int a), *addon_icon(int a);
+int card_path(const char *path); /* on the card, no ".." segment: what an app or server may name */
 int addon_is_icon(const char *name); /* a card app's Streaming icon, by its file:// name */
 void addon_poll(void), addon_stop(void), addon_paint(void *w, void *canvas), addon_card_away(void);
 void addon_forget(const char *dir), addon_quit(const char *dir);
