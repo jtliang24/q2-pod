@@ -64,6 +64,10 @@ to its [progress](m1plus-progress.md) section.
 | Card apps' sections, covers beside rows, page windows and URL queues | 1.7.3 | `addon.c`'s caps `sections`, `art`, `window`, `urls`, `audio`; `COVERINFO_CALL` | NOT PORTED; the M1's `ADDON_CAPS` stays `playlist progress pages goto sleep` |
 | Card apps' search icon in the title bar | 1.7.3 | `take_find`, `find_icon` (`s_img_search`) | NOT PORTED; V2.1's theme has no `s_img_search`, so the search row stays a row |
 | No TF card toasts after a Standby resume | 1.7.3 | `check_cardmount_status` | NOT PORTED; V2.1's `check_cardmount_status` not pinned |
+| Card apps' sort icon beside the search icon | 1.7.6 | `addon.c`'s cap `sort`, `take_sort`, `find_icon` (`s_img_order_navbar`) | NOT PORTED; it follows a taken search, which the M1 never takes, and the M1's `ADDON_CAPS` offers no `sort` |
+| Display → Status Bar: the bar's look picked on its own | 1.7.4 | `OWN_STATUSBAR`, `bar_theme`, Display's `status_row` | NOT PORTED; the M1's Display page keeps its rows, so the bar follows the theme |
+| Scan Folders: a tap on a folder with no folders inside ticks it | 1.7.4 | `scan_folders.c`, `specfolder_click` | NOT PORTED; V2.1's Scan Folders page not pinned |
+| USB Audio/DAC to a host that never reads the card | 1.7.5 | `usb_dac.c`, `check_usb_status` | NOT PORTED; V2.1's `check_usb_status` not pinned |
 
 Ported in round 2 and passed on the device ([progress section 91](m1plus-progress.md#91-unported-round-2-nov-15)):
 the player's 1.6.5 to 1.6.7 fixes (stop, preload, seek, DSD/ISO probes, forced end, the DAC release wait), the MP3

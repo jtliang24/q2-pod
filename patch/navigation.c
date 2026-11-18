@@ -93,6 +93,7 @@ void ringnav_timezone_row(void *item, int i) {
     }
 }
 static int library_music __attribute__((section(".scratch")));
+static int library_first __attribute__((section(".scratch")));
 static int spoken(const char *path);
 
 /* Failed exec in a forked child must not flush demo's copied stdio or run its exit handlers. */
@@ -136,10 +137,10 @@ static int library_query(int content, const char *db, const char *sql, void *row
         sql = aa;
     }
     const char *from = library_music && sql ? strstr(sql, " from songtable") : 0;
-    if (from) {
-        int n =
-            tk_snprintf(filtered, sizeof filtered, "%.*s from (select * from songtable where %s)%s",
-                        (int)(from - sql), sql, MUSIC_WHERE, from + 15);
+    if (from) { /* library_first: the Unknown row's check, which one song answers */
+        int n = tk_snprintf(filtered, sizeof filtered,
+                            "%.*s from (select * from songtable where %s)%s%s", (int)(from - sql),
+                            sql, MUSIC_WHERE, from + 15, library_first ? " limit 1" : "");
         if (n < 0 || (unsigned)n >= sizeof filtered) return -1;
         sql = filtered;
     }
@@ -154,6 +155,16 @@ static int library_query(int content, const char *db, const char *sql, void *row
         int n = tk_snprintf(filtered, sizeof filtered, "%s order by name collate nocase, id", sql);
         if (n < 0 || (unsigned)n >= sizeof filtered) return -1;
         sql = filtered;
+    }
+    /* Time added (ascending) would walk songtable_time_create backwards and reverse one second's
+     * songs (a CUE image's tracks): id keeps stock's order. aa is free: this SQL has no
+     * albumsonger. */
+    const char *asc = sql ? strstr(sql, " ORDER BY time_create asc;") : 0;
+    if (asc) {
+        int n =
+            tk_snprintf(aa, sizeof aa, "%.*s ORDER BY time_create asc, id", (int)(asc - sql), sql);
+        if (n < 0 || (unsigned)n >= sizeof aa) return -1;
+        sql = aa;
     }
     /* no memory to expand it: the token alone is SQL's 1, the whole library (library_scope.c) */
     char *expanded = sql && strstr(sql, LIBRARY_SCOPE_TOKEN) ? library_scope_query(sql) : 0;
@@ -1278,6 +1289,22 @@ static int pull_live(void) {
     return scope == st.pull_scope;
 }
 
+/* A white-on-black line across page, floating, that touches and keys pass through; 0 if it can't be
+ * made. */
+static void *band_create(void *page, const char *name, int y, int h) {
+    void *band = label_create(page, 0, y, I(page, W_W), h);
+    if (band) {
+        widget_set_name(band, name);
+        widget_use_style(band, STYLE_LABEL_WHITE18C);
+        widget_set_enable(band, 0);
+        widget_set_sensitive(band, 0);
+        prop(band, "floating", 1);
+        prop(band, "style:disable:bg_color", (int)0xff000000u);
+        prop(band, "style:disable:text_color", (int)0xffffffffu);
+    }
+    return band;
+}
+
 static int pull_event(void *page, void *event) {
     if (page != st.pull_page) return 0;
     unsigned type = I(event, EVENT_TYPE);
@@ -1317,18 +1344,7 @@ static int pull_event(void *page, void *event) {
         return STOP;
     }
     void *prompt = widget_lookup(page, PULL_PROMPT, 1);
-    if (!prompt) {
-        prompt = label_create(page, 0, 0, I(page, W_W), 44);
-        if (prompt) {
-            widget_set_name(prompt, PULL_PROMPT);
-            widget_use_style(prompt, STYLE_LABEL_WHITE18C);
-            widget_set_enable(prompt, 0);
-            widget_set_sensitive(prompt, 0);
-            prop(prompt, "floating", 1);
-            prop(prompt, "style:disable:bg_color", (int)0xff000000u);
-            prop(prompt, "style:disable:text_color", (int)0xffffffffu);
-        }
-    }
+    if (!prompt) prompt = band_create(page, PULL_PROMPT, 0, 44);
     if (prompt) {
         widget_set_text_utf8(prompt, ready ? "Release to search" : "Pull to search");
         widget_set_visible(prompt, dy > 0, 0);
@@ -1532,17 +1548,19 @@ void round_ring(void *canvas, const rect_t *r, int R, unsigned c) {
     }
 }
 void paint_art(void *w, void *canvas, const char *name, int x, int y);
-/* Classic's panel (volume, rating) over r: the scheme's bar gloss, LETTER_RADIUS corners, in
- * a 1 px ring of its line, on its soft shadow, an image reaching PANEL_PAD past the shadow's box,
- * which sits PANEL_DROP below the panel (tools/art.py SHADOWS). Restores the fill. */
-void paint_panel(void *w, void *canvas, const rect_t *r, const char *shadow) {
+/* Classic's panel (volume, rating) over r: the scheme's bar gloss, or (flat) its top colour alone,
+ * LETTER_RADIUS corners, in a 1 px ring of its line, on its soft shadow, an image reaching
+ * PANEL_PAD past the shadow's box, which sits PANEL_DROP below the panel (tools/art.py SHADOWS).
+ * Restores the fill. */
+void paint_panel(void *w, void *canvas, const rect_t *r, const char *shadow, int flat) {
     const scheme_t *S = scheme();
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
     paint_art(w, canvas, shadow, r->x - PANEL_PAD, r->y - PANEL_PAD + PANEL_DROP);
     stops_t ring = { 2, { 0, 100 }, { S->bar_line, S->bar_line } };
     rect_t out = { r->x - 1, r->y - 1, r->w + 2, r->h + 2 };
     paint_round_rows(canvas, &out, &ring, LETTER_RADIUS + 1);
-    paint_round_rows(canvas, r, &S->bar, LETTER_RADIUS);
+    stops_t even = { 2, { 0, 100 }, { S->bar.rgb[0], S->bar.rgb[0] } };
+    paint_round_rows(canvas, r, flat ? &even : &S->bar, LETTER_RADIUS);
     stock_canvas_set_fill_color(canvas, fill);
 }
 /* A theme image at x, y at its size. */
@@ -1736,7 +1754,8 @@ static void draw_letter(void *canvas, const unsigned *c, rect_t *box) {
     const theme_t *T = theme();
     unsigned raw = st.raw_ink;
     st.raw_ink = T->letter_raw;
-    fill_box(canvas, box, (LETTER_ALPHA << 24) | FILL_RGB, LETTER_RADIUS);
+    /* unsigned: 0xd9 << 24 is past INT_MAX, undefined for an int; the Q2's clang wrapped it */
+    fill_box(canvas, box, ((unsigned)LETTER_ALPHA << 24) | FILL_RGB, LETTER_RADIUS);
     draw_centred(canvas, c, 1, box, T->letter_px ? T->letter_px : LETTER_PX, 0xffffffff);
     st.raw_ink = raw;
 }
@@ -3886,7 +3905,7 @@ static int bar_state_sync(void *bar) {
             };
             const char *icon = st.bar_dark
                                    ? status == 2 ? "classic_light_play_w" : "classic_light_pause_w"
-                               : theme()->painter[PAINT_BATTERY] == BATT_CLASSIC_LIGHT
+                               : bar_theme()->painter[PAINT_BATTERY] == BATT_CLASSIC_LIGHT
                                    ? classic_light_icon[ipod_light()][status != 2]
                                : status == 2 ? "bar_play"
                                              : "bar_pause";
@@ -4021,16 +4040,19 @@ static void bar_sync(void *bar) {
         (shortcut() == SHORTCUT_GROOVEBOX && st.home_groovebox != groovebox_available()))
         coverflow_home_layout();
     /* Classic's battery: the set's body, which Percent Inside keeps */
-    const theme_t *T = theme();
-    /* A relayout puts them back in the row; the bar paints at least once a second. */
-    if (T->bar_bt_dy && I(st.bar_bt, W_Y) != T->bar_bt_dy)
-        widget_move_resize(st.bar_bt, I(st.bar_bt, W_X), T->bar_bt_dy, I(st.bar_bt, W_W),
+    const theme_t *T = theme(), *B = bar_theme();
+    /* The look's rows off the row layout's, y 0 in every set's row. A relayout puts them back
+     * there; the bar paints at least once a second. */
+    if (I(st.bar_bt, W_Y) != B->bar_bt_dy)
+        widget_move_resize(st.bar_bt, I(st.bar_bt, W_X), B->bar_bt_dy, I(st.bar_bt, W_W),
                            I(st.bar_bt, W_H));
-    if (T->bar_wifi_dy && I(st.bar_wifi, W_Y) != T->bar_wifi_dy)
-        widget_move_resize(st.bar_wifi, I(st.bar_wifi, W_X), T->bar_wifi_dy, I(st.bar_wifi, W_W),
+    if (I(st.bar_wifi, W_Y) != B->bar_wifi_dy)
+        widget_move_resize(st.bar_wifi, I(st.bar_wifi, W_X), B->bar_wifi_dy, I(st.bar_wifi, W_W),
                            I(st.bar_wifi, W_H));
-    int classic_light = T->painter[PAINT_BATTERY] == BATT_CLASSIC_LIGHT,
-        body = classic_light ? geom_val(V_BATT_W) + 1 : BATT_BODY_W, /* its soft edge's column */
+    int classic_row = T->painter[PAINT_BATTERY] == BATT_CLASSIC_LIGHT, /* the row's layout */
+        classic_light = B->painter[PAINT_BATTERY] == BATT_CLASSIC_LIGHT,
+        body =
+            classic_light ? bar_geom_val(V_BATT_W) + 1 : BATT_BODY_W, /* its soft edge's column */
         inside = classic_light ? body : BATT_INSIDE_W;
     int mode = st.battery;
     if (mode) {
@@ -4046,9 +4068,9 @@ static void bar_sync(void *bar) {
                 STATUS_GAP +
                 (st.codec && st.codec_step < CODEC_STEPS ? codec_reach[st.codec - 1] : BT_REACH);
         /* Classic: the play state or EQ shares the group */
-        if (classic_light && st.bar_state && widget_get_visible(st.bar_state))
+        if (classic_row && st.bar_state && widget_get_visible(st.bar_state))
             reach += I(st.bar_state, W_W) + STATUS_GAP;
-        if (classic_light && st.bar_eq && widget_get_visible(st.bar_eq))
+        if (classic_row && st.bar_eq && widget_get_visible(st.bar_eq))
             reach += I(st.bar_eq, W_W) + STATUS_GAP;
         /* Classic's Percent Inside is the icon's own width: the icon would win no room */
         if (reach > BATT_ROOM && !(classic_light && mode == 3)) mode = 0;
@@ -4126,9 +4148,9 @@ void bar_rect(void *canvas, unsigned color, int x, int y, int w, int h) {
  * half a soft edge outside the body and an emboss under it. Final colours, never flipped; the
  * caller restores the fill. Returns the level's width. */
 static int classic_light_battery(void *w, void *canvas, int x, int y, unsigned key) {
-    const theme_t *T = theme();
+    const theme_t *T = bar_theme();
     unsigned bitmap[64]; /* bitmap_t: width @0, height @4 */
-    int L = ipod_light(), bw = geom_val(V_BATT_W), bh = geom_val(V_BATT_H), nh = BATT_NUB_H,
+    int L = ipod_light(), bw = bar_geom_val(V_BATT_W), bh = bar_geom_val(V_BATT_H), nh = BATT_NUB_H,
         iw = bw - 2, ih = bh - 2, r = x + bw - 1, ny = y + (bh - nh) / 2,
         f = key & 1 ? T->batt_low_w : iw * (int)(key & 2 ? 100 : key >> 3) / 100;
     unsigned line = RGBA(T->batt_line[L]);
@@ -4194,15 +4216,22 @@ static void dark_battery(void *canvas, int x, int y, unsigned key) {
     bar_rect(canvas, RGBA(0xf5f5f5), x + 35, y + 10, 2, 5);
     paint_stops(canvas, x + 11, y + 8, 22 * (int)(key & 2 ? 100 : key >> 3) / 100, 9, &level);
 }
+/* A battery body bh rows high, either look's: its top in the slot w. Centred on the row's height,
+ * as the icons beside it are, not on w's, which is the bar's (Classic's row is shorter than its
+ * bar). Beside the percentage it rises BATT_PCT_DY, to the digits' ink. */
+static int batt_top(void *w, int bh) {
+    return (I(P(w, W_PARENT), W_H) + 1 - bh) / 2 - BATT_PCT_DY * (st.batt_mode == 2);
+}
 /* Mode 1 is the percentage alone; mode 3 uses a compact solid battery with dark digits; mode 2
  * puts the percentage beside the charge-level icon. Under Classic the battery is
  * classic_light_battery's, its digits in the bar's size. Restore canvas state. */
 static void paint_battery(void *w, void *canvas) {
     void *lcd = P(canvas, CANVAS_LCD);
     if (!lcd) return;
-    const theme_t *T = theme();
+    const theme_t *T = bar_theme();
     int classic_light = T->painter[PAINT_BATTERY] == BATT_CLASSIC_LIGHT,
-        px = classic_light && T->font_px[ROLE_BAR] ? T->font_px[ROLE_BAR] : BATT_PX;
+        bar_px = theme()->font_px[ROLE_BAR], /* the row's, as the room bar_sync gave it */
+        px = classic_light && bar_px ? bar_px : BATT_PX;
     unsigned fill = (unsigned)I(lcd, LCD_FILL_COLOR);
     unsigned key = st.batt_key, level = key >> 3, s[4], n = put_num(s, level);
     int inside = st.batt_mode == 3;
@@ -4225,9 +4254,9 @@ static void paint_battery(void *w, void *canvas) {
         draw_centred(canvas, s, n, &r, px, color);
         return;
     }
-    if (classic_light) { /* the body centred on the bar's rows above its two lines, its soft edge at
-                            0 */
-        int bw = geom_val(V_BATT_W), bh = geom_val(V_BATT_H), y = (geom_val(V_BAR) - 2 - bh) / 2;
+    if (classic_light) { /* the body's soft edge at 0; on Classic's own row batt_top is the middle
+                            of the bar's rows above its two lines (tools/ipod.py sizes the row) */
+        int bw = bar_geom_val(V_BATT_W), bh = bar_geom_val(V_BATT_H), y = batt_top(w, bh);
         int f = classic_light_battery(w, canvas, 1, y, key);
         if (st.batt_mode == 2) {
             int x = 1 + bw + BATT_NUB_W + BATT_GAP;
@@ -4245,7 +4274,7 @@ static void paint_battery(void *w, void *canvas) {
         return;
     }
     const int bw = inside ? BATT_INSIDE_W : BATT_BODY_W, bh = inside ? BATT_INSIDE_H : BATT_BODY_H,
-              nh = BATT_NUB_H, y = (I(w, W_H) + 1 - bh) / 2 - BATT_PCT_DY * (st.batt_mode == 2);
+              nh = BATT_NUB_H, y = batt_top(w, bh);
     canvas_set_fill_color(canvas, color);
     if (inside) {
         rect_t body = { 0, y, bw, bh };
@@ -5454,10 +5483,15 @@ unsigned dark_bar_key(const unsigned *t) {
                                                   << 1;
 }
 /* The dark bar's rows and its line, the last of h rows from y: the scheme's dark half in either
- * half, over the bar's own line, with no second one. Final colours. */
+ * half, over the bar's own line, with no second one; a flat Status Bar's plain black. Final
+ * colours. */
 void dark_bar_rows(void *canvas, int y, int w, int h) {
-    const theme_t *T = theme();
+    const theme_t *T = bar_theme();
     const scheme_t *S = &T->schemes[*T->accent_slot];
+    if (T->painter[PAINT_BAR] != BAR_GLOSS) {
+        bar_rect(canvas, RGBA(BAR_COLOR), 0, y, w, h);
+        return;
+    }
     paint_stops(canvas, 0, y, w, h - 1, &S->bar);
     bar_rect(canvas, RGBA(S->bar_line), 0, y + h - 1, w, 1);
 }
@@ -6036,7 +6070,7 @@ int ringnav_paint_bg(void *w, void *canvas) {
     if (form) confirm_labels(w, canvas);
     if (w && w == st.rate_box)
         paint_panel(w, canvas, &(rect_t){ PANEL_PAD, PANEL_PAD - PANEL_DROP, 304, 110 },
-                    "classic_light_rate_shadow");
+                    "classic_light_rate_shadow", 1);
     paint_separators(w, canvas);
     coverflow_home_clip(w, canvas, 1);
     if (w && w == st.bar_slot) paint_battery(w, canvas);
@@ -6076,8 +6110,8 @@ int ringnav_paint_bg(void *w, void *canvas) {
     }
     if (w == bar && P(canvas, CANVAS_LCD)) {
         unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
-        const theme_t *T = theme();
-        const scheme_t *S = scheme();
+        const theme_t *T = bar_theme();
+        const scheme_t *S = bar_scheme();
         if (st.bar_dark) {
             dark_bar_rows(canvas, 0, I(w, W_W), 26);
         } else if (T->painter[PAINT_BAR] ==
@@ -6388,11 +6422,11 @@ int ringnav_image_add(void *manager, const char *name, void *bitmap) {
     if (s && !*s && tk_str_start_with(name, "menu_") && tk_strcmp(name, "menu_left") &&
         tk_strcmp(name, "menu_right"))
         s = (void *)0;
-    /* art_final, Classic Light's (tools/theme.py refuses it for another theme): its own images
-     * (tools/art.py) are final, but for Sort's bars and the volume's speakers: marks on the paper,
-     * in the half's ink */
-    if (s && !*s && T->art_final && tk_str_start_with(name, "classic_light_") &&
-        tk_strcmp(name, "classic_light_sort_bars") &&
+    /* art_final, Classic Light's (tools/theme.py refuses it for another theme), and so on its
+     * Status Bar under any theme: its own images (tools/art.py) are final, but for Sort's bars and
+     * the volume's speakers: marks on the paper, in the half's ink */
+    if (s && !*s && (T->art_final || bar_theme()->art_final) &&
+        tk_str_start_with(name, "classic_light_") && tk_strcmp(name, "classic_light_sort_bars") &&
         !tk_str_start_with(name, "classic_light_vol_"))
         s = (void *)0;
     /* Minimal: the codec badges (img_flac, img_mp3, ...: red with the name cut out) take the
@@ -6753,7 +6787,9 @@ static int setting_click(void *ctx, void *event) {
         int buf[11];
         st.light_day = light_day(clock_now(buf));
     }
-    if (i == 2)
+    if (i == SETTING_OWN + OWN_STATUSBAR)
+        st.pct_digit = st.pct_sign = 0; /* the battery's digits, measured again at its size */
+    if (i == 2 || i == SETTING_OWN + OWN_STATUSBAR)
         widget_invalidate_force(*(void *const *)system_bar, (void *)0); /* bar_sync applies it */
     else if (i == 1 || i == 4)
         coverflow_home_layout();
@@ -6858,13 +6894,6 @@ void restart_confirm(int setting, int value) {
     if (setting == SETTING_THEME) theme_preset(&themes[value], 0);
     ringnav_reboot();
 }
-/* The Theme picker's rows, by stored THEME: Minimal, Modern, Classic. */
-#if M1PLUS
-static const unsigned char theme_rows[] = { 0, 1 }; /* Minimal, Modern: Classic is unported */
-#else
-static const unsigned char theme_rows[] = { 0, 2, 1 };
-#endif
-_Static_assert(sizeof theme_rows == THEME_N, "a row per theme");
 static int theme_pick(void *ctx, void *event) {
     int t = (int)(long)ctx;
     accent();
@@ -7482,16 +7511,23 @@ int stock_row_text(void *label, const char *text) {
     return ret;
 }
 
-/* ... whose style stock then picks: the playing row's red, which the build turns white for every
- * theme (ipod.json), keeps its colour under a set that re-pitches the rows; the style hook takes it
- * from there, as any stock red. Inline, as the row's font is, and written on each bind, as the
- * rows are reused. */
+/* ... whose style stock then picks, after the title on each bind: the playing row's red, which the
+ * build turns white for every theme (ipod.json), so a play mark goes before its title. It keeps
+ * its colour under a set that re-pitches the rows; the style hook takes it from there, as any stock
+ * red. Inline, as the row's font is, and written on each bind, as the rows are reused. */
 int stock_row_style(void *label, const char *style) {
-    int ret = widget_use_style(label, style);
-    if (geom_val(V_STOCK_ROW) < SET_STOCK_ROW)
-        widget_set_prop_int(
-            label, "style:normal:text_color",
-            (int)RGBA(tk_strcmp(style, "s_scrlabel_red20l") ? 0xffffff : STOCK_RED));
+    int ret = widget_use_style(label, style), playing = !tk_strcmp(style, "s_scrlabel_red20l");
+    if (playing) {
+        char text[512] = "\xe2\x96\xb6 "; /* U+25B6; stock binds at most this much title */
+        widget_get_text_utf8(label, text + 4, sizeof text - 4);
+        widget_set_text_utf8(label, text);
+    }
+    if (geom_val(V_STOCK_ROW) < SET_STOCK_ROW) {
+        if (playing)
+            theme_font(label, ROLE_TITLE, FONT_ROW); /* the mark's not in Classic's faces */
+        widget_set_prop_int(label, "style:normal:text_color",
+                            (int)RGBA(playing ? STOCK_RED : 0xffffff));
+    }
     return ret;
 }
 
@@ -8016,6 +8052,13 @@ int ringnav_art_name(char *buf, unsigned size, unsigned row, const char *album) 
 #endif
     return snprintf(buf, size, "%s", row < deque_size(list) ? art_key(key, list, row) : album);
 }
+/* albumcoverinfo_init's and foldercoverinfo_init's _deque_push_back of each row's cover task
+ * (0x4ed2a4, 0x4ed44c): the list's copy (0x5b390c) duplicates the task's name and path, which stock
+ * malloc'd for it and never freed. */
+void ringnav_cover_push(void *covers, void *task) {
+    _deque_push_back(covers, task);
+    free(P(task, 4)), free(P(task, 8));
+}
 /* A list's albumcoverinfo_init: the art thread hashes each cover task's copy of its row's name
  * (+4, read under aclist_mutex): key renames a row's, or returns 0 to keep it. */
 static int rename_covers(void *list, const char *(*key)(char *, void *, unsigned)) {
@@ -8303,7 +8346,8 @@ int ringnav_class_icon(void *row, int i) {
 }
 #endif
 
-/* load_localclass_list: stock fills p_deque_showlist and returns its size. getAllAlbum,
+/* load_localclass_list: stock fills p_deque_showlist and returns its size (Playlists and Baidu:
+ * their own deque's). getAllAlbum,
  * getAllArtist (and its album-artist twin), getAllComposer and getAllGenre end with an Unknown row
  * (id -1) whenever the library has songs; it goes when the query its press runs finds none. Stock
  * clears the staging deque before returning, and so does this. Stock never sets g_artist_type,
@@ -8412,8 +8456,10 @@ int ringnav_localclass(int cls) {
 #endif
     if (n > 0 && (cls == 0xf00a || cls == 0xf008 || cls == 0xf007)) /* My Fav, Frequent, Recent */
         fav_titles(list, n);
-    /* an untagged song's row reads its file name without the extension (track_name) */
-    for (int i = 0; i < n; ++i) {
+    /* an untagged song's row reads its file name without the extension (track_name). Bounded by
+     * list's own size: Playlists (0xf00b) counts p_deque_playlist's rows, Baidu's (0xff26) its own.
+     */
+    for (int i = 0, k = (int)deque_size(list); i < n && i < k; ++i) {
         void *r = deque_at(list, (unsigned)i);
         char buf[512], **title = (char **)((char *)r + REC_TITLE), *t;
         if (I(r, REC_TYPE) != 8 || (*title && **title) ||
@@ -8426,7 +8472,9 @@ int ringnav_localclass(int cls) {
         return n;
     }
     if (n > 0 && I(deque_at(list, (unsigned)n - 1), REC_ID) == -1) {
+        library_first = 1; /* a song is enough: its query stops at the first (library_query) */
         class_query((unsigned)cls, deque_at(list, (unsigned)n - 1));
+        library_first = 0;
         int empty = !deque_size(dir);
         deque_clear(dir);
         if (empty) deque_pop_back(list), n--;
@@ -8482,7 +8530,7 @@ static void qm_tracks(void *r, void *add) {
 
 /* The row's tracks: the song itself, or what stock would play for the row; an Albums row's own
  * album alone (getMusicByAlbum finds every album of the name), in album order, as Coverflow's. */
-static void *qm_collect(void *r) {
+void *qm_collect(void *r) {
     if (st.qm_kind == QM_COVERALBUM || (st.qm_kind == QM_ALBUM && st.qm_cls == CLASS_ALBUMS))
         return coverflow_album_tracks(r);
     void *add = _create_deque("stSongInfo");
@@ -9190,7 +9238,7 @@ static int qm_run(const void *unused) {
     } else if (aid && a == QA_RATE) {
         rate_show(window_manager_get_top_window(window_manager()), rate_kept(1, aid), aid);
     } else if (aid && (a == QA_FAV || a == QA_UNFAV)) {
-        rate_saved(rate_keep(1, aid, a == QA_FAV ? 5 : 0));
+        if (rate_saved(rate_keep(1, aid, a == QA_FAV ? 5 : 0))) rate_album_favs(r, a == QA_FAV);
     } else if (r && a == QA_RATE) {
         rate_open();
     } else if (r && a >= QA_ADV_SHUFFLE && a <= QA_GROUP) {
@@ -9643,8 +9691,23 @@ static int qm_hold(void) {
 }
 
 /* Quick Settings' wheel: 0 its brightness slider, 1 stock's volume (Q2POD QSVOLUME). A held
- * Play/Pause there switches it (ringnav_keylong). No toast: its msginfo_dialog would cover the
- * pull-down, taking the wheel and Centre for 2 s; the next tick shows the mode. */
+ * Play/Pause there switches it (ringnav_keylong) and says so in a band for QS_HINT_MS, not a toast:
+ * its msginfo_dialog would cover the pull-down, taking the wheel and Centre for 2 s. The band sits
+ * between the second row's first label line and the slider. */
+#define QS_HINT "ringnav_qs_hint"
+#define QS_HINT_MS 1500
+static int quick_hint_end(const void *info) {
+    widget_set_visible(P(info, TIMER_CTX), 0, 0);
+    return 7; /* RET_REMOVE */
+}
+static void quick_hint(void *top, int volume) {
+    void *old = widget_lookup(top, QS_HINT, 1);
+    if (old) widget_destroy(old); /* its timer goes with it: a second hold gets its whole time */
+    void *band = band_create(top, QS_HINT, 226, 28);
+    if (!band) return;
+    widget_set_text_utf8(band, volume ? "Wheel: Volume" : "Wheel: Brightness");
+    widget_add_timer(band, quick_hint_end, QS_HINT_MS);
+}
 static int quick_volume(void) {
 #if M1PLUS /* the knob stays volume in Quick Settings (the user's choice, 2026-11-11): brightness is touch-only */
     return 1;
@@ -9659,6 +9722,7 @@ static int quick_wheel_toggle(void *top) {
     int volume = !quick_volume();
     st.qs_wheel = 1 + volume;
     write_int_config(volume, "Q2POD", "QSVOLUME");
+    quick_hint(top, volume);
     return 1;
 }
 /* The window manager's pointer stays "pressed" when a touch's release never reaches it: every tick

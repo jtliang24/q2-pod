@@ -155,12 +155,19 @@ static void lrc_push(const lrc_line *l, unsigned n, int clear) {
  * wait for ringnav_lyric, which reads them again as a tag's, with their milliseconds and word
  * stamps and without blank lines. */
 static char *lrc_file;
+/* A file's text, NUL-ended, its first LYRIC_TAG_MAX bytes; 0 when it can't be read. */
+static char *file_text(const char *path) {
+    void *f = fopen(path, "rb");
+    char *t = f ? calloc(1, LYRIC_TAG_MAX + 1) : 0;
+    if (t) fread(t, 1, LYRIC_TAG_MAX, f);
+    if (f) fclose(f);
+    return t;
+}
+
 void *ringnav_lrc_open(const char *path, const char *mode) {
-    void *f = fopen(path, mode), *g = f ? fopen(path, "rb") : 0;
+    void *f = fopen(path, mode);
     free(lrc_file);
-    lrc_file = g ? calloc(1, LYRIC_TAG_MAX + 1) : 0;
-    if (lrc_file) fread(lrc_file, 1, LYRIC_TAG_MAX, g);
-    if (g) fclose(g);
+    lrc_file = f ? file_text(path) : 0;
     return f;
 }
 
@@ -171,10 +178,8 @@ void *ringnav_lrc_open(const char *path, const char *mode) {
  * This checks the first LYRIC_TAG_MAX bytes, as the loader parses them.
  * ponytail: a character cut at that limit fails it; a .lrc that long has not been seen. */
 int ringnav_lrc_utf8(const char *path) {
-    void *f = fopen(path, "rb");
-    char *s = f ? calloc(1, LYRIC_TAG_MAX + 1) : 0;
-    int ok = s && (fread(s, 1, LYRIC_TAG_MAX, f), utf8_text(s));
-    if (f) fclose(f);
+    char *s = file_text(path);
+    int ok = s && utf8_text(s);
     free(s);
     return ok;
 }
@@ -216,6 +221,16 @@ int ringnav_lyric(void) {
             lrc_push(l, n, 0);
             ret = 1;
         }
+    }
+    /* A card app's streamed track (a 0xf1 queue, which stock and the tags above skip): the .lrc the
+     * app left for it (tidal.c app_lyrics), its server's lyrics, synced or plain. */
+    char lp[96];
+    /* M1PLUS: no URL queues (unported), and V2.1's REC_TIDAL_ID isn't pinned */
+    if (!M1PLUS && I(MCL_TYPE, 0) == 0xf1 && q && pos < deque_size(q) && (r = deque_at(q, pos)) &&
+        app_lyrics(P(r, REC_TIDAL_ID), lp, sizeof lp) && (file = file_text(lp)) &&
+        (n = lrc_parse(file + 3 * !memcmp(file, "\xef\xbb\xbf", 3), &l, &m)) > 0) {
+        lrc_push(l, n, 0);
+        ret = 1;
     }
     /* every load sends its synced lines, or none (the rows hold unsynced ones): never the last's */
     lyrics_publish(l, n > 0 && l[0].time != LRC_FAR ? n : 0, m);

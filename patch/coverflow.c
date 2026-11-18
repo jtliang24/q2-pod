@@ -12,7 +12,8 @@
 #define CF_W (UI_W - 2 * CF_EDGE)
 /* The theme's page rows' text column; the M1's narrower rows keep its own CF_EDGE. */
 #define PAGE_X(T) (M1PLUS ? CF_EDGE : (T)->page_x)
-#define BUILDING ART_DIR "/building" /* the key of the album the worker is on (strike) */
+#define BUILDING ART_DIR "/building" /* the key and track of the album the worker is on (strike) */
+#define CRASH_LOG PEQ_ROOT "/mnt/mmc/q2-crash.log"
 #define MIN_FREE_MB 16 /* no new cache files below this much free space on the card */
 #define ART_NEAR 3 /* real art only this many covers either side, like PictureFlow's cache */
 /* Home's without a theme's pane (home_pane_paint), at 290px (stock's: 110) */
@@ -38,10 +39,36 @@ static int library_write(int (*stock)(void *, void *), void *a, void *b) {
     ++library_gen;
     return result;
 }
-int coverflow_scan_all(void *a, void *b) {
+/* Stock's songtable has only its primary key, so an album's songs (getMusicByAlbum's like, on the
+ * UI thread at each album open), a file's row (deleteMusicFromMusicDb, the folder scan's check and
+ * refresh) and Recently Added each read the whole table. Update Local Music drops the table, and
+ * its indexes with it, so a scan ends by adding them: on its own thread and stock's shared handle,
+ * while the library still reads as scanning. A library no scan has run on since has none and reads
+ * as before. A reader on another connection makes the create fail (no busy timeout), until the
+ * next scan. time_create is desc: an index keeps equal keys in rowid order, as stock's sort did,
+ * so songs of one second (a CUE image's tracks) keep their order newest first (Recently Added,
+ * getAllMusic(3)); oldest first (getAllMusic(4)) library_query adds id for it. ponytail: the album groupings
+ * (getAllAlbum, ALBUM_SQL, an artist's albums) walk songtable_album too, a row lookup each in
+ * album order: over twice a scan's page reads (docs/internals.md).
+ * A full scan (drops): toolsInitDatabase drops songtable and creates it again on the connection
+ * the tools* functions share, which has no busy handler. A count still reading songtable on its
+ * own connection made the drop fail, then the create, and stock skipped the update without a word.
+ * So the scan's thread waits for the counts first (library_counting), outside SQLite; Back ends
+ * the wait and the scan. */
+static int library_scan(int (*stock)(void *, void *), void *a, void *b, int drops) {
+    if (drops) {
+        while (library_counting() && !toolsGetUserStop()) usleep(100000);
+        if (toolsGetUserStop()) return 1; /* as wait_scan skips a stopped scan: nothing changes */
+    }
     library_scope_scan();
-    return library_write(stock_scan_all_trampoline, a, b);
+    int result = library_write(stock, a, b);
+    toolsUpdateDbTable("/mnt/data/database.db",
+                       "create index if not exists songtable_album on songtable(album collate nocase);"
+                       "create index if not exists songtable_filename on songtable(filename);"
+                       "create index if not exists songtable_time_create on songtable(time_create desc)");
+    return result;
 }
+int coverflow_scan_all(void *a, void *b) { return library_scan(stock_scan_all_trampoline, a, b, 1); }
 /* toolsGetFileCreateTime (0x5bddc4) dates a song (time_create, Recently Added's order) by stat's
  * st_ctime, on FAT32 the directory entry's creation time, but by st_atime on exFAT cards, where
  * stat has no creation time; every read moves that, so a full update dated the whole library to
@@ -59,10 +86,7 @@ int ringnav_file_created(const char *path) {
     return stock_file_created_trampoline(path);
 }
 #endif
-int coverflow_scan_folder(void *a, void *b) {
-    library_scope_scan();
-    return library_write(stock_scan_folder_trampoline, a, b);
-}
+int coverflow_scan_folder(void *a, void *b) { return library_scan(stock_scan_folder_trampoline, a, b, 0); }
 int coverflow_delete_song(void *a, void *b) { return library_write(stock_delete_song_trampoline, a, b); }
 
 /* The queue menu resolves the live track list again after its dialog closes. */
@@ -268,7 +292,8 @@ static int beside_art(const char *track, const char *dst, int w, int h, int shar
     static const char *const names[] = { "cover.jpg",  "folder.jpg",  "cover.png",
                                           "folder.png", "cover.webp", "folder.webp" };
     for (unsigned i = 0; i < sizeof(names) / sizeof(*names) && !ok && !shared; ++i) {
-        snprintf(src, sizeof(src), "%.*s/%s", folder, track, names[i]);
+        if (snprintf(src, sizeof(src), "%.*s/%s", folder, track, names[i]) >= (int)sizeof src)
+            continue; /* cut: a prefix of the name, another file's at best */
         ok = !access(src, 4) && fit(src, dst, w, h);
     }
     return ok;
@@ -426,8 +451,10 @@ static void *worker(void *unused) {
         void *note = fopen(BUILDING, "wb"); /* struck at the next open if this build never ends */
         if (note) {
             fwrite(&cf.jobs[cf.done].key, sizeof(unsigned), 1, note);
+            fwrite(cf.jobs[cf.done].track, strlen(cf.jobs[cf.done].track), 1, note);
             fflush(note), fsync(fileno(note)), fclose(note); /* synced: see strike */
         }
+        if (cf.cancel) break; /* a clean end since the loop's head: its note goes with the exit */
         build_art(&cf.jobs[cf.done]);
         ++cf.done;
     }
@@ -438,23 +465,37 @@ static void *worker(void *unused) {
 /* The album the last build never finished, BUILDING's key: demo died on it, or hung on it until the
  * watchdog restarted the Q2, and nothing marked it, so every open would try it again and end the
  * same way. It takes the "no art" marker (unless its cover is there: a death between the rename and
- * the next note) until Refresh Cover Flow; q2-crash.log names its track (docs/boot.md). A clean end
- * mid-build removes the note (coverflow_clean_end), as a power-off is no album's fault. The note
- * is synced in place, a sync per album, and not through a rename, whose directory write a reset
- * could lose: a tester's log (2026-11-09) showed the restart it must outlive is the watchdog's,
- * demo still alive and nothing flushed, with no "last art" line, so the grey disc is what names
- * the album. A torn note reads short and strikes nothing. ponytail: the battery running out
- * mid-build strikes an innocent album; Refresh puts it back. */
+ * the next note) until Refresh Cover Flow. A clean end mid-build removes the note
+ * (coverflow_clean_end), as a power-off is no album's fault. The note is synced in place, a sync
+ * per album, and not through a rename, whose directory write a reset could lose: a tester's log
+ * (2026-11-09) showed the restart it must outlive is the watchdog's, demo still alive and nothing
+ * flushed, with no "last art" line, so the note carries the track and the strike appends it to the
+ * card's q2-crash.log, that restart's own by now (the boot hook moved it there). A torn note reads
+ * short and strikes nothing, or names part of a path. ponytail: the battery running out mid-build
+ * strikes an innocent album; Refresh puts it back. */
 static void strike(void) {
-    unsigned key;
-    char path[512];
-    if (BLOB_IO(BUILDING, key, 0) && access(art_path(path, key, ""), 0)) {
-        void *f = fopen(path, "w");
-        if (f) fclose(f);
+    struct {
+        unsigned key;
+        char track[512];
+    } note = {0};
+    char path[512], line[560];
+    void *f = fopen(BUILDING, "rb");
+    unsigned got = f ? fread(&note, 1, sizeof note - 1, f) : 0;
+    if (f) fclose(f);
+    if (got >= sizeof note.key && access(art_path(path, note.key, ""), 0)) {
+        if ((f = fopen(path, "w"))) fclose(f);
+        int n = snprintf(line, sizeof line, "== cover flow skipped\n%s\n", note.track);
+        if ((f = fopen(CRASH_LOG, "a"))) fwrite(line, 1, n, f), fflush(f), fsync(fileno(f)), fclose(f);
     }
     unlink(BUILDING);
 }
-void coverflow_clean_end(void) { unlink(BUILDING); }
+/* A clean end (power-off, Restart, an update, Rockbox): the worker stops after the album it is on,
+ * writing no note for the next, which the kill that follows would leave for strike, and this one's
+ * goes. */
+void coverflow_clean_end(void) {
+    cf.cancel = 1;
+    unlink(BUILDING);
+}
 
 /* A running worker cancelled and joined, and its poll timer stopped; 1 when one ran. Shared with
  * photos.c and books.c. */
@@ -986,6 +1027,14 @@ int coverflow_jump(void *w, int from, int dir, unsigned *letter) {
         *letter = c;
     }
     return dir > 0 ? to - from : from - to;
+}
+
+/* Round the ends, for the thumb's letters: the first album of the first letter, or of the last. */
+int coverflow_round(int dir, unsigned *letter) {
+    int to = dir > 0 ? 0 : (int)deque_size(cf.albums) - 1;
+    *letter = initial(to);
+    while (dir < 0 && to > 0 && initial(to - 1) == *letter) --to;
+    return to;
 }
 
 typedef struct {
@@ -3340,7 +3389,7 @@ extern int ipod_home(void), ipod_home_rockbox(void), home_shortcut_open(void *, 
     home_lib_on(void), row_preview_on(void), library_search(void);
 extern void library_rows(void *list), stream_rows(void *list);
 extern void home_pane_read(int *services, int *games, int *free_tenths);
-extern int library_count(const char *sql);
+extern int library_count(const char *sql), msg_counting(void);
 extern const char *ipod_home_shortcut(void);
 /* Split's menu width; the art fills the rest. */
 
@@ -4582,3 +4631,8 @@ int coverflow_home(void *win, void *ctx) {
  * it as Coverflow does, since the scan rewrites the records and directory lists they would read. */
 int library_scanning(void) { return *(volatile int *)SCAN_THREAD && !*(volatile int *)SCAN_DONE; }
 #include "m1plus_coverflow_unported.c"
+/* A song count reads songtable on its own connection: Home's count_worker or the scan dialog's
+ * msg_count (classic_pages.c). Each flag is set on the UI thread before its thread starts: msg_count's
+ * as the dialog loads, before stock's init starts the scan's thread, and Home starts no count while
+ * a scan runs. So a scan that finds neither can drop the table. */
+int library_counting(void) { return home.counting == 1 || msg_counting(); }

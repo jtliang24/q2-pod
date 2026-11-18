@@ -375,7 +375,7 @@ extern int stock_keyup_trampoline(void *, void *), stock_touch_trampoline(void *
     stock_btrows_trampoline(void *, void *), stock_playlist_trampoline(void *),
     stock_stream_trampoline(void *, void *), stock_start_player_trampoline(void),
     stock_standby_trampoline(void), stock_cardmount_trampoline(void),
-    stock_usbmode_trampoline(void *, void *, void *, void *),
+    stock_usbmode_trampoline(void *, void *, void *, void *), stock_usb_status_trampoline(void),
     stock_hscroll_start_trampoline(void *), stock_wifi_page_trampoline(void *, void *),
     stock_stream_row_trampoline(void *, void *), stock_netservice_row_trampoline(void *, void *),
     stock_online_match_trampoline(void *);
@@ -397,7 +397,7 @@ enum { SLIDER_LIGHT, SLIDER_MAX, SLIDER_BALANCE, SLIDER_BOOT }; /* st.slider_kin
 int clamp_step(int offset, int maximum, int delta);
 void fill_box(void *canvas, rect_t *r, unsigned color, unsigned radius);
 unsigned put_num(unsigned *s, unsigned v);
-void paint_panel(void *w, void *canvas, const rect_t *r, const char *shadow);
+void paint_panel(void *w, void *canvas, const rect_t *r, const char *shadow, int flat);
 #define PANEL_PAD 8
 #define PANEL_DROP 2
 unsigned stops_row(const stops_t *s, int j, int h) __attribute__((pure));
@@ -436,6 +436,7 @@ int search_key(unsigned key);
 int geom(int group);
 int load_rows(menu_t *m, void *w);
 void *qm_record(void);
+void *qm_collect(void *r);
 void *rec_find(void *songs, const unsigned *slot, unsigned mask, void *r);
 unsigned *rec_index(void *songs, unsigned *mask);
 void reveal(menu_t *m, int id, int immediate);
@@ -554,6 +555,7 @@ int rate_kept(int album, unsigned key);
 int rate_key(void *top, unsigned key);
 int rate_open(void);
 int rate_saved(int k);
+void rate_album_favs(void *album, int on);
 int rate_show(void *win, int pick, unsigned album);
 void rate_bind(void *win); /* ratings: Now Playing's heart */
 int rated_albums(void *ctx, void *event);

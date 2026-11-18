@@ -284,3 +284,4 @@ stay flat or fall.
 | Unported rounds 1 and 2 (Nov 15) | 1.7.0 (`85fe884`) | +4,616/−1,758 over 42 files |
 | Merge step: sync to 1.7.1 (Nov 18) | 1.7.1 (`dc1c017`) | +4,620/−1,755 over 42 files: `np_full`'s restack under the column's parent, `np_line_hold`'s Q2-only `SCROLL_Y`, `lyric_seek` Q2-only beside the M1 scrub's |
 | Merge step: sync to 1.7.3 (Nov 18) | 1.7.3 (`01a48b2`) | +4,631/−1,746 over 53 files: the same seams spread over 1.7.3's split `navigation.c` (`navigation.h`, `home.c`, `ratings.c`, `volume.c`, `library_lists.c`, `np_bar.c`, `playlists.c`, `theme_engine.c`, `coverflow_thumb.c`); `take_find`'s M1 line |
+| Merge step: sync to 1.7.6 (Nov 18) | 1.7.6 (`37a37bd`) | +4,633/−1,747 over 54 files: `theme_rows`' M1 pair moved to `theme_engine.c`, the pull prompt's style in `band_create`, `lyrics.c`'s card-app lookup Q2-only |
