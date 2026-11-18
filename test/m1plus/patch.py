@@ -14417,14 +14417,14 @@ def m1_entry_pages():
     assert 'Library' in m.texts()
     labels=[m.nodes[m.nodes[r]['children'][1]]['text'] for r in rows]
     base=['Shuffle','Artists','Albums','All Songs','Genres','Era','Playlists','Ratings',
-          'Recently Added','Recently Played','Most Played','Frequent','Hi-Res','Long Songs']
+          'Recently Added','Recently Played','Most Played','Hi-Res','Long Songs']  # no Frequent: Most Played is its list (1.7.3)
     assert labels==base+['Podcasts','Photos','Videos','Composers','CD Ripper','Update Local Music'],labels
     # V2.1's Home ids (get_homemenu_showinfo's table at 0x97c940), which its dispatcher indexes
     native={'Artists':'6','Albums':'5','All Songs':'3','Genres':'7','Playlists':'14',
-            'Recently Added':'13','Recently Played':'12','Frequent':'11','Hi-Res':'9',
+            'Recently Added':'13','Recently Played':'12','Hi-Res':'9',
             'Composers':'8','CD Ripper':'15','Update Local Music':'2'}
     assert [m.text(m.get(0x97c940+4*int(i))) for i in native.values()]==['songer','album','mymusic','genre','playlist',
-        'recentadd','recent','many','hr','composer','cdripper','sset_updatemusic']
+        'recentadd','recent','hr','composer','cdripper','sset_updatemusic']
     for row,title in zip(rows,labels):
         if title in native:
             assert m.nodes[row]['name']==native[title]

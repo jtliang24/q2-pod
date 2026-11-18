@@ -73,7 +73,7 @@ int library_page_open(void *ctx, void *event) {
     static const char *const icons[] = { "local_podcasts", "local_audiobooks", "local_photos",
                                          "local_books", "local_videos" };
     char path[sizeof st.media_root];
-    int media[VIDEOS], scrobbles = scrobble_ready(), n = 17 + scrobbles;
+    int media[VIDEOS], scrobbles = scrobble_ready(), n = 16 + scrobbles;
     for (int k = 0; k < VIDEOS; k++) n += media[k] = media_find(k + 1, path);
     void *view = page_list(st.lib_page, st.lib_page, 0, "Library", n, LIB_PITCH);
     library_row(view, "local_shuffle", shuffle_menu, 0, "Shuffle", 1);
@@ -87,7 +87,7 @@ int library_page_open(void *ctx, void *event) {
     m1_native_row(view, "recentadd", "13", "Recently Added");
     m1_native_row(view, "recent", "12", "Recently Played");
     library_row(view, "local_frequentplay", most_played, 0, "Most Played", 1);
-    m1_native_row(view, "many", "11", "Frequent");
+    /* no Frequent (V2.1's "many", 11): Most Played is its list, from every listen (upstream 1.7.3, home.c) */
     m1_native_row(view, "hr", "9", "Hi-Res");
     library_row(view, "local_longsongs", long_songs, 0, "Long Songs", 1);
     for (int k = 0; k < VIDEOS; k++)
