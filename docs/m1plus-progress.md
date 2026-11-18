@@ -5188,6 +5188,55 @@ known-gap DSDIFF did not cut the song on the device. They go to a fix round.
 Restored after the pass: Screen Off at 1 min, boot-target "rockbox". The test folders (`R2Test`,
 `_explaylist_data`) and the test playlists were removed and the library rescanned.
 
+## 92. Merge step: sync to 1.7.1 (Nov 17-18)
+
+Step 1 of `.plan/sync-1-7-6.md` (1.7.0 → 1.7.1 → 1.7.3 → 1.7.6; 1.8.x waits for the V1.34 rebase). `sync/1.7.1`
+from `staging` at `5dc9fd51` (backup `refs/backup/pre-sync-1.7.1`). 37 upstream commits: playing from a lyric line
+and full-screen lyrics on every layout, the App Store's Check for Updates row, the watchdog's stall record, crash logs
+kept on the card, Play Next without copying the queue, Cover Flow's big-PNG and progressive-JPEG skip, and more of
+`test/fw`.
+
+**Conflicts** (`15eafb90`, 5 files), upstream's side with the M1 lines back as seams:
+- `patch/navigation.c`: `np_full`'s new layout keeps `VIEW_DOTS` and restacks the column under its parent on the M1
+  (V2.1's Now Playing column is `view_local`'s child, the Q2's the window's); `ringnav_playing`'s lyric touch keeps
+  `VIEW_LYRIC`; `ringnav_keylong` keeps `hold_previous`.
+- `patch/netupdate.c`: Check for Updates' row map and `check()` keep the M1's Rockbox and Themes skip.
+- `tools/build.py`: `VERSION = '1.7.1'` beside the fork's `Q2_TAR_SHA`.
+- `docs/internals.md`: upstream's Art paragraph with the V2.1 cover-lock sentence back.
+- `README.md`: ours.
+An `unifdef` of the Q2 side against 1.7.1 differs only in those seam lines.
+
+**Follow-ups:**
+- `cfda9742`: playing from a lyric line on the M1 goes through its own scrub (`np_scrub_drag`, `np_scrub_end` on
+  `np_local`); `lyric_seek_hold` is shared, the Q2's `lyric_seek` stays Q2-only.
+- `a6f16ddb`: the stall watch's tunables (`STALL_POLL_MS`, `STALL_MS`, `STALL_AGAIN_MS`) and `REC_SIZE` 0x58 (V2.1's
+  `platformTypeRegister` passes 0x58 at `0x5dbc44`) in `m1plus_offsets.inc`. The watch skips while `st.wdt_long` is
+  set, so round 2's long counts hold.
+- `f2b95414`: `suitemerge.py` for `build`, `patch` and `playback`, then the hand hunks: Check for Updates' row ahead
+  of the apps on the M1 shelf, the lyric mock's parent, full-screen lyrics on the M1 window's size.
+- `b9bc1426`: from the patch gate. `np_line_hold` added the lyric view's `SCROLL_Y` to `widget_to_local`'s answer, but
+  V2.1's `widget_to_local` adds each widget's own offset already (`get_offset`), so a held line on the M1 was one
+  scroll below the finger. The add is Q2-only. `1546508c` finds the held row by V2.1's geometry in the suite.
+
+`q2only.py`, the `offsets.inc`/`build.py` diff and the hex-literal check found nothing more; 1.7.1's new shared C
+names no Q2 image or screen size. `ports.py` classifies all 802 hooks, sites and names, none new.
+
+**Gates** (from `work/gatetree` at `1546508c`): all 25 pass. The Q2's `update.tar` is byte-identical to 1.7.1's
+build (`45c5f9787da5`). `--dev` **V065m** in `work/sync/1.7.1/`: `patch.py` runs 2,189 scenarios, 114 `NOT PORTED`;
+`pytest test/unit` passes 1,295 and `test/fw` 4,244. Logs: `work/sync/1.7.1-gates/`. The function diff against
+`V079m` (`work/sync/1.7.1-fndiff.txt`): 252 changed, 12 added, 0 removed, of 1,685. The added: `lyric_aim`,
+`lyric_seek`, `np_line_hold`, `lyrics_aim`, `lyrics_start`, `stall_add`, `stall_find`, `stall_read`, `stall_watch`,
+`sh_tagged`, `sh_told`, `reverse_rows`.
+
+**Unported rows:** none; 1.7.1's features all reach the M1.
+
+**For the device pass** (on `V079m`'s ground):
+- Now Playing's lyrics: hold a line to play from it (playing and paused), the line under the finger; full-screen
+  lyrics on the iPod layout and Modern, and Back to Now Playing;
+- the App Store: Check for Updates as the first row, its toast with the count, no Rockbox or Themes rows;
+- Play Next on a long queue, and with Crossfade (G4's ground);
+- a crash log or stall record on the card after a forced stall (`/mnt/sdcard/` logs, no reboot loop).
+
 ## How to check a build now
 
 ```sh

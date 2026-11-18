@@ -94,7 +94,7 @@ print('V2.1 iPod page inventory checks passed.')
 def boot_check(s90play=None):
     """S90play's dual boot under the host sh, with stand-in programs: build.py's BOOT_HOOK, or a
     built rootfs's whole S90play (its dbus start stubbed), run as init runs it."""
-    import subprocess, tempfile, pathlib
+    import os, subprocess, tempfile, pathlib
     from build import BOOT_HOOK, ROCKBOX_FLAG, WIFI_OFF
     with tempfile.TemporaryDirectory(prefix='q2-boot-') as tmp:
         r = pathlib.Path(tmp)
@@ -117,7 +117,7 @@ def boot_check(s90play=None):
         assert 'usleep 2000000' in script and '\n            rockbox\n            kill $! 2>/dev/null\n' in script  # called off once Rockbox is gone
         script = script.replace('usleep 2000000', f'echo late >> {r}/order')  # runs in line here: & is stripped above
         for real in ('killall -9', 'ifconfig', 'wlan0', 'wpa_supplicant', 'udhcpc', 'wifi_connect'): assert real not in script, real
-        for d in ('proc', 'mnt/data', 'mnt/mmc/.rockbox', 'tmp', 'usr/bin', 'release/bin'): (r/d).mkdir(parents=True)
+        for d in ('proc', 'mnt/data', 'mnt/mmc/.rockbox', 'tmp', 'usr/bin', 'release/bin', 'bin'): (r/d).mkdir(parents=True)
         def exe(path, body): (r/path).write_text('#!/bin/sh\n' + body + '\n'); (r/path).chmod(0o755)
         # demo takes Home's Rockbox row (leaves the flag) as many times as the shortcuts file says
         flag, shortcuts = f'{r}{ROCKBOX_FLAG}', r/'shortcuts'
@@ -134,7 +134,7 @@ def boot_check(s90play=None):
             if card: exe('mnt/mmc/.rockbox/rockbox', f'pwd >> {r}/ran; echo rockbox >> {r}/order; exit {code}')
             else: rb.unlink(missing_ok=True)
             (r/'ran').write_text(''); (r/'order').write_text('')
-            subprocess.run(['sh', '-c', script, 'S90play', 'start'], check=True)
+            subprocess.run(['sh', '-c', script, 'S90play', 'start'], check=True, env=dict(os.environ, PATH=f'{r}/bin:' + os.environ['PATH']))
             return (r/'ran').read_text().split(), target.exists() and target.read_text().strip()
         (r/'proc/mounts').write_text('')
         rockbox = [str(rb.parent), 'demo']
@@ -186,6 +186,24 @@ def boot_check(s90play=None):
         mounts.write_text(f'/dev/mmcblk0p1 {r}/mnt/mmc vfat rw 0 0\n'); boot(True, False, status=0)
         assert copy.read_text() == out and not crash.exists()  # the next boot with a card moves it there
         copy.write_text('kept'); boot(True, False, status=0); assert copy.read_text() == 'kept'  # and never brings it back
+        # a crash before anyone reads the card keeps the one there as q2-crash.log.1, and that one as .2
+        logs = copy, copy.with_name('q2-crash.log.1'), copy.with_name('q2-crash.log.2')
+        def card(): return [f.exists() and f.read_text() for f in logs]
+        def crashed(status): boot(True, False, status=status); return crash.read_text()
+        for f in (crash, *logs): f.unlink(missing_ok=True)
+        first, second = crashed(134), crashed(137)  # the second boot moves the first to the card
+        boot(True, False, status=0)  # and this one the second
+        assert card() == [second, first, False] and not crash.exists()
+        third, fourth = crashed(138), crashed(139)
+        boot(True, False, status=0)
+        assert card() == [fourth, third, second]  # two kept before the newest, the oldest dropped
+        boot(True, False, status=0); assert card() == [fourth, third, second]  # nothing new: nothing moves
+        # a full card: the copy fails, so nothing moves and the log stays on /mnt/data for the next boot
+        fifth = crashed(140); exe('bin/cp', 'exit 1')
+        boot(True, False, status=0); assert card() == [fourth, third, second] and crash.read_text() == fifth
+        (r/'bin/cp').unlink(); copy.with_name('q2-crash.log.new').unlink(missing_ok=True)
+        boot(True, False, status=0); assert card() == [fifth, fourth, third] and not crash.exists()
+        for f in logs: f.unlink()
         out, cp = logged(139, False)
         assert 'demo exit 139' in out and cp is False
         assert logged(0, True) == (False, False) and logged(143, True) == (False, False)
@@ -210,6 +228,21 @@ def boot_check(s90play=None):
             note_file.unlink(); note_log.unlink()
             out, cp = logged(137, False)
             assert f'== {last}' not in out and f'== {name}\n' not in out
+        # an OOM kill (5.10's wording) whose task dump is longer than the 200-line tail: its own lines, from all of
+        # dmesg (a stand-in on PATH) go ahead of the tail
+        head = '[  900.100000] demo invoked oom-killer: gfp_mask=0x100cca(GFP_HIGHUSER_MOVABLE), order=0, oom_score_adj=0'
+        dump = [f'[  900.2{n:05}] [{300 + n:7}]     0 {300 + n:7}     2000      500    16384        0             0 task{n}' for n in range(250)]
+        kill = ('[  900.300000] Out of memory: Killed process 300 (demo) total-vm:150000kB, anon-rss:92000kB, file-rss:1000kB, '
+                'shmem-rss:0kB, UID:0 pgtables:120kB oom_score_adj:0')
+        summary = ('[  900.290000] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,'
+                   'global_oom,task_memcg=/,task=demo,pid=300,uid=0')
+        reap = '[  900.400000] oom_reaper: reaped process 300 (demo), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB'
+        (r/'dmesg').write_text('\n'.join([head, *dump, summary, kill, reap]) + '\n'); exe('bin/dmesg', f'cat {r}/dmesg')
+        out, cp = logged(137, False)
+        assert '== oom\n' in out
+        oom, tail = out.split('== oom\n')[1].split('== dmesg\n')
+        assert oom == f'{head}\n{summary}\n{kill}\n{reap}\n' and head not in tail and kill in tail
+        (r/'bin/dmesg').unlink(); (r/'dmesg').unlink()
         # /mnt/data/q2-state (navigation.c state_poll) still there at boot: the last session ended in a forced
         # restart, or the battery. It goes into q2-crash.log, a new one that says so or the crash's, and goes.
         state, line = r/'mnt/data/q2-state', 'screen:off power:suspending cable:out battery:57 play:paused out:jack\n'
@@ -221,6 +254,14 @@ def boot_check(s90play=None):
         assert '== last state' in out and out.endswith('== cover flow\nstart albums=0 0 ms\nstaged albums=20000 900 ms\n') and not trace.exists()
         trace.write_text('stale\n'); out, cp = logged(0, False)
         assert out is False and not trace.exists()  # no forced restart: dropped, not reported
+        # the UI loop's stall record (navigation.c stall_write) goes in last, and goes
+        stall, record = r/'mnt/data/q2-stall', 'age 20000 ms\ntoasts 1\nstate D\nwchan wait_on_page_bit_common\n'
+        state.write_text(line); trace.write_text('start albums=0 0 ms\n'); stall.write_text(record); out, cp = logged(0, False)
+        assert out.endswith('== cover flow\nstart albums=0 0 ms\n== stall\n' + record) and not stall.exists() and not trace.exists()
+        state.write_text(line); stall.write_text(record); out, cp = logged(0, False)
+        assert out.endswith(line + '== stall\n' + record) and '== cover flow' not in out and not stall.exists()
+        stall.write_text('stale\n'); out, cp = logged(0, False)
+        assert out is False and not stall.exists()  # no forced restart: dropped, not reported
         for f in (crash, copy): f.unlink(missing_ok=True)
         crash.write_text('== demo exit 137\n'); state.write_text(line); boot(True, False, status=0)
         assert crash.read_text().startswith('== demo exit 137\n== last state\n') and line in crash.read_text() and not state.exists()

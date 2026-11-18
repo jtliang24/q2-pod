@@ -452,6 +452,12 @@ static inline int arc_out(int r, int y) {
  * driver's limit of about 23 minutes. */
 #define WDT_MS 60000
 #define WDT_LONG_MS 900000
+/* Stall record (docs/internals.md#watchdog): its thread wakes every STALL_POLL_MS and writes once
+ * the UI loop has not passed for STALL_MS, and again at STALL_AGAIN_MS, both a wake and more
+ * before WDT_MS. */
+#define STALL_POLL_MS 5000
+#define STALL_MS 20000
+#define STALL_AGAIN_MS 45000
 /* Standby limit (docs/internals.md#standby-limit): its three choices after Off, in hours of one
  * Standby, after which the Q2 powers off. */
 #define STANDBY_LIMIT_1 1
@@ -593,6 +599,9 @@ static inline int arc_out(int r, int y) {
 #define REC_DISC 0x40
 #define REC_CUE_START 0x48      /* a CUE track's start and end seconds, 0 otherwise */
 #define REC_CUE_END 0x4c
+/* A row's size, as platformTypeRegister registers stSongInfo (0x5b4150). Its copy (0x5b3b1c) gives
+ * each of the 11 strings at 0x04-0x2c its own buffer, so a row owns them and nothing points into it. */
+#define REC_SIZE 0x58
 /* g_play_id3_info, as player_get_id3info (0x5146bc) parses the playing file: its path, then tags. */
 #define ID3_ALBUM 0x404
 #define ID3_ARTIST 0x504

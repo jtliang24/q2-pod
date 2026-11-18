@@ -443,6 +443,7 @@ typedef struct {
     int wdt;      /* the hardware watchdog's fd: 0 untried, -1 none or refused (wdt_poll) */
     int wdt_long; /* counting WDT_LONG_MS for a long pass (ringnav_wdt_long) */
     int ended;    /* a clean end began: no feed and no state record from here (ringnav_clean_end) */
+    int toasts;   /* toast()'s dialogs open, nested ones too, for the stall record (stall_write) */
     int suspended;  /* inside Standby's suspend (ringnav_standby), for the state record */
     char state[96]; /* the state record last written (state_poll) */
     /* the boot logo's poll: last check, card seen mounted, its sync thread, its failure to toast */
@@ -480,9 +481,11 @@ typedef struct {
     void *np_win, *np_pos, *np_album, *np_slider, *np_remain, *np_elapsed, *np_cover, *np_title;
     int np_bold;             /* the title's font: theme_font's face | px << 2, -1 not set yet */
     void *np_slide, *np_lrc; /* the art/lyrics/info pages and the lyric lines' scroll_view */
-    /* Centred Now Playing's full-screen lyrics (np_full) and where the last touch on them came
-     * down (np_lyric_touch) */
+    /* Now Playing's full-screen lyrics (np_full), where the last touch on them came
+     * down and the timer of its hold on a line (np_lyric_touch) */
     int np_full, np_tap_x, np_tap_y;
+    unsigned np_line_timer;
+    int np_was[9]; /* the column before full screen (np_full) */
     /* The full-screen art's song name, its shade and its window, the fade's step and timer
      * (ringnav_bigcover) */
     void *bc[3];
@@ -4796,7 +4799,7 @@ static void lyric_glide(void *lrc, int to) {
 
 /* The Now Playing timer's follow (LYRIC_FOLLOW in tools/build.py): stock scrolls to the row three
  * lines above the current one, which past the end clamps to it. iPod: lyrics the wheel or a finger
- * moved stay (lyric_held) until the page leaves them or another song starts, and a finger on the
+ * moved stay (lyric_held) until Now Playing goes or another song starts, and a finger on the
  * screen keeps them too; on the page, the follow glides. The lyrics page follows its own playing
  * line (lyric_follow). */
 int ringnav_lyric_follow(void *lrc, int x, int y, int ms) {
@@ -5859,8 +5862,8 @@ static int scrub_expire(const void *info) {
 
 /* The lyrics: stock's 250 ms timer scrolls scroll_lrc to the current line whenever it is elsewhere.
  * Once the wheel or a finger moves them they stay (ringnav_lyric_follow), while the timer keeps the
- * bar and the highlight going, until the slide_view leaves the lyrics page or another song starts;
- * back on the page they follow again. A scrub under way ends first. */
+ * bar and the highlight going, until Now Playing goes or another song starts, a swipe to another
+ * page and back included. A scrub under way ends first. */
 static void lyric_hold(void) {
     scrub_end();
     st.lyric_held = 1;
@@ -5885,10 +5888,26 @@ static void lyric_step(void *lrc) {
     scroll_view_set_offset(lrc, I(lrc, SCROLL_X), y + (step ? step : to > y ? 1 : -1));
 }
 
-/* The wheel let go: the glide ends on the row top nearest its target, so no row is cut at the top.
- * The end is one (lyric_pad). */
+/* The lyrics page's line in the middle: the one whose centre (0 at least, as lyric_follow's) is
+ * nearest the offset, or the glide's target while it moves; the first of those as near. */
+static int lyric_aim(void *lrc) {
+    int at = st.lyric_glide ? (st.lyric_to + 8) >> 4 : I(lrc, SCROLL_Y), aim = 0, near = 1 << 30;
+    for (int i = 0, n = widget_count_children(lrc); i < n; ++i) {
+        int c = lyric_centre(lrc, i), d = (c > 0 ? c : 0) - at;
+        if ((d < 0 ? -d : d) < near) near = d < 0 ? -d : d, aim = i;
+    }
+    return aim;
+}
+
+/* The wheel let go: the glide ends on the row top nearest its target, so no row is cut at the top;
+ * on the lyrics page, with a line in the middle (lyric_aim). The end is one (lyric_pad). */
 static void lyric_snap(void *lrc) {
     lyric_pad(lrc);
+    if (lyrics_on(lrc)) {
+        int c = lyric_centre(lrc, lyric_aim(lrc));
+        lyric_glide(lrc, (c > 0 ? c : 0) * 16);
+        return;
+    }
     int at = st.lyric_glide ? st.lyric_to : I(lrc, SCROLL_Y) * 16, to = 0;
     for (int i = 0, n = widget_count_children(lrc); i < n; ++i) {
         int top = I(widget_get_child(lrc, i), W_Y) * 16;
@@ -5904,8 +5923,8 @@ static void lyric_snap(void *lrc) {
  * timeout itself. While a finger stays on the wheel they stay where it put them; let go, they glide
  * to the nearest row top (lyric_snap). A finger that came down on the lyrics and dragged them holds
  * them as the wheel does; stock's scroll animation stops as it lands, so only the finger moves
- * them, and a swipe that brings the page in holds nothing. Leaving the page drops the hold; the
- * next follow, off the page, jumps to the current line. Another song starts at the top, its hold
+ * them, and a swipe that brings the page in holds nothing. A swipe to another page and back keeps
+ * the hold; leaving Now Playing drops it (np_gone). Another song starts at the top, its hold
  * gone. The lyrics page's rows are its lines, a tick's worth a line. */
 #define LYRIC_ROW_PX 20
 
@@ -5958,21 +5977,45 @@ int ringnav_smart_awake(void) {
     return st.keep_lit;
 }
 
-/* Centred Now Playing's full-screen lyrics (np_lyric_touch): the column (stock's slide_view_view,
- * tools/ipod.py PLAYING_STOCK) goes over the page's other widgets, black and the window's width,
- * its slide_view down to the page dots, and the lines wrap at the new width (lyrics_fit), back on
- * the playing line; off, stock's place again, before the progress bar. A page without a slide_view
- * has none of this: nothing changes. */
+/* Full-screen lyrics (np_lyric_touch): the column (slide_view_view) goes over the page's other
+ * widgets, black and the window's width, its slide_view down to the page dots, and the lines wrap
+ * at the new width (lyrics_fit), back on the playing line; off, its place, index and slide_view's
+ * height before (np_was) again. Centred's column (tools/ipod.py PLAYING_STOCK) keeps its y and
+ * height, its lyrics ending 20 px above its foot. The iPod page's, between the top row and the
+ * bar, takes the whole window: its dots NP_FULL_FOOT above the foot, as Centred's, and its
+ * view_lrc, whose self_layout fixes its place, from the top down to NP_FULL_FOOT above them; off,
+ * both self_layouts are their old place again. A page without a slide_view has none of this. */
+#define NP_FULL_FOOT 20
 static void np_full(int on) {
-    if (!st.np_slide) return; /* a page without stock's slide_view: no column to move */
-    void *col = P(st.np_slide, W_PARENT), *dots = widget_lookup(col, VIEW_DOTS, 1);
-    st.np_full = on;
+    if (!st.np_slide || !on == !st.np_full) return; /* without stock's slide_view: no column */
+    void *col = P(st.np_slide, W_PARENT), *dots = widget_lookup(col, VIEW_DOTS, 1),
+         *view = P(st.np_lrc, W_PARENT);
+    /* off, the layout it started in: Centred's setting changes only the next Now Playing's */
+    int *was = st.np_was, ipod = on ? np_layout() != NP_CENTRED && dots && view : st.np_full == 2;
+    if (on) {
+        int now[] = { I(col, W_X), I(col, W_Y),          I(col, W_W),
+                      I(col, W_H), widget_index_of(col), I(st.np_slide, W_H) };
+        memcpy(was, now, sizeof now);
+        if (ipod) was[6] = I(view, W_Y), was[7] = I(view, W_H), was[8] = I(dots, W_Y);
+    }
+    st.np_full = on ? 1 + ipod : 0;
     /* M1 Plus: the column is view_local's child, beside the bar, as the Q2's are the window's */
-    widget_restack(col, on ? widget_count_children(M1PLUS ? P(col, W_PARENT) : st.np_win) : widget_index_of(st.np_slider));
+    widget_restack(col, on ? widget_count_children(M1PLUS ? P(col, W_PARENT) : st.np_win) : was[4]);
     widget_set_prop_str(col, "style:normal:bg_color", on ? "#000000" : "#00000000");
-    widget_move_resize(col, on ? 0 : NP_COLUMN_X, I(col, W_Y), on ? I(st.np_win, W_W) : NP_COLUMN_W,
-                       I(col, W_H));
-    widget_resize(st.np_slide, I(col, W_W), on && dots ? I(dots, W_Y) : NP_COLUMN_SLIDE_H);
+    int h = I(st.np_win, W_H), foot = on ? h - NP_FULL_FOOT : was[8];
+    if (!on)
+        widget_move_resize(col, was[0], was[1], was[2], was[3]);
+    else
+        widget_move_resize(col, 0, ipod ? 0 : was[1], I(st.np_win, W_W), ipod ? h : was[3]);
+    if (ipod) {
+        char y[12], vy[12], vh[12];
+        tk_snprintf(y, sizeof y, "%d", foot);
+        tk_snprintf(vy, sizeof vy, "%d", on ? 0 : was[6]);
+        tk_snprintf(vh, sizeof vh, "%d", on ? -NP_FULL_FOOT : was[7]);
+        widget_set_self_layout_params(dots, "0", y, "100%", "10");
+        widget_set_self_layout_params(view, "0", vy, "100%", vh);
+    }
+    widget_resize(st.np_slide, I(col, W_W), on && dots ? (ipod ? foot : I(dots, W_Y)) : was[5]);
     widget_layout(col);
     if (lyrics_fit(st.np_lrc)) lyric_pad(st.np_lrc);
     /* the follow takes them; the offset the layout left is no drag of the touch (lyric_poll) */
@@ -5986,12 +6029,12 @@ static void lyric_poll(void) {
         st.lyric_song = song;
         lyric_top(lrc);
     }
+    if (st.lyric_held == 2 && mclGetPlayStatus() == 2) st.lyric_held = 0; /* lyric_seek's, played */
     int page = lrc && st.np_slide && widget_get_prop_int(st.np_slide, "value", 0) == 1;
     if (st.np_full && !page) np_full(0); /* full-screen lyrics end off their page */
     int touch = lrc && window_manager_get_top_window(wm) == st.np_win && pointer_down();
     int shown = page && lyrics_shown(),
         on = shown && widget_count_children(lrc) && mclGetLyricSize() > 0;
-    if (!page) st.lyric_held = 0;
     if (touch && !st.lyric_touch) {
         st.lyric_touch = page ? 1 : 2;
         st.lyric_drag_y = page ? I(lrc, SCROLL_Y) : 0;
@@ -6069,6 +6112,7 @@ static void lyric_poll(void) {
         st.lyric_glide = 0;
     else if (st.lyric_glide)
         lyric_step(lrc);
+    if (shown) lyrics_aim(lrc, st.lyric_held ? lyric_aim(lrc) : -1); /* a scan of the rows */
 }
 
 /* A tick on the lyrics page while the track has lyrics, which comes only before lyric_poll takes
@@ -6144,6 +6188,40 @@ static void scrub_start(void) {
     rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
 }
 
+/* The song plays from ms, a synced line's start (lyrics_start) on the lyrics page, a scrub to it
+ * committed at once (scrub_end), and the lyrics follow again; paused, the seek waits for Play, and
+ * so does the follow (lyric_held 2, lyric_poll), so they stay on the line chosen. 0 for an unsynced
+ * line (-1), no bar or a line past the song's end. ponytail: the player seeks whole seconds, so it
+ * lands up to 999 ms before the line, and the follow may go back a line that started in that
+ * second; a millisecond seek would need hciplayer's own. */
+static int lyric_seek(int ms) {
+    int max = st.np_slider ? widget_get_prop_int(st.np_slider, "max", 0) : 0;
+    if (ms < 0 || !st.np_slider || (max > 0 && ms / 1000 > max)) return 0;
+    scrub_start();
+    st.scrub_to = ms / 1000, st.scrub_moved = 1;
+    widget_set_prop_int(st.np_slider, "value", st.scrub_to);
+    clock_text(st.np_elapsed, 0, st.scrub_to);
+    np_sync(st.np_win);
+    scrub_end();
+    st.lyric_held = mclGetPlayStatus() == 2 ? 0 : 2, st.lyric_spun = 0;
+    return 1;
+}
+
+#endif
+
+/* Play/Pause held on the lyrics page in front: the song plays from the line in the middle
+ * (lyric_aim) once the wheel or a finger holds them, else the playing line, so a hold without
+ * scrolling starts it again; before the first line, the song's start, once its lyrics are synced.
+ */
+static int lyric_seek_hold(void) {
+    void *lrc = st.np_lrc;
+    if (!lyrics_shown() || !lyrics_on(lrc)) return 0;
+    int line = st.lyric_held ? lyric_aim(lrc) : lyrics_line(lrc, lyrics_now(), 1);
+    if (line < 0 && !st.lyric_held) return lyric_seek(lyrics_start(lrc, 0) >= 0 ? 0 : -1);
+    return lyric_seek(lyrics_start(lrc, line));
+}
+
+#if !M1PLUS /* m1plus_np_view.c */
 /* Single Press Scrub (IPOD SCRUBSINGLE)'s single press, DOUBLE_CLICK_MS on: scrub starts. */
 static int np_scrub(const void *info) {
     st.np_press = 0;
@@ -6199,7 +6277,8 @@ static int np_gone(void *win, void *event) {
         st.np_pos = st.np_album = st.np_remain = st.np_slider = st.np_elapsed = st.np_cover =
             st.np_slide = st.np_lrc = st.np_title = (void *)0;
         st.scrub_moved = 0; /* the page is going: no seek */
-        st.np_off = st.np_full = 0;
+        st.np_off = st.np_full = st.lyric_held = 0;
+        stop_timer(&st.np_line_timer);
         stop_timer(&st.np_marquee);
 #if M1PLUS
         stop_timer(&st.np_repaint);
@@ -6302,11 +6381,36 @@ int stream_ipod(void *art, void *const text[4], void *elapsed, void *remain, voi
     return 1;
 }
 
-/* Centred Now Playing's lyrics page (ringnav_playing): a touch that lifts within TAP_PX of where it
- * came down, so neither a swipe nor a drag of the lines, switches them to full screen and back
- * (np_full), once there are lyrics to show. The slide_view taking the touch for a swipe (its
- * abort) ends full screen at once, so the pages slide in their column. Returns 0: a STOP would
- * keep the slide_view's grab (rate_fav_click). */
+/* A finger held still on the lyrics page RATE_HOLD_MS (np_lyric_touch): the song plays from the
+ * line under it (lyric_seek), an unsynced one or none doing nothing, and its lift is no tap. */
+static int np_line_hold(const void *info) {
+    st.np_line_timer = 0;
+    void *lrc = st.np_lrc;
+    int xy[2] = { st.np_tap_x, st.np_tap_y };
+    st.np_tap_x = 1 << 20;
+    if (!lrc || !st.np_slide || !usable() || !pointer_down() || !lyrics_on(lrc) ||
+        window_manager_get_top_window(window_manager()) != st.np_win ||
+        widget_get_prop_int(st.np_slide, "value", 0) != 1)
+        return 0;
+    widget_to_local(lrc, xy);
+    if (!M1PLUS) /* M1 Plus: V2.1's widget_to_local adds the view's own offset already (get_offset) */
+        xy[1] += I(lrc, SCROLL_Y); /* its rows' place: the view's own offset is no parent's */
+    for (int i = widget_count_children(lrc); i-- > 0;) {
+        void *row = widget_get_child(lrc, i);
+        if (xy[1] >= I(row, W_Y) && xy[1] < I(row, W_Y) + I(row, W_H)) {
+            lyric_seek(lyrics_start(lrc, i));
+            break;
+        }
+    }
+    return 0;
+}
+
+/* Now Playing's lyrics page (ringnav_playing): a touch that stays within TAP_PX of where it came
+ * down, so neither a swipe nor a drag of the lines, plays from the line under it once held
+ * RATE_HOLD_MS (np_line_hold), else at its lift switches them to full screen and back (np_full),
+ * once there are lyrics to show. The slide_view taking the touch for a
+ * swipe (its abort) ends full screen at once, so the pages slide in their column. Returns 0: a STOP
+ * would keep the slide_view's grab (rate_fav_click). */
 #define TAP_PX 10 /* AWTK's drag threshold */
 static int np_lyric_touch(void *ctx, void *event) {
     int type = I(event, EVENT_TYPE), x = I(event, EVENT_X), y = I(event, EVENT_Y);
@@ -6314,12 +6418,15 @@ static int np_lyric_touch(void *ctx, void *event) {
               (unsigned)(y - st.np_tap_y + TAP_PX) <= 2 * TAP_PX;
     if (type == EVT_POINTER_DOWN) {
         st.np_tap_x = x, st.np_tap_y = y;
+        rearm(&st.np_line_timer, np_line_hold, RATE_HOLD_MS);
         return 0;
     }
+    if (type == EVT_POINTER_MOVE_BEFORE && tap) return 0;
+    stop_timer(&st.np_line_timer);
     st.np_tap_x = 1 << 20; /* used or taken for a swipe: a later lift is no tap */
     if (type == EVT_POINTER_ABORT) {
         if (st.np_full) np_full(0);
-    } else if (tap && (st.np_full || lyrics_on(st.np_lrc)))
+    } else if (type == EVT_POINTER_UP_BEFORE && tap && (st.np_full || lyrics_on(st.np_lrc)))
         np_full(!st.np_full);
     return 0;
 }
@@ -6340,6 +6447,9 @@ static int np_art_click(void *ctx, void *event) {
 int ringnav_playing(void *win, void *ctx) {
     if (st.np_full)
         np_full(0); /* another Now Playing: the last one's lyrics back in their column */
+    /* and their place: np_gone leaves a page this one replaces alone */
+    st.lyric_held = 0;
+    stop_timer(&st.np_line_timer);
     int result = stock_playing_trampoline(win, ctx);
     if (!win) return result;
     rate_bind(win);
@@ -6369,9 +6479,9 @@ int ringnav_playing(void *win, void *ctx) {
     st.lyric_song = st.lyric_rows_song = np_track(); /* no song change at the start */
     lyric_init();                                    /* the rows stock's init built */
     void *lyric = widget_lookup(win, VIEW_LYRIC, 1);
-    static const unsigned touch[] = { EVT_POINTER_DOWN, EVT_POINTER_UP_BEFORE, EVT_POINTER_ABORT };
-    for (unsigned i = 0; lyric && np_layout() == NP_CENTRED && i < sizeof touch / sizeof *touch;
-         ++i)
+    static const unsigned touch[] = { EVT_POINTER_DOWN, EVT_POINTER_MOVE_BEFORE,
+                                      EVT_POINTER_UP_BEFORE, EVT_POINTER_ABORT };
+    for (unsigned i = 0; lyric && i < sizeof touch / sizeof *touch; ++i)
         widget_on(lyric, touch[i], np_lyric_touch, (void *)0);
     st.np_hash = 0;
     const char *file;
@@ -10681,13 +10791,17 @@ static int qm_apply(void *add, int next) {
     return n != 0;
 }
 
+/* A 2 s modal dialog: its loop runs every ringnav_sleep poll again, so a poll clears or latches
+ * what it toasts first (logo_poll). */
 void toast(const char *text) {
     struct {
         int kind, ms;
         char text[0x400];
     } info = { 1, 2000, { 0 } };
     for (unsigned i = 0; text[i] && i < sizeof info.text - 1; ++i) info.text[i] = text[i];
+    ++st.toasts; /* its loop runs the UI's polls, which may toast again */
     navigator_to_with_context("dialog/msginfo_dialog", &info);
+    --st.toasts;
 }
 
 static int all_songs(void *music) {
@@ -14216,7 +14330,8 @@ static void quick_poll(void) {
  * Internet Radio station it is the favourite toggle, on a Spotify track Add to Queue (its reply
  * toasts), on a card app's row its hold op (addon_hold: a Deezer list downloaded whole), in Quick
  * Settings the wheel's brightness/volume switch, on View Queue's shuffle list
- * Play Next (un_hold), the release latched as the queue menu's. */
+ * Play Next (un_hold), on Now Playing's synced lyrics a seek to a line (lyric_seek_hold), the
+ * release latched as the queue menu's. */
 #if M1PLUS
 static int hold_previous(unsigned key); /* m1plus_nav_back.c */
 #endif
@@ -14228,7 +14343,8 @@ int ringnav_keylong(void *ctx, void *event) {
     if (!event || I(event, EVENT_KEY) != KEY_PLAY) return stock_keylong_trampoline(ctx, event);
     void *top = window_manager_get_top_window(window_manager());
     const char *fav = radio_hold(top);
-    int taken = fav || quick_wheel_toggle(top) || spot_hold(top) || addon_hold(top) || un_hold(top);
+    int taken = fav || quick_wheel_toggle(top) || spot_hold(top) || addon_hold(top) ||
+                un_hold(top) || lyric_seek_hold();
     if (!taken && qm_hold()) return STOP;
     /* Stock has no Play/Pause hold, so its release would play or pause: Classic's does nothing. */
     if (taken || (usable() && classic_pages())) {
@@ -14570,6 +14686,110 @@ int ringnav_wifi_signal(void) {
 #define WDT_START 0x8004570d /* an int of milliseconds, by pointer */
 #define WDT_STOP 0x2000570e
 #define WDT_FEED 0x2000570f
+/* Stall record (docs/internals.md#watchdog): after the watchdog's reset q2-crash.log says only that
+ * demo did not end. A thread started with the watchdog wakes every STALL_POLL_MS; once the UI loop
+ * has not passed for STALL_MS, and again at STALL_AGAIN_MS, it writes /mnt/data/q2-stall and syncs
+ * it: the time since the pass, toast()'s dialogs open, the UI thread's state, wchan and syscall
+ * line (sp and pc), MemAvailable, pgmajfault and workingset_refault_file, then the stack words from
+ * that sp as a q2remote --prof line (ra 0). The time counts from the thread's first wake after the
+ * pass, so up to STALL_POLL_MS short. The UI loop is demo's main thread, whose stat, wchan and
+ * syscall /proc/self has. A pass removes the record: a stall that recovered is not what it is for.
+ * Standby, a clean end and a long pass (ringnav_wdt_long) write nothing. Only open, read, write,
+ * fsync, close and unlink on its own buffers, and the stack read in place: no stock call, no
+ * allocation, no lock the UI thread takes. S90play puts it in q2-crash.log as "== stall". */
+#define STALL_FILE "/mnt/data/q2-stall"
+#define STALL_WORDS 160 /* q2remote --prof's STACK_WORDS */
+#define STALL_IN 4096   /* a /proc file's start, read; the record's buffers are the thread's own */
+static struct {
+    volatile unsigned passes; /* the UI loop's, counted by wdt_poll */
+    unsigned seen, at;        /* the thread's: passes at its last wake, and since when (now_ms) */
+    int level;                /* records written since that pass */
+} stall __attribute__((section(".scratch")));
+static void stall_read(char *in, const char *path) { /* the file's start, NUL-terminated */
+    int fd = open(path, 0x80000), n = 0, got;        /* O_RDONLY | O_CLOEXEC */
+    while (fd >= 0 && n < STALL_IN - 1 && (got = read(fd, in + n, STALL_IN - 1 - n)) > 0) n += got;
+    if (fd >= 0) close(fd);
+    in[n] = 0;
+}
+/* in's line that starts with key */
+static const char *stall_find(const char *in, const char *key) {
+    unsigned n = strlen(key);
+    for (const char *s = in; *s; ++s) {
+        if (!strncmp(s, key, n)) return s;
+        while (*s && *s != '\n') ++s;
+        if (!*s) break;
+    }
+    return 0;
+}
+static char *stall_add(char *p, char *end, const char *label, const char *s) { /* s's first line */
+    if (!s || p >= end) return p;
+    while (*label && p < end) *p++ = *label++;
+    while (*s && *s != '\n' && p < end) *p++ = *s++;
+    *p++ = '\n';
+    return p;
+}
+static void stall_write(unsigned age) {
+    char in[STALL_IN], out[2560], *p = out, *last = out + sizeof out - 1, *end = last - 11;
+    char state = '?';
+    unsigned long tid = 0, top = 0, sp = 0, pc = 0, d;
+    p += snprintf(p, 64, "age %u ms\ntoasts %d\n", age, st.toasts);
+    stall_read(in, "/proc/self/stat"); /* "pid (comm) S ...": the comm may hold ") " */
+    const char *s = strrchr(in, ')');
+    if (s && s[1] == ' ' && s[2]) state = s[2];
+    for (int field = 2; s && *s; ++s) /* 28, startstack: the main stack's top */
+        if (*s == ' ' && ++field == 28) {
+            for (++s; *s >= '0' && *s <= '9'; ++s) top = top * 10 + *s - '0';
+            break;
+        }
+    for (s = in; *s >= '0' && *s <= '9'; ++s) tid = tid * 10 + *s - '0';
+    p += snprintf(p, 16, "state %c\n", state);
+    stall_read(in, "/proc/self/wchan");
+    p = stall_add(p, last, "wchan ", in);
+    stall_read(in, "/proc/self/syscall"); /* "nr args sp pc", "-1 sp pc" or "running" */
+    p = stall_add(p, last, "syscall ", in);
+    for (s = in; (s = strstr(s, "0x"));) {
+        unsigned long v = 0;
+        for (s += 2; (d = *s >= '0' && *s <= '9' ? *s - '0' : (*s | 32) - 'a' + 10) < 16; ++s)
+            v = v << 4 | d;
+        sp = pc, pc = v; /* the last two */
+    }
+    stall_read(in, "/proc/meminfo");
+    p = stall_add(p, last, "", stall_find(in, "MemAvailable:"));
+    stall_read(in, "/proc/vmstat");
+    p = stall_add(p, last, "", stall_find(in, "pgmajfault "));
+    p = stall_add(p, last, "", stall_find(in, "workingset_refault_file "));
+    /* The stack's words that could be code, as --prof's, read in place: from a blocked thread's sp
+     * up to the main stack's top is its own stack, mapped; no other is within 8 MB of that top. */
+    if (sp && !(sp & 3) && sp < top && top - sp < 0x800000 && p + 40 < end) {
+        p += snprintf(p, 40, "%lu %c %lx 0", tid, state, pc);
+        for (unsigned long a = sp; a < sp + 4 * STALL_WORDS && a + 4 <= top && p < end; a += 4) {
+            unsigned w = *(const volatile unsigned *)a;
+            if (w >= 0x400000 && w < 0x80000000 && !(w & 3)) p += snprintf(p, 10, " %x", w);
+        }
+        *p++ = '\n';
+    }
+    /* O_WRONLY | O_CREAT | O_CLOEXEC, and O_APPEND, or O_TRUNC for the first */
+    int fd = open(STALL_FILE, stall.level ? 0x80109 : 0x80301, 0644);
+    if (fd < 0) return;
+    write(fd, out, p - out);
+    fsync(fd);
+    close(fd);
+    ++stall.level;
+}
+static void stall_step(void) {
+    unsigned now = (unsigned)now_ms(), passes = stall.passes;
+    if (passes != stall.seen || st.ended || st.suspended || st.wdt_long) {
+        if (passes != stall.seen && stall.level) unlink(STALL_FILE), stall.level = 0;
+        stall.seen = passes, stall.at = now;
+        return;
+    }
+    unsigned age = now - stall.at;
+    if (stall.level < 2 && age >= (stall.level ? STALL_AGAIN_MS : STALL_MS)) stall_write(age);
+}
+static void *stall_watch(void *arg) {
+    for (;;) usleep(STALL_POLL_MS * 1000), stall_step();
+    return arg;
+}
 static void wdt_set(int on) { /* Standby's suspend and the resume after it; a clean end */
     int ms = WDT_MS;
     if (st.wdt > 0) ioctl(st.wdt, on ? WDT_START : WDT_STOP, &ms);
@@ -14587,6 +14807,7 @@ void ringnav_wdt_long(void) {
 }
 static void wdt_poll(void) {
     if (st.ended || st.wdt < 0) return;
+    ++stall.passes;
     if (st.wdt && st.wdt_long) {
         st.wdt_long = 0;
         wdt_span(WDT_MS);
@@ -14596,6 +14817,8 @@ static void wdt_poll(void) {
     int fd = open(WDT_DEV, 0x80002), ms = WDT_MS; /* O_RDWR, as libhardware2, | O_CLOEXEC (MIPS) */
     st.wdt = fd > 0 && !ioctl(fd, WDT_START, &ms) ? fd : -1;
     if (fd > 0 && st.wdt < 0) close(fd);
+    unsigned long tid;
+    if (st.wdt > 0 && !pthread_create(&tid, 0, stall_watch, 0)) pthread_detach(tid);
 }
 /* The state record (docs/internals.md#watchdog): /mnt/data/q2-state says what the Q2 is doing, one
  * line rewritten and synced whenever it changes: the screen, Standby's suspend, the cable, the
@@ -14643,6 +14866,7 @@ void ringnav_clean_end(void) {
     st.ended = 1;
     wdt_set(0);
     unlink(STATE_FILE);
+    unlink(STALL_FILE); /* one the thread hadn't removed yet: S90play's next demo never would */
 }
 /* Standby limit (docs/internals.md#standby-limit): device_standby puts the radios, the card and the
  * DAC down, then toolsIntoStandby suspends to RAM ("mem" to /sys/power/state) and returns once
@@ -14775,7 +14999,8 @@ static int card_mounted(void) {
 }
 static void logo_poll(void) {
     unsigned now = time_now_ms();
-    if (st.logo_err) toast(st.logo_err), st.logo_err = 0;
+    const char *said = st.logo_err;
+    if (said) st.logo_err = 0, toast(said); /* first: a toast's dialog polls here again */
     /* Mount edges (boot, USB storage's end) come lit; dark it keeps its edge for the first lit
      * poll. */
     if (!g_backlight_status || st.logo_busy || (st.logo_at && now - st.logo_at < CHARGE_POLL_MS))
