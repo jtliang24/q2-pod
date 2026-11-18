@@ -9177,11 +9177,15 @@ m=lyric_page(config={'WHEELSENSITIVITY':'100'}); loop(m); hold(m); loop(m,-14); 
 m=lyric_page(); loop(m); loop(m,-56); settle(m); assert y(m)==40
 assert follow(m,0)==40; m.advance(O['SCRUB_MS']+1000); assert settle(m)[-1]==40 and follow(m,0)==40
 assert not did(m,'playing_timer_clear') and not m.starts; passed()
-# Swiped away, the hold goes and the follow jumps (stock's scroll_to) while the page is hidden;
-# back on the page the follow glides.
-m.nodes[m.slide]['value']=0; loop(m); assert raw(m)==0 and follow(m,70)==70
-m.nodes[m.slide]['value']=1; loop(m); assert raw(m)==1 and follow(m,90)==70
-ys=settle(m); assert ys[-1]==90 and ys[0]<90,ys; passed()
+# Swiped away and back, the hold stays: the follow leaves them, hidden or shown.
+m.nodes[m.slide]['value']=0; loop(m); assert raw(m)==0 and follow(m,70)==40
+m.nodes[m.slide]['value']=1; loop(m); assert raw(m)==1 and follow(m,90)==40 and settle(m)[-1]==40; passed()
+# Now Playing gone and opened again, the hold is gone: the follow moves them.
+f,ctx=m.handler(m.win,O['EVT_DESTROY']); step(m,address=f,args=(ctx,m.event,0,0),gap=0)
+scrub_page(m=m); m.nodes[m.win]['children'].append(m.slide); loop(m); follow(m,90); assert settle(m)[-1]==90; passed()
+# Another Now Playing opened before this one goes (np_gone leaves a page it replaces alone): the hold is gone too.
+m=lyric_page(); loop(m); loop(m,-56); settle(m); assert follow(m,0)==40
+scrub_page(m=m); m.nodes[m.win]['children'].append(m.slide); loop(m); follow(m,90); assert settle(m)[-1]==90; passed()
 # Another song starts at the top, on the page or off it, the hold gone: its follow glides to its line.
 for off in (0,1):
     m=lyric_page(); loop(m); loop(m,-56); settle(m); assert follow(m,0)==40
@@ -9205,7 +9209,7 @@ m=lyric_page(); loop(m); a=m.alloc(0x80); m.word(m.lrc+O['VIEW_ANIMATOR'],a); m.
 assert m.get(m.lrc+O['VIEW_ANIMATOR'])==0 and ('widget_animator_destroy',a) in [c[:2] for c in m.calls]; passed()
 # The report: scroll, swipe away, screen off, next song, screen on, swipe back: the new song's top.
 m=lyric_page(); m.handlers[O['LYRIC_ROW_BUILDER']]='stock_lyric_rows'; loop(m); loop(m,-56); settle(m)
-m.nodes[m.slide]['value']=0; loop(m); assert follow(m,20)==20  # off the page: stock's jump
+m.nodes[m.slide]['value']=0; loop(m); assert follow(m,20)==40  # off the page, still held
 m.byte(syms['g_backlight_status'],0); loop(m); m.word(O['MCL_POS'],2); assert loop(m)==0
 m.word(m.lrc+O['SCROLL_Y'],60); assert rows(m)==0  # a stale follow, then the new song's rows
 m.byte(syms['g_backlight_status'],1); loop(m); m.pressed=1; loop(m); m.nodes[m.slide]['value']=1; loop(m)
@@ -9407,11 +9411,13 @@ if 'mclLoadExLyric' in HOOKS:
                 kids=[self.node('label',text=t,lrc_time=sec) for sec,t in self.lines]
                 for k in kids: self.word(k+O['W_PARENT'],self.lrc); self.word(k+O['W_W'],225); self.word(k+O['W_H'],20)
                 self.nodes[self.lrc]['children']=kids; self.word(self.lrc+O['SCROLL_Y'],0)
-            def show(self,playtime=0,lrc=None):  # Now Playing opened: stock's init builds the rows, then ringnav_playing
+            def show(self,playtime=0,lrc=None,bar=False):  # Now Playing opened: stock's init builds the rows, then ringnav_playing
                 self.playtime=playtime; self.lrc=lrc or self.node('scroll_view','scroll_lrc')  # lrc: AWTK reusing its memory
                 self.word(self.lrc+O['W_W'],375); self.word(self.lrc+O['W_H'],178); self.build()
                 self.slide=self.node('slide_view','slide_view',[self.lrc],value=1)
-                self.win=self.top=self.node('window','playing_page',[self.slide]); self.word(self.win+O['W_PARENT'],self.wm)
+                self.slider=bar and self.node('slider','slider_play',max=225,value=playtime)  # bar: the progress bar
+                kids=[self.slide]+[self.slider]*bool(bar)
+                self.win=self.top=self.node('window','playing_page',kids); self.word(self.win+O['W_PARENT'],self.wm)
                 assert self.call(address=playing,args=(self.win,7,0,0),gap=0)==0
                 self.handlers[sleep_hook+12]='stock_sleep'; self.word(payload_syms['wheel_held'],1)
                 return y(self)
@@ -9437,7 +9443,9 @@ if 'mclLoadExLyric' in HOOKS:
         m.nodes[m.slide]['value']=1; loop(m)
         loop(m,-28); loop(m,-28); m.word(payload_syms['wheel_held'],0); assert settle(m)[-1]==3*SLOT  # two ticks take over
         m.word(payload_syms['wheel_held'],1); m.playtime=30; assert settle(m)[-1]==3*SLOT; passed()
-        m.nodes[m.slide]['value']=0; assert loop(m,ms=250)==4*SLOT; m.nodes[m.slide]['value']=1; assert settle(m)[-1]==4*SLOT; passed()
+        m.nodes[m.slide]['value']=0; assert loop(m,ms=250)==3*SLOT; m.nodes[m.slide]['value']=1; assert settle(m)[-1]==3*SLOT; passed()
+        # Now Playing gone and opened again, they follow: the playing line.
+        f,ctx=m.handler(m.win,O['EVT_DESTROY']); m.call(address=f,args=(ctx,m.event,0,0),gap=0); m.show(30); assert settle(m)[-1]==4*SLOT; passed()
         # Dark, the page in front follows at that pace too, by the whole second, reading no clock between.
         m.byte(syms['g_backlight_status'],0); m.playtime=20; assert loop(m)==4*SLOT and loop(m,ms=250)==3*SLOT
         m.byte(syms['g_backlight_status'],1); m.playtime=30; assert settle(m)[-1]==4*SLOT; passed()
@@ -9483,6 +9491,41 @@ if 'mclLoadExLyric' in HOOKS:
         def seen(i): top=SLOT+sum(hs[:i])-off; return max(0,min(top+hs[i],178)-max(top,0))
         assert [seen(i) for i in range(5)]==[0,21,135,22,0]
         assert [{x[3]>>24 for x in m.ink(i)} for i in range(5)]==[set(),{255*21*21//(97*97)},{255},{255*22*22//(SLOT*SLOT)},set()]; passed()
+        # Let go, the wheel leaves a line in the middle, not a row at the top: two ticks from line 0 go a slot past the
+        # nudge, 59 + BUMP_PX, nearer line 1's centre (78; its two rows 97 px) than line 0's or a row top. Held, that
+        # line is aimed, LYRIC_DIM, and repaints; following, nothing is (LYRIC_REST).
+        SEEK='[00:05.00]One\n[00:09.70]'+'abcdefghi '*3+'abcdefghi\n[00:12.00]Three\n[00:20.00]Four\n'
+        def seek_page(status=2,tag=SEEK):
+            m=karaoke([],tags={'LYRICS':tag}); m.load(); m.show(5,bar=True); m.word(PLAY_STATUS,status); settle(m); return m
+        def moves(m): return [(c[0],c[1]) for c in m.calls if c[0] in ('player_seek_time','mclSetSeek','mclSetResume')]
+        def long_play(m):  # Play/Pause held and let go: whether it was taken, Play/Pause's own presses after it, and the seeks
+            m.t=getattr(m,'t',7000)+1; m.press(m.t); took=m.hold()==11; seen=moves(m); return took,m.release(),seen
+        def song_menu(m): return any(p[0]=='dialog/sortselect_dialog' for p in m.opened)
+        def tone(m,i): return {x[3]&0xffffff for x in m.ink(i)}
+        m=seek_page(); assert y(m)==0 and tone(m,1)=={REST&0xffffff}
+        m.calls=[]; loop(m,-28); loop(m,-28); m.word(payload_syms['wheel_held'],0); ys=settle(m)
+        assert ys[-1]==78 and m.lyric_row(1) in m.dirty() and tone(m,1)=={DIM&0xffffff}; passed()
+        # Held there, Play/Pause plays from that line: a seek to its whole second (9.7 s: 9), as a scrub's, the bar
+        # there at once; the lyrics follow again; the press neither plays nor pauses, nor opens the song menu.
+        assert long_play(m)==(True,0,[('player_seek_time',9)]) and m.nodes[m.slider]['value']==9
+        assert not song_menu(m) and settle(m)[-1]==0 and tone(m,1)=={REST&0xffffff}  # the player (mocked) stays at 5 s
+        m.playtime=12; assert settle(m)[-1]==156; passed()
+        # Following, a hold restarts the playing line.
+        assert long_play(m)==(True,0,[('player_seek_time',12)]); passed()
+        # Paused, the seek waits for Play (mclSetSeek, no resume), and so do the lyrics: they stay on that line, aimed,
+        # until it plays, then follow.
+        m=seek_page(status=3); loop(m,-28); loop(m,-28); m.word(payload_syms['wheel_held'],0); settle(m); m.calls=[]
+        assert long_play(m)==(True,0,[('mclSetSeek',9)]) and not song_menu(m)
+        assert settle(m)[-1]==78 and tone(m,1)=={DIM&0xffffff}
+        m.word(PLAY_STATUS,2); m.playtime=12; assert settle(m)[-1]==156 and tone(m,1)=={REST&0xffffff}; passed()
+        # Before the first line (5 s), a hold starts the song again; past the song's end (the bar's max), no line plays:
+        # the song menu opens.
+        m=seek_page(); m.playtime=2; settle(m); assert long_play(m)==(True,0,[('player_seek_time',0)]); passed()
+        m=seek_page(); m.nodes[m.slider]['max']=10; m.playtime=12; settle(m)
+        assert long_play(m)==(True,0,[]) and song_menu(m); passed()
+        # Unsynced lyrics, or the art page, keep the song menu.
+        m=seek_page(tag='plain\nwords\n'); assert long_play(m)==(True,0,[]) and song_menu(m); passed()
+        m=seek_page(); m.nodes[m.slide]['value']=0; loop(m); assert long_play(m)==(True,0,[]) and song_menu(m); passed()
         # With no memory for its table the page keeps stock's rows, their text and layout, and paints nothing over them.
         m=karaoke(); m.mock('calloc@GLIBC_2.0'); m.fail_calloc=True; m.show(9)
         assert [m.nodes[r]['text'] for r in m.nodes[m.lrc]['children']]==['One','Two two','Three','Four','Five']
@@ -9538,7 +9581,7 @@ if 'mclLoadExLyric' in HOOKS:
             self.returns(ret,clobber=True)
         def show(self,playtime=0,lrc=None,slide='slide_view'):  # slide: the slide_view's name (another: a page without one); V2.1's page: view_local holds the title, the column (its slide_view and dots) and the bar
             self.playtime=playtime; self.lrc=self.node('scroll_view','scroll_lrc'); self.build()
-            self.lyric=self.node('view','view_lyrics',[self.node('list_view','view_lrc',[self.lrc])])
+            self.lyric=self.node('view','view_lyrics',[self.node('list_view','view_lrc',[self.lrc])]); self.word(self.lrc+O['W_PARENT'],self.nodes[self.lyric]['children'][0])
             self.slide=self.node('slide_view',slide,[self.lyric],value=1)
             self.dots=self.node('slide_indicator','slide_indicator'); self.word(self.dots+O['W_Y'],270)
             self.col=self.node('view','slide_view_view',[self.slide,self.dots]); self.word(self.slide+O['W_PARENT'],self.col)
@@ -9585,10 +9628,49 @@ if 'mclLoadExLyric' in HOOKS:
     for dx,dy in ((70,0),(0,40),(11,0)):  # a swipe, a drag of the lines, past TAP_PX: the column untouched
         m=centred(); m.tap(dx=dx,dy=dy); assert m.full()[:6]==COLUMN[:5]+(None,),(dx,dy,m.full()); passed()
     m=centred(lines=()); m.tap(); assert m.full()[:6]==COLUMN[:5]+(None,),m.full(); passed()  # no lyrics
-    m=centred(centred='0'); assert not m.nodes[m.lyric].get('handlers'); passed()  # the iPod page's own
-    # np_layout() picks the lyric touch: the centred page's lyrics take np_lyric_touch on all three, the iPod page's none.
-    for on,want in (('1',[(O[k],payload_syms['np_lyric_touch'],0) for k in ('EVT_POINTER_DOWN','EVT_POINTER_UP_BEFORE','EVT_POINTER_ABORT')]),('0',[])):
-        m=centred(centred=on); assert m.nodes[m.lyric].get('handlers',[])==want,(on,m.nodes[m.lyric].get('handlers')); passed()
+    # Both layouts' lyrics take np_lyric_touch.
+    for on in ('1','0'):
+        m=centred(centred=on); want=[(O[k],payload_syms['np_lyric_touch'],0) for k in ('EVT_POINTER_DOWN','EVT_POINTER_MOVE_BEFORE','EVT_POINTER_UP_BEFORE','EVT_POINTER_ABORT')]
+        assert m.nodes[m.lyric].get('handlers',[])==want,(on,m.nodes[m.lyric].get('handlers')); passed()
+    # The iPod page (Centred off): its column, under the 40 px top row and over the bar, takes the whole window, the
+    # dots NP_FULL_FOOT above its foot and view_lrc from the top to 20 px above them, both by their self_layout; a tap
+    # again, or Return, puts it all back.
+    def ipod_full():
+        m=centred(centred='0'); view=m.nodes[m.lyric]['children'][0]
+        for w,box in ((m.col,(0,40,375,192)),(m.slide,(0,0,375,186)),(view,(0,0,375,178))):
+            for k,v in zip(('W_X','W_Y','W_W','W_H'),box): m.word(w+O[k],v)
+        m.word(m.dots+O['W_Y'],182); return m,view
+    def where(m,view): return (m.full()[:6],[m.get(m.col+O[k]) for k in ('W_Y','W_H')],m.nodes[m.dots].get('self_layout'),m.nodes[view].get('self_layout'))
+    for end in ('tap','return'):
+        m,view=ipod_full(); m.tap()
+        # M1 Plus: V2.1's window (UI_W wide) and the column restacked last among view_local's children, the Q2's window's
+        W,H=m.get(m.win+O['W_W']),m.get(m.win+O['W_H']); top=2 if is_m1plus else 3
+        assert where(m,view)==((top,0,W,W,H-20,'#000000'),[0,H],('0',str(H-20),'100%','10'),('0','0','100%','-20')),where(m,view)
+        if end=='tap': m.tap()
+        else: assert m.call(O['KEY_RETURN'],gap=50)==11
+        assert where(m,view)==((1,0,375,375,186,'#00000000'),[40,192],('0','182','100%','10'),('0','0','100%','178')),where(m,view); passed()
+    # Centred Now Playing switched on meanwhile (from a window over the page) changes only the next Now Playing:
+    # they leave full screen as the iPod layout they came in.
+    NPC=m.get(payload_syms['setting_values']+4*re.findall(r'&st\.(\w+)',re.search(r'setting_values\[\] = \{([^}]*)\}',
+              (ROOT/'patch/navigation.c').read_text()).group(1)).index('np_centred'))
+    m,view=ipod_full(); m.tap(); m.word(NPC,1); m.tap(); m.word(NPC,0)
+    assert where(m,view)==((1,0,375,375,186,'#00000000'),[40,192],('0','182','100%','10'),('0','0','100%','178')),where(m,view); passed()
+    # Touch and hold a synced line RATE_HOLD_MS: the song plays from it (the line under the finger, 12 s, not the
+    # middle one), and the lift toggles nothing; a drag past TAP_PX, a swipe (the slide_view's abort) or a lift
+    # before then seeks nothing; an unsynced line does nothing. The rows (offset 97, the window at y 30): "Three"
+    # from 215, so y 160 is on it.
+    def press_line(m,y=160,move=0,abort=False,ms=O['RATE_HOLD_MS']):
+        m.calls=[]; m.touch('EVT_POINTER_DOWN',150,y); m.pressed=1; loop(m)
+        if move: m.touch('EVT_POINTER_MOVE_BEFORE',150,y+move)
+        if abort: m.touch('EVT_POINTER_ABORT',150,y)
+        m.advance(ms,clear=False); seeks=moves(m); m.touch('EVT_POINTER_UP_BEFORE',150,y+move); m.pressed=0; loop(m); return seeks
+    for on in ('1','0'):
+        m=centred(centred=on); settle(m); assert y(m)==97
+        assert press_line(m)==[('player_seek_time',12)] and m.full()[5]!='#000000' and m.nodes[m.bar]['value']==12; passed()
+        for kw in ({'move':11},{'abort':True},{'ms':O['RATE_HOLD_MS']-50}):  # the last a tap
+            m=centred(centred=on); settle(m); assert press_line(m,**kw)==[] and (m.full()[5]=='#000000')==('ms' in kw),kw; passed()
+        m=centred(centred=on); settle(m); assert press_line(m,move=8)==[('player_seek_time',12)]; passed()  # within TAP_PX
+    m=centred(lines=((FAR,'x'*15),(FAR,'Two two'),(FAR,'Three'))); settle(m); assert press_line(m)==[] and m.full()[5]!='#000000'; passed()
     # A page without stock's slide_view (a layout of its own) has no column: a tap on its lyrics leaves
     # everything as it was, where np_full read the column off a NULL slide_view (W_PARENT at 0x48).
     m=CentredMachine(); m.lines=[(5,'x'*15),(9,'Two two'),(12,'Three')]; m.show(9,slide='pages')
@@ -15672,10 +15754,11 @@ class PhotosMachine(DepthMachine):
     """The card as a tree of {path: [(name, d_type)]}, photo bytes by path, and the cache's files."""
     def __init__(self,tree,data):
         super().__init__()
-        self.tree=tree; self.data=data; self.cache=set(); self.thumbs=[]; self.forks=0; self.bad=set(); self.open_files={}; self.dirs={}
+        self.tree=tree; self.data=data; self.cache=set(); self.thumbs=[]; self.forks=0; self.ff_pid=-1; self.bad=set(); self.open_files={}; self.dirs={}
         for n in ('opendir@GLIBC_2.0','readdir@GLIBC_2.0','closedir@GLIBC_2.0','qsort@GLIBC_2.0','fopen@GLIBC_2.2',
-                  'fread@GLIBC_2.0','fclose@GLIBC_2.2','access@GLIBC_2.0','rename@GLIBC_2.0','unlink@GLIBC_2.0',
-                  'memcmp@GLIBC_2.0','toolsThumbSpecCover','fork@GLIBC_2.0','pthread_mutex_lock@GLIBC_2.0','pthread_mutex_unlock@GLIBC_2.0'):
+                  'fread@GLIBC_2.0','fseek@GLIBC_2.0','fclose@GLIBC_2.2','access@GLIBC_2.0','rename@GLIBC_2.0','unlink@GLIBC_2.0',
+                  'memcmp@GLIBC_2.0','toolsThumbSpecCover','fork@GLIBC_2.0','waitpid@GLIBC_2.0','pthread_mutex_lock@GLIBC_2.0',
+                  'pthread_mutex_unlock@GLIBC_2.0'):
             self.handlers[syms[n]]='p:'+n
         tramp=int(manifest['patch_symbols']['stock_localmusic_trampoline'],16)
         self.handlers[tramp]='stock_localmusic'; self.u.hook_add(UC_HOOK_CODE,self.hook,begin=tramp,end=tramp)  # fast() ran
@@ -15694,7 +15777,7 @@ class PhotosMachine(DepthMachine):
         elif name=='canvas_draw_image':
             self.draws.append(tuple(tuple(signed(self.get(r+4*i)) for i in range(4)) for r in (c,d))); ret=0
         elif name.startswith('p:'):
-            name=name[2:].split('@')[0]; ret=0; text=self.text(a) if name not in ('readdir','closedir','qsort','fread','fclose','memcmp','fork') else ''
+            name=name[2:].split('@')[0]; ret=0; text=self.text(a) if name not in ('readdir','closedir','qsort','fread','fseek','fclose','memcmp','fork','waitpid') else ''
             if name=='opendir':
                 ret=0 if text not in self.tree else self.alloc(4); self.dirs[ret]=list(self.tree.get(text,[]))
             elif name=='readdir' and self.dirs.get(a):
@@ -15703,9 +15786,11 @@ class PhotosMachine(DepthMachine):
                 ptrs=[self.get(a+4*i) for i in range(b)]
                 for i,p in enumerate(sorted(ptrs,key=self.text)): self.word(a+4*i,p)
             elif name=='fopen':
-                if text in self.data: ret=self.alloc(4); self.open_files[ret]=self.data[text]
+                if text in self.data: ret=self.alloc(4); self.open_files[ret]=[self.data[text],0]  # bytes, position
                 elif text.endswith('.bad'): self.bad.add(text); ret=self.alloc(4)
-            elif name=='fread': chunk=self.open_files.get(d,b'')[:b*c]; self.u.mem_write(a,chunk); ret=len(chunk)//b
+            elif name=='fread':
+                f=self.open_files.get(d,[b'',0]); chunk=f[0][f[1]:f[1]+b*c]; f[1]+=len(chunk); self.u.mem_write(a,chunk); ret=len(chunk)//b
+            elif name=='fseek': assert c==0; self.open_files[a][1]=b  # thumb's header read: SEEK_SET only
             elif name=='access': ret=0 if text in self.cache or text in self.bad or text in self.data else -1
             elif name=='toolsThumbSpecCover':
                 self.thumbs.append((self.text(a),self.text(b),c,d))
@@ -15713,7 +15798,8 @@ class PhotosMachine(DepthMachine):
                 if ret: self.cache.add(self.text(b))
             elif name=='rename': self.cache.discard(text); self.cache.add(self.text(b))
             elif name=='unlink': self.cache.discard(text)
-            elif name=='fork': self.forks+=1; ret=-1  # thumb()'s ffmpeg fallback, refused
+            elif name=='fork': self.forks+=1; ret=self.ff_pid  # thumb()'s ffmpeg: refused (-1), or 99 to fail by itself
+            elif name=='waitpid': self.u.mem_write(b,struct.pack('<i',1<<8)); ret=a  # exit 1: the picture's fault
             elif name=='memcmp': ret=0 if bytes(self.u.mem_read(a,c))==bytes(self.u.mem_read(b,c)) else 1
         else: return super().hook(u,address,size,unused)
         self.calls.append((name,a,b,c))
@@ -15749,6 +15835,7 @@ def cache(i,s): return f'/mnt/mmc/.photos/{keys[i]:08x}{s}'
 # then its thumbnail from that copy, and marks the corrupt one bad.
 def border(w): return m.call(address=HOOKS['widget_on_paint_border'][0],args=(w,m.canvas,0,0),gap=0,clear=False,count=50_000_000)
 border(tiles[0]); assert m.bands[-1][:5]==((O['PH_TILE_W']-O['PH_THUMB_W'])//2,(O['PH_TILE_H']-O['PH_THUMB_H'])//2,O['PH_THUMB_W'],O['PH_THUMB_H'],O['PH_GREY'])
+m.ff_pid=99  # ffmpeg runs and fails too: the corrupt photo's marker (a refused or killed one leaves none)
 worker,arg=m.threads[0]; assert m.call(address=worker,args=(arg,0,0,0),gap=0,count=20_000_000)==0
 SW,SH,TW,TH=O['PH_SHOT_W'],O['PH_SHOT_H'],O['PH_THUMB_W'],O['PH_THUMB_H']
 assert m.thumbs==[(paths[0],cache(0,'.tmp'),SW,SH),(cache(0,'.jpg'),cache(0,'.tmp'),TW,TH),
@@ -15757,6 +15844,18 @@ assert m.thumbs==[(paths[0],cache(0,'.tmp'),SW,SH),(cache(0,'.jpg'),cache(0,'.tm
                   (paths[3],cache(3,'.tmp'),SW,SH),(cache(3,'.jpg'),cache(3,'.tmp'),TW,TH)],m.thumbs
 assert m.forks==1 and m.bad=={cache(2,'.bad')} and cache(2,'.jpg') not in m.cache
 m.advance(250); assert m.joins==[77]; passed()
+# thumb reads the header first: a PNG over 1024 px, or a progressive JPEG over 1024 px, goes to ffmpeg alone, as
+# stock would decode it whole in demo (#216); a smaller one, or a baseline JPEG of any size, stays with stock.
+def png_head(w,h): return b'\x89PNG\r\n\x1a\n'+struct.pack('>I4sII',13,b'IHDR',w,h)+bytes(9)
+def frame_jpeg(sof,w,h): return b'\xff\xd8'+JFIF+b'\xff'+bytes([sof])+struct.pack('>HBHHB',17,8,h,w,3)+bytes(9)+b'\xff\xda'+bytes(12)
+heads={R+'/a.png':(png_head(4000,4000),1),R+'/b.png':(png_head(1024,1024),0),R+'/c.jpg':(frame_jpeg(0xc2,3000,3000),1),
+       R+'/d.jpg':(frame_jpeg(0xc2,1024,1024),0),R+'/e.jpg':(frame_jpeg(0xc0,4000,4000),0)}
+thumb_m=PhotosMachine({},{p:d for p,(d,_) in heads.items()})
+for p,(_,ff) in heads.items():
+    thumb_m.thumbs=[]; thumb_m.forks=0  # ffmpeg's fork refused, so thumb answers 0
+    assert thumb_m.call(address=ps['thumb'],args=(thumb_m.string(p),thumb_m.string('/tmp/x.jpg'),160,160),gap=0,count=5_000_000)==1-ff,p
+    assert (len(thumb_m.thumbs),thumb_m.forks)==(1-ff,ff),p
+passed()
 # The turned photo's thumbnail is drawn upright, centred in its tile; the bad one stays grey.
 border(tiles[1]); assert m.draws[-1]==((0,0,54,72),((O['PH_TILE_W']-54)//2,(O['PH_TILE_H']-72)//2,54,72))
 border(tiles[2]); assert m.bands[-1][4]==O['PH_GREY']
@@ -19189,11 +19288,12 @@ if 'systemset_fwupdate_page_init' in HOOKS:  # M1 Plus: Network Update fetches t
 else:
     not_ported("Network Update (systemset_fwupdate_page_init: it fetches DiamondBond's Q2 update.tar)")
 
-# Q2 Shelf (netupdate.c, docs/internals.md#q2-shelf): System settings' Apps page, a row per app with
-# its state from .q2/apps/<id>.tag, a manual install's binary and, with Wi-Fi, a check of GitHub's
-# latest releases on opening, kept SH_STALE_MS. Install and Update start a worker at once; Remove, Erase
-# and Rockbox's first Install (the power-on default) want a second press. A press on the running
-# install cancels it; one during the opening check stops the check.
+# Q2 Shelf (netupdate.c, docs/internals.md#q2-shelf): System settings' Apps page, Check for Updates
+# then a row per app with its state from .q2/apps/<id>.tag, a manual install's binary and, with Wi-Fi,
+# a check of GitHub's latest releases on opening, kept SH_STALE_MS, its end toasting how many apps can
+# be updated. Install and Update start a worker at once; Remove, Erase and Rockbox's first Install (the
+# power-on default) want a second press. A press on the running install cancels it; one during the
+# opening check stops the check.
 SPOT_TAG,SPOT_FILES='/mnt/mmc/.q2/apps/spotify.tag','/mnt/mmc/.q2/apps/spotify.files'
 if 'usbmode_page_init' in HOOKS:
     class ShelfMachine(RadioMachine):
@@ -19235,17 +19335,19 @@ if 'usbmode_page_init' in HOOKS:
         m=M1ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                           '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
-        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Soloify','Install'] and not m.threads; passed()  # Soloify: M1 Plus's own, after the list's
+        BLANK=m.labels()[2]; assert BLANK in ('',' ')  # Check for Updates' blank detail: ' ' under a theme's separators
+        assert m.labels()==['App Store','Check for Updates',BLANK,'Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Soloify','Install'] and not m.threads; passed()  # Soloify: M1 Plus's own, after the list's
         m.close(); m.wifi=3; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
-        assert m.labels()==['App Store','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Soloify','Install']  # Erase is Configuration's (1.5.9)
+        assert m.labels()==['App Store','Check for Updates','Checking…','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Soloify','Install']  # Erase is Configuration's (1.5.9)
         m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
         assert m.urls==['https://raw.githubusercontent.com/DiamondBond/q2-pod/main/sources.list']+[f'https://api.github.com/repos/{r}/releases/latest' for r in
                         ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser','andsuor/q2-subsonic','m-d-e-v/q2-podcasts','harpmudd/q2-lma','DiamondBond/q2-fidget','jtliang24/q2-soloify')],m.urls
-        assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.labels()[2]=='Update'; passed()  # q2-v1.8 against the latest q2-v1.9
-        m.row(0); assert m.labels()[2]=='Checking…' and KILL in m.systems[-1]; m.row(0); assert m.labels()[2]=='Cancelling…'
-        shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[2]=='Update'; passed()
-        m.files[SPOT_TAG]=bytearray(b'q2-v1.9'); m.close(); m.wifi=-1; apps_open(m); assert m.labels()[2]=='Installed'
-        m.row(0); m.row(0); assert m.labels()[2]=='Removing…'; shelf_job(m)
+        assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.labels()[4]=='Update' and m.labels()[2]==BLANK  # q2-v1.8 against the latest q2-v1.9
+        assert m.toasts[-1][3]=='1 app can be updated'; passed()  # the opening check's end, the page on top
+        m.row(1); assert m.labels()[4]=='Checking…' and KILL in m.systems[-1]; m.row(1); assert m.labels()[4]=='Cancelling…'
+        shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[4]=='Update'; passed()
+        m.files[SPOT_TAG]=bytearray(b'q2-v1.9'); m.close(); m.wifi=-1; apps_open(m); assert m.labels()[4]=='Installed'
+        m.row(1); m.row(1); assert m.labels()[4]=='Removing…'; shelf_job(m)
         assert m.toasts[-1][3]=='Spotify removed' and not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/librespot'}&set(m.files); m.close(); passed()
         # Soloify: installed from its own repo (.soloify, its binary q2-soloify); an update or Remove ends a running
         # backend first and leaves the files the ZIP doesn't hold: its remote file and its settings.
@@ -19255,7 +19357,7 @@ if 'usbmode_page_init' in HOOKS:
                           '/mnt/mmc/.soloify/.delay':bytearray(b'4000'),'/mnt/mmc/.soloify/.quality':bytearray(b'96')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
         assert m.labels()[-2:]==['Soloify','Installed'],m.labels()
-        m.row(8); m.row(8); assert m.labels()[-1]=='Removing…'; shelf_job(m)
+        m.row(9); m.row(9); assert m.labels()[-1]=='Removing…'; shelf_job(m)
         assert m.toasts[-1][3]=='Soloify removed' and KILL in m.systems[-3] and KILL in m.systems[-1],m.systems
         assert not {SOLO_TAG,SOLO_FILES,'/mnt/mmc/.soloify/run','/mnt/mmc/.soloify/q2-soloify'}&set(m.files) and m.labels()[-1]=='Install'
         assert {'/mnt/mmc/.soloify/remote','/mnt/mmc/.soloify/.delay','/mnt/mmc/.soloify/.quality'}<=set(m.files); m.close(); passed()
@@ -19263,55 +19365,63 @@ if 'usbmode_page_init' in HOOKS:
         m=ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                         '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
         m.rockbox_mode=0; m.wifi=-1; apps_open(m)
-        assert m.labels()==['App Store','Rockbox','Install','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install'] and not m.threads; passed()  # no themes without Rockbox; the card apps last
+        BLANK=m.labels()[2]; assert BLANK in ('',' ')  # Check for Updates' blank detail: ' ' under a theme's separators
+        assert m.labels()==['App Store','Check for Updates',BLANK,'Rockbox','Install','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install'] and not m.threads; passed()  # no themes without Rockbox; the card apps last
         m.close(); m.wifi=3; m.rockbox_mode=0o100755; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
-        assert m.labels()==['App Store','Rockbox','Update','Rockbox Themes','Install','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install']
+        assert m.labels()==['App Store','Check for Updates','Checking…','Rockbox','Update','Rockbox Themes','Install','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install']
         m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
         assert m.opts[10002]=='https://api.github.com/repos/DiamondBond/q2-fidget/releases/latest' and m.opts[10018]=='Q2Pod'  # the last of ten
         assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.opts[64]==1 and m.opts[81]==2 and m.opts[20108]
-        assert m.labels()[6]=='Update' and '/tmp/q2-shelf.json' not in m.files; passed()  # q2-v1.8 against the latest q2-v1.9
-        m.close(); m.now+=9*60*1000; apps_open(m); assert len(m.threads)==1 and m.labels()[6]=='Update'; passed()  # still fresh: no requests
-        m.row(2); assert m.labels()[6]=='Checking…' and len(m.threads)==2 and KILL in m.systems[-1]; m.row(2); assert m.labels()[6]=='Cancelling…'
-        shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[6]=='Update'; passed()
-        m.wifi=-1; m.row(2); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and len(m.threads)==2; m.wifi=3; passed()
-        m.codes=[403]; m.row(2); shelf_job(m); assert m.toasts[-1][3]=='GitHub is busy, try later'; passed()  # the API's rate limit
-        m.files[SPOT_TAG]=bytearray(b'q2-v1.9'); m.close(); m.wifi=-1; apps_open(m); assert m.labels()[6]=='Installed' and len(m.threads)==3
-        m.row(2); assert m.labels()[6]=='Press again to remove' and len(m.threads)==3
-        m.row(0); assert m.labels()[6]=='Installed' and m.toasts[-1][3]=='Connect to Wi-Fi first'  # another row's press drops it
-        m.row(2); m.row(2); assert m.labels()[6]=='Removing…'; shelf_job(m)
+        assert m.labels()[8]=='Update' and m.labels()[2]==BLANK and '/tmp/q2-shelf.json' not in m.files  # q2-v1.8 against the latest q2-v1.9
+        assert m.toasts[-1][3]=='1 app can be updated'; passed()  # the opening check's end, the page on top
+        m.row(0); assert m.toasts[-1][3]=='1 app can be updated' and len(m.threads)==1; passed()  # within SH_RECHECK_MS: no requests
+        toasts=len(m.toasts); m.close(); m.now+=9*60*1000; apps_open(m); assert len(m.threads)==1 and m.labels()[8]=='Update' and len(m.toasts)==toasts; passed()  # still fresh: no requests
+        m.row(3); assert m.labels()[8]=='Checking…' and len(m.threads)==2 and KILL in m.systems[-1]; m.row(3); assert m.labels()[8]=='Cancelling…'
+        shelf_job(m); assert m.toasts[-1][3]=='Download cancelled' and m.labels()[8]=='Update'; passed()
+        m.wifi=-1; m.row(3); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and len(m.threads)==2; m.wifi=3; passed()
+        m.codes=[403]; m.row(3); shelf_job(m); assert m.toasts[-1][3]=='GitHub is busy, try later'; passed()  # the API's rate limit
+        m.files[SPOT_TAG]=bytearray(b'q2-v1.9'); m.close(); m.wifi=-1; apps_open(m); assert m.labels()[8]=='Installed' and len(m.threads)==3
+        m.row(3); assert m.labels()[8]=='Press again to remove' and len(m.threads)==3
+        m.row(1); assert m.labels()[8]=='Installed' and m.toasts[-1][3]=='Connect to Wi-Fi first'  # another row's press drops it
+        m.row(3); m.row(3); assert m.labels()[8]=='Removing…'; shelf_job(m)
         assert m.toasts[-1][3]=='Spotify removed' and KILL in m.systems[-3] and m.systems[-2]=='sync' and KILL in m.systems[-1]  # spot_stop: before and after
-        assert not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/run','/mnt/mmc/.spotify/librespot'}&set(m.files) and m.labels()[6]=='Install'; passed()
+        assert not {SPOT_TAG,SPOT_FILES,'/mnt/mmc/.spotify/run','/mnt/mmc/.spotify/librespot'}&set(m.files) and m.labels()[8]=='Install'; passed()
         # A stale check, stopped by a press (it needs no answer); then Rockbox from its release to "ready".
         m.close(); m.wifi=3; m.now+=11*60*1000; apps_open(m); assert len(m.threads)==5
-        m.row(1); assert m.toasts[-1][3]=='Stopped checking for updates'; shelf_job(m); assert len(m.threads)==5; passed()
+        m.row(2); assert m.toasts[-1][3]=='Stopped checking for updates'; shelf_job(m); assert len(m.threads)==5 and m.toasts[-1][3]=='Stopped checking for updates'; passed()
         m.close(); m.rockbox_mode=0; m.dirs.pop('/mnt/mmc/.spotify'); m.reply=(ROOT/'test/shelf/q2-rockbox.json').read_bytes()
-        apps_open(m); shelf_job(m); assert m.labels()==['App Store','Rockbox','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install']  # not stopped: checked again
-        m.row(0); assert m.labels()[2]=='Starts at power-on; Boot to changes that. Press again to install' and len(m.threads)==6
-        m.row(0); assert len(m.threads)==7 and m.labels()[2]=='Checking…'; m.row(0); shelf_job(m); assert m.toasts[-1][3]=='Download cancelled'
-        m.free=10<<20; m.row(0); m.row(0); shelf_job(m)  # the zip (13018581 bytes) and 64 MB left over
+        toasts=len(m.toasts); apps_open(m); shelf_job(m); assert len(m.toasts)==toasts  # the opening check: nothing to update, nothing said
+        assert m.labels()==['App Store','Check for Updates',BLANK,'Rockbox','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install']  # not stopped: checked again
+        m.row(1); assert m.labels()[4]=='Starts at power-on; Boot to changes that. Press again to install' and len(m.threads)==6
+        m.row(1); assert len(m.threads)==7 and m.labels()[4]=='Checking…'; m.row(1); shelf_job(m); assert m.toasts[-1][3]=='Download cancelled'
+        m.free=10<<20; m.row(1); m.row(1); shelf_job(m)  # the zip (13018581 bytes) and 64 MB left over
         assert m.toasts[-1][3]==f'Needs {(13018581+(54<<20)+(1<<20)-1)>>20} MB more space' and not [f for f in m.files if '.q2/staging/' in f]; passed()
         m.free=1<<32; m.staged=[('.rockbox/rockbox',b'ELF3.2'),('.rockbox/codecs/flac.codec',b'c'),('.rockbox/fonts/a b.fnt',b'f')]
         m.listing=''.join(f'{len(d):9}  10-06-2026 13:18   {f}\n' for f,d in m.staged)
-        m.row(0); m.row(0); m.rockbox_mode=0o100755; m.moves=[]; shelf_job(m)  # Rockbox on the card by the end
+        m.row(1); m.row(1); m.rockbox_mode=0o100755; m.moves=[]; shelf_job(m)  # Rockbox on the card by the end
         assert m.toasts[-1][3]=='Rockbox is ready. Find it on Home'
         assert [x for x in m.moves if x.startswith('/mnt/mmc/.rockbox/')][-1]=='/mnt/mmc/.rockbox/rockbox'  # the binary last
         assert m.moves[-2:]==['/mnt/mmc/.q2/apps/rockbox.files','/mnt/mmc/.q2/apps/rockbox.tag'] and m.files['/mnt/mmc/.q2/apps/rockbox.tag']==b'v3.2'
         assert m.files['/mnt/mmc/.rockbox/rockbox']==b'ELF3.2' and m.files['/mnt/mmc/.rockbox/fonts/a b.fnt']==b'f'
         assert m.files['/mnt/mmc/.q2/apps/rockbox.files']==b'.rockbox/rockbox\n.rockbox/codecs/flac.codec\n.rockbox/fonts/a b.fnt\n'
         assert not [f for f in m.files if '.q2/staging' in f] and 'sync' in m.systems; passed()
-        assert m.labels()==['App Store','Rockbox','Installed','Rockbox Themes','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install']; passed()  # the rows built again
-        m.listing='        1  10-06-2026 13:18   .rockbox/../../x\n'; m.files.pop('/mnt/mmc/.q2/apps/rockbox.tag'); m.row(0); shelf_job(m)
+        assert m.labels()==['App Store','Check for Updates',BLANK,'Rockbox','Installed','Rockbox Themes','Install','Spotify','Install','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install']; passed()  # the rows built again
+        m.listing='        1  10-06-2026 13:18   .rockbox/../../x\n'; m.files.pop('/mnt/mmc/.q2/apps/rockbox.tag'); m.row(1); shelf_job(m)
         assert m.toasts[-1][3]=='The download is not a usable app' and m.files['/mnt/mmc/.rockbox/rockbox']==b'ELF3.2'; passed()
         m.close(); passed()
-    # No list on the card yet: one row, which loads it with Wi-Fi. The fetched list (its bad lines
-    # skipped) is kept on the card and its rows shown; a list with no app leaves the one in use.
+    # No list on the card yet: Check for Updates alone, which loads it with Wi-Fi. No reply says so; the
+    # fetched list (its bad lines skipped) is kept on the card and its rows shown; a list with no app
+    # leaves the one in use.
     m=ShelfMachine(); m.rockbox_mode=0; m.wifi=-1; apps_open(m)
-    assert m.labels()==['App Store','App list','Connect to Wi-Fi to load the list'] and not m.threads
+    assert m.labels()==['App Store','Check for Updates','Connect to Wi-Fi to load the list'] and not m.threads
     m.row(0); assert m.toasts[-1][3]=='Connect to Wi-Fi first' and not m.threads; passed()
-    m.wifi=3; m.row(0); assert m.labels()[2]=='Loading…' and len(m.threads)==1; m.row(0); assert len(m.threads)==1  # loading already
+    m.wifi=3; m.row(0); assert m.labels()[2]=='Checking…' and len(m.threads)==1; m.row(0); assert len(m.threads)==1  # checking already
+    m.codes=[404]; shelf_job(m); assert m.toasts[-1][3]=="Can't reach GitHub" and m.labels()[1:]==['Check for Updates','Connect to Wi-Fi to load the list']
+    m.row(0); assert len(m.threads)==2; passed()  # failed: the next press fetches again
     m.reply=b'# apps\nme/q2-foo Foo\nme/q2-Bad\n'; shelf_job(m)
-    FOO=['App Store','Foo','Install']+(['Soloify','Install'] if is_m1plus else [])  # M1 Plus's own Soloify follows the list, not kept in it
-    assert m.labels()==FOO and m.files[LIST]==b'me/q2-foo Foo\n'; passed()
+    FOO=['App Store','Check for Updates',BLANK,'Foo','Install']+(['Soloify','Install'] if is_m1plus else [])  # M1 Plus's own Soloify follows the list, not kept in it
+    assert m.labels()==FOO and m.files[LIST]==b'me/q2-foo Foo\n'
+    assert m.toasts[-1][3]=='All apps are up to date'; passed()  # pressed: said; foo's release is no JSON, so none
     m.close(); m.now+=11*60*1000; m.reply=b'nothing'; apps_open(m); shelf_job(m)
     assert m.labels()==FOO and m.files[LIST]==b'me/q2-foo Foo\n'; m.close(); passed()
 else:
@@ -21368,7 +21478,9 @@ class LogoMachine(PowerMachine):
         elif name=='waitpid':
             assert a==4242; self.word(b,0); ret=a
             if self.rotated is not None: self.files[LOGO_ROT]=self.rotated
-        elif name=='navigator_to_with_context': self.toasts.append(self.text(b+8))
+        elif name=='navigator_to_with_context':
+            self.toasts.append(self.text(b+8)); assert len(self.toasts)<4,'a toast that keeps toasting'
+            self.nested(sleep_hook,0x1234)  # its dialog's loop
         self.returns(ret,clobber=True)
     def sync(self,mounted=True):  # a poll with the card in or out; returns the threads it started
         self.files['/proc/mounts']=b'/dev/mmcblk0p1 /mnt/mmc vfat rw 0 0\n' if mounted else b'none /mnt/data ubifs rw 0 0\n'
