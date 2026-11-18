@@ -7,7 +7,7 @@ writes every failing check, to rekey the list."""
 GAPS = {
     # Classic (1.6.7): its own geometry set boots V1.32 immediates (theme_boot), and its bar, rows, fonts, pane and
     # Library on Home with it; the M1 builds Minimal and Modern only (tools/m1plus.py m1_themes)
-    'a08dbf9b32': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9275 for config,preset in (({},0),({**C,K:1},1),({**C,K:2},2),({**C,K:3,HOME:
+    'bd961f722e': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9275 for config,preset in (({},0),({**C,K:1},1),({**C,K:2},2),({**C,K:3,HOME:
     'a361fff5ed': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9296 for preset in range(4):
     'fe7da9f0f1': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:12050 assert m.config_reads==[(/mnt/data/config.ini,IPOD,key,0) for key in (ACC
     '162a1d4cea': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9363 assert gradient({CLASSIC_LIGHT_ACCENT:1,THEME:1},[red,grey])[1]==[red,gr
@@ -64,7 +64,7 @@ GAPS = {
     'f457523035': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9979 cm.touch(); cm.paint(cw); assert not cm.icons; passed()  # no selection, no chev
     '7ef8be6118': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9980 assert image({},list_into,prep=classic_light)==[bytes(8)+b\xee*4]*2; passed(
     'a3819af6db': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:9993 for into_half in (1,0):  # Classic, both halves: the chevron alone, its box 
-    'd105e65638': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10014 assert [title_value(r) for r in dm.nodes[dv][children]]==[(Theme,Classic),
+    '8f205e72f8': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10014 assert [title_value(r) for r in dm.nodes[dv][children]]==[(Theme,Classic),
     '5dceccafd2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10019 assert (Single Press Scrub,Off) in [title_value(r) for r in dm.nodes[dv][ch
     '87219f38f4': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10025 assert [b[:5] for b in rm.bands]==ntick
     'd108428531': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10027 assert image({},select,prep=classic_light)==image({},unselect,prep=classic_l
@@ -108,13 +108,13 @@ GAPS = {
     'a3a2b32171': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10678 assert lit(au)==1 and style_color(au,0xff000000,bg_color)[1]==0xffffffff
     '8be7e3e5e2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10681 assert lit(au)==0 and half_of(au)!=day and style_color(au,0xff000000,bg_color)
     'cb53aa2336': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10691 m,view,rows=display({THEME:1},setup=classic_light)
-    'cfc813ab00': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10692 assert [row_text(r) for r in m.nodes[view][children]]==[Theme: Classic,Ligh
+    '9a324666fd': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10692 assert [row_text(r) for r in m.nodes[view][children]]==[Theme: Classic,Ligh
     'e0cfd27827': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10696 for stored,name in ((None,Classic Blue),(7,Classic Blue),(12,Classic Bl
     'a46a4d9b12': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10699 m,view,rows=display({},setup=classic_light); f,ctx=m.handler(m.nodes[rows[0]][c
     '9183036f78': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10700 for value,name in ((0,Graphite),(1,Crimson),(2,Tidal),(3,Champagne),(4,
-    'ffe66125a4': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10710 m,view,rows=display({},setup=classic_light); art=m.nodes[view][children][9]
-    'cfc813ab00.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10711 assert [row_text(r) for r in m.nodes[view][children]]==[Theme: Classic,Ligh
-    '8867c30f55': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10712 assert m.config_reads[13:17]==[(/mnt/data/config.ini,IPOD,k,v) for k,v in ((
+    '534e28dd0a': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10710 m,view,rows=display({},setup=classic_light); art=m.nodes[view][children][9]
+    '9a324666fd.2': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10711 assert [row_text(r) for r in m.nodes[view][children]]==[Theme: Classic,Ligh
+    '657fb41d4a': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10712 assert m.config_reads[13:17]==[(/mnt/data/config.ini,IPOD,k,v) for k,v in ((
     '3bf16d8289': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10715 assert art_boot({})==art_boot({ROWART:1})==art_boot({ROWART:2})==[class
     '11022741e6': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10716 assert art_boot({ROWART:0})==[classic-light-text_system_bar]
     '536aa048e3': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10721 m,view,_=display({},setup=classic_light); row=m.nodes[view][children][5]; f,ct
@@ -139,11 +139,11 @@ GAPS = {
     'c7b928e81e': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:13262 assert [m.nodes[m.nodes[m.nodes[r]['children'][0]]['children'][0]]['image'] for 
     '0d38a23f5d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10774 for answer,light,want in ((0,0,[]),(10,0,[(1,THEME),(1,LIGHT),(9,CLASSI
     'a990dd0434': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10791 assert m.prompts==[Restart to apply?] and not [c for c in m.calls if c[0]==wr
-    '2620d504a8': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10792 for answer,want in ((0,[]),(10,[(0,ROWART)])):
+    '8a8d940241': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10792 for answer,want in ((0,[]),(10,[(0,ROWART)])):
     'f07af0d011': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10801 m,view,_=display({ROUNDED:1},sub=4,cls=RestartMachine,setup=classic_light); 
     '53d65c4641': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10805 assert writes==[(2,THEME),(4,ACCENT),(0,ROUNDED),(0,TIMETITLE)],writes
     'd70a21d01d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10808 assert m.text(m.get(t))==Classic
-    '251720a9ab': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10810 for i,key,label in ((7,HOMELIB,Library on Home),(8,ROWPREVIEW,Row Preview
+    'c82fefce7a': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10810 for i,key,label in ((7,HOMELIB,Library on Home),(8,ROWPREVIEW,Row Preview
     'bcf5bd4d2d': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10819 for art,want in ((0,1),(1,0)):
     '1ca0b126aa': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10822 k=Machine(); assert [k.call(address=payload_syms[theme_restart],args=(t,0,0,0)
     '857a54b6a5': 'Classic and the theme engine on its own geometry set (1.6.7; Classic unported)',  # patch.py:10852 fk,fb,ft=font_row(classic_light,Title)
