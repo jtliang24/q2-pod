@@ -229,18 +229,6 @@ void np_scrub_drag(const np_page_t *p, int sec, int done) {
     rearm(&st.scrub_timer, scrub_expire, SCRUB_MS);
 }
 
-/* navigation.c's lyric_seek on the local page: a scrub to ms (a synced line's start), previewed and committed at once,
- * and the lyrics follow again; paused, the seek waits for Play (np_scrub_end), and so does the follow (lyric_held 2). 0 for
- * an unsynced line (-1), no bar or a line past the song's end. */
-static int lyric_seek(int ms) {
-    int max = st.np_slider ? widget_get_prop_int(st.np_slider, "max", 0) : 0;
-    if (ms < 0 || !st.np_slider || (max > 0 && ms / 1000 > max)) return 0;
-    np_scrub_drag(&np_local, ms / 1000, 0);
-    np_scrub_end();
-    st.lyric_held = mclGetPlayStatus() == 2 ? 0 : 2, st.lyric_spun = 0;
-    return 1;
-}
-
 /* The local bar's value-changing (ctx 0) and value-changed (ctx 1), bound after V2.1's, so they run first. V2.1's own pair
  * seeks through player_seek_time, which resumes a paused track: value-changing (0x53c834) resets BC_IDLE, stops the page's
  * timer and sets the page's mode word to 2, and value-changed (0x53c5d0) seeks only in that mode (0x53c2d8) and sets it back
