@@ -18350,6 +18350,8 @@ if 'usbmode_page_init' in HOOKS:
         bw=335; fw=bw*470//1000; rows=[(0,i,bw,1) for i in range(17)]; fills=[(0,i,fw,1) for i in range(17)]
         assert [b[:4] for b in pn.bands if b[2]==bw]==rows and [b[:4] for b in pn.bands if b[2]==fw]==fills
         assert not [b for b in pn.bands if b[4]==0xff3a3a3a]; pn.close(); passed()
+    if is_m1plus: not_ported("1.7.3 card apps' cover rows (art; the M1's ADDON_CAPS offers none)")
+    else:
         # Covers (addon.c art_rows, art_row): a row's cover is /tmp/q2-<id>.art/<key>.jpg, key the FNV-1a 32 of its URI, a
         # tab and its context, in 8 lowercase hex digits, at most 128 px either way. One cover in a list draws all its rows as stock Tidal's: 78 px
         # high, the 64 px cover (scaled to fit) at the theme's left, the title over the subtitle beside it, a row without
@@ -18470,10 +18472,11 @@ if 'usbmode_page_init' in HOOKS:
     s.answer('ok','pages','c1',arts(0)); assert s.requests[-1]==('downloads','c0'),s.requests[-1]; s.answer('ok','','',[*arts(1,49),('page','next','Next page','','c200','')])
     assert s.nodes[s.find('scroll_view')]['_ringnav_index']==99,s.nodes[s.find('scroll_view')]['_ringnav_index']
     s.back(); s.answer('ok','refresh','',SMENU); assert s.requests[-1]==('menu',) and s.labels()==SLABELS; passed()
-    # In a list drawn with covers a page row is a row of that list: 78 px, its caption centred, the cover's room empty.
-    page_c=covers((art_file('album','al-1'),),[COVERS[0],('page','next','Next page','','c2','')]); page_tx=O['CF_EDGE']+76
-    assert heights(page_c)==[78,78] and [page_c.get(r+O['W_Y']) for r in page_c.rows()]==[0,78] and len(cover_images(page_c))==1,(heights(page_c),cover_images(page_c))
-    page_t=page_c.nodes[page_c.rows()[1]]['children'][0]; assert page_c.nodes[page_t]['text']=='Next page' and box(page_c,page_t)==[page_tx,0,375-O['CF_EDGE']-page_tx,78],box(page_c,page_t); passed()
+    if not is_m1plus:  # 1.7.3's cover rows are unported (above)
+        # In a list drawn with covers a page row is a row of that list: 78 px, its caption centred, the cover's room empty.
+        page_c=covers((art_file('album','al-1'),),[COVERS[0],('page','next','Next page','','c2','')]); page_tx=O['CF_EDGE']+76
+        assert heights(page_c)==[78,78] and [page_c.get(r+O['W_Y']) for r in page_c.rows()]==[0,78] and len(cover_images(page_c))==1,(heights(page_c),cover_images(page_c))
+        page_t=page_c.nodes[page_c.rows()[1]]['children'][0]; assert page_c.nodes[page_t]['text']=='Next page' and box(page_c,page_t)==[page_tx,0,375-O['CF_EDGE']-page_tx,78],box(page_c,page_t); passed()
     # A page kept holds its own size, its bytes and their NUL: realloc'd before its fields are cut (the mock moves it
     # and spoils the old block), not the request's 64 KB.
     s=SlskMachine(); s.open(); s.answer('ok','refresh','',SMENU); s.pick(2); s.resized.clear(); s.answer('ok','pages','c1',arts(0)); s.answer('ok','pages','',arts(1,3))
@@ -18503,18 +18506,20 @@ if 'usbmode_page_init' in HOOKS:
     def find_icon(s): return next((w for w in s.nodes[s.page]['children'] if s.nodes[w].get('style')=='s_img_search'),0)
     def find_tap(s,w):
         f,ctx=s.handler(w,O['EVT_CLICK']); assert s.call(address=f,args=(ctx,s.event,0,0),gap=0,count=5_000_000)==0; s.advance(0,clear=False)
-    # Pages that come while the search box is open (no list under it) are kept and the next asked for; leaving the box
-    # shows them all, the first row selected, the icon back.
-    s=SlskMachine(); s.open(); s.answer('ok','refresh','',SMENU); s.pick(2); s.answer('ok','pages','c1',[('search','','Search','','','')]+arts(0,49))
-    icon=find_icon(s); title=s.nodes[s.page]['children'][0]
-    assert icon and len(s.rows())==50 and 'Search' not in s.labels() and s.get(icon+O['W_X'])==302 and s.nodes[icon]['clickable']==1
-    assert s.get(title+O['W_X'])==73 and s.get(title+O['W_W'])==229 and s.get(icon+O['W_H'])==s.get(title+O['W_H'])
-    find_tap(s,icon); edit=s.find('edit'); assert edit and not s.find('scroll_view')
-    s.answer('ok','pages','c2',arts(1)); assert s.requests[-1]==('downloads','c1') and not s.find('scroll_view')
-    s.answer('ok','pages','',arts(2)); assert s.requests[-1]==('downloads','c2') and not s.find('scroll_view')
-    f,ctx=s.handler(edit,O['EVT_BLUR']); s.call(address=f,args=(ctx,s.event,0,0),gap=0,count=5_000_000); s.advance(0,clear=False)
-    assert not s.find('edit') and len(s.rows())==149 and s.labels()[-2:]==['Artist 149',''] and s.nodes[s.find('scroll_view')]['_ringnav_index']==0
-    assert find_icon(s); passed()
+    if is_m1plus: not_ported("1.7.3 card apps' search icon in the title bar (V2.1's theme has no s_img_search; the search row stays a row)")
+    else:
+        # Pages that come while the search box is open (no list under it) are kept and the next asked for; leaving the box
+        # shows them all, the first row selected, the icon back.
+        s=SlskMachine(); s.open(); s.answer('ok','refresh','',SMENU); s.pick(2); s.answer('ok','pages','c1',[('search','','Search','','','')]+arts(0,49))
+        icon=find_icon(s); title=s.nodes[s.page]['children'][0]
+        assert icon and len(s.rows())==50 and 'Search' not in s.labels() and s.get(icon+O['W_X'])==302 and s.nodes[icon]['clickable']==1
+        assert s.get(title+O['W_X'])==73 and s.get(title+O['W_W'])==229 and s.get(icon+O['W_H'])==s.get(title+O['W_H'])
+        find_tap(s,icon); edit=s.find('edit'); assert edit and not s.find('scroll_view')
+        s.answer('ok','pages','c2',arts(1)); assert s.requests[-1]==('downloads','c1') and not s.find('scroll_view')
+        s.answer('ok','pages','',arts(2)); assert s.requests[-1]==('downloads','c2') and not s.find('scroll_view')
+        f,ctx=s.handler(edit,O['EVT_BLUR']); s.call(address=f,args=(ctx,s.event,0,0),gap=0,count=5_000_000); s.advance(0,clear=False)
+        assert not s.find('edit') and len(s.rows())==149 and s.labels()[-2:]==['Artist 149',''] and s.nodes[s.find('scroll_view')]['_ringnav_index']==0
+        assert find_icon(s); passed()
     # Under Classic (no title bar: the name is in the status bar) the search row stays a row, and opens the box.
     s=classic_light_on(classic_light_new(SlskMachine)); s.open(); s.worker(); s.advance(500); s.answer('ok','refresh','',SMENU)
     s.pick(2); s.answer('ok','pages','',[('search','','Search','','','')]+arts(0,3))
@@ -19588,12 +19593,12 @@ if 'usbmode_page_init' in HOOKS:
                           '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
         BLANK=m.labels()[2]; assert BLANK in ('',' ')  # Check for Updates' blank detail: ' ' under a theme's separators
-        assert m.labels()==['App Store','Check for Updates',BLANK,'Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Soloify','Install'] and not m.threads; passed()  # Soloify: M1 Plus's own, after the list's
+        assert m.labels()==['App Store','Check for Updates',BLANK,'Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Groovebox','Install','Soloify','Install'] and not m.threads; passed()  # Soloify: M1 Plus's own, after the list's
         m.close(); m.wifi=3; m.dirs['/mnt/mmc/.spotify']=[]; apps_open(m)
-        assert m.labels()==['App Store','Check for Updates','Checking…','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Soloify','Install']  # Erase is Configuration's (1.5.9)
+        assert m.labels()==['App Store','Check for Updates','Checking…','Spotify','Installed','Deezer','Install','Soulseek','Install','File Browser','Install','Subsonic','Install','Podcasts','Install','Live Music Archive','Install','Buddy','Install','Groovebox','Install','Soloify','Install']  # Erase is Configuration's (1.5.9)
         m.reply=(ROOT/'test/shelf/q2-librespot.json').read_bytes(); shelf_job(m)
         assert m.urls==['https://raw.githubusercontent.com/DiamondBond/q2-pod/main/sources.list']+[f'https://api.github.com/repos/{r}/releases/latest' for r in
-                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser','andsuor/q2-subsonic','m-d-e-v/q2-podcasts','harpmudd/q2-lma','DiamondBond/q2-fidget','jtliang24/q2-soloify')],m.urls
+                        ('DiamondBond/q2-librespot','group-a-study/q2-deezer','group-a-study/q2-soulseek','group-a-study/q2-filebrowser','andsuor/q2-subsonic','m-d-e-v/q2-podcasts','harpmudd/q2-lma','DiamondBond/q2-fidget','DiamondBond/q2-groovebox','jtliang24/q2-soloify')],m.urls
         assert m.opts[10065]=='/etc/scrobble-ca.pem' and m.labels()[4]=='Update' and m.labels()[2]==BLANK  # q2-v1.8 against the latest q2-v1.9
         assert m.toasts[-1][3]=='1 app can be updated'; passed()  # the opening check's end, the page on top
         m.row(1); assert m.labels()[4]=='Checking…' and KILL in m.systems[-1]; m.row(1); assert m.labels()[4]=='Cancelling…'
@@ -19609,7 +19614,7 @@ if 'usbmode_page_init' in HOOKS:
                           '/mnt/mmc/.soloify/.delay':bytearray(b'4000'),'/mnt/mmc/.soloify/.quality':bytearray(b'96')})
         m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
         assert m.labels()[-2:]==['Soloify','Installed'],m.labels()
-        m.row(9); m.row(9); assert m.labels()[-1]=='Removing…'; shelf_job(m)
+        m.row(10); m.row(10); assert m.labels()[-1]=='Removing…'; shelf_job(m)
         assert m.toasts[-1][3]=='Soloify removed' and KILL in m.systems[-3] and KILL in m.systems[-1],m.systems
         assert not {SOLO_TAG,SOLO_FILES,'/mnt/mmc/.soloify/run','/mnt/mmc/.soloify/q2-soloify'}&set(m.files) and m.labels()[-1]=='Install'
         assert {'/mnt/mmc/.soloify/remote','/mnt/mmc/.soloify/.delay','/mnt/mmc/.soloify/.quality'}<=set(m.files); m.close(); passed()
