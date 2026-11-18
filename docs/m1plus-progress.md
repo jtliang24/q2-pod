@@ -5313,6 +5313,67 @@ lists Groovebox, as it lists Buddy, though the M1 can't play it.
 - a card app's list with a search row: the row opens the search box;
 - Cover Flow's thumb absent, the knob as volume there.
 
+## 94. Merge step: sync to 1.7.6 (Nov 18)
+
+Step 3 of `.plan/sync-1-7-6.md`, its last. `sync/1.7.6` from `staging` at `6ac73e36` (backup
+`refs/backup/pre-sync-1.7.6`). 99 upstream commits over 1.7.4, 1.7.5 and 1.7.6: the Library's leaks and full-table
+reads (Songs' cover tasks, `songtable` indexes made by each scan, the Unknown row's `limit 1`), Update Local Music
+waiting for a running count, Scan Folders' tap, USB Audio/DAC to a host that never reads the card, Cover Flow's
+fast spin by letters, the queue's play mark, the status bar's line-up and its own Status Bar row, card apps' sort
+icon and live pages, a long EQ preset name, `config.ini` readers taking 255-byte lines, demo's stderr and a
+Bluetooth abnormal reboot in `q2-crash.log`, and 34 test commits.
+
+**Conflicts** (`bea8536a`), upstream's side with the M1 lines back as seams:
+- `navigation.c`: `theme_rows` moved to `theme_engine.c`, and the M1's two rows (Minimal, Modern) with it; the pull
+  prompt is `band_create`'s, its style `STYLE_LABEL_WHITE18C`.
+- `coverflow.c`: the M1's `CF_X`, `CF_W` and `PAGE_X` beside `BUILDING` and `CRASH_LOG`; `library_counting` after
+  the M1's unported include.
+- `addon.c`: the M1's `ADDON_CAPS` (1.7.6's `sort` unported) and its search row.
+- `peq_ui.c`: the long preset name's `LONG` with the M1's style names and `UI_W`.
+- `tools/build.py`: `VERSION` 1.7.6 beside `Q2_TAR_SHA`.
+- `test/remote.py`: `upright_corners`, then the M1's portrait check; `docs/internals.md` both sides; `README.md`
+  ours (upstream's licence unchanged).
+
+**Follow-ups:**
+- `82da2235`: Songs' leak (`COVER_PUSH`) on V2.1: `albumcoverinfo_init`'s push (`0x4dd17c`) and
+  `folderoverinfo_init`'s (sic, `0x4e8410`), their `lw t9` of `_deque_push_back` pinned, become
+  `jal ringnav_cover_push`. V2.1's `stAlbumCoverInfo` copy (`0x5db33c`, from its `_type_register` at
+  `0x5dbd7c`) duplicates the name (+4) and path (+8), as the Q2's does. `ports.py` classifies
+  `specfolder_click` and `check_usb_status` as unported: 817 hooks, sites and names.
+- `6230ad5c`: from the patch suite: `ringnav_lyric`'s card-app lookup (`app_lyrics`) reads `REC_TIDAL_ID`, which
+  is `M1_UNPORTED` (0) on V2.1, so a Tidal track's lyrics load read the record's first word. Skipped on the M1.
+- `1f9f19c0`: `suitemerge.py` for `build`, `headset_io`, `patch` and `playback`, then the hand hunks: Scan Folders,
+  the sort icon, a card app's lyrics and the scan's wait through Classic's dialog `not_ported`; the Unknown row's
+  album-artist query is `getMusicByAlbumAndAlbumSonger("", artist)` on the M1; Songs' cover tasks on V2.1's
+  addresses; the bar's slot gets its row (`batt_top`); the App Store's Apple Music and AirPlay rows; the Classic
+  gaps re-keyed.
+
+Reach the M1 unchanged: the `songtable` indexes (the M1 hooks both scans; V2.1's `songtable` has `album`,
+`filename` and `time_create`), the Unknown row's `limit 1`, the scan's wait (`library_counting`, Home's count),
+`config.ini`'s 255-byte lines, the EQ preset name, demo's stderr in `q2-crash.log`. Not the M1's: Cover Flow's
+letters (the thumb, `coverflow_thumb.c`, is Q2-only), the queue's play mark (the Q2's stock queue rows; the M1's
+queue is V2.1's `playqueue_dialog`). `q2only.py` (58 lines): Cover Flow's thumb and the M1's own wrappers. No
+`offsets.inc` change; no new V1.32 hex literal in code (`0x40504506` is an ioctl).
+
+**Gates** (from `work/gatetree` at `1f9f19c0`): all 25 pass. The Q2's `update.tar` is byte-identical to 1.7.6's
+build (`4180497468b4`). `--dev` **V067m** in `work/sync/1.7.6/`: `patch.py` runs 2,200 scenarios, 121 `NOT PORTED`;
+`pytest test/unit` passes 1,298 and `test/fw` 8,145 (5 xfailed; 1.7.4-1.7.6's 37 new firmware test files). Logs:
+`work/sync/1.7.6-gates/`. The function diff against `V079m` (`work/sync/1.7.6-fndiff.txt`): 489 changed, 344 added,
+224 removed, of 1,793. Over 1.7.3's list: 23 more changed, and 16 new: `ringnav_cover_push` (Songs' leak),
+`batt_top`, `bar_geom_val`, `bar_scheme`, `bar_theme` (the status bar), `library_counting`, `library_scan`,
+`msg_counting` (the scan's wait), `qm_collect`, `rate_album_favs`, `reboot_record`, `lyrics.c`'s `file_text`,
+`addon`'s `bar_icon`, `bar_tapped`, `card_path`, `open_list`; `addon`'s `find_tapped` is gone.
+
+**Unported rows:** card apps' sort icon; Display → Status Bar; Scan Folders' tap; USB Audio/DAC to a host that never
+reads the card. The App Store lists Apple Music and AirPlay.
+
+**For the device pass** (on `V079m`'s ground, with sections 92 and 93's lists):
+- Library → Songs open and Back several times: no growth in `demo`'s memory (`COVER_PUSH`); a folder view's covers;
+- Update Local Music, then an album open and Recently Added (the indexes); a library with an Unknown artist or album;
+- the status bar's battery in each Battery mode, on Minimal and Modern;
+- Settings → Display has no Status Bar row; the EQ page with a long preset name;
+- the App Store lists Apple Music and AirPlay; a card app's list keeps its search and sort rows as rows.
+
 ## How to check a build now
 
 ```sh
