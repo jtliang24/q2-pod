@@ -225,7 +225,8 @@ int ringnav_lyric(void) {
     /* A card app's streamed track (a 0xf1 queue, which stock and the tags above skip): the .lrc the
      * app left for it (tidal.c app_lyrics), its server's lyrics, synced or plain. */
     char lp[96];
-    if (I(MCL_TYPE, 0) == 0xf1 && q && pos < deque_size(q) && (r = deque_at(q, pos)) &&
+    /* M1PLUS: no URL queues (unported), and V2.1's REC_TIDAL_ID isn't pinned */
+    if (!M1PLUS && I(MCL_TYPE, 0) == 0xf1 && q && pos < deque_size(q) && (r = deque_at(q, pos)) &&
         app_lyrics(P(r, REC_TIDAL_ID), lp, sizeof lp) && (file = file_text(lp)) &&
         (n = lrc_parse(file + 3 * !memcmp(file, "\xef\xbb\xbf", 3), &l, &m)) > 0) {
         lrc_push(l, n, 0);
