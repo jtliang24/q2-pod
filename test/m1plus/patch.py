@@ -9659,13 +9659,18 @@ if 'mclLoadExLyric' in HOOKS:
     # middle one), and the lift toggles nothing; a drag past TAP_PX, a swipe (the slide_view's abort) or a lift
     # before then seeks nothing; an unsynced line does nothing. The rows (offset 97, the window at y 30): "Three"
     # from 215, so y 160 is on it.
-    def press_line(m,y=160,move=0,abort=False,ms=O['RATE_HOLD_MS']):
+    def line_y(m,i):  # M1 Plus: the screen y of lyric row i's middle, by V2.1's geometry, as widget_to_local inverts it
+        w,top=m.lrc,0
+        while w: top+=signed(m.get(w+O['W_Y'])); w=m.get(w+O['W_PARENT'])
+        r=m.lyric_row(i); return top-y(m)+m.get(r+O['W_Y'])+m.get(r+O['W_H'])//2
+    def press_line(m,y=None,move=0,abort=False,ms=O['RATE_HOLD_MS']):
+        if y is None: y=line_y(m,2) if is_m1plus else 160
         m.calls=[]; m.touch('EVT_POINTER_DOWN',150,y); m.pressed=1; loop(m)
         if move: m.touch('EVT_POINTER_MOVE_BEFORE',150,y+move)
         if abort: m.touch('EVT_POINTER_ABORT',150,y)
         m.advance(ms,clear=False); seeks=moves(m); m.touch('EVT_POINTER_UP_BEFORE',150,y+move); m.pressed=0; loop(m); return seeks
     for on in ('1','0'):
-        m=centred(centred=on); settle(m); assert y(m)==97
+        m=centred(centred=on); settle(m); assert is_m1plus or y(m)==97
         assert press_line(m)==[('player_seek_time',12)] and m.full()[5]!='#000000' and m.nodes[m.bar]['value']==12; passed()
         for kw in ({'move':11},{'abort':True},{'ms':O['RATE_HOLD_MS']-50}):  # the last a tap
             m=centred(centred=on); settle(m); assert press_line(m,**kw)==[] and (m.full()[5]=='#000000')==('ms' in kw),kw; passed()
