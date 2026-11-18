@@ -1268,6 +1268,7 @@ static void show(void);
  * title and subtitle aren't shown: the box's tips are the app's. Whether it did, from reply f's *n
  * rows. */
 static int take_find(char **f, int *n) {
+    if (M1PLUS) return 0; /* V2.1's theme has no s_img_search: the row stays (unported, 1.7.3) */
     if (!theme()->page_title_h || *n < 2 || strcmp(f[4], "search")) return 0;
     for (int i = 4; i < 4 + 6 * (*n - 1); ++i) f[i] = f[i + 6]; /* the rows up one */
     --*n;
