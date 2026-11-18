@@ -43,6 +43,7 @@ typedef struct {
 void np_write(np_view_t *v, const np_src_t *s);
 np_bar_t np_bar_fill(unsigned pos_ms, unsigned dur_ms, int scrubbing, int w, int h);
 void np_view_theme(const np_view_t *v);
+np_view_t np_view_local(void); /* the local page's widgets (m1plus_np_view.c) */
 void np_scrub_start(const np_page_t *p);
 void np_scrub_drag(const np_page_t *p, int sec, int done);
 void np_scrub_end(void);

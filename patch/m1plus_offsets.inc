@@ -496,6 +496,16 @@ static inline int arc_out(int r, int y) {
 #define STANDBY_LIMIT_1 1
 #define STANDBY_LIMIT_2 8
 #define STANDBY_LIMIT_3 24
+/* check_cardmount_status's TF card toast request (1.7.3, CARD_TOAST V1.32 0xa37c97): its hook is unported on the M1
+ * (M1PLUS_PORTS), so ringnav_cardmount never runs */
+#define CARD_TOAST M1_UNPORTED_ADDR
+#define CARD_QUIET_MS 15000
+/* Smart Wi-Fi (1.7.3): unported, smart_wifi.c is not compiled (m1plus_smart_wifi.c in its place). Its tunables as
+ * upstream's, and NET_TYPE (initNetworkModule's type, V1.32 0xa3bf04) unported. */
+#define SMART_POLL_MS 1000
+#define SMART_IDLE_MS 300000
+#define SMART_CONNECT_MS 15000
+#define NET_TYPE M1_UNPORTED_ADDR
 /* The Wi-Fi signal (ringnav_wifi_signal) is read from the driver again at most every
  * WIFI_SIGNAL_MS; its two pollers each ask about once a second. */
 #define WIFI_SIGNAL_MS 1000

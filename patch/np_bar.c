@@ -67,9 +67,7 @@ int np_fit_due(const void *info) {
     return 0;
 }
 
-#if M1PLUS
-#include "m1plus_np_view.c"
-#else
+#if !M1PLUS /* the M1's is m1plus_np_view.c's (navigation.c) */
 /* Now Playing's "3 of 12", album and remaining time (slider max less value, stock's seconds, so a
  * drag or scrub previews it). Labels are written only when their source changes; 1 when the
  * remaining time was. Classic's times beside the bar refit when the length's class changes: a

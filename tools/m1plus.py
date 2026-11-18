@@ -6,7 +6,7 @@ build.py keeps upstream's Q2 code; its build() hands an M1 Plus input to build()
 and every V2.1 address here was found in V2.1's own code."""
 import hashlib, io, json, re, shlex, struct, subprocess, tarfile, zipfile
 from typing import Any, cast
-from build import (ROOT, TIMEZONES, TIMEZONE_ORDER, VERSION, TAG, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
+from build import (ROOT, NAVIGATION, TIMEZONES, TIMEZONE_ORDER, VERSION, TAG, BASE, SCRATCH, RING_STEP, FLAGS, FUNCTIONS, GLOBALS, CONTEXT_DATA, HELPER,
                    HELPER_LIKE, HELPER_LIBS, BOOT, REMOTE, S90PLAY, ROCKBOX_FLAG, BOOT_HOOK, S11LOGO, LOGO_HOOK,
                    REMOTE_HOOK, BLUEALSA, BLUEALSA2, BT_KEEPALIVE, SCROBBLE_CA, WATCHDOG, WATCHDOG_SLEEP, RTC_WRITE, LOCK_CLOCK_12H, WIFI_LPS, ICONS,
                    STOCK_EQ, OBSOLETE, TAG_C, append_payload, check, need, dev_tag, fileoff, jpeg_size, patch_bluealsa,
@@ -31,7 +31,7 @@ M1PLUS_FUNCTIONS = {
  'toolsThumbSpecCover': ('int', 'const char *, const char *, int, int'),
  'set_hscroll_label_attribute': ('void', 'void *'),
  'label_set_line_wrap': ('int', 'void *, int'),
- # Home's art (ipod-ui 4.5): image_manager_unload_bitmap_by_name (patch/m1plus_nav.h) is V2.1's lookup by name, which
+ # Home's art (ipod-ui 4.5): image_manager_unload_bitmap_by_name (patch/m1plus_nav_shims.c) is V2.1's lookup by name, which
  # copies the cached bitmap_t, then its unload of that bitmap's entries
  'image_manager_lookup': ('int', 'void *, const char *, void *'),
  'image_manager_unload_bitmap': ('int', 'void *, void *'),
@@ -613,9 +613,13 @@ M1PLUS_UNRESOLVED = {
     'on_home_music_onclick': "Classic's Home Library list (coverflow.c home_library): Classic is unported",
 }
 # V1.32 routines V2.1 has no twin of that navigation.c names, which is one section (the tests call its unhooked
-# routines, so --gc-sections cannot drop any): a stand-in in patch/m1plus_nav.h under the same name, as (status, why).
+# routines, so --gc-sections cannot drop any): a stand-in in patch/m1plus_nav_shims.c under the same name, as (status, why).
 # The shipped payload drops the ones nothing calls. native: V2.1 does it itself; q2only: by design; unported: the
 # docs/m1plus-ipod-ui.md item that ports it. test/m1plus/ports.py reports them.
+# NAVIGATION files the M1 compiles an M1 file of stand-ins for: the feature is unported (M1PLUS_PORTS' rows of its hooks)
+M1PLUS_NAV_STANDINS = {
+    'smart_wifi.c': 'm1plus_smart_wifi.c',  # Smart Wi-Fi (1.7.3): the radio as the user left it
+}
 M1PLUS_SHIMS = {
     'buzzeer_switch': ('q2only', 'Key Tone; V2.1 has no buzzer command (progress 15)'),
     'tk_str_end_with': ('ported', "its own C: V2.1's AWTK lacks it"),
@@ -1173,7 +1177,7 @@ def compile_common(out, binary, player=False, defines=()):
     flags = [*FLAGS, '-fno-math-errno', '-ffunction-sections', '-fdata-sections', '-DM1PLUS=1', *defines]
     if player: flags += ['-mnan=2008', '-DPEQ_PLAYER=1']
     objects = []
-    for name in ['peq.c', 'peq_player.c', 'mp3_gapless.c', 'lavf_gapless.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'm1plus_library_scope.c', 'm1plus_batch_add.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
+    for name in ['peq.c', 'peq_player.c', 'mp3_gapless.c', 'lavf_gapless.c'] if player else ['peq.c', 'peq_ui.c', 'coverflow.c', 'coverflow_thumb.c', 'm1plus_library_scope.c', 'm1plus_batch_add.c', 'scrobble.c', 'photos.c', 'books.c', 'games.c', 'visualizer.c', 'playback.c', 'upnext.c', 'spotify.c', 'addon.c', 'addon_library.c', 'radio.c', 'tidal.c', 'netupdate.c', 'onlinematch.c', 'crossfade.c', 'nightshift.c', 'headset.c', 'lockscreen.c', 'chapters.c', 'lyrics.c', 'xiph.c']:
         obj = out/(name+'.o')
         run('clang', *flags, '-I', out, '-c', ROOT/'patch'/name, '-o', obj)
         objects.append(obj)
@@ -1372,23 +1376,24 @@ def m1_themes():
 
 
 def m1_emit_themes(themes, theme, out):
-    """out/'themes.inc' for the M1: tools/theme.py's, with no boot sites. theme_boot rewrites ipod.json's immediates,
-    V1.32 code addresses, where a set differs from SET0; the M1 has one set, so nothing may differ, and with no sites
-    nothing is touched even if it did."""
+    """out/'themes.h' and 'themes.inc' for the M1: tools/theme.py's, with no boot sites. theme_boot rewrites ipod.json's
+    immediates, V1.32 code addresses, where a set differs from SET0; the M1 has one set, so nothing may differ, and with
+    no sites nothing is touched even if it did."""
     theme.emit(themes, out)
-    inc = (out/'themes.inc').read_text()
+    h, inc = (out/'themes.h').read_text(), (out/'themes.inc').read_text()
     check(len(theme.geometry_sets(themes)) == 1, 'M1 themes: one geometry set')
-    sites = re.search(r'^#define BOOT_SITES (\d+)$', inc, re.M)
-    table = re.search(r'^const boot_site_t boot_sites\[BOOT_SITES\] = \{.*\};$', inc, re.M)
-    sites = need(sites, 'themes.inc: no boot sites table')
-    table = need(table, 'themes.inc: no boot sites table')
+    sites = need(re.search(r'^#define BOOT_SITES (\d+)$', h, re.M), 'themes.h: no BOOT_SITES')
+    decl = need(re.search(r'^extern const boot_site_t boot_sites\[BOOT_SITES\];$', h, re.M), 'themes.h: no boot_sites')
+    table = need(re.search(r'^const boot_site_t boot_sites\[BOOT_SITES\] = \{.*\};$', inc, re.M), 'themes.inc: no boot sites table')
     inc = inc[:table.start()] + 'const boot_site_t boot_sites[1] = {{0, 0}}; /* M1 Plus: none (BOOT_SITES 0) */' + inc[table.end():]
-    inc = inc.replace(sites.group(0), '#define BOOT_SITES 0 /* M1 Plus: theme_boot writes no V1.32 site */')
+    h = h[:decl.start()] + 'extern const boot_site_t boot_sites[1]; /* M1 Plus: none (BOOT_SITES 0) */' + h[decl.end():]
+    h = h.replace(sites.group(0), '#define BOOT_SITES 0 /* M1 Plus: theme_boot writes no V1.32 site */')
     # The own options of the themes the M1 leaves out (Classic's OWN_HOMELIB, OWN_ROWPREVIEW): past theme_keys, so
     # theme_own finds no option for them and reads 0
     m1_keys = list(theme.theme_keys(themes))
     for k in theme.theme_keys(theme.builtins()):
-        if k not in m1_keys: inc += f'#define OWN_{k} (THEME_KEYS + {len(m1_keys)}) /* M1 Plus: its theme is unported */\n'
+        if k not in m1_keys: h += f'#define OWN_{k} (THEME_KEYS + {len(m1_keys)}) /* M1 Plus: its theme is unported */\n'
+    (out/'themes.h').write_text(h)
     (out/'themes.inc').write_text(inc)
 
 
@@ -1397,7 +1402,11 @@ def compile_payload(out):
     extra = compile_common(out, out/'stock-demo')  # also writes the libc/libcstl imports navigation.c uses
     # -Wno-unused-function: the Q2 pages M1 replaces (ringnav_display) are out, and their iPod helpers (setting_click) with no caller
     flags = [*FLAGS, '-DM1PLUS=1', '-Wno-unused-function']
-    run('clang',*flags,'-I',out,'-c',ROOT/'patch/navigation.c','-o',out/'navigation.o')
+    # navigation.c and the files 1.7.3 split from it; Smart Wi-Fi is unported, its stand-ins in smart_wifi.c's place
+    sources = [M1PLUS_NAV_STANDINS.get(name, name) for name in NAVIGATION]
+    nav = [out/f'{name[:-2]}.o' for name in sources]
+    for name, o in zip(sources, nav):
+        run('clang',*flags,'-I',out,'-c',ROOT/'patch'/name,'-o',o)
     asm = ['.set noreorder', '.text']
     active_hooks = M1PLUS_HOOKS
     gp = M1PLUS_GP
@@ -1431,7 +1440,7 @@ def compile_payload(out):
     undefined += [f'--undefined={new}' for words in CALL_SITES['m1plus'].values() for _, _, new in words if isinstance(new, str)]
     # and each pinned site's, which nothing reaches until its word is switched on: test/m1plus/playback.py runs it in V2.1's code
     run('ld.lld','-m','elf32ltsmip','--gc-sections','-T',ROOT/'patch/link.ld','-e','ringnav',
-        *undefined, out/'navigation.o',out/'trampoline.o',*extra,'-o',out/'patch.elf')
+        *undefined, *nav,out/'trampoline.o',*extra,'-o',out/'patch.elf')
     run('llvm-objcopy','-O','binary',out/'patch.elf',out/'patch.bin')
     return symbols(out/'patch.elf')
 

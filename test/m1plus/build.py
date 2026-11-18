@@ -519,10 +519,10 @@ def m1plus_checks(directory, manifest, stock, demo, read):
             'np_scrub_shown', 'np_repaint', 'settle_poll', 'spot_np_page', 'spot_now_playing', 'radio_now_playing'} <= set(ps)
     assert not {'scrub_start', 'scrub_end', 'scrub_commit'} & set(ps)
     # A shim is a stand-in some payload source calls (a row nothing uses is dropped), and the stand-in is defined once.
-    nav = (ROOT/'patch/m1plus_nav.h').read_text()
-    users = ''.join(f.read_text() for f in (ROOT/'patch').glob('*.[ch]') if f.name != 'm1plus_nav.h')
+    nav = (ROOT/'patch/m1plus_nav_shims.c').read_text()
+    users = ''.join(f.read_text() for f in (ROOT/'patch').glob('*.[ch]') if f.name not in ('m1plus_nav.h', 'm1plus_nav_shims.c'))
     for name in M1PLUS_SHIMS:
-        assert len(re.findall(rf'^\w[\w *]* {name}\(', nav, re.M)) == 1, f'{name}: no stand-in in m1plus_nav.h'
+        assert len(re.findall(rf'^\w[\w *]* {name}\(', nav, re.M)) == 1, f'{name}: no stand-in in m1plus_nav_shims.c'
         assert re.search(rf'\b{name}\(', users), f'{name}: no payload source calls it; drop its M1PLUS_SHIMS row'
     assert not any(name in ps for name in M1PLUS_UNRESOLVED)
     payload = (directory/'patch.bin').read_bytes()

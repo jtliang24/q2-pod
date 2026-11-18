@@ -245,6 +245,9 @@ static void rate_close(int save) {
 #endif
     rate_badge();
 }
+#if M1PLUS
+void m1_rate_close(int save) { rate_close(save); } /* m1plus_nav.h */
+#endif
 
 static int rate_tap(void *ctx, void *event) {
     ra.rate_pick = (int)(long)ctx;

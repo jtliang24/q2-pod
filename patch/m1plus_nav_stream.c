@@ -5,9 +5,9 @@ extern int spot_soloify_running(void); /* spotify.c */
  * Auto) and .quality (kbit/s, none for the bridge's 160). */
 #define SOLOIFY_DELAY SOLOIFY_DIR "/.delay"
 #define SOLOIFY_QUALITY SOLOIFY_DIR "/.quality"
-static int svc_soloify __attribute__((section(".scratch"))); /* its row is on Streaming, so on Configuration */
+int svc_soloify __attribute__((section(".scratch"))); /* its row is on Streaming, so on Configuration */
 static void *sc_soloify[2] __attribute__((section(".scratch"))); /* its Delay and Quality rows */
-static int soloify_installed(void) { return !access(SOLOIFY_DIR "/q2-soloify", 0); }
+int soloify_installed(void) { return !access(SOLOIFY_DIR "/q2-soloify", 0); }
 
 /* The choice i, the cap being 512 << i MB: 2 (2 GB) when the file is missing or holds another. */
 int stream_cache(int spotify) {
@@ -95,12 +95,12 @@ static const char *svc(int i, int label) {
     if (i >= 1 && i < 1 + st.svc_n) return label ? addon_name(i - 1 - svc_soloify) : addon_id(i - 1 - svc_soloify);
     return svc_fixed[i < 1 ? i : i - st.svc_n][label];
 }
-static void svc_hidden(char *s) {
+void svc_hidden(char *s) {
     /* V2.1 leaves the destination untouched for a missing key and an empty default. */
     s[0] = 0;
     toolsReadConfig("/mnt/data/config.ini", "Q2POD", "STREAMHIDE", s, "");
 }
-static char *svc_find(char *hide, int i) {
+char *svc_find(char *hide, int i) {
     const char *key = svc(i, 0);
     return key ? csv_find(hide, key) : 0;
 }
@@ -162,7 +162,7 @@ static int sc_click(void *ctx, void *event) {
     return 0;
 }
 
-static int stream_config(void *ctx, void *event) {
+int stream_config(void *ctx, void *event) {
     if (st.sc_page || !(st.sc_page = page_open("streamconf_page", page_closed, page_keyup)))
         return 0;
     int n = 3 + st.svc_n, x = svc_soloify ? 2 : 0;

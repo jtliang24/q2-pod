@@ -1,5 +1,6 @@
 /* Logical menu selection is independent of native touch focus. Stock code owns gestures. */
 #include "navigation.h"
+#include "m1plus_nav_shims.c" /* the M1 Plus's V2.1 stand-ins and globals, once (m1plus_nav.h) */
 extern int stock_sorted_query_trampoline(const char *, const char *, void *, int);
 extern int stock_seek_time_trampoline(int);
 extern int stock_dbquery_trampoline(const char *, const char *, void *, int),
@@ -198,10 +199,6 @@ extern void coverflow_paint(void *w, void *canvas), photos_paint(void *w, void *
 extern int books_key(void *top, unsigned key), video_on(void), books_video(const char *path);
 extern void games_paint(void *w, void *canvas);
 extern void spot_poll(void), spot_paint(void *w, void *canvas), *spot_art(void);
-#if M1PLUS
-extern int spot_band(void *win, void **bar, void **times);
-static int spot_page(void *w) { return w && !tk_strcmp(widget_get_prop_str(w, "name", ""), "spotify_page"); }
-#endif
 extern void up_next(int (*keyup)(void *, void *));
 extern int un_hold(void *top);
 extern void radio_poll(void);
@@ -4436,7 +4433,9 @@ const char *theme_face(const unsigned *s, int n, int *px) {
     return "bold";
 }
 
-#if !M1PLUS /* m1plus_np_view.c */
+#if M1PLUS
+#include "m1plus_np_view.c"
+#else
 /* Paused, the seek waits for Play (scrub_end) and the player's second stands still until then,
  * and the page's timer would put the bar back on it. The bar keeps the
  * target until the player reports it, the track changes or stops, or SETTLE_PLAY_MS of playing
@@ -8562,10 +8561,6 @@ int page_keyup(void *ctx, void *event) {
 
 /* The close of navigation.c's own pages: Chapters and Streaming's Configuration. */
 static int page_closed(void *ctx, void *event) {
-#if M1PLUS /* Home's Library and Streaming (m1plus_nav_library.c) */
-    if (ctx == st.lib_page) st.lib_page = 0;
-    if (ctx == st.stream_page) st.stream_page = 0;
-#endif
     if (ctx == st.ch_page) {
         st.ch_page = 0;
         if (st.ch && !st.ch->done)
@@ -9182,7 +9177,7 @@ static int qm_run(const void *unused) {
         }
     } else if (a == QA_MORE && st.qm_kind == QM_PLAYLIST) {
 #if M1PLUS /* no playlistsmore_page: the playlist's editor (m1plus_nav_playlist_hold.inc) */
-        if (r) ple_open((void *)(long)st.qm_idx, 0);
+        if (r) m1_ple_open((void *)(long)st.qm_idx, 0);
 #else
         if (r) navigator_to_with_context("localmusic/playlistsmore_page", (void *)(long)st.qm_idx);
 #endif

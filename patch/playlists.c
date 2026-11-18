@@ -335,6 +335,10 @@ static void ple_show(void) {
         hscroll_label_set_only_focus(widget_get_child(widget_get_child(ple.view, i), 0), 1);
     if (n) ringnav_select(ple.view, mode == 0 ? ple.selected + 2 < n ? ple.selected + 2 : 0 : 0, n);
 }
+static int ple_open(void *ctx, void *event);
+#if M1PLUS
+int m1_ple_open(void *ctx, void *event) { return ple_open(ctx, event); } /* m1plus_nav.h */
+#endif
 static int ple_open(void *ctx, void *event) {
     if (ple.page) return 0;
     unsigned at = (unsigned)(long)ctx;

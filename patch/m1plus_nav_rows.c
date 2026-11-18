@@ -26,7 +26,7 @@ static void settings_row_border(void *row) {
  * high, the list's item height), a 40 px icon at 12,10, a 21 px srlabel_leftwhite21_style label at
  * 60,20 (no icon: at 12), and, opening a page, right_arrow at 295. The click is the row's. Returns
  * the label. */
-static void *list_row_core(void *view, const char *icon, int (*click)(void *, void *), void *ctx,
+void *list_row_core(void *view, const char *icon, int (*click)(void *, void *), void *ctx,
                            int w, int into) {
     (void)w;
     void *item = list_item_create(view, 0, 0, 0, 0);
