@@ -5374,6 +5374,32 @@ reads the card. The App Store lists Apple Music and AirPlay.
 - Settings → Display has no Status Bar row; the EQ page with a long preset name;
 - the App Store lists Apple Music and AirPlay; a card app's list keeps its search and sort rows as rows.
 
+## 95. Device pass: V067m, upstream 1.7.6 (Nov 18)
+
+`.plan/device-pass-1-7-6.md` on `V067m` (`staging` `568de096`, `update.bin` `30a8d1300d6e…`), sections 0-7 over
+`q2remote`, section 8 and the by-ear checks by hand. Notes, shots and logs: `work/sync/1.7.6-pass/`.
+
+**Passed:** Home's three layouts in both themes; Minimal and Modern only, no Status Bar row; the battery's four modes
+lined up on both themes. Every Library and Streaming row opens and Back returns. `demo`'s memory flat over 12 Songs
+and 10 Albums rounds (28.5 MB). Update Local Music's wait and count, the `songtable` indexes, Unknown artist and
+album. Lyrics, ratings, the volume panel, Play Next on a 491-song queue (and with Crossfade), playlist edits; a
+24-character EQ preset name whole and kept over a reboot. Internet Radio plays; the App Store's Check for Updates.
+A stopped `demo`: the watchdog reset at ~62 s, `q2-crash.log` written, no loop; a crashed one: its `== stderr`.
+By hand: USB DAC, Bluetooth (LDAC HQ, Resume on Connect), gapless, the jack, the knob's Navigation, Scan Folders,
+the Wi-Fi-off toasts, Crossfade's fade.
+
+**Findings** (to `/plan`):
+- **G (bug):** upstream's `sources.list` has 16 apps, `SH_MAX`, so `soloify_listed()` adds no Soloify.
+- **H:** the stall record can't be produced: `SIGSTOP` stops `stall_watch` too; it needs a thread-stopping helper.
+- **A:** while charging, the battery percentage follows the charging animation.
+- **C:** Cover Flow's knob in Knob: Navigation scrolls covers; section 93 says volume.
+- **D:** the lyrics page draws a stray earlier line under the last.
+- **F:** an iHeart station's raw `StreamTitle` text shows as the title.
+- **B, E:** Unknown Artist has no Unknown Album row; a hold in full-screen lyrics leaves it; PEQ messages break mid-word.
+
+The plan's `/mnt/sdcard` is `/mnt/mmc` on the M1. Apple Music is absent from the App Store: upstream comments it out.
+Settings restored (Screen Off 1 min, boot-target `rockbox`); the device stays on `V067m`.
+
 ## How to check a build now
 
 ```sh
