@@ -75,6 +75,9 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
         'AB_X_CALLS': tuple((a, 0x04110000 | ((0x52a268-a-4)//4 & 0xffff), 'ringnav_ab_x') for a in (0x52a408, 0x52a484, 0x52a494)),
         'TABLE_LOAD_CALL': ((0x5ca0fc, 0x0320f809, 'ringnav_table_load'),),
         'COVERINFO_CALL': ((0x492968, 0x0320f809, 'app_coverinfo_call'),),
+        # albumcoverinfo_init's and foldercoverinfo_init's jalr _deque_push_back -> jal ringnav_cover_push (1.7.6)
+        'COVER_PUSH': ((0x4ed298, 0x8f99f734, None), (0x4ed2a4, 0x0320f809, 'ringnav_cover_push'),
+                       (0x4ed444, 0x8f99f734, None), (0x4ed44c, 0x0320f809, 'ringnav_cover_push')),
         'HSCROLL_LULL': ((0x5e8ae8, 0x0320f809, 'ringnav_hscroll_lull'),),
         'HSCROLL_ONCE': ((0x5e8a28, 0x14400025, 0x10000025),),
         # config_init's bal config_playmode becomes jal ringnav_bootmode, which keeps the saved queue
@@ -279,6 +282,11 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
         # The Albums list's (album_page) scroll start (0x522870); V2.1's Songs and artist page don't pause.
         'COVER_PAUSE': ((0x522890, 0xac430000, 0),),
         # parse_albumcovertask_thd's local completion and its folder path's branch to it (0x4de660).
+        # albumcoverinfo_init's and folderoverinfo_init's (sic) jalr _deque_push_back of each row's cover
+        # task, after its lw t9 (pinned), becomes jal ringnav_cover_push: stAlbumCoverInfo's copy
+        # (0x5db33c) duplicates the task's name and path, so stock's own copies leaked.
+        'COVER_PUSH': ((0x4dd170, 0x8f99f488, None), (0x4dd17c, 0x0320f809, 'ringnav_cover_push'),
+                       (0x4e8408, 0x8f99f488, None), (0x4e8410, 0x0320f809, 'ringnav_cover_push')),
         'COVER_DONE': ((0x4dd630, 0x8f99b86c, 0x27a61688), (0x4dd634, 0x0411fde3, 'ringnav_cover_done'),
                        (0x4de660, 0x1000fbf4, 0x1000fbf3)),
         # checkBluetoothStatus' bal save_start_player once a headset's A2DP comes up (a0 0).
@@ -383,6 +391,7 @@ CALL_SITE_PURPOSES = {
     'ALBUM_ART': 'same-named albums apart in art',
     'CLASS_ICON': 'Artists rows without the head picture',
     'COVER_PAUSE': 'album grids never pause the cover worker',
+    'COVER_PUSH': "a cover task's name and path freed once copied",
     'ARTIST_COVER_ROW': "an artist's albums request the covers in view",
     'COVER_DONE': 'discard stale cover completion',
     'LOCKSCREEN_ACCESS': 'a built-in wallpaper survives a reboot',
@@ -500,6 +509,11 @@ M1PLUS_PORTS = {
     'systemset_wifi_page_init': ('unported', '1.7.3: Smart Wi-Fi; its stand-ins are m1plus_smart_wifi.c'),
     'stream_row': ('unported', "1.7.3: Smart Wi-Fi's held Tidal row; Smart Wi-Fi is unported"),
     'netservice_row': ('unported', "1.7.3: Smart Wi-Fi's held Network service rows; Smart Wi-Fi is unported"),
+    # 1.7.6
+    'specfolder_click': ('unported', "1.7.6: Scan Folders' tap ticks a folder with no folders inside; V2.1's "
+                                     'specfolder page not pinned'),
+    'check_usb_status': ('unported', "1.7.6: USB Audio/DAC to a host that never reads the card; V2.1's "
+                                     'check_usb_status not pinned'),
     'playermore_online': ('unported', "1.7.3: Smart Wi-Fi's held online match; Smart Wi-Fi is unported"),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
