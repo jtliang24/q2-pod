@@ -6207,6 +6207,8 @@ static int lyric_seek(int ms) {
     return 1;
 }
 
+#endif
+
 /* Play/Pause held on the lyrics page in front: the song plays from the line in the middle
  * (lyric_aim) once the wheel or a finger holds them, else the playing line, so a hold without
  * scrolling starts it again; before the first line, the song's start, once its lyrics are synced.
@@ -6219,6 +6221,7 @@ static int lyric_seek_hold(void) {
     return lyric_seek(lyrics_start(lrc, line));
 }
 
+#if !M1PLUS /* m1plus_np_view.c */
 /* Single Press Scrub (IPOD SCRUBSINGLE)'s single press, DOUBLE_CLICK_MS on: scrub starts. */
 static int np_scrub(const void *info) {
     st.np_press = 0;
