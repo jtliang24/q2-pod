@@ -673,6 +673,8 @@ static inline int arc_out(int r, int y) {
 #define REC_DISC 0x40
 #define REC_CUE_START 0x48      /* a CUE track's start and end seconds, 0 otherwise */
 #define REC_CUE_END 0x4c
+/* A row's size: platformTypeRegister registers stSongInfo with 0x58 (0x5dbc44), as V1.32 does. */
+#define REC_SIZE 0x58
 /* g_play_id3_info, as player_get_id3info (0x5146bc) parses the playing file: its path, then tags. */
 #define ID3_ALBUM 0x404
 #define ID3_ARTIST 0x504
@@ -970,6 +972,10 @@ extern unsigned char m1_return_latch;
  * libhardware2.so byte for byte, and nothing of its own opens /dev/jz_watchdog. */
 #define WDT_MS 60000
 #define WDT_LONG_MS 900000
+/* The stall record (1.7.1; navigation.c stall_step), upstream's tunables: its thread runs with the watchdog. */
+#define STALL_POLL_MS 5000
+#define STALL_MS 20000
+#define STALL_AGAIN_MS 45000
 
 #define W_ASTYLE M1_UNPORTED
 #define ALIGN_H_LEFT 2 /* stock's align_h_t, in a style's text_align_h */
