@@ -5237,6 +5237,82 @@ build (`45c5f9787da5`). `--dev` **V065m** in `work/sync/1.7.1/`: `patch.py` runs
 - Play Next on a long queue, and with Crossfade (G4's ground);
 - a crash log or stall record on the card after a forced stall (`/mnt/sdcard/` logs, no reboot loop).
 
+## 93. Merge step: sync to 1.7.3 (Nov 18)
+
+Step 2 of `.plan/sync-1-7-6.md`. `sync/1.7.3` from `staging` at `c328a273` (backup `refs/backup/pre-sync-1.7.3`).
+97 upstream commits: `navigation.c` split into 13 compilation units (`tools/build.py`'s `NAVIGATION`, with
+`navigation.h`), Cover Flow's thumb into `coverflow_thumb.c`, `themes.h` beside `themes.inc`, Smart Wi-Fi (1.7.2),
+Groovebox and card games that own the sound, card apps' sections, covers, page windows, URL queues and search icon,
+a stalled stream that carries on, Frequent hidden beside Most Played, play-from-a-line removed (a tap toggles full
+screen), Classic's bar and covers, and the licence: GPL-3.0-only from 1.7.2 on.
+
+**The split.** `git merge` can't follow functions into new files, so each function of `navigation.c` was merged
+three ways (1.7.1, `staging`, 1.7.3) at its new place, the gap above it riding with it, so the M1's `#if`
+wrappers, tables and M1-only functions went with their neighbours. Every one of `staging`'s 1,724 seam lines in
+`navigation.c` (139 functions, 304 lines at file level) is accounted for (`work/sync/1.7.3/seams-*.txt`): the M1's
+`scratch_t` fields, includes, `POD_KNOB` and `LOCAL_UI` went to `navigation.h`; `row_of` beside its one caller in
+`home.c`; the M1 lines in `ratings.c`, `volume.c` and `library_lists.c` follow `st`'s fields into `ra`, `vd` and
+`ll`; the thumb's M1 stubs into `coverflow_thumb.c`. The seam lines removed went with upstream code that is gone
+(play-from-a-line, `home_state`). An `unifdef` of the Q2 side matches 1.7.3 but for seam lines.
+
+**Conflicts** (`b40d4255`), upstream's side with the M1 lines back as seams:
+- `navigation.c`: Smart Wi-Fi's POD row ahead of the M1's knob rows; the status bar's `STATUSW_*` names;
+  `qm_run`'s V2.1 queue dialog; `shortcut_next`'s M1 row gains Groovebox's slot (never reached on the M1);
+  `marq_restart` (new) is shared.
+- `addon.c`: the M1 keeps its `ADDON_CAPS`; 1.7.3's `audio`, `sections`, `art`, `window` and `urls` are unported.
+- `radio.c`, `tools/build.py` (`VERSION` beside `Q2_TAR_SHA`), `test/peq.py`, `docs/internals.md`: both sides.
+- `test/hci_ao.py`, `test/bt_resample.py`: upstream's stall case and Bluetooth check in the fork's case functions.
+- `README.md`: ours, then upstream's licence wording (`ac1c5d8f`, the user's call).
+
+**Follow-ups:**
+- `3bdd33f9`: the M1's `lyric_seek` goes with 1.7.3's play-from-a-line.
+- `7bff7373`: the M1 build compiles `NAVIGATION` unit by unit. M1 code that crossed units got M1-only wrappers
+  (`m1_ple_open`, `m1_rate_close`), not exports, so the Q2's objects stay as upstream's; `m1plus_nav_shims.c` holds
+  the V2.1 stand-ins `navigation.c` used to define; `m1plus_nav.h` is declarations only; `m1plus_smart_wifi.c`
+  stands in for `smart_wifi.c`; `themes.h` gets the M1's boot sites and `OWN_*`; `m1plus_offsets.inc` gets
+  `CARD_TOAST`, `CARD_QUIET_MS`, `SMART_*` and `NET_TYPE`.
+- `126ba354`: `ports.py` classifies 1.7.3's hooks (`check_cardmount_status`, Smart Wi-Fi's) and Cover Flow's
+  `COVERINFO_CALL` as unported: 814 hooks, sites and names, all classified.
+- `13a07b39`: `suitemerge.py` for the M1 suites, then the hand hunks: Smart Wi-Fi's and the URL queues' cases
+  `not_ported`, `SHORTCUT` `'11'`.
+- `0ef7fd01`: the M1's Library hides Frequent, as 1.7.3's does.
+- `5a30309e`: from the patch suite. 1.7.3 moves a card app list's first search row to a title-bar icon styled
+  `s_img_search`, Tidal's, which V2.1's theme hasn't; on the M1 the row stays.
+- `7a6945f7`: Classic's reworded gap checks re-keyed, the cover rows' and search icon's cases `not_ported`, the
+  App Store's Groovebox row.
+- `592176bf`: from the media gate: the walk's Library rows one up without Frequent (18 rows).
+
+`q2only.py` (481 lines, 41 new after the split's moves): each is Smart Wi-Fi, Groovebox, the caps, a rename or an
+`offsets.inc` name, made on the M1 side or ruled out. 1.7.3's `DEFAULT_CONFIG_OFF` Standby default is ruled out: the
+M1 keeps V2.1's `config.ini`. No new V1.32 hex literal in code. The stood-in functions: `list_row_core` only lost
+`static`; `library_row`'s new `into` and the hidden Frequent row are in `m1plus_nav_library.c`.
+
+**Gates** (from `work/gatetree` at `592176bf`): all 25 pass. The Q2's `update.tar` is byte-identical to 1.7.3's
+build (`328c2455ea34`). `--dev` **V066m** in `work/sync/1.7.3/`: `patch.py` runs 2,189 scenarios, 117 `NOT PORTED`;
+`pytest test/unit` passes 1,296 and `test/fw` 4,348. Logs: `work/sync/1.7.3-gates/`. The function diff against
+`V079m` (`work/sync/1.7.3-fndiff.txt`): 466 changed, 329 added, 224 removed, of 1,778. 220 of the added and removed
+are one function moved between objects by the split. Gone: `navigation.o`'s `kb_ramp`, `library_into` and `tones`
+(play-from-a-line and Frequent), `upnext_closed`. New (109): the split's `classic_pages` (`kb_*`, `msg_*`, `pl_box_*`,
+`search_*`, `slider_*`), the M1's wrappers (`m1_ple_open`, `m1_rate_close`, `m1_home_closed`, `tk_strcmp_m1`),
+`m1plus_smart_wifi`'s 7, `addon`'s card-app code (`game_audio`, `art_*`, `search_box`, `urls_start`, ...),
+`theme_engine`'s `light_apply`, `light_day`, `groovebox_available`, `np_bar`'s `paint_scrubber`, `remain_due`,
+`np_fit_due`, `system`'s `power_poll`, `ringnav_cardmount` and `stall_*`, `radio`'s `fetch_run`, and the pages'
+`*_closed` handlers.
+
+**Unported rows:** Smart Wi-Fi; card games that own the sound and Groovebox as a Shortcut; card apps' sections,
+covers, page windows and URL queues; card apps' search icon; no TF card toasts after a Standby resume. The App Store
+lists Groovebox, as it lists Buddy, though the M1 can't play it.
+
+**For the device pass** (on `V079m`'s ground, with 1.7.1's list in section 92):
+- the Library: no Frequent row, Most Played there; every Library and Streaming row opens and Back returns (the
+  pages moved to `home.c`);
+- Now Playing's lyrics: a tap toggles full screen, a swipe ends it, Back returns; no line plays or is marked
+  (1.7.1's hold-to-play is gone, so section 92's lyric items are void);
+- Ratings, the volume panel and Playlists' hold menu (their state moved to `ratings.c`, `volume.c`, `playlists.c`);
+- Wi-Fi: Spotify and Internet Radio without Wi-Fi toast "Connect to Wi-Fi first"; the radio stays as left;
+- a card app's list with a search row: the row opens the search box;
+- Cover Flow's thumb absent, the knob as volume there.
+
 ## How to check a build now
 
 ```sh

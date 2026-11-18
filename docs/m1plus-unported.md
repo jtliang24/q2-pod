@@ -59,6 +59,11 @@ to its [progress](m1plus-progress.md) section.
 | Classic Home Streaming pane | 1.6.8–1.7.0 | `home_streaming`, `stream_rows`, `on_home_stream_onclick`, `STREAM_BG` | NOT PORTED; M1 Streaming keeps its existing page |
 | Configurable slide motion (a theme's step and fast-step ms and easing, ms 0 an immediate move) | 1.6.8–1.7.0 | the theme's motion rows (`THEME_MOTION_OFF`, `MOTION_WIDGET`); the M1's slide_menu keeps V2.1's 200/120 ms and easing | NOT PORTED |
 | USB Storage eject: OK to Disconnect | 1.6.8–1.7.0 | `usb_poll` (`navigation.c`), the Q2 gadget's `USB_LUN` configfs path; V2.1's gadget layout not checked | NOT PORTED |
+| Smart Wi-Fi: the radio off when nothing uses it, held presses that need the link | 1.7.2 | `smart_wifi.c`, `POD_SMART_WIFI`, `systemset_wifi_page_init`, `stream_row`, `netservice_row`, `playermore_online` | NOT PORTED; `m1plus_smart_wifi.c` stands in (the radio as the user left it, `need_link` toasts without Wi-Fi) |
+| Card games that own the sound (`audio=1`) and Groovebox as a Shortcut | 1.7.2 | `addon_game_open`'s sound, `SHORTCUT_GROOVEBOX`, `groovebox_available` | NOT PORTED; the M1's `ADDON_CAPS` offers no `audio` (the App Store still lists Groovebox, as it lists Buddy) |
+| Card apps' sections, covers beside rows, page windows and URL queues | 1.7.3 | `addon.c`'s caps `sections`, `art`, `window`, `urls`, `audio`; `COVERINFO_CALL` | NOT PORTED; the M1's `ADDON_CAPS` stays `playlist progress pages goto sleep` |
+| Card apps' search icon in the title bar | 1.7.3 | `take_find`, `find_icon` (`s_img_search`) | NOT PORTED; V2.1's theme has no `s_img_search`, so the search row stays a row |
+| No TF card toasts after a Standby resume | 1.7.3 | `check_cardmount_status` | NOT PORTED; V2.1's `check_cardmount_status` not pinned |
 
 Ported in round 2 and passed on the device ([progress section 91](m1plus-progress.md#91-unported-round-2-nov-15)):
 the player's 1.6.5 to 1.6.7 fixes (stop, preload, seek, DSD/ISO probes, forced end, the DAC release wait), the MP3
