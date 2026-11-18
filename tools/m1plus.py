@@ -74,6 +74,7 @@ CALL_SITES: dict[str, dict[str, tuple[tuple[int, int, int | str | None], ...]]] 
     'q2': {
         'AB_X_CALLS': tuple((a, 0x04110000 | ((0x52a268-a-4)//4 & 0xffff), 'ringnav_ab_x') for a in (0x52a408, 0x52a484, 0x52a494)),
         'TABLE_LOAD_CALL': ((0x5ca0fc, 0x0320f809, 'ringnav_table_load'),),
+        'COVERINFO_CALL': ((0x492968, 0x0320f809, 'app_coverinfo_call'),),
         'HSCROLL_LULL': ((0x5e8ae8, 0x0320f809, 'ringnav_hscroll_lull'),),
         'HSCROLL_ONCE': ((0x5e8a28, 0x14400025, 0x10000025),),
         # config_init's bal config_playmode becomes jal ringnav_bootmode, which keeps the saved queue
@@ -492,6 +493,14 @@ M1PLUS_PORTS = {
                             'found'),
     'tidalColTracksThd': ('unported', "Tidal favourite tracks past 50 (1.5.0); V2.1's is 0x51b2d4, but V2.1 has no "
                           'tidal_collection_thread_run, its done flag not yet found'),
+    # 1.7.3
+    'COVERINFO_CALL': ('unported', "1.7.3: a card app's cover by URL (addon.c art); the M1's ADDON_CAPS offers no art"),
+    'check_cardmount_status': ('unported', "1.7.3: no TF card toast after a Standby resume; V2.1's check_cardmount_status "
+                                           'not pinned'),
+    'systemset_wifi_page_init': ('unported', '1.7.3: Smart Wi-Fi; its stand-ins are m1plus_smart_wifi.c'),
+    'stream_row': ('unported', "1.7.3: Smart Wi-Fi's held Tidal row; Smart Wi-Fi is unported"),
+    'netservice_row': ('unported', "1.7.3: Smart Wi-Fi's held Network service rows; Smart Wi-Fi is unported"),
+    'playermore_online': ('unported', "1.7.3: Smart Wi-Fi's held online match; Smart Wi-Fi is unported"),
 }
 PDR_M1PLUS = (0x5f388c, 0x65800)  # demo's .pdr, as build.py's PDR
 M1PLUS_GLOBAL_ALIASES = {
