@@ -6393,7 +6393,8 @@ static int np_line_hold(const void *info) {
         widget_get_prop_int(st.np_slide, "value", 0) != 1)
         return 0;
     widget_to_local(lrc, xy);
-    xy[1] += I(lrc, SCROLL_Y); /* its rows' place: the view's own offset is no parent's */
+    if (!M1PLUS) /* M1 Plus: V2.1's widget_to_local adds the view's own offset already (get_offset) */
+        xy[1] += I(lrc, SCROLL_Y); /* its rows' place: the view's own offset is no parent's */
     for (int i = widget_count_children(lrc); i-- > 0;) {
         void *row = widget_get_child(lrc, i);
         if (xy[1] >= I(row, W_Y) && xy[1] < I(row, W_Y) + I(row, W_H)) {
