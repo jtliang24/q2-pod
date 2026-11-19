@@ -4110,6 +4110,9 @@ static void bar_sync(void *bar) {
                   7 - (I(st.bar_state, W_H) - 11) / 2, I(st.bar_state, W_W), I(st.bar_state, W_H));
         bar_place(st.bar_slot, 285, 1, 37, 21);
         if (key != st.batt_key) widget_invalidate_force(st.bar_slot, (void *)0);
+#if M1PLUS /* that invalidate is made mid-paint and dropped (#116): repaint the bar after the frame */
+        if (key != st.batt_key && !st.bar_timer) st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
+#endif
         st.batt_key = key;
         return;
     }
@@ -4124,6 +4127,9 @@ static void bar_sync(void *bar) {
     if (resized) widget_layout_children(P(st.bar_slot, W_PARENT));
 #if M1PLUS /* the row moved with it, and what this paint invalidates is dropped (#116): 100% to 99% left a second battery beside the first */
     if (resized && !st.bar_timer) st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
+    /* a new level or colour at the same width: the slot's invalidate below is dropped as well, and Charging to Full at
+     * 100% left "00%" green where no other dirty rect reached (V07Rm's L) */
+    if ((key != st.batt_key || mode != st.batt_mode) && !st.bar_timer) st.bar_timer = timer_add(bar_repaint, (void *)0, 0);
 #endif
     if (key == st.batt_key && mode == st.batt_mode && !resized) return;
     st.batt_mode = mode;
