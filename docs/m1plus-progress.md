@@ -5418,13 +5418,19 @@ Settings restored (Screen Off 1 min, boot-target `rockbox`); the device stays on
   the device.
 - **D, the stray lyric line** (`6cfdc48c`, `40e7b958`): AWTK's `scroll_view` relayout, also during a paint, sizes
   the content to the rows and clamps the offset, so the last lines, centred by `lyric_pad` past the end, dropped
-  and an earlier line showed. The last row now holds the half view (`lyrics_fit`, `lyrics_line_h`). Shared code,
-  so the Q2 takes it too. Upstream's tap-a-line (`4f0151d8`) will need `lyrics_line_h` at the next sync.
+  and an earlier line showed. The last row now holds the half view (`lyrics_fit`, `lyrics_line_h`). M1 only;
+  upstream's tap-a-line (`4f0151d8`) will need `lyrics_line_h` at the next sync.
 - **F, iHeart's title** (`9eceeedf`, `da077f34`): `icy_title()` in `video.c` turns a `key="value"` `StreamTitle`
   into "artist - title" (or either alone) and leaves any other title untouched. In `q2video`, not `.scratch`.
 - **E** (`4a143628`, `812a062f`, `e6c2fbaa`): a lift on full-screen lyrics is a tap only before `LONG_PRESS_MS`;
   the PEQ bar has `word_wrap`, and sits 8 px in from each edge with the tabs where they were.
 - **B:** closed. Upstream and V2.1 give Unknown Artist only the All Songs row, which lists untagged songs.
+
+The first `gates.py` run failed at `q2compare`: G, D, F and E changed the Q2's `update.tar`. They are now M1 only
+(`#if M1PLUS`; `7acf682b`, `2af69da6`, `d5b2683a`, `02e82085`, `724a3542`), so the Q2's stays byte-identical to
+1.7.6's; upstream PRs could carry them to the Q2. test/fw builds the Q2's side, so their test/fw cases are kept and
+skipped (`m1_only`); test/m1plus/patch.py checks G, D and the hold on the M1, and nothing runs the PEQ bar's tests
+until test/fw has an M1 build.
 
 The M1's `.scratch` is at 124,472 of 128 KB (about 6,600 B left).
 
