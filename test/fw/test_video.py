@@ -1438,6 +1438,20 @@ def test_a_station_s_key_value_title_is_shown_as_artist_and_song(q2):
     assert titles[0] == 'Band - Song' and titles[-1] == 'Next, Song'  # an artist's " - " for the page; none, the title alone
 
 
+@m1_only("video.c radio()'s icy_title")
+def test_a_station_s_artist_dash_text_title_is_shown_as_artist_and_song(q2):
+    """iHeart's KIIS FM form (V07Rm pass, finding F): the plain artist, then space-separated pairs keyed text."""
+    q2.stations[URL] = [Station(icy('Rihanna - text="Rude Boy" song_spot="M" MediaBaseId="1698179" amgTrackId="-1" '
+                                    'amgArtworkURL="http://image.iheart.com/ihr-ingestion-pipeline-production-umg/redel') +
+                                [update(5000, 'LA\'s #1 Hit Music Station - text="102.7 KIIS FM" song_spot="T" '
+                                              'MediaBaseId="0" spotInstanceId="-1"'),
+                                 update(6000, 'Artist - Song')], sound=800)]
+    q2.press(b'q', 7000)
+    assert radio(q2) == 0
+    titles = [s['title'] for s in q2.radio_states() if s['state'] == 'playing']
+    assert titles[0] == 'Rihanna - Rude Boy'
+    assert "LA's #1 Hit Music Station - 102.7 KIIS FM" in titles and titles[-1] == 'Artist - Song'  # another title stays
+
 def test_a_dropped_stream_starts_again_at_once_then_a_second_later_each_silent_start(q2):
     q2.stations[URL] = [Station(icy(), sound=500, end=3000), Station(REFUSED, end=0)]
     assert radio(q2) == 0

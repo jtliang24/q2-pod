@@ -2905,6 +2905,32 @@ def video_check(tmp):
     assert icy(b'title="A \\"quoted\\" word",artist="B"') == b'B - A "quoted" word'
     t = b'title="' + b'x' * 200 + b'",artist="' + b'y' * 30 + b'"'  # the longest title still fits the buffer
     assert icy(t) == b'y' * 30 + b' - ' + b'x' * 200
+    # iHeart's other form (KIIS FM, V07Rm pass, finding F): plain artist, " - ", then space-separated pairs keyed text.
+    # These are the StreamTitles captured on the M1 (the song's is cut at the 255 bytes, in the amgArtworkURL).
+    kiis = (b'Rihanna - text="Rude Boy" song_spot="M" MediaBaseId="1698179" itunesTrackId="0" amgTrackId="-1" '
+            b'amgArtistId="0" TAID="34742" TPID="2010947" cartcutId="0707905001" amgArtworkURL="http://image.iheart.com/'
+            b'ihr-ingestion-pipeline-production-umg/redelivery/NEW_')
+    assert len(kiis) == 255 and icy(kiis) == b'Rihanna - Rude Boy'
+    assert icy(kiis[:75]) == b'Rihanna - Rude Boy'  # cut after the title's pair, mid-pair
+    assert icy(kiis[:20]) == kiis[:20]  # the title's own quote unterminated
+    assert icy(b'Rihanna - text="Rude Boy" song_spot="M" MediaBaseId="1698179" amgArtworkURL="http://x/a.jpg" '
+               b'length="00:03:20" spotInstanceId="-1"') == b'Rihanna - Rude Boy'
+    assert icy(b'LA\'s #1 Hit Music Station - text="102.7 KIIS FM" song_spot="T" MediaBaseId="0" itunesTrackId="0" '
+               b'amgTrackId="0" amgArtistId="0" TAID="0" TPID="0" cartcutId="0" amgArtworkURL="" length="00:00:00" '
+               b'unsID="0" spotInstanceId="-1"') == b"LA's #1 Hit Music Station - 102.7 KIIS FM"
+    assert icy(b'Justin Bieber - text="Yukon" song_spot="M",TPID="1"') == b'Justin Bieber - Yukon'  # commas too
+    assert icy(b'Old - Band - text="Song" song_spot="M"') == b'Old - Band - Song'  # the prefix is whole to the pairs
+    assert icy(b'Prefix - text="Song" artist="Band" song_spot="M"') == b'Band - Song'  # an artist pair wins
+    assert icy(b'Prefix - text="Song" artist="" song_spot="M"') == b'Prefix - Song'
+    assert icy(b'Prefix - text="" song_spot="M"') == b'Prefix' and icy(b'Prefix - text="Song"') == b'Prefix - Song'
+    assert icy(b'text="Song",artist="Band"') == b'Band - Song' and icy(b'text="Song",url="u"') == b'Song'  # text is a title key
+    assert icy(b'title="Song",text="Other"') == b'Song' and icy(b'text="A \\"q\\" w" song_spot="M"') == b'A "q" w'
+    # any other StreamTitle with a " - " is left as it is: no pair right after it, an unquoted value, no space before
+    # the key, no text pair, or the text's quote unterminated
+    for same in (b'A - B', b'A - text=unquoted', b'A -text="x"', b'A - B - text=x', b'A - song_spot="M" id="1"',
+                 b'Foo - Bar a="b"', b'Foo - title="Song" song_spot="M"', b'Foo - subtitle="X" text2="Y"',
+                 b'A - text="x', b'A - B text="x"', b' - text="x"', b'- text="x"', b'A  -  text="x"'):
+        assert icy(same) == same, same
     print('Videos: ffmpeg argv, frame pacing, Bluetooth volume, length, bar and back chevron passed; radio tags passed.')
 
 
