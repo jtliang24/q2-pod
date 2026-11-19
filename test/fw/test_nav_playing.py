@@ -1800,6 +1800,24 @@ def test_centreds_tap_on_the_lyrics_takes_them_full_screen_and_back(fw, ui, mcl,
     assert restacks == [len(ui.kids[lyr.win]), at]  # over all, then its own place again, under the bar
 
 
+def test_a_hold_on_the_lyrics_stays_in_full_screen_and_plays_nothing(fw, ui, mcl, st):
+    """A press held LONG_PRESS_MS (500) before it lifts is no tap: it left full screen like one (1.7.6's pass,
+    finding E)."""
+    theme(fw, st, MINIMAL, NPCENTRED=1)  # Classic has no Centred layout
+    lyr = Lyrics(fw, ui, mcl, st, sec=35)
+    tap(ui, lyr.lyric, O['EVT_POINTER_DOWN'], 100, 100)
+    ui.now += 499  # just under: a slow tap
+    tap(ui, lyr.lyric, O['EVT_POINTER_UP_BEFORE'], 100, 100)
+    assert st.np_full == 1
+    tap(ui, lyr.lyric, O['EVT_POINTER_DOWN'], 100, 100)
+    ui.now += 500
+    assert tap(ui, lyr.lyric, O['EVT_POINTER_UP_BEFORE'], 100, 100) == [0]
+    assert st.np_full == 1 and lyr.seeks() == []
+    tap(ui, lyr.lyric, O['EVT_POINTER_DOWN'], 100, 100)  # and a tap after a hold still leaves
+    tap(ui, lyr.lyric, O['EVT_POINTER_UP_BEFORE'], 100, 100)
+    assert st.np_full == 0
+
+
 @pytest.mark.parametrize('end', ['far', 'drag', 'abort', 'page', 'reopen'])
 def test_full_screen_lyrics_end_with_a_swipe_or_off_their_page(fw, ui, mcl, st, end):
     theme(fw, st, MINIMAL, NPCENTRED=1)  # Classic has no Centred layout

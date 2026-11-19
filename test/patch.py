@@ -8608,7 +8608,9 @@ for on in ('1','0'):
     m=centred(centred=on); settle(m)
     for kw in ({'dx':11,'abort':True},{'dy':10,'abort':True},{'dy':40},{'dx':-25}):
         assert tap_line(m,**kw)==[] and not full_on(m),kw
-    assert tap_line(m,ms=O['RATE_HOLD_MS'])==[] and full_on(m); settle(m); passed()  # a long press is a tap
+    assert tap_line(m,ms=O['RATE_HOLD_MS'])==[] and not full_on(m); passed()  # a hold is no tap
+    assert tap_line(m)==[] and full_on(m); settle(m); passed()
+    assert tap_line(m,ms=O['RATE_HOLD_MS'])==[] and full_on(m); passed()  # nor is one in full screen
     assert tap_line(m)==[] and not full_on(m); passed()  # on a line: the column back, no seek
     m.tap(); settle(m); assert full_on(m)
     assert tap_line(m,dy=10,abort=True)==[] and not full_on(m); passed()  # the lines' drag ends it

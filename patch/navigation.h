@@ -213,8 +213,9 @@ typedef struct {
     int np_bold;             /* the title's font: theme_font's face | px << 2, -1 not set yet */
     void *np_slide, *np_lrc; /* the art/lyrics/info pages and the lyric lines' scroll_view */
     /* Now Playing's full-screen lyrics (np_full) and where the last touch on them came down
-     * (np_lyric_touch) */
+     * (np_lyric_touch) and when */
     int np_full, np_tap_x, np_tap_y;
+    unsigned np_tap_at;
     int np_was[9]; /* the column before full screen (np_full) */
     /* The full-screen art's song name, its shade and its window, the fade's step and timer
      * (ringnav_bigcover) */
