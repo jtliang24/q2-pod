@@ -22,7 +22,9 @@ const char *netupdate_tag(const char *location) {
 #define SH_DIR CARD "/.q2"
 #define STAGING SH_DIR "/staging"
 #define SH_CAP (1u << 30) /* the most an install may unpack */
-#define SH_MAX 16
+/* 32 as upstream's a8ace2ab (1.8.8): the live sources.list outgrew 16. a8ace2ab also gives check()'s
+ * text 8 bytes more, for the "[Games]\n" line its Games tab writes; taken now, unused until then. */
+#define SH_MAX 32
 
 enum { SH_OK, SH_NET, SH_SPACE, SH_CARD, SH_MISSING, SH_BAD, SH_CANCELLED, SH_BUSY };
 /* repo: its GitHub owner/name; id: the repo's name less "q2-", for the card folder .<id>, the tag
@@ -589,7 +591,7 @@ static int release(shelf_app *a, char *tag, char *url, unsigned *size) {
  * still installed (so it can be removed), else the page's own; then each one's latest release.
  * Whether every release was checked: a list that failed is fetched again with the next check. */
 static int check(void) {
-    char path[96], tag[32], url[256], text[SH_MAX * 120];
+    char path[96], tag[32], url[256], text[SH_MAX * 120 + 8];
     unsigned size, m = 0;
     long code = 0;
     char *list = get(SH_LIST_URL, &code);
