@@ -5445,6 +5445,46 @@ The M1's `.scratch` is at 124,472 of 128 KB (about 6,600 B left).
 6. A ~0.7 s hold in full-screen lyrics stays, a tap leaves; a long PEQ status wraps at a space; "Preset loaded…"
    has margins and both tabs still switch, tapped near the edges.
 
+## 97. Device pass: V07Rm, the V067m pass fixes (Nov 19)
+
+`.plan/device-pass-1-7-6-fixes-check.md` on `V07Rm` (`fix/1-7-6-pass` `b0eed389`, `update.bin` `6819f6f62e53…`,
+About "1.7.6 dev 5"), over `q2remote`; the user unplugged the cable for the battery's second half. Notes, shots and
+logs: `work/sync/1.7.6-fixes-pass/`.
+
+**Passed:**
+- **G:** the App Store has 16 rows, Soloify last, and scrolls to it; Check for Updates reports. Section 96's "18
+  upstream apps" counts Apple Music (commented out) and Rockbox and its Themes (hidden on the M1): 15 are listed.
+- **H:** `tstop` held `demo`'s main thread 50 s: `q2-stall` at +23 s (`age 20001 ms`, `state t`,
+  `wchan ptrace_stop`) and again at +48 s; after the detach the record went, `demo` kept its pid, no reset. The
+  optional hold to the reset was skipped: the boot target is Rockbox, which has no `q2remote`.
+- **A:** `battery/capacity` exists (100, Charging, then Full, then Discharging off the cable). Percent and the lock
+  screen show 100 throughout: no animation steps.
+- **D:** at the last line, playing and paused, full screen on and off leaves no stray line and the last lines
+  hold, on Modern, Minimal and Centred Now Playing.
+- **E:** a 0.7 s hold in full-screen lyrics stays, a tap leaves. "Folder missing or unavailable" and "Preset
+  loaded; choose Apply to activate" wrap at a space, 31 and 38 px in; both tabs switch tapped at x 20 and 302.
+- A normal station (SomaFM) shows artist and title, and a mid-play change refreshes. Home, Now Playing and Library
+  lists open and Back returns; no `q2-crash.log`.
+
+**Findings** (to `/plan`):
+- **F (not fixed):** KIIS FM's `StreamTitle` is `Artist - text="Title" song_spot="M" MediaBaseId="…" …`: plain
+  text first, then space-separated pairs with `text`, not `title`. `icy_title()` stops at the first token that
+  isn't a pair, so the raw pairs still scroll on the third line (the artist shows on the second). Songs and the
+  station ID (`LA's #1 Hit Music Station - text="102.7 KIIS FM" …`) both take this form; see `icy.log`.
+  `/tmp/q2video.log` doesn't exist on the M1: the title is in `/tmp/q2radio.state`.
+- **J (docs):** `docs/remote.md`'s `tstop` build makes a binary the M1's kernel refuses (ENOEXEC, shown as
+  `syntax error: unexpected "("`): the M1's userland is NaN2008 (`e_flags` `0x70001405`), so the clang line needs
+  `-mnan=2008`. Its `pgrep demo` also matches the `q2remote` shell; use `pidof demo`.
+- **K:** a radio-list picker (Screen Off, Theme) sometimes closes on the press and the same touch lands on the page
+  below: picking Off opened Brightness, Modern toggled Light Mode. Stock or ours is unchecked.
+- **L:** when the battery went Charging → Full, the radio pages drew Percent's "1" white and "00%" still green;
+  Home redrew it all white.
+- **I:** the App Store's toast says "1 app can be updated" while File Browser and Soloify both say Update.
+
+Settings restored (`config.ini` byte for byte, Screen Off 1 min, Battery Icon, boot-target `rockbox`); the test
+folder was removed and the library rescanned (492 songs). The test WAV stays in V2.1's play history (`recentplay`,
+`oftenplay`) and the queue. The device stays on `V07Rm`; `V067m` is kept as `/mnt/mmc/.q2/update-V067m.bin`.
+
 ## How to check a build now
 
 ```sh
