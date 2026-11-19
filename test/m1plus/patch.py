@@ -220,7 +220,10 @@ def render(m,code,v):
     return str(signed(v)) if code=='i' else '%08x'%v
 
 
+BATTERY_CAPACITY='/sys/class/power_supply/battery/capacity'  # system.c ringnav_battery_level's file (M1 Plus)
+CAPACITY_FD=0x5a  # the fd Machine opens it as
 class Machine:
+    capacity=None  # what the kernel's capacity file says (a number or text); None: no such file
     def __init__(self, patched=True):
         self.u=Uc(UC_ARCH_MIPS, UC_MODE_MIPS32|UC_MODE_LITTLE_ENDIAN)
         # M1 Plus: an exception out of a hook stops the emulation and is raised after it, never through unicorn,
@@ -305,6 +308,7 @@ class Machine:
                   'strcasestr@GLIBC_2.2',
                   'unlink@GLIBC_2.0','atoi@GLIBC_2.0','strtol@GLIBC_2.0','memcmp@GLIBC_2.0','access@GLIBC_2.0',
                   'open@GLIBC_2.0','fflush@GLIBC_2.0','fsync@GLIBC_2.0','fileno@GLIBC_2.0',  # the watchdog and the state record
+                  'read@GLIBC_2.0','close@GLIBC_2.0',  # and the kernel's battery capacity (ringnav_battery_level)
                   'fopen@GLIBC_2.2', 'opendir@GLIBC_2.0', 'readdir@GLIBC_2.0',
                   'closedir@GLIBC_2.0', 'pthread_mutex_lock@GLIBC_2.0',
                   'pthread_mutex_unlock@GLIBC_2.0', 'calloc@GLIBC_2.0', 'realloc@GLIBC_2.0',
@@ -528,7 +532,10 @@ class Machine:
             result=(re.sub(r'%\.\*s','%s',fmt) % tuple(params)).encode(); self.u.mem_write(a,result[:b-1]+b'\0'); ret=len(result)
         elif name=='atoi@GLIBC_2.0': ret=int(re.match(r'[+-]?\d+',self.text(a))[0]) if re.match(r'[+-]?\d+',self.text(a)) else 0
         elif name=='access@GLIBC_2.0': ret=0 if self.text(a) in self.present else -1
-        elif name=='open@GLIBC_2.0': ret=0xffffffff  # no /dev/jz_watchdog here: the watchdog stays off
+        elif name=='open@GLIBC_2.0':  # no /dev/jz_watchdog here: the watchdog stays off; the capacity file only when a test gave it one
+            ret=CAPACITY_FD if is_m1plus and self.capacity is not None and self.text(a)==BATTERY_CAPACITY else 0xffffffff
+        elif name=='read@GLIBC_2.0':  # system.c ringnav_battery_level's file: the kernel's capacity, as text
+            data=f'{self.capacity}\n'.encode()[:c]; u.mem_write(b,data); ret=len(data)
         elif name=='calloc@GLIBC_2.0':
             ret=0 if getattr(self,'fail_calloc',False) else self.alloc(a*b)
             self.sized[ret]=a*b
@@ -21703,6 +21710,8 @@ class PowerMachine(ResumeMachine):
             self.handlers[syms[n]]='p:'+n
     def hook(self,u,address,size,unused):
         name=self.handlers.get(address,''); a=u.reg_read(REGS[0])
+        if name=='p:open@GLIBC_2.0' and is_m1plus and self.text(a)==BATTERY_CAPACITY:  # ringnav_battery_level's, not the watchdog's
+            self.calls.append(('open',a,0,0)); self.returns(CAPACITY_FD if self.capacity is not None else 0xffffffff); return
         if name.startswith('r:fclose') and self.open.get(a,[0,0])[1]=='w':
             path,_,_,data=self.open.pop(a); self.files[path]=data; (self.records if path==RECORD else self.writes).append((path,data)); self.calls.append(('fclose',a,0,0))
             self.returns(0); return
@@ -21824,7 +21833,7 @@ if 'toolsIntoStandby' in HOOKS:
             self.byte(syms['g_backlight_status'],1); self.byte(syms['g_usbdet_value'],0)
         def hook(self,u,address,size,unused):
             name=self.handlers.get(address,''); a,b,c=[u.reg_read(r) for r in REGS[:3]]
-            if name=='p:open@GLIBC_2.0':
+            if name=='p:open@GLIBC_2.0' and not (is_m1plus and self.text(a)==BATTERY_CAPACITY):
                 assert self.text(a)=='/dev/jz_watchdog' and b==0x80002; self.wdt_opens+=1; self.returns(self.fd&0xffffffff); return
             if name=='d:ioctl':
                 self.ioctls.append((a,b,self.get(c)) if b==WDT_START else (a,b))
@@ -21932,6 +21941,52 @@ if 'networkGetWifiSignal' in HOOKS:
     m.now+=1; assert m.signal()==-70 and m.used()==['open','read','close']; passed()
 else:
     not_ported("The Wi-Fi signal from the driver (networkGetWifiSignal not hooked on M1 Plus)")
+# The battery level (system.c ringnav_battery_level), M1 Plus: V2.1's power_capacity is a guess (on the cable it
+# counts up by 10 and wraps past 100, the charging animation; off it a voltage bucket), so the status bar, the
+# lock screen, the charge limit and the state record read the kernel's capacity, again after BATTERY_LEVEL_MS at
+# the soonest, clamped to 100; a missing or unparsable file is power_capacity as before.
+if is_m1plus:
+    def capacity_of(m): return m.call(address=payload_syms['ringnav_battery_level'],args=(0,0,0,0),gap=0)
+    m=PowerMachine(); m.word(syms['power_capacity'],30)
+    for capacity,want in ((100,100),(7,7),(0,0),(250,100),('',30),('abc',30),(None,30)):
+        m.capacity=capacity; m.now+=O['BATTERY_LEVEL_MS']; m.calls=[]
+        assert capacity_of(m)==want and [m.text(c[1]) for c in m.calls if c[0]=='open']==[BATTERY_CAPACITY],(capacity,want); passed()
+    m=PowerMachine(); m.word(syms['power_capacity'],30); m.capacity=64; assert capacity_of(m)==64; m.capacity=80; m.calls=[]
+    m.now+=O['BATTERY_LEVEL_MS']-1; assert capacity_of(m)==64 and 'open' not in [c[0] for c in m.calls]
+    m.now+=1; assert capacity_of(m)==80; passed()
+if is_m1plus:
+    # The state record's battery, and the charge limit, follow it: a limit of 80 holds at a real 85 while the animation says 30, and
+    # lets a real 70 charge while the animation says 90.
+    m=WatchdogMachine(key=600); m.capacity=100; level(m,30,1); m.pass_(1); assert b' battery:100 ' in m.record(),m.record()
+    m=WatchdogMachine(key=600); level(m,30,1); m.pass_(1); assert b' battery:30 ' in m.record(),m.record(); passed()
+if is_m1plus:
+    m=PowerMachine({'CHARGELIMIT':'1'}); m.capacity=85; level(m,30,1); assert m.pass_()[0]==[0]
+    m=PowerMachine({'CHARGELIMIT':'1'}); m.capacity=70; level(m,90,1); assert m.pass_()[0]==[]
+    m=PowerMachine({'CHARGELIMIT':'1'}); level(m,90,1); assert m.pass_()[0]==[0]; passed()  # unreadable: power_capacity's
+if is_m1plus:
+    # The status bar's percentage is sized to its digits: a real 100 is three of them under an animation's 30, a real 7 one under its
+    # 100, and the file missing leaves the animation's own.
+    def bar_width(capacity,animation):
+        b=Machine(); b.config={'BATTERY':'2'}; b.capacity=capacity; b.word(syms['power_capacity'],animation)
+        slot,wifi,bt,pct,icon=(b.node(t,NAMES['STATUSW_'+k],visible=v) for k,t,v in (('SLOT','view',0),('WIFI','image',1),('BT','image',0),('PCT','progress_bar',0),('ICON','image',1)))
+        b.word(slot+O['W_H'],30); b.word(wifi+O['W_W'],14)
+        right=b.node('view','view_bar_right',[bt,wifi,slot,pct,icon]); b.word(right+O['W_H'],30)
+        for k in (bt,wifi,slot,pct,icon): b.word(k+O['W_PARENT'],right)
+        bar=b.node('system_bar','system_bar',[right]); b.word(right+O['W_PARENT'],bar); b.word(bar+O['W_PARENT'],b.wm); b.word(syms['system_bar'],bar)
+        for w in (bar,slot,bar,bar): b.call(address=HOOKS['widget_on_paint_background'][0],args=(w,b.canvas,0,0),gap=0,clear=False); b.advance(0,clear=False)
+        return b.get(slot+O['W_W'])
+    widths={(c,a):bar_width(c,a) for c in (None,7,100) for a in (7,30,100)}
+    assert all(width==O['BATT_BODY_W']+O['BATT_NUB_W']+O['BATT_GAP']+10*len(str(c if c is not None else a))+10 for (c,a),width in widths.items()),widths; passed()
+if is_m1plus:
+    # And the lock screen's level: the digits it paints.
+    CONFIG.update(BATTERY='1'); m,w,_,_=lock_window('q2pod:aurora',{'LOCKCLOCK':'1'}); CONFIG.clear()
+    m.nodes[w['img_battery']]['image']='screens_battery'; m.word(syms['power_capacity'],30)
+    for capacity,want in ((100,'100%'),(None,'30%')):
+        m.capacity=capacity; m.now+=O['BATTERY_LEVEL_MS']; m.letters.clear()
+        m.call(address=HOOKS['widget_on_paint_background'][0],args=(w[LEVEL],m.canvas,0,0),gap=0)
+        assert [l['text'] for l in m.letters]==[want],(capacity,m.letters); passed()
+if not is_m1plus:
+    not_ported("The battery level from the kernel (V2.1's power_capacity follows the charging animation)")
 
 
 
