@@ -19,6 +19,7 @@ import pytest
 
 import host
 import video_host
+from conftest import m1_only
 
 W, H = 320, 375  # the panel's picture; /dev/fb0 holds two pages of it
 ROW = W * 4
@@ -1427,6 +1428,7 @@ def test_a_station_connects_plays_and_follows_its_titles(q2):
     assert [(r, v) for _, r, v in q2.dac] == [(DAC_PCM, 0), (DAC_MUTE, 0), (DAC_MUTE, 1)]
 
 
+@m1_only("video.c radio()'s icy_title")
 def test_a_station_s_key_value_title_is_shown_as_artist_and_song(q2):
     q2.stations[URL] = [Station(icy('title="Song",artist="Band",url="song_spot=\\"F\\" id=\\"1\\""') +
                                 [update(5000, 'title="Next, Song",url="u"')], sound=800)]

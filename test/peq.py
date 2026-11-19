@@ -2884,7 +2884,8 @@ def video_check(tmp):
     assert meta(b'  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz', b'Audio') == 'mp3 (mp3float),'
     assert meta(b'StreamTitle: a long title past the buffer', b'StreamTitle', 8) == 'a long '
     # Some stations (iHeart) send a StreamTitle of key="value" pairs: "artist - title" for the radio page's
-    # split, or the title alone. Any other StreamTitle is left as it is.
+    # split, or the title alone. Any other StreamTitle is left as it is. M1 Plus's radio only (video.c compiles
+    # icy_title for M1PLUS and this PEQ_HOST build); the Q2's shows the StreamTitle as upstream's does.
     def icy(title):
         buf = C.create_string_buffer(title, 256)
         lib.icy_title(buf)

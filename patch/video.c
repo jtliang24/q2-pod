@@ -162,6 +162,8 @@ int meta(const char *s, const char *key, char *out, unsigned n) {
     return 1;
 }
 
+#if M1PLUS || defined(PEQ_HOST)
+/* M1 Plus (and the host's test/peq.py): the Q2's radio shows a StreamTitle as upstream's does. */
 /* Whether the n bytes at k spell word. */
 static int is_key(const char *k, unsigned n, const char *word) {
     unsigned i = 0;
@@ -208,6 +210,7 @@ void icy_title(char *s) {
         s[tn ? tn : an] = 0;
     }
 }
+#endif
 
 #ifndef PEQ_HOST
 struct timespec {
@@ -477,10 +480,16 @@ static int radio(int argc, char **argv) {
                     if (*x >= 'a' && *x <= 'z') *x -= 32;
                 *x = 0;
             }
+#if M1PLUS
             int titled = meta(line, "StreamTitle", rs.title, sizeof rs.title);
             if (titled) icy_title(rs.title);
             if (titled || meta(line, "icy-br", rs.bitrate, sizeof rs.bitrate))
                 radio_state(rs.at ? "playing" : "connecting");
+#else
+            if (meta(line, "StreamTitle", rs.title, sizeof rs.title) ||
+                meta(line, "icy-br", rs.bitrate, sizeof rs.bitrate))
+                radio_state(rs.at ? "playing" : "connecting");
+#endif
         }
         if (pid > 0) kill(pid, SIGKILL), waitpid(pid, 0, 0);
         if (thread) pthread_join(thread, 0);
