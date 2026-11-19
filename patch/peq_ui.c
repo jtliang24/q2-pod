@@ -93,8 +93,12 @@ static const struct { double first, step; int rows; } picks[] = {{-12, 0.5, 49},
 #define TAB_LEFT 8
 #endif
 #define TAB_W ((UI_W - TAB_LEFT - 15) / 2)
+#if M1PLUS
 #define BAR_EDGE 8                        /* the bar's margin at each side, so a message never touches the screen's edge */
-#define TAB_RIGHT (UI_W - BAR_EDGE - TAB_W) /* Advanced's x */
+#else
+#define BAR_EDGE 0                        /* the Q2's bar spans the screen, as upstream's */
+#endif
+#define TAB_RIGHT (UI_W - 8 - TAB_W)     /* Advanced's x */
 #define E3_SAVE_MS 250
 #if M1PLUS
 #include "m1plus_peq_simple.inc"
@@ -1068,14 +1072,20 @@ static int tab_touch(void *ctx, void *event) {
     return 0;
 }
 
-/* The title label; the tabs' bar when the bar takes their taps (tabs). word_wrap breaks a message
- * between words: line_wrap alone split "unavaila/ble". */
+/* The title label; the tabs' bar when the bar takes their taps (tabs). On M1 Plus word_wrap breaks
+ * a message between words: line_wrap alone split "unavaila/ble". The Q2's stays upstream's: the
+ * tabs' bar is the one as wide as the screen. */
 static void *bar(void *page, int x, int w, int tabs) {
     void *title = label_create(page, x, 0, w, 48);
     widget_use_style(title, STYLE_LABEL_WHITE20C);
     widget_set_prop_int(title, "line_wrap", 1);
+#if M1PLUS
     widget_set_prop_int(title, "word_wrap", 1);
     if (tabs) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
+#else
+    (void)tabs;
+    if (w == UI_W) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
+#endif
     return title;
 }
 
@@ -1351,7 +1361,8 @@ static void e3_paint(void *canvas) {
 
 /* The tab bar, unless a message has it: the open tab white over an accent line, the other grey,
  * and while the wheel is on the bar, the other on the lighter card Centre would open. The canvas
- * starts at the bar's left edge, BAR_EDGE in from the screen's. */
+ * starts at the bar's left edge, BAR_EDGE in from the screen's (M1 Plus; the Q2's is the
+ * screen's). */
 static void tabs_paint(void *canvas) {
     int simple = ui.tab == SIMPLE, focus = simple ? e3.focus == E3_TABS : ui.tabs;
     if (simple ? e3.status != 0 : ui.status[0] != 0) return;

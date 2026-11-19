@@ -8,7 +8,7 @@ import struct
 
 import pytest
 
-from conftest import O
+from conftest import O, m1_only
 
 KEY_CENTER, KEY_PREV, KEY_NEXT, KEY_RETURN = O['KEY_CENTER'], O['KEY_PREV'], O['KEY_NEXT'], O['KEY_RETURN']
 EVT_DESTROY, EVT_VALUE_CHANGED, EVT_CLICK, EVT_FOCUS, EVT_KEY_UP, EVT_IM_ACTION = (O[k] for k in (
@@ -532,6 +532,7 @@ def test_a_preset_s_name_and_a_picked_preamp_show_as_set(fw):
     assert p.title() == 'Preset loaded; choose Apply to activate'
 
 
+@m1_only("peq_ui.c bar()'s word_wrap")
 @pytest.mark.parametrize('where', ['simple', 'advanced', 'message'])
 def test_the_bar_breaks_between_words(fw, where):
     """A message broke mid-word ("unavaila/ble", "u/nchanged"): line_wrap alone splits where the line is full
@@ -541,6 +542,7 @@ def test_the_bar_breaks_between_words(fw, where):
     assert p.props[(bar, 'word_wrap')] == 1 and p.props[(bar, 'line_wrap')] == 1
 
 
+@m1_only("peq_ui.c BAR_EDGE")
 @pytest.mark.parametrize('where', ['simple', 'advanced', 'message'])
 def test_the_bar_keeps_clear_of_the_screen_s_edges(fw, where):
     """"Preset loaded..." touched both edges; the tabs stay where they were on the screen and take the taps to the
