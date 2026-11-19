@@ -93,7 +93,8 @@ static const struct { double first, step; int rows; } picks[] = {{-12, 0.5, 49},
 #define TAB_LEFT 8
 #endif
 #define TAB_W ((UI_W - TAB_LEFT - 15) / 2)
-#define TAB_RIGHT (UI_W - 8 - TAB_W)     /* Advanced's x */
+#define BAR_EDGE 8                        /* the bar's margin at each side, so a message never touches the screen's edge */
+#define TAB_RIGHT (UI_W - BAR_EDGE - TAB_W) /* Advanced's x */
 #define E3_SAVE_MS 250
 #if M1PLUS
 #include "m1plus_peq_simple.inc"
@@ -681,7 +682,7 @@ static int action(void *ctx, void *event) {
     return 0;
 }
 
-static void *bar(void *page, int x, int w);
+static void *bar(void *page, int x, int w, int tabs);
 static int e3_touch(void *ctx, void *event);
 
 static int render(const void *unused) {
@@ -699,7 +700,7 @@ static int render(const void *unused) {
         widget_destroy_children(ui.page);
         e3.view = widget_factory_create_widget(widget_factory(), "view", ui.page, 0, 0, UI_W, e3.h);
         widget_on(e3.view, EVT_POINTER_DOWN, e3_touch, 0);
-        ui.bar = bar(ui.page, 0, UI_W);
+        ui.bar = bar(ui.page, BAR_EDGE, UI_W - 2 * BAR_EDGE, 1);
         e3_show();
         return 7;
     }
@@ -846,7 +847,8 @@ static int render(const void *unused) {
     scroll_view_set_offset(view, 0, offset);
     /* A message takes the title bar until the next action, so it never shrinks the list; on the
      * main screen the bar otherwise shows the tabs (peq_paint). */
-    void *title = ui.screen == HOME ? bar(ui.page, 0, UI_W) : bar(ui.page, TAB_LEFT, UI_W - 2 * TAB_LEFT);
+    void *title = ui.screen == HOME ? bar(ui.page, BAR_EDGE, UI_W - 2 * BAR_EDGE, 1)
+                                    : bar(ui.page, TAB_LEFT, UI_W - 2 * TAB_LEFT, 0);
     ui.bar = ui.screen == HOME ? title : 0;
     text[0] = 0;
     if (ui.status[0]) snprintf(text, sizeof(text), "%s", ui.status);
@@ -1066,14 +1068,14 @@ static int tab_touch(void *ctx, void *event) {
     return 0;
 }
 
-/* The title label; the tabs' bar when the bar takes their taps. word_wrap breaks a message
+/* The title label; the tabs' bar when the bar takes their taps (tabs). word_wrap breaks a message
  * between words: line_wrap alone split "unavaila/ble". */
-static void *bar(void *page, int x, int w) {
+static void *bar(void *page, int x, int w, int tabs) {
     void *title = label_create(page, x, 0, w, 48);
     widget_use_style(title, STYLE_LABEL_WHITE20C);
     widget_set_prop_int(title, "line_wrap", 1);
     widget_set_prop_int(title, "word_wrap", 1);
-    if (w == UI_W) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
+    if (tabs) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
     return title;
 }
 
@@ -1348,13 +1350,14 @@ static void e3_paint(void *canvas) {
 }
 
 /* The tab bar, unless a message has it: the open tab white over an accent line, the other grey,
- * and while the wheel is on the bar, the other on the lighter card Centre would open. */
+ * and while the wheel is on the bar, the other on the lighter card Centre would open. The canvas
+ * starts at the bar's left edge, BAR_EDGE in from the screen's. */
 static void tabs_paint(void *canvas) {
     int simple = ui.tab == SIMPLE, focus = simple ? e3.focus == E3_TABS : ui.tabs;
     if (simple ? e3.status != 0 : ui.status[0] != 0) return;
     unsigned fill = (unsigned)I(P(canvas, CANVAS_LCD), LCD_FILL_COLOR);
     for (int i = 0; i < 2; ++i) {
-        int x = i ? TAB_RIGHT : TAB_LEFT, shown = i == !simple;
+        int x = (i ? TAB_RIGHT : TAB_LEFT) - BAR_EDGE, shown = i == !simple;
         if (focus && !shown && peq_focus_shown()) e3_box(canvas, x, 4, TAB_W, 40, 0x333333);
         caption(canvas, i ? "Advanced" : "Simple", x, 4, TAB_W, 40, 20, shown ? 0xffffffffu : CF_GREY);
         if (shown) e3_box(canvas, x + (TAB_W - 96) / 2, 42, 96, 3, TONE);

@@ -541,6 +541,23 @@ def test_the_bar_breaks_between_words(fw, where):
     assert p.props[(bar, 'word_wrap')] == 1 and p.props[(bar, 'line_wrap')] == 1
 
 
+@pytest.mark.parametrize('where', ['simple', 'advanced', 'message'])
+def test_the_bar_keeps_clear_of_the_screen_s_edges(fw, where):
+    """"Preset loaded..." touched both edges; the tabs stay where they were on the screen and take the taps to the
+    margin (1.7.6's pass, finding E)."""
+    p = bar_page(fw, where)
+    bar = p.bar()
+    x, _, w, _ = struct.unpack_from('<4i', p.blocks[bar], 0)
+    assert x >= 8 and x + w <= 375 - 8
+    if where != 'message':
+        c = Canvas(fw)
+        paint(fw, p.ui.bar, c)
+        (simple,), (advanced,) = c.text('Simple'), c.text('Advanced')
+        assert simple[3][0] + x == 8 and advanced[3][0] + advanced[3][2] + x == 375 - 8  # the tabs as they were
+        p.tab(367 if where == 'simple' else 8)  # the tab's own edge still takes the tap
+        assert p.ui.tab == (ADVANCED if where == 'simple' else SIMPLE)
+
+
 def bar_page(fw, where):
     """The page with the Simple tab's bar, the Advanced tab's, or Advanced's with a message on it."""
     s = state(fw, EQ_PEQ, peq=peak(fw, 3))
