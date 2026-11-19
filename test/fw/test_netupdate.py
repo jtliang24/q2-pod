@@ -13,7 +13,7 @@ import zipfile
 import pytest
 
 import host
-from conftest import O, block
+from conftest import O, block, m1_only
 
 # stock.h's Q2POD_TAG: tools/build.py's VERSION (host.py builds as a release, not --dev)
 TAG = host.tools_build.VERSION.encode()
@@ -22,7 +22,7 @@ _n = int(TAG.replace(b'.', b'')) + 1
 NEWER = b'%d.%d.%d' % (_n // 100, _n // 10 % 10, _n % 10)
 OLDER = b'0.9.9'
 
-SH_MAX = 32  # netupdate.c's, as upstream's a8ace2ab (1.8.8)
+SH_MAX = 16  # netupdate.c's on the Q2; M1 Plus's is 32, as upstream's a8ace2ab (1.8.8)
 SH_CAP = 1 << 30
 SH_OK, SH_NET, SH_SPACE, SH_CARD, SH_MISSING, SH_BAD, SH_CANCELLED, SH_BUSY = range(8)
 NU_IDLE, NU_RUNNING, NU_DONE, NU_LATEST, NU_NET, NU_MISSING, NU_CARD, NU_CANCELLED = range(8)
@@ -1701,6 +1701,7 @@ def test_the_store_loads_its_list_then_not_again_for_ten_minutes(fw):
     assert s.sh.job == JOB_CHECK and len(s.workers) == 1
 
 
+@m1_only("netupdate.c's SH_MAX 32")
 def test_the_store_lists_twenty_apps(fw):
     """More than the 16 apps SH_MAX once held: the live list has 18 (the M1's test/m1plus/patch.py adds Soloify)."""
     listed = b''.join(b'me/q2-app%02d App %02d\n' % (i, i) for i in range(20))

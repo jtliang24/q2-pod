@@ -25,6 +25,13 @@ NAVIGATION_UNITS = sorted(p.stem for p in (ROOT/'patch').glob('*.c') if '#includ
 NAVIGATION_SOURCE = ''.join((ROOT/'patch'/n).read_text() for n in ['navigation.h', *(f'{u}.c' for u in NAVIGATION_UNITS)])
 
 
+def m1_only(why):
+    """A test of an M1 Plus-only change (#if M1PLUS, docs/m1plus-integration.md's "don't break Q2"): test/fw builds
+    the Q2's C (M1PLUS 0), whose behaviour stays upstream's, so the test is kept but skipped until test/fw can build
+    the M1's; test/m1plus/patch.py checks the change on the M1 build where it can."""
+    return pytest.mark.skip(reason=f'M1 Plus only: {why}; test/fw builds the Q2 side (M1PLUS 0)')
+
+
 def ui_name(lib, name):
     """The symbol of navigation.c's `name`, wherever the split put it: `name` itself once navigation.h shares it,
     else `<unit>__<name>`, a static of navigation.c or of a unit split out of it."""
