@@ -9617,7 +9617,9 @@ if 'mclLoadExLyric' in HOOKS:
         # top (i + 1) slots down; with no load's table, the labels' (whole seconds, no word stamps). Before the
         # first line the first sits in the middle, unlit, all LYRIC_REST; the playing line glides there on the page.
         m=karaoke(); assert m.show(4)==0 and m.nodes[m.lrc]['children_layout']==f'list_view(x=0,y={SLOT},s=0)'
-        assert [(m.nodes[r]['text'],m.get(r+O['W_H']),m.get(r+O['W_W']),m.get(r+O['W_Y'])) for r in m.nodes[m.lrc]['children']]==[('',SLOT,375,(i+1)*SLOT) for i in range(5)]
+        # The last row also holds the half page under its line, so a relayout, which sizes the content to the rows, keeps the
+        # page's end (C's division: 178 less half the rest).
+        assert [(m.nodes[r]['text'],m.get(r+O['W_H']),m.get(r+O['W_W']),m.get(r+O['W_Y'])) for r in m.nodes[m.lrc]['children']]==[('',SLOT,375,(i+1)*SLOT) for i in range(4)]+[('',178-(178-SLOT)//2,375,5*SLOT)]
         assert [(x[0],x[3],x[6]) for x in m.ink(0)]==[('One',REST,'default')]; passed()  # the system font
         assert settle(m)[-1]==0 and m.get(m.lrc+O['VIEW_CONTENT_H'])==4*SLOT+178; passed()  # the last line can reach the middle
         m.playtime=5; assert settle(m)[-1]==0; m.playtime=9; ys=settle(m); assert ys[-1]==SLOT and 0<ys[0]<SLOT,ys; passed()
@@ -9661,7 +9663,7 @@ if 'mclLoadExLyric' in HOOKS:
         # past LYRIC_ROWS (4) rows the rest is cut.
         m=karaoke([(10,'abcdefghi '*3+'abcdefghi'),(20,'字'*40),(30,'x'*60),(40,'One'),(50,'y'*150)]); m.show()
         gap=SLOT-38; hs=[2*38+gap,2*38+gap,3*38+gap,SLOT,4*38+gap]
-        assert [m.get(m.lyric_row(i)+O['W_H']) for i in range(5)]==hs
+        assert [m.get(m.lyric_row(i)+O['W_H']) for i in range(5)]==hs[:4]+[178-(178-hs[4])//2]  # the last, the page's end too
         assert [m.get(m.lyric_row(i)+O['W_Y']) for i in range(5)]==[SLOT+sum(hs[:i]) for i in range(5)]
         def whole(i):  # its row at the top; each row's first draw
             m.word(m.lrc+O['SCROLL_Y'],m.get(m.lyric_row(i)+O['W_Y'])); return [x for x in m.ink(i) if x[1]==16]

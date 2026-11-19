@@ -1232,6 +1232,16 @@ class Page:
         return [tuple(ink) for ink in inks], restore
 
 
+def last_row(h, view):
+    """lyrics_fit's last row, its line h high in a view that high: the line's, or more, to hold the half view under
+    the line centred (lyric_centre's offset, C's division, plus the view)."""
+    return max(h, int((h - view) / 2) + view)
+
+
+def line_h(fw, i):
+    return fw.fn('lyrics_line_h', C.c_int, C.c_uint)(i)
+
+
 def test_the_rows_take_the_loaders_table_and_its_word_stamps(fw):
     made = C.addressof(published(fw, b'[00:01.50]<00:01.50>one <00:02.00>two\n[00:04.00]three\n').contents)
     page = Page(fw, [(1, 'one two'), (4, 'three')])  # stock's rows: whole seconds, no stamps
@@ -1290,7 +1300,8 @@ def test_each_row_is_as_high_as_its_lines_rows_four_at_most(fw):
     assert page.rows() == 1
     h = [field(page.label(i), 'W_H') for i in range(5)]
     px = {e[1] for e in page.events if e[0] == 'font'}
-    assert h[0] == SLOT and h[1] - h[0] == h[2] - h[1] == h[3] - h[2] >= max(px) and h[4] == h[3]
+    assert h[0] == SLOT and h[1] - h[0] == h[2] - h[1] == h[3] - h[2] >= max(px) and line_h(fw, 4) == h[3]
+    assert [line_h(fw, i) for i in range(4)] == h[:4] and h[4] == last_row(h[3], field(page.at, 'W_H')) > h[3]
     assert all(field(page.label(i), 'W_W') == 375 for i in range(5))
     assert all(not page.texts[page.label(i)][0] for i in range(5))  # blank rows: the paint draws the line
     assert page.layouts == [f'list_view(x=0,y={SLOT},s=0)']
@@ -1303,7 +1314,8 @@ def test_the_rows_wrap_again_only_when_the_width_changes(fw):
     assert page.fit() == 1 and page.measured == measured
     field(page.at, 'W_W', 225)  # the centred page's column
     assert page.fit() == 1 and page.measured > measured
-    assert field(page.label(0), 'W_H') > one == field(page.label(1), 'W_H') and field(page.label(0), 'W_W') == 225
+    assert field(page.label(0), 'W_H') > one == line_h(fw, 1) and field(page.label(0), 'W_W') == 225
+    assert field(page.label(1), 'W_H') == last_row(one, field(page.at, 'W_H'))
 
 
 def test_a_line_the_fit_had_no_canvas_for_is_laid_out_at_its_paint(fw):
@@ -1314,7 +1326,7 @@ def test_a_line_the_fit_had_no_canvas_for_is_laid_out_at_its_paint(fw):
     published(fw, b'[00:01.00]' + b'a' * 40 + b'\n')  # a fresh table for the same line, not laid out
     page = Page(fw, line, canvas=False)
     page.rows()
-    assert page.measured == 0 and field(page.label(0), 'W_H') == SLOT
+    assert page.measured == 0 and field(page.label(0), 'W_H') == last_row(SLOT, field(page.at, 'W_H'))
     painted = [ink[2][0][0] for ink in page.paint(0)[0]]
     assert page.measured and painted == fitted and len(painted) > 1 and ''.join(painted) == 'a' * 40
 
@@ -1383,8 +1395,8 @@ def test_a_wrapped_line_lights_row_by_row(fw):
         (X + 300 * 1000 // 2700, 375, rgba(O['LYRIC_DIM']), 'b' * 30),  # 1 s into its second's 2.7 s
         (0, X + 300 * 1000 // 2700, rgba(O['LYRIC_LIT']), 'b' * 30)])
     ys, px = sorted({d[2] for ink in inks for d in ink[2]}), max(e[1] for e in page.events if e[0] == 'font')
-    h = field(page.label(0), 'W_H')
-    assert len(ys) == 2 and abs(ys[0] - (h - ys[1] - px)) <= 1  # its rows centred in the row
+    h = line_h(fw, 0)  # its line's height: the row, the last, also holds the page's end below
+    assert len(ys) == 2 and abs(ys[0] - (h - ys[1] - px)) <= 1  # its rows centred in the line
 
 
 FAINT = 8  # lyrics_paint draws no row fainter
@@ -1444,7 +1456,7 @@ def test_hostile_lyrics_from_the_loader_to_the_paint(fw):
             assert -1 <= page.line(ms) < len(lines)
             for i in range(min(len(lines), 4)):
                 scroll = r.randrange(-100, 300)
-                alpha = faded(field(page.label(i), 'W_Y') - scroll, field(page.label(i), 'W_H'), view)
+                alpha = faded(field(page.label(i), 'W_Y') - scroll, line_h(fw, i), view)  # the line's share
                 inks, restore = page.paint(i, scroll)
                 # a row in view enough draws its line, every ink at its alpha; one not, nothing
                 assert bool(inks) == (alpha >= FAINT) and all(color >> 24 == alpha for _, color, _ in inks)
