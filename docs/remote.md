@@ -128,6 +128,21 @@ Plus (dev 11). The Q2's payload is built and linked the same way, but `peek` has
 - Busybox has no `timeout`, `pkill` or `killall -r`. Background a command and `kill $!` it. Redirect a job you leave running in the background (`>/dev/null 2>&1 &`): its output has nowhere to go once `sh` returns.
 - Settings: `/mnt/data/config.ini`; the card is at `/mnt/mmc`. A changed demo pid in `state` means demo restarted.
 
+## Stopping one thread
+
+`kill -STOP` stops every thread of demo, including `stall_watch`, the thread that writes the stall record (`/mnt/data/q2-stall`), so a stopped demo ends in the watchdog's reset with no record. `tools/tstop.c` stops one thread with `ptrace` (`PTRACE_SEIZE` and `PTRACE_INTERRUPT`) and lets it go with `PTRACE_DETACH`. Stopping demo's main thread (its tid is its pid) is the UI loop, the watchdog's only feeder, and `stall_watch` keeps running.
+
+```sh
+clang --target=mipsel-linux-gnu -march=mips32r2 -mno-abicalls -G0 -fno-pic -msoft-float -Os \
+      -ffreestanding -fno-builtin -fno-stack-protector -fno-unwind-tables -c tools/tstop.c -o tstop.o
+ld.lld -m elf32ltsmip -static -e _start --gc-sections tstop.o -o tstop
+python3 tools/q2remote.py push tstop /tmp/tstop && python3 tools/q2remote.py sh 'chmod +x /tmp/tstop'
+python3 tools/q2remote.py sh 'P=$(pgrep demo); /tmp/tstop -l $P'     # tid and comm of each thread
+python3 tools/q2remote.py sh 'P=$(pgrep demo); /tmp/tstop $P 50 >/dev/null 2>&1 & sleep 30; cat /mnt/data/q2-stall; wait'
+```
+
+`tstop -l PID` lists the threads (a thread keeps its creator's comm unless it sets one, so most of demo's say `demo`; the main thread is the one whose tid is the pid). `tstop TID [SECONDS]` holds the thread 30 s by default, `0` until tstop is killed, then detaches; a killed or crashed tstop lets go too. The binary is freestanding (raw syscalls, no libc), so it runs on any M1 userland. Stop the main thread (`$P`), not another: the stall thread reads `/proc/self`, which is the main thread, and `stat` then says `t`. The first record comes `STALL_MS` (20 s) plus up to `STALL_POLL_MS` (5 s) after the stop and the second at 45 s; the watchdog resets at about 60 s, so hold 50 s to see both records and detach before it. The first pass after the detach removes the record, so read it while the thread is held. To see `S90play` put it in `q2-crash.log` as `== stall`, hold with `0` and let the reset come. `python3 test/tstop.py` builds the helper for the host and runs it against a two-thread dummy.
+
 ## Log
 
 `--dev` builds start demo with its output, and that of the hciplayer it starts, appended to `/tmp/q2-demo.log` instead of the serial console; release builds keep its stderr alone, in `/tmp/q2-demo.err`, capped at 512 KB ([boot.md](boot.md#rockbox-from-home)). The file is in RAM: once a minute it is emptied if it has grown past 4 MB, and it is gone after a reboot. demo's stdout is block-buffered once it goes to a file, so its lines arrive in batches rather than as they are printed; stderr arrives at once.
