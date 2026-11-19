@@ -162,6 +162,53 @@ int meta(const char *s, const char *key, char *out, unsigned n) {
     return 1;
 }
 
+/* Whether the n bytes at k spell word. */
+static int is_key(const char *k, unsigned n, const char *word) {
+    unsigned i = 0;
+    while (i < n && word[i] && k[i] == word[i]) ++i;
+    return i == n && !word[i];
+}
+
+/* A StreamTitle of key="value" pairs (iHeart's title="Song",artist="Band",url="...") in s, a
+ * title of at most 255 bytes, into "Band - Song" (np_refresh splits on " - "), or "Song" with no
+ * artist. A pair's value ends at its first quote not escaped by a backslash (a \" is a quote
+ * inside it). Once the title is read, a later pair cut off by the 255 bytes (the url's) or not of
+ * the form is dropped. Any other StreamTitle stays as it is: one without a title="..." pair (a key
+ * is whole, so subtitle="..." is not one) or with the title's quote unterminated. */
+void icy_title(char *s) {
+    char t[256], a[256];
+    unsigned tn = 0, an = 0;
+    int got = 0, art = 0;
+    for (const char *p = s;;) {
+        while (*p == ',' || *p == ' ') ++p;
+        const char *k = p;
+        while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') ||
+               *p == '_' || *p == '-')
+            ++p;
+        if (p == k || p[0] != '=' || p[1] != '"') break;
+        unsigned n = 0, kn = (unsigned)(p - k);
+        char *to = !got && is_key(k, kn, "title") ? t : !art && is_key(k, kn, "artist") ? a : 0;
+        for (p += 2; *p && *p != '"'; ++p) {
+            if (*p == '\\' && p[1] == '"') ++p;
+            if (to) to[n++] = *p;
+        }
+        if (*p != '"') break;
+        ++p;
+        if (to == t) got = 1, tn = n;
+        if (to == a) art = 1, an = n;
+    }
+    if (!got) return;
+    if (tn && an) {
+        memcpy(s, a, an);
+        memcpy(s + an, " - ", 3);
+        memcpy(s + an + 3, t, tn);
+        s[an + 3 + tn] = 0;
+    } else {
+        memcpy(s, tn ? t : a, tn ? tn : an);
+        s[tn ? tn : an] = 0;
+    }
+}
+
 #ifndef PEQ_HOST
 struct timespec {
     long sec, nsec;
@@ -430,8 +477,9 @@ static int radio(int argc, char **argv) {
                     if (*x >= 'a' && *x <= 'z') *x -= 32;
                 *x = 0;
             }
-            if (meta(line, "StreamTitle", rs.title, sizeof rs.title) ||
-                meta(line, "icy-br", rs.bitrate, sizeof rs.bitrate))
+            int titled = meta(line, "StreamTitle", rs.title, sizeof rs.title);
+            if (titled) icy_title(rs.title);
+            if (titled || meta(line, "icy-br", rs.bitrate, sizeof rs.bitrate))
                 radio_state(rs.at ? "playing" : "connecting");
         }
         if (pid > 0) kill(pid, SIGKILL), waitpid(pid, 0, 0);
