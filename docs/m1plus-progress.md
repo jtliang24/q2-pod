@@ -3413,7 +3413,7 @@ screen switch.
   `system_bar` global.
 - `tools/ipod.py`: `status_bar`'s right edge is `UI_W`, not 375. The Q2's bytes are unchanged.
 - `bar_state_sync` finds the widgets through `STATUSW_*`. On the M1, `bar_sync` reads the level from
-  `power_capacity`.
+  `power_capacity` (since section 96, from the kernel's capacity through `ringnav_battery_level`).
 - The chevron (`m1plus_nav_back.c`):
   - `chevron_input`, ahead of the long press in `ringnav_input`, owns a press that starts inside it until the
     release, and runs `previous_back` on a timer when the finger lifts inside it;
@@ -3475,7 +3475,8 @@ The port, on the M1's Large clock only (Standard stays V2.1's):
 - **A percentage mode:** `lockscreen.c` hands the two widgets to `navigation.c`'s `ipod_lock_level`. That hides the
   icon and clears the bar's fill. The bar, as wide as the status bar's Percent (`BATT_PCT_W`), ends where the icon did.
 - **The paint:** `ringnav_paint_bg` paints the percentage in the bar through `paint_battery`, as Percent paints it.
-  The level is `power_capacity`, green while the icon is `screens_charge`, red while it is `screens_lowbattery`.
+  The level is `power_capacity` (since section 96, `ringnav_battery_level`), green while the icon is
+  `screens_charge`, red while it is `screens_lowbattery`.
 - **Repaints:** V2.1's own value changes repaint it. The widget is forgotten on its `EVT_DESTROY`.
 - **The Q2:** its branch is unchanged, and `update.tar` stays byte-identical.
 
@@ -5399,6 +5400,44 @@ the Wi-Fi-off toasts, Crossfade's fade.
 
 The plan's `/mnt/sdcard` is `/mnt/mmc` on the M1. Apple Music is absent from the App Store: upstream comments it out.
 Settings restored (Screen Off 1 min, boot-target `rockbox`); the device stays on `V067m`.
+
+## 96. Fixes from the V067m pass (Nov 18)
+
+`.plan/device-pass-1-7-6-fixes.md` on `fix/1-7-6-pass` from `staging` `788d2bd2`, one item per commit.
+
+- **G, the App Store's cap** (`2b440cc6`, `dbde8482`): `SH_MAX` 16 → 32, as upstream's 1.8.8 (`a8ace2ab`), so the
+  live `sources.list` (18 apps) lists whole and Soloify still fits. A test/fw case lists 20 apps and Soloify.
+- **H, the stall record** (`27dd431f`): `tstop`, a ptrace helper that stops one thread of `demo`
+  (`PTRACE_SEIZE` + `PTRACE_INTERRUPT`), so `stall_watch` keeps running. Tooling only.
+- **C** (`aa69c81c`): a doc error. Knob: Navigation scrolls Cover Flow by design (`docs/m1plus.md`); section 93's
+  checklist line is fixed.
+- **A, the battery while charging** (`3cc4985c`, `ffa4cac6`): V2.1's `power_capacity` never reads the fuel gauge:
+  on the cable it follows the charging animation (+10 a step), off it buckets the voltage (V079m the same).
+  `ringnav_battery_level` (`system.c`, M1 only) reads `/sys/class/power_supply/battery/capacity`, cached for 1 s,
+  and falls back to `power_capacity`. The bar, Percent and the lock screen use it. The path is still to confirm on
+  the device.
+- **D, the stray lyric line** (`6cfdc48c`, `40e7b958`): AWTK's `scroll_view` relayout, also during a paint, sizes
+  the content to the rows and clamps the offset, so the last lines, centred by `lyric_pad` past the end, dropped
+  and an earlier line showed. The last row now holds the half view (`lyrics_fit`, `lyrics_line_h`). Shared code,
+  so the Q2 takes it too. Upstream's tap-a-line (`4f0151d8`) will need `lyrics_line_h` at the next sync.
+- **F, iHeart's title** (`9eceeedf`, `da077f34`): `icy_title()` in `video.c` turns a `key="value"` `StreamTitle`
+  into "artist - title" (or either alone) and leaves any other title untouched. In `q2video`, not `.scratch`.
+- **E** (`4a143628`, `812a062f`, `e6c2fbaa`): a lift on full-screen lyrics is a tap only before `LONG_PRESS_MS`;
+  the PEQ bar has `word_wrap`, and sits 8 px in from each edge with the tabs where they were.
+- **B:** closed. Upstream and V2.1 give Unknown Artist only the All Songs row, which lists untagged songs.
+
+The M1's `.scratch` is at 124,472 of 128 KB (about 6,600 B left).
+
+**Device checks** (the next pass):
+1. The App Store lists all 18 upstream apps and Soloify, scrolls to the last row; Check for Updates works.
+2. `tstop` on `demo`'s main thread: the stall record is written before the watchdog reset.
+3. `cat /sys/class/power_supply/battery/capacity` exists; on the cable the % matches it, not the animation.
+4. A 10-line LRC 2 s apart: at the last line, full screen on and off leaves no stray line; the last lines don't
+   drop and glide back (an ~8 px glide entering full screen is expected); iPod and Centred layouts.
+5. The iHeart station shows artist and song; a normal station is unchanged; a mid-play title still refreshes.
+   If the raw text shows, capture its `StreamTitle` from `/tmp/q2video.log`.
+6. A ~0.7 s hold in full-screen lyrics stays, a tap leaves; a long PEQ status wraps at a space; "Preset loaded…"
+   has margins and both tabs still switch, tapped near the edges.
 
 ## How to check a build now
 
