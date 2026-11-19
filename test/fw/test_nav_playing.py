@@ -1561,6 +1561,15 @@ class Lyrics(Now):
             ui.place(k, x, y, kw, kh)
             y += kh
 
+    def relayout(self):
+        """AWTK's relayout of scroll_lrc (scroll_view's on_layout_children), which any widget's asking for one brings
+        on, a paint's too: the rows laid out again, the content as high as they reach, the offset clamped to its end."""
+        self.layout(self.ui, self.lrc)
+        h = self.ui.box(self.lrc)[3]
+        end = max([h] + [y + kh for _, y, _, kh in map(self.ui.box, self.ui.kids[self.lrc])])
+        C.c_int.from_address(self.lrc + CONTENT_H).value = end
+        self.scroll(min(self.y(), end - h))
+
     def poll(self, passes=1, ms=25):
         offsets = []
         for _ in range(passes):
@@ -1736,6 +1745,19 @@ def test_a_tick_before_the_wheel_goes_raw_glides_to_the_next_rows_top(fw, ui, mc
     assert lyr.settle() == 0
     ui.ints[lyr.slide, b'value'] = 0
     assert lyrics(KEY_NEXT) == 0
+
+
+def test_a_relayout_leaves_the_last_lines_in_the_middle(fw, ui, mcl, st):
+    """The last row holds the space under the last line: AWTK sizing the content to the rows again, as it does on any
+    relayout, clamped the offset short of the follow's, so the last lines dropped and glided back, and the device
+    kept a frame of them dropped under the last line (1.7.6's pass, finding D)."""
+    theme(fw, st, CLASSIC)
+    lyr = Lyrics(fw, ui, mcl, st, sec=115)  # the last line
+    assert lyr.settle() == centre(11)
+    lyr.relayout()
+    assert lyr.y() == centre(11) and lyr.poll(10)[-1] == centre(11)
+    lyr.sec = 105  # the line before: the rows above the last as high as before
+    assert lyr.settle() == centre(10)
 
 
 def test_a_late_pass_glides_half_the_way_no_leap(fw, ui, mcl, st):
