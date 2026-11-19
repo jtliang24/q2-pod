@@ -43,7 +43,7 @@ static void charge_poll(void) {
     if (st.charge_at && now - st.charge_at < CHARGE_POLL_MS) return;
     st.charge_at =
         now | !now; /* never 0, no poll yet; |1 would eat a millisecond when now is even */
-    int level = I(g_power_capacity, 0), charging = (unsigned)I(g_power_chargestate, 0) - 1 < 2;
+    int level = ringnav_battery_level(), charging = (unsigned)I(g_power_chargestate, 0) - 1 < 2;
     int hold = st.charge_limit && level > CHARGE_RESUME && (st.charge_held || level >= CHARGE_STOP);
     if (hold && (!st.charge_held || charging))
         switch_charge_enable(0);
@@ -84,6 +84,37 @@ int ringnav_wifi_signal(void) {
     wifi.at = now | !now; /* never 0, not read yet */
     return wifi.dbm;
 }
+
+#if M1PLUS
+/* The battery level, for the M1 Plus: V2.1's get_battery_capacity never reads the fuel gauge, and
+ * power_capacity is a guess. On the cable it counts up 10 at a time and wraps past 100 (the charging
+ * animation), off it a bucket of voltage_now (0, 20 ... 100). The kernel's own capacity is the level
+ * the status bar, the lock screen, the charge limit and the state record want, read at most every
+ * BATTERY_LEVEL_MS. Unreadable, or not a number, it is power_capacity as before. */
+#define BATTERY_CAPACITY "/sys/class/power_supply/battery/capacity"
+static struct {
+    unsigned at;
+    int level; /* 0..100, -1 unreadable */
+} batt __attribute__((section(".scratch")));
+
+int ringnav_battery_level(void) {
+    unsigned now = time_now_ms();
+    if (!batt.at || now - batt.at >= BATTERY_LEVEL_MS) {
+        char text[16];
+        int fd = open(BATTERY_CAPACITY, 0x80000); /* O_RDONLY | O_CLOEXEC, MIPS */
+        int n = fd < 0 ? 0 : read(fd, text, sizeof text - 1), pct = 0, i = 0;
+        if (fd >= 0) close(fd);
+        text[n > 0 ? n : 0] = 0;
+        for (; text[i] >= '0' && text[i] <= '9'; ++i) {
+            pct = pct * 10 + text[i] - '0';
+            if (pct > 100) pct = 100;
+        }
+        batt.level = i ? pct : -1;
+        batt.at = now | !now; /* never 0, not read yet */
+    }
+    return batt.level < 0 ? I(g_power_capacity, 0) : batt.level;
+}
+#endif
 
 /* Hardware watchdog (docs/internals.md#watchdog). Stock loads soc_watchdog.ko and never starts it,
  * so a Q2 whose UI loop or kernel stalls stays dark, every button dead, until a 15 s Centre hold
@@ -245,7 +276,7 @@ static void state_poll(void) {
     static const char *const out[] = { "jack", "bluetooth", "usb" };
     if (pw.ended) return;
     unsigned ps = (unsigned)mclGetPlayStatus(), ow = (unsigned)mclGetOutputWay();
-    unsigned pct = (unsigned)I(g_power_capacity, 0), n = 0;
+    unsigned pct = (unsigned)ringnav_battery_level(), n = 0;
     char s[sizeof pw.state], d[4], *p = s;
     p = put(p, g_backlight_status ? "screen:on" : "screen:off");
     p = put(p, pw.suspended ? " power:suspending" : " power:running");

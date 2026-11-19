@@ -4085,8 +4085,8 @@ static void bar_sync(void *bar) {
      * (bar_lowcharge), as stock picks the icon */
     const char *icon = widget_get_prop_str(st.bar_icon, "image", "");
     int level = 0;
-#if M1PLUS /* V2.1's bar has a progress bar, not a "88%" label: the level it shows is power_capacity's */
-    level = I(g_power_capacity, 0);
+#if M1PLUS /* V2.1's bar has a progress bar, not a "88%" label: the level it shows is the kernel's, as power_capacity follows the charging animation */
+    level = ringnav_battery_level();
 #else
     const unsigned *t = widget_get_text(st.bar_pct);
     while (t && *t >= '0' && *t <= '9') level = level * 10 + (int)(*t++ - '0');
@@ -4322,7 +4322,7 @@ void ipod_lock_level(void *icon, void *level) {
 }
 static void paint_lock_level(void *w, void *canvas) {
     const char *icon = widget_get_prop_str(st.lock_icon, "image", "");
-    int level = I(g_power_capacity, 0), mode = st.batt_mode;
+    int level = ringnav_battery_level(), mode = st.batt_mode;
     unsigned key = st.batt_key;
     st.batt_mode = 1; /* paint_battery reads the bar's; the lock's for this paint */
     st.batt_key = (unsigned)(level > 100 ? 100 : level) << 3 | /* paint_battery's key: bit 2, Classic's full, is 0 */

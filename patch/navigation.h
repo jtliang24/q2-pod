@@ -384,6 +384,13 @@ extern int scrobble_ready(void), scrobble_start(void), scrobble_poll(int *sent),
 extern const char *now_tag(void *r, int field);
 extern void *queue_now(unsigned *pos, unsigned *n);
 
+/* system.c */
+#if M1PLUS
+int ringnav_battery_level(void); /* the kernel's capacity; V2.1's power_capacity is a guess */
+#else
+#define ringnav_battery_level() I(g_power_capacity, 0) /* the Q2's is the fuel gauge's */
+#endif
+
 /* navigation.c */
 void pod_settings(void);
 #define COUNT "_ringnav_count"

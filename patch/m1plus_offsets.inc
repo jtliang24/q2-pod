@@ -509,6 +509,9 @@ static inline int arc_out(int r, int y) {
 /* The Wi-Fi signal (ringnav_wifi_signal) is read from the driver again at most every
  * WIFI_SIGNAL_MS; its two pollers each ask about once a second. */
 #define WIFI_SIGNAL_MS 1000
+/* The battery level (ringnav_battery_level) is read from the kernel again at most every
+ * BATTERY_LEVEL_MS. */
+#define BATTERY_LEVEL_MS 1000
 /* Resume (docs/internals.md#resume): tracks of Q2POD RESUMEMIN minutes or longer (crossfade.c
  * resume_min) keep their place in the RESUME_SLOTS most recent; a place within RESUME_EDGE_S of
  * either end is forgotten. Saved on a track change, a pause and every RESUME_SAVE_S of play;
