@@ -427,20 +427,25 @@ int lyrics_rows(void *lrc) {
     return lyrics_fit(lrc);
 }
 
+#if M1PLUS
 /* Line i's height on the page: its rows plus LYRIC_GAP. Its row is as high, but for the last
- * (lyrics_fit). */
+ * (lyrics_fit). M1 Plus only, as the last row's end below. */
 int lyrics_line_h(unsigned i) {
     const ly_line *l = &ly.tab->line[i];
     return (l->rows > 1 ? l->rows : 1) * LY_PITCH(LYRIC_PX) + LYRIC_GAP;
 }
+#define LY_ROW_H(row, i) lyrics_line_h(i) /* lyrics_paint's height: row i's line's */
+#else
+#define LY_ROW_H(row, i) I(row, W_H) /* the Q2's: the row's, as upstream's */
+#endif
 
 /* The page's rows laid out at lrc's width, again when it changes: the iPod page's span the
  * screen, the centred (stock) page's its 225 px column, or the screen in full screen (navigation.c
- * np_full). The page ends with its last line in the middle (navigation.c lyric_pad), so the last
- * row also holds the half view under that line: AWTK lays scroll_lrc out again whenever a widget
- * asks (a paint's relayout among them), sizing its content to the rows and clamping the offset to
- * their end, which would pull the last lines down for the follow to glide back, a frame drawn there
- * left behind. */
+ * np_full). The page ends with its last line in the middle (navigation.c lyric_pad), so on M1
+ * Plus the last row also holds the half view under that line (the Q2's rows stay upstream's): AWTK
+ * lays scroll_lrc out again whenever a widget asks (a paint's relayout among them), sizing its
+ * content to the rows and clamping the offset to their end, which would pull the last lines down
+ * for the follow to glide back, a frame drawn there left behind. */
 int lyrics_fit(void *lrc) {
     if (!lyrics_on(lrc)) return 0; /* none, or out of memory: stock's rows stay */
     if (ly.w != I(lrc, W_W) - 2 * LYRIC_X) {
@@ -448,14 +453,21 @@ int lyrics_fit(void *lrc) {
         for (unsigned i = 0; i < ly.tab->n; ++i) ly.tab->line[i].px = 0;
     }
     void *canvas = widget_get_canvas(lrc);
+#if M1PLUS
     int view = I(lrc, W_H);
+#endif
     for (unsigned i = 0; i < ly.rows; ++i) {
         void *row = widget_get_child(lrc, i);
         ly_line *l = &ly.tab->line[i];
         if (canvas && !l->px) ly_layout(canvas, l);
         widget_set_text_utf8(row, "");
+#if M1PLUS
         int h = lyrics_line_h(i), end = (h - view) / 2 + view; /* lyric_centre's, plus the view */
         widget_resize(row, I(lrc, W_W), i + 1 == ly.rows && end > h ? end : h);
+#else
+        widget_resize(row, I(lrc, W_W),
+                      (l->rows > 1 ? l->rows : 1) * LY_PITCH(LYRIC_PX) + LYRIC_GAP);
+#endif
     }
     char layout[48]; /* only now: out of memory, stock's rows keep stock's layout */
     tk_snprintf(layout, sizeof layout, "list_view(x=0,y=%d,s=0)", LYRIC_SLOT);
@@ -617,17 +629,17 @@ static void ly_ink(void *canvas, const int *base, const unsigned *s, unsigned n,
 }
 
 /* ringnav_paint, after stock painted a lyrics row (blank): its line, centred in the line's height
- * (the last row's top, lyrics_fit), bold (LYRIC_BOLD), LYRIC_LIT as far as it is sung while it
- * plays and LYRIC_DIM past that; any other line LYRIC_REST. A line the page's edge cuts fades with
- * the square of the share of it out of view, so no sliver of a line shows. The text color and clip
- * are restored, the font is not. */
+ * (on M1 Plus the last row's top, lyrics_fit; on the Q2 the row), bold (LYRIC_BOLD), LYRIC_LIT as
+ * far as it is sung while it plays and LYRIC_DIM past that; any other line LYRIC_REST. A line the
+ * page's edge cuts fades with the square of the share of it out of view, so no sliver of a line
+ * shows. The text color and clip are restored, the font is not. */
 void lyrics_paint(void *row, void *canvas) {
     void *lrc = row ? P(row, W_PARENT) : (void *)0;
     int i = -1, base[4];
     if (!lyrics_on(lrc) || !P(canvas, CANVAS_LCD)) return;
     while (++i < (int)ly.rows && widget_get_child(lrc, i) != row) {}
     if (i >= (int)ly.rows) return;
-    int top = I(row, W_Y) - I(lrc, SCROLL_Y), h = lyrics_line_h((unsigned)i), view = I(lrc, W_H),
+    int top = I(row, W_Y) - I(lrc, SCROLL_Y), h = LY_ROW_H(row, (unsigned)i), view = I(lrc, W_H),
         seen = (top + h < view ? top + h : view) - (top > 0 ? top : 0),
         alpha = seen >= h  ? 255
                 : seen > 0 ? 255 * seen * seen / (h * h)

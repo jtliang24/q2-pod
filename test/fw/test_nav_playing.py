@@ -9,7 +9,7 @@ import pytest
 
 import host
 import art as tools_art  # tools/, on the path host.py set: the art's own sizes
-from conftest import NAVIGATION_SOURCE, O, Deques, ui_name
+from conftest import NAVIGATION_SOURCE, O, Deques, m1_only, ui_name
 
 THEMES = host.tools_theme.builtins()
 SETS = host.tools_theme.geometry_sets(THEMES)
@@ -1747,6 +1747,7 @@ def test_a_tick_before_the_wheel_goes_raw_glides_to_the_next_rows_top(fw, ui, mc
     assert lyrics(KEY_NEXT) == 0
 
 
+@m1_only("lyrics.c lyrics_fit's last row holds the page's end")
 def test_a_relayout_leaves_the_last_lines_in_the_middle(fw, ui, mcl, st):
     """The last row holds the space under the last line: AWTK sizing the content to the rows again, as it does on any
     relayout, clamped the offset short of the follow's, so the last lines dropped and glided back, and the device

@@ -3679,13 +3679,17 @@ static void keep_selected(void *target) {
  * view: under a row of blank space below the last. A relayout (scroll_view's, 0x5f17a8) puts the
  * height back and clamps the offset; the next follow, tick or glide step pads it again. ponytail:
  * the wheel and a drag stop anywhere, so a row can be cut at the top until the page follows. iPod's
- * lyrics page (lyrics.c) ends with its last line in the middle: its last row holds the space under
- * that line (lyrics_fit), so a relayout keeps it. */
-/* The offset that centres row i of lrc in its view: on the lyrics page, its line. */
+ * lyrics page (lyrics.c) ends with its last line in the middle: on M1 Plus its last row holds the
+ * space under that line (lyrics_fit), so a relayout keeps it. */
+/* The offset that centres row i of lrc in its view: on M1 Plus's lyrics page, its line. */
 static int lyric_centre(void *lrc, int i) {
     void *row = widget_get_child(lrc, i);
+#if M1PLUS
     int h = lyrics_on(lrc) ? lyrics_line_h((unsigned)i) : I(row, W_H);
     return I(row, W_Y) + (h - I(lrc, W_H)) / 2;
+#else
+    return I(row, W_Y) + (I(row, W_H) - I(lrc, W_H)) / 2;
+#endif
 }
 static void lyric_pad(void *lrc) {
     if (lyrics_on(lrc)) {
