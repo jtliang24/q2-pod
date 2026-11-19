@@ -5311,7 +5311,7 @@ lists Groovebox, as it lists Buddy, though the M1 can't play it.
 - Ratings, the volume panel and Playlists' hold menu (their state moved to `ratings.c`, `volume.c`, `playlists.c`);
 - Wi-Fi: Spotify and Internet Radio without Wi-Fi toast "Connect to Wi-Fi first"; the radio stays as left;
 - a card app's list with a search row: the row opens the search box;
-- Cover Flow's thumb absent, the knob as volume there.
+- Cover Flow's thumb absent; the knob scrolls the covers in Knob: Navigation (as `docs/m1plus.md` says), volume in Knob: Volume.
 
 ## 94. Merge step: sync to 1.7.6 (Nov 18)
 
