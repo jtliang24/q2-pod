@@ -2883,6 +2883,27 @@ def video_check(tmp):
     assert meta(b'    StreamTitle     : ', b'StreamTitle') == '' and meta(b'StreamTitle=x', b'StreamTitle') == 0
     assert meta(b'  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz', b'Audio') == 'mp3 (mp3float),'
     assert meta(b'StreamTitle: a long title past the buffer', b'StreamTitle', 8) == 'a long '
+    # Some stations (iHeart) send a StreamTitle of key="value" pairs: "artist - title" for the radio page's
+    # split, or the title alone. Any other StreamTitle is left as it is.
+    def icy(title):
+        buf = C.create_string_buffer(title, 256)
+        lib.icy_title(buf)
+        return buf.value
+    for same in (b'Artist - Title', b'A - B', b'', b'No Artist Here', b'title=Bare', b'Say "Hi" - Band',
+                 b'subtitle="X",artist="Y"', b'artist="Band"', b'title="Song', b'a=b,title=Song'):
+        assert icy(same) == same, same
+    assert icy(b'title="Song",artist="Band",url="song_spot=\\"F\\" MediaBaseId=\\"1\\""') == b'Band - Song'
+    assert icy(b'artist="Band",title="Song"') == b'Band - Song'
+    assert icy(b'title="Song"') == b'Song' and icy(b'title="Song",artist=""') == b'Song'
+    assert icy(b'title="Song", artist="Band" , url="x"') == b'Band - Song'  # spaces after commas
+    assert icy(b'subtitle="X",title="Song"') == b'Song' and icy(b'subtitle="X",title="Song",artist="Band"') == b'Band - Song'
+    assert icy(b'title="",artist="Band"') == b'Band' and icy(b'title="",artist="",url="u"') == b''
+    # a title or artist inside another value is no pair: the url's commas, quotes and keys are skipped whole
+    assert icy(b'url="a,title=\\"Z\\",artist=\\"Y\\"",title="Song"') == b'Song'
+    assert icy(b'title="Song",url="http://x/?a,b=\\"c') == b'Song'  # the url cut off before its end
+    assert icy(b'title="A \\"quoted\\" word",artist="B"') == b'B - A "quoted" word'
+    t = b'title="' + b'x' * 200 + b'",artist="' + b'y' * 30 + b'"'  # the longest title still fits the buffer
+    assert icy(t) == b'y' * 30 + b' - ' + b'x' * 200
     print('Videos: ffmpeg argv, frame pacing, Bluetooth volume, length, bar and back chevron passed; radio tags passed.')
 
 

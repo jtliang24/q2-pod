@@ -1427,6 +1427,15 @@ def test_a_station_connects_plays_and_follows_its_titles(q2):
     assert [(r, v) for _, r, v in q2.dac] == [(DAC_PCM, 0), (DAC_MUTE, 0), (DAC_MUTE, 1)]
 
 
+def test_a_station_s_key_value_title_is_shown_as_artist_and_song(q2):
+    q2.stations[URL] = [Station(icy('title="Song",artist="Band",url="song_spot=\\"F\\" id=\\"1\\""') +
+                                [update(5000, 'title="Next, Song",url="u"')], sound=800)]
+    q2.press(b'q', 7000)
+    assert radio(q2) == 0
+    titles = [s['title'] for s in q2.radio_states() if s['state'] == 'playing']
+    assert titles[0] == 'Band - Song' and titles[-1] == 'Next, Song'  # an artist's " - " for the page; none, the title alone
+
+
 def test_a_dropped_stream_starts_again_at_once_then_a_second_later_each_silent_start(q2):
     q2.stations[URL] = [Station(icy(), sound=500, end=3000), Station(REFUSED, end=0)]
     assert radio(q2) == 0
