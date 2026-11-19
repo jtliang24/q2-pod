@@ -23006,7 +23006,7 @@ if is_m1plus:
     m=corner('folder_page',theme='0'); y=O['STATUS_H']+O['SET_TOP']; assert touch((PRESS,10,y),(LIFT,10,y),m=m)==[(PRESS,10),(LIFT,10)]; m.advance(0); assert dispatched(m)==[]
     passed()
     # A level with another digit count moves the whole right group: it repaints the bar once after the frame, as what a paint invalidates is dropped (#116). The same
-    # width doesn't, and the slot alone repaints.
+    # width does too, as the slot's own invalidate is dropped as well (V07Rm's L, below).
     b=Machine(); b.config={'BATTERY':'2'}; b.word(syms['power_capacity'],100)
     slot,wifi,bt,pct,icon=(b.node(t,NAMES['STATUSW_'+k],visible=v) for k,t,v in (('SLOT','view',0),('WIFI','image',1),('BT','image',0),('PCT','progress_bar',0),('ICON','image',1)))
     b.word(slot+O['W_H'],30); b.word(wifi+O['W_W'],14)
@@ -23019,8 +23019,16 @@ if is_m1plus:
         return [x[:2] for x in b.calls if x[0]=='widget_invalidate_force']
     bar_paint(); bar_paint(w=slot); bar_paint(); b.advance(0)  # the first paint measures the digits, which sizes it
     wide=b.get(slot+O['W_W']); assert ('widget_invalidate_force',bar) in bar_paint(99) and b.get(slot+O['W_W'])<wide
-    assert ('widget_invalidate_force',bar) not in bar_paint(88); assert ('widget_invalidate_force',slot) in bar_paint(87)
+    narrow=b.get(slot+O['W_W']); assert ('widget_invalidate_force',bar) in bar_paint(88) and b.get(slot+O['W_W'])==narrow; assert ('widget_invalidate_force',slot) in bar_paint(87)
     assert ('widget_invalidate_force',bar) in bar_paint(100); assert ('widget_invalidate_force',bar) not in bar_paint(); passed()
+    # Charging to Full at 100 % keeps the width but turns the percentage from green to white: the slot's own invalidate, made mid-paint, is dropped too
+    # (#116), and only the digits another dirty rect covered went white (V07Rm's L). A new colour repaints the whole bar after the frame; an unchanged
+    # frame arms nothing.
+    w100=b.get(slot+O['W_W']); b.nodes[icon]['image']='bar_charge'
+    assert ('widget_invalidate_force',bar) in bar_paint(100) and b.get(slot+O['W_W'])==w100; assert ('widget_invalidate_force',bar) not in bar_paint()
+    b.nodes[icon]['image']='bar_battery'
+    assert ('widget_invalidate_force',bar) in bar_paint(100) and b.get(slot+O['W_W'])==w100
+    assert ('widget_invalidate_force',bar) not in bar_paint(); passed()
     # The bar's play state is a Play/Pause button: BAR_PLAY_HIT_W round wherever the group put it. A still tap is the Play key's press and release, after this
     # pointer's dispatch; V2.1 sees the press and moves as ever, and a lift at x 0, out of the x 80 to 270 where on_wm_tsup_fun opens VOLUME. A tap beside it, a
     # drag or a press with no icon is V2.1's, as is every press while the bar has no say: dark, locked, a dialog or a full-screen page on top.
