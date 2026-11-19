@@ -532,6 +532,27 @@ def test_a_preset_s_name_and_a_picked_preamp_show_as_set(fw):
     assert p.title() == 'Preset loaded; choose Apply to activate'
 
 
+@pytest.mark.parametrize('where', ['simple', 'advanced', 'message'])
+def test_the_bar_breaks_between_words(fw, where):
+    """A message broke mid-word ("unavaila/ble", "u/nchanged"): line_wrap alone splits where the line is full
+    (1.7.6's pass, finding E)."""
+    p = bar_page(fw, where)
+    bar = p.bar()
+    assert p.props[(bar, 'word_wrap')] == 1 and p.props[(bar, 'line_wrap')] == 1
+
+
+def bar_page(fw, where):
+    """The page with the Simple tab's bar, the Advanced tab's, or Advanced's with a message on it."""
+    s = state(fw, EQ_PEQ, peq=peak(fw, 3))
+    p = page(fw, s, {f'{SAVED}/Rock.peq': b'Q2PEQ02\0' + bytes(s.peq)})
+    p = p.open() if where == 'simple' else p.advanced()
+    if where == 'message':
+        p.click('Presets')
+        p.click('Rock.peq')
+        assert p.title().startswith('Preset loaded')
+    return p
+
+
 def test_a_long_preset_name_ellipsises_right_aligned_clear_of_its_caption(fw):
     cut, focus, style = [], [], {}
     fw.mock('hscroll_label_set_ellipses', lambda w, on, *_: cut.append((w, i32(on))))

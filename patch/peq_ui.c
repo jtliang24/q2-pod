@@ -1066,11 +1066,13 @@ static int tab_touch(void *ctx, void *event) {
     return 0;
 }
 
-/* The title label; the tabs' bar when the bar takes their taps. */
+/* The title label; the tabs' bar when the bar takes their taps. word_wrap breaks a message
+ * between words: line_wrap alone split "unavaila/ble". */
 static void *bar(void *page, int x, int w) {
     void *title = label_create(page, x, 0, w, 48);
     widget_use_style(title, STYLE_LABEL_WHITE20C);
     widget_set_prop_int(title, "line_wrap", 1);
+    widget_set_prop_int(title, "word_wrap", 1);
     if (w == UI_W) widget_on(title, EVT_POINTER_DOWN, tab_touch, 0);
     return title;
 }
