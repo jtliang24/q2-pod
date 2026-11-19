@@ -18,11 +18,11 @@
  * M1 Plus's userland whatever its C library is. mipsel o32 for the device, x86-64 to test on a
  * host:
  *
- *   clang --target=mipsel-linux-gnu -march=mips32r2 -mno-abicalls -G0 -fno-pic -msoft-float -Os \
+ *   clang --target=mipsel-linux-gnu -march=mips32r2 -mnan=2008 -mno-abicalls -G0 -fno-pic -msoft-float -Os \
  *         -ffreestanding -fno-builtin -fno-stack-protector -fno-unwind-tables -c tools/tstop.c -o
  * tstop.o ld.lld -m elf32ltsmip -static -e _start --gc-sections tstop.o -o tstop
  *
- * test/unit/test_tstop.py builds the host one and tries it on a dummy threaded process; see
+ * test/tstop.py builds the host one and tries it on a dummy threaded process; see
  * docs/remote.md ("Stopping one thread") for a device pass. */
 
 #define PTRACE_DETACH 17
