@@ -171,35 +171,59 @@ static int is_key(const char *k, unsigned n, const char *word) {
     return i == n && !word[i];
 }
 
+/* The length of the key at k when a key="value" pair starts there (letters, digits, _ and -, then =" ),
+ * else 0. */
+static unsigned pair_key(const char *k) {
+    const char *p = k;
+    while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') ||
+           *p == '_' || *p == '-')
+        ++p;
+    return p != k && p[0] == '=' && p[1] == '"' ? (unsigned)(p - k) : 0;
+}
+
 /* A StreamTitle of key="value" pairs (iHeart's title="Song",artist="Band",url="...") in s, a
  * title of at most 255 bytes, into "Band - Song" (np_refresh splits on " - "), or "Song" with no
  * artist. A pair's value ends at its first quote not escaped by a backslash (a \" is a quote
  * inside it). Once the title is read, a later pair cut off by the 255 bytes (the url's) or not of
  * the form is dropped. Any other StreamTitle stays as it is: one without a title="..." pair (a key
- * is whole, so subtitle="..." is not one) or with the title's quote unterminated. */
+ * is whole, so subtitle="..." is not one) or with the title's quote unterminated.
+ * iHeart's other form, `Band - text="Song" song_spot="M" ...` (plain text, then " - ", then pairs
+ * separated by spaces or commas), is read too: text is a title key as title is, and the plain
+ * prefix is the artist ("Band - Song") unless an artist="..." pair gives one. The prefix is used
+ * only when the first pair comes right after a " - " and the title is the text pair's; any other
+ * StreamTitle with a " - " (Foo - Bar, Foo - text=unquoted, Foo -text="x") stays as it is. */
 void icy_title(char *s) {
     char t[256], a[256];
-    unsigned tn = 0, an = 0;
-    int got = 0, art = 0;
-    for (const char *p = s;;) {
+    unsigned tn = 0, an = 0, pn = 0;
+    int got = 0, art = 0, text = 0;
+    const char *p = s;
+    if (!pair_key(s)) {
+        for (const char *q = s; *q; ++q)
+            if (q > s && q[0] == ' ' && q[1] == '-' && q[2] == ' ' && pair_key(q + 3)) {
+                pn = (unsigned)(q - s);
+                p = q + 3;
+                break;
+            }
+    }
+    for (;;) {
         while (*p == ',' || *p == ' ') ++p;
         const char *k = p;
-        while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') ||
-               *p == '_' || *p == '-')
-            ++p;
-        if (p == k || p[0] != '=' || p[1] != '"') break;
-        unsigned n = 0, kn = (unsigned)(p - k);
-        char *to = !got && is_key(k, kn, "title") ? t : !art && is_key(k, kn, "artist") ? a : 0;
-        for (p += 2; *p && *p != '"'; ++p) {
+        unsigned kn = pair_key(k);
+        if (!kn) break;
+        unsigned n = 0;
+        int is_text = is_key(k, kn, "text");
+        char *to = !got && (is_text || is_key(k, kn, "title")) ? t : !art && is_key(k, kn, "artist") ? a : 0;
+        for (p = k + kn + 2; *p && *p != '"'; ++p) {
             if (*p == '\\' && p[1] == '"') ++p;
             if (to) to[n++] = *p;
         }
         if (*p != '"') break;
         ++p;
-        if (to == t) got = 1, tn = n;
+        if (to == t) got = 1, tn = n, text = is_text;
         if (to == a) art = 1, an = n;
     }
-    if (!got) return;
+    if (!got || (pn && !text)) return;
+    if (!an && pn) memcpy(a, s, pn), an = pn;
     if (tn && an) {
         memcpy(s, a, an);
         memcpy(s + an, " - ", 3);
