@@ -22,7 +22,7 @@ _n = int(TAG.replace(b'.', b'')) + 1
 NEWER = b'%d.%d.%d' % (_n // 100, _n // 10 % 10, _n % 10)
 OLDER = b'0.9.9'
 
-SH_MAX = 16
+SH_MAX = 32  # netupdate.c's, as upstream's a8ace2ab (1.8.8)
 SH_CAP = 1 << 30
 SH_OK, SH_NET, SH_SPACE, SH_CARD, SH_MISSING, SH_BAD, SH_CANCELLED, SH_BUSY = range(8)
 NU_IDLE, NU_RUNNING, NU_DONE, NU_LATEST, NU_NET, NU_MISSING, NU_CARD, NU_CANCELLED = range(8)
@@ -1699,6 +1699,18 @@ def test_the_store_loads_its_list_then_not_again_for_ten_minutes(fw):
     s.seconds += 1
     s.open()
     assert s.sh.job == JOB_CHECK and len(s.workers) == 1
+
+
+def test_the_store_lists_twenty_apps(fw):
+    """More than the 16 apps SH_MAX once held: the live list has 18 (the M1's test/m1plus/patch.py adds Soloify)."""
+    listed = b''.join(b'me/q2-app%02d App %02d\n' % (i, i) for i in range(20))
+    card = Disk(fw)
+    net = store_net(fw, listed=listed)
+    s = Store(fw, card)
+    assert s.run() == 0 and s.sh.n == 20 and s.sh.rows == 21  # Check for Updates and the 20
+    assert s.labels() == ['Install'] * 20 and card.files[SOURCES] == listed
+    assert [s.sh.next[i].name for i in range(20)] == [b'App %02d' % i for i in range(20)]
+    assert len(net.urls) == 21  # the list, then every app's release
 
 
 def test_a_check_stopped_part_way_is_done_again_at_the_next_open(fw):

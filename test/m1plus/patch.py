@@ -19838,6 +19838,17 @@ if 'usbmode_page_init' in HOOKS:
         assert m.toasts[-1][3]=='Soloify removed' and KILL in m.systems[-3] and KILL in m.systems[-1],m.systems
         assert not {SOLO_TAG,SOLO_FILES,'/mnt/mmc/.soloify/run','/mnt/mmc/.soloify/q2-soloify'}&set(m.files) and m.labels()[-1]=='Install'
         assert {'/mnt/mmc/.soloify/remote','/mnt/mmc/.soloify/.delay','/mnt/mmc/.soloify/.quality'}<=set(m.files); m.close(); passed()
+        # Twenty apps, then Soloify: past the 16 SH_MAX once held (32 from upstream's a8ace2ab, 1.8.8), every one
+        # a row, from the card's list and after a check that fetches it (V067m's finding G: the live list has 18).
+        TWENTY=''.join(f'me/q2-app{i:02} App {i:02}\n' for i in range(20)).encode()
+        ROWS=['App Store','Check for Updates',BLANK]+[s for i in range(20) for s in (f'App {i:02}','Install')]+['Soloify','Install']
+        m=M1ShelfMachine({LIST:bytearray(TWENTY)}); m.urls=[]; m.rockbox_mode=0o100755; m.wifi=-1; apps_open(m)
+        assert m.labels()==ROWS and not m.threads,m.labels()
+        m.close(); m.wifi=3; m.reply=TWENTY; apps_open(m); assert m.labels()[2]=='Checking…'; shelf_job(m)
+        assert m.labels()==ROWS and m.files[LIST]==TWENTY,m.labels()
+        assert m.urls==['https://raw.githubusercontent.com/DiamondBond/q2-pod/main/sources.list']+[f'https://api.github.com/repos/{r}/releases/latest' for r in
+                        [f'me/q2-app{i:02}' for i in range(20)]+['jtliang24/q2-soloify']],m.urls
+        m.close(); passed()
     if not is_m1plus:  # Rockbox's rows: Q2 only
         m=ShelfMachine({LIST:bytearray((ROOT/'sources.list').read_bytes()),SPOT_TAG:bytearray(b'q2-v1.8'),SPOT_FILES:bytearray(b'.spotify/run\n.spotify/librespot\n'),
                         '/mnt/mmc/.spotify/run':bytearray(b'sh'),'/mnt/mmc/.spotify/librespot':bytearray(b'ELF')})
