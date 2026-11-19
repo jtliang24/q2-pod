@@ -215,7 +215,9 @@ typedef struct {
     /* Now Playing's full-screen lyrics (np_full) and where the last touch on them came down
      * (np_lyric_touch) and when */
     int np_full, np_tap_x, np_tap_y;
-    unsigned np_tap_at;
+#if M1PLUS
+    unsigned np_tap_at; /* M1 Plus: a hold is no tap */
+#endif
     int np_was[9]; /* the column before full screen (np_full) */
     /* The full-screen art's song name, its shade and its window, the fade's step and timer
      * (ringnav_bigcover) */

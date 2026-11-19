@@ -4985,13 +4985,14 @@ int stream_ipod(void *art, void *const text[4], void *elapsed, void *remain, voi
 }
 
 /* Now Playing's lyrics page (ringnav_playing): a touch that lifts within TAP_PX of where it came
- * down, and before LONG_PRESS_MS, so neither a swipe, a drag of the lines nor a hold, switches
- * them to full screen and back (np_full), once there are lyrics to show. The slide_view or
- * scroll_lrc taking the touch (its abort) ends full screen at once, so the pages slide in their
- * column. Returns 0: a STOP would keep the slide_view's grab (rate_fav_click). */
+ * down, and on M1 Plus before LONG_PRESS_MS, so neither a swipe, a drag of the lines nor (on M1
+ * Plus) a hold, switches them to full screen and back (np_full), once there are lyrics to show.
+ * The slide_view or scroll_lrc taking the touch (its abort) ends full screen at once, so the pages
+ * slide in their column. Returns 0: a STOP would keep the slide_view's grab (rate_fav_click). */
 #define TAP_PX 10 /* AWTK's drag threshold */
 static int np_lyric_touch(void *ctx, void *event) {
     int type = I(event, EVENT_TYPE), x = I(event, EVENT_X), y = I(event, EVENT_Y);
+#if M1PLUS
     int tap = (unsigned)(x - st.np_tap_x + TAP_PX) <= 2 * TAP_PX &&
               (unsigned)(y - st.np_tap_y + TAP_PX) <= 2 * TAP_PX &&
               (unsigned)time_now_ms() - st.np_tap_at < LONG_PRESS_MS;
@@ -4999,6 +5000,14 @@ static int np_lyric_touch(void *ctx, void *event) {
         st.np_tap_x = x, st.np_tap_y = y, st.np_tap_at = (unsigned)time_now_ms();
         return 0;
     }
+#else
+    int tap = (unsigned)(x - st.np_tap_x + TAP_PX) <= 2 * TAP_PX &&
+              (unsigned)(y - st.np_tap_y + TAP_PX) <= 2 * TAP_PX;
+    if (type == EVT_POINTER_DOWN) {
+        st.np_tap_x = x, st.np_tap_y = y;
+        return 0;
+    }
+#endif
     st.np_tap_x = 1 << 20; /* used or taken for a swipe: a later lift is no tap */
     if (type == EVT_POINTER_ABORT) {
         if (st.np_full) np_full(0);
