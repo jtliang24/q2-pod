@@ -5537,12 +5537,14 @@ V07Um (§98, `update.bin` `ca08836d…`) flashed by the user over V07Rm, checked
   the radio page drew 100 % whole. The real Charging to Full is still to be seen by hand.
 - **I, App Store: as intended.** 16 rows ending in Soloify (Update); Check for Updates says "1 app can be updated";
   `.q2/apps/` has tags for File Browser, Podcasts and Spotify only.
-- **K, Theme tap-through: reproduced, so §98's "not reproduced" is wrong for Theme.** With Minimal selected, one tap
-  on Modern switches the theme and also cycles Light Mode, the Appearance row under the tap. It happened over
-  `q2remote` and by finger: the finger capture is three ordinary taps. A pick that changes the theme rebuilds the
-  windows, and the same tap reaches the rebuilt page. A Minimal pick reopens Theme's own picker the same way, which
-  looks like the picker staying open. Screen Off picks don't rebuild and never tapped through. Findings in
-  `.plan/v07rm-pass-fixes-findings.md`, to plan.
+- **K, Theme tap-through: not a bug; §98's "not reproduced" stands.** With Minimal selected, a tap on Modern
+  switched the theme and Light Mode went from Off to On, over `q2remote` and by finger. That is Modern's preset,
+  not a tap: `assets/themes/modern/theme.xml` has `<option setting="light" preset="on" keep="auto"/>` (Minimal's
+  is `preset="off"`), and `theme_select` applies it live (`theme_preset`). The picker never closed: the shots
+  after each pick (`33-theme.png`, `34-min.png`, `35-mod.png`) show it open, the rows moved to the new theme's
+  layout and the new theme marked. `theme_pick` doesn't close it. The finger capture (`k-finger.bin`) is three
+  ordinary taps. The first frame of each ends with no pressure, so the touch thread posts nothing for it
+  (docs/internals.md, Input queue), and each tap is one click. No guard was added (plan step 3b dropped).
 - **Regression: pass.** Home, Library and Now Playing open, Back returns, the play key toggles the bar's icon; demo
   kept its boot pid, and there is no new crash log or stall record. The optional stall-to-reset check was skipped
   (it passed on V07Rm and is unchanged).
