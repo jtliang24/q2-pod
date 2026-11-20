@@ -5485,6 +5485,45 @@ Settings restored (`config.ini` byte for byte, Screen Off 1 min, Battery Icon, b
 folder was removed and the library rescanned (492 songs). The test WAV stays in V2.1's play history (`recentplay`,
 `oftenplay`) and the queue. The device stays on `V07Rm`; `V067m` is kept as `/mnt/mmc/.q2/update-V067m.bin`.
 
+## 98. Fixes from the V07Rm pass (Nov 19)
+
+`.plan/v07rm-pass-fixes.md` on `fix/1-7-6-pass` from `d814c815` (§97), one item per commit. All of it is M1 only, so
+the Q2's `update.tar` should stay upstream's.
+
+- **J, the docs** (`e48ba6f2`): `docs/remote.md`'s `tstop` build needs `-mnan=2008`. The M1's userland is NaN2008
+  (busybox `e_flags` `0x70001405`); without it the kernel refuses the binary (ENOEXEC, shown as busybox
+  `syntax error`). It also says `pidof demo`, not `pgrep demo`, which matches the `q2remote` shell's own command
+  line. `tools/tstop.c`'s test path is fixed too.
+- **F, iHeart's title** (`efd1ae7b`, `fb26dd1c`): `icy_title()` (`patch/video.c`, M1 and the PEQ host only) also reads
+  KIIS FM's `Artist - text="Title" song_spot=…` form: plain text, " - ", then pairs. `text` is a title key, and the
+  plain prefix is the artist ("Rihanna - Rude Boy"); an `artist=` pair beats the prefix. The prefix counts only when
+  the first pair comes right after " - ". Any other title with a " - " (`A - B`, `A - text=unquoted`, `A -text="x"`)
+  stays as it is. The tests cover the KIIS song and station ID, the 255-byte cut and those negatives
+  (`test/peq.py`, `test/fw/test_video.py`).
+- **L, Percent half green** (`07f13673`, `e88e8f01`): `bar_sync` runs during the paint, where the M1 drops the slot's
+  invalidate (#116), and `batt_key` is updated at once, so no later frame repainted it. Charging to Full at 100 %
+  keeps the width, so only the "1", under another dirty rect, went white and "00%" stayed green. `bar_repaint` is now
+  armed on a key or mode change too, and in the dark-bar branch. It lives in `navigation.c` because `bar_sync` does.
+  The old same-width 99 to 88 assertion in `test/m1plus/patch.py` encoded the dropped invalidate; it now expects the
+  repaint, and a new case turns the charge icon to the plain battery at 100 %.
+- **I:** closed as intended. The card's `/mnt/mmc/.q2/apps/` has tags for `filebrowser`, `podcasts` and `spotify`
+  only. Soloify was installed by hand, so it has no tag, and a manual install's Update isn't counted by the toast
+  (`docs/internals.md`, App Store). No code change.
+- **K:** closed, not reproduced. A finger tap's raw Goodix-CTP events have the same two-frame form as `q2remote`'s
+  `m1_tap`: pressure 1 then 0 in the first frame, then 1, then 0 about 30 to 100 ms later. The Screen Off picker
+  stays open after a pick, for a finger tap and in 10 `q2remote` trials alternating 5min and Off, with no
+  tap-through. The user thinks spotty Wi-Fi during the pass caused the stray taps (a tap sent on a stale
+  assumption) and will report it if it comes back in use. No guard added.
+
+Gates: all 25 passed on V07Um (`work/sync/v07rm-fixes/build`, from `e88e8f01`, run `work/gates/20261119-170132`; `update.bin` `ca08836d…`). q2compare: the Q2 `update.tar` is byte-identical to 1.7.6's.
+
+**Device checks** (the next pass, `.plan/v07rm-pass-fixes-check.md`):
+1. KIIS FM (radio Favourites) shows the song alone on line 3, split into artist and song; read the title from
+   `/tmp/q2radio.state`. If the marquee still looks overdrawn, it is a new finding.
+2. On the next Charging to Full (or by changing Battery mode during playback), Percent is one colour.
+3. Finger and `q2remote` taps on Screen Off and Theme: note any tap-through.
+4. The App Store lists 15 upstream apps and Soloify; the toast doesn't count a manual install's Update.
+
 ## How to check a build now
 
 ```sh
