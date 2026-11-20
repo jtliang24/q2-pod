@@ -5524,6 +5524,33 @@ Gates: all 25 passed on V07Um (`work/sync/v07rm-fixes/build`, from `e88e8f01`, r
 3. Finger and `q2remote` taps on Screen Off and Theme: note any tap-through.
 4. The App Store lists 15 upstream apps and Soloify; the toast doesn't count a manual install's Update.
 
+## 99. The V07Um device pass (Nov 19)
+
+V07Um (§98, `update.bin` `ca08836d…`) flashed by the user over V07Rm, checked over `q2remote` with
+`.plan/v07rm-pass-fixes-check.md`; notes and shots in `work/sync/v07rm-fixes-pass/`.
+
+- **F, iHeart's title: pass.** KIIS FM shows the artist on line 2 and the song alone on line 3 ("The Weeknd" /
+  "Can't Feel My Face"), with no raw pairs and no overdrawn marquee. Over 15 minutes the title alternated between
+  songs and the station ID ("LA's #1 Hit Music Station - 102.7 KIIS FM"), and Now Playing refreshed each time.
+- **L, Percent: pass so far.** The cable was in at 100 % Full, so there was no Charging to Full to watch. Cycling
+  Battery through all four modes during playback redrew the bar whole each time, one colour, with no second battery;
+  the radio page drew 100 % whole. The real Charging to Full is still to be seen by hand.
+- **I, App Store: as intended.** 16 rows ending in Soloify (Update); Check for Updates says "1 app can be updated";
+  `.q2/apps/` has tags for File Browser, Podcasts and Spotify only.
+- **K, Theme tap-through: reproduced, so §98's "not reproduced" is wrong for Theme.** With Minimal selected, one tap
+  on Modern switches the theme and also cycles Light Mode, the Appearance row under the tap. It happened over
+  `q2remote` and by finger: the finger capture is three ordinary taps. A pick that changes the theme rebuilds the
+  windows, and the same tap reaches the rebuilt page. A Minimal pick reopens Theme's own picker the same way, which
+  looks like the picker staying open. Screen Off picks don't rebuild and never tapped through. Findings in
+  `.plan/v07rm-pass-fixes-findings.md`, to plan.
+- **Regression: pass.** Home, Library and Now Playing open, Back returns, the play key toggles the bar's icon; demo
+  kept its boot pid, and there is no new crash log or stall record. The optional stall-to-reset check was skipped
+  (it passed on V07Rm and is unchanged).
+
+A chained `q2remote` tap during the pass picked Korean on System's Language row; it was set back through the UI.
+Afterwards Screen Off went back to 1min through the UI, `config.ini` is byte-identical to the backup and the
+boot-target is `rockbox`. The M1 stays on V07Um.
+
 ## How to check a build now
 
 ```sh
