@@ -22,7 +22,6 @@ Upstream's changes are in that file.
   - EQ: a long preset name stays on the right, cut short with an ellipsis. The PEQ's messages break between words and keep clear of the screen's edges.
   - Bluetooth: the buttons of a headset whose name is longer than 55 characters work.
   - Known issues: a tap on View Queue's playing row starts the song again, and a **Play Next** while the next song is ready keeps that song's file open until the player restarts.
-  - Not on the M1 Plus yet: Smart Wi-Fi, Groovebox and card games that own the sound, card apps' sections, covers, long-list pages and title-bar search and sort buttons, Display → **Status Bar**, Scan Folders' tap to tick, USB Audio and DAC to a host that never reads the card, Cover Flow's fast spin by letters, plus 1.7.0-m1.1's list (**Theme: Classic**, Night Shift, the extra time zones, Network Update, Games) and the rest of the port report (docs/m1plus-unported.md).
 
 - **1.7.0-m1.1**:
   - Q2 Pod 1.7.0 on the M1 Plus's stock firmware V2.1, now with Q2 Pod's iPod UI as its only UI, laid out for the portrait screen and the knob. Upstream's changes since 1.5.8 that run on the M1 Plus are below; Q2 Pod's own changelog has the rest.
