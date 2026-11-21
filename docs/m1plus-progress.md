@@ -5553,6 +5553,27 @@ A chained `q2remote` tap during the pass picked Korean on System's Language row;
 Afterwards Screen Off went back to 1min through the UI, `config.ini` is byte-identical to the backup and the
 boot-target is `rockbox`. The M1 stays on V07Um.
 
+## 100. 1.7.6-m1.1 (Nov 21)
+
+The user (Nov 21): release what `staging` carries, upstream 1.7.6 with the unported rounds (§90, §91) and the 1.7.6
+pass fixes (§96, §98).
+- 18d8ea66 wrote the changelog entry; cc3dbe3e dropped its "Not on the M1 Plus yet" bullet (the user's call). The port
+  report (docs/m1plus-unported.md) still lists what isn't ported.
+
+**Package** (`tools/release_m1.py package`, from `work/gatetree` at 18d8ea66, `work/release/1.7.6-m1.1`): `V1761`,
+built twice with byte-identical `update.bin` (`28ec368d…`) and ZIP (`0974613a…`); the release gates (peq, audit,
+patch, boot, playback, m4b, faults, ldac) and `test/release_m1.py` pass. The source differs from §99's `V07Um`
+(e88e8f01) only in docs.
+
+**The notes change without a repackage:** `source_sha256` hashes no docs, and `upload` writes the notes from the
+changelog each time, so after cc3dbe3e the package's `release.json` took cc3dbe3e as its `revision` and a second
+`upload` refreshed the draft's notes and target. The tag carries the changelog its notes come from.
+
+**Released:** the user pushed `staging` (18d8ea66, then cc3dbe3e), the draft verified (the asset downloaded back and
+compared), and the user published it on Nov 21 (05:58Z). The tag `1.7.6-m1.1` is cc3dbe3e, and `main` moved from
+c4cd4883 (1.7.0-m1.1 and §89's docs) to cc3dbe3e. The release build wasn't flashed; the M1 stays on V07Um. Next: the upstream sync
+past 1.7.6 waits for the V1.34 rebase (`.plan/sync-1-7-6.md`).
+
 ## How to check a build now
 
 ```sh
