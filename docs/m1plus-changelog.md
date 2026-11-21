@@ -5,6 +5,25 @@ carries and an M1 revision, `<version>-m1.<n>`. `tools/release_m1.py` takes the 
 turns its text into the release notes, as `tools/release.py` does with [changelog.md](changelog.md).
 Upstream's changes are in that file.
 
+- **1.7.6-m1.1**:
+  - Q2 Pod 1.7.6 on the M1 Plus's stock firmware V2.1. Upstream's changes since 1.7.0 that run on the M1 Plus are below; Q2 Pod's own changelog has the rest.
+  - Playback: the player catches up with the Q2's. MP3, AAC, Opus and Vorbis albums play gapless with no click between tracks, a change of sample rate lets the last track finish before it switches, and Pause, Play, Next and Previous answer sooner. A stream that stops for a while, as when Wi-Fi drops out, carries on from where it stopped.
+  - Playback: Crossfade, the visualizer and the EQ read each track's length right. They read the wrong value before.
+  - Playback: a FLAC cut short, a broken DSD, ISO, AAC or WMA file, a genre tag over 128 characters or a status check between tracks no longer stalls or stops the player, and the song before a broken file plays to its end. **Play Next** on a long queue no longer risks a restart.
+  - System: if the M1 Plus freezes, a watchdog restarts it and `q2-crash.log` on the card says what it was doing. The card keeps the two logs before the newest as `q2-crash.log.1` and `q2-crash.log.2`. A restart or a card update saves the queue first.
+  - Battery: the status bar, **Percent** and the lock screen show the battery's real charge. On the cable they used to follow the charging animation. Percent stays one colour when charging ends.
+  - Library: Songs and the other lists no longer hold on to more memory each time they open. On a big library, opening an album, **Go to Album** and **Recently Added** are faster after the next **Update Local Music**, which no longer sometimes skips the update without a word. **Frequent** is gone: **Most Played** lists your most played songs.
+  - Library: adding an album to your favourites, or rating it five hearts, makes its songs favourites too.
+  - Playlists: a new or imported playlist never takes another's place, and deleting several ticked playlists at once deletes them all.
+  - Lyrics: tap the lyrics to fill the screen in every layout; a hold there keeps them full screen. The last lines stay in the middle, with no stray earlier line under them, and lyrics you scrolled stay where you left them. An .lrc with emoji or Korean text reads right.
+  - Internet Radio: iHeart stations, such as KIIS FM, show the artist and song instead of raw text.
+  - App Store: **Check for Updates** is the first row and says how many apps can be updated. The list holds up to 32 apps, so Soloify still fits beside upstream's.
+  - Cover Flow: a large PNG or progressive JPEG cover no longer risks a restart while Cover Flow builds its covers.
+  - EQ: a long preset name stays on the right, cut short with an ellipsis. The PEQ's messages break between words and keep clear of the screen's edges.
+  - Bluetooth: the buttons of a headset whose name is longer than 55 characters work.
+  - Known issues: a tap on View Queue's playing row starts the song again, and a **Play Next** while the next song is ready keeps that song's file open until the player restarts.
+  - Not on the M1 Plus yet: Smart Wi-Fi, Groovebox and card games that own the sound, card apps' sections, covers, long-list pages and title-bar search and sort buttons, Display → **Status Bar**, Scan Folders' tap to tick, USB Audio and DAC to a host that never reads the card, Cover Flow's fast spin by letters, plus 1.7.0-m1.1's list (**Theme: Classic**, Night Shift, the extra time zones, Network Update, Games) and the rest of the port report (docs/m1plus-unported.md).
+
 - **1.7.0-m1.1**:
   - Q2 Pod 1.7.0 on the M1 Plus's stock firmware V2.1, now with Q2 Pod's iPod UI as its only UI, laid out for the portrait screen and the knob. Upstream's changes since 1.5.8 that run on the M1 Plus are below; Q2 Pod's own changelog has the rest.
   - Home: **Split** shows the playing album's whole cover across the top, over a blurred copy of it, with the menu below; **Full** is the menu alone and **Carousel** a row of cards. Display → Appearance → Home chooses.
